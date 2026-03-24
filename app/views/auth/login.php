@@ -1,9 +1,6 @@
 <?php
 /** @var string|null $error */
 $base = BASE_URL;
-// Leer siempre desde config (así el aviso coincide con el archivo en disco, no solo con lo que pasa el controlador)
-$cfgLogin = require MVC_CONFIG . '/app.php';
-$login_debug = !empty($cfgLogin['show_login_errors']);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -25,11 +22,6 @@ $login_debug = !empty($cfgLogin['show_login_errors']);
             <small class="opacity-75">Iniciar sesión</small>
         </div>
         <div class="card-body">
-            <?php if ($login_debug): ?>
-            <div class="alert alert-secondary py-2 small" role="alert">
-                <strong>Depuración activa:</strong> errores PHP en pantalla y en <code>storage/logs/php_errors.log</code>. Desactiva <code>show_login_errors</code> en <code>config/app.php</code> cuando termines.
-            </div>
-            <?php endif; ?>
             <?php if ($error === '1'): ?>
             <div class="alert alert-danger py-2" role="alert">
                 Usuario o contraseña incorrectos.
