@@ -64,6 +64,7 @@ class AuthController extends Controller
         }
 
         session_regenerate_id(true);
+        session_write_close();
 
         $this->redirect(BASE_URL . '/home/index');
     }

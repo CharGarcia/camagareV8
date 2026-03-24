@@ -16,10 +16,11 @@ if (file_exists($parametrosPath)) {
     ];
 }
 
+// Usar IP del servidor MySQL (127.0.0.1 si está en el mismo servidor)
 return [
     'host' => '127.0.0.1',
-    'user' => 'root',
-    'pass' => '',
+    'user' => 'camagare_user',
+    'pass' => 'Camagare2024!',
     'name' => 'camagare_v8',
     'charset' => 'utf8mb4',
 ];

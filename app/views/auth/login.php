@@ -12,8 +12,8 @@ $base = BASE_URL;
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <?php require __DIR__ . '/../partials/theme-vars.php'; ?>
-    <link href="/sistema/public/css/app.css" rel="stylesheet">
-    <link href="/sistema/public/css/theme.css" rel="stylesheet">
+    <link href="<?= rtrim(BASE_URL ?? '', '/') ?>/css/app.css" rel="stylesheet">
+    <link href="<?= rtrim(BASE_URL ?? '', '/') ?>/css/theme.css" rel="stylesheet">
 </head>
 <body class="d-flex align-items-center justify-content-center min-vh-100">
     <div class="card shadow-sm" style="width: 100%; max-width: 400px;">

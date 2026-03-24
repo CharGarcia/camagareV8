@@ -91,7 +91,7 @@ abstract class Controller
             session_start();
         }
         if (!isset($_SESSION['id_usuario'])) {
-            $this->redirect('/sistema/');
+            $this->redirect(rtrim(BASE_URL ?? '', '/') . '/');
         }
     }
 

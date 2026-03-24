@@ -1,129 +1,120 @@
-# Guía: Desplegar el sistema CaMaGaRe en DigitalOcean con Git
+# Guía: Configurar servidor DigitalOcean desde cero
 
-Servidor: `root@ubuntu-s-2vcpu-4gb-amd-sfo3-01`
-
----
-
-## Parte 1: Preparar el proyecto en tu PC (Windows)
-
-### 1.1 Proteger archivos sensibles
-- Asegúrate de que `.env` esté en `.gitignore` (ya incluido)
-- Nunca subas contraseñas ni credenciales al repositorio
-
-### 1.2 Crear el primer commit
-```powershell
-cd c:\xampp\htdocs\sistema
-git add .
-git status   # Revisa que no aparezca .env ni archivos sensibles
-git commit -m "Primer commit - Sistema CaMaGaRe listo para deploy"
-```
-
-### 1.3 Crear repositorio en GitHub
-1. Ve a [github.com](https://github.com) → **New repository**
-2. Nombre sugerido: `sistema-camagare` (o el que prefieras)
-3. **No** marques "Initialize with README" (ya tienes código)
-4. Crea el repositorio
-
-### 1.4 Vincular y subir
-```powershell
-# Reemplaza TU_USUARIO y TU_REPO con los tuyos
-git remote add origin https://github.com/TU_USUARIO/TU_REPO.git
-git branch -M main
-git push -u origin main
-```
-
-Si GitHub pide autenticación:
-- Usa un **Personal Access Token** en lugar de la contraseña
-- GitHub → Settings → Developer settings → Personal access tokens
+**Servidor:** `root@ubuntu-s-2vcpu-4gb-amd-sfo3-01`  
+**Repositorio:** https://github.com/CharGarcia/camagareV8
 
 ---
 
-## Parte 2: Configurar el servidor en DigitalOcean
+## Paso 1: Obtener la IP del servidor
 
-### 2.1 Conectarte por SSH
-```bash
-ssh root@ubuntu-s-2vcpu-4gb-amd-sfo3-01
+1. Entra en [DigitalOcean](https://cloud.digitalocean.com/)
+2. Droplets → selecciona tu droplet
+3. Copia la **IP pública** (ej: `164.92.xxx.xxx`)
+
+---
+
+## Paso 2: Conectarte por SSH
+
+Desde **PowerShell** o **CMD** en Windows:
+```powershell
+ssh root@TU_IP
 ```
 
-(Necesitas la IP si el hostname no resuelve: `ssh root@IP_DEL_SERVIDOR`)
+Ejemplo: `ssh root@164.92.123.45`
 
-### 2.2 Actualizar el sistema
+- Si es la primera vez, preguntará si confías en el host → escribe `yes`
+- Te pedirá la **contraseña de root** (la recibiste por email al crear el droplet, o está en DigitalOcean → Access → Root password)
+
+---
+
+## Paso 3: Configurar el servidor (comandos en orden)
+
+### 3.1 Actualizar el sistema
 ```bash
 apt update && apt upgrade -y
 ```
 
-### 2.3 Instalar Nginx, PHP, MySQL y Git
+### 3.2 Instalar Nginx, PHP, MySQL y Git
 ```bash
 apt install -y nginx php-fpm php-mysql php-mbstring php-xml php-curl php-json php-zip git unzip
 ```
 
-### 2.4 Crear base de datos MySQL
+### 3.3 Configurar MySQL (base de datos)
 ```bash
 mysql -u root -p
 ```
-Dentro de MySQL:
+*(La contraseña de root de MySQL suele estar vacía la primera vez, o en el email de DigitalOcean)*
+
+Dentro de MySQL, ejecuta (cambia `TU_CLAVE_SEGURA` por una contraseña real):
 ```sql
 CREATE DATABASE camagare_v8 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'camagare_user'@'localhost' IDENTIFIED BY 'PON_AQUI_UNA_CLAVE_SEGURA';
+CREATE USER 'camagare_user'@'localhost' IDENTIFIED BY 'TU_CLAVE_SEGURA';
 GRANT ALL PRIVILEGES ON camagare_v8.* TO 'camagare_user'@'localhost';
 FLUSH PRIVILEGES;
 EXIT;
 ```
 
-### 2.5 Clonar el proyecto
+### 3.4 Clonar el proyecto
 ```bash
 cd /var/www
-git clone https://github.com/TU_USUARIO/TU_REPO.git sistema
+git clone https://github.com/CharGarcia/camagareV8.git sistema
 ```
 
-Si el repo es privado:
+Si el repo es privado, usa tu token:
 ```bash
-# Opción A: Usar token en la URL (solo para el clone inicial)
-git clone https://TU_TOKEN@github.com/TU_USUARIO/TU_REPO.git sistema
-
-# Opción B: Configurar credenciales con Git credential helper
+git clone https://TU_TOKEN@github.com/CharGarcia/camagareV8.git sistema
 ```
 
-### 2.6 Configurar permisos
+### 3.5 Configurar permisos
 ```bash
 chown -R www-data:www-data /var/www/sistema
 chmod -R 755 /var/www/sistema
 ```
 
-### 2.7 Configurar la aplicación para producción
-Edita la base de datos:
+### 3.6 Editar la base de datos
 ```bash
-nano /var/www/sistema/app/Config/database.php
+nano /var/www/sistema/config/database.php
 ```
-Cambia los valores según lo creado en MySQL:
+
+Reemplaza el bloque `return [...]` al final con (usa la contraseña que definiste antes):
 ```php
 return [
     'host' => '127.0.0.1',
     'user' => 'camagare_user',
-    'pass' => 'PON_AQUI_UNA_CLAVE_SEGURA',
+    'pass' => 'TU_CLAVE_SEGURA',
     'name' => 'camagare_v8',
+    'charset' => 'utf8mb4',
 ];
 ```
+Guarda con `Ctrl+O`, `Enter`, y sal con `Ctrl+X`.
 
-**Si el sitio estará en la raíz** (`https://tudominio.com/`), edita 3 archivos:
+### 3.7 Configurar BASE_URL (sitio en raíz del dominio)
 
-1. `bootstrap.php` → cambia `define('BASE_URL', '/sistema/public');` por `define('BASE_URL', '');`
-2. `public/index.php` → cambia `new Application('/sistema/public')` por `new Application('')`
-3. `app/core/Application.php` línea 40 → cambia `header('Location: /sistema/public/');` por `header('Location: ' . (defined('BASE_URL') ? BASE_URL : '') . '/');`
+Si tu sitio estará en `https://tudominio.com/` (raíz):
 
-**Si mantienes la ruta** (`https://tudominio.com/sistema/public/`), no cambies nada.
+**A)** `nano /var/www/sistema/bootstrap.php` → cambia la línea a:
+```php
+define('BASE_URL', '');
+```
 
-### 2.8 Configurar Nginx
+**B)** `nano /var/www/sistema/public/index.php` → cambia a:
+```php
+$app = new Application('');
+```
+
+Si el sitio estará en `https://tudominio.com/sistema/public/`, no cambies nada.
+
+### 3.8 Configurar Nginx
 ```bash
 nano /etc/nginx/sites-available/default
 ```
 
-Reemplaza el contenido con (ajusta `server_name` a tu dominio o IP):
+Borra todo y pega (reemplaza `TU_IP` por tu IP o dominio):
 ```nginx
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
-    server_name TU_IP_O_DOMINIO;
+    server_name TU_IP;
     root /var/www/sistema/public;
 
     index index.php;
@@ -133,7 +124,7 @@ server {
     }
 
     location ~ \.php$ {
-        fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;   # Ajusta versión si es necesario
+        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
         fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
         include fastcgi_params;
         fastcgi_hide_header X-Powered-By;
@@ -145,63 +136,46 @@ server {
 }
 ```
 
-### 2.9 Verificar y reiniciar servicios
+Verifica la versión de PHP instalada: `ls /var/run/php/`  
+Si ves `php8.1-fpm.sock`, cambia la línea `fastcgi_pass` a esa versión.
+
+### 3.9 Reiniciar servicios
 ```bash
 nginx -t
 systemctl reload nginx
-# Verifica la versión de PHP instalada:
-ls /var/run/php/
-# Luego habilita e inicia (ajusta php8.1-fpm si usas otra versión):
-systemctl enable nginx php8.1-fpm
-systemctl start php8.1-fpm
+systemctl enable nginx php8.2-fpm
+systemctl start php8.2-fpm
 ```
 
-### 2.10 Importar la base de datos (si tienes un dump)
-```bash
-# Desde tu PC, exporta:
-# mysqldump -u root camagare_v8 > backup.sql
+### 3.10 Importar la base de datos (desde tu PC)
 
-# En el servidor, importa:
-mysql -u camagare_user -p camagare_v8 < backup.sql
-```
-
-Si no tienes dump, tendrás que crear las tablas manualmente o ejecutar migraciones si las tienes.
-
----
-
-## Parte 3: Actualizaciones futuras (deploy con Git)
-
-### Desde tu PC:
+En tu PC (con XAMPP):
 ```powershell
-cd c:\xampp\htdocs\sistema
-git add .
-git commit -m "Descripción del cambio"
-git push
+cd c:\xampp\mysql\bin
+.\mysqldump.exe -u root camagare_v8 > C:\xampp\htdocs\backup_db.sql
 ```
 
-### En el servidor:
+Copia el archivo al servidor (con SCP o WinSCP), luego en el servidor:
 ```bash
-cd /var/www/sistema
-git pull origin main
-chown -R www-data:www-data /var/www/sistema
+mysql -u camagare_user -p camagare_v8 < /ruta/al/backup_db.sql
 ```
 
 ---
 
-## Parte 4: SSL con Let's Encrypt (opcional)
+## Resumen rápido
+
+| Acción | Comando |
+|--------|---------|
+| Conectar | `ssh root@TU_IP` |
+| Actualizar sitio | `cd /var/www/sistema && git pull && chown -R www-data:www-data .` |
+| Reiniciar PHP | `systemctl restart php8.2-fpm` |
+| Ver logs | `tail -f /var/log/nginx/error.log` |
+
+---
+
+## SSL (opcional, cuando tengas dominio)
 
 ```bash
 apt install certbot python3-certbot-nginx -y
 certbot --nginx -d tudominio.com
 ```
-
----
-
-## Resumen de comandos rápidos
-
-| Acción | Comando |
-|--------|---------|
-| Conectar SSH | `ssh root@IP` |
-| Actualizar sitio | `cd /var/www/sistema && git pull` |
-| Reiniciar PHP-FPM | `systemctl restart php8.1-fpm` |
-| Ver logs Nginx | `tail -f /var/log/nginx/error.log` |
