@@ -26,6 +26,15 @@ class Application
 
         if (session_status() === PHP_SESSION_NONE) {
             session_name($this->config['session']['name'] ?? 'PHPSESSID');
+            // Cookie path=/ para que funcione cuando BASE_URL está vacío (sitio en raíz)
+            session_set_cookie_params([
+                'lifetime' => $this->config['session']['lifetime'] ?? 7200,
+                'path' => '/',
+                'domain' => '',
+                'secure' => false,
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
             session_start();
         }
 
