@@ -121,11 +121,16 @@ class Usuario extends BaseModel
     public function getEmpresasAsignadasParaLogin(int $idUsuario): array
     {
         $id = (int) $idUsuario;
-        $r = $this->query("SELECT emp.id AS id_empresa, emp.ruc AS ruc_empresa, COUNT(*) AS numrows 
+        $r = $this->query("SELECT emp.id AS id_empresa, emp.ruc AS ruc_empresa,
+            (SELECT COUNT(*) FROM empresa_asignada ea 
+             INNER JOIN empresas e ON e.id = ea.id_empresa 
+             INNER JOIN usuarios u ON u.id = ea.id_usuario 
+             WHERE ea.id_usuario = {$id} AND e.estado = '1' AND u.estado = '1') AS numrows
             FROM empresa_asignada emp_asi 
             INNER JOIN empresas emp ON emp.id = emp_asi.id_empresa 
             INNER JOIN usuarios usu ON usu.id = emp_asi.id_usuario
-            WHERE emp_asi.id_usuario = {$id} AND emp.estado = '1' AND usu.estado = '1'");
+            WHERE emp_asi.id_usuario = {$id} AND emp.estado = '1' AND usu.estado = '1'
+            LIMIT 1");
         if (empty($r)) {
             return ['numrows' => 0];
         }
