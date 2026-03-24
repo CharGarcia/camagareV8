@@ -20,6 +20,14 @@ if (is_file($localCfgFile)) {
     define('BASE_URL', '/sistema/public');
 }
 
+// Cadenas UTF-8 (acentos, eñe) coherentes en todo el request
+if (function_exists('mb_internal_encoding')) {
+    mb_internal_encoding('UTF-8');
+}
+if (function_exists('mb_http_output')) {
+    mb_http_output('UTF-8');
+}
+
 require_once MVC_APP . '/helpers/helpers.php';
 require_once MVC_APP . '/helpers/funciones.php';
 require_once MVC_APP . '/helpers/theme.php';
