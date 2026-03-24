@@ -50,19 +50,25 @@ class AuthController extends Controller
         $_SESSION['nombre'] = $user['nombre'];
         $_SESSION['id_usuario'] = $user['id'];
 
-        $empresas = $model->getEmpresasAsignadasParaLogin($_SESSION['id_usuario']);
-        if (($empresas['numrows'] ?? 0) == 0) {
-            unset($_SESSION['id_usuario']);
-            $this->redirect(BASE_URL . '/?error=2');
-        }
+        $empresasLogin = $model->getEmpresasAsignadasParaLogin($_SESSION['id_usuario']);
+        $numEmpresas = (int) ($empresasLogin['numrows'] ?? 0);
 
-        $emp = ($empresas['numrows'] == 1)
-            ? ['id_empresa' => $empresas['id_empresa'], 'ruc_empresa' => $empresas['ruc_empresa']]
-            : $model->getPrimeraEmpresaAsignada($_SESSION['id_usuario']);
+        if ($numEmpresas === 0) {
+            // Solo SuperAdmin puede entrar sin empresa (crear la primera en Configuración → Empresas)
+            if ((int) $user['nivel'] !== 3) {
+                unset($_SESSION['id_usuario'], $_SESSION['nivel'], $_SESSION['nombre']);
+                $this->redirect(BASE_URL . '/?error=2');
+            }
+            unset($_SESSION['id_empresa'], $_SESSION['ruc_empresa']);
+        } else {
+            $emp = ($numEmpresas === 1)
+                ? ['id_empresa' => $empresasLogin['id_empresa'], 'ruc_empresa' => $empresasLogin['ruc_empresa']]
+                : $model->getPrimeraEmpresaAsignada($_SESSION['id_usuario']);
 
-        if ($emp) {
-            $_SESSION['id_empresa'] = $emp['id_empresa'];
-            $_SESSION['ruc_empresa'] = $emp['ruc_empresa'];
+            if ($emp) {
+                $_SESSION['id_empresa'] = $emp['id_empresa'];
+                $_SESSION['ruc_empresa'] = $emp['ruc_empresa'];
+            }
         }
 
         session_regenerate_id(true);

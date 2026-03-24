@@ -26,8 +26,12 @@ class HomeController extends Controller
             }
         }
 
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        $sinEmpresa = $nivel === 3 && empty($_SESSION['id_empresa']);
+
         $this->viewWithLayout('layouts.main', 'home.index', [
             'titulo' => 'Inicio',
+            'sinEmpresaSuperAdmin' => $sinEmpresa,
         ]);
     }
 

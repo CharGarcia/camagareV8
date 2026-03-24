@@ -103,6 +103,16 @@ class EmpresasSistemaController extends Controller
         $esAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
         try {
             $id = $this->model->crear($data);
+            $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+            if ($idUsuario > 0) {
+                $ea = new EmpresaAsignada();
+                $ea->asignar($id, $idUsuario, $idUsuario);
+            }
+            $empCreada = $this->model->getPorId($id);
+            if ($empCreada) {
+                $_SESSION['id_empresa'] = $id;
+                $_SESSION['ruc_empresa'] = $empCreada['ruc'] ?? '';
+            }
             $_SESSION['empresas_msg'] = ['success', 'Empresa creada correctamente.'];
             if ($esAjax) {
                 $this->json(['ok' => true, 'msg' => 'Empresa creada correctamente.']);
