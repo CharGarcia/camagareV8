@@ -14,8 +14,21 @@ namespace App\models;
 
 class ModuloMenu extends BaseModel
 {
-    /** Base URL para rutas legacy */
-    private const LEGACY_BASE = '/sistema/legacy/ex-archivos';
+    /**
+     * Mapa de rutas legacy → MVC (controller/action).
+     * Rutas no mapeadas van a home/moduloEnConstruccion.
+     */
+    private const RUTA_LEGACY_A_MVC = [
+        'modulos/clientes.php' => 'cliente/index',
+        'modulos/cliente.php' => 'cliente/index',
+        'paginas/empresa_set.php' => 'empresa/index',
+        'paginas/menu_de_empresas.php' => 'empresa/index',
+        'paginas/opciones_de_modulos.php' => 'config/modulo',
+        'modulos/plan_de_cuentas.php' => 'config/plan-cuentas-modelo',
+        'modulos/provincia_ciudad.php' => 'config/provincia-ciudad',
+        'modulos/provincias.php' => 'config/provincia-ciudad',
+        'modulos/ciudades.php' => 'config/provincia-ciudad',
+    ];
 
     /**
      * Obtiene módulos con submodulos para el usuario y empresa actuales.
@@ -167,7 +180,14 @@ class ModuloMenu extends BaseModel
         if (preg_match('#^https?://#', $ruta)) return $ruta;
         if (str_starts_with($ruta, '/')) return $ruta;
 
-        $ruta = str_replace(['../', './'], '', $ruta);
-        return self::LEGACY_BASE . '/' . ltrim($ruta, '/');
+        $rutaNorm = str_replace(['../', './'], '', $ruta);
+        $rutaNorm = strtolower(ltrim($rutaNorm, '/'));
+        $mvc = self::RUTA_LEGACY_A_MVC[$rutaNorm] ?? null;
+
+        $base = rtrim(defined('BASE_URL') ? BASE_URL : '', '/');
+        if ($mvc !== null) {
+            return $base . '/' . $mvc;
+        }
+        return $base . '/home/moduloEnConstruccion';
     }
 }

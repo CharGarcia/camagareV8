@@ -35,7 +35,8 @@ class Application
 
         // Si no hay sesión y no es Auth, mostrar login
         if (!isset($_SESSION['id_usuario']) && $controller !== 'Auth') {
-            header('Location: /sistema/public/');
+            $base = rtrim(defined('BASE_URL') ? BASE_URL : '', '/');
+            header('Location: ' . ($base ?: '/') . '/');
             exit;
         }
 

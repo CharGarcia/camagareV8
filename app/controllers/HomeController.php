@@ -30,4 +30,16 @@ class HomeController extends Controller
             'titulo' => 'Inicio',
         ]);
     }
+
+    /**
+     * Módulos en proceso de migración a MVC.
+     * Se muestra cuando el menú apunta a un módulo legacy que aún no tiene versión MVC.
+     */
+    public function moduloEnConstruccion(): void
+    {
+        $this->requireAuth();
+        $this->viewWithLayout('layouts.main', 'home.moduloEnConstruccion', [
+            'titulo' => 'Módulo en desarrollo',
+        ]);
+    }
 }

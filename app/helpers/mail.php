@@ -21,7 +21,7 @@ if (!function_exists('enviar_correo_recuperar_clave')) {
             return false;
         }
 
-        $docMailDir = MVC_ROOT . '/legacy/ex-archivos/documentos_mail';
+        $docMailDir = MVC_APP . '/lib/mail';
         if (!file_exists($docMailDir . '/phpmailer.php')) {
             $GLOBALS['LAST_EMAIL_ERROR'] = 'No se encuentra PHPMailer';
             return false;

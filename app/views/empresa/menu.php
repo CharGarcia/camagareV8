@@ -25,7 +25,7 @@ ob_start();
                     <?php endforeach; ?>
                 </div>
                 <hr>
-                <a href="/sistema/legacy/includes/logout.php" class="btn btn-outline-danger btn-sm">
+                <a href="<?= rtrim(BASE_URL ?? '', '/') ?>/auth/logout" class="btn btn-outline-danger btn-sm">
                     <i class="bi bi-box-arrow-right"></i> Cerrar sesión
                 </a>
             </div>

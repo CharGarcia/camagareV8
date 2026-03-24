@@ -54,7 +54,7 @@ $valorInicial = $empresaSel ? ($empresaSel['nombre_comercial'] ?? $empresaSel['r
                     <a href="<?= $base ?>/config" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Configuración">
                         <i class="bi bi-gear-fill"></i>
                     </a>
-                    <a href="/sistema/legacy/includes/logout.php" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Cerrar sesión">
+                    <a href="<?= rtrim($base ?? BASE_URL ?? '', '/') ?>/auth/logout" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Cerrar sesión">
                         <i class="bi bi-box-arrow-right"></i>
                     </a>
                 </div>
