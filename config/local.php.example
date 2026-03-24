@@ -1,0 +1,10 @@
+<?php
+/**
+ * Copiar a local.php en el servidor (no commitear local.php).
+ * Sitio en la raíz del dominio / IP (ej. http://143.110.158.101/):
+ */
+declare(strict_types=1);
+
+return [
+    'base_url' => '',
+];

@@ -34,9 +34,15 @@ class Router
         $pathInfo = $_SERVER['PATH_INFO'] ?? '';
         if ($pathInfo === '' && isset($_SERVER['REQUEST_URI'])) {
             $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-            $base = rtrim($this->basePath, '/');
-            if ($uri !== false && $base !== '' && str_starts_with($uri, $base)) {
-                $pathInfo = substr($uri, strlen($base)) ?: '/';
+            if ($uri !== false) {
+                $uri = $this->normalizePathForRouting($uri);
+                $base = rtrim($this->basePath, '/');
+                if ($base !== '' && str_starts_with($uri, $base)) {
+                    $pathInfo = substr($uri, strlen($base)) ?: '/';
+                } elseif ($base === '') {
+                    // Sitio en raíz (BASE_URL vacío): la URI completa es la ruta MVC
+                    $pathInfo = ($uri !== '' && $uri !== '/') ? $uri : '/';
+                }
             }
         }
         if ($pathInfo !== '' && $pathInfo !== '/') {
@@ -63,6 +69,22 @@ class Router
             'controller' => $this->sanitizeController($controller),
             'action' => $this->sanitizeAction($action),
         ];
+    }
+
+    /**
+     * Algunos Nginx dejan REQUEST_URI como /index.php/auth/login; sin esto el router
+     * interpreta mal el controlador (p. ej. "Index" en lugar de "Auth").
+     */
+    private function normalizePathForRouting(string $path): string
+    {
+        if (str_starts_with($path, '/index.php')) {
+            $rest = substr($path, strlen('/index.php'));
+            if ($rest === '' || $rest === false) {
+                return '/';
+            }
+            return str_starts_with($rest, '/') ? $rest : '/' . $rest;
+        }
+        return $path;
     }
 
     private function sanitizeController(string $name): string

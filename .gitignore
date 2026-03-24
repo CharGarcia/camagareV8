@@ -2,6 +2,7 @@
 # Excluir solo archivos temporales o sensibles si los hay
 .git/
 .env
+config/local.php
 legacy/
 *.log
 .DS_Store

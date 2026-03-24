@@ -14,14 +14,16 @@ class AuthController extends Controller
 {
     public function index(): void
     {
+        $this->applyLoginDebugMode();
         if (isset($_SESSION['id_usuario'])) {
-            $this->redirect(BASE_URL . '/home/index');
+            $this->redirect(BASE_URL . '/home/index');           
         }
         $this->view('auth.login', ['error' => $_GET['error'] ?? null]);
     }
 
     public function login(): void
     {
+        $this->applyLoginDebugMode();
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             $this->redirect(BASE_URL . '/');
         }
@@ -64,7 +66,8 @@ class AuthController extends Controller
         }
 
         session_regenerate_id(true);
-        session_write_close();
+        // No usar session_write_close() aquí: en algunos entornos puede interferir con el envío
+        // de la cookie antes del redirect; PHP guarda la sesión al terminar el script.
 
         $this->redirect(BASE_URL . '/home/index');
     }
@@ -239,6 +242,20 @@ class AuthController extends Controller
             $this->logEmailError('recuperar_password', $err);
             $this->json(['ok' => false, 'error' => $err]);
         }
+    }
+
+    /**
+     * Si config show_login_errors es true, muestra notices/warnings en pantalla (solo depuración).
+     * Desactivar en producción cuando termine.
+     */
+    private function applyLoginDebugMode(): void
+    {
+        if (empty($this->config['show_login_errors'])) {
+            return;
+        }
+        ini_set('display_errors', '1');
+        ini_set('display_startup_errors', '1');
+        error_reporting(E_ALL);
     }
 
     private function logEmailError(string $contexto, string $mensaje): void
