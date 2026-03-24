@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<factura id="comprobante" version="2.1.0">
+  <infoTributaria>
+    <ambiente>2</ambiente>
+    <tipoEmision>1</tipoEmision>
+    <razonSocial>ANGEL GUSTAVO IDROVO MERA</razonSocial>
+    <nombreComercial>IDROPLAST</nombreComercial>
+    <ruc>1711548931001</ruc>
+    <claveAcceso>2201202601171154893100120010010000120651234567813</claveAcceso>
+    <codDoc>01</codDoc>
+    <estab>001</estab>
+    <ptoEmi>001</ptoEmi>
+    <secuencial>000012065</secuencial>
+    <dirMatriz>PASCUAL DE ANDAGOYA OE3-261 Y AV. AMERICA</dirMatriz>
+  </infoTributaria>
+  <infoFactura>
+    <fechaEmision>22/01/2026</fechaEmision>
+    <dirEstablecimiento>PASCUAL DE ANDAGOYA OE3-261 Y AV. AMERICA</dirEstablecimiento>
+    <obligadoContabilidad>SI</obligadoContabilidad>
+    <tipoIdentificacionComprador>04</tipoIdentificacionComprador>
+    <razonSocialComprador>MAURICIO EFRAIN IDROVO MERA</razonSocialComprador>
+    <identificacionComprador>1713801148001</identificacionComprador>
+    <direccionComprador>PASCUAL DE ANDAGOYA OE3-261 Y AV, AMéRICA</direccionComprador>
+    <totalSinImpuestos>780.04</totalSinImpuestos>
+    <totalDescuento>0.00</totalDescuento>
+    <totalConImpuestos>
+      <totalImpuesto>
+        <codigo>2</codigo>
+        <codigoPorcentaje>4</codigoPorcentaje>
+        <baseImponible>780.04</baseImponible>
+        <valor>117.01</valor>
+      </totalImpuesto>
+    </totalConImpuestos>
+    <propina>0.00</propina>
+    <importeTotal>897.05</importeTotal>
+    <moneda>DOLAR</moneda>
+    <pagos>
+      <pago>
+        <formaPago>20</formaPago>
+        <total>897.05</total>
+        <plazo>30</plazo>
+        <unidadTiempo>Días</unidadTiempo>
+      </pago>
+    </pagos>
+  </infoFactura>
+  <detalles>
+    <detalle>
+      <codigoPrincipal>C.EMB.0009</codigoPrincipal>
+      <descripcion>Cinta Embalaje Transparente Con Impresión 48x100yds Md Uni</descripcion>
+      <cantidad>162</cantidad>
+      <precioUnitario>1.3400</precioUnitario>
+      <descuento>0.00</descuento>
+      <precioTotalSinImpuesto>217.08</precioTotalSinImpuesto>
+      <detallesAdicionales>
+        <detAdicional nombre="infoAdicional" valor="Vimedic"/>
+      </detallesAdicionales>
+      <impuestos>
+        <impuesto>
+          <codigo>2</codigo>
+          <codigoPorcentaje>4</codigoPorcentaje>
+          <tarifa>15</tarifa>
+          <baseImponible>217.08</baseImponible>
+          <valor>32.56</valor>
+        </impuesto>
+      </impuestos>
+    </detalle>
+    <detalle>
+      <codigoPrincipal>ROLL.0007</codigoPrincipal>
+      <descripcion>Rollo De Stretch Film De 38 Cm X 2.20kg (25mic.) Md Uni</descripcion>
+      <cantidad>172</cantidad>
+      <precioUnitario>3.2730</precioUnitario>
+      <descuento>0.00</descuento>
+      <precioTotalSinImpuesto>562.96</precioTotalSinImpuesto>
+      <impuestos>
+        <impuesto>
+          <codigo>2</codigo>
+          <codigoPorcentaje>4</codigoPorcentaje>
+          <tarifa>15</tarifa>
+          <baseImponible>562.96</baseImponible>
+          <valor>84.44</valor>
+        </impuesto>
+      </impuestos>
+    </detalle>
+  </detalles>
+  <otrosRubrosTerceros>
+    <rubro>
+      <concepto>OTROS</concepto>
+      <total>0.00</total>
+    </rubro>
+  </otrosRubrosTerceros>
+  <infoAdicional>
+    <campoAdicional nombre="Email">mauro13.idrovo@gmail.com</campoAdicional>
+    <campoAdicional nombre="Dirección">PASCUAL DE ANDAGOYA OE3-261 Y AV, AMéRICA</campoAdicional>
+    <campoAdicional nombre="Teléfono">0998308706</campoAdicional>
+  </infoAdicional>
+<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:etsi="http://uri.etsi.org/01903/v1.3.2#" Id="Signature897193">
+<ds:SignedInfo Id="Signature-SignedInfo694559">
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<ds:Reference Id="SignedPropertiesID764387" Type="http://uri.etsi.org/01903#SignedProperties" URI="#Signature897193-SignedProperties883065">
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>gbQpIylGUeZB5AidWH88rsKXTx0=</ds:DigestValue>
+</ds:Reference>
+<ds:Reference URI="#Certificate1411421">
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>ybVdtHBFYUgEJlB/PT0jN5c8W8k=</ds:DigestValue>
+</ds:Reference>
+<ds:Reference Id="Reference-ID-34465" URI="#comprobante">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>pws/Vh7El4U0WaiCXH7NRjbWIf4=</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue Id="SignatureValue873906">
+YsVeuQb3ZflvwrXsAjmP7KnWZXZkB+s2QkIfjIU1jyJHL9GUMVliKUYQzfd0RjwElfkL6XOxXX2j
+gpFS0DxDyAsVtpfSThWfEojDXPjjmJFF/fWLDPD32Y36XNOAr5zHScqvkyVwTE6UB/4/Dji0agy0
+PJWi0PsmnjgRh6WUknFlbhFcyW2xqTc9LLMcgs4HzkPfL6ZV3AnmbV6P6CBL8UKar/CWifnKRigB
+5ogixmK9fVUJeZnhyMKabT8TA3Snx7lMzzFZpUb6pvXhmR/0xl4GUWiKZqL+b9AgaOHmKr2cJxPu
+7gVe84r1LgY70XriAlXELpW2UnBAaAKCE+xi9Q==
+</ds:SignatureValue>
+<ds:KeyInfo Id="Certificate1411421">
+<ds:X509Data>
+<ds:X509Certificate>
+MIIHuDCCBqCgAwIBAgIFAMIDDGcwDQYJKoZIhvcNAQELBQAwRzELMAkGA1UEBhMCRUMxGzAZBgNV
+BAoMEkxhenphdGUgQ2lhLiBMdGRhLjEbMBkGA1UEAwwSTGF6emF0ZSBFbWlzb3IgQ0EyMB4XDTI1
+MTEyODE2NDQ1MloXDTI2MTEyODE2NDQ1MlowgZsxCzAJBgNVBAYTAkVDMRswGQYDVQQKDBJMYXp6
+YXRlIENpYS4gTHRkYS4xHjAcBgNVBAsMFUVudGUgZGUgQ2VydGlmaWNhY2lvbjEjMCEGA1UEAwwa
+QU5HRUwgR1VTVEFWTyAgSURST1ZPIE1FUkExKjAoBgkqhkiG9w0BCQEWG2d1c3Rhdm9pZHJvdm8x
+OTcxQGdtYWlsLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMCYiTNi9RDMgGpx
+oruNfDGh1dqJ76tu3KATN9qBhz36zgaVdTNiE8hAT5MwtDTQoWnfaJg6leAJa/ed47jEITXwSL8b
+sypH6PHQa9q+zpICyzXMmdOFf6KLoN3/b2O9BQZ76Jn5gAJ53GopOcZcTEscNen7TwsMAwuirZQd
+F4Ecyvz+24dI1NGfzWK/kTjQiCAPmBF4eRtnlxxoPaTHj2zxQVreYNERdrkuBjPs4JRN1DpkAMP/
+TXpZsT5bIv5hkrWbnU65RARmNdwbK9ZAiHQGVJVhzVVQ+E1oc9/X9pFVPHCFEOFqnojD6XHY4Ovd
+GMfLn8oafDWclaAAuh+/k/cCAwEAAaOCBFQwggRQMBoGCisGAQQBg892AwEEDAwKMTcxMTU0ODkz
+MTAdBgorBgEEAYPPdgMCBA8MDUFOR0VMIEdVU1RBVk8wFgYKKwYBBAGDz3YDAwQIDAZJRFJPVk8w
+FAYKKwYBBAGDz3YDBAQGDARNRVJBMBoGCisGAQQBg892AwcEDAwKQUNIVVBBTExBUzAaBgorBgEE
+AYPPdgMIBAwMCjA5NTg5MjQ4MzEwFgYKKwYBBAGDz3YDCQQIDAZBTEFVU0kwFwYKKwYBBAGDz3YD
+DAQJDAdFQ1VBRE9SMB0GCisGAQQBg892AwsEDwwNMTcxMTU0ODkzMTAwMTAMBgNVHRMBAf8EAjAA
+MB0GA1UdDgQWBBRRReJH750B1YP2iCG2kKuLejoCPjAfBgNVHSMEGDAWgBTtdkiwCvHJhoYMTEZk
+0gb4zNW9PjAOBgNVHQ8BAf8EBAMCBeAwOgYDVR0fBDMwMTAvoC2gK4YpaHR0cDovZW5leHQyLnh5
+ei9MYXp6YXRlQ0EyL2VtaXNvckNBMi5jcmwwggGEBgNVHSAEggF7MIIBdzB8BgorBgEEAYPPdgIB
+MG4wbAYIKwYBBQUHAgIwYBpeRWwgcHJlc2VudGUgY2VydGlmaWNhZG8gZXMgZW1pdGlkbyBlbiBi
+YXNlIGEgbGFzIHBvbMOtdGljYXMgZGUgc2VndXJpZGFkIGRlIExhenphdGUgQ2lhLiBMdGRhLjCB
+9gYJKwYBBAGDz3YCMIHoMGwGCCsGAQUFBwICMGAaXkVsIHByZXNlbnRlIGNlcnRpZmljYWRvIGVz
+IGVtaXRpZG8gZW4gYmFzZSBhIGxhcyBwb2zDrXRpY2FzIGRlIHNlZ3VyaWRhZCBkZSBMYXp6YXRl
+IENpYS4gTHRkYS4weAYIKwYBBQUHAgIwbBpqRWwgcHJlc2VudGUgY2VydGlmaWNhZG8gc3Vib3Jk
+aW5hZG8gZXMgZW1pdGlkbyBlbiBiYXNlIGEgbGFzIHBvbMOtdGljYXMgZGUgc2VndXJpZGFkIGRl
+IExhenphdGUgQ2lhLiBMdGRhLjCB/AYDVR0RBIH0MIHxoBoGCisGAQQBg892AwGgDAwKMTcxMTU0
+ODkzMaAdBgorBgEEAYPPdgMCoA8MDUFOR0VMIEdVU1RBVk+gFgYKKwYBBAGDz3YDA6AIDAZJRFJP
+Vk+gFAYKKwYBBAGDz3YDBKAGDARNRVJBoBoGCisGAQQBg892AwegDAwKQUNIVVBBTExBU6AaBgor
+BgEEAYPPdgMIoAwMCjA5NTg5MjQ4MzGgFgYKKwYBBAGDz3YDCaAIDAZBTEFVU0mgFwYKKwYBBAGD
+z3YDDKAJDAdFQ1VBRE9SoB0GCisGAQQBg892AwugDwwNMTcxMTU0ODkzMTAwMTA8BggrBgEFBQcB
+AQQwMC4wLAYIKwYBBQUHMAGGIGh0dHA6Ly9lbmV4dDIueHl6Ojg3NzcvYWRzcy9vY3NwMA0GCSqG
+SIb3DQEBCwUAA4IBAQBuB7Pk1tzhT3acKNpG3/Gqb3HZLig9ZScVrWpwfqRehOBCiwtEx6q3O/ft
+VTTfXgnrFUb1xUpVONiN70NeRzTDryuIZNv/3XMvLDb9R0VM6M8yaRr2Mxv+hkrOL+ruHY2NDoYS
+vqBGCXrR6L9R7Z4xxt1slBgc3r29lpwNNZ41DcxHp6IY38rjf9w91iesN/oEcGABP0xELj1bg8AF
+Q5Ru86qKUunfoXySk0qBFyPMN2gxoOye9v1ervQnrv9+G0P0GJ6aeVxAuGeK95v4MqnNuYUu/Ts3
+ljfEcMl5E6jsIFkOnjxWSDMB96b8rJs0+wzg41nMx6oYeWK9YOZWqb8N
+</ds:X509Certificate>
+</ds:X509Data>
+<ds:KeyValue>
+<ds:RSAKeyValue>
+<ds:Modulus>
+wJiJM2L1EMyAanGiu418MaHV2onvq27coBM32oGHPfrOBpV1M2ITyEBPkzC0NNChad9omDqV4Alr
+953juMQhNfBIvxuzKkfo8dBr2r7OkgLLNcyZ04V/ooug3f9vY70FBnvomfmAAnncaik5xlxMSxw1
+6ftPCwwDC6KtlB0XgRzK/P7bh0jU0Z/NYr+RONCIIA+YEXh5G2eXHGg9pMePbPFBWt5g0RF2uS4G
+M+zglE3UOmQAw/9NelmxPlsi/mGStZudTrlEBGY13Bsr1kCIdAZUlWHNVVD4TWhz39f2kVU8cIUQ
+4WqeiMPpcdjg690Yx8ufyhp8NZyVoAC6H7+T9w==
+</ds:Modulus>
+<ds:Exponent>AQAB</ds:Exponent>
+</ds:RSAKeyValue>
+</ds:KeyValue>
+</ds:KeyInfo>
+<ds:Object Id="Signature897193-Object771601">
+      <etsi:QualifyingProperties Target="#Signature897193">
+        <etsi:SignedProperties Id="Signature897193-SignedProperties883065">
+          <etsi:SignedSignatureProperties>
+            <etsi:SigningTime>2026-01-22T19:52:15+00:00</etsi:SigningTime>
+            <etsi:SigningCertificate>
+              <etsi:Cert>
+                <etsi:CertDigest>
+                  <ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+                  <ds:DigestValue>WLenuv/t2xMIZJlfJwaq9nzvePU=</ds:DigestValue>
+                </etsi:CertDigest>
+                <etsi:IssuerSerial>
+                  <ds:X509IssuerName>CN=Lazzate Emisor CA2,O=Lazzate Cia. Ltda.,C=EC</ds:X509IssuerName>
+                  <ds:X509SerialNumber>3254979687</ds:X509SerialNumber>
+                </etsi:IssuerSerial>
+              </etsi:Cert>
+            </etsi:SigningCertificate>
+          </etsi:SignedSignatureProperties>
+          <etsi:SignedDataObjectProperties>
+            <etsi:DataObjectFormat ObjectReference="#Reference-ID-34465">
+              <etsi:Description>contenido comprobante</etsi:Description>
+              <etsi:MimeType>text/xml</etsi:MimeType>
+            </etsi:DataObjectFormat>
+          </etsi:SignedDataObjectProperties>
+        </etsi:SignedProperties>
+      </etsi:QualifyingProperties>
+    </ds:Object>
+  </ds:Signature>
+</factura>

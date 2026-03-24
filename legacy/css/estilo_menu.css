@@ -1,0 +1,168 @@
+* {
+	padding:0;
+	margin:0;
+	
+	-webkit-box-sizing: border-box;
+	-moz-box-sizing: border-box;
+	box-sizing: border-box;
+	
+}
+/* COLOR DEL FONDO DEL BODY */
+body {background:#b3d8f9;}
+
+/* para desaparecer el menu */
+.menu_bar {
+	display:none;
+}
+
+header {
+	width: 100%;
+}
+ /*para dar espacio desde arriba hasta para abajo */
+header nav {
+	width:100%;
+	margin:5px auto;
+	background:#2E93B2;
+	max-width: 2000px;
+	z-index:1000;
+	border-radius: 5px;
+}
+ 
+header nav ul {
+	/* overflow: hidden;*/
+	list-style:none;
+}
+ 
+header nav ul li {
+	display:inline-block;
+	 position: relative;
+
+}
+
+/* PARA DAR COLOR AL BOTON A PASAR EL MOUSE*/
+header nav ul li:hover {
+	background:#B6D4AF;
+}
+
+ 
+ 
+header nav ul li a {
+	color:#fff;
+	padding: 20px;
+	text-decoration:none;
+	display:block;
+}
+ 
+ /*para tener espacios entre el icono y el nombre */
+header nav ul li a span {
+	margin-right:5px;
+}
+ 
+header nav ul li:hover .children {
+	display:block;
+}
+ 
+header nav ul li .children {
+	display: none;
+	background:#75BC8A;
+	position: absolute;
+	width: 160%;
+	z-index:1200;
+
+}
+ 
+header nav ul li .children li {
+	display:block;
+	overflow: hidden;
+	border-bottom: 1px solid rgba(255,255,255,.5);
+}
+ 
+header nav ul li .children li a {
+	display: block;
+
+}
+ 
+header nav ul li .children li a span {
+	float: left;
+	position: static;
+	top:5px;
+	margin-right:5px;
+	margin-left:0;
+}
+ 
+header nav ul li .caret {
+	position: relative;
+	top:2px;
+	margin-left:5px;
+	margin-right:0px;
+}
+ 
+ /*para mejorar en el celular*/
+@media screen and (max-width: 800px) {
+
+	body {
+		padding-top:100px;
+	}
+	
+	.menu_bar {
+		display:block;
+		width:100%;
+		position: fixed;
+		top:0;
+		background:#2E93B2;
+	}
+ 
+	.menu_bar .bt-menu {
+		display: block;
+		padding: 32px;
+		background:#2E93B2;
+		color: #fff;
+		text-decoration: none;
+		font-weight: bold;
+		font-size: 25px;
+				
+		
+	}
+ /*para poner el boton de menu al lado derecho */
+	.menu_bar span {
+		float: right;
+		font-size: 40px;
+	}
+ 
+	header nav {
+		width: 100%;
+		height: 100%;
+		margin: 0;
+		position: fixed;	
+		right:100%;
+		overflow: scroll;
+		
+	}
+ 
+	header nav ul li {
+		display: block;
+		float:none;
+		border-bottom:1px solid rgba(255,255,255,.3);
+	}
+ 
+	header nav ul li a {
+		display: block;
+	}
+ 
+	header nav ul li:hover .children {
+		display: none;
+	}
+ 
+	header nav ul li .children {
+		width: 100%;
+		position: relative;
+	}
+ 
+	header nav ul li .children li a {
+		margin-left:3px;
+	}
+ 
+	header nav ul li .caret {
+		float: right;
+	}
+}

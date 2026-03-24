@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<factura id="comprobante" version="2.1.0">
+  <infoTributaria>
+    <ambiente>2</ambiente>
+    <tipoEmision>1</tipoEmision>
+    <razonSocial>MARIN GOMEZ SEGUNDO ANGEL</razonSocial>
+    <nombreComercial>SUITE HOTEL CURIPAMBA</nombreComercial>
+    <ruc>0700736366001</ruc>
+    <claveAcceso>2201202601070073636600120041010000088231234567817</claveAcceso>
+    <codDoc>01</codDoc>
+    <estab>004</estab>
+    <ptoEmi>101</ptoEmi>
+    <secuencial>000008823</secuencial>
+    <dirMatriz>AVENIDA CIMA S/N</dirMatriz>
+    <agenteRetencion>1</agenteRetencion>
+  </infoTributaria>
+  <infoFactura>
+    <fechaEmision>22/01/2026</fechaEmision>
+    <dirEstablecimiento>AVENIDA CIMA S/N</dirEstablecimiento>
+    <obligadoContabilidad>SI</obligadoContabilidad>
+    <tipoIdentificacionComprador>05</tipoIdentificacionComprador>
+    <razonSocialComprador>ANGEL TUBAY MENENDEZ</razonSocialComprador>
+    <identificacionComprador>0932055247</identificacionComprador>
+    <direccionComprador>GUAYAQUIL</direccionComprador>
+    <totalSinImpuestos>58.71</totalSinImpuestos>
+    <totalDescuento>0.00</totalDescuento>
+    <totalConImpuestos>
+      <totalImpuesto>
+        <codigo>2</codigo>
+        <codigoPorcentaje>4</codigoPorcentaje>
+        <baseImponible>58.71</baseImponible>
+        <valor>8.81</valor>
+      </totalImpuesto>
+    </totalConImpuestos>
+    <propina>0.00</propina>
+    <importeTotal>67.51</importeTotal>
+    <moneda>DOLAR</moneda>
+    <pagos>
+      <pago>
+        <formaPago>20</formaPago>
+        <total>67.51</total>
+        <plazo>1</plazo>
+        <unidadTiempo>Días</unidadTiempo>
+      </pago>
+    </pagos>
+  </infoFactura>
+  <detalles>
+    <detalle>
+      <codigoPrincipal>HOSPEDAJE</codigoPrincipal>
+      <descripcion>HOSPEDAJE DE VARIAS PERSONAS Y HABITACIONES</descripcion>
+      <cantidad>3.00</cantidad>
+      <precioUnitario>19.57</precioUnitario>
+      <descuento>0.00</descuento>
+      <precioTotalSinImpuesto>58.71</precioTotalSinImpuesto>
+      <impuestos>
+        <impuesto>
+          <codigo>2</codigo>
+          <codigoPorcentaje>4</codigoPorcentaje>
+          <tarifa>15</tarifa>
+          <baseImponible>58.71</baseImponible>
+          <valor>8.81</valor>
+        </impuesto>
+      </impuestos>
+    </detalle>
+  </detalles>
+  <otrosRubrosTerceros>
+    <rubro>
+      <concepto>OTROS</concepto>
+      <total>0.00</total>
+    </rubro>
+  </otrosRubrosTerceros>
+  <infoAdicional>
+    <campoAdicional nombre="HOSPEDAJE">CORRESPONDIENTE A UNA NOCHE DE 3 PERSONAS JOEL MEDRANDA, GUSTAVO CABRERA, ANTEL TUBAY</campoAdicional>
+    <campoAdicional nombre="Email">angeltubay25@hotmail.com</campoAdicional>
+    <campoAdicional nombre="Dirección">GUAYAQUIL</campoAdicional>
+    <campoAdicional nombre="Teléfono">0978720681</campoAdicional>
+  </infoAdicional>
+<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:etsi="http://uri.etsi.org/01903/v1.3.2#" Id="Signature35438">
+<ds:SignedInfo Id="Signature-SignedInfo823111">
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<ds:Reference Id="SignedPropertiesID743416" Type="http://uri.etsi.org/01903#SignedProperties" URI="#Signature35438-SignedProperties9611">
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>YXqCuLOMKJmUdKysJJExO7jBGLE=</ds:DigestValue>
+</ds:Reference>
+<ds:Reference URI="#Certificate1194547">
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>yxXxAgCZhSBe1HpDjc/k0ksjjv8=</ds:DigestValue>
+</ds:Reference>
+<ds:Reference Id="Reference-ID-123664" URI="#comprobante">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>LUWTTwARGNifRw1lEjH8x17IK3A=</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue Id="SignatureValue988334">
+qX0XDAYE+DHUHAxuOsOkd8PxLmkAdbNA91L9Vny5jQlzUxUCR+68dan2m7YRAYbfiV+eohW+vCTS
++2uXWYx7W5kdvDTakC9Tci9X081KYULUVUTLHzwtboI/zeYcZ+3LPym9aHgkdeaDXzY2AwvXsl1D
+BtN2+06zfua2hwGbESkwsTg3u/8+0ohvS0QP4Xs7PkoMWkQEOUlh5dIYgKONOUhrM+Arl3s5YbET
+cchCf+HFelSFbQB0n1PsFAES/rJzPbku7EfsFeeEE5s4R/idK99AZkJwrlrUq+ceUjZD17g6r5KI
+bhx/U3jWuUyPT0EMC7WOY8rKYlacyCTLOsMwVQ==
+</ds:SignatureValue>
+<ds:KeyInfo Id="Certificate1194547">
+<ds:X509Data>
+<ds:X509Certificate>
+MIIHszCCBpugAwIBAgIFAMID/tEwDQYJKoZIhvcNAQELBQAwRzELMAkGA1UEBhMCRUMxGzAZBgNV
+BAoMEkxhenphdGUgQ2lhLiBMdGRhLjEbMBkGA1UEAwwSTGF6emF0ZSBFbWlzb3IgQ0EyMB4XDTI2
+MDExNjIwMjYwOFoXDTMxMDExNTIwMjYwOFowgZQxCzAJBgNVBAYTAkVDMRswGQYDVQQKDBJMYXp6
+YXRlIENpYS4gTHRkYS4xHjAcBgNVBAsMFUVudGUgZGUgQ2VydGlmaWNhY2lvbjEjMCEGA1UEAwwa
+U0VHVU5ETyBBTkdFTCAgTUFSSU4gR09NRVoxIzAhBgkqhkiG9w0BCQEWFFNlZ21hcmluMTFAeWFo
+b28uY29tMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAq5DZKgnVHBkA3APdgfFfRiBx
+6kRHPpLO9SOsZdFyvJZxtBA9nNjmn1SdHU6mfppsP904+MC6+UBwwn4CPDOxu6SqbKR84msqrsn+
+WKjkE9y3IvIDGIWlHjnva9MjE/++lg2rUngzlxfiQabhhS+YQfTRyyx1rvlOuUSHQqfk8CpTxjz5
+2lnamYTF9IeIsao9MROml5/d2+ZQHdZttctClhsc0w9kzhX/nVpR+VsWjjnqWMx1kGYGL7tRiqIy
+Zk5JBK9wKudnkHkgvJfrE1Wj8kvfFMocNhMM4UybgrZ4XNh01T5iggGFPH5k9gAx+rpG3XTTNs+V
+PF+ERmFTxzirLQIDAQABo4IEVjCCBFIwGgYKKwYBBAGDz3YDAQQMDAowNzAwNzM2MzY2MB0GCisG
+AQQBg892AwIEDwwNU0VHVU5ETyBBTkdFTDAVBgorBgEEAYPPdgMDBAcMBU1BUklOMBUGCisGAQQB
+g892AwQEBwwFR09NRVowGAYKKwYBBAGDz3YDBwQKDAhBWUFQQU1CQTAaBgorBgEEAYPPdgMIBAwM
+CjA5ODM1MTY2ODgwGQYKKwYBBAGDz3YDCQQLDAlBVEFIVUFMUEEwFwYKKwYBBAGDz3YDDAQJDAdF
+Q1VBRE9SMB0GCisGAQQBg892AwsEDwwNMDcwMDczNjM2NjAwMTAMBgNVHRMBAf8EAjAAMB0GA1Ud
+DgQWBBQAhCO0bWMr9KsoOVGu2Gei6lg9TDAfBgNVHSMEGDAWgBTtdkiwCvHJhoYMTEZk0gb4zNW9
+PjAOBgNVHQ8BAf8EBAMCBeAwOgYDVR0fBDMwMTAvoC2gK4YpaHR0cDovZW5leHQyLnh5ei9MYXp6
+YXRlQ0EyL2VtaXNvckNBMi5jcmwwggGEBgNVHSAEggF7MIIBdzB8BgorBgEEAYPPdgIBMG4wbAYI
+KwYBBQUHAgIwYBpeRWwgcHJlc2VudGUgY2VydGlmaWNhZG8gZXMgZW1pdGlkbyBlbiBiYXNlIGEg
+bGFzIHBvbMOtdGljYXMgZGUgc2VndXJpZGFkIGRlIExhenphdGUgQ2lhLiBMdGRhLjCB9gYJKwYB
+BAGDz3YCMIHoMGwGCCsGAQUFBwICMGAaXkVsIHByZXNlbnRlIGNlcnRpZmljYWRvIGVzIGVtaXRp
+ZG8gZW4gYmFzZSBhIGxhcyBwb2zDrXRpY2FzIGRlIHNlZ3VyaWRhZCBkZSBMYXp6YXRlIENpYS4g
+THRkYS4weAYIKwYBBQUHAgIwbBpqRWwgcHJlc2VudGUgY2VydGlmaWNhZG8gc3Vib3JkaW5hZG8g
+ZXMgZW1pdGlkbyBlbiBiYXNlIGEgbGFzIHBvbMOtdGljYXMgZGUgc2VndXJpZGFkIGRlIExhenph
+dGUgQ2lhLiBMdGRhLjCB/QYDVR0RBIH1MIHyoBoGCisGAQQBg892AwGgDAwKMDcwMDczNjM2NqAd
+BgorBgEEAYPPdgMCoA8MDVNFR1VORE8gQU5HRUygFQYKKwYBBAGDz3YDA6AHDAVNQVJJTqAVBgor
+BgEEAYPPdgMEoAcMBUdPTUVaoBgGCisGAQQBg892AwegCgwIQVlBUEFNQkGgGgYKKwYBBAGDz3YD
+CKAMDAowOTgzNTE2Njg4oBkGCisGAQQBg892AwmgCwwJQVRBSFVBTFBBoBcGCisGAQQBg892Awyg
+CQwHRUNVQURPUqAdBgorBgEEAYPPdgMLoA8MDTA3MDA3MzYzNjYwMDEwPAYIKwYBBQUHAQEEMDAu
+MCwGCCsGAQUFBzABhiBodHRwOi8vZW5leHQyLnh5ejo4Nzc3L2Fkc3Mvb2NzcDANBgkqhkiG9w0B
+AQsFAAOCAQEAHGr1wu6j3780BjWfUry6idDGZjIK0KKL6DrLGzRuSLCT3OK+L+8mSQeWAOatA1Qj
+VjeXAqlrVBEqs9Wd0hwl3Zayj+B2vr2+XYRmuO5FN1lqQit0gfDMzuW+xRuGgnC6gUAIE6aNyOny
+bTALqMHHHE9Lx6hyROhsrTO0KzEJsADAr/lzyd417wqOwF6UiQPw8NzUOhb+88Tkd2wHVnQOQu+4
+czitBqO2eEO66qvsWaTWCvTAbsAivkXcgLkcocA/wXZCuu1ShZjFZNSKyUVpIy/QewRGcQHhQzxb
+MYTPHC09NcRmTFsgTJ2FUUvWVvWxAjkjd9WebT+7QeXntGtRtQ==
+</ds:X509Certificate>
+</ds:X509Data>
+<ds:KeyValue>
+<ds:RSAKeyValue>
+<ds:Modulus>
+q5DZKgnVHBkA3APdgfFfRiBx6kRHPpLO9SOsZdFyvJZxtBA9nNjmn1SdHU6mfppsP904+MC6+UBw
+wn4CPDOxu6SqbKR84msqrsn+WKjkE9y3IvIDGIWlHjnva9MjE/++lg2rUngzlxfiQabhhS+YQfTR
+yyx1rvlOuUSHQqfk8CpTxjz52lnamYTF9IeIsao9MROml5/d2+ZQHdZttctClhsc0w9kzhX/nVpR
++VsWjjnqWMx1kGYGL7tRiqIyZk5JBK9wKudnkHkgvJfrE1Wj8kvfFMocNhMM4UybgrZ4XNh01T5i
+ggGFPH5k9gAx+rpG3XTTNs+VPF+ERmFTxzirLQ==
+</ds:Modulus>
+<ds:Exponent>AQAB</ds:Exponent>
+</ds:RSAKeyValue>
+</ds:KeyValue>
+</ds:KeyInfo>
+<ds:Object Id="Signature35438-Object606783">
+      <etsi:QualifyingProperties Target="#Signature35438">
+        <etsi:SignedProperties Id="Signature35438-SignedProperties9611">
+          <etsi:SignedSignatureProperties>
+            <etsi:SigningTime>2026-01-22T19:18:22+00:00</etsi:SigningTime>
+            <etsi:SigningCertificate>
+              <etsi:Cert>
+                <etsi:CertDigest>
+                  <ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+                  <ds:DigestValue>jdth8n3+9G1ifCn2y/xDRn0jvD8=</ds:DigestValue>
+                </etsi:CertDigest>
+                <etsi:IssuerSerial>
+                  <ds:X509IssuerName>CN=Lazzate Emisor CA2,O=Lazzate Cia. Ltda.,C=EC</ds:X509IssuerName>
+                  <ds:X509SerialNumber>3255041745</ds:X509SerialNumber>
+                </etsi:IssuerSerial>
+              </etsi:Cert>
+            </etsi:SigningCertificate>
+          </etsi:SignedSignatureProperties>
+          <etsi:SignedDataObjectProperties>
+            <etsi:DataObjectFormat ObjectReference="#Reference-ID-123664">
+              <etsi:Description>contenido comprobante</etsi:Description>
+              <etsi:MimeType>text/xml</etsi:MimeType>
+            </etsi:DataObjectFormat>
+          </etsi:SignedDataObjectProperties>
+        </etsi:SignedProperties>
+      </etsi:QualifyingProperties>
+    </ds:Object>
+  </ds:Signature>
+</factura>

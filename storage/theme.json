@@ -1,0 +1,25 @@
+{
+    "body": {
+        "gradient_start": "#e8f4f8",
+        "gradient_end": "#a0c8f3",
+        "gradient_angle": "180deg"
+    },
+    "primary": {
+        "main": "#58a5d5",
+        "hover": "#3297f5",
+        "text": "#faf9f9"
+    },
+    "links": {
+        "color": "#141414",
+        "hover": "#eff0f0"
+    },
+    "typography": {
+        "font_size_base": "0.9375rem",
+        "font_family": "Inter, system-ui, sans-serif"
+    },
+    "borders": {
+        "radius": "0.375rem",
+        "radius_sm": "0.25rem",
+        "radius_lg": "0.5rem"
+    }
+}

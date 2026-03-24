@@ -1,0 +1,7 @@
+# Backup / punto de restauración - CaMaGaRe
+# Excluir solo archivos temporales o sensibles si los hay
+.git/
+.env
+*.log
+.DS_Store
+Thumbs.db

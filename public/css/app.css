@@ -1,0 +1,334 @@
+/**
+ * Estilos propios del MVC
+ * Complementa Bootstrap 5
+ */
+
+/* Evitar que body/html rompan position:fixed de navbars */
+html, body {
+  transform: none !important;
+  will-change: auto !important;
+}
+
+/* Variables según reglas del proyecto */
+:root {
+  --cmg-topbar-item-height: 20px;
+  --cmg-navbar-height: 32px;
+  --cmg-empresas-select-height: 26px;
+  --cmg-empresas-select-width: 320px;
+}
+
+/* Navbar compacto - altura reducida */
+.cmg-navbar-compact {
+  min-height: var(--cmg-navbar-height) !important;
+  padding-top: 0.25rem !important;
+  padding-bottom: 0.25rem !important;
+}
+.cmg-navbar-compact .navbar-brand {
+  font-size: 1rem;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+.cmg-navbar-compact .container-fluid {
+  min-height: var(--cmg-navbar-height);
+}
+.cmg-navbar-compact .navbar-text {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  font-size: 0.75rem;
+}
+
+/* Navbar - botones compactos */
+.cmg-navbar-btn {
+  padding: 2px 6px !important;
+  height: var(--cmg-topbar-item-height) !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Navbar - selects altura fija */
+.cmg-navbar-select {
+  height: var(--cmg-topbar-item-height) !important;
+  font-size: 0.8rem;
+}
+
+/* Select empresas: dropdown al clic */
+.cmg-empresas-form {
+  min-width: var(--cmg-empresas-select-width) !important;
+  position: relative;
+}
+.cmg-empresas-input {
+  width: var(--cmg-empresas-select-width) !important;
+  height: var(--cmg-empresas-select-height) !important;
+  font-size: 0.9rem !important;
+  padding: 4px 10px !important;
+  cursor: pointer;
+}
+
+/* Navbar toggler compacto */
+.cmg-navbar-toggler {
+  background: transparent !important;
+  opacity: 0.9;
+}
+.cmg-navbar-toggler:hover {
+  opacity: 1;
+}
+.cmg-navbar-toggler:focus {
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.5);
+}
+#cmg-dropdown-portal {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  z-index: 2147483647 !important;
+  pointer-events: none;
+}
+#cmg-dropdown-portal > * {
+  pointer-events: auto;
+}
+.cmg-empresas-dropdown {
+  display: none;
+  position: fixed;
+  margin-top: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1;
+}
+.cmg-empresas-dropdown.cmg-empresas-dropdown-open {
+  display: block;
+}
+.cmg-empresas-dropdown-item {
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmg-empresas-dropdown-item:hover {
+  background: #f0f4f8;
+}
+
+/* Header sticky: navbar + menú siempre visibles al hacer scroll */
+.cmg-sticky-header {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5000;
+}
+
+/* Navbar dentro del header sticky */
+.navbar.cmg-navbar-compact {
+  width: 100% !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: auto !important;
+}
+
+/* Modal z-index según reglas (navbar 5000) */
+.modal { z-index: 5060 !important; }
+.modal-backdrop { z-index: 5055 !important; }
+
+/* Contenedor del menú horizontal - debajo del navbar */
+.cmg-menu-wrapper {
+  width: 100% !important;
+  background: #fff !important;
+  position: relative !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: auto !important;
+}
+
+/* Menú de módulos - horizontal con scroll (20% más delgado) */
+.cmg-menu-modulos {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  background: #fff;
+  border-bottom: 1px solid #dee2e6;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  position: relative;
+  z-index: 4990;
+}
+
+/* Contenido principal - fluye debajo del header sticky.
+   No usar position/z-index: rompe el stacking de modales (quedan detrás del backdrop) */
+.cmg-menu-scroll-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: #f8f9fa;
+  color: #495057;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  transition: background 0.15s;
+}
+.cmg-menu-scroll-btn:hover {
+  background: #e9ecef;
+}
+.cmg-menu-scroll-btn[style*="hidden"] {
+  pointer-events: none;
+}
+.cmg-menu-scroll-wrap {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.cmg-menu-scroll-wrap::-webkit-scrollbar {
+  display: none;
+}
+.cmg-menu-list {
+  display: flex;
+  flex-wrap: nowrap;
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0.5rem;
+  gap: 0;
+}
+.cmg-menu-item {
+  flex-shrink: 0;
+  position: relative;
+}
+.cmg-menu-modulo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+  color: #495057;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.cmg-menu-modulo-btn:hover {
+  background: #f0f4f8;
+  color: var(--cmg-primary, #0d6efd);
+}
+.cmg-menu-modulo-btn[aria-expanded="true"] {
+  background: rgba(13, 110, 253, 0.1);
+  color: var(--cmg-primary, #0d6efd);
+}
+.cmg-menu-chevron {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+.cmg-menu-dropdown-menu {
+  display: none;
+  position: fixed;
+  max-height: 70vh;
+  overflow-y: auto;
+  min-width: 200px;
+  z-index: 5065;
+  margin-top: 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.cmg-menu-dropdown-menu.cmg-dropdown-visible {
+  display: block;
+}
+.cmg-menu-empty {
+  padding: 0.4rem 0.75rem;
+  display: inline-block;
+}
+
+/* Móvil: menú más compacto */
+@media (max-width: 767.98px) {
+  .cmg-menu-modulos {
+    padding: 0;
+  }
+  .cmg-menu-scroll-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 1rem;
+  }
+  .cmg-menu-modulo-btn {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.8rem;
+  }
+  .cmg-menu-dropdown-menu {
+    max-height: 60vh;
+  }
+}
+
+/* Responsive: navbar y empresa selector en pantallas pequeñas */
+@media (max-width: 991.98px) {
+  .cmg-empresas-form {
+    min-width: 100% !important;
+    width: 100% !important;
+  }
+  .cmg-empresas-input {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .navbar-collapse {
+    border-top: 1px solid rgba(255,255,255,0.2);
+    margin-top: 0.25rem;
+    padding-top: 0.5rem;
+  }
+  .navbar.cmg-navbar-compact .navbar-collapse .d-flex {
+    flex-wrap: wrap;
+  }
+}
+
+/* Pantallas muy pequeñas: ajustes adicionales */
+@media (max-width: 575.98px) {
+  .navbar-brand {
+    font-size: 0.95rem !important;
+  }
+  .cmg-empresas-input {
+    font-size: 0.85rem !important;
+  }
+}
+
+/* Tablas de datos: frame con padding, filas compactas, botones pequeños */
+.cmg-table-card .card-body {
+  padding: 0.75rem 1rem !important;
+}
+.cmg-table-card .table {
+  font-size: 0.875rem;
+  margin-bottom: 0;
+}
+.cmg-table-card .table th,
+.cmg-table-card .table td {
+  padding: 0.35rem 0.5rem;
+  vertical-align: middle;
+}
+.cmg-btn-table {
+  padding: 2px 6px !important;
+  font-size: 0.75rem !important;
+  line-height: 1.2 !important;
+  min-width: 28px;
+}
+
+/* Iconos con contorno para visibilidad en fondos de cualquier color */
+.cmg-icon-outline i {
+  text-shadow: -1px -1px 0 rgba(0,0,0,0.7), 1px -1px 0 rgba(0,0,0,0.7),
+    -1px 1px 0 rgba(0,0,0,0.7), 1px 1px 0 rgba(0,0,0,0.7),
+    0 0 2px rgba(0,0,0,0.8);
+}
+.cmg-icon-outline i.text-danger {
+  text-shadow: -1px -1px 0 rgba(0,0,0,0.7), 1px -1px 0 rgba(0,0,0,0.7),
+    -1px 1px 0 rgba(0,0,0,0.7), 1px 1px 0 rgba(0,0,0,0.7),
+    0 0 2px rgba(0,0,0,0.8), 0 0 1px rgba(255,255,255,0.4);
+}
+
+

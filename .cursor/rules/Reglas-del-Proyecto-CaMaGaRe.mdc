@@ -1,0 +1,101 @@
+---
+alwaysApply: true
+---
+
+Documento de referencia con las reglas establecidas para el desarrollo del sistema.
+
+---
+
+## 1. Permisos y redirecciones
+
+| Situación | Acción |
+|-----------|--------|
+| Usuario sin permiso de lectura en un módulo | Redirigir a `sistema/empresa` |
+| Cambio de empresa (select en navbar) | Siempre redirigir a `sistema/empresa` |
+| Usuario sin sesión | Redirigir a `sistema/empresa` |
+| `getPermisos` retorna null | Retornar `array('r'=>0,'w'=>0,'u'=>0,'d'=>0)` |
+
+**Implementación:** En módulos que usan `getPermisos`, incluir al inicio:
+```php
+$con = conenta_login();
+require_once dirname(__DIR__) . '/paginas/verificar_permiso_modulo.php';
+```
+
+---
+
+## 2. Navbar
+
+| Elemento | Regla |
+|----------|-------|
+| Select de empresa | 40% del ancho; altura fija 25px |
+| Altura del select | No debe variar entre páginas (usar `!important` en `.cmg-topbar-empresa`) |
+| Novedades | Flex configurable según diseño |
+| Variables CSS | `--cmg-topbar-item-height`, `--cmg-navbar-height` |
+
+---
+
+## 3. Buscador (barra de búsqueda)
+
+| Elemento | Valor |
+|----------|-------|
+| Input de búsqueda | altura 24px, fuente 0.8rem |
+| Botón buscar | altura 24px, padding 2px 8px |
+| Botones Excel/PDF | altura 24px, fuente 0.75rem |
+
+---
+
+## 4. Modal de clientes
+
+| Elemento | Valor |
+|----------|-------|
+| Inputs y selects | altura 28px, padding 2px 8px, fuente 0.85rem |
+| Pestañas | padding 0.35rem 0.75rem |
+| Botones footer | padding 4px 12px, fuente 0.8rem |
+| Espaciado entre filas | --bs-gutter-y: 0.5rem |
+
+---
+
+## 5. Tablas y módulos
+
+| Elemento | Valor |
+|----------|-------|
+| Encabezado tabla | color #6b8ab3, padding 6px 8px |
+| Filas | padding 4px 8px, fuente 0.85rem |
+| Botón "Nuevo" en header | padding 4px 10px, fuente 0.8rem |
+| Modal z-index | backdrop 5055, modal 5060 (navbar 5000) |
+
+---
+
+## 6. Estructura MVC
+
+- Controladores: `app/Controllers/`
+- Vistas: `app/Views/`
+- Modelos: `app/Models/`
+- Helpers: `helpers/helpers.php`, `app/Helpers/`
+- Barra de búsqueda reutilizable: `includes/cmg-search-bar.php`
+- CSS global: `css/modulo-header.css`, `css/modulo-tabla.css`
+
+---
+
+## 7. Mensajes en formularios
+
+**Los mensajes (éxito, error, validación) siempre se muestran dentro del formulario**, no arriba de la página.
+
+| Elemento | Regla |
+|----------|-------|
+| Ubicación | Div de mensaje dentro del modal o formulario (ej. `#crear-msg`, `#editar-msg`) |
+| Submit | Envío vía AJAX con header `X-Requested-With: XMLHttpRequest` |
+| Controlador | Si es AJAX: retornar JSON `{ ok: true/false, msg: "...", error: "..." }` |
+| Éxito | Mostrar mensaje en el formulario, luego redirect/refresh |
+| Error | Mostrar mensaje en el formulario, mantener modal abierto, habilitar botón |
+
+**Patrón:**
+- Vista: `<div id="form-msg" class="d-none"></div>` al inicio del `modal-body`
+- JS: `mostrarMsgForm(containerId, 'success'|'error', texto)`
+- Controlador: `$esAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest'`; si `$esAjax` → `$this->json(...)` y `return`
+
+---
+
+## 8. Comunicación
+
+- Responder siempre en **español**.

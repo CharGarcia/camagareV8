@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<factura id="comprobante" version="2.1.0">
+  <infoTributaria>
+    <ambiente>2</ambiente>
+    <tipoEmision>1</tipoEmision>
+    <razonSocial>SOCIEDAD HIDROELECTRICA IMBABURA HIDROIMBABURA C.A.</razonSocial>
+    <nombreComercial>HIDROIMBABURA C.A.</nombreComercial>
+    <ruc>1791831896001</ruc>
+    <claveAcceso>2101202601179183189600120011010000012751234567816</claveAcceso>
+    <codDoc>01</codDoc>
+    <estab>001</estab>
+    <ptoEmi>101</ptoEmi>
+    <secuencial>000001275</secuencial>
+    <dirMatriz>SAN GERONIMO S/N Y SN</dirMatriz>
+  </infoTributaria>
+  <infoFactura>
+    <fechaEmision>21/01/2026</fechaEmision>
+    <dirEstablecimiento>SAN GERONIMO S/N Y SN</dirEstablecimiento>
+    <obligadoContabilidad>SI</obligadoContabilidad>
+    <tipoIdentificacionComprador>04</tipoIdentificacionComprador>
+    <razonSocialComprador>EMPRESA ELECTRICA PUBLICA ESTRATEGICA CORPORACION NACIONAL DE ELECTRICIDAD CNEL EP  OFICINA MATRIZ</razonSocialComprador>
+    <identificacionComprador>0968599020001</identificacionComprador>
+    <direccionComprador>GUAYAQUIL: VIA A LA COSTA KM  6 1/2 EDIFICIO GRACE CEIBOS PISO 3</direccionComprador>
+    <totalSinImpuestos>17917.91</totalSinImpuestos>
+    <totalDescuento>0.00</totalDescuento>
+    <totalConImpuestos>
+      <totalImpuesto>
+        <codigo>2</codigo>
+        <codigoPorcentaje>0</codigoPorcentaje>
+        <baseImponible>17917.91</baseImponible>
+        <valor>0.00</valor>
+      </totalImpuesto>
+    </totalConImpuestos>
+    <propina>0.00</propina>
+    <importeTotal>17917.91</importeTotal>
+    <moneda>DOLAR</moneda>
+    <pagos>
+      <pago>
+        <formaPago>20</formaPago>
+        <total>17917.91</total>
+        <plazo>30</plazo>
+        <unidadTiempo>Días</unidadTiempo>
+      </pago>
+    </pagos>
+  </infoFactura>
+  <detalles>
+    <detalle>
+      <codigoPrincipal>02</codigoPrincipal>
+      <descripcion>KWh De Energía Eléctrica Renovable No Convenc.por El Mes De Diciembre De 2025,según Liq.CENACE</descripcion>
+      <cantidad>249901.12</cantidad>
+      <precioUnitario>0.0717</precioUnitario>
+      <descuento>0.00</descuento>
+      <precioTotalSinImpuesto>17917.91</precioTotalSinImpuesto>
+      <impuestos>
+        <impuesto>
+          <codigo>2</codigo>
+          <codigoPorcentaje>0</codigoPorcentaje>
+          <tarifa>0</tarifa>
+          <baseImponible>17917.91</baseImponible>
+          <valor>0.00</valor>
+        </impuesto>
+      </impuestos>
+    </detalle>
+  </detalles>
+  <otrosRubrosTerceros>
+    <rubro>
+      <concepto>OTROS</concepto>
+      <total>0.00</total>
+    </rubro>
+  </otrosRubrosTerceros>
+  <infoAdicional>
+    <campoAdicional nombre="Email">marioj.mendoza@cnel.gob.ec</campoAdicional>
+    <campoAdicional nombre="Dirección">GUAYAQUIL: VIA A LA COSTA KM  6 1/2 EDIFICIO GRACE CEIBOS PISO 3</campoAdicional>
+    <campoAdicional nombre="Teléfono">04-3727310</campoAdicional>
+  </infoAdicional>
+<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:etsi="http://uri.etsi.org/01903/v1.3.2#" Id="Signature315909">
+<ds:SignedInfo Id="Signature-SignedInfo891362">
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<ds:Reference Id="SignedPropertiesID1030224" Type="http://uri.etsi.org/01903#SignedProperties" URI="#Signature315909-SignedProperties320622">
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>LIwUg+u1h4QMk6FwVZTZhRBe8q4=</ds:DigestValue>
+</ds:Reference>
+<ds:Reference URI="#Certificate1547572">
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>9NdTkaQRLFdwgzIKgNiBbyHJut8=</ds:DigestValue>
+</ds:Reference>
+<ds:Reference Id="Reference-ID-646366" URI="#comprobante">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>Gw4ma143tK+0BQAQql82u3H+vto=</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue Id="SignatureValue600477">
+BKhtIxpRzS+nAA9e0PLF9JimIpV2UrBn1KbP0sXseE0QOtFVgze6HeK0D7XGxe3eFejAuH9GZJXV
+EYpKvaViE17k56dfxqNaPLYI6rKBu1TOV61OhBCrYru0/g0eCXTbHaCQCUlA3bqSFEDaHF8NPuus
+nYi0VYxubvoewAYSh+YvZWK4ezhF73YyR3Qqvzfnen9AJQxUyqxoXyFyCFnowbkJfrdpJ++jpYuV
+R2T/2ix8NCLQ2pWyhrK1cAUN7gmlTLYH+ATzbmArDHpReETVQtII8cP+4foSuw9F3HmG4wW36LE3
+n29vX/HgVQjOOdn2HY1IvW86pWTx9Wjf9M0oEA==
+</ds:SignatureValue>
+<ds:KeyInfo Id="Certificate1547572">
+<ds:X509Data>
+<ds:X509Certificate>
+MIIMSjCCCjKgAwIBAgIEQcteCTANBgkqhkiG9w0BAQsFADCBmTELMAkGA1UEBhMCRUMxHTAbBgNV
+BAoMFFNFQ1VSSVRZIERBVEEgUy5BLiAyMTAwLgYDVQQLDCdFTlRJREFEIERFIENFUlRJRklDQUNJ
+T04gREUgSU5GT1JNQUNJT04xOTA3BgNVBAMMMEFVVE9SSURBRCBERSBDRVJUSUZJQ0FDSU9OIFNV
+QkNBLTIgU0VDVVJJVFkgREFUQTAeFw0yNDA1MjIyMDMwMjZaFw0yNjA1MjIyMDMwMjZaMIG4MTYw
+NAYDVQQDDC1NQU5VRUwgTUFSSUEgRlJBTkNJU0NPIEpBVklFUiBQT0xJVCBNT0xFU1RJTkExIDAe
+BgNVBAUTFzE3MDMwNjU0MTUtMjIwNTI0MTU0MDAzMTAwLgYDVQQLDCdFTlRJREFEIERFIENFUlRJ
+RklDQUNJT04gREUgSU5GT1JNQUNJT04xHTAbBgNVBAoMFFNFQ1VSSVRZIERBVEEgUy5BLiAyMQsw
+CQYDVQQGEwJFQzCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAK74dIvOBOvHBNyroAF6
+Hh1j1GMO0/4DAGmdIegq3Q9Oee41ozodO/M01yi3e/m4Uij93e/s3vYyfx8vEEDu2ZbNP3mCIdFV
+gyy3HcVZ7sI7Uo9xWuXkK0Sw2UjGdQYJgKLFEDKCoN3ss0w43nnRDOChplM3dPx3PU/KULeGbsoD
+kNIZyj/qEsJC+6gSDKHCITfxsVFJBrj/dl0HFpldl10opZ4qeZNhLYI4f4FCg5Zfqb9sHJbdaBBH
+M3uFTm1ki3FCk8j5HfFEYftOLvZJ79jhGMLHgi1O224piPACHpt2a1jyYTnfUTeEJOVU9QEXKXWO
+djAsm2Ls6WGR9N981ycCAwEAAaOCB3cwggdzMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUjLrK
+EVd4JYAdawpLVb+NrmLdvY8wWQYIKwYBBQUHAQEETTBLMEkGCCsGAQUFBzABhj1odHRwOi8vb2Nz
+cGd3LnNlY3VyaXR5ZGF0YS5uZXQuZWMvZWpiY2EvcHVibGljd2ViL3N0YXR1cy9vY3NwMIHPBgNV
+HS4EgccwgcQwgcGggb6ggbuGgbhsZGFwOi8vbGRhcHNkY2EyLnNlY3VyaXR5ZGF0YS5uZXQuZWMv
+Q049QVVUT1JJREFEIERFIENFUlRJRklDQUNJT04gU1VCQ0EtMiBTRUNVUklUWSBEQVRBLE9VPUVO
+VElEQUQgREUgQ0VSVElGSUNBQ0lPTiBERSBJTkZPUk1BQ0lPTixPPVNFQ1VSSVRZIERBVEEgUy5B
+LiAyLEM9RUM/ZGVsdGFSZXZvY2F0aW9uTGlzdD9iYXNlMCQGA1UdEQQdMBuBGWhpZHJvaW1iYWJ1
+cmFAaG90bWFpbC5jb20wggEVBgNVHSAEggEMMIIBCDBiBgorBgEEAYKmcgIJMFQwUgYIKwYBBQUH
+AgIwRh5EAEMAZQByAHQAaQBmAGkAYwBhAGQAbwAgAGQAZQAgAFIAZQBwAHIAZQBzAGUAbgB0AGEA
+bgB0AGUAIABMAGUAZwBhAGwwgaEGCisGAQQBgqZyAgMwgZIwgY8GCCsGAQUFBwIBFoGCaHR0cHM6
+Ly93d3cuc2VjdXJpdHlkYXRhLm5ldC5lYy93cC1jb250ZW50L2Rvd25sb2Fkcy9Ob3JtYXRpdmFz
+L1BfZGVfQ2VydGlmaWNhZG9zL1BvbGl0aWNhcyBkZSBDZXJ0aWZpY2FkbyBSZXByZXNlbnRhbnRl
+IExlZ2FsLnBkZjCCAqIGA1UdHwSCApkwggKVMIHloEGgP4Y9aHR0cDovL29jc3Bndy5zZWN1cml0
+eWRhdGEubmV0LmVjL2VqYmNhL3B1YmxpY3dlYi9zdGF0dXMvb2NzcKKBn6SBnDCBmTE5MDcGA1UE
+AwwwQVVUT1JJREFEIERFIENFUlRJRklDQUNJT04gU1VCQ0EtMiBTRUNVUklUWSBEQVRBMTAwLgYD
+VQQLDCdFTlRJREFEIERFIENFUlRJRklDQUNJT04gREUgSU5GT1JNQUNJT04xHTAbBgNVBAoMFFNF
+Q1VSSVRZIERBVEEgUy5BLiAyMQswCQYDVQQGEwJFQzCBx6CBxKCBwYaBvmxkYXA6Ly9sZGFwc2Rj
+YTIuc2VjdXJpdHlkYXRhLm5ldC5lYy9DTj1BVVRPUklEQUQgREUgQ0VSVElGSUNBQ0lPTiBTVUJD
+QS0yIFNFQ1VSSVRZIERBVEEsT1U9RU5USURBRCBERSBDRVJUSUZJQ0FDSU9OIERFIElORk9STUFD
+SU9OLE89U0VDVVJJVFkgREFUQSBTLkEuIDIsQz1FQz9jZXJ0aWZpY2F0ZVJldm9jYXRpb25MaXN0
+P2Jhc2UwgeCggd2ggdqGgddodHRwczovL3BvcnRhbC1vcGVyYWRvcjIuc2VjdXJpdHlkYXRhLm5l
+dC5lYy9lamJjYS9wdWJsaWN3ZWIvd2ViZGlzdC9jZXJ0ZGlzdD9jbWQ9Y3JsJmlzc3Vlcj1DTj1B
+VVRPUklEQUQgREUgQ0VSVElGSUNBQ0lPTiBTVUJDQS0yIFNFQ1VSSVRZIERBVEEsT1U9RU5USURB
+RCBERSBDRVJUSUZJQ0FDSU9OIERFIElORk9STUFDSU9OLE89U0VDVVJJVFkgREFUQSBTLkEuIDIs
+Qz1FQzAdBgNVHQ4EFgQUPCINiDYBpgKc8P+ic7bsXLQ1PHowKwYDVR0QBCQwIoAPMjAyNDA1MjIy
+MDMwMjZagQ8yMDI2MDUyMjIwMzAyNlowCwYDVR0PBAQDAgXgMB8GCisGAQQBgqZyAwUEEQwPR0VS
+RU5URSBHRU5FUkFMMBoGCisGAQQBgqZyAwEEDAwKMTcwMzA2NTQxNTAYBgorBgEEAYKmcgMJBAoM
+CFNBTiBKVUFOMBEGCisGAQQBgqZyAyIEAwwBLjA1BgorBgEEAYKmcgMHBCcMJUxJWkFSRE8gR0FS
+Q0lBIDUxMiBZIERJRUdPIERFIEFMTUFHUk8wLQYKKwYBBAGCpnIDAgQfDB1NQU5VRUwgTUFSSUEg
+RlJBTkNJU0NPIEpBVklFUjAfBgorBgEEAYKmcgMgBBEMDzAxMTAwMTAwMDAwNTA4MTATBgorBgEE
+AYKmcgMhBAUMA1BGWDAXBgorBgEEAYKmcgMMBAkMB0VDVUFET1IwFQYKKwYBBAGCpnIDAwQHDAVQ
+T0xJVDBCBgorBgEEAYKmcgMKBDQMMlNPQ0lFREFEIEhJRFJPRUxFQ1RSSUNBIElNQkFCVVJBIEhJ
+RFJPSU1CQUJVUkEgQyBBMB0GCisGAQQBgqZyAwsEDwwNMTc5MTgzMTg5NjAwMTARBgorBgEEAYKm
+cgMdBAMMAS4wGQYKKwYBBAGCpnIDBAQLDAlNT0xFU1RJTkEwEAYKKwYBBAGCpnIDCAQCDAAwDQYJ
+KoZIhvcNAQELBQADggIBAKS/UuOLz/GYjQJG+PE3yJOShg5AoFbuoFD5AkN4qVSt5NzdFGfvrdHt
+UzYb+xE8Z5awnkKz3D0yOHvZ9tV/Ws3FLOvTK0LcWD4wqOf9jFMahzmyY/bYlTA8vDxIw1iUdcVD
+ukWdTCKYAjxwS4X/uTZLbaDXL8frHtuxvPoS5wYOVLhXXbxkKpcZboKnP2LY6N0yk8BSsTVvEMyf
+4PstC2VgltU/DI6+wEwExFMeLxH/IUTFeqrH0ZmED3PVUWznFlK8wh7cWrdxSM46jZHfgET9XSry
+CzmzLgdv6QgsW9jmBMDHOTRJWPNSrTZv/DH/oCv5bQMsaOZ2YjvoNarNYnTTV7QWkAtC4M83r+tK
+KMmXPU05MrbWausulxK0FH4iNHXkBpWCTJd5uNk/4AbmI/6kpg1KR4zpOS2fH3v14oC8PkKI8yw2
+LPoeQdwPugfWxEakmtNj/8iOC+5zjZdrQFodjbdV1AvkDNmzLlcaB6WKtvCyKMLUrrJBkf7PnVig
+kz0UyE/FNni1hP/k/xIysTi4t8uD5/F77W65yM7FFX2ckwmIQ3mJdSa8Uhhf14ekwfaCtmvSXzme
+3sglycLREeAqng7gIgf3LeH5kC45sjjQ4gVRsxxoEXnXnq3fs3+XoizsedOUAbOQuiTguQMhf7W6
+7CeQrBD8KIdpMaWBUobO
+</ds:X509Certificate>
+</ds:X509Data>
+<ds:KeyValue>
+<ds:RSAKeyValue>
+<ds:Modulus>
+rvh0i84E68cE3KugAXoeHWPUYw7T/gMAaZ0h6CrdD0557jWjOh078zTXKLd7+bhSKP3d7+ze9jJ/
+Hy8QQO7Zls0/eYIh0VWDLLcdxVnuwjtSj3Fa5eQrRLDZSMZ1BgmAosUQMoKg3eyzTDjeedEM4KGm
+Uzd0/Hc9T8pQt4ZuygOQ0hnKP+oSwkL7qBIMocIhN/GxUUkGuP92XQcWmV2XXSilnip5k2Etgjh/
+gUKDll+pv2wclt1oEEcze4VObWSLcUKTyPkd8URh+04u9knv2OEYwseCLU7bbimI8AIem3ZrWPJh
+Od9RN4Qk5VT1ARcpdY52MCybYuzpYZH033zXJw==
+</ds:Modulus>
+<ds:Exponent>AQAB</ds:Exponent>
+</ds:RSAKeyValue>
+</ds:KeyValue>
+</ds:KeyInfo>
+<ds:Object Id="Signature315909-Object26193">
+      <etsi:QualifyingProperties Target="#Signature315909">
+        <etsi:SignedProperties Id="Signature315909-SignedProperties320622">
+          <etsi:SignedSignatureProperties>
+            <etsi:SigningTime>2026-01-21T14:25:28+00:00</etsi:SigningTime>
+            <etsi:SigningCertificate>
+              <etsi:Cert>
+                <etsi:CertDigest>
+                  <ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+                  <ds:DigestValue>ZMVIhz5PngtHayZxEnDgDYAMl54=</ds:DigestValue>
+                </etsi:CertDigest>
+                <etsi:IssuerSerial>
+                  <ds:X509IssuerName>CN=AUTORIDAD DE CERTIFICACION SUBCA-2 SECURITY DATA,OU=ENTIDAD DE CERTIFICACION DE INFORMACION,O=SECURITY DATA S.A. 2,C=EC</ds:X509IssuerName>
+                  <ds:X509SerialNumber>1103846921</ds:X509SerialNumber>
+                </etsi:IssuerSerial>
+              </etsi:Cert>
+            </etsi:SigningCertificate>
+          </etsi:SignedSignatureProperties>
+          <etsi:SignedDataObjectProperties>
+            <etsi:DataObjectFormat ObjectReference="#Reference-ID-646366">
+              <etsi:Description>contenido comprobante</etsi:Description>
+              <etsi:MimeType>text/xml</etsi:MimeType>
+            </etsi:DataObjectFormat>
+          </etsi:SignedDataObjectProperties>
+        </etsi:SignedProperties>
+      </etsi:QualifyingProperties>
+    </ds:Object>
+  </ds:Signature>
+</factura>

@@ -1,0 +1,59 @@
+/**
+ * Tema - colores, tipografía y bordes personalizables
+ * Variables definidas en theme-vars.php
+ */
+
+/* Body */
+body {
+  background: linear-gradient(
+    var(--cmg-body-gradient-angle, 135deg),
+    var(--cmg-body-gradient-start, #e8f4f8),
+    var(--cmg-body-gradient-end, #f0f7fa)
+  ) !important;
+  min-height: 100vh;
+  font-size: var(--cmg-font-size-base, 0.9375rem);
+  font-family: var(--cmg-font-family, system-ui, -apple-system, sans-serif);
+}
+
+/* Enlaces */
+a {
+  color: var(--cmg-link-color, #0d6efd);
+}
+a:hover {
+  color: var(--cmg-link-hover, #0a58ca);
+}
+
+/* Bordes redondeados */
+.btn, .form-control, .form-select {
+  border-radius: var(--cmg-border-radius, 0.375rem);
+}
+.btn-sm, .form-control-sm, .form-select-sm {
+  border-radius: var(--cmg-border-radius-sm, 0.25rem);
+}
+.card {
+  border-radius: var(--cmg-border-radius-lg, 0.5rem);
+  border-color: rgba(0,0,0,0.08);
+}
+
+/* Color principal */
+.btn-primary,
+.bg-primary,
+.navbar-dark.bg-primary,
+.card-header.bg-primary {
+  background-color: var(--cmg-primary) !important;
+  border-color: var(--cmg-primary) !important;
+}
+
+.btn-primary:hover {
+  background-color: var(--cmg-primary-hover) !important;
+  border-color: var(--cmg-primary-hover) !important;
+}
+
+.navbar-dark .navbar-brand:hover,
+.navbar-dark .btn-outline-light:hover {
+  background-color: rgba(255,255,255,0.15);
+}
+
+.card-header.bg-primary {
+  color: var(--cmg-primary-text) !important;
+}
