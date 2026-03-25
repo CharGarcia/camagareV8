@@ -12,6 +12,23 @@ $base = BASE_URL;
 $msg = $_SESSION['modulo_msg'] ?? null;
 unset($_SESSION['modulo_msg']);
 ?>
+<style>
+.cmg-modulo-icono-fila { display: flex; align-items: stretch; gap: 0.5rem; }
+.cmg-modulo-icono-preview {
+    flex: 0 0 2.25rem;
+    width: 2.25rem;
+    min-height: 2.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    color: var(--bs-secondary-color, #6c757d);
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 0.25rem;
+    background: var(--bs-body-bg, #fff);
+}
+.cmg-modulo-icono-fila .form-select { flex: 1 1 auto; min-width: 0; }
+</style>
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div>
         <h5 class="mb-0"><i class="bi bi-collection"></i> <?= htmlspecialchars($titulo) ?></h5>
@@ -214,12 +231,16 @@ unset($_SESSION['modulo_msg']);
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Icono <span class="text-danger">*</span></label>
-                        <select name="id_icono" class="form-select" required>
-                            <option value="">Seleccione...</option>
+                        <div class="cmg-modulo-icono-fila">
+                            <span class="cmg-modulo-icono-preview" id="preview_icono_nuevo_modulo" aria-hidden="true"></span>
+                            <select name="id_icono" id="sel_icono_nuevo_modulo" class="form-select cmg-select-icono-preview" data-preview-target="preview_icono_nuevo_modulo" required>
+                            <option value="" data-icon-class="">Seleccione...</option>
                             <?php foreach ($iconos as $ico): ?>
-                            <option value="<?= (int)($ico['id'] ?? 0) ?>"><?= htmlspecialchars($ico['nombre_icono'] ?? '') ?></option>
+                            <?php $nomIco = $ico['nombre_icono'] ?? ''; ?>
+                            <option value="<?= (int)($ico['id'] ?? 0) ?>" data-icon-class="<?= htmlspecialchars(iconoClase($nomIco)) ?>"><?= htmlspecialchars($nomIco) ?></option>
                             <?php endforeach; ?>
                         </select>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -248,11 +269,15 @@ unset($_SESSION['modulo_msg']);
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Icono <span class="text-danger">*</span></label>
-                        <select name="mod_id_icono" id="mod_id_icono" class="form-select" required>
+                        <div class="cmg-modulo-icono-fila">
+                            <span class="cmg-modulo-icono-preview" id="preview_icono_edit_modulo" aria-hidden="true"></span>
+                            <select name="mod_id_icono" id="mod_id_icono" class="form-select cmg-select-icono-preview" data-preview-target="preview_icono_edit_modulo" required>
                             <?php foreach ($iconos as $ico): ?>
-                            <option value="<?= (int)($ico['id'] ?? 0) ?>"><?= htmlspecialchars($ico['nombre_icono'] ?? '') ?></option>
+                            <?php $nomIco = $ico['nombre_icono'] ?? ''; ?>
+                            <option value="<?= (int)($ico['id'] ?? 0) ?>" data-icon-class="<?= htmlspecialchars(iconoClase($nomIco)) ?>"><?= htmlspecialchars($nomIco) ?></option>
                             <?php endforeach; ?>
                         </select>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -293,12 +318,16 @@ unset($_SESSION['modulo_msg']);
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Icono <span class="text-danger">*</span></label>
-                        <select name="id_icono" class="form-select" required>
-                            <option value="">Seleccione...</option>
+                        <div class="cmg-modulo-icono-fila">
+                            <span class="cmg-modulo-icono-preview" id="preview_icono_nuevo_submodulo" aria-hidden="true"></span>
+                            <select name="id_icono" id="sel_icono_nuevo_submodulo" class="form-select cmg-select-icono-preview" data-preview-target="preview_icono_nuevo_submodulo" required>
+                            <option value="" data-icon-class="">Seleccione...</option>
                             <?php foreach ($iconos as $ico): ?>
-                            <option value="<?= (int)($ico['id'] ?? 0) ?>"><?= htmlspecialchars($ico['nombre_icono'] ?? '') ?></option>
+                            <?php $nomIco = $ico['nombre_icono'] ?? ''; ?>
+                            <option value="<?= (int)($ico['id'] ?? 0) ?>" data-icon-class="<?= htmlspecialchars(iconoClase($nomIco)) ?>"><?= htmlspecialchars($nomIco) ?></option>
                             <?php endforeach; ?>
                         </select>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -339,11 +368,15 @@ unset($_SESSION['modulo_msg']);
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Icono <span class="text-danger">*</span></label>
-                        <select name="mod_id_icono_sub" id="mod_id_icono_sub" class="form-select" required>
+                        <div class="cmg-modulo-icono-fila">
+                            <span class="cmg-modulo-icono-preview" id="preview_icono_edit_submodulo" aria-hidden="true"></span>
+                            <select name="mod_id_icono_sub" id="mod_id_icono_sub" class="form-select cmg-select-icono-preview" data-preview-target="preview_icono_edit_submodulo" required>
                             <?php foreach ($iconos as $ico): ?>
-                            <option value="<?= (int)($ico['id'] ?? 0) ?>"><?= htmlspecialchars($ico['nombre_icono'] ?? '') ?></option>
+                            <?php $nomIco = $ico['nombre_icono'] ?? ''; ?>
+                            <option value="<?= (int)($ico['id'] ?? 0) ?>" data-icon-class="<?= htmlspecialchars(iconoClase($nomIco)) ?>"><?= htmlspecialchars($nomIco) ?></option>
                             <?php endforeach; ?>
                         </select>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -356,32 +389,68 @@ unset($_SESSION['modulo_msg']);
 </div>
 
 <script>
-document.getElementById('modalEditarModulo')?.addEventListener('show.bs.modal', function(e) {
-    var btn = e.relatedTarget;
-    if (btn) {
-        document.getElementById('mod_id_modulo').value = btn.dataset.id || '';
-        document.getElementById('mod_nombre_modulo').value = btn.dataset.nombre || '';
-        document.getElementById('mod_id_icono').value = btn.dataset.icono || '';
+(function() {
+    function cmgIconoPreviewActualizar(select) {
+        if (!select) return;
+        var tid = select.getAttribute('data-preview-target');
+        if (!tid) return;
+        var el = document.getElementById(tid);
+        if (!el) return;
+        el.innerHTML = '';
+        var opt = select.options[select.selectedIndex];
+        var cls = opt ? (opt.getAttribute('data-icon-class') || '').trim() : '';
+        if (!cls) return;
+        var i = document.createElement('i');
+        i.className = cls;
+        i.setAttribute('aria-hidden', 'true');
+        el.appendChild(i);
     }
-});
-document.querySelectorAll('.btn-editar-submodulo').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-        document.getElementById('mod_id_submodulo').value = this.dataset.id || '';
-        document.getElementById('mod_id_modulo_sub').value = this.dataset.modulo || '';
-        document.getElementById('mod_nombre_submodulo').value = this.dataset.nombre || '';
-        document.getElementById('mod_ruta').value = this.dataset.ruta || '';
-        document.getElementById('mod_id_icono_sub').value = this.dataset.icono || '';
-        new bootstrap.Modal(document.getElementById('modalEditarSubmodulo')).show();
-    });
-});
 
-document.querySelectorAll('.btn-editar-icono').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-        document.getElementById('mod_id_icono').value = this.dataset.id || '';
-        document.getElementById('mod_nombre_icono').value = this.dataset.nombre || '';
-        new bootstrap.Modal(document.getElementById('modalEditarIcono')).show();
+    document.querySelectorAll('select.cmg-select-icono-preview').forEach(function(sel) {
+        sel.addEventListener('change', function() { cmgIconoPreviewActualizar(sel); });
     });
-});
+
+    document.getElementById('modalNuevoModulo')?.addEventListener('shown.bs.modal', function() {
+        cmgIconoPreviewActualizar(document.getElementById('sel_icono_nuevo_modulo'));
+    });
+    document.getElementById('modalNuevoSubmodulo')?.addEventListener('shown.bs.modal', function() {
+        cmgIconoPreviewActualizar(document.getElementById('sel_icono_nuevo_submodulo'));
+    });
+
+    document.getElementById('modalEditarModulo')?.addEventListener('show.bs.modal', function(e) {
+        var btn = e.relatedTarget;
+        if (btn) {
+            document.getElementById('mod_id_modulo').value = btn.dataset.id || '';
+            document.getElementById('mod_nombre_modulo').value = btn.dataset.nombre || '';
+            document.getElementById('mod_id_icono').value = btn.dataset.icono || '';
+        }
+    });
+    document.getElementById('modalEditarModulo')?.addEventListener('shown.bs.modal', function() {
+        cmgIconoPreviewActualizar(document.getElementById('mod_id_icono'));
+    });
+
+    document.querySelectorAll('.btn-editar-submodulo').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.getElementById('mod_id_submodulo').value = this.dataset.id || '';
+            document.getElementById('mod_id_modulo_sub').value = this.dataset.modulo || '';
+            document.getElementById('mod_nombre_submodulo').value = this.dataset.nombre || '';
+            document.getElementById('mod_ruta').value = this.dataset.ruta || '';
+            document.getElementById('mod_id_icono_sub').value = this.dataset.icono || '';
+            new bootstrap.Modal(document.getElementById('modalEditarSubmodulo')).show();
+        });
+    });
+    document.getElementById('modalEditarSubmodulo')?.addEventListener('shown.bs.modal', function() {
+        cmgIconoPreviewActualizar(document.getElementById('mod_id_icono_sub'));
+    });
+
+    document.querySelectorAll('.btn-editar-icono').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.getElementById('edit_icono_id').value = this.dataset.id || '';
+            document.getElementById('mod_nombre_icono').value = this.dataset.nombre || '';
+            new bootstrap.Modal(document.getElementById('modalEditarIcono')).show();
+        });
+    });
+})();
 </script>
 
 <!-- Modal Nuevo icono -->
@@ -413,7 +482,7 @@ document.querySelectorAll('.btn-editar-icono').forEach(function(btn) {
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="<?= $base ?>/config/moduloUpdateIcono">
-                <input type="hidden" name="mod_id_icono" id="mod_id_icono">
+                <input type="hidden" name="mod_id_icono" id="edit_icono_id">
                 <div class="modal-header">
                     <h5 class="modal-title"><i class="bi bi-pencil"></i> Editar icono</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>

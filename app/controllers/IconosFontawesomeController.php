@@ -38,10 +38,16 @@ class IconosFontawesomeController extends Controller
         }
 
         $rows = $this->model->getAll($ordenCol, $ordenDir, $buscar);
+        $ids = [];
+        foreach ($rows as $r) {
+            $ids[] = (int) ($r['id'] ?? $r['id_icono'] ?? 0);
+        }
+        $refsMap = $this->model->contarReferenciasPorIds($ids);
 
         $this->viewWithLayout('layouts.main', 'iconosFontawesome.index', [
             'titulo' => 'Iconos FontAwesome',
             'rows' => $rows,
+            'refsMap' => $refsMap,
             'ordenCol' => $ordenCol,
             'ordenDir' => $ordenDir,
             'buscar' => $buscar,
@@ -70,6 +76,11 @@ class IconosFontawesomeController extends Controller
             $this->redirect(BASE_URL . self::BASE_PATH);
         }
 
+        if ($this->model->existeNombreOtro($nombreIcono, $id)) {
+            $_SESSION['iconos_msg'] = ['danger', 'Ya existe otro icono con el mismo nombre.'];
+            $this->redirect(BASE_URL . self::BASE_PATH);
+        }
+
         if ($this->model->actualizar($id, $nombreIcono)) {
             $_SESSION['iconos_msg'] = ['success', 'Icono actualizado correctamente.'];
         } else {
@@ -95,11 +106,45 @@ class IconosFontawesomeController extends Controller
             $this->redirect(BASE_URL . self::BASE_PATH);
         }
 
+        if ($this->model->existeNombreOtro($nombreIcono, null)) {
+            $_SESSION['iconos_msg'] = ['danger', 'Ya existe otro icono con el mismo nombre.'];
+            $this->redirect(BASE_URL . self::BASE_PATH);
+        }
+
         try {
             $this->model->crear($nombreIcono);
             $_SESSION['iconos_msg'] = ['success', 'Icono creado correctamente.'];
         } catch (\Throwable $e) {
             $_SESSION['iconos_msg'] = ['danger', 'Error al crear: ' . $e->getMessage()];
+        }
+
+        $this->redirect(BASE_URL . self::BASE_PATH);
+    }
+
+    public function delete(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->redirect(BASE_URL . self::BASE_PATH);
+        }
+
+        $id = (int) ($_POST['id'] ?? 0);
+        if ($id <= 0) {
+            $_SESSION['iconos_msg'] = ['danger', 'ID inválido.'];
+            $this->redirect(BASE_URL . self::BASE_PATH);
+        }
+
+        if ($this->model->contarReferenciasEnMenus($id) > 0) {
+            $_SESSION['iconos_msg'] = ['danger', 'No se puede eliminar: el icono está asignado en módulos o submódulos del menú.'];
+            $this->redirect(BASE_URL . self::BASE_PATH);
+        }
+
+        if ($this->model->eliminar($id)) {
+            $_SESSION['iconos_msg'] = ['success', 'Icono eliminado correctamente.'];
+        } else {
+            $_SESSION['iconos_msg'] = ['danger', 'No se pudo eliminar el icono.'];
         }
 
         $this->redirect(BASE_URL . self::BASE_PATH);

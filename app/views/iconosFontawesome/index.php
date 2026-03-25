@@ -4,8 +4,10 @@
 /** @var string $ordenCol */
 /** @var string $ordenDir */
 /** @var string $buscar */
+/** @var array<int, int> $refsMap */
 $base = BASE_URL;
 $rows = $rows ?? [];
+$refsMap = $refsMap ?? [];
 $ordenCol = $ordenCol ?? 'nombre_icono';
 $ordenDir = $ordenDir ?? 'asc';
 $buscar = $buscar ?? '';
@@ -68,6 +70,7 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                     <tr>
                         <th class="icon-preview"></th>
                         <th><?= thSort($base, 'nombre_icono', 'Nombre del icono', $ordenCol, $ordenDir, $buscar) ?></th>
+                        <th class="text-end" style="width: 5rem;">Uso</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -75,13 +78,15 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                     <?php
                     $id = (int)($r['id'] ?? $r['id_icono'] ?? 0);
                     $nombreIcono = $r['nombre_icono'] ?? '';
+                    $refs = (int) ($refsMap[$id] ?? 0);
                     $cls = iconoClase($nombreIcono);
                     ?>
-                    <tr class="icono-row" role="button" tabindex="0" data-id="<?= $id ?>" data-nombre="<?= htmlspecialchars($nombreIcono) ?>">
+                    <tr class="icono-row" role="button" tabindex="0" data-id="<?= $id ?>" data-nombre="<?= htmlspecialchars($nombreIcono) ?>" data-refs="<?= $refs ?>">
                         <td class="icon-preview">
                             <i class="<?= htmlspecialchars($cls) ?>" title="<?= htmlspecialchars($nombreIcono) ?>"></i>
                         </td>
                         <td><code><?= htmlspecialchars($nombreIcono) ?></code></td>
+                        <td class="text-end small text-muted"><?= $refs ?></td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -92,6 +97,10 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
         </div>
     </div>
 </div>
+
+<form id="formEliminarIcono" method="POST" action="<?= $base ?>/config/iconosFontawesomeDelete" class="d-none" aria-hidden="true">
+    <input type="hidden" name="id" id="del-id" value="">
+</form>
 
 <!-- Modal Nuevo icono -->
 <div class="modal fade" id="modalNuevoIcono" tabindex="-1" aria-labelledby="modalNuevoIconoLabel" aria-hidden="true" data-bs-backdrop="static">
@@ -137,9 +146,12 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Guardar</button>
+                <div class="modal-footer d-flex flex-wrap gap-2 justify-content-between align-items-center">
+                    <button type="submit" form="formEliminarIcono" class="btn btn-outline-danger btn-sm" id="btn-eliminar-icono" title="">Eliminar</button>
+                    <div class="ms-auto d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Guardar</button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -152,10 +164,20 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
     var form = modal ? modal.querySelector('form') : null;
     if (!modal || !form) return;
 
+    var formDel = document.getElementById('formEliminarIcono');
+    var delId = document.getElementById('del-id');
+    var btnEliminar = document.getElementById('btn-eliminar-icono');
+
     document.querySelectorAll('.icono-row').forEach(function(row) {
         row.addEventListener('click', function() {
             form.querySelector('#edit-id').value = this.dataset.id || '';
             form.querySelector('#edit-nombre_icono').value = this.dataset.nombre || '';
+            if (delId) delId.value = this.dataset.id || '';
+            var refs = parseInt(this.dataset.refs || '0', 10);
+            if (btnEliminar) {
+                btnEliminar.disabled = refs > 0;
+                btnEliminar.title = refs > 0 ? 'No se puede eliminar: está en uso en módulos o submódulos del menú.' : 'Eliminar este icono';
+            }
             new bootstrap.Modal(modal).show();
         });
         row.addEventListener('keydown', function(e) {
@@ -165,5 +187,18 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
             }
         });
     });
+
+    if (formDel && btnEliminar) {
+        formDel.addEventListener('submit', function(e) {
+            if (btnEliminar.disabled) {
+                e.preventDefault();
+                return false;
+            }
+            if (!confirm('¿Eliminar este icono de forma permanente?')) {
+                e.preventDefault();
+                return false;
+            }
+        });
+    }
 })();
 </script>

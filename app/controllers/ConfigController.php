@@ -370,6 +370,11 @@ class ConfigController extends Controller
         (new IconosFontawesomeController())->store();
     }
 
+    public function iconosFontawesomeDelete(): void
+    {
+        (new IconosFontawesomeController())->delete();
+    }
+
     public function usuariosSistema(): void
     {
         (new UsuariosSistemaController())->index();
