@@ -703,7 +703,15 @@ function estadoPagoBadge($estado) {
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
         fetch(base + '/config/empresas-sistema?action=sriIdentificacion&numero=' + encodeURIComponent(num), { credentials: 'same-origin' })
-            .then(function(r) { return r.json(); })
+            .then(function(r) {
+                var ct = (r.headers.get('content-type') || '');
+                if (!ct.includes('application/json')) {
+                    return r.text().then(function(t) {
+                        throw new Error('El servidor no devolvió JSON (¿sesión expirada o error PHP?). ' + (t ? t.slice(0, 120) : ''));
+                    });
+                }
+                return r.json();
+            })
             .then(function(res) {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-search"></i>';
@@ -727,10 +735,12 @@ function estadoPagoBadge($estado) {
                     alert(res.error || 'No se pudo consultar el RUC.');
                 }
             })
-            .catch(function() {
+            .catch(function(err) {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-search"></i>';
-                alert('Error de conexión al consultar el RUC.');
+                var msg = (err && err.message) ? err.message
+                    : 'Error de conexión al consultar el RUC. Revise sri_identification_url en config/app.php y que el servidor salga a internet (probar con curl desde el VPS).';
+                alert(msg);
             });
     }
 

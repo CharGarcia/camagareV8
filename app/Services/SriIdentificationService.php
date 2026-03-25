@@ -23,17 +23,35 @@ class SriIdentificationService
         $this->timeout = $timeout;
     }
 
+    /** Si en config/app.php está en false, no se llama al API (útil si el servicio externo no es alcanzable). */
+    public static function estaHabilitado(): bool
+    {
+        $config = require MVC_CONFIG . '/app.php';
+        return ($config['sri_identification_enabled'] ?? true) !== false;
+    }
+
     /**
      * Consulta el web service y devuelve los datos normalizados para el formulario.
      * @return array{ok: bool, data?: array, error?: string}
      */
     public function consultar(string $identificacion): array
     {
+        if (!self::estaHabilitado()) {
+            return [
+                'ok' => false,
+                'error' => 'La consulta automática al SRI está desactivada (sri_identification_enabled en config/app.php). Ingrese los datos manualmente.',
+            ];
+        }
+
         $identificacion = preg_replace('/\D/', '', $identificacion);
         $longitud = strlen($identificacion);
 
         if ($longitud !== 10 && $longitud !== 13) {
             return ['ok' => false, 'error' => 'La identificación debe tener 10 (cédula) o 13 (RUC) dígitos.'];
+        }
+
+        if (!function_exists('curl_init')) {
+            return ['ok' => false, 'error' => 'PHP no tiene la extensión cURL habilitada en el servidor.'];
         }
 
         $payload = ['identification' => $identificacion];
@@ -42,18 +60,32 @@ class SriIdentificationService
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
+            CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT => $this->timeout,
             CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
             CURLOPT_POSTFIELDS => json_encode($payload),
         ]);
 
         $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError = curl_error($ch);
         curl_close($ch);
 
-        if ($curlError) {
-            return ['ok' => false, 'error' => 'Error de conexión: ' . $curlError];
+        if ($curlError !== '') {
+            return [
+                'ok' => false,
+                'error' => 'No se pudo contactar el servicio de consulta (' . $this->apiUrl . '). ' . $curlError
+                    . ' Compruebe firewall/salida HTTPS, que el API esté en marcha, o ingrese los datos a mano.',
+            ];
+        }
+
+        if ($httpCode < 200 || $httpCode >= 300) {
+            $snippet = is_string($response) ? mb_substr(trim($response), 0, 200) : '';
+            return [
+                'ok' => false,
+                'error' => 'El servicio de consulta respondió HTTP ' . $httpCode . '. '
+                    . ($snippet !== '' ? $snippet : 'Revise sri_identification_url en config/app.php.'),
+            ];
         }
 
         $responseData = json_decode($response ?? '', true);

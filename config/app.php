@@ -12,6 +12,8 @@ return [
     'show_login_errors' => true,
     'url' => '/sistema/public',
     'timezone' => 'America/Guayaquil',
+    // Consulta RUC/cédula (servicio externo). Si el VPS no alcanza la URL, ponga false y cargue datos a mano.
+    'sri_identification_enabled' => true,
     'sri_identification_url' => 'http://137.184.159.242:4000/api/sri-identification',
     'session' => [
         'name' => 'CMG_SESSION',
