@@ -20,6 +20,17 @@ unset($_SESSION['config_msg']);
     <?php endif; ?>
 </div>
 
+<?php if (!empty($opciones)): ?>
+<div class="mb-3">
+    <label for="buscar-tarjetas-config" class="visually-hidden">Buscar tarjetas</label>
+    <div class="input-group input-group-sm" style="max-width: 360px;">
+        <span class="input-group-text bg-white border-end-0 py-0" style="height:24px;"><i class="bi bi-search text-muted"></i></span>
+        <input type="search" id="buscar-tarjetas-config" class="form-control border-start-0" placeholder="Buscar tarjetas…" autocomplete="off" style="height:24px;font-size:0.8rem;">
+    </div>
+    <p id="config-buscar-sin-resultados" class="text-muted small mb-0 mt-2 d-none">No hay tarjetas que coincidan con la búsqueda.</p>
+</div>
+<?php endif; ?>
+
 <?php if ($msg): ?>
 <div class="alert alert-<?= $msg[0] ?> alert-dismissible fade show" role="alert">
     <?= htmlspecialchars($msg[1]) ?>
@@ -32,8 +43,20 @@ unset($_SESSION['config_msg']);
 <?php else: ?>
 <div class="row g-3" id="contenedor-tarjetas-config"<?= $puedeCrear ? ' data-sortable="1"' : '' ?>>
     <?php foreach ($opciones as $op): ?>
-    <?php $opId = (int) ($op['id'] ?? 0); $mostrarAcciones = $puedeCrear && $opId > 0; $inactiva = (int)($op['activo'] ?? 1) === 0; ?>
-    <div class="col-md-6 col-lg-4 tarjeta-config" data-id="<?= $opId ?>" <?= $mostrarAcciones ? 'data-opcion="' . htmlspecialchars(json_encode($op)) . '"' : '' ?>>
+    <?php
+    $opId = (int) ($op['id'] ?? 0);
+    $mostrarAcciones = $puedeCrear && $opId > 0;
+    $inactiva = (int)($op['activo'] ?? 1) === 0;
+    $textoBuscar = mb_strtolower(
+        trim(
+            ($op['nombre'] ?? '')
+            . ' ' . ($op['descripcion'] ?? '')
+            . ' ' . implode(' ', array_map(static fn ($e) => (string) ($e['etiqueta'] ?? ''), $op['enlaces'] ?? []))
+        ),
+        'UTF-8'
+    );
+    ?>
+    <div class="col-md-6 col-lg-4 tarjeta-config" data-id="<?= $opId ?>" data-search-text="<?= htmlspecialchars($textoBuscar, ENT_QUOTES, 'UTF-8') ?>" <?= $mostrarAcciones ? 'data-opcion="' . htmlspecialchars(json_encode($op)) . '"' : '' ?>>
         <div class="card h-100 border-0 shadow-sm<?= $inactiva ? ' opacity-75' : '' ?>">
             <div class="card-header bg-<?= htmlspecialchars($op['clase_color'] ?? 'primary') ?> text-white py-3 d-flex justify-content-between align-items-center">
                 <h6 class="mb-0 d-flex align-items-center gap-2">
@@ -419,6 +442,40 @@ unset($_SESSION['config_msg']);
             .catch(function() {});
         }
     });
+})();
+
+// Filtrar tarjetas por texto (nombre, descripción, etiquetas de enlaces)
+(function() {
+    var input = document.getElementById('buscar-tarjetas-config');
+    var contenedor = document.getElementById('contenedor-tarjetas-config');
+    var msgVacío = document.getElementById('config-buscar-sin-resultados');
+    if (!input || !contenedor) return;
+
+    function sinAcentos(s) {
+        try {
+            return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        } catch (e) {
+            return s || '';
+        }
+    }
+
+    function filtrar() {
+        var q = sinAcentos(input.value.trim().toLowerCase());
+        var cards = contenedor.querySelectorAll('.tarjeta-config');
+        var visibles = 0;
+        cards.forEach(function(el) {
+            var t = sinAcentos((el.getAttribute('data-search-text') || '').toLowerCase());
+            var mostrar = !q || t.indexOf(q) !== -1;
+            el.classList.toggle('d-none', !mostrar);
+            if (mostrar) visibles++;
+        });
+        if (msgVacío) {
+            msgVacío.classList.toggle('d-none', !(q && visibles === 0));
+        }
+    }
+
+    input.addEventListener('input', filtrar);
+    input.addEventListener('search', filtrar);
 })();
 </script>
 <?php endif; ?>
