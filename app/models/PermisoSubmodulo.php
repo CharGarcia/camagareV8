@@ -133,7 +133,7 @@ class PermisoSubmodulo extends BaseModel
     {
         $idU = (int) $idUsuario;
         $idE = (int) $idEmpresa;
-        $rows = $this->query("SELECT id_submodulo, COALESCE(r,0) AS r, COALESCE(w,0) AS w, COALESCE(u,0) AS u, COALESCE(d,0) AS d
+        $rows = $this->query("SELECT id_submodulo, COALESCE(r,0) AS r, COALESCE(w,0) AS w, COALESCE(u,0) AS u, COALESCE(d,0) AS d, COALESCE(t,0) AS t
             FROM modulos_asignados WHERE id_usuario = {$idU} AND id_empresa = {$idE}");
         $out = [];
         foreach ($rows as $r) {
@@ -142,6 +142,7 @@ class PermisoSubmodulo extends BaseModel
                 'crear' => (int)($r['w'] ?? 0),
                 'actualizar' => (int)($r['u'] ?? 0),
                 'eliminar' => (int)($r['d'] ?? 0),
+                't' => (int)($r['t'] ?? 0),
             ];
         }
         return $out;
@@ -156,7 +157,7 @@ class PermisoSubmodulo extends BaseModel
     {
         $idU = (int) $idUsuario;
         $idE = (int) $idEmpresa;
-        $this->db->begin_transaction();
+        $this->db->beginTransaction();
         try {
             $idsAGuardar = [];
             foreach ($permisos as $idSub => $p) {
@@ -169,14 +170,15 @@ class PermisoSubmodulo extends BaseModel
                 $w = isset($p['crear']) && $p['crear'] ? 1 : 0;
                 $u = isset($p['actualizar']) && $p['actualizar'] ? 1 : 0;
                 $d = isset($p['eliminar']) && $p['eliminar'] ? 1 : 0;
+                $t = isset($p['t']) && $p['t'] ? 1 : 0;
 
                 $existe = $this->query("SELECT 1 FROM modulos_asignados WHERE id_usuario = {$idU} AND id_empresa = {$idE} AND id_submodulo = {$idSub}");
                 if (!empty($existe)) {
-                    $this->execute("UPDATE modulos_asignados SET r = {$r}, w = {$w}, u = {$u}, d = {$d}
+                    $this->execute("UPDATE modulos_asignados SET r = {$r}, w = {$w}, u = {$u}, d = {$d}, t = {$t}
                         WHERE id_usuario = {$idU} AND id_empresa = {$idE} AND id_submodulo = {$idSub}");
                 } else {
-                    $this->execute("INSERT INTO modulos_asignados (id_usuario, id_empresa, id_modulo, id_submodulo, r, w, u, d)
-                        VALUES ({$idU}, {$idE}, {$idMod}, {$idSub}, {$r}, {$w}, {$u}, {$d})");
+                    $this->execute("INSERT INTO modulos_asignados (id_usuario, id_empresa, id_modulo, id_submodulo, r, w, u, d, t)
+                        VALUES ({$idU}, {$idE}, {$idMod}, {$idSub}, {$r}, {$w}, {$u}, {$d}, {$t})");
                 }
                 $idsAGuardar[] = $idSub;
             }
@@ -192,8 +194,80 @@ class PermisoSubmodulo extends BaseModel
             $this->db->commit();
             return true;
         } catch (\Throwable $e) {
-            $this->db->rollback();
+            $this->db->rollBack();
             return false;
         }
+    }
+
+    /**
+     * Normaliza ruta legacy de submodulos_menu para comparar con config/modulos_mvc.php.
+     */
+    private function normalizarRutaSubmodulo(string $ruta): string
+    {
+        $r = strtolower(trim($ruta));
+        $r = str_replace(['../', './'], '', $r);
+        $r = preg_replace('#^(sistema/)+#', '', $r);
+
+        return ltrim($r, '/');
+    }
+
+    /**
+     * Filas de submodulos_menu (soporta id_submodulo o id).
+     */
+    private function listarRutasSubmodulos(): array
+    {
+        $queries = [
+            "SELECT id_submodulo, ruta FROM submodulos_menu WHERE COALESCE(status, 1) = 1",
+            "SELECT id AS id_submodulo, ruta FROM submodulos_menu WHERE COALESCE(status, 1) = 1",
+        ];
+        foreach ($queries as $sql) {
+            try {
+                $rows = $this->query($sql);
+                if (!empty($rows)) {
+                    return $rows;
+                }
+            } catch (\Throwable $e) {
+                continue;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Resuelve id_submodulo para una ruta MVC (ej. modulos/clientes) usando config/modulos_mvc.php.
+     */
+    public function getIdSubmoduloPorRutaMvc(string $pathMvc): ?int
+    {
+        $cfgFile = MVC_CONFIG . '/modulos_mvc.php';
+        $all = is_file($cfgFile) ? require $cfgFile : [];
+        $entry = $all[$pathMvc] ?? [];
+
+        if (!empty($entry['id_submodulo'])) {
+            $id = (int) $entry['id_submodulo'];
+
+            return $id > 0 ? $id : null;
+        }
+        $legacy = $entry['legacy_rutas'] ?? [];
+        $targets = [];
+        // Soportar también la ruta MVC exacta por si el submódulo ya se guardó con esa ruta limpia en la BD
+        $targets[$this->normalizarRutaSubmodulo($pathMvc)] = true;
+        
+        foreach ($legacy as $lr) {
+            $targets[$this->normalizarRutaSubmodulo((string) $lr)] = true;
+        }
+        if ($targets === []) {
+            return null;
+        }
+        foreach ($this->listarRutasSubmodulos() as $row) {
+            $norm = $this->normalizarRutaSubmodulo((string) ($row['ruta'] ?? ''));
+            if ($norm !== '' && isset($targets[$norm])) {
+                $id = (int) ($row['id_submodulo'] ?? 0);
+
+                return $id > 0 ? $id : null;
+            }
+        }
+
+        return null;
     }
 }

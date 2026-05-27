@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Modelo EmpresaAsignada - Asignar empresas a usuarios
  *
@@ -47,7 +48,7 @@ class EmpresaAsignada extends BaseModel
         $sql = "SELECT DISTINCT u.id AS id_usuario, u.nombre, u.cedula, u.nivel
             FROM {$from} {$where}
             ORDER BY u.nombre
-            LIMIT {$offset}, {$perPage}";
+            LIMIT {$perPage} OFFSET {$offset}";
         $rows = $this->query($sql);
 
         foreach ($rows as &$r) {
@@ -114,23 +115,28 @@ class EmpresaAsignada extends BaseModel
     {
         $idEmp = (int) $idEmpresa;
         $idA = (int) $idActual;
-        $notExists = "NOT EXISTS (SELECT 1 FROM empresa_asignada ea2 WHERE ea2.id_usuario = u.id AND ea2.id_empresa = {$idEmp})";
+        $params = [':id_emp' => $idEmp];
+        $notExists = "NOT EXISTS (SELECT 1 FROM empresa_asignada ea2 WHERE ea2.id_usuario = u.id AND ea2.id_empresa = :id_emp)";
 
         if ($nivel >= 3) {
             $from = "usuarios u";
-            $where = "WHERE u.estado = 1 AND u.id != {$idA} AND {$notExists}";
+            $where = "WHERE u.estado = 1 AND u.id != :id_actual AND {$notExists}";
+            $params[':id_actual'] = $idA;
         } else {
             $from = "usuario_asignado ua INNER JOIN usuarios u ON u.id = ua.id_usuario";
-            $where = "WHERE u.estado = 1 AND ua.id_adm = {$idA} AND {$notExists}";
+            $where = "WHERE u.estado = 1 AND ua.id_adm = :id_adm AND {$notExists}";
+            $params[':id_adm'] = $idA;
         }
 
         if ($buscar !== '') {
-            $b = $this->escape($buscar);
-            $where .= " AND (u.nombre LIKE '%{$b}%' OR u.cedula LIKE '%{$b}%' OR u.mail LIKE '%{$b}%')";
+            $where .= " AND (u.nombre ILIKE :buscar OR u.cedula LIKE :buscar OR u.mail LIKE :buscar)";
+            $params[':buscar'] = '%' . $buscar . '%';
         }
 
         $sql = "SELECT DISTINCT u.id AS id_usuario, u.nombre, u.cedula, u.mail FROM {$from} {$where} ORDER BY u.nombre LIMIT 50";
-        return $this->query($sql);
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     /**
@@ -140,7 +146,7 @@ class EmpresaAsignada extends BaseModel
     public function getEmpresasDisponiblesParaAsignar(int $idActual, int $nivel, int $idUsuarioDestino, string $buscar = ''): array
     {
         $idDest = (int) $idUsuarioDestino;
-        $where = "e.estado = '1' AND NOT EXISTS (SELECT 1 FROM empresa_asignada ea2 WHERE ea2.id_empresa = e.id AND ea2.id_usuario = {$idDest})";
+        $where = "e.eliminado=false and e.estado = '1' AND NOT EXISTS (SELECT 1 FROM empresa_asignada ea2 WHERE ea2.id_empresa = e.id AND ea2.id_usuario = {$idDest})";
 
         if ($nivel >= 3) {
             $from = "empresas e";

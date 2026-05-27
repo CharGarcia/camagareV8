@@ -9,7 +9,7 @@ namespace App\core;
 
 abstract class Controller
 {
-    protected \mysqli $db;
+    protected \PDO $db;
     protected array $config;
 
     public function __construct()
@@ -33,11 +33,28 @@ abstract class Controller
     {
         $empresas = [];
         $menuModulos = [];
+        $idEmpresaFavorita = null;
         if (isset($_SESSION['id_usuario'])) {
+            $idUsuario = (int) $_SESSION['id_usuario'];
             $model = new \App\models\Empresa();
-            $empresas = $model->getEmpresasAsignadas((int) $_SESSION['id_usuario']);
+            $usuarioModel = new \App\models\Usuario();
+
+            try {
+                $empresas = $model->getEmpresasAsignadas($idUsuario);
+                $perfil = $usuarioModel->getPerfil($idUsuario);
+                // getPerfil no traia id_empresa_favorita, voy a usar una consulta directa o actualizar getPerfil
+                // Para ser rápido y seguro, consulto directo el campo:
+                $resFav = $this->db->prepare("SELECT id_empresa_favorita FROM usuarios WHERE id = ?");
+                $resFav->execute([$idUsuario]);
+                $idEmpresaFavorita = $resFav->fetchColumn();
+                $idEmpresaFavorita = $idEmpresaFavorita ? (int) $idEmpresaFavorita : null;
+            } catch (\Throwable $e) {
+                $empresas = [];
+            }
+
             $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
             if ($idEmpresa > 0) {
+// ... rest remains same
                 try {
                     $menuModel = new \App\models\ModuloMenu();
                     $nivel = (int) ($_SESSION['nivel'] ?? 1);
@@ -56,11 +73,15 @@ abstract class Controller
             'nombre' => $_SESSION['nombre'] ?? '',
             'app_name' => $this->config['name'] ?? 'CaMaGaRe',
             'menuModulos' => $menuModulos,
+            'idEmpresaFavorita' => $idEmpresaFavorita,
         ];
     }
 
     protected function viewWithLayout(string $layout, string $view, array $data = []): void
     {
+        if (!headers_sent()) {
+            header('Content-Type: text/html; charset=UTF-8');
+        }
         $data = array_merge($this->getLayoutData(), $data);
         extract($data, EXTR_SKIP);
         ob_start();
@@ -91,6 +112,9 @@ abstract class Controller
             session_start();
         }
         if (!isset($_SESSION['id_usuario'])) {
+            if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+                $this->json(['ok' => false, 'mensaje' => 'La sesión ha expirado. Por favor, recarga la página e inicia sesión nuevamente.'], 401);
+            }
             $this->redirect(rtrim(BASE_URL ?? '', '/') . '/');
         }
     }
@@ -99,7 +123,7 @@ abstract class Controller
     {
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode($data, JSON_UNESCAPED_UNICODE);
+        echo json_encode($data, JSON_FLAGS);
         exit;
     }
 }

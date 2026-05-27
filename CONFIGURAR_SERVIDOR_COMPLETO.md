@@ -6,9 +6,9 @@ Sigue estos pasos **en orden** desde la terminal SSH (`ssh root@TU_IP`).
 
 ## FASE 1: Limpiar lo anterior
 
-### 1.1 Salir de MySQL (si estás dentro)
+### 1.1 Salir de PostgreSQL (si estás dentro)
 ```bash
-EXIT;
+\q
 ```
 
 ### 1.2 Borrar proyecto y preparar base de datos
@@ -16,19 +16,18 @@ EXIT;
 # Borrar carpeta del proyecto
 rm -rf /var/www/sistema
 
-# Entrar a MySQL
-mysql -u root -p
+# Entrar a PostgreSQL
+sudo -u postgres psql
 ```
 
-Dentro de MySQL:
+Dentro de PostgreSQL:
 ```sql
 DROP DATABASE IF EXISTS camagare_v8;
-DROP USER IF EXISTS 'camagare_user'@'localhost';
-CREATE DATABASE camagare_v8 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'camagare_user'@'localhost' IDENTIFIED BY 'Camagare2024!';
-GRANT ALL PRIVILEGES ON camagare_v8.* TO 'camagare_user'@'localhost';
-FLUSH PRIVILEGES;
-EXIT;
+DROP USER IF EXISTS camagare_user;
+CREATE DATABASE camagare_v8 ENCODING 'UTF8';
+CREATE USER camagare_user WITH ENCRYPTED PASSWORD 'Camagare2024!';
+GRANT ALL PRIVILEGES ON DATABASE camagare_v8 TO camagare_user;
+\q
 ```
 *(Cambia `Camagare2024!` por tu contraseña)*
 
@@ -41,9 +40,9 @@ EXIT;
 apt update && apt upgrade -y
 ```
 
-### 2.2 Instalar Nginx, PHP, MySQL, Git
+### 2.2 Instalar Nginx, PHP, PostgreSQL, Git
 ```bash
-apt install -y nginx php-fpm php-mysql php-mbstring php-xml php-curl php-json php-zip git unzip
+apt install -y nginx php-fpm php-pgsql postgresql postgresql-client php-mbstring php-xml php-curl php-json php-zip git unzip
 ```
 
 ### 2.3 Ver versión de PHP
@@ -76,11 +75,13 @@ Borra el contenido y pega (usa la contraseña que creaste en 1.2):
 ```php
 <?php
 return [
+    'driver' => 'pgsql',
     'host' => '127.0.0.1',
+    'port' => 5432,
     'user' => 'camagare_user',
     'pass' => 'Camagare2024!',
     'name' => 'camagare_v8',
-    'charset' => 'utf8mb4',
+    'charset' => 'UTF8',
 ];
 ```
 Guarda: `Ctrl+O` → Enter → `Ctrl+X`
@@ -146,10 +147,10 @@ systemctl start php8.2-fpm
 
 ## FASE 4: Importar tu base de datos
 
-### En tu PC (Windows, XAMPP)
+### En tu PC (ejemplo ruta bin PostgreSQL)
 ```powershell
-cd c:\xampp\mysql\bin
-.\mysqldump.exe -u root camagare_v8 > C:\xampp\htdocs\backup_camagare.sql
+cd "C:\Program Files\PostgreSQL\16\bin"
+.\pg_dump.exe -U postgres -d camagare_v8 > C:\xampp\htdocs\backup_camagare.sql
 ```
 
 ### Copiar al servidor
@@ -160,7 +161,7 @@ scp C:\xampp\htdocs\backup_camagare.sql root@TU_IP:/root/
 
 ### En el servidor
 ```bash
-mysql -u camagare_user -p camagare_v8 < /root/backup_camagare.sql
+sudo -u postgres psql -d camagare_v8 < /root/backup_camagare.sql
 ```
 *(Te pedirá la contraseña de camagare_user)*
 

@@ -50,9 +50,8 @@ class UnidadesTipo extends BaseModel
         $codigo = $this->escape(trim($codigo));
         $nombre = $this->escape(trim($nombre));
         $descripcion = $this->escape(trim($descripcion));
-        $estado = $estado ? 1 : 0;
         $this->execute("INSERT INTO unidades_tipo_modelo (codigo, nombre, descripcion, estado) VALUES ('{$codigo}', '{$nombre}', '{$descripcion}', {$estado})");
-        return $this->lastInsertId();
+        return $this->lastInsertId('unidades_tipo_modelo_id_seq');
     }
 
     public function actualizar(int $id, string $codigo, string $nombre, string $descripcion, int $estado): bool

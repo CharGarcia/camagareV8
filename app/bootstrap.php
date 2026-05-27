@@ -11,8 +11,10 @@ function _getDbConfig()
     static $cfg = null;
     if ($cfg === null) {
         $xml = simplexml_load_file(ROOT_PATH . '/config/parametros.xml');
+        $port = isset($xml->port_db) ? (int) (string) $xml->port_db : 5432;
         $cfg = [
             'host' => (string) $xml->host_db,
+            'port' => $port > 0 ? $port : 5432,
             'user' => (string) $xml->user_db,
             'pass' => (string) $xml->pass_db,
             'name' => (string) $xml->db_name,
@@ -22,21 +24,13 @@ function _getDbConfig()
 }
 
 /**
- * Devuelve conexión mysqli (singleton)
- * @return mysqli
+ * Devuelve conexión PDO PostgreSQL (singleton vía App\core\Database).
  */
-function getConnection()
+function getConnection(): \PDO
 {
-    static $con = null;
-    if ($con === null) {
-        $config = _getDbConfig();
-        $con = new mysqli($config['host'], $config['user'], $config['pass'], $config['name']);
-        if (mysqli_connect_errno()) {
-            throw new RuntimeException('Error de conexión: ' . mysqli_connect_error());
-        }
-        mysqli_set_charset($con, 'utf8');
-    }
-    return $con;
+    require_once ROOT_PATH . '/bootstrap.php';
+
+    return \App\core\Database::getConnection();
 }
 
 /**

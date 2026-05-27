@@ -19,8 +19,10 @@ class ModuloMenu extends BaseModel
      * Rutas no mapeadas van a home/moduloEnConstruccion.
      */
     private const RUTA_LEGACY_A_MVC = [
-        'modulos/clientes.php' => 'cliente/index',
-        'modulos/cliente.php' => 'cliente/index',
+        'modulos/clientes.php' => 'modulos/clientes',
+        'modulos/cliente.php' => 'modulos/clientes',
+        'sistema/modulos/clientes.php' => 'modulos/clientes',
+        'sistema/modulos/cliente.php' => 'modulos/clientes',
         'paginas/empresa_set.php' => 'empresa/index',
         'paginas/menu_de_empresas.php' => 'empresa/index',
         'paginas/opciones_de_modulos.php' => 'config/modulo',
@@ -178,16 +180,24 @@ class ModuloMenu extends BaseModel
         $ruta = trim($ruta);
         if ($ruta === '') return '#';
         if (preg_match('#^https?://#', $ruta)) return $ruta;
-        if (str_starts_with($ruta, '/')) return $ruta;
-
-        $rutaNorm = str_replace(['../', './'], '', $ruta);
-        $rutaNorm = strtolower(ltrim($rutaNorm, '/'));
-        $mvc = self::RUTA_LEGACY_A_MVC[$rutaNorm] ?? null;
 
         $base = rtrim(defined('BASE_URL') ? BASE_URL : '', '/');
+
+        // Limpiamos la ruta
+        $rutaNorm = ltrim(str_replace(['../', './'], '', $ruta), '/');
+        $rutaNormL = strtolower($rutaNorm);
+
+        // Verificamos si es una ruta legacy mapeada
+        $mvc = self::RUTA_LEGACY_A_MVC[$rutaNormL] ?? null;
         if ($mvc !== null) {
             return $base . '/' . $mvc;
         }
+
+        // Si la ruta no termina en .php, asumimos que ya es una ruta MVC válida (ej: 'modulos/clientes')
+        if (!str_ends_with($rutaNormL, '.php')) {
+            return $base . '/' . $rutaNorm;
+        }
+
         return $base . '/home/moduloEnConstruccion';
     }
 }

@@ -34,7 +34,7 @@ Copia este bloque completo en la terminal y presiona Enter:
 apt update && apt upgrade -y
 
 # Instalar servicios
-apt install -y nginx php-fpm php-mysql php-mbstring php-xml php-curl php-json php-zip git unzip
+apt install -y nginx php-fpm php-pgsql postgresql postgresql-client php-mbstring php-xml php-curl php-json php-zip git unzip
 
 # Ver versión PHP (anota: php8.1 o php8.2)
 ls /var/run/php/
@@ -42,14 +42,13 @@ ls /var/run/php/
 # Borrar contenido de html
 rm -rf /var/www/html/*
 
-# Crear BD y usuario (te pedirá contraseña de root MySQL - puede estar vacía, Enter)
-mysql -u root << 'EOF'
+# Crear BD y usuario PostgreSQL
+sudo -u postgres psql << 'EOF'
 DROP DATABASE IF EXISTS camagare_v8;
-DROP USER IF EXISTS 'camagare_user'@'localhost';
-CREATE DATABASE camagare_v8 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'camagare_user'@'localhost' IDENTIFIED BY 'Camagare2024!';
-GRANT ALL PRIVILEGES ON camagare_v8.* TO 'camagare_user'@'localhost';
-FLUSH PRIVILEGES;
+DROP USER IF EXISTS camagare_user;
+CREATE DATABASE camagare_v8 ENCODING 'UTF8';
+CREATE USER camagare_user WITH ENCRYPTED PASSWORD 'Camagare2024!';
+GRANT ALL PRIVILEGES ON DATABASE camagare_v8 TO camagare_user;
 EOF
 
 # Clonar proyecto
@@ -73,11 +72,13 @@ echo "Listo. Ahora configura database.php, bootstrap, index.php y Nginx."
 cat > /var/www/sistema/config/database.php << 'EOF'
 <?php
 return [
+    'driver' => 'pgsql',
     'host' => '127.0.0.1',
+    'port' => 5432,
     'user' => 'camagare_user',
     'pass' => 'Camagare2024!',
     'name' => 'camagare_v8',
-    'charset' => 'utf8mb4',
+    'charset' => 'UTF8',
 ];
 EOF
 ```
@@ -128,8 +129,8 @@ systemctl start php*-fpm
 
 **En tu PC** (exportar):
 ```powershell
-cd c:\xampp\mysql\bin
-.\mysqldump.exe -u root camagare_v8 > C:\xampp\htdocs\backup_camagare.sql
+cd "C:\Program Files\PostgreSQL\16\bin"
+.\pg_dump.exe -U postgres -d camagare_v8 > C:\xampp\htdocs\backup_camagare.sql
 ```
 
 **Copiar al servidor:**
@@ -139,7 +140,7 @@ scp C:\xampp\htdocs\backup_camagare.sql root@TU_IP:/root/
 
 **En el servidor** (importar):
 ```bash
-mysql -u camagare_user -pCamagare2024! camagare_v8 < /root/backup_camagare.sql
+sudo -u postgres psql -d camagare_v8 < /root/backup_camagare.sql
 ```
 
 ---
@@ -156,8 +157,8 @@ Deberías ver el login de CaMaGaRe.
 
 | Dato | Valor |
 |------|-------|
-| Usuario MySQL | camagare_user |
-| Contraseña MySQL | Camagare2024! |
+| Usuario PostgreSQL | camagare_user |
+| Contraseña PostgreSQL | Camagare2024! |
 | Base de datos | camagare_v8 |
 
-*(Puedes cambiar la contraseña editando `config/database.php` y recreando el usuario en MySQL)*
+*(Puedes cambiar la contraseña editando `config/database.php` y recreando el usuario en PostgreSQL)*

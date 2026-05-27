@@ -134,12 +134,13 @@ function estadoPagoBadge($estado) {
                         <th><?= thSortEmpresas($urlBaseEmpresas, 'nombre', 'Razón social', $ordenCol, $ordenDir, $buscar, $page) ?></th>
                         <th><?= thSortEmpresas($urlBaseEmpresas, 'nombre_comercial', 'Nombre comercial', $ordenCol, $ordenDir, $buscar, $page) ?></th>
                         <th><?= thSortEmpresas($urlBaseEmpresas, 'ruc', 'RUC', $ordenCol, $ordenDir, $buscar, $page) ?></th>
-                        <th><?= thSortEmpresas($urlBaseEmpresas, 'establecimiento', 'Establecimiento', $ordenCol, $ordenDir, $buscar, $page) ?></th>
+                        <th><?= thSortEmpresas($urlBaseEmpresas, 'establecimiento', 'Est.', $ordenCol, $ordenDir, $buscar, $page) ?></th>
                         <th><?= thSortEmpresas($urlBaseEmpresas, 'direccion', 'Dirección', $ordenCol, $ordenDir, $buscar, $page) ?></th>
                         <th><?= thSortEmpresas($urlBaseEmpresas, 'nombre_provincia', 'Provincia', $ordenCol, $ordenDir, $buscar, $page) ?></th>
                         <th><?= thSortEmpresas($urlBaseEmpresas, 'nombre_ciudad', 'Ciudad', $ordenCol, $ordenDir, $buscar, $page) ?></th>
                         <th><?= thSortEmpresas($urlBaseEmpresas, 'estado', 'Estado', $ordenCol, $ordenDir, $buscar, $page) ?></th>
                         <th class="text-center">Usuarios</th>
+                        <?php if ($nivel >= 3): ?><th class="text-center">Acciones</th><?php endif; ?>
                     </tr>
                 </thead>
                 <tbody>
@@ -169,13 +170,13 @@ function estadoPagoBadge($estado) {
                         data-periodo-vigencia-hasta="<?= htmlspecialchars($r['periodo_vigencia_hasta'] ?? '') ?>"
                         data-estado-pago="<?= htmlspecialchars($r['estado_pago'] ?? 'pendiente') ?>"
                         data-usuarios="<?= count($usuarios) ?>">
-                        <td><?= htmlspecialchars($r['nombre'] ?? '—') ?></td>
-                        <td><?= htmlspecialchars($r['nombre_comercial'] ?? '—') ?></td>
+                        <td><?= htmlspecialchars($r['nombre'] ?? '-') ?></td>
+                        <td><?= htmlspecialchars($r['nombre_comercial'] ?? '-') ?></td>
                         <td><code><?= htmlspecialchars($r['ruc'] ?? '') ?></code></td>
-                        <td><code><?= htmlspecialchars($r['establecimiento'] ?? '—') ?></code></td>
-                        <td class="text-truncate" style="max-width: 180px;"><?= htmlspecialchars($r['direccion'] ?? '—') ?></td>
-                        <td><?= htmlspecialchars($r['nombre_provincia'] ?? '—') ?></td>
-                        <td><?= htmlspecialchars($r['nombre_ciudad'] ?? '—') ?></td>
+                        <td class="text-center"><code><?= htmlspecialchars($r['establecimiento'] ?? '001') ?></code></td>
+                        <td class="text-truncate" style="max-width: 180px;"><?= htmlspecialchars($r['direccion'] ?? '-') ?></td>
+                        <td><?= htmlspecialchars($r['nombre_provincia'] ?? '-') ?></td>
+                        <td><?= htmlspecialchars($r['nombre_ciudad'] ?? '-') ?></td>
                         <td>
                             <?php if ($estado === '1'): ?>
                             <span class="badge bg-success">Activo</span>
@@ -184,6 +185,11 @@ function estadoPagoBadge($estado) {
                             <?php endif; ?>
                         </td>
                         <td class="text-center"><span class="badge bg-light text-dark"><?= count($usuarios) ?></span></td>
+                        <?php if ($nivel >= 3): ?>
+                        <td class="text-center" onclick="event.stopPropagation()">
+                            <button class="btn btn-sm btn-outline-danger" onclick="eliminarEmpresa(<?= $r['id'] ?>)" title="Eliminar empresa"><i class="bi bi-trash"></i></button>
+                        </td>
+                        <?php endif; ?>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -216,8 +222,8 @@ function estadoPagoBadge($estado) {
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <label for="crear-establecimiento" class="form-label">Establecimiento</label>
-                            <input type="text" id="crear-establecimiento" name="establecimiento" class="form-control form-control-sm solo-numero" placeholder="000" maxlength="3" pattern="[0-9]{0,3}" inputmode="numeric" title="Solo números 0-9 (opcional)">
+                            <label for="crear-establecimiento" class="form-label">Establecimiento *</label>
+                            <input type="text" id="crear-establecimiento" name="establecimiento" class="form-control form-control-sm solo-numero" required placeholder="001" maxlength="3" value="001">
                         </div>
                         <div class="col-md-4">
                             <label for="crear-estado" class="form-label">Estado</label>
@@ -290,6 +296,9 @@ function estadoPagoBadge($estado) {
                         <button class="nav-link active" id="tab-empresas-general" data-bs-toggle="tab" data-bs-target="#pane-empresas-general" type="button" role="tab">General</button>
                     </li>
                     <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tab-empresas-establecimientos" data-bs-toggle="tab" data-bs-target="#pane-empresas-establecimientos" type="button" role="tab">Establecimientos</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
                         <button class="nav-link" id="tab-empresas-usuarios" data-bs-toggle="tab" data-bs-target="#pane-empresas-usuarios" type="button" role="tab">Usuarios asignados</button>
                     </li>
                     <li class="nav-item" role="presentation">
@@ -315,7 +324,8 @@ function estadoPagoBadge($estado) {
                                 </div>
                                 <div class="col-md-4">
                                     <label for="edit-establecimiento" class="form-label">Establecimiento</label>
-                                    <input type="text" id="edit-establecimiento" name="establecimiento" class="form-control form-control-sm solo-numero" placeholder="000" maxlength="3" pattern="[0-9]{0,3}" inputmode="numeric" title="Solo números 0-9 (3 dígitos)">
+                                    <input type="text" id="edit-establecimiento" name="establecimiento" class="form-control form-control-sm solo-numero" placeholder="001" maxlength="3" readonly>
+                                    <div class="form-text small" style="font-size: 0.6rem;">El establecimiento matriz no es editable.</div>
                                 </div>
                                 <div class="col-md-4">
                                     <label for="edit-estado" class="form-label">Estado</label>
@@ -361,6 +371,17 @@ function estadoPagoBadge($estado) {
                                 </div>
                             </div>
                         </form>
+                    </div>
+                    <div class="tab-pane fade" id="pane-empresas-establecimientos" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="fw-bold mb-0 small text-primary"><i class="bi bi-buildings me-2"></i>Establecimientos</h6>
+                        </div>
+                        <div class="establecimientos-empresa-scroll">
+                            <table class="table table-sm mb-0">
+                                <thead class="table-light"><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Estado</th><th class="text-end">Acción</th></tr></thead>
+                                <tbody id="tbody-establecimientos-empresa"></tbody>
+                            </table>
+                        </div>
                     </div>
                     <div class="tab-pane fade" id="pane-empresas-usuarios" role="tabpanel">
                         <div class="row g-2 mb-3">
@@ -456,6 +477,54 @@ function estadoPagoBadge($estado) {
     </div>
 </div>
 
+<!-- Modal Editar Establecimiento (desde Sistema) -->
+<div class="modal fade" id="modalEditarEstSistema" tabindex="-1">
+    <div class="modal-dialog">
+        <form id="form-edit-est-sistema" class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-dark text-white py-2">
+                <h6 class="modal-title fw-bold small"><i class="bi bi-buildings me-2"></i>Editar Establecimiento</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <input type="hidden" name="action" value="updateEstablecimiento">
+                <input type="hidden" name="id" id="edit-est-id-sistema">
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">Código</label>
+                        <input type="text" name="codigo" id="edit-est-codigo-sistema" class="form-control form-control-sm bg-light fw-bold" readonly maxlength="3">
+                    </div>
+                    <div class="col-md-9">
+                        <label class="form-label small fw-bold">Nombre</label>
+                        <input type="text" name="nombre" id="edit-est-nombre-sistema" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Tipo</label>
+                        <select name="tipo" id="edit-est-tipo-sistema" class="form-select form-select-sm">
+                            <option value="Matriz">Casa Matriz</option>
+                            <option value="Sucursal">Sucursal</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Estado</label>
+                        <select name="estado" id="edit-est-estado-sistema" class="form-select form-select-sm">
+                            <option value="activo">Activo</option>
+                            <option value="inactivo">Inactivo</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label small fw-bold">Dirección</label>
+                        <textarea name="direccion" id="edit-est-direccion-sistema" class="form-control form-control-sm" rows="2" required></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-1">
+                <button type="button" class="btn btn-link btn-sm text-muted text-decoration-none" data-bs-dismiss="modal">Cerrar</button>
+                <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold shadow-sm">GUARDAR CAMBIOS</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 (function() {
     var base = '<?= $base ?>';
@@ -527,8 +596,8 @@ function estadoPagoBadge($estado) {
         document.getElementById('modal-empresa-nombre').textContent = el.dataset.nombre || el.dataset.nombreComercial || el.dataset.establecimiento || '';
         document.getElementById('edit-nombre-comercial').value = el.dataset.nombreComercial || '';
         document.getElementById('edit-ruc').value = el.dataset.ruc || '';
+        document.getElementById('edit-establecimiento').value = el.dataset.establecimiento || '001';
         document.getElementById('edit-nombre').value = el.dataset.nombre || '';
-        document.getElementById('edit-establecimiento').value = el.dataset.establecimiento || '';
         document.getElementById('edit-direccion').value = el.dataset.direccion || '';
         document.getElementById('edit-telefono').value = el.dataset.telefono || '';
         document.getElementById('edit-mail').value = el.dataset.mail || '';
@@ -547,6 +616,7 @@ function estadoPagoBadge($estado) {
         cargarUsuarios();
         cargarUsuariosDisponibles();
         cargarDocumentos();
+        cargarEstablecimientos();
         new bootstrap.Modal(modal).show();
     }
 
@@ -604,6 +674,73 @@ function estadoPagoBadge($estado) {
             .catch(function() { tbody.innerHTML = '<tr><td colspan="4" class="text-danger">Error al cargar</td></tr>'; });
     }
 
+    function cargarEstablecimientos() {
+        var tbody = document.getElementById('tbody-establecimientos-empresa');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center">Cargando...</td></tr>';
+        fetch(base + '/config/empresas-sistema?action=establecimientosEmpresa&id=' + idEmpresa)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.html) {
+                    tbody.innerHTML = data.html;
+                    tbody.querySelectorAll('.btn-edit-est').forEach(function(b) {
+                        b.addEventListener('click', function() {
+                            var est = JSON.parse(this.dataset.est);
+                            document.getElementById('edit-est-id-sistema').value = est.id;
+                            document.getElementById('edit-est-codigo-sistema').value = est.codigo || '';
+                            document.getElementById('edit-est-nombre-sistema').value = est.nombre || '';
+                            document.getElementById('edit-est-direccion-sistema').value = est.direccion || '';
+                            document.getElementById('edit-est-tipo-sistema').value = est.tipo || 'Sucursal';
+                            document.getElementById('edit-est-estado-sistema').value = est.estado || 'activo';
+                            
+                            var mEl = document.getElementById('modalEditarEstSistema');
+                            var modalEdit = bootstrap.Modal.getInstance(mEl) || new bootstrap.Modal(mEl);
+                            modalEdit.show();
+                        });
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">No hay establecimientos registrados.</td></tr>';
+                }
+            })
+            .catch(function() { tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error al cargar sucursales.</td></tr>'; });
+    }
+
+    // Submit form edit establecimiento sistema
+    var formEditEst = document.getElementById('form-edit-est-sistema');
+    if (formEditEst) {
+        formEditEst.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var btn = this.querySelector('button[type="submit"]');
+            var txtOrig = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
+            
+            fetch(base + '/config/empresas-sistema', {
+                method: 'POST',
+                body: new FormData(this),
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            }).then(function(r) { return r.json(); })
+            .then(function(res) {
+                btn.disabled = false;
+                btn.innerHTML = txtOrig;
+                if (res.ok) {
+                    bootstrap.Modal.getInstance(document.getElementById('modalEditarEstSistema')).hide();
+                    cargarEstablecimientos();
+                    if (window.Swal) Swal.fire('Éxito', res.msg, 'success');
+                    else alert(res.msg);
+                } else {
+                    alert(res.error || 'Error al actualizar');
+                }
+            }).catch(function() {
+                btn.disabled = false;
+                btn.innerHTML = txtOrig;
+                alert('Error de conexión');
+            });
+        });
+    }
+
+    document.getElementById('tab-empresas-establecimientos').addEventListener('shown.bs.tab', cargarEstablecimientos);
     document.getElementById('tab-empresas-documentos').addEventListener('shown.bs.tab', cargarDocumentos);
     document.getElementById('tab-empresas-usuarios').addEventListener('shown.bs.tab', function() {
         cargarUsuarios();
@@ -720,7 +857,6 @@ function estadoPagoBadge($estado) {
                     document.getElementById('crear-nombre').value = d.nombre || '';
                     document.getElementById('crear-nombre-comercial').value = d.nombre_comercial || '';
                     document.getElementById('crear-direccion').value = d.direccion || '';
-                    document.getElementById('crear-establecimiento').value = d.establecimiento || '';
                     if (d.tipo && modalCrear) {
                         var tipoInput = modalCrear.querySelector('input[name="tipo"]');
                         if (tipoInput) tipoInput.value = d.tipo;
@@ -839,6 +975,30 @@ function estadoPagoBadge($estado) {
             ocultarMsgForm('editar-cobro-msg');
         });
     }
+
+    window.eliminarEmpresa = function(id) {
+        if (!confirm('¿Está seguro de eliminar esta empresa? Esta acción no se puede deshacer y solo se permite si la empresa no tiene registros vinculados.')) return;
+
+        var formData = new FormData();
+        formData.append('id', id);
+
+        fetch(base + '/config/empresas-sistema-delete', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (res.ok) {
+                alert(res.msg || 'Empresa eliminada correctamente.');
+                window.location.reload();
+            } else {
+                alert(res.error || 'No se pudo eliminar la empresa.');
+            }
+        })
+        .catch(function(err) {
+            alert('Error de conexión. Intente de nuevo.');
+        });
+    };
 
 })();
 </script>

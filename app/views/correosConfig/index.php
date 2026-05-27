@@ -31,7 +31,7 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div>
         <h5 class="mb-0"><i class="bi bi-envelope-at"></i> <?= htmlspecialchars($titulo) ?></h5>
-        <p class="text-muted mb-0 small">Correos por propósito: recuperar contraseña, notificaciones, cobros, etc. Clic en fila para editar.</p>
+        <p class="text-muted mb-0 small">Correos para cada propósito: recuperar contraseña, notificaciones, cobros, pagos etc.</p>
     </div>
     <div class="d-flex gap-2">
         <a href="<?= $base ?>/config" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
@@ -94,8 +94,8 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                         <td><code><?= htmlspecialchars($r['codigo'] ?? '') ?></code></td>
                         <td><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
                         <td><small><?= htmlspecialchars($r['email'] ?? '') ?></small></td>
-                        <td><small><?= htmlspecialchars($r['host_smtp'] ?? '') ?: '—' ?></small></td>
-                        <td class="text-center"><?= (int)($r['puerto_smtp'] ?? 0) ?: '—' ?></td>
+                        <td><small><?= htmlspecialchars($r['host_smtp'] ?? '') ?: '-' ?></small></td>
+                        <td class="text-center"><?= (int)($r['puerto_smtp'] ?? 0) ?: '-' ?></td>
                         <td><span class="badge bg-secondary"><?= htmlspecialchars($r['encryption'] ?? '') ?: 'none' ?></span></td>
                         <td class="text-center">
                             <?php if ($status): ?>

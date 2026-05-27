@@ -12,6 +12,7 @@ namespace App\controllers;
 use App\core\Controller;
 use App\models\ConfiguracionOpcion;
 use App\models\Usuario as ModelUsuario;
+use App\Services\modulos\AsientosTipoService;
 
 class ConfigController extends Controller
 {
@@ -385,12 +386,24 @@ class ConfigController extends Controller
         (new UsuariosSistemaController())->update();
     }
 
+    public function usuariosSistemaEliminar(): void
+    {
+        (new UsuariosSistemaController())->eliminar();
+    }
+
+    public function usuariosSistemaReenviarInvitacion(): void
+    {
+        (new UsuariosSistemaController())->reenviarInvitacion();
+    }
+
     public function empresasSistema(): void
     {
         $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
         $c = new EmpresasSistemaController();
         $method = match ($sub) {
             'usuariosEmpresa' => 'usuariosEmpresaJson',
+            'establecimientosEmpresa' => 'establecimientosEmpresaJson',
+            'updateEstablecimiento' => 'updateEstablecimiento',
             'documentosEmpresa' => 'documentosEmpresaJson',
             'usuariosDisponiblesEmpresa' => 'usuariosDisponiblesEmpresaJson',
             'uploadDocumento' => 'uploadDocumento',
@@ -399,6 +412,7 @@ class ConfigController extends Controller
             'provincias' => 'provinciasJson',
             'ciudades' => 'ciudadesJson',
             'sriIdentificacion' => 'sriIdentificacionJson',
+            'delete' => 'delete',
             default => 'index',
         };
         if (method_exists($c, $method)) {
@@ -416,6 +430,11 @@ class ConfigController extends Controller
     public function empresasSistemaUpdate(): void
     {
         (new EmpresasSistemaController())->update();
+    }
+
+    public function empresasSistemaDelete(): void
+    {
+        (new EmpresasSistemaController())->delete();
     }
 
     public function provinciaCiudad(): void
@@ -674,9 +693,21 @@ class ConfigController extends Controller
 
             try {
                 $model = new ModelUsuario();
-                $model->crearPorCorreo($nombre, $correo, $idAdmin);
+                $resultado = $model->crearPorCorreo($nombre, $correo, $idAdmin);
+                $idNuevo = $resultado['id'];
+                $token = $resultado['token'];
 
-                $_SESSION[$msgKey] = ['success', 'Usuario creado. Se enviará un correo para que complete su registro. Asigne empresas en "Asignar empresas".'];
+                if ($token !== '') {
+                    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+                    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                    $urlEmail = urlencode($correo);
+                    $urlInvite = $scheme . '://' . $host . rtrim(BASE_URL, '/') . '/registro/index/' . $urlEmail . '/' . $token;
+
+                    require_once MVC_APP . '/helpers/mail.php';
+                    enviar_correo_nuevo_usuario($nombre, $correo, $urlInvite);
+                }
+
+                $_SESSION[$msgKey] = ['success', 'Usuario creado. Se ha enviado un correo a ' . $correo . ' para que complete su registro.'];
                 $this->redirect($targetUrl);
             } catch (\InvalidArgumentException $e) {
                 $_SESSION[$msgKey] = ['danger', $e->getMessage()];
@@ -752,5 +783,245 @@ class ConfigController extends Controller
         }
         $_SESSION['config_msg'] = ['success', 'Colores restaurados a los valores por defecto.'];
         $this->redirect(BASE_URL . '/config/appearance');
+    }
+
+    // ─── Tareas y Obligaciones ────────────────────────────────
+
+    public function tareasObligaciones(): void
+    {
+        $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
+        $c   = new TareasObligacionesController();
+        $method = match ($sub) {
+            // Obligaciones
+            'obligaciones-search-ajax' => 'obligacionesSearchAjax',
+            'obligaciones-store'       => 'obligacionesStore',
+            'obligaciones-update'      => 'obligacionesUpdate',
+            'obligaciones-delete'      => 'obligacionesDelete',
+            // Tareas
+            'tareas-search-ajax'       => 'tareasSearchAjax',
+            'tareas-store'             => 'tareasStore',
+            'tareas-update'            => 'tareasUpdate',
+            'tareas-delete'            => 'tareasDelete',
+            'tareas-get-detalle'       => 'tareasGetDetalle',
+            // Adjuntos
+            'tareas-upload-adjunto'    => 'tareasUploadAdjunto',
+            'tareas-delete-adjunto'    => 'tareasDeleteAdjunto',
+            // Búsquedas y SRI
+            'buscar-clientes'          => 'buscarClientes',
+            'buscar-usuarios'          => 'buscarUsuarios',
+            'correos-cliente'          => 'getCorreosCliente',
+            'consultar-sri'            => 'consultarSri',
+            'crear-cliente-tarea'      => 'crearClienteTarea',
+            'crear-responsable-tarea'  => 'crearResponsableTarea',
+            'tareas-alertas-count'     => 'tareasAlertasCountAjax',
+            default                    => 'index',
+        };
+        if (method_exists($c, $method)) {
+            $c->$method();
+        } else {
+            $c->index();
+        }
+    }
+
+    // ==========================================
+    // SECCIÓN DE CONFIGURACIÓN DE ASIENTOS TIPO
+    // ==========================================
+
+    public function asientosTipo(): void
+    {
+        $this->requireAuth();
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        if ($nivel < 2) {
+            $_SESSION['config_msg'] = ['danger', 'No tiene permisos para acceder a esta configuración.'];
+            $this->redirect(BASE_URL . '/config');
+        }
+
+        $this->viewWithLayout('layouts.main', 'config.asientos_tipo', [
+            'titulo' => 'Modelos de Asientos Tipo',
+            'nivel' => $nivel
+        ]);
+    }
+
+    public function asientosTipoListAjax(): void
+    {
+        $this->requireAuth();
+        header('Content-Type: application/json');
+
+        $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $page      = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
+        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'id');
+        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'ASC'));
+        $perPage   = 10;
+
+        $service = new AsientosTipoService();
+        $result = $service->getListado($buscar, $page, $perPage, $ordenCol, $ordenDir);
+        $rows   = $result['rows'];
+        $total  = $result['total'];
+        $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
+
+        $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
+        $to   = $total > 0 ? min($page * $perPage, $total) : 0;
+
+        $tiposTextos = [
+            'ventas_factura' => 'Ventas con Factura',
+            'ventas_recibo' => 'Ventas con Recibo',
+            'adquisiciones_compras' => 'Adquisiciones de Compras/Servicios',
+            'retenciones_venta' => 'Retenciones en Venta',
+            'retenciones_compra' => 'Retenciones en Compra',
+            'ingresos_egresos' => 'Ingresos y Egresos',
+            'cobros_pagos' => 'Cobros y Pagos',
+            'nomina' => 'Nómina'
+        ];
+
+        ob_start();
+        if (empty($rows)) {
+            echo '<tr><td colspan="6" class="text-center py-4 text-muted">No se encontraron asientos tipo.</td></tr>';
+        } else {
+            foreach ($rows as $r) {
+                $tipoText = $tiposTextos[$r['tipo_asiento']] ?? ucwords(str_replace('_', ' ', $r['tipo_asiento']));
+                
+                $parts = array_map('trim', explode(',', strtolower($r['tipo_cuenta'] ?? '')));
+                $badgeHtml = '';
+                foreach ($parts as $p) {
+                    if (!empty($p)) {
+                        $label = ucfirst($p);
+                        $badgeHtml .= '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 m-1 small">' . $label . '</span>';
+                    }
+                }
+                if (empty($badgeHtml)) {
+                    $badgeHtml = '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 m-1 small">Todos</span>';
+                }
+
+                $debeHaberBadge = (strtolower($r['debe_haber'] ?? 'debe') === 'debe')
+                    ? '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 fw-bold small">DEBE</span>'
+                    : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 fw-bold small">HABER</span>';
+
+                echo '<tr class="asiento-tipo-row align-middle" role="button" onclick="ASIENTOTIPO_editar(' . $r['id'] . ')">
+                        <td class="ps-3 fw-bold text-primary">' . htmlspecialchars($r['codigo']) . '</td>
+                        <td class="fw-medium">' . htmlspecialchars($tipoText) . '</td>
+                        <td>' . htmlspecialchars($r['referencia']) . '</td>
+                        <td class="text-center">' . $debeHaberBadge . '</td>
+                        <td>' . $badgeHtml . '</td>
+                        <td class="small text-muted text-truncate" style="max-width: 300px;" title="' . htmlspecialchars($r['detalle'] ?? '') . '">' . htmlspecialchars($r['detalle'] ?? '') . '</td>
+                        <td class="text-center">
+                            <button type="button" class="btn btn-link text-danger p-0 border-0" onclick="event.stopPropagation(); ASIENTOTIPO_eliminar(' . $r['id'] . ')" title="Eliminar">
+                                <i class="bi bi-trash fs-5"></i>
+                            </button>
+                        </td>
+                      </tr>';
+            }
+        }
+        $rowsHtml = ob_get_clean();
+
+        ob_start();
+        $prevDisabled = ($page <= 1) ? 'disabled' : '';
+        $nextDisabled = ($page >= $totalPages) ? 'disabled' : '';
+        echo '<div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary" ' . $prevDisabled . ' onclick="ASIENTOTIPO_cambiarPagina(' . ($page - 1) . ')"><i class="bi bi-chevron-left"></i></button>
+                <button type="button" class="btn btn-outline-secondary" ' . $nextDisabled . ' onclick="ASIENTOTIPO_cambiarPagina(' . ($page + 1) . ')"><i class="bi bi-chevron-right"></i></button>
+              </div>';
+        $paginationHtml = ob_get_clean();
+
+        echo json_encode([
+            'ok'         => true,
+            'rows'       => $rowsHtml,
+            'pagination' => $paginationHtml,
+            'info'       => "$from-$to/$total"
+        ]);
+        exit;
+    }
+
+    public function asientosTipoGetDetailAjax(): void
+    {
+        $this->requireAuth();
+        header('Content-Type: application/json');
+
+        $id = (int)($_GET['id'] ?? 0);
+        $service = new AsientosTipoService();
+        $data = $service->findById($id);
+
+        if (!$data) {
+            echo json_encode(['ok' => false, 'error' => 'No se encontró el asiento tipo.']);
+        } else {
+            $repo = new \App\repositories\modulos\AsientosTipoRepository();
+            $data['en_uso'] = $repo->estaEnUso($id);
+            echo json_encode(['ok' => true, 'data' => $data]);
+        }
+        exit;
+    }
+
+    public function asientosTipoStore(): void
+    {
+        $this->requireAuth();
+        header('Content-Type: application/json');
+
+        $data = [
+            'tipo_asiento' => trim($_POST['tipo_asiento'] ?? ''),
+            'referencia'   => trim($_POST['referencia'] ?? ''),
+            'detalle'      => trim($_POST['detalle'] ?? ''),
+            'codigo'       => trim($_POST['codigo'] ?? ''),
+            'tipo_cuenta'  => trim($_POST['tipo_cuenta'] ?? ''),
+            'debe_haber'   => trim($_POST['debe_haber'] ?? 'debe'),
+            'id_usuario'   => (int)$_SESSION['id_usuario']
+        ];
+
+        try {
+            $service = new AsientosTipoService();
+            $id = $service->crear($data);
+            echo json_encode(['ok' => true, 'msg' => 'Asiento tipo registrado correctamente.', 'id' => $id]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function asientosTipoUpdate(): void
+    {
+        $this->requireAuth();
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $data = [
+            'tipo_asiento' => trim($_POST['tipo_asiento'] ?? ''),
+            'referencia'   => trim($_POST['referencia'] ?? ''),
+            'detalle'      => trim($_POST['detalle'] ?? ''),
+            'codigo'       => trim($_POST['codigo'] ?? ''),
+            'tipo_cuenta'  => trim($_POST['tipo_cuenta'] ?? ''),
+            'debe_haber'   => trim($_POST['debe_haber'] ?? 'debe'),
+            'id_usuario'   => (int)$_SESSION['id_usuario']
+        ];
+
+        try {
+            if ($id <= 0) {
+                throw new \Exception('ID de asiento tipo inválido.');
+            }
+            $service = new AsientosTipoService();
+            $service->actualizar($id, $data);
+            echo json_encode(['ok' => true, 'msg' => 'Asiento tipo actualizado correctamente.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function asientosTipoDelete(): void
+    {
+        $this->requireAuth();
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $idUsuario = (int)$_SESSION['id_usuario'];
+
+        try {
+            if ($id <= 0) {
+                throw new \Exception('ID de asiento tipo inválido.');
+            }
+            $service = new AsientosTipoService();
+            $service->eliminar($id, $idUsuario);
+            echo json_encode(['ok' => true, 'msg' => 'Asiento tipo de modelo predefinido eliminado correctamente.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
     }
 }

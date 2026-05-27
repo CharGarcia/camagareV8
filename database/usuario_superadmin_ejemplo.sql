@@ -1,4 +1,4 @@
--- Ejemplo: insertar solo un SuperAdmin (nivel 3) en MySQL.
+-- Ejemplo: insertar solo un SuperAdmin (nivel 3) en PostgreSQL.
 -- La aplicación permite iniciar sesión sin empresa asignada solo si nivel = 3.
 -- Luego cree empresas en: Configuración → Empresas del sistema (al crear la primera, se le asigna automáticamente).
 

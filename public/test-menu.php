@@ -38,43 +38,36 @@ if ($idEmpresa <= 0) {
     exit;
 }
 
-// 2. Estructura de tablas
+// 2–3. Estructura y conteo (PostgreSQL)
 echo "=== 2. ESTRUCTURA DE TABLAS ===\n";
+$db = null;
 try {
     $db = \App\core\Database::getConnection();
-    
-    $r = $db->query("DESCRIBE modulos_menu");
-    echo "modulos_menu columnas: ";
-    if ($r) {
-        $cols = [];
-        while ($row = $r->fetch_assoc()) $cols[] = $row['Field'];
-        echo implode(', ', $cols) . "\n";
-    } else echo "error\n";
-    
-    $r = $db->query("DESCRIBE submodulos_menu");
-    echo "submodulos_menu columnas: ";
-    if ($r) {
-        $cols = [];
-        while ($row = $r->fetch_assoc()) $cols[] = $row['Field'];
-        echo implode(', ', $cols) . "\n\n";
-    } else echo "error\n\n";
 
-// 3. Conteo en tablas
-echo "=== 3. REGISTROS EN TABLAS ===\n";
-    
-    $r = $db->query("SELECT COUNT(*) as n FROM modulos_menu");
-    $n = $r ? $r->fetch_assoc()['n'] : 0;
+    $st = $db->prepare('SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ? ORDER BY ordinal_position');
+    $st->execute(['modulos_menu']);
+    $cols = array_column($st->fetchAll(\PDO::FETCH_ASSOC), 'column_name');
+    echo 'modulos_menu columnas: ' . implode(', ', $cols) . "\n";
+
+    $st->execute(['submodulos_menu']);
+    $cols = array_column($st->fetchAll(\PDO::FETCH_ASSOC), 'column_name');
+    echo 'submodulos_menu columnas: ' . implode(', ', $cols) . "\n\n";
+
+    echo "=== 3. REGISTROS EN TABLAS ===\n";
+
+    $r = $db->query('SELECT COUNT(*) AS n FROM modulos_menu');
+    $n = $r ? (int) ($r->fetch(\PDO::FETCH_ASSOC)['n'] ?? 0) : 0;
     echo "modulos_menu: $n registros\n";
-    
-    $r = $db->query("SELECT COUNT(*) as n FROM submodulos_menu");
-    $n = $r ? $r->fetch_assoc()['n'] : 0;
+
+    $r = $db->query('SELECT COUNT(*) AS n FROM submodulos_menu');
+    $n = $r ? (int) ($r->fetch(\PDO::FETCH_ASSOC)['n'] ?? 0) : 0;
     echo "submodulos_menu: $n registros\n";
-    
-    $r = $db->query("SELECT COUNT(*) as n FROM modulos_asignados WHERE id_usuario=$idUsuario AND id_empresa=$idEmpresa");
-    $n = $r ? $r->fetch_assoc()['n'] : 0;
+
+    $r = $db->query("SELECT COUNT(*) AS n FROM modulos_asignados WHERE id_usuario={$idUsuario} AND id_empresa={$idEmpresa}");
+    $n = $r ? (int) ($r->fetch(\PDO::FETCH_ASSOC)['n'] ?? 0) : 0;
     echo "modulos_asignados (tu usuario+empresa): $n registros\n\n";
 } catch (Throwable $e) {
-    echo "Error: " . $e->getMessage() . "\n\n";
+    echo 'Error: ' . $e->getMessage() . "\n\n";
 }
 
 // 4. Query según nivel
@@ -99,8 +92,11 @@ echo "SQL: $sql\n\n";
 // 5. Resultado raw
 echo "=== 5. FILAS DEVUELTAS POR LA QUERY ===\n";
 try {
+    if ($db === null) {
+        $db = \App\core\Database::getConnection();
+    }
     $result = $db->query($sql);
-    $rows = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+    $rows = $result ? $result->fetchAll(\PDO::FETCH_ASSOC) : [];
     echo "Total filas: " . count($rows) . "\n";
     if (!empty($rows)) {
         print_r(array_slice($rows, 0, 5));

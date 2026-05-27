@@ -57,7 +57,7 @@ class UnidadMedida extends BaseModel
         $factorBase = (float) $factorBase;
         $estado = $estado ? 1 : 0;
         $this->execute("INSERT INTO unidades_medida_modelo (id_tipo, codigo, nombre, abreviatura, es_base, factor_base, estado) VALUES ({$idTipo}, '{$codigo}', '{$nombre}', '{$abreviatura}', {$esBase}, {$factorBase}, {$estado})");
-        return $this->lastInsertId();
+        return $this->lastInsertId('unidades_medida_modelo_id_seq');
     }
 
     public function actualizar(int $id, int $idTipo, string $codigo, string $nombre, string $abreviatura, int $esBase, float $factorBase, int $estado): bool

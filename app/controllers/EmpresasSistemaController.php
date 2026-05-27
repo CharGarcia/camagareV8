@@ -371,6 +371,62 @@ class EmpresasSistemaController extends Controller
     }
 
     /**
+     * Obtener establecimientos de una empresa en JSON/HTML
+     */
+    public function establecimientosEmpresaJson(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+
+        $idEmpresa = (int) ($_GET['id'] ?? 0);
+        if ($idEmpresa <= 0) {
+            $this->json(['establecimientos' => [], 'html' => '']);
+            return;
+        }
+
+        $this->verificarAccesoEmpresa($idEmpresa);
+
+        $establecimientos = $this->model->getEstablecimientos($idEmpresa);
+        $html = '';
+        foreach ($establecimientos as $e) {
+            $json = htmlspecialchars(json_encode($e), ENT_QUOTES, 'UTF-8');
+            $tipoTxt = htmlspecialchars($e['tipo'] ?? 'Sucursal');
+            $estadoTxt = (strtolower($e['estado'] ?? '') === 'activo') ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-danger">Inactivo</span>';
+            $html .= '<tr>';
+            $html .= '<td class="fw-bold"><code>' . htmlspecialchars($e['codigo'] ?? '') . '</code></td>';
+            $html .= '<td>' . htmlspecialchars($e['nombre'] ?? '') . '</td>';
+            $html .= '<td><span class="badge bg-info bg-opacity-10 text-info border border-info">' . $tipoTxt . '</span></td>';
+            $html .= '<td>' . $estadoTxt . '</td>';
+            $html .= '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-primary btn-edit-est" data-est=\'' . $json . '\' title="Editar"><i class="bi bi-pencil"></i></button></td>';
+            $html .= '</tr>';
+        }
+
+        $this->json(['establecimientos' => $establecimientos, 'html' => $html]);
+    }
+
+    /**
+     * Actualizar un establecimiento (desde el sistema)
+     */
+    public function updateEstablecimiento(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+
+        $id = (int) ($_POST['id'] ?? 0);
+        if ($id <= 0) {
+            $this->json(['ok' => false, 'error' => 'ID de establecimiento inválido.']);
+            return;
+        }
+
+        try {
+            $res = $this->model->actualizarEstablecimiento($id, $_POST);
+            $this->json(['ok' => $res, 'msg' => $res ? 'Establecimiento actualizado.' : 'No se realizaron cambios.']);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
      * Subir documento para una empresa
      */
     public function uploadDocumento(): void
@@ -526,5 +582,42 @@ class EmpresasSistemaController extends Controller
             header('Location: ' . BASE_URL . '/config');
             exit;
         }
+    }
+
+    public function delete(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(3);
+
+        $id = (int) ($_POST['id'] ?? 0);
+        $esAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
+
+        if ($id <= 0) {
+            if ($esAjax) {
+                $this->json(['ok' => false, 'error' => 'ID de empresa inválido.']);
+                return;
+            }
+            $_SESSION['empresas_msg'] = ['danger', 'ID de empresa inválido.'];
+            $this->redirect(BASE_URL . self::BASE_PATH);
+        }
+
+        try {
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            if ($this->model->eliminar($id, $idUsuario)) {
+                if ($esAjax) {
+                    $this->json(['ok' => true, 'msg' => 'Empresa eliminada correctamente.']);
+                    return;
+                }
+                $_SESSION['empresas_msg'] = ['success', 'Empresa eliminada correctamente.'];
+            }
+        } catch (\Throwable $e) {
+            if ($esAjax) {
+                $this->json(['ok' => false, 'error' => $e->getMessage()]);
+                return;
+            }
+            $_SESSION['empresas_msg'] = ['danger', $e->getMessage()];
+        }
+
+        $this->redirect(BASE_URL . self::BASE_PATH);
     }
 }

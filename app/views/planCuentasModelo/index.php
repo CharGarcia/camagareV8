@@ -69,8 +69,8 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                         <th>SRI</th>
                         <th>Supercias ESF</th>
                         <th>Supercias ERI</th>
-                        <th>Supercias ECP-1</th>
                         <th>Supercias ECP-2</th>
+                        <th>Supercias ECP-1</th>
                         <th class="text-center"><?= thSort($base, 'status', 'Status', $ordenCol, $ordenDir, $buscar, 'text-center d-inline-block') ?></th>
                     </tr>
                 </thead>
@@ -98,7 +98,7 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                             <?php if ($puedeCrearHijo): ?>
                             <button type="button" class="btn btn-link btn-sm text-primary p-0 btn-crear-hijo" title="Crear cuenta de nivel <?= $nivelHijo ?>"><i class="bi bi-plus-circle"></i></button>
                             <?php else: ?>
-                            <span class="text-muted">—</span>
+                            <span class="text-muted">-</span>
                             <?php endif; ?>
                         </td>
                         <td class="text-center p-1" onclick="event.stopPropagation()">
@@ -108,14 +108,14 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                                 <button type="submit" class="btn btn-link btn-sm text-danger p-0" title="Eliminar"><i class="bi bi-trash"></i></button>
                             </form>
                             <?php else: ?>
-                            <span class="text-muted">—</span>
+                            <span class="text-muted">-</span>
                             <?php endif; ?>
                         </td>
                         <td><small><?= htmlspecialchars($r['codigo_sri'] ?? '') ?></small></td>
                         <td><small><?= htmlspecialchars($r['supercias_esf'] ?? '') ?></small></td>
                         <td><small><?= htmlspecialchars($r['supercias_eri'] ?? '') ?></small></td>
-                        <td><small><?= htmlspecialchars($r['supercias_ecp_codigo'] ?? '') ?></small></td>
                         <td><small><?= htmlspecialchars($r['supercias_ecp_subcodigo'] ?? '') ?></small></td>
+                        <td><small><?= htmlspecialchars($r['supercias_ecp_codigo'] ?? '') ?></small></td>
                         <td class="text-center">
                             <?php if ($status): ?><span class="badge bg-success">Activo</span><?php else: ?><span class="badge bg-secondary">Inactivo</span><?php endif; ?>
                         </td>
@@ -165,12 +165,12 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                             <input type="text" name="supercias_eri" class="form-control form-control-sm" placeholder="">
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label">ECP Código</label>
-                            <input type="text" name="supercias_ecp_codigo" class="form-control form-control-sm" placeholder="">
-                        </div>
-                        <div class="col-md-3">
                             <label class="form-label">ECP Subcódigo</label>
                             <input type="text" name="supercias_ecp_subcodigo" class="form-control form-control-sm" placeholder="">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">ECP Código</label>
+                            <input type="text" name="supercias_ecp_codigo" class="form-control form-control-sm" placeholder="">
                         </div>
                     </div>
                     <div class="form-check mt-2">
@@ -235,12 +235,12 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                             <input type="text" name="supercias_eri" id="edit-supercias-eri" class="form-control form-control-sm" placeholder="">
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label">ECP principal</label>
-                            <input type="text" name="supercias_ecp_codigo" id="edit-supercias-ecp-codigo" class="form-control form-control-sm" placeholder="">
-                        </div>
-                        <div class="col-md-3">
                             <label class="form-label">ECP secundario</label>
                             <input type="text" name="supercias_ecp_subcodigo" id="edit-supercias-ecp-subcodigo" class="form-control form-control-sm" placeholder="">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">ECP principal</label>
+                            <input type="text" name="supercias_ecp_codigo" id="edit-supercias-ecp-codigo" class="form-control form-control-sm" placeholder="">
                         </div>
                     </div>
                 </div>

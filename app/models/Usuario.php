@@ -25,15 +25,12 @@ class Usuario extends BaseModel
             return false;
         }
 
-        $stmt = $this->db->prepare("SELECT id, nombre, cedula, password, nivel FROM usuarios WHERE cedula = ? AND estado = '1' LIMIT 1");
+        $stmt = $this->db->prepare('SELECT id, nombre, cedula, password, nivel, id_empresa_favorita FROM usuarios WHERE cedula = ? AND estado = 1 AND eliminado = false LIMIT 1');
         if (!$stmt) {
             return false;
         }
-        $stmt->bind_param('s', $cedula);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $user = $result ? $result->fetch_assoc() : null;
-        $stmt->close();
+        $stmt->execute([$cedula]);
+        $user = $stmt->fetch(\PDO::FETCH_ASSOC) ?: null;
 
         if (!$user || empty($user['password'])) {
             return false;
@@ -44,7 +41,7 @@ class Usuario extends BaseModel
         // Bcrypt (password_hash): $2y$ o $2a$
         if (str_starts_with($stored, '$2y$') || str_starts_with($stored, '$2a$') || str_starts_with($stored, '$2b$')) {
             if (password_verify($password, $stored)) {
-                return ['id' => (int) $user['id'], 'nombre' => $user['nombre'], 'cedula' => $user['cedula'], 'nivel' => (int) $user['nivel']];
+                return ['id' => (int) $user['id'], 'nombre' => $user['nombre'], 'cedula' => $user['cedula'], 'nivel' => (int) $user['nivel'], 'id_empresa_favorita' => $user['id_empresa_favorita'] ? (int)$user['id_empresa_favorita'] : null];
             }
             return false;
         }
@@ -54,14 +51,12 @@ class Usuario extends BaseModel
             $newHash = password_hash($password, PASSWORD_DEFAULT);
             if ($newHash !== false) {
                 $id = (int) $user['id'];
-                $upd = $this->db->prepare("UPDATE usuarios SET password = ? WHERE id = ?");
+                $upd = $this->db->prepare('UPDATE usuarios SET password = ? WHERE id = ?');
                 if ($upd) {
-                    $upd->bind_param('si', $newHash, $id);
-                    $upd->execute();
-                    $upd->close();
+                    $upd->execute([$newHash, $id]);
                 }
             }
-            return ['id' => (int) $user['id'], 'nombre' => $user['nombre'], 'cedula' => $user['cedula'], 'nivel' => (int) $user['nivel']];
+            return ['id' => (int) $user['id'], 'nombre' => $user['nombre'], 'cedula' => $user['cedula'], 'nivel' => (int) $user['nivel'], 'id_empresa_favorita' => $user['id_empresa_favorita'] ? (int)$user['id_empresa_favorita'] : null];
         }
 
         return false;
@@ -82,13 +77,10 @@ class Usuario extends BaseModel
             return false;
         }
 
-        $stmt = $this->db->prepare("SELECT password FROM usuarios WHERE id = ? AND estado = '1' LIMIT 1");
+        $stmt = $this->db->prepare('SELECT password FROM usuarios WHERE id = ? AND estado = 1 AND eliminado = false LIMIT 1');
         if (!$stmt) return false;
-        $stmt->bind_param('i', $id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $row = $result ? $result->fetch_assoc() : null;
-        $stmt->close();
+        $stmt->execute([$id]);
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC) ?: null;
 
         if (!$row) return false;
         $stored = $row['password'];
@@ -107,12 +99,10 @@ class Usuario extends BaseModel
         $hash = password_hash($nuevaClave, PASSWORD_DEFAULT);
         if ($hash === false) return false;
 
-        $upd = $this->db->prepare("UPDATE usuarios SET password = ? WHERE id = ?");
+        $upd = $this->db->prepare('UPDATE usuarios SET password = ? WHERE id = ?');
         if (!$upd) return false;
-        $upd->bind_param('si', $hash, $id);
-        $ok = $upd->execute();
-        $upd->close();
-        return $ok;
+
+        return $upd->execute([$hash, $id]);
     }
 
     /**
@@ -125,7 +115,7 @@ class Usuario extends BaseModel
             (SELECT COUNT(*) FROM empresa_asignada ea 
              INNER JOIN empresas e ON e.id = ea.id_empresa 
              INNER JOIN usuarios u ON u.id = ea.id_usuario 
-             WHERE ea.id_usuario = {$id} AND e.estado = '1' AND u.estado = '1') AS numrows
+             WHERE ea.id_usuario = {$id} AND e.estado = '1' AND u.estado = '1' AND u.eliminado = false) AS numrows
             FROM empresa_asignada emp_asi 
             INNER JOIN empresas emp ON emp.id = emp_asi.id_empresa 
             INNER JOIN usuarios usu ON usu.id = emp_asi.id_usuario
@@ -152,8 +142,23 @@ class Usuario extends BaseModel
             FROM empresa_asignada emp_asi 
             INNER JOIN empresas emp ON emp.id = emp_asi.id_empresa 
             INNER JOIN usuarios u ON u.id = emp_asi.id_usuario 
-            WHERE emp_asi.id_usuario = {$id} AND emp.estado = '1' AND u.estado = '1' 
+            WHERE emp_asi.id_usuario = {$id} AND emp.estado = '1' AND u.estado = '1' AND u.eliminado = false 
             ORDER BY emp.nombre_comercial ASC LIMIT 1");
+        if (empty($r)) return null;
+        return ['id_empresa' => (int) $r[0]['id_empresa'], 'ruc_empresa' => $r[0]['ruc_empresa']];
+    }
+    /**
+     * Obtiene una empresa específica si está asignada al usuario.
+     */
+    public function getEmpresaAsignadaEspecifica(int $idUsuario, int $idEmpresa): ?array
+    {
+        $idU = (int) $idUsuario;
+        $idE = (int) $idEmpresa;
+        $r = $this->query("SELECT emp.id AS id_empresa, emp.ruc AS ruc_empresa 
+            FROM empresa_asignada emp_asi 
+            INNER JOIN empresas emp ON emp.id = emp_asi.id_empresa 
+            WHERE emp_asi.id_usuario = {$idU} AND emp_asi.id_empresa = {$idE} AND emp.estado = '1' AND emp.eliminado = false 
+            LIMIT 1");
         if (empty($r)) return null;
         return ['id_empresa' => (int) $r[0]['id_empresa'], 'ruc_empresa' => $r[0]['ruc_empresa']];
     }
@@ -161,7 +166,7 @@ class Usuario extends BaseModel
     public function existePorCedula(string $cedula, ?int $excluirId = null): bool
     {
         $c = $this->escape(trim($cedula));
-        $sql = "SELECT 1 FROM usuarios WHERE cedula = '{$c}' AND estado = 1";
+        $sql = "SELECT 1 FROM usuarios WHERE cedula = '{$c}' AND estado = 1 AND eliminado = false";
         if ($excluirId !== null && $excluirId > 0) {
             $sql .= " AND id != " . (int) $excluirId;
         }
@@ -177,24 +182,33 @@ class Usuario extends BaseModel
         $nivel = (int) ($data['nivel'] ?? 1);
         $mail = $this->escape(trim($data['mail'] ?? ''));
 
-        if ($nombre === '' || $cedula === '') {
-            throw new \InvalidArgumentException('Nombre y cédula son obligatorios.');
+        if (strlen($cedula) > 15) {
+            throw new \InvalidArgumentException('La identificación no puede superar los 15 caracteres.');
         }
 
         if ($this->existePorCedula($cedula)) {
             throw new \InvalidArgumentException('Ya existe un usuario con esa cédula.');
         }
 
-        $hash = password_hash($password, PASSWORD_DEFAULT);
-        if ($hash === false) {
-            $hash = md5($password);
-        }
-        $hashEsc = "'" . $this->escape($hash) . "'";
-
+        $token = bin2hex(random_bytes(16));
+        $hash = password_hash($password, PASSWORD_DEFAULT) ?: md5($password);
         $nivel = max(1, min(3, $nivel));
-        $sql = "INSERT INTO usuarios (nombre, cedula, password, nivel, estado, mail) VALUES ('{$nombre}', '{$cedula}', {$hashEsc}, {$nivel}, 1, '{$mail}')";
-        $this->execute($sql);
-        return $this->lastInsertId();
+
+        $sql = "INSERT INTO usuarios (nombre, cedula, password, nivel, estado, mail, token, telefono) 
+                VALUES (:nombre, :cedula, :password, :nivel, 1, :mail, :token, :telefono)";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':nombre'   => trim($data['nombre'] ?? ''),
+            ':cedula'   => trim($cedula),
+            ':password' => $hash,
+            ':nivel'    => $nivel,
+            ':mail'     => trim($data['mail'] ?? ''),
+            ':token'    => $token,
+            ':telefono' => trim($data['telefono'] ?? '')
+        ]);
+
+        return $this->lastInsertId('usuarios_id_seq');
     }
 
     /**
@@ -204,7 +218,7 @@ class Usuario extends BaseModel
     {
         $c = $this->escape(strtolower(trim($correo)));
         if ($c === '') return null;
-        $r = $this->query("SELECT id, nombre, mail FROM usuarios WHERE LOWER(mail) = '{$c}' AND estado = 1 LIMIT 1");
+        $r = $this->query("SELECT id, nombre, mail FROM usuarios WHERE LOWER(mail) = '{$c}' AND estado = 1 AND eliminado = false LIMIT 1");
         return $r[0] ?? null;
     }
 
@@ -226,7 +240,7 @@ class Usuario extends BaseModel
         $c = $this->escape(strtolower(trim($correo)));
         $t = $this->escape(trim($token));
         if ($c === '' || $t === '') return null;
-        $r = $this->query("SELECT id, nombre, mail FROM usuarios WHERE LOWER(mail) = '{$c}' AND token = '{$t}' AND estado = 1 LIMIT 1");
+        $r = $this->query("SELECT id, nombre, mail FROM usuarios WHERE LOWER(mail) = '{$c}' AND token = '{$t}' AND estado = 1 AND eliminado = false LIMIT 1");
         return $r[0] ?? null;
     }
 
@@ -242,7 +256,7 @@ class Usuario extends BaseModel
         $hash = password_hash($p, PASSWORD_DEFAULT);
         if ($hash === false) $hash = md5($p);
         $h = $this->escape($hash);
-        return $this->execute("UPDATE usuarios SET password = '{$h}', token = NULL WHERE id = {$id} AND token = '{$t}'");
+        return $this->execute("UPDATE usuarios SET password = '{$h}', token = '' WHERE id = {$id} AND token = '{$t}'");
     }
 
     /**
@@ -263,7 +277,7 @@ class Usuario extends BaseModel
     {
         $id = (int) $id;
         if ($id <= 0) return null;
-        $r = $this->query("SELECT id, nombre, cedula, mail, nivel FROM usuarios WHERE id = {$id} AND estado = 1 LIMIT 1");
+        $r = $this->query("SELECT id, nombre, cedula, mail, nivel FROM usuarios WHERE id = {$id} AND estado = 1 AND eliminado = false LIMIT 1");
         return $r[0] ?? null;
     }
 
@@ -303,7 +317,7 @@ class Usuario extends BaseModel
     {
         $c = $this->escape(trim($correo));
         if ($c === '') return false;
-        $sql = "SELECT 1 FROM usuarios WHERE mail = '{$c}'";
+        $sql = "SELECT 1 FROM usuarios WHERE mail = '{$c}' AND eliminado = false";
         if ($excluirId !== null && $excluirId > 0) {
             $sql .= " AND id != " . (int) $excluirId;
         }
@@ -317,7 +331,7 @@ class Usuario extends BaseModel
     public function contarSuperAdminActivos(?int $excluirId = null): int
     {
         $excluir = ($excluirId !== null && $excluirId > 0) ? " AND id != " . (int) $excluirId : '';
-        $r = $this->query("SELECT COUNT(*) AS n FROM usuarios WHERE nivel = 3 AND estado = 1{$excluir}");
+        $r = $this->query("SELECT COUNT(*) AS n FROM usuarios WHERE nivel = 3 AND estado = 1 AND eliminado = false{$excluir}");
         return (int) ($r[0]['n'] ?? 0);
     }
 
@@ -368,7 +382,7 @@ class Usuario extends BaseModel
      * Crear usuario por correo (invitación). El usuario completará registro y clave vía correo.
      * Cedula temporal = correo. Password = token aleatorio hasta que se registre.
      */
-    public function crearPorCorreo(string $nombre, string $correo, int $idAdmin): int
+    public function crearPorCorreo(string $nombre, string $correo, int $idAdmin): array
     {
         $nombre = $this->escape(trim($nombre));
         $correo = trim($correo);
@@ -384,21 +398,26 @@ class Usuario extends BaseModel
             throw new \InvalidArgumentException('Ya existe un usuario con ese correo.');
         }
 
-        $cedula = $this->escape($correo);
         $token = bin2hex(random_bytes(16));
-        $hash = password_hash($token, PASSWORD_DEFAULT);
-        if ($hash === false) {
-            $hash = md5($token);
-        }
-        $hashEsc = "'" . $this->escape($hash) . "'";
+        $hash = password_hash($token, PASSWORD_DEFAULT) ?: md5($token);
 
-        $sql = "INSERT INTO usuarios (nombre, cedula, password, nivel, estado, mail) VALUES ('{$nombre}', '{$cedula}', {$hashEsc}, 1, 1, '{$mail}')";
-        $this->execute($sql);
-        $idNuevo = $this->lastInsertId();
+        $sql = "INSERT INTO usuarios (nombre, cedula, password, nivel, estado, mail, token, telefono) 
+                VALUES (:nombre, :cedula, :password, 1, 1, :mail, :token, :telefono)";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+            ':nombre'   => trim($nombre),
+            ':cedula'   => substr(md5($correo), 0, 15), // Hash único de máx 15 caracteres
+            ':password' => $hash,
+            ':mail'     => trim($correo),
+            ':token'    => $token,
+            ':telefono' => '' // Teléfono vacío por defecto en invitación
+        ]);
 
+        $idNuevo = $this->lastInsertId('usuarios_id_seq');
         $this->agregarAUsuarioAsignado($idNuevo, $idAdmin);
 
-        return $idNuevo;
+        return ['id' => $idNuevo, 'token' => $token];
     }
 
     public function agregarAUsuarioAsignado(int $idUsuario, int $idAdmin): bool
@@ -406,9 +425,18 @@ class Usuario extends BaseModel
         $idU = (int) $idUsuario;
         $idA = (int) $idAdmin;
         if ($idU <= 0 || $idA <= 0) return false;
-        $existe = $this->query("SELECT 1 FROM usuario_asignado WHERE id_usuario = {$idU} AND id_adm = {$idA}");
-        if (!empty($existe)) return true;
-        return $this->execute("INSERT INTO usuario_asignado (id_usuario, id_adm) VALUES ({$idU}, {$idA})");
+
+        $sqlExiste = "SELECT 1 FROM usuario_asignado WHERE id_usuario = :id_u AND id_adm = :id_a";
+        $stmtExiste = $this->db->prepare($sqlExiste);
+        $stmtExiste->execute([':id_u' => $idU, ':id_a' => $idA]);
+        
+        if ($stmtExiste->fetch()) {
+            return true;
+        }
+
+        $sqlInsert = "INSERT INTO usuario_asignado (id_usuario, id_adm) VALUES (:id_u, :id_a)";
+        $stmtInsert = $this->db->prepare($sqlInsert);
+        return $stmtInsert->execute([':id_u' => $idU, ':id_a' => $idA]);
     }
 
     /** Columnas ordenables */
@@ -431,10 +459,10 @@ class Usuario extends BaseModel
 
         if ($nivel >= 3) {
             $from = 'usuarios u';
-            $where = "WHERE 1=1";
+            $where = "WHERE u.eliminado = false";
         } else {
             $from = 'usuario_asignado ua INNER JOIN usuarios u ON u.id = ua.id_usuario';
-            $where = "WHERE ua.id_adm = {$idActual}";
+            $where = "WHERE u.eliminado = false AND ua.id_adm = {$idActual}";
         }
 
         if ($buscar !== '') {
@@ -445,10 +473,10 @@ class Usuario extends BaseModel
         $countSql = "SELECT COUNT(DISTINCT u.id) AS total FROM {$from} {$where}";
         $total = (int) ($this->query($countSql)[0]['total'] ?? 0);
 
-        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel, u.estado, u.mail
+        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel, u.estado, u.mail, u.token
             FROM {$from} {$where}
             ORDER BY {$col} {$dir}
-            LIMIT {$offset}, {$perPage}";
+            LIMIT {$perPage} OFFSET {$offset}";
         $rows = $this->query($sql);
 
         $empresaModel = new EmpresaAsignada();
@@ -457,5 +485,141 @@ class Usuario extends BaseModel
         }
 
         return ['rows' => $rows, 'total' => $total];
+    }
+
+    /**
+     * Cuenta cuántas empresas tiene asignadas un usuario.
+     */
+    public function contarAsignacionesEmpresa(int $idUsuario): int
+    {
+        $id = (int) $idUsuario;
+        $sql = "SELECT COUNT(*) AS total FROM empresa_asignada WHERE id_usuario = :id_u";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':id_u' => $id]);
+        return (int) ($stmt->fetch(\PDO::FETCH_ASSOC)['total'] ?? 0);
+    }
+
+    /**
+     * Eliminación lógica de un usuario.
+     * Restricción: No puede tener empresas asignadas.
+     * Solo para niveles 2 y 3.
+     */
+    public function eliminar(int $idUsuario, int $idEliminador): bool
+    {
+        $id = (int) $idUsuario;
+        $idAsig = (int) $idEliminador;
+
+        if ($id <= 0) return false;
+
+        // 1. Validar que no tenga empresas asignadas
+        $asignaciones = $this->contarAsignacionesEmpresa($id);
+        if ($asignaciones > 0) {
+            throw new \RuntimeException("No se puede eliminar el usuario porque tiene {$asignaciones} empresas asignadas. Primero debe quitarle las asignaciones.");
+        }
+
+        // 2. Validar que no sea el último super administrador activo
+        $actual = $this->query("SELECT nivel, estado FROM usuarios WHERE id = {$id}");
+        if (!empty($actual)) {
+            $esSuperAdmin = (int) ($actual[0]['nivel'] ?? 0) === 3;
+            $estaActivo = (int) ($actual[0]['estado'] ?? 0) === 1;
+            if ($esSuperAdmin && $estaActivo) {
+                $otrosActivos = $this->contarSuperAdminActivos($id);
+                if ($otrosActivos === 0) {
+                    throw new \RuntimeException("Al menos debe existir un usuario superadministrador en el sistema. No puede eliminar al último.");
+                }
+            }
+        }
+
+        // 3. Marcar como eliminado (lógico)
+        $sql = "UPDATE usuarios 
+                SET eliminado = true, 
+                    estado = 0, 
+                    deleted_at = CURRENT_TIMESTAMP, 
+                    deleted_by = :deleted_by 
+                WHERE id = :id AND eliminado = false";
+        
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute([
+            ':id' => $id,
+            ':deleted_by' => $idAsig
+        ]);
+    }
+
+    /**
+     * Completa el registro de un nuevo usuario (invitación).
+     * Actualiza nombre, cédula, password y teléfono, y limpia el token.
+     */
+    public function completarRegistro(int $id, string $nombre, string $cedula, string $password, string $telefono, string $token): bool
+    {
+        $id = (int) $id;
+        $nombre = trim($nombre);
+        $cedula = trim($cedula);
+        $password = trim($password);
+        $telefono = trim($telefono);
+        $token = trim($token);
+
+        if ($nombre === '' || $cedula === '' || $password === '' || $token === '') {
+            return false;
+        }
+
+        if ($this->existePorCedula($cedula, $id)) {
+            throw new \InvalidArgumentException('Ya existe un usuario con esa identificación.');
+        }
+
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        if ($hash === false) $hash = md5($password);
+
+        $sql = "UPDATE usuarios 
+                SET nombre = :nombre, 
+                    cedula = :cedula, 
+                    password = :password, 
+                    telefono = :telefono, 
+                    token = '',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND token = :token AND eliminado = false";
+        
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute([
+            ':nombre'   => $nombre,
+            ':cedula'   => $cedula,
+            ':password' => $hash,
+            ':telefono' => $telefono,
+            ':id'       => $id,
+            ':token'    => $token
+        ]);
+    }
+
+    /**
+     * Obtiene datos básicos y token para reenviar invitación.
+     */
+    public function getDatosInvitacion(int $id): ?array
+    {
+        $id = (int) $id;
+        $sql = "SELECT nombre, mail, token FROM usuarios WHERE id = {$id} AND eliminado = false LIMIT 1";
+        $r = $this->query($sql);
+        return $r[0] ?? null;
+    }
+
+    /**
+     * Establece la empresa favorita del usuario.
+     */
+    public function setEmpresaFavorita(int $idUsuario, int $idEmpresa): bool
+    {
+        try {
+            $idU = $idUsuario;
+            $idE = $idEmpresa > 0 ? $idEmpresa : null;
+            
+            if ($idU <= 0) return false;
+            
+            $sql = "UPDATE usuarios SET id_empresa_favorita = :id_empresa WHERE id = :id_usuario";
+            $stmt = $this->db->prepare($sql);
+            return $stmt->execute([
+                'id_empresa' => $idE,
+                'id_usuario' => $idU
+            ]);
+        } catch (\PDOException $e) {
+            error_log("Error en setEmpresaFavorita: " . $e->getMessage());
+            return false;
+        }
     }
 }

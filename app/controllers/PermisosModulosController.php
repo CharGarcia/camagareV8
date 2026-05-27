@@ -198,13 +198,15 @@ class PermisosModulosController extends Controller
             $crear = !empty($vals['crear']);
             $actualizar = !empty($vals['actualizar']);
             $eliminar = !empty($vals['eliminar']);
-            // Solo guardar filas con al menos un permiso marcado
-            if (!$ver && !$crear && !$actualizar && !$eliminar) continue;
+            $t = !empty($vals['t']);
+            // Solo guardar filas con al menos un permiso marcado (o si tiene t, aunque t sin 'ver' no tiene mucho sentido, nos aseguramos)
+            if (!$ver && !$crear && !$actualizar && !$eliminar && !$t) continue;
             $permisos[$idSub] = [
                 'ver' => $ver,
                 'crear' => $crear,
                 'actualizar' => $actualizar,
                 'eliminar' => $eliminar,
+                't' => $t,
             ];
             $idModuloPorSub[$idSub] = (int)($vals['id_modulo'] ?? 0);
         }
@@ -266,6 +268,7 @@ class PermisosModulosController extends Controller
                 'crear' => (int)($p['crear'] ?? 0),
                 'actualizar' => (int)($p['actualizar'] ?? 0),
                 'eliminar' => (int)($p['eliminar'] ?? 0),
+                't' => (int)($p['t'] ?? 0),
                 'asignado' => $asignado,
             ];
             $modulos[$idMod]['submodulos'][] = $sub;

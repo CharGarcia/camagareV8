@@ -17,10 +17,10 @@ class Empresa extends BaseModel
     public function getEmpresasAsignadas(int $idUsuario): array
     {
         $id = $this->escape((string) $idUsuario);
-        $sql = "SELECT emp.id AS id_empresa, emp.ruc, emp.nombre_comercial
+        $sql = "SELECT emp.id AS id_empresa, emp.ruc, emp.nombre, emp.nombre_comercial, emp.establecimiento
                 FROM empresa_asignada emp_asi
                 INNER JOIN empresas emp ON emp.id = emp_asi.id_empresa
-                WHERE emp_asi.id_usuario = '{$id}' AND emp.estado = '1'";
+                WHERE emp_asi.id_usuario = '{$id}' AND emp.estado = '1' AND emp.eliminado = false";
         return $this->query($sql);
     }
 
@@ -45,10 +45,10 @@ class Empresa extends BaseModel
 
         if ($nivel >= 3) {
             $from = 'empresas e';
-            $where = 'WHERE 1=1';
+            $where = 'WHERE e.eliminado = false';
         } else {
             $from = 'empresa_asignada ea INNER JOIN empresas e ON e.id = ea.id_empresa';
-            $where = "WHERE ea.id_usuario = {$idActual}";
+            $where = "WHERE ea.id_usuario = {$idActual} AND e.eliminado = false";
         }
         $joinProv = 'LEFT JOIN provincia p ON p.codigo = e.cod_prov';
         $joinCiud = 'LEFT JOIN ciudad c ON c.codigo = e.cod_ciudad';
@@ -66,7 +66,7 @@ class Empresa extends BaseModel
                 p.nombre AS nombre_provincia, c.nombre AS nombre_ciudad
             FROM {$from} {$joinProv} {$joinCiud} {$where}
             ORDER BY {$col} {$dir}
-            LIMIT {$offset}, {$perPage}";
+            LIMIT {$perPage} OFFSET {$offset}";
         $rows = $this->query($sql);
 
         $empAsignada = new EmpresaAsignada();
@@ -135,7 +135,7 @@ class Empresa extends BaseModel
         $rucEsc = $this->escape(trim($ruc));
         $est = $this->escape(trim($establecimiento));
         if ($rucEsc === '' || $est === '') return false;
-        $sql = "SELECT 1 FROM empresas WHERE ruc = '{$rucEsc}' AND establecimiento = '{$est}'";
+        $sql = "SELECT 1 FROM empresas WHERE ruc = '{$rucEsc}' AND establecimiento = '{$est}' AND eliminado = false";
         if ($excluirId !== null && $excluirId > 0) {
             $sql .= ' AND id != ' . (int) $excluirId;
         }
@@ -190,7 +190,22 @@ class Empresa extends BaseModel
         $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago)
             VALUES ('{$nombre}', '{$nombreComercial}', '{$ruc}', '{$estEsc}', '{$direccion}', '{$telefono}', '{$tipo}', '{$nomRepLegal}', '{$cedRepLegal}', '{$mail}', '{$codProv}', '{$codCiudad}', '{$estado}', NOW(), '{$idUsuario}', '{$nombreContador}', '{$rucContador}', {$valCobroSql}, {$vigenciaDesde}, {$vigenciaHasta}, {$estadoPago})";
         $this->execute($sql);
-        return $this->lastInsertId();
+        $id = $this->lastInsertId('empresas_id_seq');
+
+        // Insertar establecimiento por defecto en la nueva tabla
+        $estCod = $this->escape($establecimiento);
+        $estNom = ($nombreComercial !== '') ? $nombreComercial : $nombre;
+        $estTipo = ($establecimiento === '001') ? 'Matriz' : 'Sucursal';
+        $sqlEst = "INSERT INTO empresa_establecimiento (id_empresa, codigo, nombre, direccion, tipo, estado, created_by, created_at, eliminado)
+                   VALUES ({$id}, '{$estCod}', '{$estNom}', '{$direccion}', '{$estTipo}', 'activo', {$idUsuario}, NOW(), false)";
+        $this->execute($sqlEst);
+
+        // Crear bodega Central por defecto
+        $sqlBod = "INSERT INTO bodegas (id_empresa, id_usuario, nombre, status, created_by, updated_by, created_at, updated_at, eliminado)
+                   VALUES ({$id}, {$idUsuario}, 'Central', true, {$idUsuario}, {$idUsuario}, NOW(), NOW(), false)";
+        $this->execute($sqlBod);
+
+        return $id;
     }
 
     /**
@@ -203,17 +218,28 @@ class Empresa extends BaseModel
 
         $establecimiento = trim($data['establecimiento'] ?? '');
         $ruc = trim($data['ruc'] ?? '');
+
+        // Obtener datos actuales para verificar establecimiento
+        $actual = $this->getPorId($id);
+        $estActual = $actual['establecimiento'] ?? '';
+
         if ($establecimiento !== '' && $ruc !== '') {
             $estNorm = $this->normalizarEstablecimiento($establecimiento);
             if ($estNorm === null) {
                 throw new \InvalidArgumentException('Establecimiento debe ser de 3 dígitos (000 a 999).');
             }
+            
+            // Si el actual es 001, NO permitir cambiarlo
+            if ($estActual === '001' && $estNorm !== '001') {
+                throw new \InvalidArgumentException('El establecimiento matriz (001) no puede ser cambiado.');
+            }
+
             if ($this->existePorRucYEstablecimiento($ruc, $estNorm, $id)) {
                 throw new \InvalidArgumentException('Ya existe una empresa con el mismo RUC y establecimiento.');
             }
             $data['establecimiento'] = $estNorm;
         } elseif ($ruc !== '') {
-            $data['establecimiento'] = $this->obtenerEstablecimientoDisponible($ruc, $id);
+            $data['establecimiento'] = ($estActual !== '') ? $estActual : $this->obtenerEstablecimientoDisponible($ruc, $id);
         }
 
         $sets = [];
@@ -234,5 +260,107 @@ class Empresa extends BaseModel
         if (empty($sets)) return true;
         $sql = 'UPDATE empresas SET ' . implode(', ', $sets) . ' WHERE id = ' . $id;
         return $this->execute($sql);
+    }
+
+    public function getEstablecimientos(int $idEmpresa): array
+    {
+        $id = (int) $idEmpresa;
+        return $this->query("SELECT * FROM empresa_establecimiento WHERE id_empresa = {$id} AND eliminado = false ORDER BY codigo ASC");
+    }
+
+    public function getBodegas(int $idEmpresa): array
+    {
+        $id = (int) $idEmpresa;
+        return $this->query("SELECT * FROM bodegas WHERE id_empresa = {$id} AND eliminado = false ORDER BY nombre ASC");
+    }
+
+    public function getPuntosEmision(int $idEstablecimiento): array
+    {
+        $id = (int) $idEstablecimiento;
+        $sql = "SELECT p.*, e.codigo as cod_establecimiento 
+                FROM empresa_punto_emision p
+                JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+                WHERE p.id_establecimiento = {$id} 
+                  AND p.eliminado = false 
+                  AND e.eliminado = false
+                ORDER BY p.codigo_punto ASC";
+        return $this->query($sql);
+    }
+
+    public function actualizarEstablecimiento(int $id, array $data): bool
+    {
+        $id = (int) $id;
+        
+        // Verificar si es el 001 o tipo Matriz para restringir cambios
+        $sqlCheck = "SELECT codigo, tipo FROM empresa_establecimiento WHERE id = {$id}";
+        $check = $this->query($sqlCheck);
+        if (!empty($check)) {
+            $estActual = $check[0];
+            if ($estActual['codigo'] === '001' || strtolower($estActual['tipo']) === 'matriz') {
+                if (isset($data['codigo']) && $data['codigo'] !== $estActual['codigo']) {
+                    throw new \Exception('No se puede cambiar el código del establecimiento matriz.');
+                }
+                if (isset($data['tipo']) && strtolower($data['tipo']) !== 'matriz') {
+                    throw new \Exception('No se puede cambiar el tipo del establecimiento matriz.');
+                }
+                if (isset($data['estado']) && strtolower($data['estado']) !== 'activo') {
+                    throw new \Exception('El establecimiento matriz debe permanecer activo.');
+                }
+            }
+        }
+
+        $sets = [];
+        $campos = ['nombre', 'codigo', 'direccion', 'tipo', 'estado'];
+        foreach ($campos as $c) {
+            if (isset($data[$c])) {
+                $sets[] = "{$c} = '" . $this->escape(trim((string) $data[$c])) . "'";
+            }
+        }
+        if (empty($sets)) return true;
+        $sql = 'UPDATE empresa_establecimiento SET ' . implode(', ', $sets) . ', updated_at = NOW() WHERE id = ' . $id;
+        return $this->execute($sql);
+    }
+
+    public function eliminar(int $id, int $idUsuario): bool
+    {
+        $id = (int) $id;
+        if ($this->esUsada($id)) {
+            throw new \Exception('No se puede eliminar la empresa porque ya tiene registros asociados (clientes, facturas, etc).');
+        }
+        
+        // 1. Eliminar puntos de emisión relacionados
+        $sqlPuntos = "UPDATE empresa_punto_emision SET eliminado = true, deleted_at = NOW(), deleted_by = {$idUsuario} WHERE id_empresa = {$id}";
+        $this->execute($sqlPuntos);
+
+        // 2. Eliminar establecimientos relacionados
+        $sqlEst = "UPDATE empresa_establecimiento SET eliminado = true, deleted_at = NOW(), deleted_by = {$idUsuario} WHERE id_empresa = {$id}";
+        $this->execute($sqlEst);
+
+        // 3. Eliminar empresa asignada (accesos)
+        $sqlAsig = "DELETE FROM empresa_asignada WHERE id_empresa = {$id}"; // Esta tabla sí se puede limpiar físicamente ya que es solo de permisos
+        $this->execute($sqlAsig);
+
+        // 4. Eliminar empresa
+        $sql = "UPDATE empresas SET eliminado = true, deleted_at = NOW(), deleted_by = {$idUsuario} WHERE id = {$id}";
+        return $this->execute($sql);
+    }
+
+    public function esUsada(int $id): bool
+    {
+        $id = (int) $id;
+        
+        // Tablas críticas a revisar
+        $tablas = ['clientes', 'proveedores', 'productos', 'compras', 'ventas', 'facturas_emisores'];
+        
+        foreach ($tablas as $t) {
+            // Verificar si la tabla existe antes de consultar
+            $checkTable = $this->query("SELECT 1 FROM information_schema.tables WHERE table_name = '{$t}'");
+            if (empty($checkTable)) continue;
+
+            $res = $this->query("SELECT 1 FROM {$t} WHERE id_empresa = {$id} AND eliminado = false LIMIT 1");
+            if (!empty($res)) return true;
+        }
+        
+        return false;
     }
 }

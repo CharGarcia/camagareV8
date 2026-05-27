@@ -52,10 +52,10 @@ class ModuloSubmodulo extends BaseModel
 
         $rows = [];
         $queries = [
-            "SELECT mm.id_modulo, mm.nombre_modulo, mm.id_icono, ico.nombre_icono FROM modulos_menu mm LEFT JOIN iconos_fontawesome ico ON ico.id_icono = mm.id_icono WHERE {$where} {$orderBy} LIMIT {$offset}, {$perPage}",
-            "SELECT mm.id_modulo, mm.nombre_modulo, mm.id_icono, ico.nombre_icono FROM modulos_menu mm LEFT JOIN iconos_fontawesome ico ON ico.id = mm.id_icono WHERE {$where} {$orderBy} LIMIT {$offset}, {$perPage}",
-            "SELECT mm.id AS id_modulo, mm.nombre_modulo, mm.id_icono, ico.nombre_icono FROM modulos_menu mm LEFT JOIN iconos_fontawesome ico ON ico.id_icono = mm.id_icono WHERE {$where} {$orderBy} LIMIT {$offset}, {$perPage}",
-            "SELECT mm.id AS id_modulo, mm.nombre_modulo, mm.id_icono, ico.nombre_icono FROM modulos_menu mm LEFT JOIN iconos_fontawesome ico ON ico.id = mm.id_icono WHERE {$where} {$orderBy} LIMIT {$offset}, {$perPage}",
+            "SELECT mm.id_modulo, mm.nombre_modulo, mm.id_icono, ico.nombre_icono FROM modulos_menu mm LEFT JOIN iconos_fontawesome ico ON ico.id_icono = mm.id_icono WHERE {$where} {$orderBy} LIMIT {$perPage} OFFSET {$offset}",
+            "SELECT mm.id_modulo, mm.nombre_modulo, mm.id_icono, ico.nombre_icono FROM modulos_menu mm LEFT JOIN iconos_fontawesome ico ON ico.id = mm.id_icono WHERE {$where} {$orderBy} LIMIT {$perPage} OFFSET {$offset}",
+            "SELECT mm.id AS id_modulo, mm.nombre_modulo, mm.id_icono, ico.nombre_icono FROM modulos_menu mm LEFT JOIN iconos_fontawesome ico ON ico.id_icono = mm.id_icono WHERE {$where} {$orderBy} LIMIT {$perPage} OFFSET {$offset}",
+            "SELECT mm.id AS id_modulo, mm.nombre_modulo, mm.id_icono, ico.nombre_icono FROM modulos_menu mm LEFT JOIN iconos_fontawesome ico ON ico.id = mm.id_icono WHERE {$where} {$orderBy} LIMIT {$perPage} OFFSET {$offset}",
         ];
         foreach ($queries as $sql) {
             try {
@@ -95,10 +95,10 @@ class ModuloSubmodulo extends BaseModel
         }
 
         $queries = [
-            "SELECT sm.id AS id_submodulo, sm.nombre_submodulo, sm.ruta, sm.id_modulo, sm.id_icono, sm.status, ico.nombre_icono, mm.nombre_modulo AS nombre_modulo FROM submodulos_menu sm INNER JOIN modulos_menu mm ON mm.id = sm.id_modulo LEFT JOIN iconos_fontawesome ico ON ico.id_icono = sm.id_icono WHERE {$where} {$orderBy} LIMIT {$offset}, {$perPage}",
-            "SELECT sm.id AS id_submodulo, sm.nombre_submodulo, sm.ruta, sm.id_modulo, sm.id_icono, sm.status, ico.nombre_icono, mm.nombre_modulo AS nombre_modulo FROM submodulos_menu sm INNER JOIN modulos_menu mm ON mm.id = sm.id_modulo LEFT JOIN iconos_fontawesome ico ON ico.id = sm.id_icono WHERE {$where} {$orderBy} LIMIT {$offset}, {$perPage}",
-            "SELECT sm.id_submodulo, sm.nombre_submodulo, sm.ruta, sm.id_modulo, sm.id_icono, sm.status, ico.nombre_icono, mm.nombre_modulo AS nombre_modulo FROM submodulos_menu sm INNER JOIN modulos_menu mm ON mm.id_modulo = sm.id_modulo LEFT JOIN iconos_fontawesome ico ON ico.id_icono = sm.id_icono WHERE {$where} {$orderBy} LIMIT {$offset}, {$perPage}",
-            "SELECT sm.id_submodulo, sm.nombre_submodulo, sm.ruta, sm.id_modulo, sm.id_icono, sm.status, ico.nombre_icono, mm.nombre_modulo AS nombre_modulo FROM submodulos_menu sm INNER JOIN modulos_menu mm ON mm.id_modulo = sm.id_modulo LEFT JOIN iconos_fontawesome ico ON ico.id = sm.id_icono WHERE {$where} {$orderBy} LIMIT {$offset}, {$perPage}",
+            "SELECT sm.id AS id_submodulo, sm.nombre_submodulo, sm.ruta, sm.id_modulo, sm.id_icono, sm.status, ico.nombre_icono, mm.nombre_modulo AS nombre_modulo FROM submodulos_menu sm INNER JOIN modulos_menu mm ON mm.id = sm.id_modulo LEFT JOIN iconos_fontawesome ico ON ico.id_icono = sm.id_icono WHERE {$where} {$orderBy} LIMIT {$perPage} OFFSET {$offset}",
+            "SELECT sm.id AS id_submodulo, sm.nombre_submodulo, sm.ruta, sm.id_modulo, sm.id_icono, sm.status, ico.nombre_icono, mm.nombre_modulo AS nombre_modulo FROM submodulos_menu sm INNER JOIN modulos_menu mm ON mm.id = sm.id_modulo LEFT JOIN iconos_fontawesome ico ON ico.id = sm.id_icono WHERE {$where} {$orderBy} LIMIT {$perPage} OFFSET {$offset}",
+            "SELECT sm.id_submodulo, sm.nombre_submodulo, sm.ruta, sm.id_modulo, sm.id_icono, sm.status, ico.nombre_icono, mm.nombre_modulo AS nombre_modulo FROM submodulos_menu sm INNER JOIN modulos_menu mm ON mm.id_modulo = sm.id_modulo LEFT JOIN iconos_fontawesome ico ON ico.id_icono = sm.id_icono WHERE {$where} {$orderBy} LIMIT {$perPage} OFFSET {$offset}",
+            "SELECT sm.id_submodulo, sm.nombre_submodulo, sm.ruta, sm.id_modulo, sm.id_icono, sm.status, ico.nombre_icono, mm.nombre_modulo AS nombre_modulo FROM submodulos_menu sm INNER JOIN modulos_menu mm ON mm.id_modulo = sm.id_modulo LEFT JOIN iconos_fontawesome ico ON ico.id = sm.id_icono WHERE {$where} {$orderBy} LIMIT {$perPage} OFFSET {$offset}",
         ];
         $rows = [];
         foreach ($queries as $sql) {
@@ -264,7 +264,7 @@ class ModuloSubmodulo extends BaseModel
         $rows = [];
         foreach (['id_icono AS id', 'id'] as $idCol) {
             try {
-                $rows = $this->query("SELECT {$idCol}, nombre_icono FROM iconos_fontawesome {$where} ORDER BY nombre_icono LIMIT {$offset}, {$perPage}");
+                $rows = $this->query("SELECT {$idCol}, nombre_icono FROM iconos_fontawesome {$where} ORDER BY nombre_icono LIMIT {$perPage} OFFSET {$offset}");
                 break;
             } catch (\Throwable $e) {
                 continue;

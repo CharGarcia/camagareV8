@@ -1,0 +1,501 @@
+<?php
+
+/** @var string $titulo */
+/** @var array $perm */
+/** @var string $rutaModulo */
+/** @var array $rows */
+/** @var array $clientes */
+/** @var int $total */
+/** @var int $page */
+/** @var int $totalPages */
+/** @var int $perPage */
+/** @var string $buscar */
+/** @var string $ordenCol */
+/** @var string $ordenDir */
+
+$base = BASE_URL;
+$urlBasePR = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
+
+$rows       = $rows ?? [];
+$clientes   = $clientes ?? [];
+$total      = $total ?? 0;
+$page       = $page ?? 1;
+$totalPages = $totalPages ?? 1;
+$perPage    = $perPage ?? 20;
+$ordenCol   = $ordenCol ?? 'nombre';
+$ordenDir   = $ordenDir ?? 'asc';
+$buscar     = $buscar ?? '';
+$from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
+$to   = $total > 0 ? min($page * $perPage, $total) : 0;
+?>
+<style>
+    .pr-header {
+        flex-shrink: 0;
+    }
+
+    .pr-scroll {
+        max-height: calc(100vh - 240px);
+        overflow-y: auto;
+    }
+
+    .pr-scroll thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #f8f9fa;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .pr-row {
+        cursor: pointer;
+    }
+
+    .pr-row:hover {
+        background-color: rgba(0, 0, 0, .04);
+    }
+
+    .progress-sm {
+        height: 6px;
+        border-radius: 10px;
+        background-color: #e9ecef;
+    }
+</style>
+<?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
+
+<div class="pr-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h5 class="mb-0 fw-bold"><i class="bi bi-briefcase"></i> <?= htmlspecialchars($titulo) ?></h5>
+    <?php if ($perm['crear']): ?>
+        <button type="button" class="btn btn-primary btn-sm px-3" onclick="abrirModalCrear()"><i class="bi bi-plus-lg"></i> Nuevo</button>
+    <?php endif; ?>
+</div>
+
+<div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
+    <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+            <form method="POST" action="<?= $urlBasePR ?>" class="d-flex align-items-center m-0" onsubmit="event.preventDefault(); fetchSearch(1);">
+                <div class="input-group input-group-sm" style="width: 300px;">
+                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                    <input type="text" name="b" id="buscarPR" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
+                </div>
+            </form>
+
+            <div class="btn-group btn-group-sm">
+                <?php
+                $columnasTabla = [
+                    'codigo' => 'Código',
+                    'nombre' => 'Nombre',
+                    'descripcion' => 'Descripción',
+                    'cliente_nombre' => 'Cliente',
+                    'presupuesto' => 'Presupuesto',
+                    'porcentaje_ejecucion' => '% Ejec.',
+                    'fecha_inicio' => 'F. Inicio',
+                    'fecha_fin' => 'F. Fin',
+                    'estado' => 'Estado'
+                ];
+                ?>
+                <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
+
+                <a id="btnExportPdf" href="<?= $urlBasePR ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF">
+                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                </a>
+                <a id="btnExportExcel" href="<?= $urlBasePR ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                </a>
+            </div>
+        </div>
+
+        <div class="d-flex align-items-center gap-3">
+            <span id="paginationInfo" class="text-muted small fw-medium"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
+            <div id="paginationContainer" class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary" <?= ($page <= 1) ? 'disabled' : '' ?> onclick="cambiarPaginaAjax(<?= $page - 1 ?>)"><i class="bi bi-chevron-left"></i></button>
+                <button type="button" class="btn btn-outline-secondary" <?= ($page >= $totalPages) ? 'disabled' : '' ?> onclick="cambiarPaginaAjax(<?= $page + 1 ?>)"><i class="bi bi-chevron-right"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-body p-0">
+        <div class="pr-scroll w-100">
+            <table class="table table-hover table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3 sortable-header" role="button" data-sort="codigo" onclick="ordenar('codigo')" data-col="codigo">
+                            Código <i class="bi <?= $ordenCol === 'codigo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> small ms-1"></i>
+                        </th>
+                        <th class="sortable-header" role="button" data-sort="nombre" onclick="ordenar('nombre')" data-col="nombre">
+                            Nombre <i class="bi <?= $ordenCol === 'nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> small ms-1"></i>
+                        </th>
+                        <th data-col="descripcion">Descripción</th>
+                        <th class="sortable-header" role="button" data-sort="cliente_nombre" onclick="ordenar('cliente_nombre')" data-col="cliente_nombre">
+                            Cliente <i class="bi <?= $ordenCol === 'cliente_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> small ms-1"></i>
+                        </th>
+                        <th class="text-end" data-col="presupuesto">Presupuesto</th>
+                        <th class="text-center" data-col="porcentaje_ejecucion">% Ejec.</th>
+                        <th data-col="fecha_inicio">F. Inicio</th>
+                        <th data-col="fecha_fin">F. Fin</th>
+                        <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" onclick="ordenar('estado')" data-col="estado">
+                            Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> small ms-1"></i>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyPR">
+                    <?php if (empty($rows)): ?>
+                        <tr>
+                            <td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-briefcase fs-3 d-block mb-2"></i>No se encontraron proyectos.</td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($rows as $r): ?>
+                            <tr class="pr-row" role="button" tabindex="0" data-row='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8') ?>' onclick="abrirModalEditar(this)">
+                                <td class="ps-3" data-col="codigo"><code class="text-secondary"><?= htmlspecialchars($r['codigo'] ?? '-') ?></code></td>
+                                <td class="fw-medium" data-col="nombre"><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
+                                <td data-col="descripcion" class="small text-muted"><?= htmlspecialchars($r['descripcion'] ?? '-') ?></td>
+                                <td data-col="cliente_nombre"><?= htmlspecialchars($r['cliente_nombre'] ?? '-') ?></td>
+                                <td class="text-end" data-col="presupuesto">$<?= number_format((float)($r['presupuesto'] ?? 0), 2) ?></td>
+                                <td class="text-center" data-col="porcentaje_ejecucion">
+                                    <div class="progress progress-sm w-100 mx-auto mb-1" style="max-width: 60px;" title="<?= (int)($r['porcentaje_ejecucion'] ?? 0) ?>%">
+                                        <div class="progress-bar" role="progressbar" style="width: <?= (int)($r['porcentaje_ejecucion'] ?? 0) ?>%"></div>
+                                    </div>
+                                    <span class="small" style="font-size: 0.75rem;"><?= (int)($r['porcentaje_ejecucion'] ?? 0) ?>%</span>
+                                </td>
+                                <td class="small" data-col="fecha_inicio"><?= htmlspecialchars($r['fecha_inicio'] ?? '-') ?></td>
+                                <td class="small" data-col="fecha_fin"><?= htmlspecialchars($r['fecha_fin'] ?? '-') ?></td>
+                                <td class="text-center pe-3" data-col="estado">
+                                    <span class="badge <?= ($r['estado'] === 'activo') ? 'bg-success bg-opacity-10 text-success border border-success border-opacity-25' : 'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25' ?>">
+                                        <?= ucfirst($r['estado'] ?? '-') ?>
+                                    </span>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalPR" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <form id="formPR" novalidate>
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-briefcase text-primary me-2"></i><span id="tituloModal">Nuevo Proyecto</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div id="modalAlert" class="alert d-none mx-3 mt-3 mb-0 py-2 small shadow-sm border-0"></div>
+                    <input type="hidden" name="id" id="pr_id" value="">
+
+                    <div class="d-flex align-items-center bg-light px-3 pt-2">
+                        <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="tabsPR" role="tablist">
+                            <li class="nav-item">
+                                <a class="nav-link active py-2 small" id="tab-general-btn" data-bs-toggle="tab" href="#tab-general" role="tab">General</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link py-2 small disabled" id="tab-info-btn" data-bs-toggle="tab" href="#tab-info" role="tab">Información</a>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="border-bottom mx-3 mb-3"></div>
+
+                    <div class="tab-content px-3 pb-3">
+                        <div class="tab-pane fade show active" id="tab-general" role="tabpanel">
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold">Código</label>
+                                    <input type="text" class="form-control form-control-sm" name="codigo" id="pr_codigo" maxlength="20">
+                                </div>
+                                <div class="col-md-9">
+                                    <label class="form-label small fw-bold">Nombre *</label>
+                                    <input type="text" class="form-control form-control-sm" name="nombre" id="pr_nombre" required maxlength="100">
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Cliente</label>
+                                    <select class="form-select form-select-sm" name="id_cliente" id="pr_id_cliente">
+                                        <option value="">-- Seleccionar --</option>
+                                        <?php foreach ($clientes as $c): ?>
+                                            <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?> (<?= htmlspecialchars($c['identificacion']) ?>)</option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold">Presupuesto ($)</label>
+                                    <input type="number" step="0.01" class="form-control form-control-sm text-end" name="presupuesto" id="pr_presupuesto" value="0.00">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold">% Ejecución</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" step="0.01" min="0" max="100" class="form-control text-end" name="porcentaje_ejecucion" id="pr_porcentaje_ejecucion" value="0">
+                                        <span class="input-group-text">%</span>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Fecha Inicio</label>
+                                    <input type="date" class="form-control form-control-sm" name="fecha_inicio" id="pr_fecha_inicio">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Fecha Fin</label>
+                                    <input type="date" class="form-control form-control-sm" name="fecha_fin" id="pr_fecha_fin">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Estado</label>
+                                    <div class="form-check form-switch mt-1">
+                                        <input class="form-check-input" type="checkbox" role="switch" name="estado" id="pr_estado" value="1" checked>
+                                        <label class="form-check-label small" for="pr_estado">Activo</label>
+                                    </div>
+                                </div>
+
+                                <div class="col-12">
+                                    <label class="form-label small fw-bold">Descripción</label>
+                                    <textarea class="form-control form-control-sm" name="descripcion" id="pr_descripcion" rows="2" maxlength="500"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="tab-info" role="tabpanel">
+                             <div class="bg-light rounded-3 p-3 border mb-3">
+                                <h6 class="text-primary mb-3 small fw-bold"><i class="bi bi-clock-history me-2"></i>Historial de Cambios</h6>
+                                <div id="auditoriaTimelinePR" class="position-relative mt-2" style="max-height: 350px; overflow-y: auto; padding-right: 5px;">
+                                    <div class="text-center py-3 text-muted small">
+                                        <div class="spinner-border spinner-border-sm mb-2" role="status"></div>
+                                        <div class="d-block">Cargando historial...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between bg-light border-top p-2">
+                    <div>
+                        <?php if ($perm['eliminar']): ?>
+                            <button type="button" class="btn btn-outline-danger btn-sm px-3 d-none" id="btnEliminar" onclick="eliminarRegistro()">
+                                <i class="bi bi-trash3 me-1"></i> Eliminar
+                            </button>
+                        <?php endif; ?>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+                            <i class="fa-solid fa-xmark me-1"></i>Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary btn-sm px-4" id="btnGuardar">
+                            <i class="bi bi-check2-circle me-1"></i> Guardar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function() {
+        'use strict';
+        const urlBase = '<?= $urlBasePR ?>';
+        const form = document.getElementById('formPR');
+        let modalInst = null;
+        let currentPage = <?= $page ?>;
+        let currentSort = '<?= $ordenCol ?>';
+        let currentDir = '<?= $ordenDir ?>';
+
+        function getModal() {
+            if (!modalInst) modalInst = new bootstrap.Modal(document.getElementById('modalPR'));
+            return modalInst;
+        }
+
+        window.abrirModalCrear = function() {
+            form.reset();
+            document.getElementById('pr_id').value = '';
+            document.getElementById('tituloModal').textContent = 'Nuevo Proyecto';
+            document.getElementById('modalAlert').classList.add('d-none');
+            document.getElementById('btnEliminar')?.classList.add('d-none');
+            document.getElementById('pr_estado').checked = true;
+            document.getElementById('tab-info-btn').classList.add('disabled');
+            bootstrap.Tab.getInstance(document.getElementById('tab-general-btn')).show();
+            getModal().show();
+            setTimeout(() => document.getElementById('pr_nombre').focus(), 400);
+        };
+
+        window.abrirModalEditar = function(row) {
+            const data = JSON.parse(row.dataset.row);
+            form.reset();
+            document.getElementById('pr_id').value = data.id;
+            document.getElementById('pr_codigo').value = data.codigo || '';
+            document.getElementById('pr_nombre').value = data.nombre || '';
+            document.getElementById('pr_id_cliente').value = data.id_cliente || '';
+            document.getElementById('pr_presupuesto').value = data.presupuesto || '0.00';
+            document.getElementById('pr_porcentaje_ejecucion').value = data.porcentaje_ejecucion || '0';
+            document.getElementById('pr_fecha_inicio').value = data.fecha_inicio || '';
+            document.getElementById('pr_fecha_fin').value = data.fecha_fin || '';
+            document.getElementById('pr_descripcion').value = data.descripcion || '';
+            document.getElementById('pr_estado').checked = data.estado === 'activo';
+            document.getElementById('tituloModal').textContent = 'Editar Proyecto';
+            document.getElementById('modalAlert').classList.add('d-none');
+            document.getElementById('btnEliminar')?.classList.remove('d-none');
+            document.getElementById('tab-info-btn').classList.remove('disabled');
+            bootstrap.Tab.getInstance(document.getElementById('tab-general-btn')).show();
+
+            fetchHistorialPR(data.id);
+            getModal().show();
+        };
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btnGuardar');
+            const alertEl = document.getElementById('modalAlert');
+            const id = document.getElementById('pr_id').value;
+            const url = id ? `${urlBase}/update` : `${urlBase}/store`;
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>...';
+
+            try {
+                const fd = new FormData(form);
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    body: fd
+                });
+                const json = await resp.json();
+                if (json.ok) {
+                    alertEl.textContent = json.msg;
+                    alertEl.className = 'alert alert-success mb-3 py-2 small shadow-sm border-0';
+                    alertEl.classList.remove('d-none');
+                    setTimeout(() => {
+                        getModal().hide();
+                        fetchSearch(currentPage);
+                    }, 800);
+                } else {
+                    alertEl.textContent = json.error;
+                    alertEl.className = 'alert alert-danger mb-3 py-2 small shadow-sm border-0';
+                    alertEl.classList.remove('d-none');
+                }
+            } catch (err) {
+                alertEl.textContent = 'Error de conexión';
+                alertEl.classList.remove('d-none');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+            }
+        });
+
+        window.fetchSearch = async function(page = 1) {
+            currentPage = page;
+            const buscar = document.getElementById('buscarPR').value;
+            const url = `${urlBase}/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
+            try {
+                const resp = await fetch(url);
+                const json = await resp.json();
+                if (json.ok) {
+                    document.getElementById('tbodyPR').innerHTML = json.rows;
+                    document.getElementById('paginationContainer').innerHTML = json.pagination;
+                    document.getElementById('paginationInfo').textContent = json.info;
+                    document.getElementById('btnExportPdf').href = json.pdf_url;
+                    document.getElementById('btnExportExcel').href = json.excel_url;
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        };
+
+        window.cambiarPaginaAjax = (p) => fetchSearch(p);
+
+        window.ordenar = function(col) {
+            if (currentSort === col) {
+                currentDir = (currentDir === 'ASC') ? 'DESC' : 'ASC';
+            } else {
+                currentSort = col;
+                currentDir = 'ASC';
+            }
+
+            if (typeof window.guardarOrdenacionVista === 'function') {
+                window.guardarOrdenacionVista('proyectos', currentSort, currentDir);
+            }
+
+            fetchSearch(1);
+        };
+
+        window.eliminarRegistro = async function() {
+            if (!confirm('¿Seguro que desea eliminar este proyecto?')) return;
+            const id = document.getElementById('pr_id').value;
+            try {
+                const fd = new FormData();
+                fd.append('id_eliminar', id);
+                const resp = await fetch(`${urlBase}/delete`, {
+                    method: 'POST',
+                    body: fd
+                });
+                const json = await resp.json();
+                if (json.ok) {
+                    getModal().hide();
+                    fetchSearch(currentPage);
+                } else {
+                    alert(json.error);
+                }
+            } catch (e) {
+                alert('Error de conexión');
+            }
+        };
+        async function fetchHistorialPR(id) {
+            const container = document.getElementById('auditoriaTimelinePR');
+            if (!container || !id) return;
+
+            try {
+                const resp = await fetch(`${urlBase}/getHistorialAjax?id=${id}&tabla=proyectos`);
+                const json = await resp.json();
+
+                if (json.ok && json.data.length > 0) {
+                    let html = '<div class="timeline-border position-absolute h-100 border-start border-2 border-primary border-opacity-10" style="left: 10px; top: 0;"></div>';
+
+                    json.data.forEach(log => {
+                        const icon = log.accion.includes('Crear') ? 'bi-plus-circle-fill text-success' :
+                                   log.accion.includes('Actualizar') ? 'bi-pencil-fill text-primary' :
+                                   log.accion.includes('Eliminar') ? 'bi-trash-fill text-danger' :
+                                   'bi-clock-history text-secondary';
+
+                        html += `
+                            <div class="timeline-item position-relative mb-3 ps-4">
+                                <div class="timeline-icon position-absolute rounded-circle bg-white d-flex align-items-center justify-content-center shadow-sm border" 
+                                     style="left: 0; top: 0; width: 22px; height: 22px; z-index: 2;">
+                                    <i class="bi ${icon}" style="font-size: 0.7rem;"></i>
+                                </div>
+                                <div class="timeline-content">
+                                    <div class="d-flex justify-content-between align-items-center mb-0">
+                                        <span class="fw-bold" style="font-size: 0.75rem;">${log.accion}</span>
+                                        <span class="text-muted" style="font-size: 0.65rem;">${log.created_at}</span>
+                                    </div>
+                                    <div class="text-muted mb-1" style="font-size: 0.7rem;">
+                                        <i class="bi bi-person me-1"></i> ${log.usuario_nombre || 'SISTEMA'}
+                                    </div>
+                                    <div class="bg-light rounded p-1 border border-light-subtle shadow-sm" style="font-size: 0.65rem;">
+                                        ${renderDetalleHistorialPR(log.detalles)}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = `<div class="text-center py-4 text-muted small">No hay historial de cambios.</div>`;
+                }
+            } catch (e) {
+                container.innerHTML = `<div class="text-center py-3 text-danger small">Error de carga.</div>`;
+            }
+        }
+
+        function renderDetalleHistorialPR(detalle) {
+            if (!detalle || detalle.length === 0) return '<span class="text-muted">Sin detalles específicos</span>';
+            if (typeof detalle === 'string') return detalle;
+            if (Array.isArray(detalle)) {
+                return `<ul class="list-unstyled mb-0">
+                    ${detalle.map(d => {
+                        if (typeof d === 'object') {
+                            const antes = d.antes !== null ? `<span class="text-decoration-line-through text-muted">${d.antes}</span> ` : '';
+                            return `<li><i class="bi bi-dot"></i> <span class="fw-bold">${d.campo}:</span> ${antes}<i class="bi bi-arrow-right mx-1"></i> ${d.despues}</li>`;
+                        }
+                        return `<li><i class="bi bi-dot"></i> ${d}</li>`;
+                    }).join('')}
+                </ul>`;
+            }
+            return '<span class="text-muted">Acción registrada</span>';
+        }
+
+    })();
+</script>

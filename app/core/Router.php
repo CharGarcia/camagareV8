@@ -48,11 +48,27 @@ class Router
         if ($pathInfo !== '' && $pathInfo !== '/') {
             $parts = array_filter(explode('/', trim($pathInfo, '/')));
             $parts = array_values($parts);
+            
             if (count($parts) >= 1) {
-                $controller = ucfirst(strtolower($parts[0]));
-            }
-            if (count($parts) >= 2) {
-                $action = $this->toCamelCase($parts[1]);
+                if (strtolower($parts[0]) === 'modulos') {
+                    if (count($parts) >= 2) {
+                        $controllerName = $this->toCamelCase($parts[1]);
+                        $controller = 'modulos\\' . ucfirst($controllerName);
+                    } else {
+                        $controller = 'modulos\\Index';
+                    }
+                    if (count($parts) >= 3) {
+                        $action = $this->toCamelCase($parts[2]);
+                    } else {
+                        $action = 'index';
+                    }
+                } else {
+                    $controllerName = $this->toCamelCase($parts[0]);
+                    $controller = ucfirst($controllerName);
+                    if (count($parts) >= 2) {
+                        $action = $this->toCamelCase($parts[1]);
+                    }
+                }
             }
             // URL limpia: /config/provincia-ciudad/ciudades → tab=ciudades
             if (count($parts) >= 3 && ($parts[1] ?? '') === 'provincia-ciudad' && in_array($parts[2], ['provincias', 'ciudades'], true)) {
@@ -62,6 +78,79 @@ class Router
             if (count($parts) >= 4 && ($parts[1] ?? '') === 'confirmUser') {
                 $_GET['email'] = urldecode($parts[2] ?? '');
                 $_GET['token'] = $parts[3] ?? '';
+            }
+            // /registro/index/email/token → email y token para completar registro de nuevo usuario
+            if (count($parts) >= 4 && ($parts[0] ?? '') === 'registro' && ($parts[1] ?? '') === 'index') {
+                $_GET['email'] = urldecode($parts[2] ?? '');
+                $_GET['token'] = $parts[3] ?? '';
+            }
+            // /solicitud-firma/* → formulario público de firma electrónica (sin auth)
+            if (($parts[0] ?? '') === 'solicitud-firma') {
+                $controller = 'SolicitudFirma';
+                $part1      = $parts[1] ?? '';
+                // Sub-rutas AJAX: /solicitud-firma/ciudades y /solicitud-firma/sri
+                if (in_array($part1, ['ciudades', 'sri'], true)) {
+                    $action = $part1;
+                } elseif (!empty($part1) && ($parts[2] ?? '') === 'enviar') {
+                    // /solicitud-firma/{token}/enviar → POST del formulario
+                    $action          = 'enviar';
+                    $_GET['token']   = $part1;
+                } elseif (!empty($part1)) {
+                    // /solicitud-firma/{token} → mostrar formulario
+                    $action          = 'index';
+                    $_GET['token']   = $part1;
+                } else {
+                    $action = 'index';
+                }
+            }
+
+            // /factura-express/* → formulario público QR (sin auth)
+            if (($parts[0] ?? '') === 'factura-express') {
+                $controller = 'FacturaExpressPublico';
+                $part1      = $parts[1] ?? '';
+                if (!empty($part1) && ($parts[2] ?? '') === 'enviar') {
+                    // /factura-express/{token}/enviar → POST del formulario
+                    $action        = 'enviar';
+                    $_GET['token'] = $part1;
+                } elseif (!empty($part1) && ($parts[2] ?? '') === 'estado') {
+                    // /factura-express/{token}/estado → consulta de estado por el cliente
+                    $action        = 'estado';
+                    $_GET['token'] = $part1;
+                } elseif (!empty($part1) && ($parts[2] ?? '') === 'sri') {
+                    // /factura-express/{token}/sri → AJAX consulta SRI por identificación
+                    $action        = 'consultarSri';
+                    $_GET['token'] = $part1;
+                } elseif (!empty($part1)) {
+                    // /factura-express/{token} → mostrar formulario
+                    $action        = 'index';
+                    $_GET['token'] = $part1;
+                } else {
+                    $action = 'index';
+                }
+            }
+
+            // /payphone/* → retorno de pagos Payphone (sin auth)
+            if (($parts[0] ?? '') === 'payphone') {
+                $controller = 'Payphone';
+                $sub        = $parts[1] ?? 'retorno';
+                $accionesValidas = ['retorno', 'cancelacion'];
+                $action = in_array($sub, $accionesValidas, true) ? $sub : 'retorno';
+            }
+
+            // /reservas/{slug}/* → portal público de reserva de citas (sin auth)
+            if (($parts[0] ?? '') === 'reservas') {
+                $controller = 'Reservas';
+                $slug       = $parts[1] ?? '';
+                $sub        = $parts[2] ?? '';
+                $_GET['slug'] = $slug;
+                $accionesAjax = ['disponibilidad', 'verificar-cliente', 'reservar', 'confirmacion'];
+                if (!empty($slug) && in_array($sub, $accionesAjax, true)) {
+                    $action = $this->toCamelCase($sub);
+                } elseif (!empty($slug)) {
+                    $action = 'index';
+                } else {
+                    $action = 'index';
+                }
             }
         }
 
@@ -89,7 +178,10 @@ class Router
 
     private function sanitizeController(string $name): string
     {
-        $name = preg_replace('/[^a-zA-Z0-9_]/', '', $name) ?: 'Empresa';
+        $name = preg_replace('/[^a-zA-Z0-9_\\\\]/', '', $name) ?: 'Empresa';
+        if (str_contains($name, '\\')) {
+            return $name; // Ya viene con formato modulos\Nombre
+        }
         return ucfirst($name);
     }
 

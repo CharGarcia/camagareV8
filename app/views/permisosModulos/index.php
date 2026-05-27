@@ -1,4 +1,5 @@
 <?php
+
 /** @var string $titulo */
 /** @var int $nivel */
 /** @var int $idUsuarioSel */
@@ -28,10 +29,10 @@ unset($_SESSION['permisos_msg']);
 </div>
 
 <?php if ($msg): ?>
-<div class="alert alert-<?= htmlspecialchars($msg[0]) ?> alert-dismissible fade show" role="alert">
-    <?= htmlspecialchars($msg[1]) ?>
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
+    <div class="alert alert-<?= htmlspecialchars($msg[0]) ?> alert-dismissible fade show" role="alert">
+        <?= htmlspecialchars($msg[1]) ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
 <?php endif; ?>
 
 <div class="card mb-3">
@@ -45,7 +46,7 @@ unset($_SESSION['permisos_msg']);
                     <select id="select-usuario" class="form-select">
                         <option value="">Seleccione usuario...</option>
                         <?php foreach ($opcionesUsuarios as $opt): ?>
-                        <option value="<?= (int)$opt['value'] ?>" <?= ($opt['value'] ?? 0) == $idUsuarioSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
+                            <option value="<?= (int)$opt['value'] ?>" <?= ($opt['value'] ?? 0) == $idUsuarioSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -62,7 +63,7 @@ unset($_SESSION['permisos_msg']);
                     <label class="form-label small">Empresa</label>
                     <select id="select-empresa" name="e" class="form-select">
                         <?php foreach ($opcionesEmpresas as $opt): ?>
-                        <option value="<?= (int)$opt['value'] ?>" <?= ($opt['value'] ?? 0) == $idEmpresaSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
+                            <option value="<?= (int)$opt['value'] ?>" <?= ($opt['value'] ?? 0) == $idEmpresaSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -76,79 +77,88 @@ unset($_SESSION['permisos_msg']);
 </div>
 
 <?php if (!empty($modulos)): ?>
-<div class="card cmg-table-card" id="card-modulos">
-    <div class="card-header bg-light py-2">
-        <strong><i class="bi bi-person-fill"></i> <?= htmlspecialchars($usuarioSel['nombre'] ?? '') ?> — <i class="bi bi-building"></i> <?= htmlspecialchars($empresaSel['nombre_comercial'] ?? $empresaSel['ruc'] ?? '') ?></strong>
+    <div class="card cmg-table-card" id="card-modulos">
+        <div class="card-header bg-light py-2">
+            <strong><i class="bi bi-person-fill"></i> <?= htmlspecialchars($usuarioSel['nombre'] ?? '') ?> - <i class="bi bi-building"></i> <?= htmlspecialchars($empresaSel['nombre_comercial'] ?? $empresaSel['ruc'] ?? '') ?></strong>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="<?= $base ?>/config/permisos-modulos" id="form-permisos">
+                <input type="hidden" name="action" value="guardar">
+                <input type="hidden" name="id_usuario" value="<?= (int)$idUsuarioSel ?>">
+                <input type="hidden" name="id_empresa" value="<?= (int)$idEmpresaSel ?>">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Módulo</th>
+                                <th>Submódulo</th>
+                                <th class="text-center" style="width:70px">Ver</th>
+                                <th class="text-center" style="width:70px">Crear</th>
+                                <th class="text-center" style="width:70px">Actualizar</th>
+                                <th class="text-center" style="width:70px">Eliminar</th>
+                                <th class="text-center bg-warning bg-opacity-10" style="width:90px" title="Marcar para ver todos los registros del módulo, de lo contrario solo verá los suyos.">Ver Todo <i class="bi bi-info-circle small"></i></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($modulos as $mod): ?>
+                                <?php foreach ($mod['submodulos'] as $sub): ?>
+                                    <tr class="perm-row" data-sub="<?= (int)$sub['id_submodulo'] ?>">
+                                        <td class="align-middle"><span class="text-muted small"><?= htmlspecialchars($mod['nombre_modulo'] ?? '') ?></span></td>
+                                        <td class="align-middle"><?= htmlspecialchars($sub['nombre_submodulo'] ?? '') ?><?= (($sub['ver'] ?? 0) || ($sub['crear'] ?? 0) || ($sub['actualizar'] ?? 0) || ($sub['eliminar'] ?? 0)) ? ' <i class="bi bi-check-circle-fill text-success" title="Con permisos"></i>' : '' ?></td>
+                                        <td class="text-center align-middle">
+                                            <input type="hidden" name="perm[<?= (int)$sub['id_submodulo'] ?>][id_modulo]" value="<?= (int)($mod['id_modulo'] ?? 0) ?>">
+                                            <input type="hidden" name="perm[<?= (int)$sub['id_submodulo'] ?>][ver]" value="0">
+                                            <input type="checkbox" class="form-check-input perm-check perm-ver" name="perm[<?= (int)$sub['id_submodulo'] ?>][ver]" value="1" <?= ($sub['ver'] ?? 0) ? 'checked' : '' ?>>
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            <input type="hidden" name="perm[<?= (int)$sub['id_submodulo'] ?>][crear]" value="0">
+                                            <input type="checkbox" class="form-check-input perm-check perm-crear" name="perm[<?= (int)$sub['id_submodulo'] ?>][crear]" value="1" <?= ($sub['crear'] ?? 0) ? 'checked' : '' ?>>
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            <input type="hidden" name="perm[<?= (int)$sub['id_submodulo'] ?>][actualizar]" value="0">
+                                            <input type="checkbox" class="form-check-input perm-check perm-actualizar" name="perm[<?= (int)$sub['id_submodulo'] ?>][actualizar]" value="1" <?= ($sub['actualizar'] ?? 0) ? 'checked' : '' ?>>
+                                        </td>
+                                        <td class="text-center align-middle">
+                                            <input type="hidden" name="perm[<?= (int)$sub['id_submodulo'] ?>][eliminar]" value="0">
+                                            <input type="checkbox" class="form-check-input perm-check perm-eliminar" name="perm[<?= (int)$sub['id_submodulo'] ?>][eliminar]" value="1" <?= ($sub['eliminar'] ?? 0) ? 'checked' : '' ?>>
+                                        </td>
+                                        <td class="text-center align-middle bg-warning bg-opacity-10 border-start border-warning border-opacity-25">
+                                            <input type="hidden" name="perm[<?= (int)$sub['id_submodulo'] ?>][t]" value="0">
+                                            <input type="checkbox" class="form-check-input perm-check perm-t border-warning" name="perm[<?= (int)$sub['id_submodulo'] ?>][t]" value="1" <?= ($sub['t'] ?? 0) ? 'checked' : '' ?>>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg"></i> Guardar permisos</button>
+                </div>
+            </form>
+        </div>
     </div>
-    <div class="card-body">
-        <form method="POST" action="<?= $base ?>/config/permisos-modulos" id="form-permisos">
-            <input type="hidden" name="action" value="guardar">
-            <input type="hidden" name="id_usuario" value="<?= (int)$idUsuarioSel ?>">
-            <input type="hidden" name="id_empresa" value="<?= (int)$idEmpresaSel ?>">
-            <div class="table-responsive">
-                <table class="table table-sm table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Módulo</th>
-                            <th>Submódulo</th>
-                            <th class="text-center" style="width:70px">Ver</th>
-                            <th class="text-center" style="width:70px">Crear</th>
-                            <th class="text-center" style="width:70px">Actualizar</th>
-                            <th class="text-center" style="width:70px">Eliminar</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($modulos as $mod): ?>
-                        <?php foreach ($mod['submodulos'] as $sub): ?>
-                        <tr class="perm-row" data-sub="<?= (int)$sub['id_submodulo'] ?>">
-                            <td class="align-middle"><span class="text-muted small"><?= htmlspecialchars($mod['nombre_modulo'] ?? '') ?></span></td>
-                            <td class="align-middle"><?= htmlspecialchars($sub['nombre_submodulo'] ?? '') ?><?= (($sub['ver'] ?? 0) || ($sub['crear'] ?? 0) || ($sub['actualizar'] ?? 0) || ($sub['eliminar'] ?? 0)) ? ' <i class="bi bi-check-circle-fill text-success" title="Con permisos"></i>' : '' ?></td>
-                            <td class="text-center align-middle">
-                                <input type="hidden" name="perm[<?= (int)$sub['id_submodulo'] ?>][id_modulo]" value="<?= (int)($mod['id_modulo'] ?? 0) ?>">
-                                <input type="hidden" name="perm[<?= (int)$sub['id_submodulo'] ?>][ver]" value="0">
-                                <input type="checkbox" class="form-check-input perm-check perm-ver" name="perm[<?= (int)$sub['id_submodulo'] ?>][ver]" value="1" <?= ($sub['ver'] ?? 0) ? 'checked' : '' ?>>
-                            </td>
-                            <td class="text-center align-middle">
-                                <input type="hidden" name="perm[<?= (int)$sub['id_submodulo'] ?>][crear]" value="0">
-                                <input type="checkbox" class="form-check-input perm-check perm-crear" name="perm[<?= (int)$sub['id_submodulo'] ?>][crear]" value="1" <?= ($sub['crear'] ?? 0) ? 'checked' : '' ?>>
-                            </td>
-                            <td class="text-center align-middle">
-                                <input type="hidden" name="perm[<?= (int)$sub['id_submodulo'] ?>][actualizar]" value="0">
-                                <input type="checkbox" class="form-check-input perm-check perm-actualizar" name="perm[<?= (int)$sub['id_submodulo'] ?>][actualizar]" value="1" <?= ($sub['actualizar'] ?? 0) ? 'checked' : '' ?>>
-                            </td>
-                            <td class="text-center align-middle">
-                                <input type="hidden" name="perm[<?= (int)$sub['id_submodulo'] ?>][eliminar]" value="0">
-                                <input type="checkbox" class="form-check-input perm-check perm-eliminar" name="perm[<?= (int)$sub['id_submodulo'] ?>][eliminar]" value="1" <?= ($sub['eliminar'] ?? 0) ? 'checked' : '' ?>>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-            <div class="mt-3">
-                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg"></i> Guardar permisos</button>
-            </div>
-        </form>
-    </div>
-</div>
 
-<script>
-(function() {
-    var form = document.getElementById('form-permisos');
-    if (!form) return;
+    <script>
+        (function() {
+            var form = document.getElementById('form-permisos');
+            if (!form) return;
 
-    document.querySelectorAll('.perm-row').forEach(function(row) {
-        row.style.cursor = 'pointer';
-        row.addEventListener('click', function(e) {
-            if (e.target.type === 'checkbox') return;
-            var checks = this.querySelectorAll('.perm-check');
-            var allChecked = Array.from(checks).every(function(c) { return c.checked; });
-            checks.forEach(function(c) { c.checked = !allChecked; });
-        });
-    });
-})();
-</script>
+            document.querySelectorAll('.perm-row').forEach(function(row) {
+                row.style.cursor = 'pointer';
+                row.addEventListener('click', function(e) {
+                    if (e.target.type === 'checkbox') return;
+                    var checks = this.querySelectorAll('.perm-check');
+                    var allChecked = Array.from(checks).every(function(c) {
+                        return c.checked;
+                    });
+                    checks.forEach(function(c) {
+                        c.checked = !allChecked;
+                    });
+                });
+            });
+        })();
+    </script>
 <?php endif; ?>
 
 <!-- Modal Crear Usuario -->
@@ -181,70 +191,74 @@ unset($_SESSION['permisos_msg']);
 </div>
 
 <script>
-window.addEventListener('load', function() {
-    var base = '<?= $base ?>';
-    if (window.location.search.indexOf('v=1') !== -1) {
-        history.replaceState({}, '', base + '/config/permisos-modulos');
-    }
-    var paso1 = document.getElementById('paso1');
-    var paso2 = document.getElementById('paso2');
-    var selectUsuario = document.getElementById('select-usuario');
-    var selectEmpresa = document.getElementById('select-empresa');
-    var inputU = document.getElementById('input-u');
-    var usuarioTexto = document.getElementById('usuario-texto');
-    var btnSiguiente = document.getElementById('btn-siguiente');
-    var btnAnterior = document.getElementById('btn-anterior');
-    if (!selectUsuario || typeof TomSelect === 'undefined') return;
-    if (!btnSiguiente) return;
-
-    var tsUsuario = new TomSelect('#select-usuario', {
-        create: false,
-        placeholder: 'Buscar usuario...',
-        maxOptions: 500
-    });
-
-    var tsEmpresa = new TomSelect('#select-empresa', {
-        create: false,
-        placeholder: 'Buscar empresa...',
-        maxOptions: 500
-    });
-
-    function actualizarUsuarioPaso2() {
-        var idU = tsUsuario.getValue() || '';
-        var opt = tsUsuario.options[idU] || tsUsuario.options[String(idU)];
-        usuarioTexto.value = (opt && opt.text) ? opt.text : '';
-        inputU.value = idU;
-    }
-
-    function cargarEmpresas(idU) {
-        tsEmpresa.clear();
-        tsEmpresa.clearOptions();
-        if (!idU) return;
-        fetch(base + '/config/permisos-modulos?action=empresasJson&u=' + encodeURIComponent(idU) + '&q=', { credentials: 'same-origin' })
-            .then(function(r) { return r.ok ? r.json() : []; })
-            .then(function(data) {
-                if (Array.isArray(data) && data.length > 0) {
-                    tsEmpresa.addOptions(data);
-                    tsEmpresa.refreshOptions(false);
-                }
-            })
-            .catch(function() {});
-    }
-
-    btnSiguiente.addEventListener('click', function() {
-        var idU = tsUsuario.getValue() || '';
-        if (!idU) {
-            alert('Seleccione un usuario.');
-            return;
+    window.addEventListener('load', function() {
+        var base = '<?= $base ?>';
+        if (window.location.search.indexOf('v=1') !== -1) {
+            history.replaceState({}, '', base + '/config/permisos-modulos');
         }
-        actualizarUsuarioPaso2();
-        cargarEmpresas(idU);
-        paso1.style.display = 'none';
-        paso2.style.display = 'flex';
-    });
+        var paso1 = document.getElementById('paso1');
+        var paso2 = document.getElementById('paso2');
+        var selectUsuario = document.getElementById('select-usuario');
+        var selectEmpresa = document.getElementById('select-empresa');
+        var inputU = document.getElementById('input-u');
+        var usuarioTexto = document.getElementById('usuario-texto');
+        var btnSiguiente = document.getElementById('btn-siguiente');
+        var btnAnterior = document.getElementById('btn-anterior');
+        if (!selectUsuario || typeof TomSelect === 'undefined') return;
+        if (!btnSiguiente) return;
 
-    btnAnterior.addEventListener('click', function() {
-        window.location = base + '/config/permisos-modulos?limpiar=1';
+        var tsUsuario = new TomSelect('#select-usuario', {
+            create: false,
+            placeholder: 'Buscar usuario...',
+            maxOptions: 500
+        });
+
+        var tsEmpresa = new TomSelect('#select-empresa', {
+            create: false,
+            placeholder: 'Buscar empresa...',
+            maxOptions: 500
+        });
+
+        function actualizarUsuarioPaso2() {
+            var idU = tsUsuario.getValue() || '';
+            var opt = tsUsuario.options[idU] || tsUsuario.options[String(idU)];
+            usuarioTexto.value = (opt && opt.text) ? opt.text : '';
+            inputU.value = idU;
+        }
+
+        function cargarEmpresas(idU) {
+            tsEmpresa.clear();
+            tsEmpresa.clearOptions();
+            if (!idU) return;
+            fetch(base + '/config/permisos-modulos?action=empresasJson&u=' + encodeURIComponent(idU) + '&q=', {
+                    credentials: 'same-origin'
+                })
+                .then(function(r) {
+                    return r.ok ? r.json() : [];
+                })
+                .then(function(data) {
+                    if (Array.isArray(data) && data.length > 0) {
+                        tsEmpresa.addOptions(data);
+                        tsEmpresa.refreshOptions(false);
+                    }
+                })
+                .catch(function() {});
+        }
+
+        btnSiguiente.addEventListener('click', function() {
+            var idU = tsUsuario.getValue() || '';
+            if (!idU) {
+                alert('Seleccione un usuario.');
+                return;
+            }
+            actualizarUsuarioPaso2();
+            cargarEmpresas(idU);
+            paso1.style.display = 'none';
+            paso2.style.display = 'flex';
+        });
+
+        btnAnterior.addEventListener('click', function() {
+            window.location = base + '/config/permisos-modulos?limpiar=1';
+        });
     });
-});
 </script>

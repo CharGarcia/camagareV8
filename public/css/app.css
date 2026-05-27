@@ -137,6 +137,7 @@ html, body {
 /* Modal z-index según reglas (navbar 5000) */
 .modal { z-index: 5060 !important; }
 .modal-backdrop { z-index: 5055 !important; }
+.swal2-container { z-index: 10000 !important; }
 
 /* Contenedor del menú horizontal - debajo del navbar */
 .cmg-menu-wrapper {
@@ -299,10 +300,7 @@ html, body {
   }
 }
 
-/* Tablas de datos: frame con padding, filas compactas, botones pequeños */
-.cmg-table-card .card-body {
-  padding: 0.75rem 1rem !important;
-}
+/* Tablas de datos: filas compactas, botones pequeños */
 .cmg-table-card .table {
   font-size: 0.875rem;
   margin-bottom: 0;
@@ -311,6 +309,24 @@ html, body {
 .cmg-table-card .table td {
   padding: 0.35rem 0.5rem;
   vertical-align: middle;
+}
+
+/* Redimensionamiento de columnas */
+th[data-col] {
+  position: relative;
+}
+.cmg-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 5px;
+  cursor: col-resize;
+  user-select: none;
+  height: 100%;
+  z-index: 10;
+}
+.cmg-resizer:hover, .cmg-resizer.resizing {
+  border-right: 2px solid var(--bs-primary, #0d6efd);
 }
 .cmg-btn-table {
   padding: 2px 6px !important;
@@ -332,3 +348,141 @@ html, body {
 }
 
 
+/* Buscador de Módulos - Diseño Premium Mejorado */
+.cmg-nav-search-wrap {
+    position: relative;
+    width: 280px;
+    margin-right: 1.5rem;
+    display: flex;
+    align-items: center;
+}
+.cmg-nav-search-input {
+    background: rgba(255, 255, 255, 0.12) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: #ffffff !important;
+    height: 24px !important;
+    font-size: 0.8rem !important;
+    border-radius: 4px !important;
+    padding: 0 12px 0 32px !important;
+    transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.cmg-nav-search-input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+.cmg-nav-search-input:focus {
+    background: rgba(255, 255, 255, 0.25) !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.4) !important;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1) !important;
+    outline: none !important;
+}
+.cmg-nav-search-input:focus + .cmg-nav-search-icon {
+    color: #ffffff;
+}
+.cmg-nav-search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.85rem;
+    pointer-events: none;
+    z-index: 3;
+}
+
+/* Resultados - Estilo Tarjeta Flotante */
+.cmg-nav-search-results {
+    position: fixed !important;
+    background: #ffffff !important; /* Blanco Sólido */
+    border: 1px solid rgba(0,0,0,0.1) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 10px 35px rgba(0,0,0,0.25) !important;
+    z-index: 10000 !important;
+    display: none;
+    overflow: hidden;
+    padding: 4px 0;
+}
+.cmg-nav-search-results.show {
+    display: block !important;
+}
+.cmg-search-result-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    color: #334155;
+    text-decoration: none !important;
+    transition: background 0.15s;
+    border-bottom: 1px solid #f8fafc;
+}
+.cmg-search-result-item:last-child {
+    border-bottom: 0;
+}
+.cmg-search-result-item:hover,
+.cmg-search-result-item.active {
+    background: #f1f5f9;
+    color: #2563eb;
+}
+.cmg-search-result-icon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f1f5f9;
+    border-radius: 6px;
+    margin-right: 12px;
+    font-size: 1rem;
+    color: #64748b;
+}
+.cmg-search-result-item:hover .cmg-search-result-icon,
+.cmg-search-result-item.active .cmg-search-result-icon {
+    background: #e0e7ff;
+    color: #2563eb;
+}
+.cmg-search-result-content {
+    flex: 1;
+}
+.cmg-search-result-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.25;
+    display: block;
+}
+.cmg-search-result-path {
+    font-size: 0.7rem;
+    color: #94a3b8;
+    display: block;
+}
+
+@media (max-width: 991.98px) {
+    .cmg-nav-search-wrap {
+        width: 100% !important;
+        margin-right: 0;
+        margin-bottom: 0.5rem;
+    }
+    .cmg-nav-search-input {
+        width: 100% !important;
+    }
+}
+
+
+
+
+
+
+
+/* Estilos para resultados de autocompletado */
+.ac-results {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    border: 1px solid rgba(0,0,0,0.15) !important;
+    border-radius: 0 0 8px 8px !important;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.3) !important;
+    z-index: 9999 !important; /* Por encima de casi todo */
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+.ac-item:hover {
+    background-color: #f1f5f9 !important;
+    color: #0d6efd !important;
+}

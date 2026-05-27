@@ -1,7 +1,7 @@
 <?php
 /**
  * Configuración general del sistema
- * PHP 8+ | Bootstrap 5+ | MySQL
+ * PHP 8+ | Bootstrap 5+ | PostgreSQL
  */
 
 return [
@@ -26,4 +26,6 @@ return [
             'verify_peer_name' => false,
         ],
     ],
+    // API key de 2captcha para resolver reCAPTCHA v3 Enterprise del portal SRI
+    '2captcha_api_key' => 'f40ccb9455dfd2bdb8bd2d3e7ccce8fa',
 ];

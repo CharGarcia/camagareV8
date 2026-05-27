@@ -22,8 +22,6 @@ class Application
 
     public function run(): void
     {
-        date_default_timezone_set($this->config['timezone'] ?? 'UTC');
-
         if (session_status() === PHP_SESSION_NONE) {
             session_name($this->config['session']['name'] ?? 'PHPSESSID');
             // Cookie path=/ para que funcione cuando BASE_URL está vacío (sitio en raíz)
@@ -42,8 +40,19 @@ class Application
         $controller = $dispatch['controller'];
         $action = $dispatch['action'];
 
-        // Si no hay sesión y no es Auth, mostrar login
-        if (!isset($_SESSION['id_usuario']) && $controller !== 'Auth') {
+        // Controladores públicos (sin autenticación requerida)
+        $publicControllers = ['Auth', 'Registro', 'SolicitudFirma', 'FacturaExpressPublico', 'WhatsappWebhook', 'Reservas', 'Payphone'];
+
+        // Si no hay sesión y no es un controlador público, mostrar login
+        if (!isset($_SESSION['id_usuario']) && !in_array($controller, $publicControllers, true)) {
+            $isAjax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
+                   || (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json'));
+            if ($isAjax) {
+                http_response_code(401);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['ok' => false, 'error' => 'Sesión expirada. Por favor recarga e inicia sesión.']);
+                exit;
+            }
             $base = rtrim(defined('BASE_URL') ? BASE_URL : '', '/');
             $loginUrl = $base === '' ? '/' : $base . '/';
             header('Location: ' . $loginUrl);
@@ -68,6 +77,7 @@ class Application
 
     private function handleError(int $code, string $message): void
     {
+        error_log("ROUTING ERROR $code: $message");
         http_response_code($code);
         if ($this->config['debug'] ?? false) {
             echo "<h1>Error {$code}</h1><p>" . htmlspecialchars($message) . "</p>";

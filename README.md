@@ -1,6 +1,6 @@
 # CaMaGaRe - Sistema MVC
 
-PHP 8+ | Bootstrap 5+ | MySQL
+PHP 8+ | Bootstrap 5+ | PostgreSQL
 
 ## Estructura
 
@@ -35,5 +35,5 @@ sistema/
 ## Requisitos
 
 - PHP 8.0+
-- MySQL 5.7+
+- PostgreSQL 12+
 - Apache con mod_rewrite

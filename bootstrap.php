@@ -9,6 +9,11 @@ define('MVC_ROOT', __DIR__);
 define('MVC_APP', MVC_ROOT . '/app');
 define('MVC_CONFIG', MVC_ROOT . '/config');
 
+// Composer Autoloader
+if (file_exists(MVC_ROOT . '/vendor/autoload.php')) {
+    require_once MVC_ROOT . '/vendor/autoload.php';
+}
+
 // Producción (raíz del dominio): crear config/local.php con ['base_url' => ''] (ver local.php.example)
 $localCfgFile = MVC_CONFIG . '/local.php';
 if (is_file($localCfgFile)) {
@@ -21,12 +26,25 @@ if (is_file($localCfgFile)) {
 }
 
 // Cadenas UTF-8 (acentos, eñe) coherentes en todo el request
+ini_set('default_charset', 'UTF-8');
 if (function_exists('mb_internal_encoding')) {
     mb_internal_encoding('UTF-8');
 }
 if (function_exists('mb_http_output')) {
     mb_http_output('UTF-8');
 }
+if (function_exists('mb_language')) {
+    mb_language('uni');
+}
+
+// Flags estándar para json_encode en todo el sistema
+if (!defined('JSON_FLAGS')) {
+    define('JSON_FLAGS', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+// Configuración de zona horaria (Cargar desde config/app.php)
+$appCfg = is_file(MVC_CONFIG . '/app.php') ? require MVC_CONFIG . '/app.php' : [];
+date_default_timezone_set($appCfg['timezone'] ?? 'America/Guayaquil');
 
 require_once MVC_APP . '/helpers/helpers.php';
 require_once MVC_APP . '/helpers/funciones.php';

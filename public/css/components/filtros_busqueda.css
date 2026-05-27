@@ -1,0 +1,87 @@
+/* Componente: Buscador con filtros estilo Odoo
+ * Uso: agregar clase .fb-search al contenedor wrapper.
+ */
+.fb-search { position: relative; }
+
+.fb-search-box {
+    min-height: 31px;
+    cursor: text;
+    background: #fff;
+}
+.fb-search-box:focus-within {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, .15);
+}
+
+.fb-search-typer { outline: none; background: transparent; min-width: 80px; }
+.fb-search-typer:focus { outline: none; box-shadow: none; }
+
+.fb-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #e7f1ff;
+    color: #0d6efd;
+    border: 1px solid #b6d4fe;
+    border-radius: 12px;
+    padding: 1px 8px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+.fb-chip .fb-chip-key { font-weight: 600; opacity: 0.85; }
+.fb-chip .fb-chip-x { cursor: pointer; opacity: 0.6; margin-left: 2px; }
+.fb-chip .fb-chip-x:hover { opacity: 1; }
+.fb-chip.fb-chip-neg {
+    background: #f8d7da;
+    color: #842029;
+    border-color: #f5c2c7;
+}
+
+.fb-search-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 380px;
+    overflow-y: auto;
+    z-index: 1050;
+    background: #fff;
+}
+
+.fb-dd-section { padding: 6px 0; }
+.fb-dd-section + .fb-dd-section { border-top: 1px solid #f0f0f0; }
+.fb-dd-title {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: #6c757d;
+    font-weight: 600;
+    padding: 4px 12px;
+    letter-spacing: 0.5px;
+}
+.fb-dd-item {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.fb-dd-item:hover, .fb-dd-item.active { background: #f0f7ff; }
+.fb-dd-item .bi { width: 16px; color: #6c757d; }
+.fb-dd-item .fb-hint { color: #6c757d; font-size: 0.75rem; margin-left: auto; }
+.fb-dd-item .fb-match { font-weight: 600; color: #0d6efd; }
+
+.fb-dd-submenu {
+    padding: 10px 12px;
+    background: #fafbfc;
+    border-top: 1px solid #f0f0f0;
+}
+.fb-dd-submenu label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #495057;
+    display: block;
+    margin-bottom: 4px;
+}
+.fb-dd-submenu input, .fb-dd-submenu select { font-size: 0.85rem; }

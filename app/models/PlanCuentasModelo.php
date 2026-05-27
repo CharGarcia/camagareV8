@@ -53,7 +53,7 @@ class PlanCuentasModelo extends BaseModel
         $sql = "INSERT INTO plan_cuentas_modelo (codigo, nivel, nombre, codigo_sri, supercias_esf, supercias_eri, supercias_ecp_codigo, supercias_ecp_subcodigo, status)
                 VALUES ('{$codigo}', '{$nivel}', '{$nombre}', '{$codigoSri}', '{$superciasEsf}', '{$superciasEri}', '{$superciasEcpCodigo}', '{$superciasEcpSubcodigo}', {$status})";
         $this->execute($sql);
-        return $this->lastInsertId();
+        return $this->lastInsertId('plan_cuentas_modelo_id_seq');
     }
 
     public function actualizar(int $id, array $data): bool

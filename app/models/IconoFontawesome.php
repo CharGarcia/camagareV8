@@ -171,14 +171,15 @@ class IconoFontawesome extends BaseModel
             return false;
         }
         foreach ([
-            "DELETE FROM iconos_fontawesome WHERE id_icono = {$id} LIMIT 1",
-            "DELETE FROM iconos_fontawesome WHERE id = {$id} LIMIT 1",
+            "DELETE FROM iconos_fontawesome WHERE id_icono = {$id}",
+            "DELETE FROM iconos_fontawesome WHERE id = {$id}",
         ] as $sql) {
             try {
-                if (!$this->execute($sql)) {
+                $n = $this->execRowCount($sql);
+                if ($n === false) {
                     continue;
                 }
-                if ($this->db->affected_rows > 0) {
+                if ($n > 0) {
                     return true;
                 }
             } catch (\Throwable $e) {

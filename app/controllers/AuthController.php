@@ -61,9 +61,17 @@ class AuthController extends Controller
             }
             unset($_SESSION['id_empresa'], $_SESSION['ruc_empresa']);
         } else {
-            $emp = ($numEmpresas === 1)
-                ? ['id_empresa' => $empresasLogin['id_empresa'], 'ruc_empresa' => $empresasLogin['ruc_empresa']]
-                : $model->getPrimeraEmpresaAsignada($_SESSION['id_usuario']);
+            $favId = (int) ($user['id_empresa_favorita'] ?? 0);
+            $emp = null;
+            if ($favId > 0) {
+                $emp = $model->getEmpresaAsignadaEspecifica((int) $user['id'], $favId);
+            }
+
+            if (!$emp) {
+                $emp = ($numEmpresas === 1)
+                    ? ['id_empresa' => $empresasLogin['id_empresa'], 'ruc_empresa' => $empresasLogin['ruc_empresa']]
+                    : $model->getPrimeraEmpresaAsignada((int) $user['id']);
+            }
 
             if ($emp) {
                 $_SESSION['id_empresa'] = $emp['id_empresa'];
@@ -74,6 +82,15 @@ class AuthController extends Controller
         session_regenerate_id(true);
         // No usar session_write_close() aquí: en algunos entornos puede interferir con el envío
         // de la cookie antes del redirect; PHP guarda la sesión al terminar el script.
+
+        // Super admin sin ninguna empresa: ir directo a crear la primera (configuración desde cero)
+        if ((int) $user['nivel'] === 3 && $numEmpresas === 0) {
+            $_SESSION['empresas_msg'] = [
+                'info',
+                'Bienvenido. Cree su primera empresa aquí; podrá completar datos y asignaciones después. Luego use el menú Configuración para el resto del sistema.',
+            ];
+            $this->redirect(BASE_URL . '/config/empresas-sistema');
+        }
 
         $this->redirect(BASE_URL . '/home/index');
     }

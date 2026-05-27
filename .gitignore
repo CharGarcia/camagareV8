@@ -3,7 +3,82 @@
 .git/
 .env
 config/local.php
+config/parametros.xml
 legacy/
 *.log
 .DS_Store
 Thumbs.db
+
+# Archivos de desarrollo / debug (no van a producción)
+debug_*.php
+test_*.php
+fix_*.php
+patch_*.php
+scratch_*.php
+check_*.php
+tmp_*.php
+add_columns*.php
+alter_*.php
+inspect_*.php
+migrate_*.php
+rename_*.php
+run_migration*.php
+dump_*.php
+extract_*.php
+inject_*.php
+read_*.php
+restore_*.php
+describe_*.php
+setup_*.php
+public/debug_*.php
+public/check_*.php
+public/mig_*.php
+public/migrate_*.php
+public/migracion_*.php
+public/run_*.php
+public/drop_*.php
+public/list_*.php
+public/inspect_*.php
+public/script.php
+public/sri_debug/
+public/sri_debug_login.php
+public/sri_test.php
+public/test_*.php
+public/info_db.php
+
+# Archivos temporales y de trabajo
+*.txt
+diff.txt
+git_diff.txt
+query.sql
+blocks.json
+missing_block.js
+nesting_check*.txt
+temp_*.txt
+tmp/
+scratch/
+artifacts/
+brain/
+appDataDir/
+
+# Dependencias y uploads
+vendor/
+public/vendor/
+public/uploads/
+public/storage/
+storage/
+scripts/
+descargasri_python/
+
+# Documentos de prueba en raíz
+*.pdf
+Factura.xml
+"Ficha ATS.pdf"
+"GUIA FORMULARIO 104.pdf"
+
+# Carpeta de agentes
+.agents/
+
+# Scripts de migración expuestos en carpeta pública
+public/migrar_*.php
+public/check.php

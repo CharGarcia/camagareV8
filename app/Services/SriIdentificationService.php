@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Servicio para consultar identificación (RUC/Cédula) al web service SRI
  * Reutilizable en múltiples módulos del sistema.
@@ -40,6 +41,16 @@ class SriIdentificationService
             return [
                 'ok' => false,
                 'error' => 'La consulta automática al SRI está desactivada (sri_identification_enabled en config/app.php). Ingrese los datos manualmente.',
+            ];
+        }
+
+        // 1. BUSCAR LOCALMENTE PRIMERO (Clientes y Proveedores)
+        $local = $this->buscarLocalmente($identificacion);
+        if ($local !== null) {
+            return [
+                'ok' => true,
+                'data' => $local,
+                'source' => 'local'
             ];
         }
 
@@ -90,7 +101,7 @@ class SriIdentificationService
 
         $responseData = json_decode($response ?? '', true);
         if (!is_array($responseData) || empty($responseData['data'])) {
-            return ['ok' => false, 'error' => 'No se encontró información para esta identificación.'];
+            return ['ok' => false, 'error' => 'No encontrado.'];
         }
 
         $data = $responseData['data'];
@@ -203,6 +214,55 @@ class SriIdentificationService
             return str_pad((string) $v, 3, '0', STR_PAD_LEFT);
         }
         return '';
+    }
+
+    /**
+     * Busca en las tablas de proveedores y clientes sin filtros adicionales.
+     */
+    private function buscarLocalmente(string $identificacion): ?array
+    {
+        try {
+            $db = \App\core\Database::getConnection();
+            $id = $db->quote($identificacion);
+
+            // Buscar en Proveedores primero (suelen tener datos más completos)
+            $prov = $db->query("SELECT razon_social, nombre_comercial, direccion, provincia, ciudad, telefono, email, identificacion FROM proveedores WHERE identificacion = {$id} LIMIT 1")->fetch(\PDO::FETCH_ASSOC);
+            if ($prov) {
+                return [
+                    'ruc' => $prov['identificacion'],
+                    'establecimiento' => '001',
+                    'nombre' => $prov['razon_social'],
+                    'nombre_comercial' => $prov['nombre_comercial'] ?: $prov['razon_social'],
+                    'direccion' => $prov['direccion'],
+                    'cod_prov' => $prov['provincia'],
+                    'cod_ciudad' => $prov['ciudad'],
+                    'telefono' => $prov['telefono'],
+                    'mail' => $prov['email'],
+                    'tipo' => strlen($prov['identificacion']) === 13 ? '01' : '04', 
+                ];
+            }
+
+            // Buscar en Clientes
+            $cli = $db->query("SELECT nombre, direccion, provincia, ciudad, telefono, email, identificacion FROM clientes WHERE identificacion = {$id} LIMIT 1")->fetch(\PDO::FETCH_ASSOC);
+            if ($cli) {
+                return [
+                    'ruc' => $cli['identificacion'],
+                    'establecimiento' => '001',
+                    'nombre' => $cli['nombre'],
+                    'nombre_comercial' => $cli['nombre'],
+                    'direccion' => $cli['direccion'],
+                    'cod_prov' => $cli['provincia'],
+                    'cod_ciudad' => $cli['ciudad'],
+                    'telefono' => $cli['telefono'],
+                    'mail' => $cli['email'],
+                    'tipo' => strlen($cli['identificacion']) === 13 ? '01' : '04',
+                ];
+            }
+        } catch (\Exception $e) {
+            // Si hay error en DB local, simplemente ignoramos y seguimos al SRI
+        }
+
+        return null;
     }
 
     private function mapearTipoContribuyente(string $tipo): string

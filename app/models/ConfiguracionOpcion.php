@@ -18,12 +18,17 @@ class ConfiguracionOpcion extends BaseModel
      */
     public function asegurarOpcionesBase(): void
     {
+        // Limpiar tarjeta "Plantillas de Documentos" si fue insertada automáticamente antes.
+        // Pertenece al módulo operativo por empresa (/modulos/plantillas-pdf) y no a config global.
+        $this->limpiarPlantillasDocumentosBase();
+
         $base = [
             ['nombre' => 'Mi perfil', 'descripcion' => 'Editar tu nombre, cédula y correo', 'icono' => 'person-circle', 'clase_color' => 'info', 'nivel_minimo' => 1, 'enlace' => ['etiqueta' => 'Mi perfil', 'ruta' => '/perfil', 'clase_btn' => 'info']],
             ['nombre' => 'Cambiar contraseña', 'descripcion' => 'Actualizar tu contraseña de acceso', 'icono' => 'key', 'clase_color' => 'warning', 'nivel_minimo' => 1, 'enlace' => ['etiqueta' => 'Cambiar contraseña', 'ruta' => '/auth/cambiar-clave', 'clase_btn' => 'warning']],
             ['nombre' => 'Apariencia', 'descripcion' => 'Colores y tema visual del sistema', 'icono' => 'palette', 'clase_color' => 'primary', 'nivel_minimo' => 1, 'enlace' => ['etiqueta' => 'Colores y tema', 'ruta' => '/config/appearance', 'clase_btn' => 'primary']],
             ['nombre' => 'Unidades de medida', 'descripcion' => 'Tipos y unidades de medida (kg, litro, etc.)', 'icono' => 'rulers', 'clase_color' => 'secondary', 'nivel_minimo' => 2, 'enlace' => ['etiqueta' => 'Unidades de medida', 'ruta' => '/config/unidades-medida', 'clase_btn' => 'secondary']],
             ['nombre' => 'Plan de cuentas modelo', 'descripcion' => 'Plantilla del plan de cuentas contable', 'icono' => 'journal-bookmark', 'clase_color' => 'info', 'nivel_minimo' => 2, 'enlace' => ['etiqueta' => 'Plan de cuentas modelo', 'ruta' => '/config/plan-cuentas-modelo', 'clase_btn' => 'info']],
+            ['nombre' => 'Asientos tipo', 'descripcion' => 'Modelos de asientos contables predefinidos del sistema', 'icono' => 'sliders', 'clase_color' => 'dark', 'nivel_minimo' => 2, 'enlace' => ['etiqueta' => 'Asientos tipo', 'ruta' => '/config/asientos-tipo', 'clase_btn' => 'dark']],
         ];
         foreach ($base as $op) {
             $ruta = $op['enlace']['ruta'] ?? '';
@@ -31,7 +36,7 @@ class ConfiguracionOpcion extends BaseModel
             $rutaEsc = $this->escape($ruta);
             if ($this->estaRutaOmitida($rutaEsc)) continue;
             $existePorNombre = $this->query("SELECT 1 FROM configuracion_opciones WHERE nombre = '" . $this->escape($op['nombre']) . "' LIMIT 1");
-            $existePorRuta = $this->query("SELECT 1 FROM configuracion_opcion_enlaces e INNER JOIN configuracion_opciones o ON o.id = e.id_opcion WHERE e.ruta = '{$rutaEsc}' AND o.activo = 1 LIMIT 1");
+            $existePorRuta = $this->query("SELECT 1 FROM configuracion_opcion_enlaces e INNER JOIN configuracion_opciones o ON o.id = e.id_opcion WHERE e.ruta = '{$rutaEsc}' AND o.activo IS TRUE LIMIT 1");
             if (empty($existePorNombre) && empty($existePorRuta)) {
                 $id = $this->crearOpcion($op);
                 $this->crearEnlace($id, $op['enlace']);
@@ -59,6 +64,26 @@ class ConfiguracionOpcion extends BaseModel
         }
     }
 
+    private function limpiarPlantillasDocumentosBase(): void
+    {
+        try {
+            $rows = $this->query(
+                "SELECT o.id FROM configuracion_opciones o
+                 INNER JOIN configuracion_opcion_enlaces e ON e.id_opcion = o.id
+                 WHERE o.nombre = 'Plantillas de Documentos'
+                   AND e.ruta = '/modulos/plantillas-pdf'
+                 LIMIT 1"
+            );
+            if (!empty($rows)) {
+                $id = (int) $rows[0]['id'];
+                $this->execute("DELETE FROM configuracion_opcion_enlaces WHERE id_opcion = {$id}");
+                $this->execute("DELETE FROM configuracion_opciones WHERE id = {$id}");
+            }
+        } catch (\Throwable $e) {
+            // Fallo silencioso: si la tarjeta no existe o hay error de BD no bloqueamos la carga
+        }
+    }
+
     private function marcarOpcionBaseOmitida(string $ruta): void
     {
         try {
@@ -75,7 +100,7 @@ class ConfiguracionOpcion extends BaseModel
     public function getOpcionesPorNivel(int $nivelUsuario): array
     {
         $nivel = (int) $nivelUsuario;
-        $activoFilter = ($nivel >= 3) ? '' : ' AND activo = 1';
+        $activoFilter = ($nivel >= 3) ? '' : ' AND activo IS TRUE';
         $sql = "SELECT id, nombre, descripcion, icono, clase_color, nivel_minimo, orden, activo
                 FROM configuracion_opciones
                 WHERE nivel_minimo <= {$nivel}{$activoFilter}
@@ -110,12 +135,13 @@ class ConfiguracionOpcion extends BaseModel
         $claseColor = $this->escape(trim($data['clase_color'] ?? 'primary'));
         $nivelMinimo = (int) ($data['nivel_minimo'] ?? 1);
         $orden = (int) ($data['orden'] ?? 0);
-        $activo = isset($data['activo']) ? (int) (bool) $data['activo'] : 1;
+        $activo = isset($data['activo']) ? (bool) $data['activo'] : true;
+        $activoSql = $activo ? 'TRUE' : 'FALSE';
 
         $sql = "INSERT INTO configuracion_opciones (nombre, descripcion, icono, clase_color, nivel_minimo, orden, activo)
-                VALUES ('{$nombre}', '{$descripcion}', '{$icono}', '{$claseColor}', {$nivelMinimo}, {$orden}, {$activo})";
+                VALUES ('{$nombre}', '{$descripcion}', '{$icono}', '{$claseColor}', {$nivelMinimo}, {$orden}, {$activoSql})";
         $this->execute($sql);
-        return $this->lastInsertId();
+        return $this->lastInsertId('configuracion_opciones_id_seq');
     }
 
     public function crearEnlace(int $idOpcion, array $data): int
@@ -129,7 +155,7 @@ class ConfiguracionOpcion extends BaseModel
         $sql = "INSERT INTO configuracion_opcion_enlaces (id_opcion, etiqueta, ruta, clase_btn, orden)
                 VALUES ({$id}, '{$etiqueta}', '{$ruta}', '{$claseBtn}', {$orden})";
         $this->execute($sql);
-        return $this->lastInsertId();
+        return $this->lastInsertId('configuracion_opcion_enlaces_id_seq');
     }
 
     public function getOpcionPorId(int $id): ?array
@@ -155,11 +181,12 @@ class ConfiguracionOpcion extends BaseModel
         $claseColor = $this->escape(trim($data['clase_color'] ?? 'primary'));
         $nivelMinimo = (int) ($data['nivel_minimo'] ?? 1);
         $orden = (int) ($data['orden'] ?? 0);
-        $activo = isset($data['activo']) ? (int) (bool) $data['activo'] : 1;
+        $activo = isset($data['activo']) ? (bool) $data['activo'] : true;
+        $activoSql = $activo ? 'TRUE' : 'FALSE';
 
         $sql = "UPDATE configuracion_opciones SET
                 nombre = '{$nombre}', descripcion = '{$descripcion}', icono = '{$icono}',
-                clase_color = '{$claseColor}', nivel_minimo = {$nivelMinimo}, orden = {$orden}, activo = {$activo}
+                clase_color = '{$claseColor}', nivel_minimo = {$nivelMinimo}, orden = {$orden}, activo = {$activoSql}
                 WHERE id = {$id}";
         return $this->execute($sql);
     }

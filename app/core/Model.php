@@ -1,6 +1,6 @@
 <?php
 /**
- * Modelo base
+ * Modelo base (legado / compatibilidad)
  */
 
 declare(strict_types=1);
@@ -9,7 +9,7 @@ namespace App\core;
 
 abstract class Model
 {
-    protected \mysqli $db;
+    protected \PDO $db;
 
     public function __construct()
     {
@@ -18,25 +18,38 @@ abstract class Model
 
     protected function query(string $sql): array
     {
-        $result = $this->db->query($sql);
-        if ($result === false) {
-            throw new \RuntimeException('Error SQL: ' . $this->db->error . ' | ' . $sql);
+        try {
+            $stmt = $this->db->query($sql);
+
+            return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        } catch (\PDOException $e) {
+            throw new \RuntimeException('Error SQL: ' . $e->getMessage() . ' | ' . $sql, 0, $e);
         }
-        return $result->fetch_all(MYSQLI_ASSOC) ?: [];
     }
 
     protected function execute(string $sql): bool
     {
-        return $this->db->query($sql) !== false;
+        try {
+            $this->db->exec($sql);
+
+            return true;
+        } catch (\PDOException $e) {
+            return false;
+        }
     }
 
-    protected function lastInsertId(): int
+    protected function lastInsertId(?string $sequence = null): int
     {
-        return (int) $this->db->insert_id;
+        return (int) $this->db->lastInsertId($sequence);
     }
 
     protected function escape(string $value): string
     {
-        return $this->db->real_escape_string($value);
+        $q = $this->db->quote($value);
+        if ($q === false) {
+            return '';
+        }
+
+        return substr($q, 1, -1);
     }
 }

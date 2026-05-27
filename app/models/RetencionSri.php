@@ -126,16 +126,17 @@ class RetencionSri extends BaseModel
         string $desde,
         string $hasta
     ): int {
-        $codigoRet = $this->escape($codigoRet);
+        $codigoRet   = $this->escape($codigoRet);
         $conceptoRet = $this->escape($conceptoRet);
         $porcentajeRet = (float) $porcentajeRet;
         $impuestoRet = $this->escape($impuestoRet);
         $codAnexoRet = $this->escape($codAnexoRet);
-        $status = $status ? 1 : 0;
-        $desde = $this->escape($desde);
-        $hasta = $this->escape($hasta);
+        $status      = $status ? 1 : 0;
+        $desdeSQL    = !empty(trim($desde)) ? "'" . $this->escape(trim($desde)) . "'" : 'NULL';
+        $hastaSQL    = !empty(trim($hasta)) ? "'" . $this->escape(trim($hasta)) . "'" : 'NULL';
 
-        $sql = "INSERT INTO retenciones_sri (codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret, cod_anexo_ret, status, desde, hasta) VALUES ('{$codigoRet}', '{$conceptoRet}', {$porcentajeRet}, '{$impuestoRet}', '{$codAnexoRet}', {$status}, '{$desde}', '{$hasta}')";
+        $sql = "INSERT INTO retenciones_sri (codigo_ret, concepto_ret, porcentaje_ret, impuesto_ret, cod_anexo_ret, status, desde, hasta)
+                VALUES ('{$codigoRet}', '{$conceptoRet}', {$porcentajeRet}, '{$impuestoRet}', '{$codAnexoRet}', {$status}, {$desdeSQL}, {$hastaSQL})";
         $this->execute($sql);
         return $this->lastInsertId();
     }
@@ -154,19 +155,19 @@ class RetencionSri extends BaseModel
         string $desde,
         string $hasta
     ): bool {
-        $id = (int) $id;
-        $codigoRet = $this->escape($codigoRet);
+        $id          = (int) $id;
+        $codigoRet   = $this->escape($codigoRet);
         $conceptoRet = $this->escape($conceptoRet);
         $porcentajeRet = (float) $porcentajeRet;
         $impuestoRet = $this->escape($impuestoRet);
         $codAnexoRet = $this->escape($codAnexoRet);
-        $status = $status ? 1 : 0;
-        $desde = $this->escape($desde);
-        $hasta = $this->escape($hasta);
+        $status      = $status ? 1 : 0;
+        $desdeSQL    = !empty(trim($desde)) ? "'" . $this->escape(trim($desde)) . "'" : 'NULL';
+        $hastaSQL    = !empty(trim($hasta)) ? "'" . $this->escape(trim($hasta)) . "'" : 'NULL';
 
         $queries = [
-            "UPDATE retenciones_sri SET codigo_ret='{$codigoRet}', concepto_ret='{$conceptoRet}', porcentaje_ret={$porcentajeRet}, impuesto_ret='{$impuestoRet}', cod_anexo_ret='{$codAnexoRet}', status={$status}, desde='{$desde}', hasta='{$hasta}' WHERE id_ret={$id}",
-            "UPDATE retenciones_sri SET codigo_ret='{$codigoRet}', concepto_ret='{$conceptoRet}', porcentaje_ret={$porcentajeRet}, impuesto_ret='{$impuestoRet}', cod_anexo_ret='{$codAnexoRet}', status={$status}, desde='{$desde}', hasta='{$hasta}' WHERE id={$id}",
+            "UPDATE retenciones_sri SET codigo_ret='{$codigoRet}', concepto_ret='{$conceptoRet}', porcentaje_ret={$porcentajeRet}, impuesto_ret='{$impuestoRet}', cod_anexo_ret='{$codAnexoRet}', status={$status}, desde={$desdeSQL}, hasta={$hastaSQL} WHERE id_ret={$id}",
+            "UPDATE retenciones_sri SET codigo_ret='{$codigoRet}', concepto_ret='{$conceptoRet}', porcentaje_ret={$porcentajeRet}, impuesto_ret='{$impuestoRet}', cod_anexo_ret='{$codAnexoRet}', status={$status}, desde={$desdeSQL}, hasta={$hastaSQL} WHERE id={$id}",
         ];
         foreach ($queries as $sql) {
             try {

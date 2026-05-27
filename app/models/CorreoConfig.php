@@ -18,8 +18,10 @@ class CorreoConfig extends BaseModel
     public const CODIGOS_SUGERIDOS = [
         'recuperar_password' => 'Recuperación de contraseña',
         'notificaciones' => 'Notificaciones del sistema',
-        'cobros' => 'Cobros y facturación',
+        'cobros_pagos' => 'Cobros y pagos',
+        'envio_documentos_sri' => 'Facturación electrónica',
         'soporte' => 'Soporte técnico',
+        'nuevo_usuario' => 'Creación de usuarios',
     ];
 
     public function getAll(string $ordenCol = 'codigo', string $ordenDir = 'ASC', string $buscar = ''): array
@@ -128,7 +130,7 @@ class CorreoConfig extends BaseModel
         $sql = "INSERT INTO correos_config (codigo, nombre, email, nombre_remitente, host_smtp, puerto_smtp, usuario_smtp, password_smtp, encryption, status) " .
             "VALUES ('{$cod}', '{$nom}', '{$em}', '{$nr}', '{$host}', {$puerto}, '{$user}', '{$pass}', '{$enc}', {$st})";
         $this->execute($sql);
-        return $this->lastInsertId();
+        return $this->lastInsertId('correos_config_id_correo_config_seq');
     }
 
     public function actualizar(

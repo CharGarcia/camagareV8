@@ -57,4 +57,12 @@ class TarifaIva extends BaseModel
         $sql = "UPDATE tarifa_iva SET codigo='{$codigo}', tarifa='{$tarifa}', porcentaje_iva={$porcentajeIva}, status={$status} WHERE id={$id}";
         return $this->execute($sql);
     }
+    /**
+     * Obtiene solo las tarifas activas
+     */
+    public function getActivos(): array
+    {
+        $sql = "SELECT id, codigo, tarifa, porcentaje_iva FROM tarifa_iva WHERE status = 1 ORDER BY tarifa ASC";
+        return $this->query($sql);
+    }
 }

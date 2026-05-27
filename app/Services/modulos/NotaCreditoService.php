@@ -1,0 +1,359 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services\modulos;
+
+use App\repositories\modulos\NotaCreditoRepository;
+use App\Rules\modulos\NotaCreditoRules;
+use App\Services\LogSistemaService;
+use App\Services\ClaveAccesoService;
+use App\Services\Xml\XmlNotaCreditoService;
+use App\core\Database;
+use Exception;
+
+class NotaCreditoService
+{
+    private $repository;
+    private $rules;
+    private $logService;
+
+    public function __construct(NotaCreditoRepository $repository, NotaCreditoRules $rules, LogSistemaService $logService)
+    {
+        $this->repository = $repository;
+        $this->rules      = $rules;
+        $this->logService = $logService;
+    }
+
+    public function crear(array $data): int
+    {
+        $this->rules->validar($data);
+
+        // Validar que la suma de NC no exceda el total de la factura
+        $numDocModificado = $data['num_doc_modificado'] ?? '';
+        if (!empty($numDocModificado)) {
+            $facturaRepo = new \App\repositories\modulos\FacturaVentaRepository();
+            $factura = $facturaRepo->getPorNumeroCompleto($numDocModificado, (int)$data['id_empresa']);
+            if ($factura) {
+                // Validar estado de la factura (Solo 'autorizado')
+                if (($factura['estado'] ?? '') !== 'autorizado') {
+                    throw new Exception("Solo se pueden generar notas de crédito para facturas en estado 'autorizado'.");
+                }
+
+                $sumaExistente = $this->repository->getSumaImporteNotasCredito($numDocModificado, (int)$data['id_empresa']);
+                $nuevoTotalNC = $sumaExistente + (float)($data['importe_total'] ?? 0);
+                
+                if ($nuevoTotalNC > (float)$factura['importe_total'] + 0.01) {
+                    throw new Exception("La suma de las notas de crédito ($nuevoTotalNC) excede el total de la factura (" . $factura['importe_total'] . ").");
+                }
+            }
+        }
+
+        $db = Database::getConnection();
+        $db->beginTransaction();
+
+        try {
+            // Generar Clave de Acceso (si es para SRI)
+            $empresaConfig = $data['empresa_config'] ?? [];
+            if (!empty($empresaConfig['ruc'])
+                && !empty($data['establecimiento'])
+                && !empty($data['punto_emision'])
+                && !empty($data['secuencial'])
+            ) {
+                $data['clave_acceso'] = ClaveAccesoService::generar(
+                    (string)($data['fecha_emision'] ?? date('Y-m-d')),
+                    ClaveAccesoService::NOTA_CREDITO,
+                    (string)$empresaConfig['ruc'],
+                    (string)($empresaConfig['tipo_ambiente'] ?? '1'),
+                    (string)$data['establecimiento'],
+                    (string)$data['punto_emision'],
+                    (string)$data['secuencial']
+                );
+            }
+
+            $idNC = $this->repository->insertCabecera($data);
+
+            foreach ($data['detalles'] as $det) {
+                $det['id_nota_credito'] = $idNC;
+                $idDetalle = $this->repository->insertDetalle($det);
+
+                if (!empty($det['impuestos'])) {
+                    foreach ($det['impuestos'] as $imp) {
+                        $imp['id_nota_credito_detalle'] = $idDetalle;
+                        $this->repository->insertImpuesto($imp);
+                    }
+                }
+
+                // Lógica de Inventario: Reintegrar stock si es una NC de Venta
+                if (!empty($det['id_producto']) && !empty($data['id_bodega'])) {
+                    $invService = new \App\Services\modulos\InventarioService(
+                        new \App\repositories\modulos\InventarioRepository(),
+                        $this->logService
+                    );
+                    $invService->registrarEntradaPorNC([
+                        'id_empresa'      => $data['id_empresa'],
+                        'id_producto'     => $det['id_producto'],
+                        'id_bodega'       => $data['id_bodega'],
+                        'cantidad'        => $det['cantidad'],
+                        'id_referencia'   => $idNC,
+                        'descripcion'     => "Devolución NC {$data['establecimiento']}-{$data['punto_emision']}-{$data['secuencial']}",
+                        'id_usuario'      => $data['id_usuario']
+                    ]);
+                }
+            }
+
+            $this->logService->registrar(
+                (int)$data['id_usuario'],
+                (int)$data['id_empresa'],
+                'crear',
+                'notas_credito_cabecera',
+                $idNC,
+                null,
+                ['secuencial' => $data['secuencial']]
+            );
+
+            $db->commit();
+            $this->generarYGuardarXml($idNC, $data['empresa_config'] ?? []);
+            return $idNC;
+        } catch (Exception $e) {
+            $db->rollBack();
+            throw $e;
+        }
+    }
+
+    public function actualizar(int $id, array $data): int
+    {
+        $this->rules->validar($data);
+
+        // Validar que la suma de NC no exceda el total de la factura (excluyendo la actual)
+        $numDocModificado = $data['num_doc_modificado'] ?? '';
+        if (!empty($numDocModificado)) {
+            $facturaRepo = new \App\repositories\modulos\FacturaVentaRepository();
+            $factura = $facturaRepo->getPorNumeroCompleto($numDocModificado, (int)$data['id_empresa']);
+            if ($factura) {
+                // Validar estado de la factura (Solo 'autorizado')
+                if (($factura['estado'] ?? '') !== 'autorizado') {
+                    throw new Exception("Solo se pueden generar notas de crédito para facturas en estado 'autorizado'.");
+                }
+
+                $sumaExistente = $this->repository->getSumaImporteNotasCredito($numDocModificado, (int)$data['id_empresa'], $id);
+                $nuevoTotalNC = $sumaExistente + (float)($data['importe_total'] ?? 0);
+                
+                if ($nuevoTotalNC > (float)$factura['importe_total'] + 0.01) {
+                    throw new Exception("La suma de las notas de crédito ($nuevoTotalNC) excede el total de la factura (" . $factura['importe_total'] . ").");
+                }
+            }
+        }
+
+        $db = Database::getConnection();
+        $db->beginTransaction();
+
+        try {
+            $ncOriginal = $this->repository->getPorId($id);
+            if (!$ncOriginal) {
+                throw new Exception("Nota de Crédito no encontrada.");
+            }
+
+            if ($ncOriginal['estado'] !== 'borrador') {
+                throw new Exception("Solo se pueden editar Notas de Crédito en estado borrador.");
+            }
+
+            // Regenerar Clave de Acceso si cambió algo clave
+            $empresaConfig = $data['empresa_config'] ?? [];
+            if (!empty($empresaConfig['ruc'])
+                && !empty($data['establecimiento'])
+                && !empty($data['punto_emision'])
+                && !empty($data['secuencial'])
+            ) {
+                $codigoNumerico = ClaveAccesoService::extraerCodigoNumerico($ncOriginal['clave_acceso'] ?? '');
+                $data['clave_acceso'] = ClaveAccesoService::generar(
+                    (string)($data['fecha_emision'] ?? date('Y-m-d')),
+                    ClaveAccesoService::NOTA_CREDITO,
+                    (string)$empresaConfig['ruc'],
+                    (string)($empresaConfig['tipo_ambiente'] ?? '1'),
+                    (string)$data['establecimiento'],
+                    (string)$data['punto_emision'],
+                    (string)$data['secuencial'],
+                    '1',
+                    $codigoNumerico
+                );
+            }
+
+            $this->repository->updateCabecera($id, $data);
+
+            // Revertir movimientos de inventario anteriores para esta NC antes de recrear
+            $invService = new \App\Services\modulos\InventarioService(
+                new \App\repositories\modulos\InventarioRepository(),
+                $this->logService
+            );
+            $invService->revertirMovimientosPorReferencia('nota_credito', $id, (int)$data['id_empresa'], (int)$data['id_usuario']);
+
+            $this->repository->deleteDetalles($id);
+
+            foreach ($data['detalles'] as $det) {
+                $det['id_nota_credito'] = $id;
+                $idDetalle = $this->repository->insertDetalle($det);
+
+                if (!empty($det['impuestos'])) {
+                    foreach ($det['impuestos'] as $imp) {
+                        $imp['id_nota_credito_detalle'] = $idDetalle;
+                        $this->repository->insertImpuesto($imp);
+                    }
+                }
+
+                // Registrar nuevos movimientos de inventario
+                if (!empty($det['id_producto']) && !empty($data['id_bodega'])) {
+                    $invService->registrarEntradaPorNC([
+                        'id_empresa'      => $data['id_empresa'],
+                        'id_producto'     => $det['id_producto'],
+                        'id_bodega'       => $data['id_bodega'],
+                        'cantidad'        => $det['cantidad'],
+                        'id_referencia'   => $id,
+                        'descripcion'     => "Devolución NC Actualizada {$data['secuencial']}",
+                        'id_usuario'      => $data['id_usuario']
+                    ]);
+                }
+            }
+
+            $this->logService->registrar(
+                (int)$data['id_usuario'],
+                (int)$data['id_empresa'],
+                'actualizar',
+                'notas_credito_cabecera',
+                $id,
+                $ncOriginal,
+                $data
+            );
+
+            $db->commit();
+            $this->generarYGuardarXml($id, $data['empresa_config'] ?? []);
+            return $id;
+        } catch (Exception $e) {
+            $db->rollBack();
+            throw $e;
+        }
+    }
+
+    public function eliminar(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $db = Database::getConnection();
+        $db->beginTransaction();
+
+        try {
+            $nc = $this->repository->getPorId($id);
+            if (!$nc || (int)$nc['id_empresa'] !== $idEmpresa) {
+                throw new Exception("Nota de Crédito no encontrada.");
+            }
+
+            if ($nc['estado'] !== 'borrador') {
+                throw new Exception("Solo se pueden eliminar Notas de Crédito en estado borrador.");
+            }
+
+            // Revertir inventario
+            if ((int)($nc['id_empresa'] ?? 0) > 0) {
+                $invService = new \App\Services\modulos\InventarioService(
+                    new \App\repositories\modulos\InventarioRepository(),
+                    $this->logService
+                );
+                $invService->revertirMovimientosPorReferencia('nota_credito', $id, $idEmpresa, $idUsuario);
+            }
+
+            $this->repository->eliminarLogico($id, $idUsuario);
+
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresa,
+                'eliminar',
+                'notas_credito_cabecera',
+                $id,
+                $nc,
+                null
+            );
+
+            $db->commit();
+        } catch (Exception $e) {
+            $db->rollBack();
+            throw $e;
+        }
+    }
+    public function anular(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $db = Database::getConnection();
+        $db->beginTransaction();
+
+        try {
+            $nc = $this->repository->getPorId($id);
+            if (!$nc || (int)$nc['id_empresa'] !== $idEmpresa) {
+                throw new Exception("Nota de Crédito no encontrada.");
+            }
+
+            if ($nc['estado'] === 'anulado') {
+                throw new Exception("La Nota de Crédito ya se encuentra anulada.");
+            }
+
+            // Revertir inventario (eliminar los ingresos generados por la NC)
+            $invService = new \App\Services\modulos\InventarioService(
+                new \App\repositories\modulos\InventarioRepository(),
+                $this->logService
+            );
+            $invService->revertirMovimientosPorReferencia('nota_credito', $id, $idEmpresa, $idUsuario);
+
+            $this->repository->updateEstado($id, 'anulado');
+
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresa,
+                'anular',
+                'notas_credito_cabecera',
+                $id,
+                $nc,
+                ['estado' => 'anulado']
+            );
+
+            $db->commit();
+        } catch (Exception $e) {
+            $db->rollBack();
+            throw $e;
+        }
+    }
+
+    // ── XML en base de datos ──────────────────────────────────────────────────
+
+    private function generarYGuardarXml(int $idNC, array $empresaConfig): void
+    {
+        try {
+            $cabecera = $this->repository->getPorId($idNC);
+            if (!$cabecera) return;
+
+            $detalles = $this->repository->getDetalles($idNC);
+            foreach ($detalles as &$d) {
+                $d['impuestos'] = $this->repository->getImpuestosDetalle((int)$d['id']);
+            }
+            unset($d);
+
+            // NC no tiene infoAdicional propia — se pasa vacío
+            $infoAdicional = [];
+
+            $empresaModel = new \App\models\Empresa();
+            $empresa      = $empresaModel->getPorId((int)$cabecera['id_empresa']) ?? [];
+
+            $dirEstablecimiento = null;
+            if (!empty($cabecera['id_establecimiento'])) {
+                try {
+                    $estRepo = new \App\repositories\modulos\EmpresaRepository();
+                    foreach ($estRepo->getEstablecimientos((int)$cabecera['id_empresa']) as $est) {
+                        if ((int)$est['id'] === (int)$cabecera['id_establecimiento']) {
+                            $dirEstablecimiento = $est['direccion'] ?? null;
+                            break;
+                        }
+                    }
+                } catch (\Throwable) {}
+            }
+
+            $xml = (new XmlNotaCreditoService())->generar($cabecera, $detalles, $infoAdicional, $empresa, $dirEstablecimiento);
+            $this->repository->updateDetalleXml($idNC, $xml);
+        } catch (\Throwable $e) {
+            error_log('[NC] Error generando XML para NC #' . $idNC . ': ' . $e->getMessage());
+        }
+    }
+}

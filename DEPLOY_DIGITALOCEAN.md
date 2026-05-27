@@ -34,24 +34,22 @@ Ejemplo: `ssh root@164.92.123.45`
 apt update && apt upgrade -y
 ```
 
-### 3.2 Instalar Nginx, PHP, MySQL y Git
+### 3.2 Instalar Nginx, PHP, PostgreSQL y Git
 ```bash
-apt install -y nginx php-fpm php-mysql php-mbstring php-xml php-curl php-json php-zip git unzip
+apt install -y nginx php-fpm php-pgsql postgresql postgresql-client php-mbstring php-xml php-curl php-json php-zip git unzip
 ```
 
-### 3.3 Configurar MySQL (base de datos)
+### 3.3 Configurar PostgreSQL (base de datos)
 ```bash
-mysql -u root -p
+sudo -u postgres psql
 ```
-*(La contraseña de root de MySQL suele estar vacía la primera vez, o en el email de DigitalOcean)*
 
-Dentro de MySQL, ejecuta (cambia `TU_CLAVE_SEGURA` por una contraseña real):
+Dentro de PostgreSQL, ejecuta (cambia `TU_CLAVE_SEGURA` por una contraseña real):
 ```sql
-CREATE DATABASE camagare_v8 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'camagare_user'@'localhost' IDENTIFIED BY 'TU_CLAVE_SEGURA';
-GRANT ALL PRIVILEGES ON camagare_v8.* TO 'camagare_user'@'localhost';
-FLUSH PRIVILEGES;
-EXIT;
+CREATE DATABASE camagare_v8 ENCODING 'UTF8';
+CREATE USER camagare_user WITH ENCRYPTED PASSWORD 'TU_CLAVE_SEGURA';
+GRANT ALL PRIVILEGES ON DATABASE camagare_v8 TO camagare_user;
+\q
 ```
 
 ### 3.4 Clonar el proyecto
@@ -79,11 +77,13 @@ nano /var/www/sistema/config/database.php
 Reemplaza el bloque `return [...]` al final con (usa la contraseña que definiste antes):
 ```php
 return [
+    'driver' => 'pgsql',
     'host' => '127.0.0.1',
+    'port' => 5432,
     'user' => 'camagare_user',
     'pass' => 'TU_CLAVE_SEGURA',
     'name' => 'camagare_v8',
-    'charset' => 'utf8mb4',
+    'charset' => 'UTF8',
 ];
 ```
 Guarda con `Ctrl+O`, `Enter`, y sal con `Ctrl+X`.
@@ -149,15 +149,15 @@ systemctl start php8.2-fpm
 
 ### 3.10 Importar la base de datos (desde tu PC)
 
-En tu PC (con XAMPP):
+En tu PC (ruta a PostgreSQL bin):
 ```powershell
-cd c:\xampp\mysql\bin
-.\mysqldump.exe -u root camagare_v8 > C:\xampp\htdocs\backup_db.sql
+cd "C:\Program Files\PostgreSQL\16\bin"
+.\pg_dump.exe -U postgres -d camagare_v8 > C:\xampp\htdocs\backup_db.sql
 ```
 
 Copia el archivo al servidor (con SCP o WinSCP), luego en el servidor:
 ```bash
-mysql -u camagare_user -p camagare_v8 < /ruta/al/backup_db.sql
+sudo -u postgres psql -d camagare_v8 < /ruta/al/backup_db.sql
 ```
 
 ---

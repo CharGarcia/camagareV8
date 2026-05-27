@@ -141,4 +141,32 @@ class SustentoTributario extends BaseModel
         }
         return false;
     }
+
+    /**
+     * Obtiene los sustentos tributarios que permiten un tipo de comprobante específico.
+     * La columna tipo_comprobante contiene códigos separados por coma.
+     */
+    public function getPorTipoComprobante(string $tipo): array
+    {
+        $tipo = $this->escape(trim($tipo));
+        // Usamos una expresión regular de Postgres para buscar el código exacto entre comas o al inicio/fin
+        // O más simple: string_to_array y ANY
+        $sql = "SELECT id_sustento AS id, codigo, nombre, tipo_comprobante 
+                FROM sustento_tributario 
+                WHERE status = 1 
+                AND '{$tipo}' = ANY(string_to_array(tipo_comprobante, ','))
+                ORDER BY codigo ASC";
+        
+        try {
+            return $this->query($sql);
+        } catch (\Throwable $e) {
+            // Reintento con ID si id_sustento falla
+            $sql = "SELECT id, codigo, nombre, tipo_comprobante 
+                    FROM sustento_tributario 
+                    WHERE status = 1 
+                    AND '{$tipo}' = ANY(string_to_array(tipo_comprobante, ','))
+                    ORDER BY codigo ASC";
+            return $this->query($sql);
+        }
+    }
 }

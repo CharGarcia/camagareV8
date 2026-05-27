@@ -1,0 +1,553 @@
+<?php
+
+namespace App\repositories\modulos;
+
+use App\models\BaseModel;
+
+class EmpresaRepository extends BaseModel
+{
+    public function getEmisorConfig(int $idEmpresa): ?array
+    {
+        $id = (int) $idEmpresa;
+                $sql = "SELECT id, ruc, nombre, nombre_comercial, establecimiento, direccion, telefono, mail,
+                       resolucion_contribuyente, id_tipo_regimen, tipo_ambiente, agente_retencion, tipo_emision,
+                       nom_rep_legal, ced_rep_legal, nombre_contador, ruc_contador, cod_prov, cod_ciudad,
+                       tipo, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, estado,
+                       cancelar_renovacion
+                FROM empresas
+                WHERE id = {$id} AND eliminado = false";
+        $res = $this->query($sql);
+        return $res[0] ?? null;
+    }
+
+    public function getEmpresasByRuc(string $ruc): array
+    {
+        $ruc = $this->escape($ruc);
+        $sql = "SELECT id, ruc, nombre FROM empresas WHERE ruc = '{$ruc}' AND eliminado = false";
+        return $this->query($sql);
+    }
+
+    public function updateEmpresa(int $idEmpresa, array $data): bool
+    {
+        $id = (int) $idEmpresa;
+        $user = (int) ($_SESSION['id_usuario'] ?? 0);
+        $sets = [];
+        
+        // Lista de columnas permitidas en la tabla 'empresas'
+        $allowed = [
+            'nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion',
+            'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov',
+            'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'tipo',
+            'resolucion_contribuyente', 'id_tipo_regimen', 'tipo_ambiente',
+            'agente_retencion', 'tipo_emision', 'cancelar_renovacion',
+        ];
+
+        foreach ($data as $k => $v) {
+            if (in_array($k, $allowed, true)) {
+                $val = $this->escape((string) $v);
+                $sets[] = "{$k} = '{$val}'";
+            }
+        }
+        
+        if (empty($sets)) return true;
+
+        // Incluimos auditoría si las columnas existen (ya las aseguramos arriba)
+        $sql = "UPDATE empresas SET " . implode(', ', $sets) . ", updated_at = NOW(), updated_by = {$user} WHERE id = {$id}";
+        return $this->execute($sql);
+    }
+
+    public function saveCorreoConfig(int $idEmpresa, array $data): bool
+    {
+        $this->db->beginTransaction();
+        try {
+            $id = (int) $idEmpresa;
+            $ssl = ($data['ssl_habilitado'] ?? false) ? 'true' : 'false';
+            $envio = ($data['envio_automatico'] ?? false) ? 'true' : 'false';
+            $asunto = $this->escape($data['asunto_correo'] ?? '');
+            $host = $this->escape($data['host'] ?? '');
+            $puerto = (int) ($data['puerto'] ?? 0);
+            $correo = $this->escape($data['correo_emisor'] ?? '');
+            $pass = $this->escape($data['password_correo_emisor'] ?? '');
+            $tipoCorreo = $this->escape($data['tipo_correo'] ?? 'camagare');
+            $cuerpoCorreo = $this->escape($data['cuerpo_correo'] ?? '');
+            $user = (int) ($_SESSION['id_usuario'] ?? 0);
+
+            $check = $this->query("SELECT id FROM empresa_correo WHERE id_empresa = {$id} AND eliminado = false");
+            if (!empty($check)) {
+                $sql = "UPDATE empresa_correo SET 
+                        ssl_habilitado = {$ssl}, envio_automatico = {$envio}, asunto_correo = '{$asunto}', host = '{$host}', 
+                        puerto = {$puerto}, correo_emisor = '{$correo}', password_correo_emisor = '{$pass}',
+                        tipo_correo = '{$tipoCorreo}', cuerpo_correo = '{$cuerpoCorreo}',
+                        updated_at = NOW(), updated_by = {$user}
+                        WHERE id_empresa = {$id}";
+            } else {
+                $sql = "INSERT INTO empresa_correo (id_empresa, ssl_habilitado, envio_automatico, asunto_correo, host, puerto, correo_emisor, password_correo_emisor, tipo_correo, cuerpo_correo, created_by, updated_by)
+                        VALUES ({$id}, {$ssl}, {$envio}, '{$asunto}', '{$host}', {$puerto}, '{$correo}', '{$pass}', '{$tipoCorreo}', '{$cuerpoCorreo}', {$user}, {$user})";
+            }
+            $this->execute($sql);
+            $this->db->commit();
+            return true;
+        } catch (\Exception $e) {
+            $this->db->rollBack();
+            return false;
+        }
+    }
+
+    public function getCorreoConfig(int $idEmpresa): ?array
+    {
+        $id = (int) $idEmpresa;
+        $res = $this->query("SELECT * FROM empresa_correo WHERE id_empresa = {$id} AND eliminado = false");
+        return $res[0] ?? null;
+    }
+
+    public function saveFirma(int $idEmpresa, array $data): bool
+    {
+        $this->db->beginTransaction();
+        try {
+            $id = (int) $idEmpresa;
+            $nom = $this->escape($data['archivo_nombre'] ?? '');
+            $ruta = $this->escape($data['archivo_ruta'] ?? '');
+            $pass = $this->escape($data['password_firma'] ?? '');
+            $fechaEmi = !empty($data['fecha_emision']) ? "'" . $this->escape($data['fecha_emision']) . "'" : "NULL";
+            $fechaExp = !empty($data['fecha_expiracion']) ? "'" . $this->escape($data['fecha_expiracion']) . "'" : "NULL";
+            $user = (int) ($_SESSION['id_usuario'] ?? 0);
+
+            $sql = "INSERT INTO empresa_firma (id_empresa, archivo_nombre, archivo_ruta, password_firma, es_activo, fecha_emision, fecha_expiracion, created_by, updated_by)
+                    VALUES ({$id}, '{$nom}', '{$ruta}', '{$pass}', false, {$fechaEmi}, {$fechaExp}, {$user}, {$user})";
+            $this->execute($sql);
+
+            // Determinar cuál es la firma más actualizada (mayor fecha de expiración) y ponerla como activa
+            $this->execute("UPDATE empresa_firma SET es_activo = false WHERE id_empresa = {$id}");
+            $this->execute("
+                UPDATE empresa_firma 
+                SET es_activo = true 
+                WHERE id = (
+                    SELECT id 
+                    FROM empresa_firma 
+                    WHERE id_empresa = {$id} AND eliminado = false 
+                    ORDER BY fecha_expiracion DESC NULLS LAST, created_at DESC 
+                    LIMIT 1
+                )
+            ");
+
+            $this->db->commit();
+            return true;
+        } catch (\Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    public function getFirmas(int $idEmpresa): array
+    {
+        $id = (int) $idEmpresa;
+        return $this->query("SELECT * FROM empresa_firma WHERE id_empresa = {$id} AND eliminado = false ORDER BY created_at DESC");
+    }
+
+    public function getEstablecimientos(int $idEmpresa): array
+    {
+        $id = (int) $idEmpresa;
+        $sql = "SELECT * FROM empresa_establecimiento WHERE id_empresa = {$id} AND eliminado = false ORDER BY codigo ASC";
+        return $this->query($sql);
+    }
+
+    public function saveEstablecimiento(int $idEmpresa, array $data): int
+    {
+        $id = (int) $idEmpresa;
+        $nom = $this->escape($data['nombre'] ?? '');
+        $cod = $this->escape($data['codigo'] ?? '001');
+        $dir = $this->escape($data['direccion'] ?? '');
+        $tipo = $this->escape($data['tipo'] ?? 'Matriz');
+        $logo = $this->escape($data['logo_ruta'] ?? '');
+        $leyendaTitulo = $this->escape($data['leyenda_pdf_titulo'] ?? '');
+        $leyendaMensaje = $this->escape($data['leyenda_pdf_mensaje'] ?? '');
+        $user = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        $sql = "INSERT INTO empresa_establecimiento (id_empresa, nombre, codigo, direccion, tipo, logo_ruta, leyenda_pdf_titulo, leyenda_pdf_mensaje, created_by, updated_by)
+                VALUES ({$id}, '{$nom}', '{$cod}', '{$dir}', '{$tipo}', '{$logo}', '{$leyendaTitulo}', '{$leyendaMensaje}', {$user}, {$user})";
+        $this->execute($sql);
+        return $this->lastInsertId('empresa_establecimiento_id_seq');
+    }
+
+    public function updateEstablecimiento(int $idEst, int $idEmpresa, array $data): bool
+    {
+        $id = (int) $idEst;
+        $user = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        // Validar si es matriz 001
+        $current = $this->query("SELECT codigo, tipo FROM empresa_establecimiento WHERE id = {$id} AND id_empresa = {$idEmpresa}");
+        if (!empty($current)) {
+            $estActual = $current[0];
+            if ($estActual['codigo'] === '001' || strtolower($estActual['tipo']) === 'matriz') {
+                if (isset($data['codigo']) && $data['codigo'] !== $estActual['codigo']) {
+                    throw new \Exception('El código del establecimiento matriz no puede ser cambiado.');
+                }
+                if (isset($data['tipo']) && strtolower($data['tipo']) !== 'matriz') {
+                    throw new \Exception('El tipo del establecimiento matriz no puede ser cambiado.');
+                }
+                if (isset($data['estado']) && strtolower($data['estado']) !== 'activo') {
+                    throw new \Exception('El establecimiento matriz debe estar siempre activo.');
+                }
+            }
+        }
+
+        $nom = $this->escape($data['nombre'] ?? '');
+        $cod = $this->escape($data['codigo'] ?? '001');
+        $dir = $this->escape($data['direccion'] ?? '');
+        $tipo = $this->escape($data['tipo'] ?? 'Matriz');
+        $est = $this->escape($data['estado'] ?? 'activo');
+        $logo = isset($data['logo_ruta']) ? $this->escape($data['logo_ruta']) : null;
+        
+        $leyendaTitulo = $this->escape($data['leyenda_pdf_titulo'] ?? '');
+        $leyendaMensaje = $this->escape($data['leyenda_pdf_mensaje'] ?? '');
+
+        $logoSql = ($logo !== null) ? ", logo_ruta = '{$logo}'" : "";
+
+        $sql = "UPDATE empresa_establecimiento SET 
+                nombre = '{$nom}', codigo = '{$cod}', direccion = '{$dir}', tipo = '{$tipo}',
+                estado = '{$est}', leyenda_pdf_titulo = '{$leyendaTitulo}', leyenda_pdf_mensaje = '{$leyendaMensaje}' {$logoSql}, updated_at = NOW(), updated_by = {$user}
+                WHERE id = {$id} AND id_empresa = {$idEmpresa}";
+        return $this->execute($sql);
+    }
+
+    public function deleteEstablecimiento(int $idEst, int $idEmpresa): bool
+    {
+        $id = (int) $idEst;
+        $user = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        // Validar si es matriz 001
+        $current = $this->query("SELECT codigo, tipo FROM empresa_establecimiento WHERE id = {$id} AND id_empresa = {$idEmpresa}");
+        if (!empty($current)) {
+            $estActual = $current[0];
+            if ($estActual['codigo'] === '001' || strtolower($estActual['tipo']) === 'matriz') {
+                throw new \Exception('El establecimiento matriz no puede ser eliminado.');
+            }
+        }
+
+        $sql = "UPDATE empresa_establecimiento SET eliminado = true, deleted_at = NOW(), deleted_by = {$user}
+                WHERE id = {$id} AND id_empresa = {$idEmpresa}";
+        return $this->execute($sql);
+    }
+
+    public function getPrimerEstablecimientoId(int $idEmpresa): int
+    {
+        $id  = (int) $idEmpresa;
+        $res = $this->query("SELECT id FROM empresa_establecimiento WHERE id_empresa = {$id} AND eliminado = false ORDER BY id ASC LIMIT 1");
+        return (int) ($res[0]['id'] ?? 0);
+    }
+
+    public function getEstablecimientoConfig(int $idEst): ?array
+    {
+        $id = (int) $idEst;
+        $sql = "SELECT id, decimales_cantidad, decimales_precio, calculo_iva_facturacion,
+                       facturacion_inventario, metodo_costeo, facturacion_libre,
+                       factura_solo_stock_positivo,
+                       obligatorio_lotes, obligatorio_caducidad, obligatorio_nup,
+                       mostrar_cajero_factura, mostrar_vendedor_factura,
+                       mostrar_unidad_medida, valor_limite_consumidor_final,
+                       id_forma_pago_sri_def,
+                       editar_precio_factura, editar_iva_factura, editar_descuento_factura,
+                       mostrar_propina_factura
+                FROM empresa_establecimiento
+                WHERE id = {$id} AND eliminado = false";
+        $res = $this->query($sql);
+        return $res[0] ?? null;
+    }
+
+    public function updateEstablecimientoConfig(int $idEst, array $data): bool
+    {
+        $id   = (int) $idEst;
+        $user = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        $allowed = [
+            'decimales_cantidad', 'decimales_precio', 'calculo_iva_facturacion',
+            'facturacion_inventario', 'metodo_costeo', 'facturacion_libre',
+            'factura_solo_stock_positivo',
+            'obligatorio_lotes', 'obligatorio_caducidad', 'obligatorio_nup',
+            'mostrar_cajero_factura', 'mostrar_vendedor_factura',
+            'mostrar_unidad_medida', 'valor_limite_consumidor_final',
+            'id_forma_pago_sri_def',
+            'editar_precio_factura', 'editar_iva_factura', 'editar_descuento_factura',
+            'mostrar_propina_factura',
+        ];
+
+        // Campos numéricos que admiten NULL
+        $numericNullable = ['valor_limite_consumidor_final', 'id_forma_pago_sri_def'];
+
+        $sets = [];
+        foreach ($data as $k => $v) {
+            if (in_array($k, $allowed, true)) {
+                if (in_array($k, $numericNullable, true) && ($v === 'NULL' || $v === null || $v === '')) {
+                    $sets[] = "{$k} = NULL";
+                } elseif (in_array($k, $numericNullable, true)) {
+                    $sets[] = "{$k} = " . (float) $v;
+                } else {
+                    $val    = $this->escape((string) $v);
+                    $sets[] = "{$k} = '{$val}'";
+                }
+            }
+        }
+
+        if (empty($sets)) return true;
+
+        $sql = "UPDATE empresa_establecimiento SET " . implode(', ', $sets)
+             . ", updated_at = NOW(), updated_by = {$user} WHERE id = {$id}";
+        return $this->execute($sql);
+    }
+
+    public function getPuntosEmision(int $idEmpresa): array
+    {
+        $id = (int) $idEmpresa;
+        $sql = "SELECT p.*, e.codigo AS cod_establecimiento 
+                FROM empresa_punto_emision p
+                LEFT JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+                WHERE p.id_empresa = {$id} AND p.eliminado = false 
+                ORDER BY e.codigo, p.codigo_punto ASC";
+        return $this->query($sql);
+    }
+
+    public function savePuntoEmision(int $idEmpresa, array $data): int
+    {
+        $id = (int) $idEmpresa;
+        $est_id = (int) ($data['id_establecimiento'] ?? 0);
+        $nom = $this->escape($data['nombre'] ?? '');
+        $cod = $this->escape($data['codigo_punto'] ?? '001');
+        $logo = $this->escape($data['logo_ruta'] ?? '');
+        $est = $this->escape($data['estado'] ?? 'activo');
+        $user = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        $sql = "INSERT INTO empresa_punto_emision (id_empresa, id_establecimiento, nombre, codigo_punto, logo_ruta, estado, created_by, updated_by)
+                VALUES ({$id}, {$est_id}, '{$nom}', '{$cod}', '{$logo}', '{$est}', {$user}, {$user})";
+        $this->execute($sql);
+        return $this->lastInsertId('empresa_punto_emision_id_seq');
+    }
+
+    public function updatePuntoEmision(int $idPunto, int $idEmpresa, array $data): bool
+    {
+        $id = (int) $idPunto;
+        $est_id = (int) ($data['id_establecimiento'] ?? 0);
+        $nom = $this->escape($data['nombre'] ?? '');
+        $cod = $this->escape($data['codigo_punto'] ?? '001');
+        $est = $this->escape($data['estado'] ?? 'activo');
+        $user = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        $sql = "UPDATE empresa_punto_emision SET 
+                id_establecimiento = {$est_id}, nombre = '{$nom}', codigo_punto = '{$cod}', 
+                estado = '{$est}', updated_at = NOW(), updated_by = {$user}
+                WHERE id = {$id} AND id_empresa = {$idEmpresa}";
+        return $this->execute($sql);
+    }
+
+    public function deletePuntoEmision(int $idPunto, int $idEmpresa): bool
+    {
+        $id = (int) $idPunto;
+        $user = (int) ($_SESSION['id_usuario'] ?? 0);
+        $sql = "UPDATE empresa_punto_emision SET eliminado = true, deleted_at = NOW(), deleted_by = {$user}
+                WHERE id = {$id} AND id_empresa = {$idEmpresa}";
+        return $this->execute($sql);
+    }
+
+    public function updateSecuencial(int $idPunto, string $tipo, int $numero, int $idEmpresa): bool
+    {
+        $id = (int) $idPunto;
+        $t = $this->escape($tipo);
+        $n = (int) $numero;
+        $idEmp = (int) $idEmpresa;
+        $user = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        $check = $this->query("SELECT id FROM empresa_secuencial WHERE id_punto_emision = {$id} AND tipo_documento = '{$t}' AND id_empresa = {$idEmp} AND eliminado = false");
+        if (!empty($check)) {
+            $sql = "UPDATE empresa_secuencial SET secuencial_inicial = {$n}, updated_at = NOW(), updated_by = {$user}
+                    WHERE id_punto_emision = {$id} AND tipo_documento = '{$t}' AND id_empresa = {$idEmp}";
+        } else {
+            $sql = "INSERT INTO empresa_secuencial (id_punto_emision, id_empresa, tipo_documento, secuencial_inicial, created_by, updated_by)
+                    VALUES ({$id}, {$idEmp}, '{$t}', {$n}, {$user}, {$user})";
+        }
+        return $this->execute($sql);
+    }
+
+    public function getSecuencial(int $idPunto, string $tipo, int $idEmpresa = 0): int
+    {
+        $id = (int) $idPunto;
+        $t = $this->escape($tipo);
+        $where = "id_punto_emision = {$id} AND tipo_documento = '{$t}' AND eliminado = false";
+        if ($idEmpresa > 0) $where .= " AND id_empresa = {$idEmpresa}";
+        $res = $this->query("SELECT secuencial_inicial FROM empresa_secuencial WHERE {$where}");
+        return (int) ($res[0]['secuencial_inicial'] ?? 1);
+    }
+
+    public function getSecuencialesByPunto(int $idPunto, int $idEmpresa): array
+    {
+        $id = (int) $idPunto;
+        $idEmp = (int) $idEmpresa;
+        $res = $this->query("SELECT tipo_documento, secuencial_inicial FROM empresa_secuencial WHERE id_punto_emision = {$id} AND id_empresa = {$idEmp} AND eliminado = false");
+        $map = [];
+        foreach ($res as $row) {
+            $map[$row['tipo_documento']] = (int) $row['secuencial_inicial'];
+        }
+        return $map;
+    }
+
+    public function getIvaCasilleros(int $idEmpresa): array
+    {
+        $id = (int) $idEmpresa;
+        $sql = "SELECT codigo, casillero_subtotal_ventas, casillero_iva_ventas,
+                       casillero_subtotal_compras, casillero_iva_compras,
+                       COALESCE(casillero_iva_compras, '') AS cas_iva_compras,
+                       COALESCE(casillero_iva_ventas, '')  AS cas_iva_ventas,
+                       COALESCE(tabla, 'iva')              AS tabla
+                FROM empresa_casilleros_iva_sri
+                WHERE id_empresa = {$id} AND eliminado = false";
+        $res = $this->query($sql);
+
+        $mapping = [];
+        foreach ($res as $row) {
+            $mapping[$row['codigo']] = [
+                'subtotal_ventas'  => $row['casillero_subtotal_ventas'],
+                'iva_ventas'       => $row['casillero_iva_ventas'],
+                'subtotal_compras' => $row['casillero_subtotal_compras'],
+                'iva_compras'      => $row['casillero_iva_compras'],
+                'cas_iva_compras'  => $row['cas_iva_compras'],
+                'cas_iva_ventas'   => $row['cas_iva_ventas'],
+                'tabla'            => $row['tabla'],
+            ];
+        }
+        return $mapping;
+    }
+
+    public function updateIvaCasillero(int $idEmpresa, int $idTarifa, array $data): bool
+    {
+        $idEmp  = (int) $idEmpresa;
+        $idTar  = (int) $idTarifa;
+        $sv     = $this->escape($data['subtotal_ventas']  ?? '');
+        $iv     = $this->escape($data['iva_ventas']       ?? '');
+        $sc     = $this->escape($data['subtotal_compras'] ?? '');
+        $ic     = $this->escape($data['iva_compras']      ?? '');
+        $civ_c  = $this->escape($data['cas_iva_compras']  ?? '');
+        $civ_v  = $this->escape($data['cas_iva_ventas']   ?? '');
+        $tabla  = $this->escape($data['tabla']            ?? 'iva');
+        $user   = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        $check = $this->query("SELECT id FROM empresa_casilleros_iva_sri WHERE id_empresa = {$idEmp} AND codigo = {$idTar} AND eliminado = false");
+        if (!empty($check)) {
+            $sql = "UPDATE empresa_casilleros_iva_sri SET
+                    casillero_subtotal_ventas  = '{$sv}',
+                    casillero_iva_ventas       = '{$iv}',
+                    casillero_subtotal_compras = '{$sc}',
+                    casillero_iva_compras      = '{$ic}',
+                    tabla                      = '{$tabla}',
+                    updated_at = NOW(), updated_by = {$user}
+                    WHERE id_empresa = {$idEmp} AND codigo = {$idTar}";
+
+        } else {
+            $sql = "INSERT INTO empresa_casilleros_iva_sri
+                        (id_empresa, codigo, casillero_subtotal_ventas, casillero_iva_ventas,
+                         casillero_subtotal_compras, casillero_iva_compras, tabla, created_by, updated_by)
+                    VALUES ({$idEmp}, {$idTar}, '{$sv}', '{$iv}', '{$sc}', '{$ic}', '{$tabla}', {$user}, {$user})";
+        }
+        return $this->execute($sql);
+    }
+
+    public function getRetencionesSriIva(): array
+    {
+        $sql = "SELECT id, concepto_ret, porcentaje_ret AS porcentaje
+                FROM retenciones_sri
+                WHERE impuesto_ret = 'IVA'
+                ORDER BY porcentaje_ret ASC";
+        return $this->query($sql);
+    }
+
+    public function getRetencionesCasilleros(int $idEmpresa): array
+    {
+        $id  = (int) $idEmpresa;
+        $sql = "SELECT codigo, casillero_iva_compras, casillero_iva_ventas
+                FROM empresa_casilleros_iva_sri
+                WHERE id_empresa = {$id} AND tabla = 'retenciones' AND eliminado = false";
+        $res = $this->query($sql);
+
+        $map = [];
+        foreach ($res as $row) {
+            $map[(int)$row['codigo']] = [
+                'casillero_compras' => $row['casillero_iva_compras'],
+                'casillero_ventas'  => $row['casillero_iva_ventas'],
+            ];
+        }
+        return $map;
+    }
+
+    public function updateRetencionCasillero(int $idEmpresa, int $idRetencion, array $data): void
+    {
+        $idEmp = (int) $idEmpresa;
+        $idRet = (int) $idRetencion;
+        $comp  = $this->escape($data['cas_compras'] ?? '');
+        $ven   = $this->escape($data['cas_ventas']  ?? '');
+        $user  = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        $check = $this->query("SELECT id FROM empresa_casilleros_iva_sri WHERE id_empresa = {$idEmp} AND codigo = {$idRet} AND tabla = 'retenciones' AND eliminado = false");
+        if (!empty($check)) {
+            $sql = "UPDATE empresa_casilleros_iva_sri SET
+                    casillero_iva_compras = '{$comp}',
+                    casillero_iva_ventas  = '{$ven}',
+                    updated_at = NOW(), updated_by = {$user}
+                    WHERE id_empresa = {$idEmp} AND codigo = {$idRet} AND tabla = 'retenciones'";
+        } else {
+            $sql = "INSERT INTO empresa_casilleros_iva_sri
+                        (id_empresa, codigo, tabla,
+                         casillero_subtotal_ventas, casillero_iva_ventas,
+                         casillero_subtotal_compras, casillero_iva_compras,
+                         created_by, updated_by)
+                    VALUES ({$idEmp}, {$idRet}, 'retenciones',
+                            '', '{$ven}', '', '{$comp}',
+                            {$user}, {$user})";
+        }
+        $this->execute($sql);
+    }
+
+    public function getIces(int $idEmpresa): array
+    {
+        $id = (int) $idEmpresa;
+        $sql = "SELECT i.*
+                FROM empresa_ice i
+                WHERE i.id_empresa = {$id} AND i.eliminado = false
+                ORDER BY i.nombre_ice ASC";
+        return $this->query($sql);
+    }
+
+    public function saveIce(array $data): bool
+    {
+        $id = isset($data['id']) ? (int)$data['id'] : 0;
+        $idEmpresa = (int)$data['id_empresa'];
+        $casillero = $this->escape($data['casillero_ice'] ?? '');
+        $casilleroBase = $this->escape($data['casillero_base_ice'] ?? '');
+        $codigo = $this->escape($data['codigo_ats'] ?? '');
+        $nombre = $this->escape($data['nombre_ice'] ?? '');
+        $valor = (float)($data['valor_ice'] ?? 0);
+        $user = (int)($_SESSION['id_usuario'] ?? 0);
+
+        if ($id > 0) {
+            $sql = "UPDATE empresa_ice SET 
+                    casillero_ice = '{$casillero}',
+                    casillero_base_ice = '{$casilleroBase}',
+                    codigo_ats = '{$codigo}',
+                    nombre_ice = '{$nombre}',
+                    valor_ice = {$valor},
+                    updated_at = NOW(),
+                    updated_by = {$user}
+                    WHERE id = {$id} AND id_empresa = {$idEmpresa}";
+        } else {
+            $sql = "INSERT INTO empresa_ice (id_empresa, casillero_ice, casillero_base_ice, codigo_ats, nombre_ice, valor_ice, created_by, updated_by)
+                    VALUES ({$idEmpresa}, '{$casillero}', '{$casilleroBase}', '{$codigo}', '{$nombre}', {$valor}, {$user}, {$user})";
+        }
+        return $this->execute($sql);
+    }
+
+    public function deleteIce(int $id, int $idEmpresa): bool
+    {
+        $id = (int)$id;
+        $idEmpresa = (int)$idEmpresa;
+        $user = (int)($_SESSION['id_usuario'] ?? 0);
+        $sql = "UPDATE empresa_ice SET eliminado = true, deleted_at = NOW(), deleted_by = {$user}
+                WHERE id = {$id} AND id_empresa = {$idEmpresa}";
+        return $this->execute($sql);
+    }
+}

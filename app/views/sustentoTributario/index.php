@@ -84,7 +84,7 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                         data-status="<?= $status ?>">
                         <td><code><?= htmlspecialchars($r['codigo'] ?? '') ?></code></td>
                         <td><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
-                        <td><small><?= htmlspecialchars($r['tipo_comprobante'] ?? '') ?: '—' ?></small></td>
+                        <td><small><?= htmlspecialchars($r['tipo_comprobante'] ?? '') ?: '-' ?></small></td>
                         <td class="text-center">
                             <?php if ($status): ?>
                             <span class="badge bg-success">Activo</span>
