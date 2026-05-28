@@ -78,19 +78,27 @@ class FacturaVentaPdfService
             $rutasPosibles[] = $empresa['logo'];
         }
 
+        // DEBUG TEMPORAL - eliminar después
+        error_log('[PDF LOGO DEBUG] empresa keys: ' . implode(', ', array_keys($empresa)));
+        error_log('[PDF LOGO DEBUG] logo_ruta: ' . ($empresa['logo_ruta'] ?? 'NO EXISTE'));
+        error_log('[PDF LOGO DEBUG] logo: ' . ($empresa['logo'] ?? 'NO EXISTE'));
+        error_log('[PDF LOGO DEBUG] MVC_ROOT: ' . \MVC_ROOT);
+
         foreach ($rutasPosibles as $ruta) {
             $cleanRuta = ltrim($ruta, '/');
             // Si la ruta en DB ya incluye 'sistema/' pero MVC_ROOT también, lo removemos para evitar duplicación
             if (strpos($cleanRuta, 'sistema/') === 0) {
                 $cleanRuta = substr($cleanRuta, 8);
             }
-            
+
             $testPath = \MVC_ROOT . '/' . $cleanRuta;
+            error_log('[PDF LOGO DEBUG] ruta original: ' . $ruta . ' => testPath: ' . $testPath . ' => existe: ' . (file_exists($testPath) ? 'SI' : 'NO'));
             if (file_exists($testPath)) {
                 $logoPath = $testPath;
                 break;
             }
         }
+        error_log('[PDF LOGO DEBUG] logoPath final: ' . ($logoPath ?: 'VACÍO - sin logo'));
         
         $pdf->SetLineWidth(0.3);
         $pdf->SetDrawColor(0, 0, 0);
