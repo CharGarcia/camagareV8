@@ -112,10 +112,8 @@ class DocumentoAutomatedRegisterService
                 ];
             }
 
-            // 1. Verificar ambiente (2 = Producción)
-            if ($ambiente !== '2') {
-                return ['ok' => false, 'error' => "Ambiente de pruebas ($ambiente). Solo se procesan documentos de Producción (2).", 'estado_registro' => 'ERROR'];
-            }
+            // 1. Ya no bloqueamos si es pruebas, simplemente lo procesamos y se guardará con su ambiente respectivo.
+            // Esto permite que el sistema de ambientes lo filtre en las vistas correspondientes.
 
             // Obtener RUC de la empresa actual
             $empresaActual = $this->empresaRepo->getEmisorConfig($idEmpresa);
@@ -221,11 +219,11 @@ class DocumentoAutomatedRegisterService
 
             // 2. Lógica por tipo de documento
             $res = match ($codDoc) {
-                '01' => $this->handleFactura($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $esGastoPersonal),
-                '03' => $this->handleLiquidacion($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $esGastoPersonal),
-                '04' => $this->handleNotaCredito($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $esGastoPersonal),
-                '05' => $this->handleNotaDebito($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $esGastoPersonal),
-                '07' => $this->handleRetencion($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi),
+                '01' => $this->handleFactura($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambiente, $esGastoPersonal),
+                '03' => $this->handleLiquidacion($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambiente, $esGastoPersonal),
+                '04' => $this->handleNotaCredito($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambiente, $esGastoPersonal),
+                '05' => $this->handleNotaDebito($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambiente, $esGastoPersonal),
+                '07' => $this->handleRetencion($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambiente),
                 default => ['ok' => false, 'error' => "Tipo de documento no soportado ($codDoc)", 'estado_registro' => 'ERROR']
             };
 
@@ -257,7 +255,7 @@ class DocumentoAutomatedRegisterService
         }
     }
 
-    private function handleFactura(SimpleXMLElement $xml, int $idEmpresa, int $idUsuario, bool $esEmitida, bool $esGastoPersonal = false): array
+    private function handleFactura(SimpleXMLElement $xml, int $idEmpresa, int $idUsuario, bool $esEmitida, string $ambiente, bool $esGastoPersonal = false): array
     {
         $it = $xml->infoTributaria;
         $info = $xml->infoFactura;
@@ -270,7 +268,7 @@ class DocumentoAutomatedRegisterService
             }
             $idCliente = $this->getOrCreateCliente($info->identificacionComprador, $info->razonSocialComprador, $info->direccionComprador, $idEmpresa, $idUsuario, $tipoId);
             
-            $idFactura = $this->insertarVenta($xml, $idEmpresa, $idCliente, $idUsuario);
+            $idFactura = $this->insertarVenta($xml, $idEmpresa, $idCliente, $idUsuario, $ambiente);
             return ['ok' => true, 'mensaje' => "Venta registrada con éxito.", 'id' => $idFactura, 'existe' => false];
         } else {
             if ($this->existeEnTabla('compras_cabecera', 'numero_autorizacion', $claveAcceso, $idEmpresa)) {
@@ -286,7 +284,7 @@ class DocumentoAutomatedRegisterService
                 $idSustento = $this->getSustentoIdByCodigo('01');
             }
 
-            $idCompra = $this->insertarCompra($xml, $idEmpresa, $idProv, $idUsuario, $esGastoPersonal, $idSustento);
+            $idCompra = $this->insertarCompra($xml, $idEmpresa, $idProv, $idUsuario, $ambiente, $esGastoPersonal, $idSustento);
 
             $msgRet = "";
             $msgEgreso = "";
@@ -306,7 +304,7 @@ class DocumentoAutomatedRegisterService
         }
     }
 
-    private function insertarVenta(SimpleXMLElement $xml, int $idEmpresa, int $idCliente, int $idUsuario): int
+    private function insertarVenta(SimpleXMLElement $xml, int $idEmpresa, int $idCliente, int $idUsuario, string $ambiente): int
     {
         $it      = $xml->infoTributaria;
         $info    = $xml->infoFactura;
@@ -337,7 +335,8 @@ class DocumentoAutomatedRegisterService
                 'moneda' => (string)($info->moneda ?? 'DOLAR'),
                 'tipo_registro' => 'electronico',
                 'dias_credito' => (int)($info->pagos->pago[0]->plazo ?? 0),
-                'plazo' => (string)($info->pagos->pago[0]->plazo ?? '')
+                'plazo' => (string)($info->pagos->pago[0]->plazo ?? ''),
+                'tipo_ambiente' => $ambiente
             ]);
 
             // 1.5 Información Adicional
@@ -407,7 +406,7 @@ class DocumentoAutomatedRegisterService
         }
     }
 
-    private function insertarCompra(SimpleXMLElement $xml, int $idEmpresa, int $idProv, int $idUsuario, bool $esGastoPersonal = false, ?int $idSustento = null): int
+    private function insertarCompra(SimpleXMLElement $xml, int $idEmpresa, int $idProv, int $idUsuario, string $ambiente, bool $esGastoPersonal = false, ?int $idSustento = null): int
     {
         $it          = $xml->infoTributaria;
         $codDoc      = (string)$it->codDoc;
@@ -482,7 +481,8 @@ class DocumentoAutomatedRegisterService
                 'tipo_registro' => 'electronico',
                 'autorizacion_desde' => $secuencial,
                 'autorizacion_hasta' => $secuencial,
-                'fecha_caducidad' => $fechaEmision
+                'fecha_caducidad' => $fechaEmision,
+                'tipo_ambiente' => $ambiente
             ]);
 
             // 1.5 Información Adicional
@@ -582,7 +582,7 @@ class DocumentoAutomatedRegisterService
         return $fecha;
     }
 
-    private function handleLiquidacion(SimpleXMLElement $xml, int $idEmpresa, int $idUsuario, bool $esEmitida, bool $esGastoPersonal = false): array
+    private function handleLiquidacion(SimpleXMLElement $xml, int $idEmpresa, int $idUsuario, bool $esEmitida, string $ambiente, bool $esGastoPersonal = false): array
     {
         $it = $xml->infoTributaria;
         $info = $xml->infoLiquidacionCompra;
@@ -594,14 +594,14 @@ class DocumentoAutomatedRegisterService
             }
             $idProv = $this->getOrCreateProveedor($info->identificacionProveedor, $info->razonSocialProveedor, $info->direccionProveedor, $idEmpresa, $idUsuario, $info->tipoIdentificacionProveedor, (string)($it->nombreComercial ?? ''));
             
-            $idLiq = $this->insertarLiquidacion($xml, $idEmpresa, $idProv, $idUsuario);
+            $idLiq = $this->insertarLiquidacion($xml, $idEmpresa, $idProv, $idUsuario, $ambiente);
             return ['ok' => true, 'mensaje' => "Liquidación registrada (ID: $idLiq)", 'id' => $idLiq, 'existe' => false];
         } else {
             if ($this->existeEnTabla('compras_cabecera', 'numero_autorizacion', $claveAcceso, $idEmpresa)) {
                 return ['ok' => true, 'mensaje' => "Compra ya registrada", 'existe' => true];
             }
             $idProv = $this->getOrCreateProveedor($it->ruc, $it->razonSocial, $it->dirMatriz, $idEmpresa, $idUsuario, null, (string)($it->nombreComercial ?? ''));
-            $idCompra = $this->insertarCompra($xml, $idEmpresa, $idProv, $idUsuario, $esGastoPersonal);
+            $idCompra = $this->insertarCompra($xml, $idEmpresa, $idProv, $idUsuario, $ambiente, $esGastoPersonal);
             
             $msgRet = "";
             if ($idCompra > 0) {
@@ -613,7 +613,7 @@ class DocumentoAutomatedRegisterService
         }
     }
 
-    private function insertarLiquidacion(SimpleXMLElement $xml, int $idEmpresa, int $idProv, int $idUsuario): int
+    private function insertarLiquidacion(SimpleXMLElement $xml, int $idEmpresa, int $idProv, int $idUsuario, string $ambiente): int
     {
         $it     = $xml->infoTributaria;
         $info   = $xml->infoLiquidacionCompra;
@@ -638,7 +638,8 @@ class DocumentoAutomatedRegisterService
                 'importe_total' => (float)$info->importeTotal,
                 'estado' => 'autorizado',
                 'tipo_registro' => 'electronico',
-                'clave_acceso' => (string)$it->claveAcceso
+                'clave_acceso' => (string)$it->claveAcceso,
+                'tipo_ambiente' => $ambiente
             ]);
 
             // 1.5 Información Adicional
@@ -704,7 +705,7 @@ class DocumentoAutomatedRegisterService
         }
     }
 
-    private function handleNotaCredito(SimpleXMLElement $xml, int $idEmpresa, int $idUsuario, bool $esEmitida, bool $esGastoPersonal = false): array
+    private function handleNotaCredito(SimpleXMLElement $xml, int $idEmpresa, int $idUsuario, bool $esEmitida, string $ambiente, bool $esGastoPersonal = false): array
     {
         $it = $xml->infoTributaria;
         $info = $xml->infoNotaCredito;
@@ -716,20 +717,20 @@ class DocumentoAutomatedRegisterService
             }
             $idCliente = $this->getOrCreateCliente($info->identificacionComprador, $info->razonSocialComprador, $info->direccionComprador, $idEmpresa, $idUsuario, $info->tipoIdentificacionComprador);
             
-            $idNC = $this->insertarNotaCredito($xml, $idEmpresa, $idCliente, $idUsuario);
+            $idNC = $this->insertarNotaCredito($xml, $idEmpresa, $idCliente, $idUsuario, $ambiente);
             return ['ok' => true, 'mensaje' => "Nota de Crédito (Venta) registrada (ID: $idNC)", 'id' => $idNC, 'existe' => false];
         } else {
             if ($this->existeEnTabla('compras_cabecera', 'numero_autorizacion', $claveAcceso, $idEmpresa)) {
                 return ['ok' => true, 'mensaje' => "NC Compra ya registrada", 'existe' => true];
             }
             $idProv = $this->getOrCreateProveedor($it->ruc, $it->razonSocial, $it->dirMatriz, $idEmpresa, $idUsuario, null, (string)($it->nombreComercial ?? ''));
-            $idCompra = $this->insertarCompraNC($xml, $idEmpresa, $idProv, $idUsuario, $esGastoPersonal);
+            $idCompra = $this->insertarCompraNC($xml, $idEmpresa, $idProv, $idUsuario, $ambiente, $esGastoPersonal);
             $msg = $esGastoPersonal ? "Gasto Personal (NC) registrado (ID: $idCompra)" : "NC Compra registrada como Compra (ID: $idCompra)";
             return ['ok' => true, 'mensaje' => $msg, 'id' => $idCompra, 'existe' => false];
         }
     }
 
-    private function handleNotaDebito(SimpleXMLElement $xml, int $idEmpresa, int $idUsuario, bool $esEmitida, bool $esGastoPersonal = false): array
+    private function handleNotaDebito(SimpleXMLElement $xml, int $idEmpresa, int $idUsuario, bool $esEmitida, string $ambiente, bool $esGastoPersonal = false): array
     {
         $it = $xml->infoTributaria;
         $info = $xml->infoNotaDebito;
@@ -740,20 +741,20 @@ class DocumentoAutomatedRegisterService
                 return ['ok' => true, 'mensaje' => "Nota de Débito ya registrada", 'existe' => true];
             }
             $idCliente = $this->getOrCreateCliente($info->identificacionComprador, $info->razonSocialComprador, $info->direccionComprador, $idEmpresa, $idUsuario, $info->tipoIdentificacionComprador);
-            $idND = $this->insertarNotaDebito($xml, $idEmpresa, $idCliente, $idUsuario);
+            $idND = $this->insertarNotaDebito($xml, $idEmpresa, $idCliente, $idUsuario, $ambiente);
             return ['ok' => true, 'mensaje' => "Nota de Débito (Venta) registrada (ID: $idND)", 'id' => $idND, 'existe' => false];
         } else {
             if ($this->existeEnTabla('compras_cabecera', 'numero_autorizacion', $claveAcceso, $idEmpresa)) {
                 return ['ok' => true, 'mensaje' => "ND Compra ya registrada", 'existe' => true];
             }
             $idProv = $this->getOrCreateProveedor($it->ruc, $it->razonSocial, $it->dirMatriz, $idEmpresa, $idUsuario, null, (string)($it->nombreComercial ?? ''));
-            $idCompra = $this->insertarCompraND($xml, $idEmpresa, $idProv, $idUsuario, $esGastoPersonal);
+            $idCompra = $this->insertarCompraND($xml, $idEmpresa, $idProv, $idUsuario, $ambiente, $esGastoPersonal);
             $msg = $esGastoPersonal ? "Gasto Personal (ND) registrado (ID: $idCompra)" : "ND Compra registrada como Compra (ID: $idCompra)";
             return ['ok' => true, 'mensaje' => $msg, 'id' => $idCompra, 'existe' => false];
         }
     }
 
-    private function handleRetencion(SimpleXMLElement $xml, int $idEmpresa, int $idUsuario, bool $esEmitida): array
+    private function handleRetencion(SimpleXMLElement $xml, int $idEmpresa, int $idUsuario, bool $esEmitida, string $ambiente): array
     {
         $it = $xml->infoTributaria;
         $info = $xml->infoRetencion;
@@ -776,7 +777,7 @@ class DocumentoAutomatedRegisterService
                 (string)($it->nombreComercial ?? '')
             );
             
-            $idRet = $this->insertarRetencionCompra($xml, $idEmpresa, $idProv, $idUsuario);
+            $idRet = $this->insertarRetencionCompra($xml, $idEmpresa, $idProv, $idUsuario, $ambiente);
             return ['ok' => true, 'mensaje' => "Retención de Compra (emitida) registrada con éxito.", 'id' => $idRet, 'existe' => false];
         } else {
             // RETENCIÓN EMITIDA A NOSOTROS (Retención en Ventas)
@@ -787,12 +788,12 @@ class DocumentoAutomatedRegisterService
             // Buscar cliente
             $idCliente = $this->getOrCreateCliente($it->ruc, $it->razonSocial, $it->dirMatriz, $idEmpresa, $idUsuario);
             
-            $idRet = $this->insertarRetencionVenta($xml, $idEmpresa, $idCliente, $idUsuario);
+            $idRet = $this->insertarRetencionVenta($xml, $idEmpresa, $idCliente, $idUsuario, $ambiente);
             return ['ok' => true, 'mensaje' => "Retención de Venta (recibida) registrada con éxito.", 'id' => $idRet, 'existe' => false];
         }
     }
 
-    private function insertarNotaCredito(SimpleXMLElement $xml, int $idEmpresa, int $idCliente, int $idUsuario): int
+    private function insertarNotaCredito(SimpleXMLElement $xml, int $idEmpresa, int $idCliente, int $idUsuario, string $ambiente): int
     {
         $it     = $xml->infoTributaria;
         $info   = $xml->infoNotaCredito;
@@ -818,7 +819,8 @@ class DocumentoAutomatedRegisterService
                 'fecha_emision_docs_sustento' => $this->formatearFecha((string)$info->fechaEmisionDocSustento),
                 'motivo' => (string)$info->motivo,
                 'estado' => 'autorizado',
-                'tipo_registro' => 'electronico'
+                'tipo_registro' => 'electronico',
+                'tipo_ambiente' => $ambiente
             ]);
 
             if (isset($xml->detalles->detalle)) {
@@ -880,7 +882,8 @@ class DocumentoAutomatedRegisterService
                 'num_doc_modificado' => (string)$info->numDocModificado,
                 'fecha_emision_docs_sustento' => $this->formatearFecha((string)$info->fechaEmisionDocSustento),
                 'estado' => 'autorizado',
-                'tipo_registro' => 'electronico'
+                'tipo_registro' => 'electronico',
+                'tipo_ambiente' => $ambiente
             ]);
 
             if (isset($info->motivos->motivo)) {
@@ -1028,12 +1031,13 @@ class DocumentoAutomatedRegisterService
             'lineas'                     => $lineas,
             'origen'                     => 'electronico',
             'detalle_xml'                => $xml->asXML(),
+            'tipo_ambiente'              => $ambiente
         ];
 
         return $this->retencionService->crear($data);
     }
 
-    private function insertarRetencionVenta(SimpleXMLElement $xml, int $idEmpresa, int $idCliente, int $idUsuario): int
+    private function insertarRetencionVenta(SimpleXMLElement $xml, int $idEmpresa, int $idCliente, int $idUsuario, string $ambiente): int
     {
         $it   = $xml->infoTributaria;
         $info = isset($xml->infoRetencion) ? $xml->infoRetencion : $xml->infoCompRetencion;

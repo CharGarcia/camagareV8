@@ -135,9 +135,9 @@ class NotaCreditoRepository extends BaseRepository
                     fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso,
                     cod_doc_modificado, num_doc_modificado, fecha_emision_docs_sustento, motivo,
                     total_sin_impuestos, total_descuento, importe_total, estado, observaciones,
-                    created_by, updated_by
+                    created_by, updated_by, tipo_ambiente
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 ) RETURNING id";
         
         $st = $this->db->prepare($sql);
@@ -162,7 +162,8 @@ class NotaCreditoRepository extends BaseRepository
             $data['estado'] ?? 'borrador',
             $data['observaciones'] ?? null,
             $data['id_usuario'],
-            $data['id_usuario']
+            $data['id_usuario'],
+            $data['tipo_ambiente'] ?? '1'
         ]);
 
         return (int) $st->fetchColumn();

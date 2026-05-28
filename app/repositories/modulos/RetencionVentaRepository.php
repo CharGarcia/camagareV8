@@ -176,14 +176,14 @@ class RetencionVentaRepository extends BaseRepository
                     periodo_fiscal,
                     total_isd, total_iva, total_renta,
                     origen, detalle_xml,
-                    created_by, updated_by
+                    created_by, updated_by, tipo_ambiente
                 ) VALUES (
                     :ie, :ic, :iv,
                     :fe, :estab, :pto, :sec, :ca,
                     :pf,
                     :tisd, :tiva, :trenta,
                     :orig, :dxml,
-                    :cb, :ub
+                    :cb, :ub, :ta
                 ) RETURNING id";
 
         $st = $this->db->prepare($sql);
@@ -204,6 +204,7 @@ class RetencionVentaRepository extends BaseRepository
             ':dxml'  => $d['detalle_xml'] ?? null,
             ':cb'    => $d['id_usuario'],
             ':ub'    => $d['id_usuario'],
+            ':ta'    => $d['tipo_ambiente'] ?? '1',
         ]);
 
         return (int) $st->fetchColumn();

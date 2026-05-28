@@ -261,11 +261,11 @@ class ComprasRepository extends BaseRepository
                     total_sin_impuestos, total_descuento, importe_total, propina,
                     autorizacion_desde, autorizacion_hasta, fecha_caducidad,
                     tipo_registro, deducible, documento_modificado, motivo,
-                    observaciones, created_by, updated_by, id_usuario
+                    observaciones, created_by, updated_by, id_usuario, tipo_ambiente
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?
                 ) RETURNING id";
 
         $params = [
@@ -296,7 +296,8 @@ class ComprasRepository extends BaseRepository
             $data['observaciones'] ?? null,
             (int)   $data['id_usuario'], // created_by
             (int)   $data['id_usuario'], // updated_by
-            (int)   $data['id_usuario']  // id_usuario
+            (int)   $data['id_usuario'], // id_usuario
+            (int)   ($data['tipo_ambiente'] ?? 1) // tipo_ambiente
         ];
 
         return (int) $this->query($sql, $params)->fetchColumn();

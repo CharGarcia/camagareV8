@@ -22,9 +22,9 @@ class NotaDebitoRepository extends BaseRepository
                     fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso,
                     total_sin_impuestos, importe_total, estado, 
                     num_doc_modificado, fecha_emision_docs_sustento,
-                    created_by, updated_by
+                    created_by, updated_by, tipo_ambiente
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 ) RETURNING id";
         
         $st = $this->db->prepare($sql);
@@ -45,7 +45,8 @@ class NotaDebitoRepository extends BaseRepository
             $data['num_doc_modificado'] ?? null,
             $data['fecha_emision_docs_sustento'] ?? null,
             $data['id_usuario'],
-            $data['id_usuario']
+            $data['id_usuario'],
+            $data['tipo_ambiente'] ?? '1'
         ]);
 
         return (int) $st->fetchColumn();
