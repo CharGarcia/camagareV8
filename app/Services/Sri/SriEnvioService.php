@@ -90,19 +90,44 @@ class SriEnvioService
         $empresaModel = new \App\models\Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
 
-        // Dirección del establecimiento
+        // Dirección y logo del establecimiento
         $dirEstablecimiento = null;
-        if (!empty($cabecera['id_establecimiento'])) {
-            try {
-                $estRepo = new \App\repositories\modulos\EmpresaRepository();
-                foreach ($estRepo->getEstablecimientos($idEmpresa) as $est) {
-                    if ((int)$est['id'] === (int)$cabecera['id_establecimiento']) {
-                        $dirEstablecimiento = $est['direccion'] ?? null;
-                        break;
+        try {
+            $estRepo = new \App\repositories\modulos\EmpresaRepository();
+            $establecimientos = $estRepo->getEstablecimientos($idEmpresa);
+            foreach ($establecimientos as $est) {
+                $esElEstablecimiento = !empty($cabecera['id_establecimiento'])
+                    ? (int)$est['id'] === (int)$cabecera['id_establecimiento']
+                    : true; // si no hay id_establecimiento, usar el primero
+                if ($esElEstablecimiento) {
+                    $dirEstablecimiento = $est['direccion'] ?? null;
+                    // Enriquecer $empresa con datos del establecimiento para el PDF
+                    if (!empty($est['logo_ruta'])) {
+                        $empresa['logo_ruta'] = $est['logo_ruta'];
                     }
+                    if (!empty($est['direccion'])) {
+                        $empresa['direccion_establecimiento'] = $est['direccion'];
+                    }
+                    if (!empty($est['leyenda_pdf_titulo'])) {
+                        $empresa['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+                    }
+                    if (!empty($est['leyenda_pdf_mensaje'])) {
+                        $empresa['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+                    }
+                    // Merge config del establecimiento (decimales, facturación, etc.)
+                    $estConfig = $estRepo->getEstablecimientoConfig((int)$est['id']);
+                    if ($estConfig) {
+                        $estConfig['direccion_matriz'] = $empresa['direccion'] ?? '';
+                        $estConfig['direccion_establecimiento'] = $est['direccion'] ?? '';
+                        if (!empty($est['logo_ruta'])) {
+                            $estConfig['logo_ruta'] = $est['logo_ruta'];
+                        }
+                        $empresa = array_merge($empresa, $estConfig);
+                    }
+                    break;
                 }
-            } catch (\Throwable) {}
-        }
+            }
+        } catch (\Throwable) {}
 
         // 1. Generar XML
         $xmlService = new XmlFacturaVentaService();
