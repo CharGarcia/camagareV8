@@ -39,6 +39,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         background-color: rgba(0, 0, 0, .04);
     }
 </style>
+<?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-award-fill me-2 text-primary"></i>Marcas</h5>
@@ -57,6 +58,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <input type="text" id="buscarMarca" class="form-control border-start-0 ps-0 shadow-none" placeholder="Buscar marca..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
             </div>
             <div class="btn-group btn-group-sm">
+                <?php
+                $columnasTabla = [
+                    'nombre'          => 'Nombre',
+                    'status'          => 'Estado',
+                    'productos_count' => 'Productos',
+                ];
+                echo \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo);
+                ?>
                 <a id="btnExportPdf" href="<?= $urlBaseMarcas ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
                 <a id="btnExportExcel" href="<?= $urlBaseMarcas ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
             </div>
@@ -76,9 +85,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             <table class="table table-hover table-sm mb-0 align-middle">
                 <thead class="table-light shadow-sm">
                     <tr>
-                        <th class="ps-3 sortable-header" data-sort="nombre" role="button">Nombre de la Marca <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-center sortable-header" data-sort="status" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-end pe-3">Productos</th>
+                        <th class="ps-3 sortable-header" data-sort="nombre" data-col="nombre" role="button">Nombre de la Marca <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" data-sort="status" data-col="status" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-end pe-3" data-col="productos_count">Productos</th>
                     </tr>
                 </thead>
                 <tbody id="tbodyMarcas">

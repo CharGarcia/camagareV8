@@ -1,4 +1,7 @@
-
+<?php
+$vistaConfigProdInline = \App\Helpers\PreferenciasHelper::getPreferenciasVista('productos');
+echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigProdInline, 'estiloVistaPestanasProdInline');
+?>
 <div class="modal fade" id="modalProducto" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-lg">
         <div class="modal-content border-0 shadow-lg">
@@ -13,7 +16,8 @@
                     <div id="modalAlert" class="alert d-none m-3 py-2 small shadow-sm border-0"></div>
                     <input type="hidden" name="id" id="prod_id">
 
-                    <ul class="nav nav-tabs px-3 pt-2 bg-light border-bottom-0" id="modalProductoTabs" role="tablist">
+                    <div class="d-flex align-items-center px-3 pt-2 bg-light">
+                    <ul class="nav nav-tabs border-bottom-0 flex-grow-1" id="modalProductoTabs" role="tablist">
                         <li class="nav-item">
                             <button class="nav-link active py-2 small fw-bold" id="tab-general-btn" data-bs-toggle="tab" data-bs-target="#pane-general" type="button">
                                 <i class="bi bi-card-text me-1"></i> General
@@ -45,6 +49,19 @@
                             </button>
                         </li>
                     </ul>
+                    <div class="ms-auto pb-1">
+                        <?php
+                        $pestanasProdInline = [
+                            'pane-inventario'   => 'Inventario',
+                            'pane-precios'      => 'Precios',
+                            'pane-clasificacion'=> 'ClasificaciÃ³n',
+                            'pane-contable'     => 'Contable',
+                            'pane-info'         => 'InformaciÃ³n',
+                        ];
+                        echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasProdInline, $vistaConfigProdInline, 'productos');
+                        ?>
+                    </div>
+                    </div>
 
                     <div class="tab-content p-4">
                         <!-- TAB GENERAL -->
@@ -132,7 +149,7 @@
                                     <input type="text" name="nombre_ice" id="prod_nombre_ice" class="form-control form-control-sm shadow-none border-secondary-subtle" maxlength="50" autocomplete="off" placeholder="(opc)">
                                 </div>
 
-                                <!-- Grupo 5: Resultados (TamaÃ±o EstÃ¡ndar - ÃÅ¡ltima Fila) -->
+                                <!-- Grupo 5: Resultados (TamaÃ±o EstÃ¡ndar - ï¿½Å¡ltima Fila) -->
                                 <div class="row g-2 mt-2 bg-light p-2 rounded border">
                                     <div class="col-md-6">
                                         <label class="form-label mb-1 small fw-bold text-success">IVA Calculado</label>
@@ -251,7 +268,7 @@
                             </div>
                         </div>
 
-                        <!-- TAB CLASIFICACIÃâ€œN -->
+                        <!-- TAB CLASIFICACIï¿½â€œN -->
                         <div class="tab-pane fade" id="pane-clasificacion" role="tabpanel">
                             <div class="row g-3">
                                 <div class="col-md-6">
@@ -293,19 +310,19 @@
                                 <div class="row g-3">
                                     <div class="col-6">
                                         <label class="d-block small text-muted text-uppercase fw-bold mb-1" style="font-size: 0.65rem">Fecha de creaciÃ³n</label>
-                                        <span class="small fw-medium d-block" id="info_creado_at">â-</span>
+                                        <span class="small fw-medium d-block" id="info_creado_at">ï¿½-</span>
                                     </div>
                                     <div class="col-6">
                                         <label class="d-block small text-muted text-uppercase fw-bold mb-1" style="font-size: 0.65rem">Creado por</label>
-                                        <span class="small fw-medium d-block" id="info_creado_por">â-</span>
+                                        <span class="small fw-medium d-block" id="info_creado_por">ï¿½-</span>
                                     </div>
                                     <div class="col-6">
-                                        <label class="d-block small text-muted text-uppercase fw-bold mb-1" style="font-size: 0.65rem">ÃÅ¡ltima modificaciÃ³n</label>
-                                        <span class="small fw-medium d-block" id="info_actualizado_at">â-</span>
+                                        <label class="d-block small text-muted text-uppercase fw-bold mb-1" style="font-size: 0.65rem">ï¿½Å¡ltima modificaciÃ³n</label>
+                                        <span class="small fw-medium d-block" id="info_actualizado_at">ï¿½-</span>
                                     </div>
                                     <div class="col-6">
                                         <label class="d-block small text-muted text-uppercase fw-bold mb-1" style="font-size: 0.65rem">Modificado por</label>
-                                        <span class="small fw-medium d-block" id="info_actualizado_por">â-</span>
+                                        <span class="small fw-medium d-block" id="info_actualizado_por">ï¿½-</span>
                                     </div>
                                 </div>
                             </div>
@@ -542,7 +559,7 @@
         };
 
         /* ---------------------------------
-           LÃâ€œGICA INVENTARIOS Y PRECIOS 
+           Lï¿½â€œGICA INVENTARIOS Y PRECIOS 
         ---------------------------------- */
         function renderInventarios() {
             const tb = document.getElementById('tb-inventario');
@@ -605,8 +622,8 @@
                 return `<tr>
                     <td class="text-start">${pre.nombre_precio}</td>
                     <td class="fw-bold text-success">$${parseFloat(pre.precio).toFixed(2)}</td>
-                    <td>${pre.valido_desde || 'â-'}</td>
-                    <td>${pre.valido_hasta || 'â-'}</td>
+                    <td>${pre.valido_desde || 'ï¿½-'}</td>
+                    <td>${pre.valido_hasta || 'ï¿½-'}</td>
                     <td>
                         <button type="button" class="btn btn-sm text-danger p-0 m-0 shadow-none border-0" onclick="quitarPrecio(${idx})">
                             <i class="bi bi-x-circle-fill"></i>
@@ -826,16 +843,16 @@
         };
 
         async function fetchInformacionExtra(id) {
-            document.getElementById('info_creado_at').textContent = 'â-';
+            document.getElementById('info_creado_at').textContent = 'ï¿½-';
             try {
                 const resp = await fetch(`${urlBase}/getDetalleAjax?id=${id}`);
                 const json = await resp.json();
                 if (json.ok) {
                     const d = json.data;
-                    document.getElementById('info_creado_at').textContent = d.creado_at || 'â-';
-                    document.getElementById('info_creado_por').textContent = d.creado_por || 'â-';
-                    document.getElementById('info_actualizado_at').textContent = d.actualizado_at || 'â-';
-                    document.getElementById('info_actualizado_por').textContent = d.actualizado_por || 'â-';
+                    document.getElementById('info_creado_at').textContent = d.creado_at || 'ï¿½-';
+                    document.getElementById('info_creado_por').textContent = d.creado_por || 'ï¿½-';
+                    document.getElementById('info_actualizado_at').textContent = d.actualizado_at || 'ï¿½-';
+                    document.getElementById('info_actualizado_por').textContent = d.actualizado_por || 'ï¿½-';
 
                     if (d.inventarios) {
                         inventariosObj = d.inventarios;

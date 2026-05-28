@@ -1,12 +1,16 @@
 /* Componente: Buscador con filtros estilo Odoo
  * Uso: agregar clase .fb-search al contenedor wrapper.
  */
-.fb-search { position: relative; }
+.fb-search {
+    position: relative;
+    width: 100%;
+}
 
 .fb-search-box {
     min-height: 31px;
     cursor: text;
     background: #fff;
+    width: 100%;
 }
 .fb-search-box:focus-within {
     border-color: #86b7fe;
@@ -85,3 +89,18 @@
     margin-bottom: 4px;
 }
 .fb-dd-submenu input, .fb-dd-submenu select { font-size: 0.85rem; }
+
+/* Responsive: dropdown ocupa todo el ancho disponible en móvil */
+@media (max-width: 767.98px) {
+    .fb-search-dropdown {
+        max-height: 260px;
+        font-size: 0.85rem;
+    }
+    .fb-dd-item {
+        padding: 8px 10px;
+    }
+    .fb-chip {
+        font-size: 0.72rem;
+        padding: 1px 6px;
+    }
+}

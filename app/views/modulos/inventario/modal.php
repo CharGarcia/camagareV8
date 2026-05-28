@@ -1,3 +1,7 @@
+<?php
+$vistaConfigInv = \App\Helpers\PreferenciasHelper::getPreferenciasVista('inventario');
+echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigInv, 'estiloVistaPestanasInv');
+?>
 <!-- Modal para Nuevo Movimiento de Inventario -->
 <div class="modal fade" id="modalAjuste" tabindex="-1" aria-labelledby="modalAjusteLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">

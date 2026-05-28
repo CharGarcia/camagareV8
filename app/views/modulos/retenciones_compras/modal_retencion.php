@@ -5,6 +5,7 @@
 /** @var array $puntos */
 
 $vistaConfigRet = \App\Helpers\PreferenciasHelper::getPreferenciasVista($rutaModulo);
+echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigRet, 'estiloVistaPestanasRet');
 ?>
 
 <!-- Modal Retención en Compras -->

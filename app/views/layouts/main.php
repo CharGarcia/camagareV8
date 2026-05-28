@@ -14,7 +14,7 @@
         </div>
     </header>
     <main class="cmg-main-content">
-        <div class="<?= !empty($fullWidth) ? 'container-fluid' : 'container' ?> py-4">
+        <div class="<?= !empty($fullWidth) ? 'container-fluid' : 'container' ?> py-3 py-md-4 px-2 px-md-3">
             <?= $contenido ?? '' ?>
         </div>
     </main>

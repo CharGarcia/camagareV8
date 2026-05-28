@@ -17,12 +17,24 @@ $urlBase = $base . '/modulos/firmas_electronicas';
 $from    = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
 $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 ?>
-
 <style>
-    .firmas-scroll { max-height: calc(100vh - 250px); overflow-y: auto; }
-    .firmas-scroll thead th { position: sticky; top: 0; z-index: 10; background: #f8f9fa; }
+    .firmas-header { flex-shrink: 0; }
+
+    .firmas-scroll {
+        max-height: calc(100vh - 240px);
+        overflow-y: auto;
+    }
+
+    .firmas-scroll thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #f8f9fa;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
     .firma-row { cursor: pointer; }
-    .firma-row:hover { background-color: rgba(0,0,0,.04); }
+    .firma-row:hover { background-color: rgba(0, 0, 0, .04); }
 
     /* Panel solicitudes */
     #panelSolicitudes { display: none; }
@@ -31,8 +43,9 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
     .sol-badge-expirado   { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
     .sol-badge-cancelado  { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
 </style>
+<?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="firmas-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-pen-fill me-2 text-primary"></i>Firmas Electrónicas</h5>
     <div class="d-flex gap-2">
         <?php if ($perm['crear']): ?>
@@ -78,29 +91,84 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                 </tbody>
             </table>
         </div>
-        <div id="solPaginacion" class="px-3 py-2 border-top d-flex justify-content-between align-items-center small text-muted" style="display:none!important;"></div>
     </div>
 </div>
 
 <!-- ── Tabla principal ─────────────────────────────────────── -->
-<div class="card cmg-table-card border-0 shadow-sm rounded-3">
+<div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <!-- Buscador y Exportación -->
         <div class="d-flex align-items-center gap-2">
-            <div class="input-group input-group-sm" style="width:280px;">
-                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                <input type="text" id="buscarFirma" class="form-control border-start-0 ps-0 shadow-none"
-                    placeholder="Buscar por nombre, identificación…"
-                    value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-            </div>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_busqueda.css?v=<?= time() ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_busqueda.js?v=<?= time() ?>"></script>
+            <div id="fbBuscadorFIRMAS" style="width: 480px;"></div>
+            <input type="hidden" id="buscarFirma" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosBusqueda) return;
+                    new FiltrosBusqueda({
+                        containerId: 'fbBuscadorFIRMAS',
+                        hiddenInputId: 'buscarFirma',
+                        fields: [
+                            { key: 'nombres',        label: 'Nombres',          icon: 'bi-person',         type: 'text' },
+                            { key: 'apellidos',      label: 'Apellidos',        icon: 'bi-person',         type: 'text' },
+                            { key: 'identificacion', label: 'Identificación',   icon: 'bi-card-text',      type: 'text' },
+                            { key: 'telefono',       label: 'Teléfono',         icon: 'bi-telephone',      type: 'text' },
+                            { key: 'correo',         label: 'Correo',           icon: 'bi-envelope',       type: 'text' },
+                            { key: 'tipo_firma',     label: 'Tipo Firma',       icon: 'bi-pen',            type: 'text' },
+                            { key: 'tipo_identificacion', label: 'Tipo Identificación', icon: 'bi-credit-card', type: 'select', options: [
+                                { v: 'cedula',    l: 'Cédula' },
+                                { v: 'pasaporte', l: 'Pasaporte' },
+                            ]},
+                            { key: 'estado', label: 'Estado Trámite', icon: 'bi-flag', type: 'select', options: [
+                                { v: 'pendiente',   l: 'Pendiente' },
+                                { v: 'en_proceso',  l: 'En Proceso' },
+                                { v: 'emitida',     l: 'Emitida' },
+                                { v: 'cancelada',   l: 'Cancelada' },
+                            ]},
+                            { key: 'estado_pago', label: 'Estado Pago', icon: 'bi-credit-card-2-front', type: 'select', options: [
+                                { v: 'pendiente',   l: 'Pendiente' },
+                                { v: 'confirmado',  l: 'Confirmado' },
+                                { v: 'rechazado',   l: 'Rechazado' },
+                            ]},
+                        ],
+                        quickFilters: [
+                            { id: 'qf_pendiente',  label: 'Pendientes',   mk: () => ({ key: 'estado', op: '=', value: 'pendiente',  display: 'Pendiente' }) },
+                            { id: 'qf_en_proceso', label: 'En Proceso',   mk: () => ({ key: 'estado', op: '=', value: 'en_proceso', display: 'En Proceso' }) },
+                            { id: 'qf_emitida',    label: 'Emitidas',     mk: () => ({ key: 'estado', op: '=', value: 'emitida',    display: 'Emitida' }) },
+                            { id: 'qf_pago_conf',  label: 'Pago confirmado', mk: () => ({ key: 'estado_pago', op: '=', value: 'confirmado', display: 'Confirmado' }) },
+                        ],
+                        onApply: () => window.fetchSearch && window.fetchSearch(1),
+                    }).init();
+                });
+            </script>
+
             <div class="btn-group btn-group-sm">
-                <a id="btnFirmaPdf"   href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <?php
+                $columnasTabla = [
+                    'nombres'               => 'Nombres',
+                    'numero_identificacion' => 'Identificación',
+                    'nombre_producto'       => 'Tipo Firma',
+                    'telefono'              => 'Teléfono',
+                    'correo'                => 'Correo',
+                    'estado_pago'           => 'Pago',
+                    'factura_estado'        => 'Factura',
+                    'estado'                => 'Estado',
+                    'fecha_caducidad'       => 'Caducidad',
+                    'created_at'            => 'Fecha',
+                ];
+                echo \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo);
+                ?>
+                <a id="btnFirmaPdf" href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
                 <a id="btnFirmaExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
             </div>
         </div>
+
+        <!-- Paginación -->
         <div class="d-flex align-items-center gap-3">
-            <span id="firmasPaginationInfo" class="text-muted small fw-medium"><?= $from ?>-<?= $to ?> / <?= $total ?></span>
+            <span id="firmasPaginationInfo" class="text-muted small fw-medium"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
             <div id="firmasPaginationContainer" class="btn-group btn-group-sm">
                 <button type="button" class="btn btn-outline-secondary" onclick="cambiarPaginaFirmas(<?= $page - 1 ?>)" <?= $page <= 1 ? 'disabled' : '' ?>><i class="bi bi-chevron-left"></i></button>
                 <button type="button" class="btn btn-outline-secondary" onclick="cambiarPaginaFirmas(<?= $page + 1 ?>)" <?= $page >= $totalPages ? 'disabled' : '' ?>><i class="bi bi-chevron-right"></i></button>
@@ -108,26 +176,31 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         </div>
     </div>
 
+    <!-- Tabla -->
     <div class="card-body p-0">
-        <div class="firmas-scroll">
-            <table class="table table-hover table-sm mb-0 align-middle">
-                <thead class="table-light shadow-sm">
+        <div class="firmas-scroll w-100">
+            <table class="table table-hover table-sm mb-0">
+                <thead class="table-light">
                     <tr>
-                        <th class="ps-3 sortable-header-f" data-sort="nombres" role="button">Nombres <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header-f" data-sort="numero_identificacion" role="button">Identificación <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header-f" data-sort="nombre_producto" role="button">Tipo Firma <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header-f" data-sort="telefono" role="button">Teléfono <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="sortable-header-f d-none d-lg-table-cell" data-sort="correo" role="button">Correo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-center sortable-header-f" data-sort="estado_pago" role="button">Pago <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-center" data-sort="factura_estado">Factura</th>
-                        <th class="text-center sortable-header-f" data-sort="estado" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-center sortable-header-f" data-sort="fecha_caducidad" role="button">Caducidad <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-end pe-3 sortable-header-f" data-sort="created_at" role="button">Fecha <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="ps-3 sortable-header-f" data-sort="nombres" data-col="nombres" role="button">Nombres <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header-f" data-sort="numero_identificacion" data-col="numero_identificacion" role="button">Identificación <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header-f" data-sort="nombre_producto" data-col="nombre_producto" role="button">Tipo Firma <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header-f" data-sort="telefono" data-col="telefono" role="button">Teléfono <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header-f" data-sort="correo" data-col="correo" role="button">Correo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header-f" data-sort="estado_pago" data-col="estado_pago" role="button">Pago <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header-f" data-sort="factura_estado" data-col="factura_estado" role="button">Factura <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header-f" data-sort="estado" data-col="estado" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header-f" data-sort="fecha_caducidad" data-col="fecha_caducidad" role="button">Caducidad <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-end pe-3 sortable-header-f" data-sort="created_at" data-col="created_at" role="button">Fecha <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyFirmas">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-pen fs-3 d-block mb-2"></i>No se encontraron firmas electrónicas.</td></tr>
+                        <tr>
+                            <td colspan="10" class="text-center py-5 text-muted">
+                                <i class="bi bi-pen fs-3 d-block mb-2"></i>No se encontraron firmas electrónicas.
+                            </td>
+                        </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $row):
                             $badgeEstado = match($row['estado'] ?? 'pendiente') {
@@ -152,9 +225,10 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                                     'anulada'    => '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:.7rem;">Anulada</span>',
                                     default      => '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:.7rem;">' . htmlspecialchars(ucfirst($factEst ?? '?')) . '</span>',
                                 };
-                            $fCad  = $row['fecha_caducidad'] ?? null;
-                            $diff  = $fCad ? (int)(( strtotime($fCad) - time()) / 86400) : null;
-                            $badgeCaducidad = $fCad === null ? '<span class="text-muted small">-</span>'
+                            $fCad = $row['fecha_caducidad'] ?? null;
+                            $diff = $fCad ? (int)((strtotime($fCad) - time()) / 86400) : null;
+                            $badgeCaducidad = $fCad === null
+                                ? '<span class="text-muted small">-</span>'
                                 : ($diff < 0
                                     ? '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25"><i class="bi bi-exclamation-circle me-1"></i>' . date('d-m-Y', strtotime($fCad)) . '</span>'
                                     : ($diff <= 30
@@ -165,15 +239,14 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                             <tr class="firma-row" onclick="abrirModalFirmaEditar(this)"
                                 data-row='<?= htmlspecialchars(json_encode($row), ENT_QUOTES) ?>'>
                                 <td class="ps-3 fw-medium" data-col="nombres">
-                                    <?= htmlspecialchars(($row['nombres'] ?? '') . ' ' . ($row['apellidos'] ?? '')) ?>
+                                    <?= htmlspecialchars(trim(($row['nombres'] ?? '') . ' ' . ($row['apellidos'] ?? ''))) ?>
                                 </td>
                                 <td data-col="numero_identificacion">
-                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 me-1" style="font-size:.65rem"><?= strtoupper($row['tipo_identificacion'] ?? '') ?></span>
-                                    <?= htmlspecialchars($row['numero_identificacion'] ?? '') ?>
+                                    <code class="text-secondary"><?= htmlspecialchars($row['numero_identificacion'] ?? '') ?></code>
                                 </td>
                                 <td data-col="nombre_producto" class="small text-muted"><?= htmlspecialchars($row['nombre_producto'] ?? '-') ?></td>
                                 <td data-col="telefono"><?= htmlspecialchars($row['telefono'] ?? '-') ?></td>
-                                <td data-col="correo" class="d-none d-lg-table-cell small"><?= htmlspecialchars($row['correo'] ?? '-') ?></td>
+                                <td data-col="correo" class="small"><?= htmlspecialchars($row['correo'] ?? '-') ?></td>
                                 <td class="text-center" data-col="estado_pago"><?= $badgePago ?></td>
                                 <td class="text-center" data-col="factura_estado"><?= $badgeFactura ?></td>
                                 <td class="text-center" data-col="estado"><?= $badgeEstado ?></td>
@@ -223,32 +296,42 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 <script>
 (function () {
     'use strict';
-    const urlBase  = '<?= $urlBase ?>';
-    const inputB   = document.getElementById('buscarFirma');
-    let currentSort = '<?= $ordenCol ?>';
-    let currentDir  = '<?= $ordenDir ?>';
-    let timer;
+    const urlBase   = '<?= $urlBase ?>';
+    const inputBuscar = document.getElementById('buscarFirma');
+    window.currentSort = '<?= $ordenCol ?>';
+    window.currentDir  = '<?= $ordenDir ?>';
+    window.currentPage = <?= $page ?>;
 
-    window.cambiarPaginaFirmas = (p) => fetchSearchFirmas(p);
+    let timerId;
 
-    async function fetchSearchFirmas(page = 1) {
-        const b   = inputB ? inputB.value.trim() : '';
-        const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
+    function debounce(func, delay = 350) {
+        return (...args) => {
+            clearTimeout(timerId);
+            timerId = setTimeout(() => func.apply(this, args), delay);
+        };
+    }
+
+    window.cambiarPaginaFirmas = (n) => window.fetchSearch(n);
+
+    window.fetchSearch = async (page = 1) => {
+        const term = inputBuscar ? inputBuscar.value.trim() : '';
+        const uri  = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
         try {
             const resp = await fetch(uri);
             const data = await resp.json();
             if (data.ok) {
-                document.getElementById('tbodyFirmas').innerHTML               = data.rows;
-                document.getElementById('firmasPaginationContainer').innerHTML  = data.pagination;
-                document.getElementById('firmasPaginationInfo').textContent     = data.info;
-                document.getElementById('btnFirmaPdf').href                    = data.pdf_url;
-                document.getElementById('btnFirmaExcel').href                  = data.excel_url;
+                window.currentPage = page;
+                document.getElementById('tbodyFirmas').innerHTML              = data.rows;
+                document.getElementById('firmasPaginationContainer').innerHTML = data.pagination;
+                document.getElementById('firmasPaginationInfo').textContent    = data.info;
+                document.getElementById('btnFirmaPdf').href                   = data.pdf_url;
+                document.getElementById('btnFirmaExcel').href                 = data.excel_url;
 
                 document.querySelectorAll('.sortable-header-f').forEach(th => {
                     const icon = th.querySelector('i');
                     if (!icon) return;
-                    if (th.dataset.sort === currentSort) {
-                        icon.className = currentDir.toLowerCase() === 'asc'
+                    if (th.dataset.sort === window.currentSort) {
+                        icon.className = window.currentDir.toLowerCase() === 'asc'
                             ? 'bi bi-sort-alpha-down text-primary ms-1'
                             : 'bi bi-sort-alpha-up text-primary ms-1';
                     } else {
@@ -256,23 +339,22 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                     }
                 });
             }
-        } catch (e) {}
-    }
-    window.fetchSearchFirmas = fetchSearchFirmas;
+        } catch (e) {
+            console.error('Error en búsqueda de firmas:', e);
+        }
+    };
 
     document.querySelectorAll('.sortable-header-f').forEach(h => {
         h.addEventListener('click', () => {
             const f = h.dataset.sort;
-            if (currentSort === f) currentDir = currentDir.toLowerCase() === 'asc' ? 'DESC' : 'ASC';
-            else { currentSort = f; currentDir = 'ASC'; }
-            fetchSearchFirmas(1);
+            if (window.currentSort === f) window.currentDir = window.currentDir.toLowerCase() === 'asc' ? 'DESC' : 'ASC';
+            else { window.currentSort = f; window.currentDir = 'ASC'; }
+            if (typeof window.guardarOrdenacionVista === 'function') window.guardarOrdenacionVista('firmas_electronicas', window.currentSort, window.currentDir);
+            window.fetchSearch(1);
         });
     });
 
-    if (inputB) inputB.addEventListener('input', () => {
-        clearTimeout(timer);
-        timer = setTimeout(() => fetchSearchFirmas(1), 400);
-    });
+    if (inputBuscar) inputBuscar.addEventListener('input', debounce(() => window.fetchSearch(1), 400));
 
     // ── Panel solicitudes ──────────────────────────────────────
     let panelVisible = false;
@@ -380,28 +462,22 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         } catch { alert('Error de conexión.'); }
     };
 
-    window.abrirFirmaPorNombre = function(idFirma) {
-        // Buscar la fila en la tabla principal y abrirla si existe, si no buscar via AJAX
+    window.abrirFirmaPorNombre = function (idFirma) {
         const rows = document.querySelectorAll('#tbodyFirmas tr[data-row]');
         for (const row of rows) {
             try {
                 const d = JSON.parse(row.dataset.row);
-                if (String(d.id) === String(idFirma)) {
-                    row.click();
-                    return;
-                }
+                if (String(d.id) === String(idFirma)) { row.click(); return; }
             } catch {}
         }
-        // Si no está en la página actual, buscar
         document.getElementById('buscarFirma').value = '';
-        fetchSearchFirmas(1).then(() => {
-            const r2 = document.querySelectorAll('#tbodyFirmas tr[data-row]');
-            for (const row of r2) {
+        window.fetchSearch(1).then(() => {
+            document.querySelectorAll('#tbodyFirmas tr[data-row]').forEach(row => {
                 try {
                     const d = JSON.parse(row.dataset.row);
-                    if (String(d.id) === String(idFirma)) { row.click(); return; }
+                    if (String(d.id) === String(idFirma)) { row.click(); }
                 } catch {}
-            }
+            });
         });
     };
 })();

@@ -1,4 +1,8 @@
-<?php /** @var array $perm */ ?>
+<?php
+/** @var array $perm */
+$vistaConfigTr = \App\Helpers\PreferenciasHelper::getPreferenciasVista('transportistas');
+echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigTr, 'estiloVistaPestanasTr');
+?>
 
 <!-- ═══════════════════════ MODAL TRANSPORTISTA ═══════════════════════ -->
 <div class="modal fade" id="modalTransportista" tabindex="-1" aria-labelledby="modalTransportistaLabel" aria-hidden="true">

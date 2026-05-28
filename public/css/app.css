@@ -486,3 +486,236 @@ th[data-col] {
     background-color: #f1f5f9 !important;
     color: #0d6efd !important;
 }
+
+
+/* ============================================================
+   RESPONSIVE MÓVIL — Reglas globales del sistema
+   ============================================================ */
+
+/* --- Modales: pantalla completa en dispositivos pequeños --- */
+@media (max-width: 575.98px) {
+    /* modal-xl y modal-lg ocupan toda la pantalla en móvil */
+    .modal-dialog.modal-xl,
+    .modal-dialog.modal-lg {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        min-height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .modal-dialog.modal-xl .modal-content,
+    .modal-dialog.modal-lg .modal-content {
+        min-height: 100vh;
+        border: 0;
+        border-radius: 0;
+        overflow-y: auto;
+    }
+    /* Ajustar body del modal para no exceder pantalla */
+    .modal-dialog.modal-xl .modal-body,
+    .modal-dialog.modal-lg .modal-body {
+        overflow-y: auto;
+        flex: 1 1 auto;
+        max-height: calc(100dvh - 160px);
+    }
+    /* Tabs de modales: compactos en móvil */
+    .modal .nav-tabs .nav-link {
+        font-size: 0.78rem !important;
+        padding: 0.3rem 0.5rem !important;
+    }
+    /* Footer modal: apilado en móvil */
+    .modal-footer {
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+}
+
+/* --- Card-header de tablas: 2 filas en móvil (buscador arriba, botones + paginación abajo) --- */
+@media (max-width: 767.98px) {
+    /* El card-header pasa a flex-start con wrap para recibir los hijos aplanados */
+    .cmg-table-card .card-header.d-flex {
+        justify-content: flex-start !important;
+        align-items: center !important;
+        flex-wrap: wrap !important;
+        gap: 0.4rem !important;
+    }
+
+    /* display:contents aplana el div izquierdo:
+       sus hijos (fbBuscador, btn-group) pasan a ser flex-items directos del card-header */
+    .cmg-table-card .card-header.d-flex > div:first-child {
+        display: contents !important;
+    }
+
+    /* FILA 1 — Buscador FiltrosBusqueda: ocupa todo el ancho */
+    .cmg-table-card .card-header [id^="fbBuscador"] {
+        flex: 1 1 100% !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        order: 1;
+    }
+
+    /* FILA 1 — Input-group simple como hijo directo (módulos sin FiltrosBusqueda) */
+    .cmg-table-card .card-header > div:first-child > .input-group {
+        flex: 1 1 100% !important;
+        width: 100% !important;
+        order: 1;
+    }
+
+    /* FILA 1 — Form con input-group dentro (patrón bodegas, centro_costos, etc.) */
+    .cmg-table-card .card-header > div:first-child > form {
+        flex: 1 1 100% !important;
+        width: 100% !important;
+        order: 1;
+    }
+    .cmg-table-card .card-header > div:first-child > form .input-group {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    /* FILA 2 izquierda — btn-group (columnas visibles + PDF + Excel + extras) */
+    .cmg-table-card .card-header > div:first-child > .btn-group {
+        order: 2;
+        flex: 0 0 auto;
+    }
+
+    /* FILA 2 derecha — div de paginación: margen automático lo empuja a la derecha */
+    .cmg-table-card .card-header.d-flex > div:last-child {
+        order: 2;
+        flex: 0 0 auto;
+        margin-left: auto !important;
+    }
+}
+
+/* --- Tablas de módulos: scroll horizontal en móvil --- */
+@media (max-width: 767.98px) {
+    /* Scroll containers de módulos (productos-scroll, clientes-scroll, etc.) */
+    [class*="-scroll"] {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        max-height: calc(100vh - 200px) !important;
+    }
+    /* Tablas dentro de scroll containers: ancho mínimo para no aplastar columnas */
+    [class*="-scroll"] .table {
+        min-width: 600px;
+    }
+    /* Celdas de acción: no reducir demasiado */
+    [class*="-scroll"] .table td:last-child,
+    [class*="-scroll"] .table th:last-child {
+        min-width: 70px;
+    }
+}
+
+/* --- Header de módulos: layout apilado en pantallas muy pequeñas --- */
+@media (max-width: 575.98px) {
+    /* Fila de cabecera de módulos con título + botón Nuevo (clientes-header, productos-header, etc.) */
+    [class*="-header"].d-flex.justify-content-between {
+        flex-wrap: wrap !important;
+        gap: 0.5rem !important;
+    }
+    /* Tabla de configuración (empresas sistema, usuarios, etc.) */
+    .cmg-table-card .table th,
+    .cmg-table-card .table td {
+        font-size: 0.8rem;
+    }
+    /* Paginación compacta */
+    .pagination .page-link {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.8rem;
+    }
+    /* Badges en celdas: no truncar */
+    .badge {
+        white-space: normal;
+        text-align: center;
+    }
+}
+
+/* --- Perfil y páginas de configuración: columnas apiladas --- */
+@media (max-width: 575.98px) {
+    /* Formularios con row g-3: campos ocupan ancho completo */
+    .modal-body .row .col-md-4,
+    .modal-body .row .col-md-5,
+    .modal-body .row .col-md-6,
+    .modal-body .row .col-md-3 {
+        /* Bootstrap ya lo maneja con col-md-* en sm pero si se forzó col- sin breakpoint: */
+        width: 100%;
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+}
+
+/* --- Navbar colapsado: ajustar empresa selector --- */
+@media (max-width: 991.98px) {
+    /* Evitar overflow horizontal cuando el navbar está expandido */
+    .navbar-collapse.show,
+    .navbar-collapse.collapsing {
+        overflow-x: hidden;
+    }
+    /* Íconos de notificaciones: wrap en móvil */
+    .navbar-collapse .d-flex.align-items-center {
+        flex-wrap: wrap;
+        justify-content: flex-start !important;
+        gap: 0.5rem;
+    }
+}
+
+/* --- Tablas de configuración global (sin -scroll): tabla responsive --- */
+@media (max-width: 767.98px) {
+    .cmg-table-card {
+        overflow-x: auto;
+    }
+    .cmg-table-card > .table {
+        min-width: 500px;
+    }
+}
+
+/* --- Dashboard: ajustes en métricas --- */
+@media (max-width: 575.98px) {
+    .metric-value {
+        font-size: 1.35rem !important;
+    }
+    .panel-header {
+        padding: 0.75rem 1rem !important;
+    }
+}
+
+/* --- Menú de módulos en móvil: compactar sin ocultar texto --- */
+@media (max-width: 575.98px) {
+    .cmg-menu-chevron {
+        display: none;
+    }
+    .cmg-menu-modulo-btn {
+        padding: 0.3rem 0.55rem !important;
+        font-size: 0.78rem !important;
+    }
+}
+
+/* --- Empresa dropdown: ancho total en móvil --- */
+@media (max-width: 991.98px) {
+    .cmg-empresas-dropdown-wrap {
+        width: 100% !important;
+    }
+}
+
+/* --- Botones de exportar PDF/Excel: solo ícono en pantallas pequeñas --- */
+@media (max-width: 575.98px) {
+    /* Ocultar texto en botones de exportar para ahorrar espacio */
+    .card-header .btn-group a.btn[href*="export-pdf"],
+    .card-header .btn-group a.btn[href*="export-excel"],
+    .card-header .btn-group a.btn[href*="mapa"] {
+        font-size: 0;        /* oculta el texto */
+    }
+    .card-header .btn-group a.btn[href*="export-pdf"] i,
+    .card-header .btn-group a.btn[href*="export-excel"] i,
+    .card-header .btn-group a.btn[href*="mapa"] i {
+        font-size: 0.9rem;   /* mantiene el ícono visible */
+    }
+}
+
+/* --- Ajuste general de formularios en páginas de configuración --- */
+@media (max-width: 767.98px) {
+    /* Formularios de configuración: campos ocupan ancho completo */
+    .card-body .row .col-md-4,
+    .card-body .row .col-md-3 {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+}

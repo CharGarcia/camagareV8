@@ -64,19 +64,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                     <i class="bi bi-receipt me-1"></i> Facturación
                                 </button>
                             </li>
-                            <li class="nav-item">
-                                <button class="nav-link fw-medium py-2 disabled" id="tab-firma-info-btn"
-                                    data-bs-toggle="tab" data-bs-target="#tab-firma-info" type="button">
-                                    <i class="bi bi-info-circle me-1"></i> Información
-                                </button>
-                            </li>
                         </ul>
                         <?php
                         $pestanasConfig = [
                             'tab-firma-pago-btn' => 'Pago',
                             'tab-firma-docs-btn' => 'Documentos',
                             'tab-firma-fact-btn' => 'Facturación',
-                            'tab-firma-info-btn' => 'Información',
                         ];
                         echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfigF, 'firmas_electronicas');
                         ?>
@@ -663,39 +656,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
 
                             </div>
                         </div><!-- /tab-firma-fact -->
-
-                        <!-- ── Pestaña Información ── -->
-                        <div class="tab-pane fade" id="tab-firma-info" role="tabpanel">
-
-                            <!-- Permisos -->
-                            <div class="p-2 border rounded-3 bg-white shadow-sm mb-3 mx-0">
-                                <div class="small fw-bold text-muted mb-2 d-flex align-items-center" style="font-size:.7rem;">
-                                    <i class="bi bi-key-fill text-warning me-2"></i> PERMISOS
-                                </div>
-                                <div class="d-flex flex-wrap gap-2">
-                                    <?php
-                                    $bBadge = fn($ok, $lbl) => sprintf(
-                                        '<span class="badge bg-%s bg-opacity-10 text-%s border border-%s border-opacity-25 px-2" style="font-size:.65rem;">%s</span>',
-                                        $ok ? 'success' : 'secondary text-opacity-50',
-                                        $ok ? 'success' : 'secondary',
-                                        $ok ? 'success' : 'secondary',
-                                        $lbl
-                                    );
-                                    echo $bBadge($perm['ver']        ?? true,  'VER');
-                                    echo $bBadge($perm['crear']      ?? true,  'CREAR');
-                                    echo $bBadge($perm['actualizar'] ?? true,  'MODIFICAR');
-                                    echo $bBadge($perm['eliminar']   ?? false, 'ELIMINAR');
-                                    ?>
-                                </div>
-                            </div>
-
-                            <div class="bg-light rounded-3 p-3 border mb-3">
-                                <h6 class="text-primary mb-3 small fw-bold"><i class="bi bi-clock-history me-2"></i>Historial</h6>
-                                <div id="auditoriaTimelineFirma" class="position-relative mt-2" style="max-height:200px;overflow-y:auto;">
-                                    <div class="text-center py-3 text-muted small">Cargando…</div>
-                                </div>
-                            </div>
-                        </div><!-- /tab-firma-info -->
 
                     </div><!-- /tab-content -->
                 </div><!-- /modal-body -->

@@ -1,4 +1,7 @@
 <?php
+$vistaConfigFexqr = \App\Helpers\PreferenciasHelper::getPreferenciasVista('factura-express-config');
+echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigFexqr, 'estiloVistaPestanasFexqr');
+
 $urlBase        = rtrim(BASE_URL, '/') . '/modulos/factura-express-config';
 $permFexqr      = $perm ?? [];
 $establecimientos = $establecimientos ?? [];
@@ -38,6 +41,15 @@ $formasPago       = $formasPago       ?? [];
                             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-fexqr-items"><i class="bi bi-list-ul me-1"></i>Productos / Servicios</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-fexqr-mensajes"><i class="bi bi-chat-text me-1"></i>Mensajes</a></li>
                         </ul>
+                        <div class="ms-auto pb-1">
+                            <?php
+                            $pestanasFexqr = [
+                                'pane-fexqr-items'    => 'Productos / Servicios',
+                                'pane-fexqr-mensajes' => 'Mensajes',
+                            ];
+                            echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasFexqr, $vistaConfigFexqr, 'factura-express-config');
+                            ?>
+                        </div>
                     </div>
                     <div class="border-bottom bg-light"></div>
 
