@@ -167,6 +167,41 @@ class AuthController extends Controller
         ]);
     }
 
+    /**
+     * Endpoint AJAX para verificar si la sesión sigue activa.
+     * El frontend hace polling cada X segundos para detectar si fue desplazado.
+     * GET/POST /auth/verificar-sesion
+     */
+    public function verificarSesion(): void
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        header('Content-Type: application/json');
+
+        if (!isset($_SESSION['id_usuario'])) {
+            echo json_encode(['activa' => false, 'razon' => 'no_sesion']);
+            exit;
+        }
+
+        if (empty($_SESSION['session_token'])) {
+            // Sesión PHP activa pero sin token (usuario que inició sesión antes de esta feature)
+            echo json_encode(['activa' => true]);
+            exit;
+        }
+
+        try {
+            $sesionSvc = new SesionActivaService();
+            $valido = $sesionSvc->validarToken($_SESSION['session_token']);
+            echo json_encode(['activa' => $valido, 'razon' => $valido ? '' : 'desplazado']);
+        } catch (\Throwable $e) {
+            // Si hay error de BD, no cerrar sesión
+            echo json_encode(['activa' => true]);
+        }
+        exit;
+    }
+
     public function logout(): void
     {
         if (session_status() === PHP_SESSION_NONE) {

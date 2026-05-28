@@ -1,4 +1,64 @@
 <script>const BASE_URL = '<?= rtrim(BASE_URL ?? '', '/') ?>';</script>
+<script>
+/* ---------------------------------------------------------------
+ * Control de sesión activa: polling cada 30 s.
+ * Si el servidor indica que la sesión fue desplazada (otro dispositivo
+ * inició sesión), muestra una alerta y redirige al login.
+ * --------------------------------------------------------------- */
+(function() {
+    var URL_VERIFICAR = BASE_URL + '/auth/verificar-sesion';
+    var URL_LOGOUT    = BASE_URL + '/auth/logout';
+    var INTERVALO_MS  = 30000; // 30 segundos
+    var _timer = null;
+    var _alertaActiva = false;
+
+    function verificarSesion() {
+        fetch(URL_VERIFICAR, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.activa && !_alertaActiva) {
+                _alertaActiva = true;
+                clearInterval(_timer);
+                if (window.Swal) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Sesión cerrada',
+                        text: 'Su sesión fue cerrada porque se inició sesión desde otro dispositivo.',
+                        confirmButtonText: 'Aceptar',
+                        confirmButtonColor: '#0d6efd',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                    }).then(function() {
+                        window.location.href = URL_LOGOUT;
+                    });
+                } else {
+                    alert('Su sesión fue cerrada porque se inició sesión desde otro dispositivo.');
+                    window.location.href = URL_LOGOUT;
+                }
+            }
+        })
+        .catch(function() {
+            // Error de red: no cerrar sesión, intentar de nuevo en el próximo ciclo
+        });
+    }
+
+    // Iniciar polling solo si hay sesión activa (el elemento body con id_usuario en data es
+    // suficiente señal; usamos el hecho de que este script está en el layout autenticado)
+    document.addEventListener('DOMContentLoaded', function() {
+        _timer = setInterval(verificarSesion, INTERVALO_MS);
+        // Verificar también cuando la pestaña vuelve a estar visible
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') {
+                verificarSesion();
+            }
+        });
+    });
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     // Mixin global para notificaciones tipo Toast
