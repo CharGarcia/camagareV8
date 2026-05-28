@@ -588,6 +588,12 @@ th[data-col] {
 /* --- Tablas de módulos: scroll contenido (sin mover la página) --- */
 /* NOTA: se excluye [class*="cmg-"] para no afectar cmg-menu-scroll-wrap */
 @media (max-width: 767.98px) {
+    /* overflow-x: clip en el contenido principal evita que la página se mueva
+       horizontalmente sin crear un scroll container (no rompe sticky ni el menú) */
+    .cmg-main-content {
+        overflow-x: clip;
+    }
+
     /* Scroll container de módulos (clientes-scroll, productos-scroll, etc.)
        Se excluyen elementos con prefijo cmg- para no romper el menú */
     [class*="-scroll"]:not([class*="cmg-"]) {
@@ -597,7 +603,7 @@ th[data-col] {
         max-width: 100% !important;
         width: 100% !important;
         max-height: calc(100vh - 200px) !important;
-        overscroll-behavior: none;
+        overscroll-behavior: contain;
     }
 
     /* Card que envuelve la tabla: no puede exceder la pantalla */
