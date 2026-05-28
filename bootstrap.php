@@ -61,16 +61,28 @@ spl_autoload_register(function (string $class): void {
     $parts = explode('\\', $relativeClass);
     $fileName = array_pop($parts);
 
-    // Intentar con la ruta exacta primero, luego con directorios en minúsculas
-    $candidates = [
-        $baseDir . implode('/', $parts) . '/' . $fileName . '.php',
-        $baseDir . strtolower(implode('/', $parts)) . '/' . $fileName . '.php',
-    ];
-
-    foreach ($candidates as $file) {
-        if (file_exists($file)) {
-            require $file;
-            return;
+    // Resolver cada segmento de directorio probando: original, minúsculas, primera mayúscula
+    $resolveDir = function (string $base, array $segments) use (&$resolveDir, $fileName): ?string {
+        if (empty($segments)) {
+            $file = $base . $fileName . '.php';
+            return file_exists($file) ? $file : null;
         }
+        $segment = array_shift($segments);
+        $candidates = array_unique([$segment, strtolower($segment), ucfirst(strtolower($segment))]);
+        foreach ($candidates as $candidate) {
+            $path = $base . $candidate . '/';
+            if (is_dir($path)) {
+                $result = $resolveDir($path, $segments);
+                if ($result !== null) {
+                    return $result;
+                }
+            }
+        }
+        return null;
+    };
+
+    $file = $resolveDir($baseDir, $parts);
+    if ($file !== null) {
+        require $file;
     }
 });
