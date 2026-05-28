@@ -1657,6 +1657,8 @@ class FacturaVentaController extends BaseModuloController
             echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
         }
         exit;
+    }
+
     private function renderFilaHtml(array $r): string
     {
         $rowData      = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
