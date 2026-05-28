@@ -8,7 +8,7 @@
 (function() {
     var URL_VERIFICAR = BASE_URL + '/auth/verificar-sesion';
     var URL_LOGOUT    = BASE_URL + '/auth/logout';
-    var INTERVALO_MS  = 30000; // 30 segundos
+    var INTERVALO_MS  = 5000; // 5 segundos
     var _timer = null;
     var _alertaActiva = false;
 
