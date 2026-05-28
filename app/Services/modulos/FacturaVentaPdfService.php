@@ -78,27 +78,30 @@ class FacturaVentaPdfService
             $rutasPosibles[] = $empresa['logo'];
         }
 
-        // DEBUG TEMPORAL - eliminar después
-        error_log('[PDF LOGO DEBUG] empresa keys: ' . implode(', ', array_keys($empresa)));
-        error_log('[PDF LOGO DEBUG] logo_ruta: ' . ($empresa['logo_ruta'] ?? 'NO EXISTE'));
-        error_log('[PDF LOGO DEBUG] logo: ' . ($empresa['logo'] ?? 'NO EXISTE'));
-        error_log('[PDF LOGO DEBUG] MVC_ROOT: ' . \MVC_ROOT);
-
         foreach ($rutasPosibles as $ruta) {
             $cleanRuta = ltrim($ruta, '/');
-            // Si la ruta en DB ya incluye 'sistema/' pero MVC_ROOT también, lo removemos para evitar duplicación
-            if (strpos($cleanRuta, 'sistema/') === 0) {
-                $cleanRuta = substr($cleanRuta, 8);
+            // Eliminar prefijos que duplicarían la ruta del servidor
+            if (strpos($cleanRuta, 'sistema/public/') === 0) {
+                $cleanRuta = substr($cleanRuta, strlen('sistema/public/'));
+            } elseif (strpos($cleanRuta, 'sistema/') === 0) {
+                $cleanRuta = substr($cleanRuta, strlen('sistema/'));
+            }
+            if (strpos($cleanRuta, 'public/') === 0) {
+                $cleanRuta = substr($cleanRuta, strlen('public/'));
             }
 
-            $testPath = \MVC_ROOT . '/' . $cleanRuta;
-            error_log('[PDF LOGO DEBUG] ruta original: ' . $ruta . ' => testPath: ' . $testPath . ' => existe: ' . (file_exists($testPath) ? 'SI' : 'NO'));
-            if (file_exists($testPath)) {
-                $logoPath = $testPath;
-                break;
+            // Intentar primero en public/ (ubicación real en producción)
+            $candidatos = [
+                \MVC_ROOT . '/public/' . $cleanRuta,
+                \MVC_ROOT . '/' . $cleanRuta,
+            ];
+            foreach ($candidatos as $testPath) {
+                if (file_exists($testPath)) {
+                    $logoPath = $testPath;
+                    break 2;
+                }
             }
         }
-        error_log('[PDF LOGO DEBUG] logoPath final: ' . ($logoPath ?: 'VACÍO - sin logo'));
         
         $pdf->SetLineWidth(0.3);
         $pdf->SetDrawColor(0, 0, 0);
