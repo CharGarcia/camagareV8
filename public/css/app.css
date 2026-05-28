@@ -9,6 +9,15 @@ html, body {
   will-change: auto !important;
 }
 
+/* Evitar scroll horizontal en toda la página (el scroll de tablas va dentro de su contenedor) */
+html {
+  overflow-x: hidden;
+}
+body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 /* Variables según reglas del proyecto */
 :root {
   --cmg-topbar-item-height: 20px;
@@ -585,19 +594,39 @@ th[data-col] {
     }
 }
 
-/* --- Tablas de módulos: scroll horizontal en móvil --- */
+/* --- Tablas de módulos: scroll contenido (sin mover la página) --- */
 @media (max-width: 767.98px) {
-    /* Scroll containers de módulos (productos-scroll, clientes-scroll, etc.) */
+    /* Bloquear scroll horizontal en el layout principal para que la página no se mueva */
+    body,
+    .cmg-main-content,
+    .cmg-main-content > .container,
+    .cmg-main-content > .container-fluid {
+        overflow-x: hidden !important;
+        max-width: 100vw !important;
+    }
+
+    /* Scroll container: ancho máximo = pantalla, scroll horizontal INTERNO (no mueve la página) */
     [class*="-scroll"] {
         overflow-x: auto !important;
+        overflow-y: auto !important;
         -webkit-overflow-scrolling: touch;
+        max-width: 100% !important;
+        width: 100% !important;
         max-height: calc(100vh - 200px) !important;
     }
+
+    /* Card que envuelve la tabla: no puede exceder la pantalla */
+    .cmg-table-card {
+        max-width: 100% !important;
+        overflow: hidden;
+    }
+
     /* Tablas dentro de scroll containers: ancho mínimo para no aplastar columnas */
     [class*="-scroll"] .table {
         min-width: 600px;
     }
-    /* Celdas de acción: no reducir demasiado */
+
+    /* Celdas de acción: espacio mínimo para los botones */
     [class*="-scroll"] .table td:last-child,
     [class*="-scroll"] .table th:last-child {
         min-width: 70px;
