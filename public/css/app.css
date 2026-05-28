@@ -492,40 +492,107 @@ th[data-col] {
    RESPONSIVE MÓVIL — Reglas globales del sistema
    ============================================================ */
 
-/* --- Modales: pantalla completa en dispositivos pequeños --- */
-@media (max-width: 575.98px) {
-    /* modal-xl y modal-lg ocupan toda la pantalla en móvil */
-    .modal-dialog.modal-xl,
+/* ============================================================
+   MODALES RESPONSIVOS — Pantalla completa según breakpoint
+   ============================================================ */
+
+/* Mixin reutilizable: modal fullscreen */
+.cmg-modal-fullscreen .modal-dialog,
+.cmg-modal-fullscreen .modal-content {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100% !important;
+    min-height: 100dvh !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+}
+
+/* TABLETS (≤ 991px): modal-xl pasa a pantalla completa */
+@media (max-width: 991.98px) {
+    .modal-dialog.modal-xl {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        min-height: 100dvh !important;
+        margin: 0 !important;
+        align-items: flex-start !important;
+    }
+    .modal-dialog.modal-xl .modal-content {
+        min-height: 100dvh;
+        border: 0;
+        border-radius: 0;
+        display: flex;
+        flex-direction: column;
+    }
+    .modal-dialog.modal-xl .modal-body {
+        flex: 1 1 auto;
+        overflow-y: auto;
+    }
+}
+
+/* MÓVIL GRANDE (≤ 767px): modal-lg también pasa a pantalla completa */
+@media (max-width: 767.98px) {
     .modal-dialog.modal-lg {
         width: 100vw !important;
         max-width: 100vw !important;
-        min-height: 100% !important;
+        min-height: 100dvh !important;
         margin: 0 !important;
-        padding: 0 !important;
+        align-items: flex-start !important;
     }
-    .modal-dialog.modal-xl .modal-content,
     .modal-dialog.modal-lg .modal-content {
-        min-height: 100vh;
+        min-height: 100dvh;
         border: 0;
         border-radius: 0;
-        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
     }
-    /* Ajustar body del modal para no exceder pantalla */
-    .modal-dialog.modal-xl .modal-body,
     .modal-dialog.modal-lg .modal-body {
-        overflow-y: auto;
         flex: 1 1 auto;
-        max-height: calc(100dvh - 160px);
+        overflow-y: auto;
     }
-    /* Tabs de modales: compactos en móvil */
+
+    /* Nav-tabs en modales: scroll horizontal si no caben */
+    .modal .nav-tabs {
+        flex-wrap: nowrap !important;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .modal .nav-tabs::-webkit-scrollbar { display: none; }
     .modal .nav-tabs .nav-link {
         font-size: 0.78rem !important;
-        padding: 0.3rem 0.5rem !important;
+        padding: 0.3rem 0.55rem !important;
+        white-space: nowrap;
     }
-    /* Footer modal: apilado en móvil */
+}
+
+/* MÓVIL PEQUEÑO (≤ 575px): modales sin clase de tamaño también se expanden */
+@media (max-width: 575.98px) {
+    /* Modales default (sin modal-lg ni modal-xl): casi fullscreen con pequeño margen */
+    .modal-dialog:not(.modal-lg):not(.modal-xl):not(.modal-sm) {
+        width: calc(100vw - 1rem) !important;
+        max-width: calc(100vw - 1rem) !important;
+        margin: 0.5rem auto !important;
+    }
+
+    /* Footer: botones apilados */
     .modal-footer {
         flex-wrap: wrap;
         gap: 0.4rem;
+    }
+
+    /* Inputs y selects más compactos en modales */
+    .modal .form-control,
+    .modal .form-select {
+        font-size: 0.85rem;
+    }
+
+    /* Columnas de formulario dentro de modales: ancho completo */
+    .modal-body .row > [class*="col-md-"],
+    .modal-body .row > [class*="col-sm-"] {
+        flex: 0 0 100%;
+        max-width: 100%;
     }
 }
 
