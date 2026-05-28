@@ -38,7 +38,7 @@ class OrdenesCompraController extends BaseModuloController
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $db        = Database::getConnection();
             $sql       = "SELECT COUNT(*) FROM ordenes_compra
-                          WHERE id_empresa = :id_empresa AND estado = 'borrador' AND eliminado = false";
+                          WHERE id_empresa = :id_empresa AND estado = 'borrador' AND eliminado = false AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
             $st = $db->prepare($sql);
             $st->execute([':id_empresa' => $idEmpresa]);
             echo json_encode(['ok' => true, 'count' => (int) $st->fetchColumn()]);
