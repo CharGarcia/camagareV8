@@ -3,6 +3,26 @@
  * Helper para envío de correos usando correos_config
  */
 
+if (!function_exists('_mail_resolve_ipv4_host')) {
+    /**
+     * Resuelve un hostname forzando IPv4 para evitar timeouts con IPv6.
+     * En servidores con IPv6 habilitado pero sin ruta IPv6 válida (ej: DigitalOcean),
+     * PHPMailer intenta IPv6 primero y falla. Esto devuelve solo IPs IPv4.
+     */
+    function _mail_resolve_ipv4_host(string $host): string
+    {
+        $resolved = @gethostbynamel($host);
+        if (!$resolved) {
+            return $host;
+        }
+        $ipv4 = array_filter($resolved, fn($ip) => filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4));
+        if (!empty($ipv4)) {
+            return implode(';', array_values($ipv4));
+        }
+        return $host;
+    }
+}
+
 if (!function_exists('enviar_correo_recuperar_clave')) {
     /**
      * Envía el correo de recuperación de contraseña.
@@ -36,7 +56,7 @@ if (!function_exists('enviar_correo_recuperar_clave')) {
 
         try {
             $mail->isSMTP();
-            $mail->Host = $base['host'];
+            $mail->Host = _mail_resolve_ipv4_host($base['host']);
             $mail->SMTPAuth = true;
             $mail->Username = $base['emisor'];
             $mail->Password = $base['pass'];
@@ -105,7 +125,7 @@ if (!function_exists('enviar_correo_recuperar_clave')) {
 
         try {
             $mail->isSMTP();
-            $mail->Host = $base['host'];
+            $mail->Host = _mail_resolve_ipv4_host($base['host']);
             $mail->SMTPAuth = true;
             $mail->Username = $base['emisor'];
             $mail->Password = $base['pass'];
@@ -169,7 +189,7 @@ if (!function_exists('enviar_correo_notificacion_tarea')) {
 
         try {
             $mail->isSMTP();
-            $mail->Host = $base['host'];
+            $mail->Host = _mail_resolve_ipv4_host($base['host']);
             $mail->SMTPAuth = true;
             $mail->Username = $base['emisor'];
             $mail->Password = $base['pass'];

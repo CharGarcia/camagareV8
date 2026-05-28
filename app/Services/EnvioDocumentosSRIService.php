@@ -153,7 +153,7 @@ class EnvioDocumentosSRIService
 
         try {
             $mail->isSMTP();
-            $mail->Host       = $smtpData['host'];
+            $mail->Host       = _mail_resolve_ipv4_host($smtpData['host']);
             $mail->SMTPAuth   = true;
             $mail->Username   = $smtpData['username'];
             $mail->Password   = $smtpData['password'];
