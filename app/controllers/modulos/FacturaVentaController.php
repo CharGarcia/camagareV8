@@ -506,13 +506,26 @@ class FacturaVentaController extends BaseModuloController
 
             $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
             if (!empty($establecimientos)) {
+                // Asignar campos críticos del establecimiento antes del try/catch
+                if (!empty($establecimientos[0]['logo_ruta'])) {
+                    $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+                }
+                if (!empty($establecimientos[0]['direccion'])) {
+                    $empresa['direccion_establecimiento'] = $establecimientos[0]['direccion'];
+                }
+                if (!empty($establecimientos[0]['leyenda_pdf_titulo'])) {
+                    $empresa['leyenda_pdf_titulo'] = $establecimientos[0]['leyenda_pdf_titulo'];
+                }
+                if (!empty($establecimientos[0]['leyenda_pdf_mensaje'])) {
+                    $empresa['leyenda_pdf_mensaje'] = $establecimientos[0]['leyenda_pdf_mensaje'];
+                }
                 try {
                     $estRepo   = new \App\repositories\modulos\EmpresaRepository();
                     $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
                     if ($estConfig) {
                         $estConfig['direccion_matriz'] = $empresa['direccion'] ?? '';
                         $estConfig['direccion_establecimiento'] = $establecimientos[0]['direccion'] ?? '';
-                        
+
                         if (!empty($establecimientos[0]['logo_ruta'])) {
                             $estConfig['logo_ruta'] = $establecimientos[0]['logo_ruta'];
                         }
@@ -665,6 +678,19 @@ class FacturaVentaController extends BaseModuloController
 
             $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
             if (!empty($establecimientos)) {
+                // Asignar campos críticos del establecimiento antes del try/catch
+                if (!empty($establecimientos[0]['logo_ruta'])) {
+                    $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+                }
+                if (!empty($establecimientos[0]['direccion'])) {
+                    $empresa['direccion_establecimiento'] = $establecimientos[0]['direccion'];
+                }
+                if (!empty($establecimientos[0]['leyenda_pdf_titulo'])) {
+                    $empresa['leyenda_pdf_titulo'] = $establecimientos[0]['leyenda_pdf_titulo'];
+                }
+                if (!empty($establecimientos[0]['leyenda_pdf_mensaje'])) {
+                    $empresa['leyenda_pdf_mensaje'] = $establecimientos[0]['leyenda_pdf_mensaje'];
+                }
                 try {
                     $estRepo   = new \App\repositories\modulos\EmpresaRepository();
                     $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
@@ -1578,13 +1604,26 @@ class FacturaVentaController extends BaseModuloController
 
             $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
             if (!empty($establecimientos)) {
+                // Asignar campos críticos del establecimiento antes del try/catch
+                if (!empty($establecimientos[0]['logo_ruta'])) {
+                    $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+                }
+                if (!empty($establecimientos[0]['direccion'])) {
+                    $empresa['direccion_establecimiento'] = $establecimientos[0]['direccion'];
+                }
+                if (!empty($establecimientos[0]['leyenda_pdf_titulo'])) {
+                    $empresa['leyenda_pdf_titulo'] = $establecimientos[0]['leyenda_pdf_titulo'];
+                }
+                if (!empty($establecimientos[0]['leyenda_pdf_mensaje'])) {
+                    $empresa['leyenda_pdf_mensaje'] = $establecimientos[0]['leyenda_pdf_mensaje'];
+                }
                 try {
                     $estRepo   = new \App\repositories\modulos\EmpresaRepository();
                     $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
                     if ($estConfig) {
                         $estConfig['direccion_matriz'] = $empresa['direccion'] ?? '';
                         $estConfig['direccion_establecimiento'] = $establecimientos[0]['direccion'] ?? '';
-                        
+
                         if (!empty($establecimientos[0]['logo_ruta'])) {
                             $estConfig['logo_ruta'] = $establecimientos[0]['logo_ruta'];
                         }
@@ -1603,7 +1642,7 @@ class FacturaVentaController extends BaseModuloController
 
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');
-            
+
             if ($plantillaPdf) {
                 $pdfString = $renderer->generar($plantillaPdf, $factura, $detalles, $pagos, $infoAdicional, $empresa, 'S');
             } else {

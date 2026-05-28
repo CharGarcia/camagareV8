@@ -247,7 +247,7 @@ class EmpresaRepository extends BaseModel
                        mostrar_unidad_medida, valor_limite_consumidor_final,
                        id_forma_pago_sri_def,
                        editar_precio_factura, editar_iva_factura, editar_descuento_factura,
-                       mostrar_propina_factura
+                       mostrar_propina_factura, logo_ruta
                 FROM empresa_establecimiento
                 WHERE id = {$id} AND eliminado = false";
         $res = $this->query($sql);
