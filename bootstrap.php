@@ -60,9 +60,17 @@ spl_autoload_register(function (string $class): void {
     $relativeClass = substr($class, strlen($prefix));
     $parts = explode('\\', $relativeClass);
     $fileName = array_pop($parts);
-    $dirPath = strtolower(implode('/', $parts));
-    $file = $baseDir . ($dirPath ? $dirPath . '/' : '') . $fileName . '.php';
-    if (file_exists($file)) {
-        require $file;
+
+    // Intentar con la ruta exacta primero, luego con directorios en minúsculas
+    $candidates = [
+        $baseDir . implode('/', $parts) . '/' . $fileName . '.php',
+        $baseDir . strtolower(implode('/', $parts)) . '/' . $fileName . '.php',
+    ];
+
+    foreach ($candidates as $file) {
+        if (file_exists($file)) {
+            require $file;
+            return;
+        }
     }
 });
