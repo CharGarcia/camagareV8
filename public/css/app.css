@@ -9,6 +9,14 @@ html, body {
   will-change: auto !important;
 }
 
+/* Evitar rebote/arrastre vertical de la página en móvil
+   (overscroll-behavior no rompe sticky ni el navbar collapse) */
+@media (max-width: 991.98px) {
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
 /* Variables según reglas del proyecto */
 :root {
   --cmg-topbar-item-height: 20px;
