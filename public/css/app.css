@@ -594,16 +594,31 @@ th[data-col] {
         overflow-x: clip;
     }
 
-    /* Scroll container de módulos en móvil:
-       SIN overflow-x para mantener los thead sticky (overflow-x rompe position:sticky).
-       La página no se mueve gracias a overflow-x:clip en .cmg-main-content */
+    /* WRAPPER EXTERNO (inyectado por JS): maneja scroll horizontal
+       No tiene overflow-y → no interfiere con position:sticky */
+    .cmg-scroll-x-wrap {
+        overflow-x: auto !important;
+        overflow-y: visible !important;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+        max-width: 100%;
+        width: 100%;
+    }
+
+    /* CONTENEDOR INTERNO (-scroll): maneja scroll vertical + sticky thead
+       Sin overflow-x → position:sticky funciona correctamente */
     [class*="-scroll"]:not([class*="cmg-"]) {
-        overflow-x: hidden !important;
+        overflow-x: visible !important;
         overflow-y: auto !important;
-        max-width: 100% !important;
+        max-width: none !important;
         width: 100% !important;
         max-height: calc(100vh - 200px) !important;
         overscroll-behavior-y: contain;
+    }
+
+    /* Tabla: ancho mínimo para que el wrapper externo active el scroll horizontal */
+    [class*="-scroll"]:not([class*="cmg-"]) .table {
+        min-width: 600px;
     }
 
     /* Card que envuelve la tabla */
@@ -612,27 +627,9 @@ th[data-col] {
         overflow: hidden;
     }
 
-    /* Tabla: ocupa el ancho disponible sin desbordarse,
-       columnas se comprimen con ellipsis */
-    [class*="-scroll"]:not([class*="cmg-"]) .table {
-        width: 100% !important;
-        min-width: unset !important;
-        table-layout: fixed;
-    }
-
-    /* Celdas: texto truncado con ellipsis en lugar de desbordar */
-    [class*="-scroll"]:not([class*="cmg-"]) .table th,
-    [class*="-scroll"]:not([class*="cmg-"]) .table td {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        max-width: 0;
-    }
-
-    /* Columna de acciones (última): ancho fijo suficiente para los botones */
+    /* Columna de acciones: espacio mínimo para los botones */
     [class*="-scroll"]:not([class*="cmg-"]) .table th:last-child,
     [class*="-scroll"]:not([class*="cmg-"]) .table td:last-child {
-        width: 70px;
         min-width: 70px;
     }
 }
