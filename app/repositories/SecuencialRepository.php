@@ -74,6 +74,21 @@ class SecuencialRepository
     }
 
     /**
+     * Obtiene el tipo_ambiente ('1' Pruebas, '2' Producción) basado en el punto de emisión.
+     */
+    private function getTipoAmbiente(int $idPuntoEmision): string
+    {
+        $sql = "SELECT CAST(e.tipo_ambiente AS VARCHAR(1)) 
+                FROM empresa_punto_emision pe
+                JOIN empresa_establecimiento ee ON pe.id_establecimiento = ee.id
+                JOIN empresas e ON ee.id_empresa = e.id
+                WHERE pe.id = :id_punto";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':id_punto' => $idPuntoEmision]);
+        return $stmt->fetchColumn() ?: '1';
+    }
+
+    /**
      * Obtiene TODOS los secuenciales ya utilizados para un punto de emisión y tipo de documento.
      * Solo consulta la tabla correspondiente al tipo de documento.
      * Retorna un array de enteros con los secuenciales usados, ordenados ASC.
@@ -94,15 +109,20 @@ class SecuencialRepository
         $tabla    = $map['tabla'];
         $colSec   = $map['col_sec'];
         $colPunto = $map['col_punto'];
+        $tipoAmbiente = $this->getTipoAmbiente($idPuntoEmision);
 
         $sql = "SELECT CAST({$colSec} AS BIGINT) AS sec_num
                 FROM {$tabla}
                 WHERE {$colPunto} = :id_punto 
+                  AND tipo_ambiente = :tipo_ambiente
                   AND eliminado = false
                 ORDER BY sec_num ASC";
 
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':id_punto' => $idPuntoEmision]);
+        $stmt->execute([
+            ':id_punto' => $idPuntoEmision,
+            ':tipo_ambiente' => $tipoAmbiente
+        ]);
 
         return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
     }
@@ -121,14 +141,19 @@ class SecuencialRepository
         $tabla    = $map['tabla'];
         $colSec   = $map['col_sec'];
         $colPunto = $map['col_punto'];
+        $tipoAmbiente = $this->getTipoAmbiente($idPuntoEmision);
 
         $sql = "SELECT COALESCE(MAX(CAST({$colSec} AS BIGINT)), 0) AS max_sec
                 FROM {$tabla}
                 WHERE {$colPunto} = :id_punto 
+                  AND tipo_ambiente = :tipo_ambiente
                   AND eliminado = false";
 
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':id_punto' => $idPuntoEmision]);
+        $stmt->execute([
+            ':id_punto' => $idPuntoEmision,
+            ':tipo_ambiente' => $tipoAmbiente
+        ]);
 
         return (int) $stmt->fetchColumn();
     }
@@ -147,18 +172,21 @@ class SecuencialRepository
         $tabla    = $map['tabla'];
         $colSec   = $map['col_sec'];
         $colPunto = $map['col_punto'];
+        $tipoAmbiente = $this->getTipoAmbiente($idPuntoEmision);
 
         $secStr = str_pad((string) $secuencial, 9, '0', STR_PAD_LEFT);
 
         $sql = "SELECT COUNT(*) 
                 FROM {$tabla}
                 WHERE {$colPunto} = :id_punto 
+                  AND tipo_ambiente = :tipo_ambiente
                   AND ({$colSec} = :sec_num OR {$colSec} = :sec_str)
                   AND eliminado = false";
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
             ':id_punto' => $idPuntoEmision,
+            ':tipo_ambiente' => $tipoAmbiente,
             ':sec_num'  => (string) $secuencial,
             ':sec_str'  => $secStr,
         ]);

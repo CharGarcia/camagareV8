@@ -37,7 +37,7 @@ class EgresoRepository extends BaseRepository
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
 
-        $where = "WHERE e.id_empresa = :id_empresa AND e.eliminado = FALSE";
+        $where = "WHERE e.id_empresa = :id_empresa AND e.eliminado = false AND e.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {

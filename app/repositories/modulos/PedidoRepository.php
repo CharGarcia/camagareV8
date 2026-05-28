@@ -33,7 +33,7 @@ class PedidoRepository {
         }
         $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
 
-        $whereSql = "WHERE p.id_empresa = :id_empresa AND p.eliminado = false";
+        $whereSql = "WHERE p.id_empresa = :id_empresa AND p.eliminado = false AND p.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
         $params   = [':id_empresa' => $idEmpresa];
 
         if ($buscar !== '') {

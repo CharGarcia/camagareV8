@@ -46,7 +46,9 @@ class InventarioRepository extends BaseRepository
 
         $sql = "SELECT ROUND(COALESCE(SUM(cantidad), 0), 2) 
                 FROM inventario_kardex 
-                WHERE id_empresa = :e AND id_producto = :p AND id_bodega = :b AND eliminado = false $whereExcluir $whereLote";
+                WHERE id_empresa = :e AND id_producto = :p AND id_bodega = :b AND eliminado = false 
+                  AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
+                  $whereExcluir $whereLote";
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return (float) $st->fetchColumn();
@@ -85,7 +87,9 @@ class InventarioRepository extends BaseRepository
 
         $sql = "SELECT ROUND(COALESCE(SUM(cantidad), 0), 2) FROM inventario_kardex
                 WHERE id_empresa = :e AND id_producto = :p AND id_bodega = :b 
-                  AND eliminado = false $whereLote $whereExcluir";
+                  AND eliminado = false 
+                  AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
+                  $whereLote $whereExcluir";
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return (float) ($st->fetchColumn() ?: 0);
@@ -273,7 +277,7 @@ class InventarioRepository extends BaseRepository
     public function getKardex(int $idEmpresa, array $filtros = [], int $page = 1, int $perPage = 50): array
     {
         $params = [':e' => $idEmpresa];
-        $where  = 'WHERE k.id_empresa = :e AND k.eliminado = false';
+        $where  = 'WHERE k.id_empresa = :e AND k.eliminado = false AND k.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)';
 
         if (!empty($filtros['buscar'])) {
             $where .= ' AND (p.nombre ILIKE :b OR p.codigo ILIKE :b OR k.observaciones ILIKE :b OR b.nombre ILIKE :b)';

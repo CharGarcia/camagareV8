@@ -37,7 +37,7 @@ class ComprasRepository extends BaseRepository
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
 
-        $where = "WHERE c.id_empresa = :id_empresa AND c.eliminado = FALSE";
+        $where = "WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         $parsed     = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         $textoLibre = $parsed['texto_libre'];

@@ -39,7 +39,7 @@ class RetencionVentaRepository extends BaseRepository
         ];
         $colFinal = $mapCols[$ordenCol] ?? "r.{$ordenCol}";
 
-        $where  = 'r.id_empresa = :ie AND r.eliminado = false';
+        $where  = 'r.id_empresa = :ie AND r.eliminado = false AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :ie)';
         $params = [':ie' => $idEmpresa];
 
         $parsed     = \App\Helpers\FiltrosBusqueda::parsear($buscar);

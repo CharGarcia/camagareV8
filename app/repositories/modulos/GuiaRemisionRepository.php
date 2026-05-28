@@ -32,7 +32,7 @@ class GuiaRemisionRepository extends BaseRepository
     ): array {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
-        $where  = "WHERE g.id_empresa = :id_empresa AND g.eliminado = FALSE";
+        $where = "WHERE g.id_empresa = :id_empresa AND g.eliminado = false AND g.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         if ($buscar !== '') {
             $where .= " AND (

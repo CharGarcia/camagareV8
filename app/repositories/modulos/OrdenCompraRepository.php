@@ -34,6 +34,7 @@ class OrdenCompraRepository extends BaseRepository
         $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
 
         $whereSql = $this->getBaseWhere($idEmpresa, 'oc', $idUsuarioFiltro);
+        $whereSql .= " AND oc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
         $params   = [':id_empresa' => $idEmpresa];
         if ($idUsuarioFiltro !== null) {
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;

@@ -24,7 +24,7 @@ class AsientoContableRepository
         
         $sql = "SELECT id, fecha_asiento, tipo_comprobante, numero_comprobante, concepto, estado, modulo_origen, total_debe, total_haber 
                 FROM asientos_contables_cabecera 
-                WHERE id_empresa = :id_empresa AND eliminado = false";
+                WHERE id_empresa = :id_empresa AND eliminado = false AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
                 
         $params = [':id_empresa' => $idEmpresa];
 
