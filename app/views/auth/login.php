@@ -32,7 +32,14 @@ $base = BASE_URL;
                 El usuario no tiene empresas asignadas.
             </div>
             <?php endif; ?>
-            <form method="POST" action="<?= $base ?>/auth/login">
+            <?php if (!empty($_GET['sesion_cerrada'])): ?>
+            <div class="alert alert-warning py-2 d-flex align-items-center gap-2" role="alert">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <?= htmlspecialchars(urldecode($_GET['msg'] ?? 'Su sesión fue cerrada.')) ?>
+            </div>
+            <?php endif; ?>
+            <form method="POST" action="<?= $base ?>/auth/login" id="form-login">
+                <input type="hidden" name="force_login" id="force_login" value="">
                 <div class="mb-3">
                     <label for="cedula" class="form-label">Cédula</label>
                     <input type="text" class="form-control" id="cedula" name="cedula" placeholder="Ingresa tu cédula" required autofocus>
@@ -41,7 +48,7 @@ $base = BASE_URL;
                     <label for="password" class="form-label">Contraseña</label>
                     <input type="password" class="form-control" id="password" name="password" placeholder="Ingresa tu contraseña" required>
                 </div>
-                <button type="submit" class="btn btn-primary w-100 mb-2">
+                <button type="submit" class="btn btn-primary w-100 mb-2" id="btn-login">
                     <i class="bi bi-box-arrow-in-right"></i> Iniciar sesión
                 </button>
                 <div class="text-center">
@@ -81,6 +88,87 @@ $base = BASE_URL;
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+    // Control de sesiones concurrentes
+    (function() {
+        var form       = document.getElementById('form-login');
+        var forceInput = document.getElementById('force_login');
+        var btnLogin   = document.getElementById('btn-login');
+        var urlLogin   = '<?= rtrim($base ?? BASE_URL, "/") ?>/auth/login';
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            var cedula   = document.getElementById('cedula').value.trim();
+            var password = document.getElementById('password').value;
+            var force    = forceInput.value;
+
+            if (!cedula || !password) return;
+
+            btnLogin.disabled = true;
+            btnLogin.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Verificando...';
+
+            var formData = new FormData();
+            formData.append('cedula',      cedula);
+            formData.append('password',    password);
+            formData.append('force_login', force);
+            formData.append('ajax_login',  '1');
+
+            fetch(urlLogin, { method: 'POST', body: formData })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.sesion_activa) {
+                    btnLogin.disabled = false;
+                    btnLogin.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Iniciar sesión';
+
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Sesión activa detectada',
+                        html: '<p class="mb-1">Ya existe una sesión iniciada desde:</p>' +
+                              '<p class="mb-1"><strong>IP:</strong> ' + (data.ip || 'desconocida') + '</p>' +
+                              '<p class="mb-0"><strong>Última actividad:</strong> ' + (data.ultima_actividad || 'desconocida') + '</p>' +
+                              '<p class="mt-2 text-muted small">¿Desea cerrar esa sesión e iniciar una nueva aquí?</p>',
+                        showCancelButton: true,
+                        confirmButtonText: 'Sí, cerrar sesión anterior',
+                        cancelButtonText: 'Cancelar',
+                        confirmButtonColor: '#0d6efd',
+                        cancelButtonColor: '#6c757d',
+                    }).then(function(res) {
+                        if (res.isConfirmed) {
+                            forceInput.value = '1';
+                            btnLogin.disabled = true;
+                            btnLogin.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Ingresando...';
+                            form.dispatchEvent(new Event('submit'));
+                        }
+                    });
+
+                } else if (data.ok && data.redirect) {
+                    window.location.href = data.redirect;
+
+                } else if (data.error) {
+                    btnLogin.disabled = false;
+                    btnLogin.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Iniciar sesión';
+                    var msgEl = document.createElement('div');
+                    msgEl.className = 'alert alert-danger py-2 mt-2';
+                    msgEl.textContent = data.msg || 'Usuario o contraseña incorrectos.';
+                    var existingAlert = form.querySelector('.alert');
+                    if (existingAlert) existingAlert.remove();
+                    form.prepend(msgEl);
+
+                } else {
+                    form.submit();
+                }
+            })
+            .catch(function() {
+                // Error de red o respuesta no-JSON: enviar el formulario normalmente
+                btnLogin.disabled = false;
+                btnLogin.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Iniciar sesión';
+                form.submit();
+            });
+        });
+    })();
+    </script>
     <script>
     (function() {
         var modal = new bootstrap.Modal(document.getElementById('modalRecuperar'));

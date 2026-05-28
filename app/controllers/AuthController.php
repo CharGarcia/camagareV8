@@ -9,6 +9,7 @@ namespace App\controllers;
 
 use App\core\Controller;
 use App\models\Usuario;
+use App\Services\SesionActivaService;
 
 class AuthController extends Controller
 {
@@ -32,37 +33,66 @@ class AuthController extends Controller
             session_start();
         }
 
-        $cedula = trim($_POST['cedula'] ?? '');
-        $password = trim($_POST['password'] ?? '');
+        $cedula     = trim($_POST['cedula'] ?? '');
+        $password   = trim($_POST['password'] ?? '');
+        $forceLogin = !empty($_POST['force_login']); // El usuario confirmó cerrar la sesión anterior
+        $isAjax     = !empty($_POST['ajax_login']);   // Request desde fetch (JS)
 
         if ($cedula === '' || $password === '') {
+            if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['error' => 'credenciales', 'msg' => 'Usuario o contraseña incorrectos.']); exit; }
             $this->redirect(BASE_URL . '/?error=1');
         }
 
         $model = new Usuario();
-        $user = $model->validaLogin($cedula, $password);
+        $user  = $model->validaLogin($cedula, $password);
 
         if (!$user) {
+            if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['error' => 'credenciales', 'msg' => 'Usuario o contraseña incorrectos.']); exit; }
             $this->redirect(BASE_URL . '/?error=1');
         }
 
-        $_SESSION['nivel'] = $user['nivel'];
-        $_SESSION['nombre'] = $user['nombre'];
+        // --- Control de sesiones concurrentes ---
+        $sesionSvc = new SesionActivaService();
+        $sesionActiva = $sesionSvc->obtenerSesionActiva((int) $user['id']);
+
+        if ($sesionActiva && !$forceLogin) {
+            // Existe una sesión activa en otro dispositivo; notificar al cliente vía JSON
+            $ultimaActividad = $sesionActiva['ultima_actividad'] ?? $sesionActiva['created_at'] ?? '';
+            // Formatear fecha
+            if ($ultimaActividad) {
+                $dt = new \DateTime($ultimaActividad);
+                $ultimaActividad = $dt->format('d-m-Y H:i:s');
+            }
+            header('Content-Type: application/json');
+            echo json_encode([
+                'sesion_activa'    => true,
+                'ip'               => $sesionActiva['ip'] ?? 'desconocida',
+                'ultima_actividad' => $ultimaActividad,
+                'cedula'           => $cedula,
+                'password_hash'    => '', // No enviamos la clave; el frontend la reenvía
+            ]);
+            exit;
+        }
+
+        // Si force_login o no había sesión activa: proceder con el login normal
+        $_SESSION['nivel']      = $user['nivel'];
+        $_SESSION['nombre']     = $user['nombre'];
         $_SESSION['id_usuario'] = $user['id'];
 
         $empresasLogin = $model->getEmpresasAsignadasParaLogin($_SESSION['id_usuario']);
-        $numEmpresas = (int) ($empresasLogin['numrows'] ?? 0);
+        $numEmpresas   = (int) ($empresasLogin['numrows'] ?? 0);
 
         if ($numEmpresas === 0) {
             // Solo SuperAdmin puede entrar sin empresa (crear la primera en Configuración → Empresas)
             if ((int) $user['nivel'] !== 3) {
                 unset($_SESSION['id_usuario'], $_SESSION['nivel'], $_SESSION['nombre']);
+                if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['error' => 'sin_empresa', 'msg' => 'El usuario no tiene empresas asignadas.']); exit; }
                 $this->redirect(BASE_URL . '/?error=2');
             }
             unset($_SESSION['id_empresa'], $_SESSION['ruc_empresa']);
         } else {
             $favId = (int) ($user['id_empresa_favorita'] ?? 0);
-            $emp = null;
+            $emp   = null;
             if ($favId > 0) {
                 $emp = $model->getEmpresaAsignadaEspecifica((int) $user['id'], $favId);
             }
@@ -74,14 +104,16 @@ class AuthController extends Controller
             }
 
             if ($emp) {
-                $_SESSION['id_empresa'] = $emp['id_empresa'];
-                $_SESSION['ruc_empresa'] = $emp['ruc_empresa'];
+                $_SESSION['id_empresa']   = $emp['id_empresa'];
+                $_SESSION['ruc_empresa']  = $emp['ruc_empresa'];
             }
         }
 
         session_regenerate_id(true);
-        // No usar session_write_close() aquí: en algunos entornos puede interferir con el envío
-        // de la cookie antes del redirect; PHP guarda la sesión al terminar el script.
+
+        // Registrar nueva sesión activa (cierra la anterior si existe)
+        $token = $sesionSvc->iniciarSesion((int) $user['id']);
+        $_SESSION['session_token'] = $token;
 
         // Super admin sin ninguna empresa: ir directo a crear la primera (configuración desde cero)
         if ((int) $user['nivel'] === 3 && $numEmpresas === 0) {
@@ -89,9 +121,11 @@ class AuthController extends Controller
                 'info',
                 'Bienvenido. Cree su primera empresa aquí; podrá completar datos y asignaciones después. Luego use el menú Configuración para el resto del sistema.',
             ];
+            if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['ok' => true, 'redirect' => BASE_URL . '/config/empresas-sistema']); exit; }
             $this->redirect(BASE_URL . '/config/empresas-sistema');
         }
 
+        if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['ok' => true, 'redirect' => BASE_URL . '/home/index']); exit; }
         $this->redirect(BASE_URL . '/home/index');
     }
 
@@ -135,6 +169,20 @@ class AuthController extends Controller
 
     public function logout(): void
     {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        // Desactivar el token en BD antes de destruir la sesión
+        if (!empty($_SESSION['session_token'])) {
+            try {
+                $sesionSvc = new SesionActivaService();
+                $sesionSvc->cerrarSesion($_SESSION['session_token']);
+            } catch (\Throwable $e) {
+                // No interrumpir el logout si falla la BD
+            }
+        }
+
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
             $params = session_get_cookie_params();
