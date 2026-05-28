@@ -597,6 +597,7 @@ th[data-col] {
         max-width: 100% !important;
         width: 100% !important;
         max-height: calc(100vh - 200px) !important;
+        overscroll-behavior: none;
     }
 
     /* Card que envuelve la tabla: no puede exceder la pantalla */
