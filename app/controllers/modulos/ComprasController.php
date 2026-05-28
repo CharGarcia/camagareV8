@@ -134,7 +134,7 @@ class ComprasController extends BaseModuloController
                         <td data-col="fecha_emision">' . $fechaEmision . '</td>
                         <td class="fw-medium text-truncate" style="max-width:220px" data-col="proveedor_nombre">' . htmlspecialchars($r['proveedor_nombre'] ?? '—') . '</td>
                         <td data-col="proveedor_ruc"><small class="text-muted">' . htmlspecialchars($r['proveedor_ruc'] ?? '—') . '</small></td>
-                        <td data-col="tipo_comprobante"><small>' . htmlspecialchars($r['tipo_comprobante'] ?? '—') . '</small></td>
+                        <td data-col="tipo_comprobante"><small>' . htmlspecialchars($r['tipo_comprobante_nombre'] ?? $r['tipo_comprobante'] ?? '—') . '</small></td>
                         <td data-col="sustento_nombre" class="text-truncate" style="max-width:160px"><small class="text-muted">' . htmlspecialchars($r['sustento_nombre'] ?? '—') . '</small></td>
                         <td class="text-end" data-col="total_sin_impuestos">' . number_format((float)($r['total_sin_impuestos'] ?? 0), 2) . '</td>
                         <td class="text-end" data-col="monto_iva">$' . number_format((float)($r['monto_iva'] ?? 0), 2) . '</td>

@@ -116,6 +116,7 @@ class ComprasRepository extends BaseRepository
             'proveedor_nombre' => 'p.razon_social',
             'proveedor_ruc'    => 'p.identificacion',
             'usuario_nombre'   => 'u.nombre',
+            'tipo_comprobante' => 'ca.comprobante',
             default            => "c.$ordenCol",
         };
 
@@ -126,11 +127,13 @@ class ComprasRepository extends BaseRepository
                        p.identificacion    AS proveedor_ruc,
                        st.nombre           AS sustento_nombre,
                        st.codigo           AS sustento_codigo,
-                       u.nombre            AS usuario_nombre
+                       u.nombre            AS usuario_nombre,
+                       ca.comprobante      AS tipo_comprobante_nombre
                 FROM compras_cabecera c
                 INNER JOIN proveedores p        ON c.id_proveedor = p.id
                 LEFT  JOIN sustento_tributario st ON c.id_sustento_tributario = st.id
                 LEFT  JOIN usuarios u            ON c.created_by = u.id
+                LEFT  JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = c.tipo_comprobante
                 $where
                 ORDER BY $ordenExpr $ordenDir
                 LIMIT $perPage OFFSET $offset";
