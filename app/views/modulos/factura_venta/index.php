@@ -4216,6 +4216,9 @@ $perm = $permOriginal;
 
         modalMain.show();
 
+        // Cargar cobros en background para mostrar el botón de pago con tarjeta
+        fvCargarCobrosTab();
+
         // Cargar datos completos vÃ­a AJAX
         try {
             const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getFacturaAjax?id=${id}`);
