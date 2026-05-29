@@ -5942,104 +5942,121 @@ function FV_abrirModalWhatsapp() {
 
 // ─── CAJITA DE PAGOS PAYPHONE ────────────────────────────────────────────────
 
-// Caché del módulo Payphone para no importarlo varias veces
-let _ppModulePromise = null;
+var _ppCargado = false;
 
-function _fvCargarPayphoneModule() {
-    if (!_ppModulePromise) {
-        // Cargar CSS
-        if (!document.querySelector('link[href*="payphone-payment-box.css"]')) {
-            const link  = document.createElement('link');
-            link.rel    = 'stylesheet';
-            link.href   = 'https://cdn.payphonetodoesposible.com/box/v2.0/payphone-payment-box.css';
-            document.head.appendChild(link);
-        }
-        // Importar módulo ES6 — resuelve el scope de PPaymentButtonBox correctamente
-        _ppModulePromise = import('https://cdn.payphonetodoesposible.com/box/v2.0/payphone-payment-box.js')
-            .catch(() => null);
+function _fvCargarPayphoneSDK(callback) {
+    if (_ppCargado && typeof window.PPaymentButtonBox !== 'undefined') {
+        callback();
+        return;
     }
-    return _ppModulePromise;
+    if (!document.querySelector('link[href*="payphone-payment-box.css"]')) {
+        var lnk  = document.createElement('link');
+        lnk.rel  = 'stylesheet';
+        lnk.href = 'https://cdn.payphonetodoesposible.com/box/v2.0/payphone-payment-box.css';
+        document.head.appendChild(lnk);
+    }
+    if (!document.querySelector('script[src*="payphone-payment-box.js"]')) {
+        var sc    = document.createElement('script');
+        sc.src    = 'https://cdn.payphonetodoesposible.com/box/v2.0/payphone-payment-box.js';
+        sc.onload = function() { _ppCargado = true; callback(); };
+        sc.onerror= function() { callback(new Error('No se pudo cargar el SDK de Payphone.')); };
+        document.head.appendChild(sc);
+    } else {
+        var t = 0;
+        var iv = setInterval(function() {
+            if (typeof window.PPaymentButtonBox !== 'undefined') {
+                clearInterval(iv);
+                _ppCargado = true;
+                callback();
+            } else if (++t > 50) {
+                clearInterval(iv);
+                callback(new Error('Tiempo de espera agotado cargando Payphone.'));
+            }
+        }, 100);
+    }
 }
 
 function _fvGetOCrearModal() {
-    let el = document.getElementById('modalFvPagoTarjeta');
-    if (!el) {
-        el = document.createElement('div');
-        el.innerHTML = `
-            <div class="modal fade" id="modalFvPagoTarjeta" tabindex="-1" data-bs-backdrop="static">
-                <div class="modal-dialog modal-dialog-centered" style="max-width:480px;">
-                    <div class="modal-content rounded-3 shadow">
-                        <div class="modal-header py-2 px-3">
-                            <h6 class="modal-title fw-bold">
-                                <i class="bi bi-credit-card-2-front text-primary me-2"></i>Pagar con tarjeta
-                            </h6>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                        </div>
-                        <div class="modal-body p-3">
-                            <div id="fvPagoTarjetaContenido"></div>
-                            <div class="d-flex align-items-center gap-1 mt-3 small text-muted">
-                                <i class="bi bi-shield-lock text-success"></i>
-                                Pago seguro procesado por <strong class="ms-1">Payphone</strong>
-                                <span class="ms-1" style="font-size:.7rem;">PCI DSS 4.0</span>
-                            </div>
-                        </div>
-                        <div class="modal-footer py-2 px-3 justify-content-end">
-                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-        document.body.appendChild(el.firstElementChild);
-        el = document.getElementById('modalFvPagoTarjeta');
-    }
-    return el;
+    var el = document.getElementById('modalFvPagoTarjeta');
+    if (el) return el;
+
+    var wrap = document.createElement('div');
+    var hdr  = document.createElement('div'); hdr.className = 'modal-header py-2 px-3';
+    var ttl  = document.createElement('h6');  ttl.className = 'modal-title fw-bold';
+    ttl.innerHTML = '<i class="bi bi-credit-card-2-front text-primary me-2"></i>Pagar con tarjeta';
+    var cls  = document.createElement('button'); cls.type = 'button'; cls.className = 'btn-close';
+    cls.setAttribute('data-bs-dismiss', 'modal'); cls.setAttribute('aria-label', 'Cerrar');
+    hdr.appendChild(ttl); hdr.appendChild(cls);
+
+    var bdy  = document.createElement('div'); bdy.className = 'modal-body p-3';
+    var ctn  = document.createElement('div'); ctn.id = 'fvPagoTarjetaContenido';
+    var sec  = document.createElement('div'); sec.className = 'd-flex align-items-center gap-1 mt-3 small text-muted';
+    sec.innerHTML = '<i class="bi bi-shield-lock text-success"></i>&nbsp;Pago seguro procesado por <strong class="ms-1">Payphone</strong>';
+    bdy.appendChild(ctn); bdy.appendChild(sec);
+
+    var ftr  = document.createElement('div'); ftr.className = 'modal-footer py-2 px-3 justify-content-end';
+    var can  = document.createElement('button'); can.type = 'button'; can.className = 'btn btn-secondary btn-sm';
+    can.setAttribute('data-bs-dismiss', 'modal'); can.textContent = 'Cancelar';
+    ftr.appendChild(can);
+
+    var cnt  = document.createElement('div'); cnt.className = 'modal-content rounded-3 shadow';
+    cnt.appendChild(hdr); cnt.appendChild(bdy); cnt.appendChild(ftr);
+    var dlg  = document.createElement('div'); dlg.className = 'modal-dialog modal-dialog-centered';
+    dlg.style.maxWidth = '480px'; dlg.appendChild(cnt);
+    var mod  = document.createElement('div'); mod.className = 'modal fade';
+    mod.id = 'modalFvPagoTarjeta'; mod.setAttribute('tabindex', '-1');
+    mod.setAttribute('data-bs-backdrop', 'static');
+    mod.appendChild(dlg);
+
+    document.body.appendChild(mod);
+    return mod;
 }
 
-window.fvAbrirPagoTarjeta = async function () {
-    const idFactura = parseInt(FV_ID_ACTIVO) || 0;
+window.fvAbrirPagoTarjeta = function() {
+    var idFactura = parseInt(FV_ID_ACTIVO) || 0;
     if (idFactura <= 0) return;
 
-    const btnWrap = document.getElementById('fvPagoBtnTarjetaWrap');
-    const btn     = btnWrap?.querySelector('button');
-    const origHtml = btn ? btn.innerHTML : '';
+    var btnWrap  = document.getElementById('fvPagoBtnTarjetaWrap');
+    var btn      = btnWrap ? btnWrap.querySelector('button') : null;
+    var origHtml = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cargando...'; }
 
-    try {
-        const fd = new FormData();
-        fd.append('id_factura', idFactura);
-        const resp = await fetch(`${B_URL}/${RUTA_MODULO}/prepararPagoTarjetaAjax`, { method: 'POST', body: fd });
-        const data = await resp.json();
+    var fd = new FormData();
+    fd.append('id_factura', idFactura);
 
-        if (!data.ok) {
-            Swal.fire('No se puede procesar el pago', data.mensaje, 'warning');
-            return;
-        }
+    fetch(B_URL + '/' + RUTA_MODULO + '/prepararPagoTarjetaAjax', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.ok) {
+                Swal.fire('No se puede procesar el pago', data.mensaje, 'warning');
+                return;
+            }
 
-        // Obtener o crear el modal dinámicamente
-        const modalEl      = _fvGetOCrearModal();
-        const contenidoEl  = modalEl.querySelector('#fvPagoTarjetaContenido');
-        contenidoEl.innerHTML = `<div class="text-center py-4 text-muted small">
-            <span class="spinner-border spinner-border-sm me-2"></span>Cargando formulario de pago...
-        </div>`;
+            var modalEl     = _fvGetOCrearModal();
+            var contenidoEl = modalEl.querySelector('#fvPagoTarjetaContenido');
+            contenidoEl.innerHTML = '<div class="text-center py-4 text-muted small"><span class="spinner-border spinner-border-sm me-2"></span>Cargando formulario de pago...</div>';
 
-        const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
-        bsModal.show();
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
 
-        // Importar módulo y renderizar widget
-        await _fvCargarPayphoneModule();
-
-        contenidoEl.innerHTML = '';
-        try {
-            new PPaymentButtonBox(data.widget).render('fvPagoTarjetaContenido');
-        } catch (e) {
-            contenidoEl.innerHTML = '<div class="alert alert-danger small py-2">Error al cargar el formulario de pago. Verifica las credenciales de Payphone.</div>';
-        }
-
-    } catch (e) {
-        Swal.fire('Error', 'No se pudo conectar con el servidor.', 'error');
-    } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
-    }
+            _fvCargarPayphoneSDK(function(err) {
+                if (err) {
+                    contenidoEl.innerHTML = '<div class="alert alert-danger small py-2">' + err.message + '</div>';
+                    return;
+                }
+                contenidoEl.innerHTML = '';
+                try {
+                    new window.PPaymentButtonBox(data.widget).render('fvPagoTarjetaContenido');
+                } catch(e) {
+                    contenidoEl.innerHTML = '<div class="alert alert-danger small py-2">Error al inicializar el formulario de pago.</div>';
+                }
+            });
+        })
+        .catch(function() {
+            Swal.fire('Error', 'No se pudo conectar con el servidor.', 'error');
+        })
+        .finally(function() {
+            if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+        });
 };
 
 <?php // Fin de index.php ?>
