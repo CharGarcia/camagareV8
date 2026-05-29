@@ -63,11 +63,11 @@ class PayphoneRepository extends BaseRepository
             "INSERT INTO payphone_transacciones
                 (id_empresa, client_transaction_id, modulo, id_referencia,
                  descripcion, monto, moneda, estado,
-                 url_retorno, url_cancelacion, url_exito, created_by)
+                 url_retorno, url_cancelacion, url_exito, tipo_flujo, created_by)
              VALUES
                 (:ie, :ctid, :mod, :ref,
                  :desc, :monto, :moneda, 'pendiente',
-                 :url_ret, :url_can, :url_ok, :cb)
+                 :url_ret, :url_can, :url_ok, :flujo, :cb)
              RETURNING id"
         );
         $st->execute([
@@ -81,6 +81,7 @@ class PayphoneRepository extends BaseRepository
             ':url_ret' => $d['url_retorno']      ?? null,
             ':url_can' => $d['url_cancelacion']  ?? null,
             ':url_ok'  => $d['url_exito']        ?? null,
+            ':flujo'   => $d['tipo_flujo']       ?? 'boton',
             ':cb'      => $d['id_usuario']       ?? null,
         ]);
         return (int) $st->fetchColumn();

@@ -51,18 +51,18 @@ $tieneConfig = !empty($config);
                             </button>
                         </div>
                         <div class="form-text">
-                            Encuéntralo en <strong>pay.payphonetodoesunred.com</strong> →
-                            Integración → Token de acceso.
+                            Encuéntralo en <strong>Payphone Developer</strong> → tu aplicación de tipo <strong>WEB</strong> → Token de acceso.
                         </div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label small fw-bold">Store ID <span class="text-muted fw-normal">(opcional)</span></label>
+                        <label class="form-label small fw-bold">Store ID <span class="text-muted fw-normal">(recomendado)</span></label>
                         <input type="text" name="store_id" id="pp-store"
                                class="form-control form-control-sm"
                                value="<?= $storeId ?>"
-                               placeholder="ID de tu tienda en Payphone (si aplica)"
+                               placeholder="Identificador de tu cuenta en Payphone Developer"
                                autocomplete="off">
+                        <div class="form-text">Obtenlo en Payphone Developer junto con el token. Requerido para algunos flujos de pago.</div>
                     </div>
 
                     <div class="row g-3 mb-4">
@@ -111,15 +111,26 @@ $tieneConfig = !empty($config);
         <!-- Ayuda -->
         <div class="card border-0 shadow-sm rounded-3 mb-3">
             <div class="card-header bg-white border-bottom py-3">
-                <h6 class="mb-0 fw-bold"><i class="bi bi-info-circle text-info me-2"></i>¿Cómo obtener el token?</h6>
+                <h6 class="mb-0 fw-bold"><i class="bi bi-info-circle text-info me-2"></i>¿Cómo obtener las credenciales?</h6>
             </div>
             <div class="card-body p-3 small text-muted">
-                <ol class="ps-3 mb-0">
-                    <li class="mb-1">Ingresa a <a href="https://pay.payphonetodoesunred.com" target="_blank" rel="noopener">pay.payphonetodoesunred.com</a></li>
-                    <li class="mb-1">Ve a <strong>Mi cuenta → Integración</strong></li>
-                    <li class="mb-1">Copia el <strong>Token de acceso</strong></li>
-                    <li>Pégalo en el campo de arriba y guarda</li>
+                <p class="fw-semibold text-dark mb-1">Requisitos previos:</p>
+                <ul class="ps-3 mb-2">
+                    <li>Cuenta activa en <strong>Payphone Business</strong></li>
+                    <li>Usuario con rol <strong>Developer</strong> en tu cuenta</li>
+                </ul>
+                <p class="fw-semibold text-dark mb-1">Pasos:</p>
+                <ol class="ps-3 mb-2">
+                    <li class="mb-1">Ingresa a <a href="https://pay.payphonetodoesposible.com" target="_blank" rel="noopener">Payphone Developer</a></li>
+                    <li class="mb-1">Crea una aplicación de tipo <strong>WEB</strong></li>
+                    <li class="mb-1">Registra el <strong>dominio</strong> de tu sistema y la <strong>URL de retorno</strong> (ver abajo)</li>
+                    <li class="mb-1">Copia el <strong>Token de acceso</strong> y el <strong>Store ID</strong></li>
+                    <li>Pégalos en los campos de la izquierda y guarda</li>
                 </ol>
+                <div class="alert alert-warning p-2 mb-0 small">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    El botón de pago <strong>solo funciona en el dominio registrado</strong> en tu aplicación Payphone. Asegúrate de registrar el dominio correcto.
+                </div>
             </div>
         </div>
 

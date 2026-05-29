@@ -57,6 +57,10 @@ class SuscripcionesController extends BaseModuloController
         $totalPages     = $perPage > 0 ? (int) ceil($result['total'] / $perPage) : 1;
         $periodicidades = $this->service->getPeriodicidades();
 
+        $db = \App\core\Database::getConnection();
+        $stmt = $db->query("SELECT id, tarifa, porcentaje_iva FROM tarifa_iva WHERE status = 1 ORDER BY porcentaje_iva ASC");
+        $tarifasIva = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
         $this->viewWithLayout('layouts.main', 'modulos.suscripciones.index', [
             'titulo'         => 'Suscripciones',
             'perm'           => $perm,
@@ -71,6 +75,7 @@ class SuscripcionesController extends BaseModuloController
             'ordenDir'       => $ordenDir,
             'vistaConfig'    => $prefsVista,
             'periodicidades' => $periodicidades,
+            'tarifasIva'     => $tarifasIva,
             'fullWidth'      => true,
         ]);
     }
@@ -287,5 +292,35 @@ class SuscripcionesController extends BaseModuloController
 
         $periodicidades = $this->service->getPeriodicidades();
         echo json_encode(['ok' => true, 'periodicidades' => $periodicidades]);
+    }
+
+    public function getClientesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar = trim($_GET['q'] ?? '');
+
+        $repo = new \App\repositories\modulos\ClienteRepository();
+        $result = $repo->getListado($idEmpresa, $buscar, 1, 12, 'nombre', 'ASC');
+
+        echo json_encode(['ok' => true, 'rows' => $result['rows']]);
+        exit;
+    }
+
+    public function getProductosAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar = trim($_GET['q'] ?? '');
+
+        $repo = new \App\repositories\modulos\ProductoRepository();
+        $result = $repo->getListado($idEmpresa, $buscar, 1, 12, 'nombre', 'ASC', null, 'venta');
+
+        echo json_encode(['ok' => true, 'rows' => $result['rows']]);
+        exit;
     }
 }

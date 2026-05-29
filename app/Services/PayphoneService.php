@@ -43,10 +43,12 @@ use App\repositories\PayphoneRepository;
  */
 class PayphoneService
 {
-    private const BASE_URL_PROD    = 'https://pay.payphonetodoesunred.com';
-    private const BASE_URL_SANDBOX = 'https://pay.payphonetodoesunred.com'; // Payphone usa el mismo endpoint
-    private const ENDPOINT_PREPARE = '/api/button/Prepare';
-    private const ENDPOINT_CONFIRM = '/api/button/Confirm';
+    private const BASE_URL_PROD      = 'https://pay.payphonetodoesposible.com';
+    private const BASE_URL_SANDBOX   = 'https://pay.payphonetodoesposible.com'; // Payphone usa el mismo endpoint
+    private const BASE_URL_CAJITA    = 'https://paymentbox.payphonetodoesposible.com';
+    private const ENDPOINT_PREPARE   = '/api/button/Prepare';
+    private const ENDPOINT_CONFIRM   = '/api/button/V2/Confirm';
+    private const ENDPOINT_CAJITA_CONFIRM = '/api/confirm';
 
     /** Mapa de transactionStatus de Payphone a estados internos */
     private const STATUS_MAP = [
@@ -297,6 +299,154 @@ class PayphoneService
         ];
     }
 
+    // ─── CAJITA DE PAGOS ─────────────────────────────────────────────────────
+
+    /**
+     * Prepara una transacción para la Cajita de Pagos (widget embebido).
+     * No llama a la API de Payphone — simplemente registra la transacción
+     * y devuelve los parámetros que el widget JS necesita.
+     *
+     * Parámetros de $params: igual que prepararPago() excepto url_retorno → url_cajita_retorno.
+     *
+     * Retorna:
+     *  ['ok' => true, 'widget' => [...parámetros para PPaymentButtonBox...], 'client_transaction_id' => '...']
+     *  ['ok' => false, 'mensaje' => '...']
+     */
+    public function prepararCajita(int $idEmpresa, array $params): array
+    {
+        if (empty($params['monto']) || (int) $params['monto'] <= 0) {
+            throw new \InvalidArgumentException('El monto debe ser mayor a cero (en centavos).');
+        }
+        if (empty($params['url_retorno'])) {
+            throw new \InvalidArgumentException('Se requiere url_retorno.');
+        }
+        if (empty($params['url_cancelacion'])) {
+            throw new \InvalidArgumentException('Se requiere url_cancelacion.');
+        }
+
+        $cfg    = $this->getConfig($idEmpresa);
+        $monto  = (int) $params['monto'];
+        $tax    = (int) ($params['impuesto'] ?? 0);
+        $tip    = (int) ($params['propina']  ?? 0);
+        $sinIva = $monto - $tax;
+
+        $ctid = sprintf(
+            'ppb-%d-%s-%s-%s',
+            $idEmpresa,
+            $params['modulo']        ?? 'gen',
+            $params['id_referencia'] ?? '0',
+            uniqid('', true)
+        );
+
+        $this->repo->crearTransaccion([
+            'id_empresa'            => $idEmpresa,
+            'client_transaction_id' => $ctid,
+            'modulo'                => $params['modulo']        ?? 'general',
+            'id_referencia'         => $params['id_referencia'] ?? null,
+            'descripcion'           => $params['descripcion']   ?? null,
+            'monto'                 => $monto,
+            'moneda'                => 'USD',
+            'url_retorno'           => $params['url_retorno'],
+            'url_cancelacion'       => $params['url_cancelacion'],
+            'url_exito'             => $params['url_exito']     ?? null,
+            'id_usuario'            => $params['id_usuario']    ?? null,
+            'tipo_flujo'            => 'cajita',
+        ]);
+
+        $widget = [
+            'token'               => $cfg['token'],
+            'amount'              => $monto,
+            'amountWithTax'       => $tax,
+            'amountWithoutTax'    => $sinIva,
+            'tax'                 => $tax,
+            'service'             => 0,
+            'tip'                 => $tip,
+            'currency'            => 'USD',
+            'clientTransactionId' => $ctid,
+            'responseUrl'         => $params['url_retorno'],
+            'cancellationUrl'     => $params['url_cancelacion'],
+            'reference'           => $params['descripcion'] ?? '',
+            'lang'                => 'es',
+        ];
+
+        if (!empty($cfg['store_id'])) {
+            $widget['storeId'] = $cfg['store_id'];
+        }
+        if (!empty($params['telefono'])) {
+            $widget['phoneNumber'] = $params['telefono'];
+        }
+        if (!empty($params['email'])) {
+            $widget['email'] = $params['email'];
+        }
+        if (!empty($params['documento'])) {
+            $widget['documentId']         = $params['documento'];
+            $widget['identificationType'] = (int) ($params['tipo_documento'] ?? 1);
+        }
+
+        return [
+            'ok'                    => true,
+            'widget'                => $widget,
+            'client_transaction_id' => $ctid,
+        ];
+    }
+
+    /**
+     * Confirma el resultado de un pago realizado con la Cajita de Pagos.
+     * Usa el endpoint exclusivo de cajita: paymentbox.payphonetodoesposible.com/api/confirm
+     * con payload { "id": ..., "clientTxId": ... }
+     */
+    public function confirmarCajitaPago(string $clientTransactionId, int $paymentId, int $idUsuario = 0): array
+    {
+        $trans = $this->repo->getTransaccionByClientId($clientTransactionId);
+        if (!$trans) {
+            return ['ok' => false, 'mensaje' => 'Transacción no encontrada.'];
+        }
+
+        if ($trans['estado'] !== 'pendiente') {
+            return [
+                'ok'          => true,
+                'estado'      => $trans['estado'],
+                'transaccion' => $trans,
+            ];
+        }
+
+        $cfg  = $this->getConfig((int) $trans['id_empresa']);
+        $resp = $this->apiPostCajita(self::ENDPOINT_CAJITA_CONFIRM, [
+            'id'        => $paymentId,
+            'clientTxId'=> $clientTransactionId,
+        ], $cfg['token']);
+
+        $statusPayphone = $resp['transactionStatus'] ?? ($resp['status'] ?? 'Error');
+        // La cajita puede devolver statusCode: 3=aprobado, 2=cancelado
+        if (isset($resp['statusCode']) && !isset($resp['transactionStatus'])) {
+            $statusPayphone = match ((int) $resp['statusCode']) {
+                3 => 'Approved',
+                2 => 'Cancelled',
+                default => 'Error',
+            };
+        }
+        $estadoInterno = self::STATUS_MAP[$statusPayphone] ?? 'error';
+
+        $this->repo->actualizarResultado($clientTransactionId, [
+            'transaction_id'     => $resp['transactionId']    ?? null,
+            'transaction_status' => $statusPayphone,
+            'estado'             => $estadoInterno,
+            'authorization_code' => $resp['authorizationCode'] ?? null,
+            'response_data'      => $resp,
+            'id_usuario'         => $idUsuario,
+        ]);
+
+        $trans = $this->repo->getTransaccionByClientId($clientTransactionId);
+
+        return [
+            'ok'          => true,
+            'estado'      => $estadoInterno,
+            'aprobado'    => $estadoInterno === 'aprobado',
+            'transaccion' => $trans,
+            'response'    => $resp,
+        ];
+    }
+
     // ─── CONSULTAS ────────────────────────────────────────────────────────────
 
     /**
@@ -377,6 +527,43 @@ class PayphoneService
     }
 
     // ─── API INTERNA ──────────────────────────────────────────────────────────
+
+    private function apiPostCajita(string $endpoint, array $payload, string $token): array
+    {
+        $url = self::BASE_URL_CAJITA . $endpoint;
+        $ch  = curl_init();
+
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode($payload),
+            CURLOPT_HTTPHEADER     => [
+                'Authorization: Bearer ' . $token,
+                'Content-Type: application/json',
+                'Accept: application/json',
+            ],
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_TIMEOUT        => 30,
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr  = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlErr) {
+            return ['error' => 'Error de conexión: ' . $curlErr];
+        }
+
+        $data = json_decode($response, true);
+
+        if (!is_array($data)) {
+            return ['error' => 'Respuesta inválida de Payphone Cajita (HTTP ' . $httpCode . ').'];
+        }
+
+        return $data;
+    }
 
     private function apiPost(string $endpoint, array $payload, string $token): array
     {

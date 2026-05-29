@@ -72,6 +72,49 @@ class PayphoneController extends BaseController
     }
 
     /**
+     * Retorno de la Cajita de Pagos (widget embebido).
+     * Payphone redirige aquí con GET: ?clientTransactionId=...&id=...
+     * La confirmación usa el endpoint exclusivo de cajita.
+     */
+    public function cajitaRetorno(): void
+    {
+        $ctid      = trim($_GET['clientTransactionId'] ?? '');
+        $paymentId = (int) ($_GET['id'] ?? 0);
+
+        if ($ctid === '' || $paymentId <= 0) {
+            $this->mostrarError('Parámetros de retorno inválidos.');
+            return;
+        }
+
+        try {
+            $resultado = $this->pp->confirmarCajitaPago($ctid, $paymentId, 0);
+        } catch (\Throwable $e) {
+            $this->mostrarError('Error al confirmar el pago: ' . $e->getMessage());
+            return;
+        }
+
+        if (!$resultado['ok']) {
+            $this->mostrarError($resultado['mensaje'] ?? 'Error al procesar el pago.');
+            return;
+        }
+
+        $trans  = $resultado['transaccion'];
+        $estado = $resultado['estado'];
+
+        if ($estado === 'aprobado' && !empty($trans['url_exito'])) {
+            $sep = str_contains($trans['url_exito'], '?') ? '&' : '?';
+            header('Location: ' . $trans['url_exito'] . $sep . 'ctid=' . urlencode($ctid));
+            exit;
+        }
+
+        $this->view('publica.payphone.resultado', [
+            'estado'      => $estado,
+            'transaccion' => $trans,
+            'resultado'   => $resultado,
+        ]);
+    }
+
+    /**
      * Cancelación: el cliente hizo clic en "Cancelar" en Payphone.
      * Payphone redirige aquí con GET: ?clientTransactionId=...
      */

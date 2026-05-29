@@ -133,8 +133,8 @@ class Router
             if (($parts[0] ?? '') === 'payphone') {
                 $controller = 'Payphone';
                 $sub        = $parts[1] ?? 'retorno';
-                $accionesValidas = ['retorno', 'cancelacion'];
-                $action = in_array($sub, $accionesValidas, true) ? $sub : 'retorno';
+                $accionesValidas = ['retorno', 'cancelacion', 'cajita-retorno'];
+                $action = in_array($sub, $accionesValidas, true) ? $this->toCamelCase($sub) : 'retorno';
             }
 
             // /reservas/{slug}/* → portal público de reserva de citas (sin auth)

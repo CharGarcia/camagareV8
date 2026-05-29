@@ -3,6 +3,9 @@ $urlBase         = BASE_URL . '/modulos/suscripciones';
 $urlBaseClientes = BASE_URL . '/modulos/clientes';
 $urlBaseProductos = BASE_URL . '/modulos/productos';
 $permSusc        = $perm ?? [];
+
+$vistaConfigSusc = \App\Helpers\PreferenciasHelper::getPreferenciasVista('suscripciones');
+echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigSusc, 'estiloVistaPestanasSusc');
 ?>
 
 <style>
@@ -35,10 +38,10 @@ $permSusc        = $perm ?? [];
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
             <form id="formSusc" novalidate>
-                <div class="modal-header">
-                    <h5 class="modal-title fw-bold fs-6" id="modalSuscLabel">
+                <div class="modal-header bg-light py-3">
+                    <h5 class="modal-title fw-bold">
                         <i class="bi bi-arrow-repeat text-primary me-2"></i>
-                        <span id="tituloModalSusc">Nueva Suscripción</span>
+                        <span id="tituloModalSusc">Nueva</span>
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -49,22 +52,31 @@ $permSusc        = $perm ?? [];
 
                     <!-- Pestañas -->
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
-                        <ul class="nav nav-tabs border-bottom-0 flex-grow-1" role="tablist">
+                        <ul class="nav nav-tabs border-bottom-0 flex-grow-1 flex-nowrap tab-pestaña" role="tablist">
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link active py-2 small" data-bs-toggle="tab" href="#pane-susc-servicios" role="tab">
+                                <a class="nav-link active py-2 small" id="susc-tab-servicios-btn" data-bs-toggle="tab" href="#pane-susc-servicios" role="tab" title="Cliente y Servicios">
                                     <i class="bi bi-receipt me-1"></i>Cliente y Servicios
                                 </a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-susc-cobro" role="tab">
+                                <a class="nav-link py-2 small" id="susc-tab-cobro-btn" data-bs-toggle="tab" href="#pane-susc-cobro" role="tab" title="Cobro">
                                     <i class="bi bi-credit-card me-1"></i>Cobro
                                 </a>
                             </li>
                         </ul>
+                        <div class="pb-1 flex-shrink-0">
+                            <?php
+                            $pestanasConfigSusc = [
+                                'pane-susc-servicios' => 'Cliente y Servicios',
+                                'pane-susc-cobro'     => 'Cobro',
+                            ];
+                            echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigSusc, $vistaConfigSusc ?? [], 'suscripciones');
+                            ?>
+                        </div>
                     </div>
-                    <div class="border-bottom bg-light"></div>
+                    <div class="border-bottom bg-light mb-0"></div>
 
-                    <div class="tab-content">
+                    <div class="tab-content border-top px-3 py-3" style="overflow: visible !important;">
 
                         <!-- ══ PESTAÑA 1: Cliente + Servicios ══════════════════════════════════ -->
                         <div class="tab-pane fade show active" id="pane-susc-servicios" role="tabpanel">
@@ -77,8 +89,8 @@ $permSusc        = $perm ?? [];
                                     <div class="col-12">
                                         <div class="p-2 border rounded-3 bg-light bg-opacity-10">
                                             <div class="row g-2 align-items-center">
-                                                <div class="col-12 position-relative">
-                                                    <div class="input-group input-group-sm rounded-pill overflow-hidden border">
+                                                <div class="col-md-9 position-relative">
+                                                    <div class="input-group input-group-sm rounded-pill overflow-hidden border bg-white">
                                                         <span class="input-group-text bg-white border-0 text-primary"><i class="bi bi-search"></i></span>
                                                         <input type="text" class="form-control border-0 px-1"
                                                                id="susc_search_cliente"
@@ -87,8 +99,13 @@ $permSusc        = $perm ?? [];
                                                         <input type="hidden" name="id_cliente" id="susc_id_cliente">
                                                     </div>
                                                     <div id="susc_dropdown_clientes"
-                                                         class="list-group shadow dropdown-susc-cli d-none"
-                                                         style="z-index:1090"></div>
+                                                         class="list-group shadow dropdown-predictivo position-absolute d-none"
+                                                         style="z-index:1090; width:100%; max-height:250px; overflow-y:auto; top:35px; left:0;"></div>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <select class="form-select form-select-sm border-0 bg-transparent text-muted fw-bold" name="tipo_documento_emision" id="susc_tipo_documento_emision">
+                                                        <option value="factura_venta" selected>Factura de Venta</option>
+                                                    </select>
                                                 </div>
                                                 <div class="col-12 d-none px-2" id="susc_info_cliente" style="font-size:.72rem; color:#6c757d;">
                                                     <span class="fw-bold text-dark border-end pe-2 me-1" id="susc_lbl_cli_ruc"></span>
@@ -128,16 +145,16 @@ $permSusc        = $perm ?? [];
                             <!-- Tabla de productos/servicios -->
                             <div class="p-3">
                                 <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-                                    <div class="table-responsive" style="max-height:320px;">
+                                    <div class="table-responsive" style="max-height: 350px;">
                                         <table class="table table-sm table-detalle mb-0 text-nowrap">
                                             <thead>
                                                 <tr class="table-light border-bottom">
-                                                    <th class="ps-3" style="width:35%;">Descripción</th>
-                                                    <th style="width:10%;" class="text-center">Cant.</th>
-                                                    <th style="width:15%;" class="text-end">Precio Unit.</th>
-                                                    <th style="width:10%;" class="text-center">IVA %</th>
-                                                    <th style="width:15%;" class="text-end pe-3">Subtotal</th>
-                                                    <th style="width:40px;"></th>
+                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width:40%;">Descripción</th>
+                                                    <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">Cant.</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end" style="width:15%;">Precio Unit.</th>
+                                                    <th class="py-2 small fw-bold text-muted text-center" style="width:15%;">IVA</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end pe-4" style="width:15%;">Subtotal</th>
+                                                    <th style="width:5%;"></th>
                                                 </tr>
                                             </thead>
                                             <tbody id="susc_tbody_detalle">
@@ -150,39 +167,43 @@ $permSusc        = $perm ?? [];
                                         </table>
                                     </div>
 
-                                    <!-- Pie de tabla: agregar línea + buscador productos -->
-                                    <div class="border-top p-2 bg-light d-flex align-items-center gap-2 position-relative">
-                                        <div class="input-group input-group-sm" style="max-width:380px;">
-                                            <span class="input-group-text bg-white border-end-0 text-primary"><i class="bi bi-box-seam"></i></span>
-                                            <input type="text" class="form-control border-start-0 ps-0 shadow-none"
-                                                   id="susc_search_producto"
-                                                   placeholder="Buscar producto o servicio..."
-                                                   autocomplete="off">
+                                    <!-- Pie de tabla: agregar línea -->
+                                    <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center position-relative">
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="suscAgregarFilaVacia()">
+                                            <i class="bi bi-plus-circle me-1"></i> Agregar línea
+                                        </button>
+                                        <div class="small fw-bold text-muted pe-3">
+                                            Items: <span id="susc_count_items">0</span>
                                         </div>
                                         <div id="susc_dropdown_productos"
-                                             class="list-group shadow position-absolute d-none"
-                                             style="z-index:1090; bottom:48px; left:10px; width:380px; max-height:220px; overflow-y:auto;"></div>
-                                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="suscAgregarFilaVacia()">
-                                            <i class="bi bi-plus-lg me-1"></i>Agregar línea
-                                        </button>
+                                             class="list-group shadow dropdown-predictivo d-none position-fixed"
+                                             style="z-index: 2000; width: 380px; max-height: 250px; overflow-y: auto;"></div>
                                     </div>
                                 </div>
 
                                 <!-- Totales -->
-                                <div class="d-flex justify-content-end mt-3">
-                                    <div class="border rounded-3 bg-white shadow-sm px-4 py-3" style="min-width:260px;">
-                                        <div class="d-flex justify-content-between mb-1">
-                                            <span class="susc-total-label">Subtotal sin IVA</span>
-                                            <span class="susc-total-value" id="susc_total_subtotal">$0.00</span>
-                                        </div>
-                                        <div class="d-flex justify-content-between mb-1">
-                                            <span class="susc-total-label">IVA</span>
-                                            <span class="susc-total-value" id="susc_total_iva">$0.00</span>
-                                        </div>
-                                        <hr class="my-2">
-                                        <div class="d-flex justify-content-between">
-                                            <span class="susc-total-label">TOTAL</span>
-                                            <span class="susc-total-grande" id="susc_total_total">$0.00</span>
+                                <div class="row justify-content-end mt-3">
+                                    <div class="col-md-4">
+                                        <div class="bg-white border rounded p-2 shadow-sm" style="font-size:0.75rem;">
+                                            <!-- Subtotal General -->
+                                            <div class="d-flex justify-content-between align-items-center mb-1 fw-bold border-bottom pb-1">
+                                                <span class="text-muted">Subtotal</span>
+                                                <span id="susc_lbl_subtotal">$0.00</span>
+                                            </div>
+
+                                            <!-- Subtotales agrupados por tarifa IVA -->
+                                            <div id="susc_lbl_subtotales_iva" class="mb-1"></div>
+
+                                            <!-- IVA agrupado por tarifa (solo los > 0) -->
+                                            <div id="susc_lbl_ivas_grupo" class="mb-1"></div>
+
+                                            <hr class="my-1 opacity-25">
+
+                                            <!-- Total -->
+                                            <div class="d-flex justify-content-between align-items-center bg-light border py-1 px-2 rounded">
+                                                <span class="fw-bold text-dark" style="font-size:0.8rem;">TOTAL</span>
+                                                <span class="fw-bold text-dark" style="font-size:1rem;" id="susc_lbl_total">$0.00</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -214,30 +235,17 @@ $permSusc        = $perm ?? [];
                                         <textarea class="form-control form-control-sm" name="observaciones" id="susc_observaciones" rows="2" maxlength="500"></textarea>
                                     </div>
 
-                                    <!-- Sección Kushki (solo si forma_cobro = tarjeta) -->
+                                    <!-- Sección Payphone (solo si forma_cobro = tarjeta) -->
                                     <div class="col-12" id="susc_sec_tarjeta" style="display:none;">
                                         <div class="border rounded-3 p-3 bg-light">
-                                            <h6 class="fw-bold small mb-3"><i class="bi bi-credit-card me-1 text-primary"></i>Tarjeta Kushki</h6>
+                                            <h6 class="fw-bold small mb-3"><i class="bi bi-credit-card me-1 text-primary"></i>Suscripción con Tarjeta (Payphone)</h6>
                                             <div id="susc_tarjeta_actual" class="alert alert-info py-2 small mb-3 d-none">
                                                 <i class="bi bi-credit-card me-1"></i>
                                                 Tarjeta registrada: <strong id="susc_tarjeta_info"></strong>
                                             </div>
-                                            <div class="alert alert-warning py-2 small mb-3">
-                                                <i class="bi bi-exclamation-triangle me-1"></i>
-                                                Para registrar una tarjeta necesita las credenciales de Kushki configuradas en el sistema.
-                                            </div>
-                                            <div class="row g-2">
-                                                <div class="col-12">
-                                                    <label>Token de tarjeta (Kushki)</label>
-                                                    <input type="text" class="form-control form-control-sm" id="susc_kushki_token"
-                                                           placeholder="Token generado por Kushki JS" autocomplete="off">
-                                                    <small class="text-muted">Se completará automáticamente al integrar el formulario Kushki.</small>
-                                                </div>
-                                                <div class="col-12">
-                                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="suscGuardarTarjeta()">
-                                                        <i class="bi bi-shield-check me-1"></i>Guardar Tarjeta
-                                                    </button>
-                                                </div>
+                                            <div class="alert alert-primary py-2 small mb-0 bg-primary bg-opacity-10 text-primary border-primary border-opacity-25">
+                                                <i class="bi bi-info-circle me-1"></i>
+                                                El sistema generará un enlace seguro de Payphone. Una vez guardada la suscripción, podrá enviar este enlace al cliente para que registre su tarjeta. El cobro automático iniciará cuando la tarjeta esté asociada.
                                             </div>
                                         </div>
                                     </div>
@@ -279,6 +287,7 @@ $permSusc        = $perm ?? [];
     const urlBase  = '<?= $urlBase ?>';
     const urlCli   = '<?= $urlBaseClientes ?>';
     const urlProd  = '<?= $urlBaseProductos ?>';
+    const tarifasIva = <?= json_encode($tarifasIva ?? []) ?>;
     let suscDetLineIdx = 0;
 
     /* ── Buscador de clientes ─────────────────────────────────────────────────── */
@@ -299,7 +308,7 @@ $permSusc        = $perm ?? [];
 
     async function suscBuscarClientes(q) {
         try {
-            const r = await fetch(urlCli + '/searchAjax?b=' + encodeURIComponent(q) + '&page=1&sort=nombre&dir=ASC');
+            const r = await fetch(urlBase + '/getClientesAjax?q=' + encodeURIComponent(q));
             const d = await r.json();
             const lista = d.rows ?? [];
             if (!lista.length) { ddCli.innerHTML = '<div class="list-group-item text-muted small py-1 px-2">Sin resultados</div>'; ddCli.classList.remove('d-none'); return; }
@@ -307,7 +316,7 @@ $permSusc        = $perm ?? [];
                 const nombre = (c.nombre ?? '').replace(/</g, '&lt;');
                 const ruc    = (c.identificacion ?? '').replace(/</g, '&lt;');
                 const enc    = encodeURIComponent(JSON.stringify(c));
-                return `<button type="button" class="list-group-item list-group-item-action py-1 px-2 small" onclick='suscSelCliente(${JSON.stringify(enc)})'><strong>${ruc}</strong> - ${nombre}</button>`;
+                return `<button type="button" class="list-group-item list-group-item-action py-1 px-2 small" onclick='suscSelCliente("${enc}")'><strong>${ruc}</strong> - ${nombre}</button>`;
             }).join('');
             ddCli.classList.remove('d-none');
         } catch (e) { console.error(e); }
@@ -332,45 +341,69 @@ $permSusc        = $perm ?? [];
     }
 
     /* ── Buscador de productos ────────────────────────────────────────────────── */
-    const inpProd = document.getElementById('susc_search_producto');
     const ddProd  = document.getElementById('susc_dropdown_productos');
     let timerProd;
+    let inputFilaActiva = null;
 
-    inpProd.addEventListener('input', () => {
-        clearTimeout(timerProd);
-        const q = inpProd.value.trim();
-        if (q.length < 2) { ddProd.classList.add('d-none'); return; }
-        timerProd = setTimeout(() => suscBuscarProductos(q), 300);
+    document.getElementById('susc_tbody_detalle').addEventListener('input', (e) => {
+        if(e.target.classList.contains('det-desc')) {
+            clearTimeout(timerProd);
+            const q = e.target.value.trim();
+            inputFilaActiva = e.target;
+            if (q.length < 2) { ddProd.classList.add('d-none'); return; }
+            timerProd = setTimeout(() => suscBuscarProductos(q, e.target), 300);
+        }
     });
 
-    inpProd.addEventListener('blur', () => setTimeout(() => ddProd.classList.add('d-none'), 200));
+    document.addEventListener('click', (e) => {
+        if(!e.target.closest('#susc_dropdown_productos') && !e.target.classList.contains('det-desc')) {
+            ddProd.classList.add('d-none');
+        }
+    });
 
-    async function suscBuscarProductos(q) {
+    async function suscBuscarProductos(q, inputEl) {
         try {
-            const r = await fetch(urlProd + '/searchAjax?b=' + encodeURIComponent(q) + '&page=1&sort=nombre&dir=ASC');
+            const r = await fetch(urlBase + '/getProductosAjax?q=' + encodeURIComponent(q));
             const d = await r.json();
             const lista = d.rows ?? [];
+            
+            const rect = inputEl.getBoundingClientRect();
+            ddProd.style.position = 'fixed';
+            ddProd.style.top = (rect.bottom) + 'px';
+            ddProd.style.left = rect.left + 'px';
+            ddProd.style.width = Math.max(380, rect.width) + 'px';
+
             if (!lista.length) { ddProd.innerHTML = '<div class="list-group-item text-muted small py-1 px-2">Sin resultados</div>'; ddProd.classList.remove('d-none'); return; }
             ddProd.innerHTML = lista.slice(0, 10).map(p => {
                 const nombre  = (p.nombre ?? '').replace(/</g, '&lt;');
                 const precio  = parseFloat(p.precio_unitario ?? p.pvp ?? 0).toFixed(2);
-                const enc     = encodeURIComponent(JSON.stringify(p));
-                return `<button type="button" class="list-group-item list-group-item-action py-1 px-2 small" onclick='suscAgregarProducto(${JSON.stringify(enc)})'><strong>${nombre}</strong> - $${precio}</button>`;
+                const iva     = parseFloat(p.porcentaje_iva_final ?? p.porcentaje_iva ?? p.iva ?? 0).toFixed(2);
+                const enc     = encodeURIComponent(JSON.stringify({id: p.id, n: nombre, p: precio, i: iva}));
+                return `<button type="button" class="list-group-item list-group-item-action py-1 px-2 small" onclick='suscAsignarProductoFila("${enc}")'><strong>${nombre}</strong> - $${precio}</button>`;
             }).join('');
             ddProd.classList.remove('d-none');
         } catch (e) { console.error(e); }
     }
 
-    window.suscAgregarProducto = function(enc) {
+    window.suscAsignarProductoFila = function(enc) {
+        if(!inputFilaActiva) return;
         const p = JSON.parse(decodeURIComponent(enc));
-        suscAgregarFila({
-            id_producto:     p.id,
-            descripcion:     p.nombre ?? '',
-            cantidad:        1,
-            precio_unitario: parseFloat(p.precio_unitario ?? p.pvp ?? 0),
-            porcentaje_iva:  parseFloat(p.porcentaje_iva ?? p.iva ?? 0),
-        });
-        inpProd.value = '';
+        const tr = inputFilaActiva.closest('tr');
+        
+        tr.querySelector('.det-id-prod').value = p.id;
+        tr.querySelector('.det-desc').value = p.n;
+        tr.querySelector('.det-price').value = p.p;
+        
+        let selectIva = tr.querySelector('.det-iva');
+        let valBuscado = parseFloat(p.i);
+        for(let i = 0; i < selectIva.options.length; i++) {
+            if(parseFloat(selectIva.options[i].value) === valBuscado) {
+                selectIva.selectedIndex = i;
+                break;
+            }
+        }
+        
+        suscRecalcFila(tr.querySelector('.det-qty'));
         ddProd.classList.add('d-none');
     };
 
@@ -389,37 +422,39 @@ $permSusc        = $perm ?? [];
         tr.className = 'row-susc-det';
         tr.dataset.idx = idx;
         tr.innerHTML = `
-            <td class="ps-2">
+            <td class="ps-3 position-relative">
                 <input type="hidden" name="detalle[${idx}][id_producto]" class="det-id-prod" value="${item.id_producto ?? ''}">
-                <input type="text" class="input-detalle w-100 det-desc" name="detalle[${idx}][descripcion]"
+                <input type="text" class="form-control form-control-sm input-detalle det-desc" name="detalle[${idx}][descripcion]"
                        value="${(item.descripcion ?? '').replace(/"/g, '&quot;')}"
-                       placeholder="Descripción..." style="min-width:180px;">
+                       placeholder="Escribe o busca un producto/servicio..." autocomplete="off">
             </td>
             <td class="text-center">
-                <input type="number" class="input-detalle text-center det-qty" name="detalle[${idx}][cantidad]"
-                       value="${item.cantidad ?? 1}" min="0.001" step="0.001" style="width:70px;"
-                       oninput="suscRecalcFila(this)">
+                <input type="number" class="form-control form-control-sm input-detalle text-center det-qty" name="detalle[${idx}][cantidad]"
+                       value="${item.cantidad ?? 1}" min="0.001" step="0.001" oninput="suscRecalcFila(this)">
             </td>
             <td class="text-end">
-                <input type="number" class="input-detalle text-end det-price" name="detalle[${idx}][precio_unitario]"
-                       value="${parseFloat(item.precio_unitario ?? 0).toFixed(2)}" min="0" step="0.01" style="width:90px;"
-                       oninput="suscRecalcFila(this)">
+                <input type="number" class="form-control form-control-sm input-detalle text-end det-price" name="detalle[${idx}][precio_unitario]"
+                       value="${parseFloat(item.precio_unitario ?? 0).toFixed(2)}" min="0" step="0.01" oninput="suscRecalcFila(this)">
             </td>
-            <td class="text-center">
-                <input type="number" class="input-detalle text-center det-iva" name="detalle[${idx}][porcentaje_iva]"
-                       value="${parseFloat(item.porcentaje_iva ?? 0).toFixed(2)}" min="0" step="0.01" style="width:60px;"
-                       oninput="suscRecalcFila(this)">
+            <td class="text-center align-middle">
+                <select class="form-select form-select-sm input-detalle text-center det-iva" name="detalle[${idx}][porcentaje_iva]" onchange="suscRecalcFila(this)">
+                    ${tarifasIva.map(t => `<option value="${t.porcentaje_iva}" ${parseFloat(item.porcentaje_iva ?? 0) === parseFloat(t.porcentaje_iva) ? 'selected' : ''}>${t.tarifa}</option>`).join('')}
+                </select>
             </td>
-            <td class="text-end pe-2">
+            <td class="text-end pe-4 align-middle">
                 <span class="det-subtotal" style="font-size:.82rem; font-weight:600;">$${subtot}</span>
             </td>
-            <td class="text-center">
-                <button type="button" class="btn btn-sm btn-remove-det px-1 py-0" onclick="suscEliminarFila(this)" title="Quitar">
-                    <i class="bi bi-x-lg"></i>
+            <td class="text-center p-0 align-middle">
+                <button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="suscEliminarFila(this)" title="Eliminar ítem">
+                    <i class="bi bi-trash3 fs-6"></i>
                 </button>
             </td>`;
         tbody.appendChild(tr);
         suscRecalcTotales();
+        
+        if(!item.id_producto) {
+            setTimeout(() => tr.querySelector('.det-desc').focus(), 50);
+        }
     }
 
     window.suscEliminarFila = function(btn) {
@@ -440,18 +475,61 @@ $permSusc        = $perm ?? [];
     };
 
     function suscRecalcTotales() {
-        let subtotal = 0, iva = 0;
+        let subGeneral = 0;
+        let totalGeneral = 0;
+        
+        let basesIva = {}; 
+
         document.querySelectorAll('#susc_tbody_detalle tr.row-susc-det').forEach(tr => {
             const qty  = parseFloat(tr.querySelector('.det-qty')?.value)   || 0;
             const prc  = parseFloat(tr.querySelector('.det-price')?.value)  || 0;
             const ivaP = parseFloat(tr.querySelector('.det-iva')?.value)    || 0;
             const sub  = qty * prc;
-            subtotal += sub;
-            iva      += sub * (ivaP / 100);
+            
+            subGeneral += sub;
+            
+            if (!basesIva[ivaP]) basesIva[ivaP] = 0;
+            basesIva[ivaP] += sub;
         });
-        document.getElementById('susc_total_subtotal').textContent = '$' + subtotal.toFixed(2);
-        document.getElementById('susc_total_iva').textContent      = '$' + iva.toFixed(2);
-        document.getElementById('susc_total_total').textContent    = '$' + (subtotal + iva).toFixed(2);
+
+        document.getElementById('susc_lbl_subtotal').textContent = '$' + subGeneral.toFixed(2);
+        
+        // Renderizar subtotales por tarifa
+        const contSubIva = document.getElementById('susc_lbl_subtotales_iva');
+        contSubIva.innerHTML = '';
+        let sortedTasas = Object.keys(basesIva).map(Number).sort((a,b)=>b-a);
+        sortedTasas.forEach(tasa => {
+            if (basesIva[tasa] >= 0 || Object.keys(basesIva).length > 0) {
+                contSubIva.innerHTML += `
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                        <span class="text-muted">Subtotal ${tasa}%</span>
+                        <span class="fw-bold text-dark">$${basesIva[tasa].toFixed(2)}</span>
+                    </div>`;
+            }
+        });
+
+        // Renderizar ivas agrupados
+        const contIvasGrupo = document.getElementById('susc_lbl_ivas_grupo');
+        contIvasGrupo.innerHTML = '';
+        let sumaIvas = 0;
+        sortedTasas.forEach(tasa => {
+            const montoIva = basesIva[tasa] * (tasa / 100);
+            sumaIvas += montoIva;
+            if (tasa > 0 && montoIva > 0) {
+                contIvasGrupo.innerHTML += `
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                        <span class="text-muted">IVA ${tasa}%</span>
+                        <span class="fw-bold text-dark">$${montoIva.toFixed(2)}</span>
+                    </div>`;
+            }
+        });
+
+        totalGeneral = subGeneral + sumaIvas;
+        document.getElementById('susc_lbl_total').textContent = '$' + totalGeneral.toFixed(2);
+        
+        if(document.getElementById('susc_count_items')) {
+            document.getElementById('susc_count_items').textContent = document.querySelectorAll('#susc_tbody_detalle tr.row-susc-det').length;
+        }
     }
 
     /* ── Recalcular próximo cobro ─────────────────────────────────────────────── */
@@ -531,12 +609,13 @@ $permSusc        = $perm ?? [];
         document.getElementById('susc_forma_cobro').value       = 'credito';
         document.getElementById('susc_estado').value            = 'activo';
         document.getElementById('susc_observaciones').value     = '';
-        document.getElementById('tituloModalSusc').textContent  = 'Nueva Suscripción';
+        document.getElementById('tituloModalSusc').textContent  = 'Nueva';
         document.getElementById('btnEliminarSusc')?.classList.add('d-none');
         document.getElementById('btnVerPagosSusc')?.classList.add('d-none');
         document.getElementById('suscAlert').className          = 'alert d-none';
         document.getElementById('susc_tarjeta_actual')?.classList.add('d-none');
         suscLimpiarDetalle();
+        suscAgregarFilaVacia();
         suscOnFormaCobro();
         // Activar primera pestaña
         const tabEl = document.querySelector('#modalSusc a[href="#pane-susc-servicios"]');
