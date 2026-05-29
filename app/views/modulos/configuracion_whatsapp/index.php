@@ -5,6 +5,11 @@
 
 $base = BASE_URL;
 $urlModulo = rtrim($base, '/') . '/modulos/configuracion-whatsapp';
+
+// Construir URL absoluta del webhook (protocolo + host + ruta)
+$scheme      = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$host        = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$webhookUrl  = $scheme . '://' . $host . rtrim($base, '/') . '/whatsapp-webhook';
 ?>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -84,11 +89,18 @@ $urlModulo = rtrim($base, '/') . '/modulos/configuracion-whatsapp';
                 <div class="form-text">
                     <i class="bi bi-info-circle me-1"></i>
                     URL del webhook para Meta:
-                    <code id="webhookUrl" class="text-break"><?= rtrim($base, '/') ?>/whatsapp-webhook</code>
+                    <code id="webhookUrl" class="text-break"><?= htmlspecialchars($webhookUrl) ?></code>
                     <button type="button" class="btn btn-link btn-sm p-0 ms-1" onclick="WACFG_copiarUrl()" title="Copiar URL">
                         <i class="bi bi-clipboard"></i>
                     </button>
                 </div>
+                <?php if ($scheme === 'http'): ?>
+                <div class="alert alert-warning py-2 px-3 mt-2 mb-0 small">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                    <strong>Atención:</strong> Meta requiere <strong>HTTPS</strong> para los webhooks de WhatsApp.
+                    Tu URL actual usa <code>http://</code>. Necesitas un dominio con certificado SSL (HTTPS) para que Meta pueda verificar y enviar eventos al webhook.
+                </div>
+                <?php endif; ?>
             </div>
 
             <div class="d-flex gap-2">
