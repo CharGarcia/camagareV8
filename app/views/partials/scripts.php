@@ -138,10 +138,15 @@
 
     /* ----------------------------------------------------------------
      * 4. Scroll interno en modales fullscreen (móvil/tablet).
+     *
      *    Bootstrap pone overflow-y:auto en el overlay .modal, lo que
-     *    hace que scrollee todo el modal en vez del .modal-body.
-     *    Al abrir cualquier modal en pantalla pequeña, bloqueamos el
-     *    scroll del overlay y lo dejamos solo en el .modal-body.
+     *    hace que scrollee TODO el modal (header+body+footer juntos).
+     *    La solución:
+     *    a) Agregar modal-dialog-scrollable al diálogo (si no lo tiene),
+     *       para que Bootstrap active scroll solo en .modal-body.
+     *    b) Poner overflow:hidden en el overlay .modal para que no
+     *       compita con el scroll interno.
+     *    Se aplica solo cuando el modal ocupa toda la pantalla.
      * ---------------------------------------------------------------- */
     function fixModalScroll(modalEl) {
         if (!modalEl) return;
@@ -152,17 +157,43 @@
         var isXl = dialog.classList.contains('modal-xl');
         var aplicar = (isXl && w <= 991) || (isLg && w <= 767);
         if (aplicar) {
+            // Activar scroll nativo de Bootstrap en el body del modal
+            dialog.classList.add('modal-dialog-scrollable');
+            // Bloquear scroll del overlay para que no compita
             modalEl.style.overflow = 'hidden';
-        } else {
-            modalEl.style.overflow = '';
         }
     }
 
+    function restoreModalScroll(modalEl) {
+        if (!modalEl) return;
+        var dialog = modalEl.querySelector('.modal-dialog');
+        // Solo quitar si lo agregamos nosotros (no si ya lo tenía)
+        if (dialog && dialog.dataset.cmgScrollable === '1') {
+            dialog.classList.remove('modal-dialog-scrollable');
+            delete dialog.dataset.cmgScrollable;
+        }
+        modalEl.style.overflow = '';
+    }
+
     document.addEventListener('show.bs.modal', function(e) {
-        fixModalScroll(e.target);
+        var w = window.innerWidth;
+        var dialog = e.target.querySelector('.modal-dialog');
+        if (!dialog) return;
+        var isLg = dialog.classList.contains('modal-lg');
+        var isXl = dialog.classList.contains('modal-xl');
+        var aplicar = (isXl && w <= 991) || (isLg && w <= 767);
+        if (aplicar) {
+            // Marcar si ya tenía la clase antes de que la agreguemos
+            if (!dialog.classList.contains('modal-dialog-scrollable')) {
+                dialog.classList.add('modal-dialog-scrollable');
+                dialog.dataset.cmgScrollable = '1';
+            }
+            e.target.style.overflow = 'hidden';
+        }
     });
+
     document.addEventListener('hidden.bs.modal', function(e) {
-        e.target.style.overflow = '';
+        restoreModalScroll(e.target);
     });
 })();
 </script>
