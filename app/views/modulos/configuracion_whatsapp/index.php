@@ -18,9 +18,9 @@ $webhookUrl = 'https://www.camagare.com.ec/whatsapp-webhook';
             <div class="row">
                 <div class="col-md-4 mb-3">
                     <label class="form-label fw-medium small text-muted">
-                        Phone Number ID
+                        Identificador del número de teléfono
                         <span tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top"
-                              title="ID del número de teléfono de WhatsApp Business. Lo encuentras en Meta for Developers → WhatsApp → Configuración de API → sección 'Número de teléfono'."
+                              title="En Meta for Developers → WhatsApp → Configuración de API, sección 'Número de teléfono'. Corresponde al campo 'Identificador del número de teléfono'."
                               class="text-primary ms-1" style="cursor:pointer;">
                             <i class="bi bi-question-circle-fill"></i>
                         </span>
@@ -31,9 +31,9 @@ $webhookUrl = 'https://www.camagare.com.ec/whatsapp-webhook';
                 </div>
                 <div class="col-md-4 mb-3">
                     <label class="form-label fw-medium small text-muted">
-                        WABA ID
+                        Identificador de la cuenta de WhatsApp Business
                         <span tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top"
-                              title="ID de la cuenta de WhatsApp Business (WhatsApp Business Account ID). Lo encuentras en Meta Business Suite → Configuración → Cuentas de WhatsApp Business."
+                              title="En Meta for Developers → WhatsApp → Configuración de API. Corresponde al campo 'Identificador de la cuenta de WhatsApp Business'."
                               class="text-primary ms-1" style="cursor:pointer;">
                             <i class="bi bi-question-circle-fill"></i>
                         </span>
@@ -59,9 +59,9 @@ $webhookUrl = 'https://www.camagare.com.ec/whatsapp-webhook';
 
             <div class="mb-3">
                 <label class="form-label fw-medium small text-muted">
-                    Token de Acceso (Access Token)
+                    Identificador de acceso
                     <span tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top"
-                          title="Token permanente de la API de WhatsApp. Ve a Meta for Developers → tu App → WhatsApp → Configuración de API → genera un token permanente desde el System User en Meta Business Suite. NO uses el token temporal de 24 horas."
+                          title="En Meta for Developers → WhatsApp → Configuración de API. Corresponde al campo 'Identificador de acceso'. NO uses el token temporal de 24 horas, genera uno permanente desde el System User en Meta Business Suite."
                           class="text-primary ms-1" style="cursor:pointer;">
                         <i class="bi bi-question-circle-fill"></i>
                     </span>
@@ -72,9 +72,9 @@ $webhookUrl = 'https://www.camagare.com.ec/whatsapp-webhook';
 
             <div class="mb-4">
                 <label class="form-label fw-medium small text-muted">
-                    Token de Verificación para Webhook
+                    Identificador de verificación
                     <span tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top"
-                          title="Palabra o frase secreta que tú defines (ej: mitoken2024). Debe coincidir exactamente con lo que ingreses en Meta for Developers → Webhooks → Token de verificación. Es obligatorio para recibir mensajes entrantes."
+                          title="Palabra o frase secreta que tú defines. En Meta for Developers → WhatsApp → Configuración de API, al configurar el webhook, corresponde al campo 'Identificador de verificación'. Debe coincidir exactamente."
                           class="text-primary ms-1" style="cursor:pointer;">
                         <i class="bi bi-question-circle-fill"></i>
                     </span>
@@ -84,7 +84,7 @@ $webhookUrl = 'https://www.camagare.com.ec/whatsapp-webhook';
                        placeholder="Ej: mitoken2024seguro" required>
                 <div class="form-text">
                     <i class="bi bi-info-circle me-1"></i>
-                    URL del webhook para Meta:
+                    URL de devolución de llamada:
                     <code id="webhookUrl" class="text-break"><?= htmlspecialchars($webhookUrl) ?></code>
                     <button type="button" class="btn btn-link btn-sm p-0 ms-1" onclick="WACFG_copiarUrl()" title="Copiar URL">
                         <i class="bi bi-clipboard"></i>
