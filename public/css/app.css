@@ -15,73 +15,73 @@ html, body {
 }
 
 /* ============================================================
-   APP-SHELL MÓVIL — Solo cuando hay tabla (.cmg-has-table)
+   APP-SHELL — Solo cuando hay tabla (.cmg-has-table)
+   Aplica en TODOS los tamaños de pantalla.
    El título, buscador y paginación NUNCA se mueven.
    Solo hace scroll el contenido de la tabla.
    ============================================================ */
-@media (max-width: 991.98px) {
-  /* El área de contenido ocupa exactamente el espacio debajo del header */
-  body.cmg-has-table .cmg-main-content {
-    height: calc(100dvh - var(--cmg-sticky-h));
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
 
-  body.cmg-has-table .cmg-main-content > .container,
-  body.cmg-has-table .cmg-main-content > .container-fluid {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    min-height: 0;
-    padding-bottom: 0.5rem;
-  }
+/* El área de contenido ocupa exactamente el espacio debajo del header */
+body.cmg-has-table .cmg-main-content {
+  height: calc(100dvh - var(--cmg-sticky-h));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 
-  /* Título del módulo + botón Nuevo: no hace scroll, siempre visible */
-  body.cmg-has-table .cmg-main-content [class*="-header"]:not([class*="cmg-"]) {
-    flex-shrink: 0;
-  }
+body.cmg-has-table .cmg-main-content > .container,
+body.cmg-has-table .cmg-main-content > .container-fluid {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  padding-bottom: 0.5rem;
+}
 
-  /* Card de tabla: ocupa todo el espacio restante */
-  body.cmg-has-table .cmg-main-content .cmg-table-card {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    min-height: 0;
-  }
+/* Título del módulo + botón Nuevo: no hace scroll, siempre visible */
+body.cmg-has-table .cmg-main-content [class*="-header"]:not([class*="cmg-"]) {
+  flex-shrink: 0;
+}
 
-  /* Card-header (buscador + paginación): no hace scroll, siempre visible */
-  body.cmg-has-table .cmg-main-content .cmg-table-card > .card-header {
-    flex-shrink: 0;
-  }
+/* Card de tabla: ocupa todo el espacio restante */
+body.cmg-has-table .cmg-main-content .cmg-table-card {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
 
-  /* Card-body: ocupa el espacio restante, oculta overflow */
-  body.cmg-has-table .cmg-main-content .cmg-table-card > .card-body {
-    flex: 1 1 auto;
-    overflow: hidden;
-    min-height: 0;
-    padding: 0;
-  }
+/* Card-header (buscador + paginación): no hace scroll, siempre visible */
+body.cmg-has-table .cmg-main-content .cmg-table-card > .card-header {
+  flex-shrink: 0;
+}
 
-  /* Wrapper de scroll horizontal: altura completa del card-body */
-  body.cmg-has-table .cmg-scroll-x-wrap {
-    height: 100%;
-    overflow-x: auto;
-    overflow-y: visible;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-  }
+/* Card-body: ocupa el espacio restante, oculta overflow */
+body.cmg-has-table .cmg-main-content .cmg-table-card > .card-body {
+  flex: 1 1 auto;
+  overflow: hidden;
+  min-height: 0;
+  padding: 0;
+}
 
-  /* Contenedor de la tabla: ocupa todo el alto, sin max-height fijo */
-  body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) {
-    height: 100% !important;
-    max-height: none !important;
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
-    overscroll-behavior: contain;
-  }
+/* Wrapper de scroll horizontal: altura completa del card-body */
+body.cmg-has-table .cmg-scroll-x-wrap {
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Contenedor de la tabla: ocupa todo el alto, sin max-height fijo */
+body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) {
+  height: 100% !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
 }
 
 /* Variables según reglas del proyecto */

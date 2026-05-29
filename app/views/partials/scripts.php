@@ -98,12 +98,10 @@
      *    para activar el layout de altura fija solo en esas páginas.
      * ---------------------------------------------------------------- */
     function applyAppShell() {
-        if (window.innerWidth > 991) {
-            document.body.classList.remove('cmg-has-table');
-            return;
-        }
         if (document.querySelector('.cmg-table-card')) {
             document.body.classList.add('cmg-has-table');
+        } else {
+            document.body.classList.remove('cmg-has-table');
         }
     }
 
@@ -153,7 +151,6 @@
     }
 
     function wrapScrollContainers() {
-        if (window.innerWidth > 991) return;
         document.querySelectorAll('[class*="-scroll"]:not([class*="cmg-"]):not(.cmg-scroll-wrapped)').forEach(function(el) {
             var wrapper = document.createElement('div');
             wrapper.className = 'cmg-scroll-x-wrap';
