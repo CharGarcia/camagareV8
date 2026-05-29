@@ -1309,12 +1309,27 @@ class FacturaVentaController extends BaseModuloController
             $stNC->execute([$numeroFactura, $idEmpresa]);
             $totalNC = (float) $stNC->fetchColumn();
 
+            // ── Transacciones Payphone vinculadas ─────────────────────────────────
+            $stPP = $db->prepare(
+                "SELECT client_transaction_id, payment_id, monto, estado,
+                        transaction_status, authorization_code, created_at, updated_at, tipo_flujo
+                 FROM payphone_transacciones
+                 WHERE id_empresa    = ?
+                   AND modulo        = 'factura_venta'
+                   AND id_referencia = ?
+                   AND eliminado     = false
+                 ORDER BY created_at DESC"
+            );
+            $stPP->execute([$idEmpresa, $id]);
+            $pagosTarjeta = $stPP->fetchAll(\PDO::FETCH_ASSOC);
+
             echo json_encode([
                 'ok'                => true,
                 'factura'           => $factura,
                 'cobros'            => $cobros,
                 'total_retenciones' => round($totalRetenciones, 2),
                 'total_nc'          => round($totalNC, 2),
+                'pagos_tarjeta'     => $pagosTarjeta,
             ]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
@@ -1613,6 +1628,12 @@ class FacturaVentaController extends BaseModuloController
             $pp     = new \App\Services\PayphoneService(new \App\repositories\PayphoneRepository());
             $numero = ($factura['establecimiento'] ?? '001') . '-' . ($factura['punto_emision'] ?? '001') . '-' . str_pad((string)($factura['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
 
+            $correoCliente = trim($factura['cliente_email'] ?? '');
+            if (!filter_var($correoCliente, FILTER_VALIDATE_EMAIL)) {
+                echo json_encode(['ok' => false, 'mensaje' => 'El cliente no tiene un correo electrónico registrado.']);
+                exit;
+            }
+
             $cajita = $pp->prepararCajita($idEmpresa, [
                 'monto'          => \App\Services\PayphoneService::dolaresACentavos($saldo),
                 'descripcion'    => 'Factura ' . $numero,
@@ -1620,12 +1641,45 @@ class FacturaVentaController extends BaseModuloController
                 'id_referencia'  => $idFactura,
                 'url_retorno'    => rtrim(BASE_URL, '/') . '/payphone/cajita-retorno',
                 'url_cancelacion'=> rtrim(BASE_URL, '/') . '/payphone/cancelacion',
-                'url_exito'      => rtrim(BASE_URL, '/') . '/modulos/factura-venta?pago=ok&fv=' . $idFactura,
+                'url_exito'      => rtrim(BASE_URL, '/') . '/payphone/cajita-retorno',
                 'id_usuario'     => $idUsuario,
-                'email'          => $factura['cliente_email'] ?? null,
+                'email'          => $correoCliente,
             ]);
 
-            echo json_encode($cajita);
+            if (!$cajita['ok']) {
+                echo json_encode($cajita);
+                exit;
+            }
+
+            // Generar enlace público para el cliente
+            $urlPago = rtrim(BASE_URL, '/') . '/pago/' . $cajita['client_transaction_id'];
+
+            // Obtener nombre de la empresa
+            $empresaModel   = new \App\models\Empresa();
+            $empresaData    = $empresaModel->getPorId($idEmpresa);
+            $empresaNombre  = $empresaData['nombre_comercial'] ?? $empresaData['razon_social'] ?? '';
+
+            // Enviar correo al cliente
+            require_once MVC_APP . '/helpers/mail.php';
+            $enviado = enviar_correo_pago_tarjeta($correoCliente, [
+                'cliente_nombre' => $factura['cliente_nombre'] ?? '',
+                'empresa_nombre' => $empresaNombre,
+                'monto'          => $saldo,
+                'descripcion'    => 'Factura ' . $numero,
+                'url_pago'       => $urlPago,
+            ]);
+
+            if (!$enviado) {
+                $err = $GLOBALS['LAST_EMAIL_ERROR'] ?? 'Error desconocido al enviar el correo.';
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo: ' . $err]);
+                exit;
+            }
+
+            echo json_encode([
+                'ok'      => true,
+                'mensaje' => 'Enlace de pago enviado al correo ' . $correoCliente,
+                'correo'  => $correoCliente,
+            ]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }

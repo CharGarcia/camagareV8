@@ -372,6 +372,70 @@ if (!function_exists('enviar_correo_suscripcion')) {
     }
 }
 
+if (!function_exists('enviar_correo_pago_tarjeta')) {
+    /**
+     * Envía al cliente el enlace para pagar con tarjeta (Cajita de Pagos Payphone).
+     *
+     * @param string $correoDestino  Email del cliente
+     * @param array  $data  {
+     *   cliente_nombre, empresa_nombre, monto (float en USD), descripcion, url_pago
+     * }
+     * @return bool
+     */
+    function enviar_correo_pago_tarjeta(string $correoDestino, array $data): bool
+    {
+        $base = \App\services\EmailConfigService::getDataForSendEmail('notificaciones');
+        if (!$base) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'No hay configuración en correos_config (codigo: notificaciones)';
+            return false;
+        }
+
+        $docMailDir = MVC_APP . '/lib/mail';
+        if (!file_exists($docMailDir . '/phpmailer.php')) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'No se encuentra PHPMailer';
+            return false;
+        }
+
+        require_once $docMailDir . '/phpmailer.php';
+        require_once $docMailDir . '/smtp.php';
+        require_once $docMailDir . '/exception.php';
+
+        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        $GLOBALS['LAST_EMAIL_ERROR'] = null;
+
+        try {
+            $mail->isSMTP();
+            $mail->Host       = _mail_resolve_ipv4_host($base['host']);
+            $mail->SMTPAuth   = true;
+            $mail->Username   = $base['emisor'];
+            $mail->Password   = $base['pass'];
+            $mail->SMTPSecure = $base['smtp_secure'] ?? 'tls';
+            $mail->Port       = $base['port'];
+            $mail->CharSet    = 'UTF-8';
+
+            $config = require MVC_CONFIG . '/app.php';
+            if (!empty($config['mail_smtp_options'])) {
+                $mail->SMTPOptions = $config['mail_smtp_options'];
+            }
+
+            $mail->setFrom($base['emisor'], $base['empresa']);
+            $mail->addAddress($correoDestino, $data['cliente_nombre'] ?? '');
+            $mail->Subject = 'Enlace de pago con tarjeta — ' . ($data['descripcion'] ?? 'Pago pendiente');
+
+            ob_start();
+            require $docMailDir . '/email_pago_tarjeta.php';
+            $mail->Body = ob_get_clean();
+            $mail->isHTML(true);
+
+            return $mail->send();
+        } catch (\PHPMailer\PHPMailer\Exception $e) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = $mail->ErrorInfo ?? $e->getMessage();
+            error_log('Mailer Error (PagoTarjeta): ' . ($GLOBALS['LAST_EMAIL_ERROR']));
+            return false;
+        }
+    }
+}
+
 if (!function_exists('enviar_correo_factura_express_dueno')) {
     /**
      * Notifica al dueño del negocio de una nueva solicitud Factura Express QR.

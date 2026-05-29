@@ -819,7 +819,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <div class="row g-3">
                                     <!-- Izquierda: Historial -->
                                     <div class="col-md-7">
-                                        <div class="card border border-secondary-subtle shadow-sm rounded-3 overflow-hidden">
+                                        <div class="card border border-secondary-subtle shadow-sm rounded-3 overflow-hidden mb-3">
                                             <div class="card-header bg-light py-2 d-flex align-items-center border-bottom border-secondary-subtle">
                                                 <h6 class="card-title mb-0 fw-bold text-secondary" style="font-size: 0.85rem;"><i class="bi bi-list-ul me-2"></i>Historial de Cobros (Ingresos)</h6>
                                             </div>
@@ -841,6 +841,26 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                         </tbody>
                                                     </table>
                                                 </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Pagos con tarjeta (Payphone) -->
+                                        <div class="card border border-success border-opacity-25 shadow-sm rounded-3 overflow-hidden d-none" id="fvPagoTarjetaHistorialCard">
+                                            <div class="card-header bg-success bg-opacity-10 py-2 border-bottom border-success border-opacity-25">
+                                                <h6 class="card-title mb-0 fw-bold text-success" style="font-size: 0.85rem;"><i class="bi bi-credit-card me-2"></i>Pagos con tarjeta</h6>
+                                            </div>
+                                            <div class="card-body p-0">
+                                                <table class="table table-hover align-middle mb-0" style="font-size:0.78rem;">
+                                                    <thead class="table-light text-muted border-bottom">
+                                                        <tr>
+                                                            <th class="ps-3">Fecha</th>
+                                                            <th>Estado</th>
+                                                            <th>Autorización</th>
+                                                            <th class="text-end pe-3">Monto</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="fvPagoTarjetaTbody"></tbody>
+                                                </table>
                                             </div>
                                         </div>
                                     </div>
@@ -5642,6 +5662,35 @@ $perm = $permOriginal;
                     + 'No hay cobros registrados aún.</td></tr>';
             }
 
+            // Pagos con tarjeta (Payphone)
+            const cardTarjeta = document.getElementById('fvPagoTarjetaHistorialCard');
+            const tbodyTarjeta = document.getElementById('fvPagoTarjetaTbody');
+            if (cardTarjeta && tbodyTarjeta && jCob.pagos_tarjeta && jCob.pagos_tarjeta.length > 0) {
+                cardTarjeta.classList.remove('d-none');
+                tbodyTarjeta.innerHTML = '';
+                const badgePP = {
+                    'aprobado' : ['bg-success bg-opacity-10 text-success border-success', 'Aprobado'],
+                    'pendiente': ['bg-warning bg-opacity-10 text-warning border-warning', 'Pendiente'],
+                    'cancelado': ['bg-secondary bg-opacity-10 text-secondary border-secondary', 'Cancelado'],
+                    'rechazado': ['bg-danger bg-opacity-10 text-danger border-danger', 'Rechazado'],
+                    'error'    : ['bg-danger bg-opacity-10 text-danger border-danger', 'Error'],
+                };
+                jCob.pagos_tarjeta.forEach(function(pp) {
+                    const fecha = (pp.updated_at || pp.created_at || '').slice(0, 10).split('-').reverse().join('/');
+                    const [bClass, bLabel] = badgePP[pp.estado] || badgePP['error'];
+                    const monto = (parseInt(pp.monto) / 100).toFixed(2);
+                    const auth  = pp.authorization_code ? '<code class="text-muted" style="font-size:.7rem;">' + pp.authorization_code + '</code>' : '—';
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = '<td class="ps-3">' + fecha + '</td>'
+                        + '<td><span class="badge ' + bClass + ' border border-opacity-25" style="font-size:.7rem;">' + bLabel + '</span></td>'
+                        + '<td>' + auth + '</td>'
+                        + '<td class="text-end fw-bold pe-3">$ ' + monto + '</td>';
+                    tbodyTarjeta.appendChild(tr);
+                });
+            } else if (cardTarjeta) {
+                cardTarjeta.classList.add('d-none');
+            }
+
             // Saldo = Factura − Cobrado − Retenciones − Notas de Crédito
             const saldo = Math.max(0, totalFactura - totalCobrado - totalRetenciones - totalNC);
             _fvSaldoPendiente = saldo;                       // guardar para validación
@@ -5939,86 +5988,7 @@ function FV_abrirModalWhatsapp() {
     });
 }
 
-// ─── CAJITA DE PAGOS PAYPHONE ────────────────────────────────────────────────
-
-var _ppCargado = false;
-
-function _fvCargarPayphoneSDK(callback) {
-    if (_ppCargado && typeof window.PPaymentButtonBox !== 'undefined') {
-        callback();
-        return;
-    }
-    if (!document.querySelector('link[href*="payphone-payment-box.css"]')) {
-        var lnk  = document.createElement('link');
-        lnk.rel  = 'stylesheet';
-        lnk.href = 'https://cdn.payphonetodoesposible.com/box/v2.0/payphone-payment-box.css';
-        lnk.onload = function() {
-            // Payphone CSS altera font-size global — restaurar al valor de Bootstrap
-            if (!document.getElementById('pp-css-override')) {
-                var ov = document.createElement('style');
-                ov.id  = 'pp-css-override';
-                ov.textContent = 'html{font-size:16px!important}body{font-size:var(--bs-body-font-size,1rem)!important}';
-                document.head.appendChild(ov);
-            }
-        };
-        document.head.appendChild(lnk);
-    }
-    if (!document.querySelector('script[src*="payphone-payment-box.js"]')) {
-        var sc    = document.createElement('script');
-        sc.src    = 'https://cdn.payphonetodoesposible.com/box/v2.0/payphone-payment-box.js';
-        sc.onload = function() { _ppCargado = true; callback(); };
-        sc.onerror= function() { callback(new Error('No se pudo cargar el SDK de Payphone.')); };
-        document.head.appendChild(sc);
-    } else {
-        var t = 0;
-        var iv = setInterval(function() {
-            if (typeof window.PPaymentButtonBox !== 'undefined') {
-                clearInterval(iv);
-                _ppCargado = true;
-                callback();
-            } else if (++t > 50) {
-                clearInterval(iv);
-                callback(new Error('Tiempo de espera agotado cargando Payphone.'));
-            }
-        }, 100);
-    }
-}
-
-function _fvGetOCrearModal() {
-    var el = document.getElementById('modalFvPagoTarjeta');
-    if (el) return el;
-
-    var wrap = document.createElement('div');
-    var hdr  = document.createElement('div'); hdr.className = 'modal-header py-2 px-3';
-    var ttl  = document.createElement('h6');  ttl.className = 'modal-title fw-bold';
-    ttl.innerHTML = '<i class="bi bi-credit-card-2-front text-primary me-2"></i>Pagar con tarjeta';
-    var cls  = document.createElement('button'); cls.type = 'button'; cls.className = 'btn-close';
-    cls.setAttribute('data-bs-dismiss', 'modal'); cls.setAttribute('aria-label', 'Cerrar');
-    hdr.appendChild(ttl); hdr.appendChild(cls);
-
-    var bdy  = document.createElement('div'); bdy.className = 'modal-body p-3';
-    var ctn  = document.createElement('div'); ctn.id = 'fvPagoTarjetaContenido';
-    var sec  = document.createElement('div'); sec.className = 'd-flex align-items-center gap-1 mt-3 small text-muted';
-    sec.innerHTML = '<i class="bi bi-shield-lock text-success"></i>&nbsp;Pago seguro procesado por <strong class="ms-1">Payphone</strong>';
-    bdy.appendChild(ctn); bdy.appendChild(sec);
-
-    var ftr  = document.createElement('div'); ftr.className = 'modal-footer py-2 px-3 justify-content-end';
-    var can  = document.createElement('button'); can.type = 'button'; can.className = 'btn btn-secondary btn-sm';
-    can.setAttribute('data-bs-dismiss', 'modal'); can.textContent = 'Cancelar';
-    ftr.appendChild(can);
-
-    var cnt  = document.createElement('div'); cnt.className = 'modal-content rounded-3 shadow';
-    cnt.appendChild(hdr); cnt.appendChild(bdy); cnt.appendChild(ftr);
-    var dlg  = document.createElement('div'); dlg.className = 'modal-dialog modal-dialog-centered';
-    dlg.style.maxWidth = '480px'; dlg.appendChild(cnt);
-    var mod  = document.createElement('div'); mod.className = 'modal fade';
-    mod.id = 'modalFvPagoTarjeta'; mod.setAttribute('tabindex', '-1');
-    mod.setAttribute('data-bs-backdrop', 'static');
-    mod.appendChild(dlg);
-
-    document.body.appendChild(mod);
-    return mod;
-}
+// ─── PAGO CON TARJETA (envío por correo al cliente) ─────────────────────────
 
 window.fvAbrirPagoTarjeta = function() {
     var idFactura = parseInt(FV_ID_ACTIVO) || 0;
@@ -6026,7 +5996,7 @@ window.fvAbrirPagoTarjeta = function() {
 
     var btn      = document.getElementById('m-btn-pagar-tarjeta');
     var origHtml = btn ? btn.innerHTML : '';
-    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cargando...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando...'; }
 
     var fd = new FormData();
     fd.append('id_factura', idFactura);
@@ -6035,28 +6005,18 @@ window.fvAbrirPagoTarjeta = function() {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (!data.ok) {
-                Swal.fire('No se puede procesar el pago', data.mensaje, 'warning');
+                Swal.fire('No se puede procesar', data.mensaje, 'warning');
                 return;
             }
-
-            var modalEl     = _fvGetOCrearModal();
-            var contenidoEl = modalEl.querySelector('#fvPagoTarjetaContenido');
-            contenidoEl.innerHTML = '<div class="text-center py-4 text-muted small"><span class="spinner-border spinner-border-sm me-2"></span>Cargando formulario de pago...</div>';
-
-            bootstrap.Modal.getOrCreateInstance(modalEl).show();
-
-            _fvCargarPayphoneSDK(function(err) {
-                if (err) {
-                    contenidoEl.innerHTML = '<div class="alert alert-danger small py-2">' + err.message + '</div>';
-                    return;
-                }
-                contenidoEl.innerHTML = '';
-                try {
-                    new window.PPaymentButtonBox(data.widget).render('fvPagoTarjetaContenido');
-                } catch(e) {
-                    contenidoEl.innerHTML = '<div class="alert alert-danger small py-2">Error al inicializar el formulario de pago.</div>';
-                }
+            Swal.fire({
+                icon: 'success',
+                title: 'Enlace enviado',
+                html: 'Se envió el enlace de pago al correo<br><strong>' + data.correo + '</strong>',
+                timer: 4000,
+                showConfirmButton: false
             });
+            // Refrescar la pestaña pagos para mostrar la transacción pendiente
+            fvCargarCobrosTab();
         })
         .catch(function() {
             Swal.fire('Error', 'No se pudo conectar con el servidor.', 'error');

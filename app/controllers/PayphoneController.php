@@ -72,6 +72,53 @@ class PayphoneController extends BaseController
     }
 
     /**
+     * Página pública de pago: muestra la Cajita de Pagos al cliente.
+     * Ruta: /pago/{clientTransactionId}
+     */
+    public function pago(): void
+    {
+        $ctid = trim($_GET['token'] ?? '');
+
+        if ($ctid === '') {
+            $this->view('publica.payphone.pago', ['estado' => 'error', 'widgetConfig' => null]);
+            return;
+        }
+
+        try {
+            $trans = $this->pp->getTransaccionByClientId($ctid);
+
+            if (!$trans) {
+                $this->view('publica.payphone.pago', ['estado' => 'error', 'widgetConfig' => null]);
+                return;
+            }
+
+            // Si ya fue procesada mostrar resultado directamente
+            if ($trans['estado'] !== 'pendiente') {
+                $this->view('publica.payphone.pago', [
+                    'estado'        => $trans['estado'],
+                    'widgetConfig'  => null,
+                    'descripcion'   => $trans['descripcion'] ?? '',
+                    'monto'         => \App\Services\PayphoneService::centavosADolares((int) $trans['monto']),
+                    'empresa_nombre'=> '',
+                ]);
+                return;
+            }
+
+            $widgetConfig = $this->pp->getWidgetConfigFromTransaction($trans);
+
+            $this->view('publica.payphone.pago', [
+                'estado'        => null,
+                'widgetConfig'  => $widgetConfig,
+                'descripcion'   => $trans['descripcion'] ?? '',
+                'monto'         => \App\Services\PayphoneService::centavosADolares((int) $trans['monto']),
+                'empresa_nombre'=> '',
+            ]);
+        } catch (\Throwable $e) {
+            $this->view('publica.payphone.pago', ['estado' => 'error', 'widgetConfig' => null]);
+        }
+    }
+
+    /**
      * Retorno de la Cajita de Pagos (widget embebido).
      * Payphone redirige aquí con GET: ?clientTransactionId=...&id=...
      * La confirmación usa el endpoint exclusivo de cajita.

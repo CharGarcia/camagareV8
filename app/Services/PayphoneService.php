@@ -447,6 +447,38 @@ class PayphoneService
         ];
     }
 
+    /**
+     * Reconstruye el array de configuración del widget a partir de una transacción guardada.
+     * Usado en la página pública de pago para volver a renderizar la cajita.
+     */
+    public function getWidgetConfigFromTransaction(array $trans): array
+    {
+        $cfg    = $this->repo->getConfig((int) $trans['id_empresa']);
+        $monto  = (int) $trans['monto'];
+
+        $widget = [
+            'token'               => $cfg['token'],
+            'amount'              => $monto,
+            'amountWithTax'       => 0,
+            'amountWithoutTax'    => $monto,
+            'tax'                 => 0,
+            'service'             => 0,
+            'tip'                 => 0,
+            'currency'            => $trans['moneda'] ?? 'USD',
+            'clientTransactionId' => $trans['client_transaction_id'],
+            'responseUrl'         => $trans['url_retorno'],
+            'cancellationUrl'     => $trans['url_cancelacion'] ?? $trans['url_retorno'],
+            'reference'           => $trans['descripcion'] ?? '',
+            'lang'                => 'es',
+        ];
+
+        if (!empty($cfg['store_id'])) {
+            $widget['storeId'] = $cfg['store_id'];
+        }
+
+        return $widget;
+    }
+
     // ─── CONSULTAS ────────────────────────────────────────────────────────────
 
     /**

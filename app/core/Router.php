@@ -129,6 +129,13 @@ class Router
                 }
             }
 
+            // /pago/{token} → página pública de pago con tarjeta (sin auth)
+            if (($parts[0] ?? '') === 'pago') {
+                $controller      = 'Payphone';
+                $action          = 'pago';
+                $_GET['token']   = $parts[1] ?? '';
+            }
+
             // /payphone/* → retorno de pagos Payphone (sin auth)
             if (($parts[0] ?? '') === 'payphone') {
                 $controller = 'Payphone';
