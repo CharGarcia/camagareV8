@@ -182,11 +182,39 @@
         });
     }
 
+    /* ----------------------------------------------------------------
+     * 5. Prevenir zoom al enfocar inputs en iOS/Android.
+     *    Si el navegador ya hizo zoom, lo resetea al perder el foco.
+     * ---------------------------------------------------------------- */
+    function fixInputZoom() {
+        if (window.innerWidth > 767) return;
+        var viewport = document.querySelector('meta[name="viewport"]');
+        if (!viewport) return;
+        var original = viewport.content;
+
+        document.addEventListener('focus', function(e) {
+            var tag = e.target.tagName;
+            if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
+                // Temporalmente desactivar zoom del usuario durante el foco
+                viewport.content = original + ', maximum-scale=1';
+            }
+        }, true);
+
+        document.addEventListener('blur', function(e) {
+            var tag = e.target.tagName;
+            if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
+                // Restaurar el viewport original para volver al tamaño normal
+                viewport.content = original;
+            }
+        }, true);
+    }
+
     function init() {
         updateStickyHeaderHeight();
         applyAppShell();
         wrapScrollContainers();
         blockHeaderTouch();
+        fixInputZoom();
     }
 
     document.addEventListener('DOMContentLoaded', init);

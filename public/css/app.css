@@ -335,6 +335,27 @@ body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) {
   display: inline-block;
 }
 
+/* ---------------------------------------------------------------
+   Prevenir zoom automático en iOS/Android al enfocar inputs.
+   El navegador hace zoom cuando font-size < 16px. Forzamos 16px
+   solo en móvil para no alterar el diseño en desktop.
+   --------------------------------------------------------------- */
+@media (max-width: 767.98px) {
+    input[type="text"],
+    input[type="search"],
+    input[type="email"],
+    input[type="password"],
+    input[type="number"],
+    input[type="tel"],
+    input[type="url"],
+    input[type="date"],
+    input[type="datetime-local"],
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+}
+
 /* Móvil: menú más compacto */
 @media (max-width: 767.98px) {
   .cmg-menu-modulos {
