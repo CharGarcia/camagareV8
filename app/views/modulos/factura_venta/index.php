@@ -421,6 +421,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <button id="m-btn-whatsapp" type="button" class="btn btn-outline-success btn-sm px-2" onclick="FV_abrirModalWhatsapp()" title="Enviar por WhatsApp"><i class="bi bi-whatsapp"></i></button>
                         <button id="m-btn-ticket" type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="imprimirTicket()" title="Imprimir ticket / tirilla"><i class="bi bi-receipt"></i></button>
                         <button id="btnAnularFacturaModal" type="button" class="btn btn-outline-warning btn-sm d-none" title="Anular Factura"><i class="bi bi-slash-circle me-1"></i>Anular</button>
+                        <button id="m-btn-pagar-tarjeta" type="button" class="btn btn-success btn-sm px-2 d-none" onclick="fvAbrirPagoTarjeta()" title="Pagar con tarjeta"><i class="bi bi-credit-card"></i></button>
                         <div class="vr mx-1"></div>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalClienteCrear()" title="Registrar nuevo cliente"><i class="bi bi-person-plus fs-6"></i></button>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalProductoCrear()" title="Registrar nuevo producto"><i class="bi bi-box-seam fs-6"></i></button>
@@ -919,13 +920,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-
-                                        <!-- Botón pagar con tarjeta (Payphone) -->
-                                        <div class="d-none mt-2" id="fvPagoBtnTarjetaWrap">
-                                            <button type="button" class="btn btn-success btn-sm w-100 py-2 fw-bold shadow-sm border-0" onclick="fvAbrirPagoTarjeta()">
-                                                <i class="bi bi-credit-card me-2"></i>Pagar con tarjeta
-                                            </button>
                                         </div>
 
                                         <!-- Factura completamente pagada -->
@@ -2047,12 +2041,13 @@ $perm = $permOriginal;
         }
 
         const btnSri = document.getElementById('m-btn-sri');
-        const btnDuplicar = document.getElementById('m-btn-duplicar');
-        const btnPdf      = document.getElementById('m-btn-pdf');
-        const btnXml      = document.getElementById('m-btn-xml');
-        const btnCorreo   = document.getElementById('m-btn-correo');
-        const btnTicket   = document.getElementById('m-btn-ticket');
-        const btnAnular   = document.getElementById('btnAnularFacturaModal');
+        const btnDuplicar  = document.getElementById('m-btn-duplicar');
+        const btnPdf       = document.getElementById('m-btn-pdf');
+        const btnXml       = document.getElementById('m-btn-xml');
+        const btnCorreo    = document.getElementById('m-btn-correo');
+        const btnTicket    = document.getElementById('m-btn-ticket');
+        const btnAnular    = document.getElementById('btnAnularFacturaModal');
+        const btnTarjeta   = document.getElementById('m-btn-pagar-tarjeta');
         const vrs = document.querySelectorAll('.modal-body .vr'); // Separadores visuales
 
         // Si es nueva factura (ID 0), ocultar todo
@@ -2064,6 +2059,7 @@ $perm = $permOriginal;
             if (btnCorreo) btnCorreo.classList.add('d-none');
             if (btnTicket) btnTicket.classList.add('d-none');
             if (btnAnular) btnAnular.classList.add('d-none');
+            if (btnTarjeta) btnTarjeta.classList.add('d-none');
             vrs.forEach(v => v.classList.add('d-none'));
             return;
         }
@@ -5497,12 +5493,12 @@ $perm = $permOriginal;
         document.getElementById('fvPagoTotalNC').textContent           = totalNC.toFixed(2);
         document.getElementById('fvPagoSaldoPendiente').textContent    = saldo.toFixed(2);
 
-        const btnWrap = document.getElementById('fvPagoBtnTarjetaWrap');
-        if (btnWrap) {
+        const btnTarjeta = document.getElementById('m-btn-pagar-tarjeta');
+        if (btnTarjeta) {
             if (saldo > 0.001) {
-                btnWrap.classList.remove('d-none');
+                btnTarjeta.classList.remove('d-none');
             } else {
-                btnWrap.classList.add('d-none');
+                btnTarjeta.classList.add('d-none');
             }
         }
     }
@@ -6016,8 +6012,7 @@ window.fvAbrirPagoTarjeta = function() {
     var idFactura = parseInt(FV_ID_ACTIVO) || 0;
     if (idFactura <= 0) return;
 
-    var btnWrap  = document.getElementById('fvPagoBtnTarjetaWrap');
-    var btn      = btnWrap ? btnWrap.querySelector('button') : null;
+    var btn      = document.getElementById('m-btn-pagar-tarjeta');
     var origHtml = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cargando...'; }
 
