@@ -111,7 +111,47 @@
      * 3. Scroll horizontal en tablas sin romper thead sticky.
      *    Envuelve cada -scroll con un div que maneja overflow-x,
      *    dejando al contenedor original solo con overflow-y.
+     *    Además aplica bloqueo de dirección: al detectar el primer
+     *    movimiento significativo del dedo, bloquea la dirección
+     *    contraria para evitar el efecto "hoja suelta".
      * ---------------------------------------------------------------- */
+    function attachScrollDirectionLock(outerEl, innerEl) {
+        var startX = 0, startY = 0, dir = null;
+
+        outerEl.addEventListener('touchstart', function(e) {
+            if (e.touches.length !== 1) return;
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+            dir = null;
+            // Asegurar estado limpio al iniciar gesto
+            outerEl.style.overflowX = '';
+            innerEl.style.overflowY  = '';
+        }, { passive: true });
+
+        outerEl.addEventListener('touchmove', function(e) {
+            if (e.touches.length !== 1 || dir) return;
+            var dx = Math.abs(e.touches[0].clientX - startX);
+            var dy = Math.abs(e.touches[0].clientY - startY);
+            if (dx < 6 && dy < 6) return; // umbral mínimo antes de decidir
+            dir = dx > dy ? 'h' : 'v';
+            if (dir === 'h') {
+                // Movimiento horizontal: bloquar scroll vertical del inner
+                innerEl.style.overflowY = 'hidden';
+            } else {
+                // Movimiento vertical: bloquar scroll horizontal del outer
+                outerEl.style.overflowX = 'hidden';
+            }
+        }, { passive: true });
+
+        function onEnd() {
+            dir = null;
+            outerEl.style.overflowX = '';
+            innerEl.style.overflowY  = '';
+        }
+        outerEl.addEventListener('touchend',    onEnd, { passive: true });
+        outerEl.addEventListener('touchcancel', onEnd, { passive: true });
+    }
+
     function wrapScrollContainers() {
         if (window.innerWidth > 991) return;
         document.querySelectorAll('[class*="-scroll"]:not([class*="cmg-"]):not(.cmg-scroll-wrapped)').forEach(function(el) {
@@ -120,6 +160,8 @@
             el.parentNode.insertBefore(wrapper, el);
             wrapper.appendChild(el);
             el.classList.add('cmg-scroll-wrapped');
+            // Bloqueo de dirección: un eje a la vez
+            attachScrollDirectionLock(wrapper, el);
         });
     }
 
