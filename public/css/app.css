@@ -606,8 +606,13 @@ th[data-col] {
 .modal-dialog-scrollable .modal-content > form > .modal-body {
     flex: 1 1 auto;
     overflow-y: auto;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     min-height: 0;
+}
+/* También aplica cuando no hay form wrapper */
+.modal-dialog-scrollable .modal-body {
+    overflow-x: hidden;
 }
 
 /* ==============================================================
