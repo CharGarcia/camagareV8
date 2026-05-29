@@ -26,6 +26,21 @@ class WhatsappConfig extends BaseModel
     }
 
     /**
+     * Verifica si el token recibido por Meta coincide con alguna empresa.
+     * Usado en la verificación GET del webhook (multitenant: una App, múltiples WABA).
+     */
+    public function verificarWebhookToken(string $token): bool
+    {
+        $token = $this->escape($token);
+        $rows = $this->query(
+            "SELECT id FROM empresa_whatsapp_config
+             WHERE webhook_verify_token = '{$token}' AND eliminado = false
+             LIMIT 1"
+        );
+        return !empty($rows);
+    }
+
+    /**
      * Guarda o actualiza la configuración.
      */
     public function guardarConfiguracion(int $idEmpresa, array $datos, int $idUsuario): bool

@@ -34,24 +34,32 @@ class WhatsappWebhookController extends Controller
     }
 
     /**
-     * Verificacin del Webhook
-     * Meta enva hub.mode, hub.challenge, y hub.verify_token
+     * Verificación del Webhook.
+     * Meta envía hub.mode, hub.challenge y hub.verify_token.
+     * Validamos el token contra cualquier empresa configurada (multitenant:
+     * una sola App de Meta, múltiples WABA/empresas).
      */
     private function verifyWebhook(): void
     {
-        $mode = $_GET['hub_mode'] ?? '';
-        $token = $_GET['hub_verify_token'] ?? '';
-        $challenge = $_GET['hub_challenge'] ?? '';
+        $mode      = $_GET['hub_mode']         ?? '';
+        $token     = $_GET['hub_verify_token'] ?? '';
+        $challenge = $_GET['hub_challenge']    ?? '';
 
-        if ($mode === 'subscribe' && !empty($token)) {
-            // Aqu normalmente validamos que el token coincida con alguno en nuestra BD o un global.
-            // Para simplificar, aceptamos si el challenge viene (al ser multitenant, Meta usa un solo App o varios)
-            echo $challenge;
+        if ($mode !== 'subscribe' || empty($token) || empty($challenge)) {
+            http_response_code(403);
+            echo "Forbidden";
             exit;
         }
 
-        http_response_code(403);
-        echo "Forbidden";
+        // Validar el token contra todos los webhook_verify_token registrados
+        $configModel = new WhatsappConfig();
+        if (!$configModel->verificarWebhookToken($token)) {
+            http_response_code(403);
+            echo "Forbidden: token inválido";
+            exit;
+        }
+
+        echo $challenge;
         exit;
     }
 
