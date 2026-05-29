@@ -1564,6 +1564,74 @@ class FacturaVentaController extends BaseModuloController
         exit;
     }
 
+    public function prepararPagoTarjetaAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa  = (int) $_SESSION['id_empresa'];
+            $idFactura  = (int) ($_POST['id_factura'] ?? 0);
+            $idUsuario  = (int) $_SESSION['id_usuario'];
+
+            if ($idFactura <= 0) {
+                echo json_encode(['ok' => false, 'mensaje' => 'ID de factura inválido.']);
+                exit;
+            }
+
+            $factura = $this->repository->getPorId($idFactura);
+            if (!$factura || (int)$factura['id_empresa'] !== $idEmpresa) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Factura no encontrada.']);
+                exit;
+            }
+            if (($factura['estado'] ?? '') !== 'autorizado') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Solo se pueden pagar facturas autorizadas.']);
+                exit;
+            }
+
+            $total = (float) ($factura['importe_total'] ?? 0);
+
+            // Calcular total cobrado real desde ingresos
+            $stCob = $this->db->prepare(
+                "SELECT COALESCE(SUM(id2.monto_cobrado), 0)
+                 FROM ingresos_detalle id2
+                 INNER JOIN ingresos_cabecera ic2 ON id2.id_ingreso = ic2.id
+                 WHERE id2.tipo_documento = 'FACTURA'
+                   AND id2.id_referencia_documento = ?
+                   AND ic2.estado != 'anulado'
+                   AND ic2.eliminado = false"
+            );
+            $stCob->execute([$idFactura]);
+            $cobrado = (float) $stCob->fetchColumn();
+            $saldo   = round($total - $cobrado, 2);
+
+            if ($saldo <= 0) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Esta factura ya se encuentra pagada en su totalidad.']);
+                exit;
+            }
+
+            $pp     = new \App\Services\PayphoneService(new \App\repositories\PayphoneRepository());
+            $numero = ($factura['establecimiento'] ?? '001') . '-' . ($factura['punto_emision'] ?? '001') . '-' . str_pad((string)($factura['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+
+            $cajita = $pp->prepararCajita($idEmpresa, [
+                'monto'          => \App\Services\PayphoneService::dolaresACentavos($saldo),
+                'descripcion'    => 'Factura ' . $numero,
+                'modulo'         => 'factura_venta',
+                'id_referencia'  => $idFactura,
+                'url_retorno'    => rtrim(BASE_URL, '/') . '/payphone/cajita-retorno',
+                'url_cancelacion'=> rtrim(BASE_URL, '/') . '/payphone/cancelacion',
+                'url_exito'      => rtrim(BASE_URL, '/') . '/modulos/factura-venta?pago=ok&fv=' . $idFactura,
+                'id_usuario'     => $idUsuario,
+                'email'          => $factura['cliente_email'] ?? null,
+            ]);
+
+            echo json_encode($cajita);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function reenviarCorreoAjax(): void
     {
         ob_start();

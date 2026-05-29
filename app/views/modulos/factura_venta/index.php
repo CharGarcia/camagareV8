@@ -420,6 +420,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <button id="m-btn-correo" type="button" class="btn btn-outline-info btn-sm px-2" onclick="enviarPorCorreo()" title="Enviar por correo"><i class="bi bi-envelope"></i></button>
                         <button id="m-btn-whatsapp" type="button" class="btn btn-outline-success btn-sm px-2" onclick="FV_abrirModalWhatsapp()" title="Enviar por WhatsApp"><i class="bi bi-whatsapp"></i></button>
                         <button id="m-btn-ticket" type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="imprimirTicket()" title="Imprimir ticket / tirilla"><i class="bi bi-receipt"></i></button>
+                        <button id="m-btn-pagar-tarjeta" type="button" class="btn btn-success btn-sm px-2 d-none" onclick="fvAbrirPagoTarjeta()" title="Pagar con tarjeta"><i class="bi bi-credit-card me-1"></i>Pagar</button>
                         <button id="btnAnularFacturaModal" type="button" class="btn btn-outline-warning btn-sm d-none" title="Anular Factura"><i class="bi bi-slash-circle me-1"></i>Anular</button>
                         <div class="vr mx-1"></div>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalClienteCrear()" title="Registrar nuevo cliente"><i class="bi bi-person-plus fs-6"></i></button>
@@ -2040,12 +2041,13 @@ $perm = $permOriginal;
         }
 
         const btnSri = document.getElementById('m-btn-sri');
-        const btnDuplicar = document.getElementById('m-btn-duplicar');
-        const btnPdf = document.getElementById('m-btn-pdf');
-        const btnXml = document.getElementById('m-btn-xml');
-        const btnCorreo = document.getElementById('m-btn-correo');
-        const btnTicket = document.getElementById('m-btn-ticket');
-        const btnAnular = document.getElementById('btnAnularFacturaModal');
+        const btnDuplicar    = document.getElementById('m-btn-duplicar');
+        const btnPdf         = document.getElementById('m-btn-pdf');
+        const btnXml         = document.getElementById('m-btn-xml');
+        const btnCorreo      = document.getElementById('m-btn-correo');
+        const btnTicket      = document.getElementById('m-btn-ticket');
+        const btnAnular      = document.getElementById('btnAnularFacturaModal');
+        const btnPagarTarjeta= document.getElementById('m-btn-pagar-tarjeta');
         const vrs = document.querySelectorAll('.modal-body .vr'); // Separadores visuales
 
         // Si es nueva factura (ID 0), ocultar todo
@@ -2057,6 +2059,7 @@ $perm = $permOriginal;
             if (btnCorreo) btnCorreo.classList.add('d-none');
             if (btnTicket) btnTicket.classList.add('d-none');
             if (btnAnular) btnAnular.classList.add('d-none');
+            if (btnPagarTarjeta) btnPagarTarjeta.classList.add('d-none');
             vrs.forEach(v => v.classList.add('d-none'));
             return;
         }
@@ -2072,10 +2075,11 @@ $perm = $permOriginal;
 
         // Lógica de habilitación y visibilidad específica por Estado
         const st = (estado || '').toLowerCase().trim();
+        const esAutorizado = st.includes('autorizado') || st.includes('autorizada');
 
         if (btnDuplicar) btnDuplicar.disabled = false;
         if (btnPdf) btnPdf.disabled = false;
-        if (btnCorreo) btnCorreo.disabled = (st !== 'autorizado');
+        if (btnCorreo) btnCorreo.disabled = !esAutorizado;
 
         // Botón SRI: activo siempre que el documento esté en borrador
         if (btnSri) {
@@ -2083,12 +2087,18 @@ $perm = $permOriginal;
             btnSri.title    = st !== 'borrador' ? 'Solo se pueden enviar documentos en estado borrador.' : '';
         }
 
+        // Botón Pagar con tarjeta: solo en facturas autorizadas
+        if (btnPagarTarjeta) {
+            if (esAutorizado) {
+                btnPagarTarjeta.classList.remove('d-none');
+            } else {
+                btnPagarTarjeta.classList.add('d-none');
+            }
+        }
+
         // Botón Anular: SOLO en estado autorizado y con permiso de actualizar (Centralizado)
         if (btnAnular) {
             // Permitimos 'autorizado' o 'autorizada' para cubrir variaciones locales
-            const esAutorizado = st.includes('autorizado') || st.includes('autorizada');
-
-            // Si el estado es autorizado, comprobamos permisos
             if (esAutorizado && PERM_ACTUALIZAR) {
                 btnAnular.classList.remove('d-none');
             } else {
@@ -5925,5 +5935,116 @@ function FV_abrirModalWhatsapp() {
         Swal.fire('Error de Red', 'Hubo un problema de conexión al cargar las plantillas.', 'error');
     });
 }
+
+// ─── CAJITA DE PAGOS PAYPHONE ────────────────────────────────────────────────
+
+window.fvAbrirPagoTarjeta = async function () {
+    const idFactura = parseInt(FV_ID_ACTIVO) || 0;
+    if (idFactura <= 0) return;
+
+    const btn = document.getElementById('m-btn-pagar-tarjeta');
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cargando...';
+
+    try {
+        const fd = new FormData();
+        fd.append('id_factura', idFactura);
+
+        const resp = await fetch(`${B_URL}/${RUTA_MODULO}/prepararPagoTarjetaAjax`, { method: 'POST', body: fd });
+        const data = await resp.json();
+
+        if (!data.ok) {
+            Swal.fire('No se puede procesar el pago', data.mensaje, 'warning');
+            return;
+        }
+
+        // Rellenar el modal con el widget
+        document.getElementById('fvPagoTarjetaContenido').innerHTML = '';
+        const modal = new bootstrap.Modal(document.getElementById('modalFvPagoTarjeta'));
+        modal.show();
+
+        // Cargar CDN si no está cargado aún y renderizar widget
+        _fvRenderCajita(data.widget, 'fvPagoTarjetaContenido');
+
+    } catch (e) {
+        Swal.fire('Error', 'No se pudo conectar con el servidor.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+    }
+};
+
+function _fvRenderCajita(widgetConfig, containerId) {
+    // Cargar CSS si aún no está
+    if (!document.querySelector('link[href*="payphone-payment-box.css"]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://cdn.payphonetodoesposible.com/box/v2.0/payphone-payment-box.css';
+        document.head.appendChild(link);
+    }
+
+    // Cargar JS si aún no está
+    if (!document.querySelector('script[src*="payphone-payment-box.js"]')) {
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.src  = 'https://cdn.payphonetodoesposible.com/box/v2.0/payphone-payment-box.js';
+        script.onload = () => _fvIniciarWidget(widgetConfig, containerId);
+        document.head.appendChild(script);
+    } else {
+        // Ya cargado: esperar a que PPaymentButtonBox esté disponible
+        _fvEsperarYRenderizar(widgetConfig, containerId, 0);
+    }
+}
+
+function _fvEsperarYRenderizar(config, containerId, intentos) {
+    if (typeof PPaymentButtonBox !== 'undefined') {
+        _fvIniciarWidget(config, containerId);
+    } else if (intentos < 30) {
+        setTimeout(() => _fvEsperarYRenderizar(config, containerId, intentos + 1), 100);
+    } else {
+        document.getElementById(containerId).innerHTML =
+            '<div class="alert alert-warning small">No se pudo cargar el formulario de pago. Recarga la página.</div>';
+    }
+}
+
+function _fvIniciarWidget(config, containerId) {
+    try {
+        new PPaymentButtonBox(config).render(containerId);
+    } catch (e) {
+        document.getElementById(containerId).innerHTML =
+            '<div class="alert alert-danger small">Error al inicializar el formulario de pago.</div>';
+    }
+}
 </script>
+
+<!-- Modal: Pagar con tarjeta (Cajita de Pagos Payphone) -->
+<div class="modal fade" id="modalFvPagoTarjeta" tabindex="-1" aria-labelledby="modalFvPagoTarjetaLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:480px;">
+        <div class="modal-content rounded-3 shadow">
+            <div class="modal-header py-2 px-3">
+                <h6 class="modal-title fw-bold" id="modalFvPagoTarjetaLabel">
+                    <i class="bi bi-credit-card-2-front text-primary me-2"></i>Pagar con tarjeta
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div id="fvPagoTarjetaContenido">
+                    <div class="text-center py-4 text-muted small">
+                        <span class="spinner-border spinner-border-sm me-2"></span>Cargando formulario de pago...
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-1 mt-3 small text-muted">
+                    <i class="bi bi-shield-lock text-success"></i>
+                    Pago seguro procesado por <strong class="ms-1">Payphone</strong>
+                    <span class="ms-1" style="font-size:.7rem;">PCI DSS 4.0</span>
+                </div>
+            </div>
+            <div class="modal-footer py-2 px-3 justify-content-end">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?php // Fin de index.php ?>
