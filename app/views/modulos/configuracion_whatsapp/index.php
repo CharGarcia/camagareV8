@@ -4,18 +4,8 @@
 /** @var array|null $config */
 
 $base = BASE_URL;
-$urlModulo = rtrim($base, '/') . '/modulos/configuracion-whatsapp';
-
-// Construir URL absoluta del webhook.
-// Prioridad: APP_URL (config/local.php) → detección automática desde $_SERVER.
-if (defined('APP_URL') && APP_URL !== '') {
-    $webhookUrl = APP_URL . '/whatsapp-webhook';
-    $scheme     = str_starts_with(APP_URL, 'https') ? 'https' : 'http';
-} else {
-    $scheme     = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host       = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    $webhookUrl = $scheme . '://' . $host . rtrim($base, '/') . '/whatsapp-webhook';
-}
+$urlModulo  = rtrim($base, '/') . '/modulos/configuracion-whatsapp';
+$webhookUrl = 'https://www.camagare.com.ec/whatsapp-webhook';
 ?>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -100,13 +90,6 @@ if (defined('APP_URL') && APP_URL !== '') {
                         <i class="bi bi-clipboard"></i>
                     </button>
                 </div>
-                <?php if ($scheme === 'http'): ?>
-                <div class="alert alert-warning py-2 px-3 mt-2 mb-0 small">
-                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                    <strong>Atención:</strong> Meta requiere <strong>HTTPS</strong> para los webhooks de WhatsApp.
-                    Tu URL actual usa <code>http://</code>. Necesitas un dominio con certificado SSL (HTTPS) para que Meta pueda verificar y enviar eventos al webhook.
-                </div>
-                <?php endif; ?>
             </div>
 
             <div class="d-flex gap-2">
