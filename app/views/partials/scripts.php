@@ -135,5 +135,34 @@
         applyAppShell();
     });
     window.addEventListener('cmg:tableRefreshed', wrapScrollContainers);
+
+    /* ----------------------------------------------------------------
+     * 4. Scroll interno en modales fullscreen (móvil/tablet).
+     *    Bootstrap pone overflow-y:auto en el overlay .modal, lo que
+     *    hace que scrollee todo el modal en vez del .modal-body.
+     *    Al abrir cualquier modal en pantalla pequeña, bloqueamos el
+     *    scroll del overlay y lo dejamos solo en el .modal-body.
+     * ---------------------------------------------------------------- */
+    function fixModalScroll(modalEl) {
+        if (!modalEl) return;
+        var w = window.innerWidth;
+        var dialog = modalEl.querySelector('.modal-dialog');
+        if (!dialog) return;
+        var isLg = dialog.classList.contains('modal-lg');
+        var isXl = dialog.classList.contains('modal-xl');
+        var aplicar = (isXl && w <= 991) || (isLg && w <= 767);
+        if (aplicar) {
+            modalEl.style.overflow = 'hidden';
+        } else {
+            modalEl.style.overflow = '';
+        }
+    }
+
+    document.addEventListener('show.bs.modal', function(e) {
+        fixModalScroll(e.target);
+    });
+    document.addEventListener('hidden.bs.modal', function(e) {
+        e.target.style.overflow = '';
+    });
 })();
 </script>
