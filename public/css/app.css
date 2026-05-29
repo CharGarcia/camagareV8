@@ -584,6 +584,33 @@ th[data-col] {
 }
 
 /* ==============================================================
+   FIX: form wrapper dentro de modal-dialog-scrollable.
+   Cuando el <form> envuelve header+body+footer como hijo directo
+   de .modal-content, Bootstrap no puede aplicar su mecanismo de
+   scroll porque espera header/body/footer como hijos directos.
+   Esta regla hace que el form se comporte como un flex-column
+   que ocupa todo el espacio disponible, delegando el scroll al
+   .modal-body que está dentro.
+   ============================================================== */
+.modal-dialog-scrollable .modal-content > form {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+.modal-dialog-scrollable .modal-content > form > .modal-header,
+.modal-dialog-scrollable .modal-content > form > .modal-footer {
+    flex-shrink: 0;
+}
+.modal-dialog-scrollable .modal-content > form > .modal-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    min-height: 0;
+}
+
+/* ==============================================================
    MODALES FULLSCREEN EN MÓVIL/TABLET
    La lógica de scroll es manejada por JS (scripts.php):
    - Agrega modal-dialog-scrollable al diálogo
