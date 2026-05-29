@@ -100,9 +100,29 @@
     function applyAppShell() {
         if (document.querySelector('.cmg-table-card')) {
             document.body.classList.add('cmg-has-table');
+            // Bloquear scroll en html y body para que NADA fuera de
+            // los contenedores de tabla pueda moverse
+            document.documentElement.style.overflow = 'hidden';
+            document.documentElement.style.height   = '100%';
+            document.body.style.overflow = 'hidden';
+            document.body.style.height   = '100%';
         } else {
             document.body.classList.remove('cmg-has-table');
+            document.documentElement.style.overflow = '';
+            document.documentElement.style.height   = '';
+            document.body.style.overflow = '';
+            document.body.style.height   = '';
         }
+    }
+
+    /* Prevenir que el sticky-header arrastre la página con el dedo */
+    function blockHeaderTouch() {
+        var header = document.querySelector('.cmg-sticky-header');
+        if (!header || header._cmgTouchBlocked) return;
+        header._cmgTouchBlocked = true;
+        header.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+        }, { passive: false });
     }
 
     /* ----------------------------------------------------------------
@@ -166,6 +186,7 @@
         updateStickyHeaderHeight();
         applyAppShell();
         wrapScrollContainers();
+        blockHeaderTouch();
     }
 
     document.addEventListener('DOMContentLoaded', init);
