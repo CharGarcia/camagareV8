@@ -72,15 +72,17 @@ html, body {
     overflow-y: visible;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
+    touch-action: pan-x;        /* toque → solo mueve horizontal */
   }
 
   /* Contenedor de la tabla: ocupa todo el alto, sin max-height fijo */
   body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) {
     height: 100% !important;
     max-height: none !important;
-    overflow-x: visible !important;
+    overflow-x: hidden !important;  /* sin scroll horizontal suelto en filas */
     overflow-y: auto !important;
     overscroll-behavior-y: contain;
+    touch-action: pan-y;        /* toque → solo mueve vertical */
   }
 }
 
@@ -778,17 +780,19 @@ th[data-col] {
         overscroll-behavior-x: contain;
         max-width: 100%;
         width: 100%;
+        touch-action: pan-x;        /* toque → solo mueve horizontal */
     }
 
     /* CONTENEDOR INTERNO (-scroll): maneja scroll vertical + sticky thead
        Sin overflow-x → position:sticky funciona correctamente */
     [class*="-scroll"]:not([class*="cmg-"]) {
-        overflow-x: visible !important;
+        overflow-x: hidden !important;  /* sin scroll horizontal suelto en filas */
         overflow-y: auto !important;
         max-width: none !important;
         width: 100% !important;
         max-height: calc(100vh - 200px) !important;
         overscroll-behavior-y: contain;
+        touch-action: pan-y;        /* toque → solo mueve vertical */
     }
 
     /* Tabla: ancho mínimo para que el wrapper externo active el scroll horizontal */
