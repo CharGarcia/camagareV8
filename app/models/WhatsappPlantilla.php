@@ -129,57 +129,14 @@ class WhatsappPlantilla extends BaseModel
      */
     public function getPlantillasAprobadas(int $idEmpresa): array
     {
-        $sql = "SELECT id, nombre, categoria, idioma, componentes
-                FROM {$this->table}
-                WHERE id_empresa = :id_empresa
-                  AND estado_meta = 'APPROVED'
-                  AND eliminado = FALSE
+        $sql = "SELECT id, nombre, categoria, idioma, componentes 
+                FROM {$this->table} 
+                WHERE id_empresa = :id_empresa 
+                  AND estado_meta = 'APPROVED' 
+                  AND eliminado = FALSE 
                 ORDER BY nombre ASC";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':id_empresa' => $idEmpresa]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * Alias de getPlantillasAprobadas para consistencia de nomenclatura.
-     */
-    public function getAprobadas(int $idEmpresa): array
-    {
-        return $this->getPlantillasAprobadas($idEmpresa);
-    }
-
-    /**
-     * Extrae el texto del cuerpo (BODY) de una plantilla, reemplazando las variables {{1}}, {{2}}, etc.
-     */
-    public function extraerTextoCuerpo(int $idEmpresa, string $nombrePlantilla, array $variables = []): string
-    {
-        $sql = "SELECT componentes FROM {$this->table}
-                WHERE id_empresa = :id_empresa AND nombre = :nombre AND eliminado = FALSE
-                LIMIT 1";
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([':id_empresa' => $idEmpresa, ':nombre' => $nombrePlantilla]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$row || empty($row['componentes'])) {
-            return '';
-        }
-
-        $componentes = is_string($row['componentes']) ? json_decode($row['componentes'], true) : $row['componentes'];
-        if (!is_array($componentes)) {
-            return '';
-        }
-
-        $texto = '';
-        foreach ($componentes as $comp) {
-            if (($comp['type'] ?? '') === 'BODY') {
-                $texto = $comp['text'] ?? '';
-                foreach ($variables as $idx => $val) {
-                    $texto = str_replace('{{' . ($idx + 1) . '}}', (string) $val, $texto);
-                }
-                break;
-            }
-        }
-
-        return $texto;
     }
 }
