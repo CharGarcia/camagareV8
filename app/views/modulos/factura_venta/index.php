@@ -5952,6 +5952,15 @@ function _fvCargarPayphoneSDK(callback) {
         var lnk  = document.createElement('link');
         lnk.rel  = 'stylesheet';
         lnk.href = 'https://cdn.payphonetodoesposible.com/box/v2.0/payphone-payment-box.css';
+        lnk.onload = function() {
+            // Payphone CSS altera font-size global — restaurar al valor de Bootstrap
+            if (!document.getElementById('pp-css-override')) {
+                var ov = document.createElement('style');
+                ov.id  = 'pp-css-override';
+                ov.textContent = 'html{font-size:16px!important}body{font-size:var(--bs-body-font-size,1rem)!important}';
+                document.head.appendChild(ov);
+            }
+        };
         document.head.appendChild(lnk);
     }
     if (!document.querySelector('script[src*="payphone-payment-box.js"]')) {
