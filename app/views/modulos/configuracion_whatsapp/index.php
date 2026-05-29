@@ -6,10 +6,16 @@
 $base = BASE_URL;
 $urlModulo = rtrim($base, '/') . '/modulos/configuracion-whatsapp';
 
-// Construir URL absoluta del webhook (protocolo + host + ruta)
-$scheme      = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$host        = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$webhookUrl  = $scheme . '://' . $host . rtrim($base, '/') . '/whatsapp-webhook';
+// Construir URL absoluta del webhook.
+// Prioridad: APP_URL (config/local.php) → detección automática desde $_SERVER.
+if (defined('APP_URL') && APP_URL !== '') {
+    $webhookUrl = APP_URL . '/whatsapp-webhook';
+    $scheme     = str_starts_with(APP_URL, 'https') ? 'https' : 'http';
+} else {
+    $scheme     = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host       = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $webhookUrl = $scheme . '://' . $host . rtrim($base, '/') . '/whatsapp-webhook';
+}
 ?>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">

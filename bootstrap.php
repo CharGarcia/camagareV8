@@ -21,8 +21,13 @@ if (is_file($localCfgFile)) {
     define('BASE_URL', is_array($localCfg) && array_key_exists('base_url', $localCfg)
         ? (string) $localCfg['base_url']
         : '/sistema/public');
+    // APP_URL: URL pública completa (ej: https://www.camagare.com.ec). Sin barra final.
+    define('APP_URL', is_array($localCfg) && !empty($localCfg['app_url'])
+        ? rtrim((string) $localCfg['app_url'], '/')
+        : '');
 } else {
     define('BASE_URL', '/sistema/public');
+    define('APP_URL', '');
 }
 
 // Cadenas UTF-8 (acentos, eñe) coherentes en todo el request

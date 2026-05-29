@@ -7,4 +7,9 @@ declare(strict_types=1);
 
 return [
     'base_url' => '',
+
+    // URL pública completa de la aplicación (con https:// y sin barra final).
+    // Se usa para construir URLs absolutas como el webhook de WhatsApp.
+    // Ej: 'https://www.camagare.com.ec'
+    'app_url'  => 'https://www.camagare.com.ec',
 ];
