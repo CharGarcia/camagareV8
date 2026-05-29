@@ -172,13 +172,8 @@
 
     function wrapScrollContainers() {
         document.querySelectorAll('[class*="-scroll"]:not([class*="cmg-"]):not(.cmg-scroll-wrapped)').forEach(function(el) {
-            var wrapper = document.createElement('div');
-            wrapper.className = 'cmg-scroll-x-wrap';
-            el.parentNode.insertBefore(wrapper, el);
-            wrapper.appendChild(el);
             el.classList.add('cmg-scroll-wrapped');
-            // Bloqueo de dirección: un eje a la vez
-            attachScrollDirectionLock(wrapper, el);
+            // En móvil NO creamos el wrapper horizontal: sin arrastre lateral
         });
     }
 

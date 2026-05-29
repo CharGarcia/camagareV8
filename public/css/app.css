@@ -73,24 +73,28 @@ body.cmg-has-table .cmg-main-content .cmg-table-card > .card-body {
   padding: 0;
 }
 
-/* Wrapper de scroll horizontal: altura completa del card-body */
-body.cmg-has-table .cmg-scroll-x-wrap {
-  height: 100%;
-  overflow-x: auto;
-  overflow-y: visible;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  touch-action: pan-x pan-y; /* re-habilitar gestos táctiles aquí */
-}
-
-/* Contenedor de la tabla: ocupa todo el alto, sin max-height fijo */
+/* Contenedor de la tabla: solo scroll vertical, sin arrastre lateral */
 body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) {
   height: 100% !important;
   max-height: none !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
-  overscroll-behavior: contain;
-  touch-action: pan-x pan-y; /* re-habilitar gestos táctiles aquí */
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;   /* dedo solo mueve filas arriba/abajo */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Tabla: columnas se adaptan al ancho disponible sin desbordarse */
+body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) .table {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed;
+}
+body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) .table td,
+body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) .table th {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Variables según reglas del proyecto */
@@ -799,31 +803,28 @@ th[data-col] {
         overflow-x: clip;
     }
 
-    /* WRAPPER EXTERNO (inyectado por JS): maneja scroll horizontal
-       No tiene overflow-y → no interfiere con position:sticky */
-    .cmg-scroll-x-wrap {
-        overflow-x: auto !important;
-        overflow-y: visible !important;
-        -webkit-overflow-scrolling: touch;
-        overscroll-behavior: contain;
-        max-width: 100%;
-        width: 100%;
-    }
-
-    /* CONTENEDOR INTERNO (-scroll): maneja scroll vertical + sticky thead
-       Sin overflow-x → position:sticky funciona correctamente */
+    /* CONTENEDOR (-scroll): solo scroll vertical, sin arrastre lateral */
     [class*="-scroll"]:not([class*="cmg-"]) {
         overflow-x: hidden !important;
         overflow-y: auto !important;
-        max-width: none !important;
+        max-width: 100% !important;
         width: 100% !important;
         max-height: calc(100vh - 200px) !important;
-        overscroll-behavior: contain;
+        overscroll-behavior-y: contain;
+        touch-action: pan-y;
     }
 
-    /* Tabla: ancho mínimo para que el wrapper externo active el scroll horizontal */
+    /* Tabla: columnas se adaptan al ancho de pantalla */
     [class*="-scroll"]:not([class*="cmg-"]) .table {
-        min-width: 600px;
+        width: 100% !important;
+        min-width: 0 !important;
+        table-layout: fixed;
+    }
+    [class*="-scroll"]:not([class*="cmg-"]) .table td,
+    [class*="-scroll"]:not([class*="cmg-"]) .table th {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     /* Card que envuelve la tabla */
