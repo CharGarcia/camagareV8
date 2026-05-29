@@ -6058,5 +6058,6 @@ window.fvAbrirPagoTarjeta = function() {
             if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
         });
 };
+</script>
 
 <?php // Fin de index.php ?>
