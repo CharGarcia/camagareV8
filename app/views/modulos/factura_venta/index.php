@@ -5663,6 +5663,7 @@ $perm = $permOriginal;
             }
 
             // Pagos con tarjeta (Payphone)
+            let totalPagadoTarjeta = 0;
             const cardTarjeta = document.getElementById('fvPagoTarjetaHistorialCard');
             const tbodyTarjeta = document.getElementById('fvPagoTarjetaTbody');
             if (cardTarjeta && tbodyTarjeta && jCob.pagos_tarjeta && jCob.pagos_tarjeta.length > 0) {
@@ -5678,7 +5679,9 @@ $perm = $permOriginal;
                 jCob.pagos_tarjeta.forEach(function(pp) {
                     const fecha = (pp.updated_at || pp.created_at || '').slice(0, 10).split('-').reverse().join('/');
                     const [bClass, bLabel] = badgePP[pp.estado] || badgePP['error'];
-                    const monto = (parseInt(pp.monto) / 100).toFixed(2);
+                    const montoNum = parseInt(pp.monto) / 100;
+                    const monto = montoNum.toFixed(2);
+                    if (pp.estado === 'aprobado') totalPagadoTarjeta += montoNum;
                     const auth  = pp.authorization_code ? '<code class="text-muted" style="font-size:.7rem;">' + pp.authorization_code + '</code>' : '—';
                     const tr = document.createElement('tr');
                     tr.innerHTML = '<td class="ps-3">' + fecha + '</td>'
@@ -5691,7 +5694,8 @@ $perm = $permOriginal;
                 cardTarjeta.classList.add('d-none');
             }
 
-            // Saldo = Factura − Cobrado − Retenciones − Notas de Crédito
+            // Saldo = Factura − Cobrado − Retenciones − Notas de Crédito − Pagos tarjeta aprobados
+            totalCobrado += totalPagadoTarjeta;
             const saldo = Math.max(0, totalFactura - totalCobrado - totalRetenciones - totalNC);
             _fvSaldoPendiente = saldo;                       // guardar para validación
             _fvSetTarjetas(totalFactura, totalCobrado, totalRetenciones, totalNC, saldo);

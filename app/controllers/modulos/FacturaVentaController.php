@@ -1618,10 +1618,41 @@ class FacturaVentaController extends BaseModuloController
             );
             $stCob->execute([$idFactura]);
             $cobrado = (float) $stCob->fetchColumn();
-            $saldo   = round($total - $cobrado, 2);
+
+            // Pagos con tarjeta (Payphone) ya APROBADOS para esta factura (en centavos → dólares)
+            $stPP = $this->db->prepare(
+                "SELECT COALESCE(SUM(monto), 0)
+                 FROM payphone_transacciones
+                 WHERE id_empresa    = ?
+                   AND modulo        = 'factura_venta'
+                   AND id_referencia = ?
+                   AND estado        = 'aprobado'
+                   AND eliminado     = false"
+            );
+            $stPP->execute([$idEmpresa, $idFactura]);
+            $pagadoTarjeta = ((float) $stPP->fetchColumn()) / 100;
+
+            $saldo = round($total - $cobrado - $pagadoTarjeta, 2);
 
             if ($saldo <= 0) {
                 echo json_encode(['ok' => false, 'mensaje' => 'Esta factura ya se encuentra pagada en su totalidad.']);
+                exit;
+            }
+
+            // Evitar enviar un segundo enlace mientras hay uno pendiente reciente (15 min)
+            $stPend = $this->db->prepare(
+                "SELECT COUNT(*)
+                 FROM payphone_transacciones
+                 WHERE id_empresa    = ?
+                   AND modulo        = 'factura_venta'
+                   AND id_referencia = ?
+                   AND estado        = 'pendiente'
+                   AND eliminado     = false
+                   AND created_at >= (CURRENT_TIMESTAMP - INTERVAL '15 minutes')"
+            );
+            $stPend->execute([$idEmpresa, $idFactura]);
+            if ((int) $stPend->fetchColumn() > 0) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Ya existe un enlace de pago pendiente enviado en los últimos 15 minutos. Espera a que el cliente lo complete o a que expire.']);
                 exit;
             }
 
