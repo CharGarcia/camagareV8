@@ -1639,14 +1639,19 @@ class FacturaVentaController extends BaseModuloController
                 exit;
             }
 
+            // URL pública absoluta (BASE_URL puede estar vacío en producción)
+            $host    = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            $scheme  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $urlBaseAbs = $scheme . '://' . $host . rtrim(BASE_URL, '/');
+
             $cajita = $pp->prepararCajita($idEmpresa, [
                 'monto'          => \App\Services\PayphoneService::dolaresACentavos($saldo),
                 'descripcion'    => 'Factura ' . $numero,
                 'modulo'         => 'factura_venta',
                 'id_referencia'  => $idFactura,
-                'url_retorno'    => rtrim(BASE_URL, '/') . '/payphone/cajita-retorno',
-                'url_cancelacion'=> rtrim(BASE_URL, '/') . '/payphone/cancelacion',
-                'url_exito'      => rtrim(BASE_URL, '/') . '/payphone/cajita-retorno',
+                'url_retorno'    => $urlBaseAbs . '/payphone/cajita-retorno',
+                'url_cancelacion'=> $urlBaseAbs . '/payphone/cancelacion',
+                'url_exito'      => $urlBaseAbs . '/payphone/cajita-retorno',
                 'id_usuario'     => $idUsuario,
                 'email'          => $correoCliente,
             ]);
@@ -1656,8 +1661,8 @@ class FacturaVentaController extends BaseModuloController
                 exit;
             }
 
-            // Generar enlace público para el cliente
-            $urlPago       = rtrim(BASE_URL, '/') . '/pago/' . $cajita['client_transaction_id'];
+            // Generar enlace público absoluto para el cliente
+            $urlPago       = $urlBaseAbs . '/pago/' . $cajita['client_transaction_id'];
             $descripcion   = 'Factura ' . $numero;
 
             // Obtener nombre de la empresa
