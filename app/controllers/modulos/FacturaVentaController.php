@@ -1604,12 +1604,24 @@ class FacturaVentaController extends BaseModuloController
                 exit;
             }
 
-            // Verificar que exista una forma de cobro "Tarjeta" para registrar el ingreso
-            $ppRepo = new \App\repositories\PayphoneRepository();
-            if (!$ppRepo->getFormaCobroTarjeta($idEmpresa)) {
+            // Forma de cobro seleccionada (debe ser tipo TARJETA)
+            $ppRepo        = new \App\repositories\PayphoneRepository();
+            $idFormaCobro  = (int) ($_POST['id_forma_cobro'] ?? 0);
+
+            $formaCobro = null;
+            if ($idFormaCobro > 0) {
+                $stFc = $this->db->prepare(
+                    "SELECT id, nombre, tipo FROM empresa_formas_pago
+                     WHERE id = ? AND id_empresa = ? AND eliminado = false AND activo = true"
+                );
+                $stFc->execute([$idFormaCobro, $idEmpresa]);
+                $formaCobro = $stFc->fetch(\PDO::FETCH_ASSOC);
+            }
+
+            if (!$formaCobro || strtoupper((string) $formaCobro['tipo']) !== 'TARJETA') {
                 echo json_encode([
                     'ok'      => false,
-                    'mensaje' => 'No existe una forma de cobro de tipo "Tarjeta" configurada. Antes de enviar un cobro con tarjeta debes crear una forma de pago/cobro con tipo "Tarjeta" (aplicable a Ingresos), para poder registrar el ingreso cuando el cliente pague. Puedes nombrarla como quieras.',
+                    'mensaje' => 'Debes seleccionar una forma de cobro de tipo "Tarjeta" para enviar el cobro con tarjeta.',
                 ]);
                 exit;
             }
@@ -1648,6 +1660,16 @@ class FacturaVentaController extends BaseModuloController
 
             if ($saldo <= 0) {
                 echo json_encode(['ok' => false, 'mensaje' => 'Esta factura ya se encuentra pagada en su totalidad.']);
+                exit;
+            }
+
+            // Monto a cobrar (parcial permitido). Si no llega, usar el saldo completo.
+            $montoCobrar = round((float) ($_POST['monto'] ?? 0), 2);
+            if ($montoCobrar <= 0) {
+                $montoCobrar = $saldo;
+            }
+            if ($montoCobrar > $saldo + 0.001) {
+                echo json_encode(['ok' => false, 'mensaje' => 'El monto a cobrar ($' . number_format($montoCobrar, 2) . ') no puede superar el saldo pendiente ($' . number_format($saldo, 2) . ').']);
                 exit;
             }
 
@@ -1690,7 +1712,7 @@ class FacturaVentaController extends BaseModuloController
             // Payphone usa la Response URL registrada en su panel (/payphone/retorno).
             // No se define url_exito: el cliente externo ve la página de resultado "aprobado".
             $cajita = $pp->prepararCajita($idEmpresa, [
-                'monto'          => \App\Services\PayphoneService::dolaresACentavos($saldo),
+                'monto'          => \App\Services\PayphoneService::dolaresACentavos($montoCobrar),
                 'descripcion'    => 'Factura ' . $numero,
                 'modulo'         => 'factura_venta',
                 'id_referencia'  => $idFactura,
@@ -1699,6 +1721,7 @@ class FacturaVentaController extends BaseModuloController
                 'url_exito'      => null,
                 'id_usuario'     => $idUsuario,
                 'email'          => $correoCliente,
+                'id_forma_cobro' => $idFormaCobro,
             ]);
 
             if (!$cajita['ok']) {
@@ -1762,7 +1785,7 @@ class FacturaVentaController extends BaseModuloController
                 $correoCliente,
                 $factura['cliente_nombre'] ?? '',
                 $empresaNombre,
-                $saldo,
+                $montoCobrar,
                 $descripcion,
                 $urlPago,
                 $pdfString

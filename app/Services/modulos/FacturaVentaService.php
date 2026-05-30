@@ -57,9 +57,14 @@ class FacturaVentaService
         $monto     = round(((int) $trans['monto']) / 100, 2);
         $idUsuario = !empty($trans['created_by']) ? (int) $trans['created_by'] : null;
 
-        // Forma de cobro "Tarjeta"
+        // Forma de cobro: la específica guardada en la transacción, o cualquier tipo TARJETA
         $ppRepo = new \App\repositories\PayphoneRepository();
-        $formaTarjeta = $ppRepo->getFormaCobroTarjeta($idEmpresa);
+        $idFormaCobro = !empty($trans['id_forma_cobro']) ? (int) $trans['id_forma_cobro'] : 0;
+        if ($idFormaCobro > 0) {
+            $formaTarjeta = ['id' => $idFormaCobro];
+        } else {
+            $formaTarjeta = $ppRepo->getFormaCobroTarjeta($idEmpresa);
+        }
         if (!$formaTarjeta) {
             return null; // sin forma de cobro Tarjeta no se puede registrar
         }

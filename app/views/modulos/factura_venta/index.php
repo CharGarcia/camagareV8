@@ -421,7 +421,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <button id="m-btn-whatsapp" type="button" class="btn btn-outline-success btn-sm px-2" onclick="FV_abrirModalWhatsapp()" title="Enviar por WhatsApp"><i class="bi bi-whatsapp"></i></button>
                         <button id="m-btn-ticket" type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="imprimirTicket()" title="Imprimir ticket / tirilla"><i class="bi bi-receipt"></i></button>
                         <button id="btnAnularFacturaModal" type="button" class="btn btn-outline-warning btn-sm d-none" title="Anular Factura"><i class="bi bi-slash-circle me-1"></i>Anular</button>
-                        <button id="m-btn-pagar-tarjeta" type="button" class="btn btn-success btn-sm px-2 d-none" onclick="fvAbrirPagoTarjeta()" title="Pagar con tarjeta"><i class="bi bi-credit-card"></i></button>
                         <div class="vr mx-1"></div>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalClienteCrear()" title="Registrar nuevo cliente"><i class="bi bi-person-plus fs-6"></i></button>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalProductoCrear()" title="Registrar nuevo producto"><i class="bi bi-box-seam fs-6"></i></button>
@@ -934,7 +933,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                             <input type="text" class="form-control form-control-sm shadow-none border-secondary-subtle" id="fvPagoObs" placeholder="Nota del cobro">
                                                         </div>
                                                         <div class="col-12 mt-2">
-                                                            <button type="button" class="btn btn-success btn-sm w-100 py-2 fw-bold shadow-sm border-0" id="fvPagoBtnRegistrar" onclick="fvRegistrarCobro()">
+                                                            <button type="button" class="btn btn-success btn-sm w-100 py-2 fw-bold shadow-sm border-0" id="fvPagoBtnRegistrar" onclick="fvAccionCobro()">
                                                                 <i class="bi bi-check-circle me-2"></i>Registrar Cobro
                                                             </button>
                                                         </div>
@@ -2068,7 +2067,6 @@ $perm = $permOriginal;
         const btnCorreo    = document.getElementById('m-btn-correo');
         const btnTicket    = document.getElementById('m-btn-ticket');
         const btnAnular    = document.getElementById('btnAnularFacturaModal');
-        const btnTarjeta   = document.getElementById('m-btn-pagar-tarjeta');
         const vrs = document.querySelectorAll('.modal-body .vr'); // Separadores visuales
 
         // Si es nueva factura (ID 0), ocultar todo
@@ -2080,7 +2078,6 @@ $perm = $permOriginal;
             if (btnCorreo) btnCorreo.classList.add('d-none');
             if (btnTicket) btnTicket.classList.add('d-none');
             if (btnAnular) btnAnular.classList.add('d-none');
-            if (btnTarjeta) btnTarjeta.classList.add('d-none');
             vrs.forEach(v => v.classList.add('d-none'));
             return;
         }
@@ -5516,15 +5513,6 @@ $perm = $permOriginal;
         document.getElementById('fvPagoTotalRetenciones').textContent  = totalRet.toFixed(2);
         document.getElementById('fvPagoTotalNC').textContent           = totalNC.toFixed(2);
         document.getElementById('fvPagoSaldoPendiente').textContent    = saldo.toFixed(2);
-
-        const btnTarjeta = document.getElementById('m-btn-pagar-tarjeta');
-        if (btnTarjeta) {
-            if (saldo > 0.001) {
-                btnTarjeta.classList.remove('d-none');
-            } else {
-                btnTarjeta.classList.add('d-none');
-            }
-        }
     }
 
     async function fvCargarCobrosTab() {
@@ -5607,7 +5595,7 @@ $perm = $permOriginal;
                     const comboFP = document.getElementById('fvPagoFormaCobro');
                     if (comboFP) {
                         comboFP.innerHTML = '<option value="">— Seleccione —</option>'
-                            + fps.map(fp => `<option value="${fp.id}">${fp.nombre}</option>`).join('');
+                            + fps.map(fp => `<option value="${fp.id}" data-tipo="${(fp.tipo || '').toUpperCase()}">${fp.nombre}</option>`).join('');
                         if (fps.length === 1) comboFP.selectedIndex = 1;
                     }
 
@@ -5741,11 +5729,40 @@ $perm = $permOriginal;
 
     function fvToggleCobrosFormaForm(formaCobradId) {
         const divBanco = document.getElementById('fvPagoDivBanco');
-        if (!divBanco) return;
         const fp = (_fvIngresoDeps?.formas_cobro || []).find(x => x.id == formaCobradId);
-        if (fp && fp.tipo === 'BANCO') divBanco.classList.remove('d-none');
-        else divBanco.classList.add('d-none');
+        const tipo = fp ? (fp.tipo || '').toUpperCase() : '';
+
+        if (divBanco) {
+            if (tipo === 'BANCO') divBanco.classList.remove('d-none');
+            else divBanco.classList.add('d-none');
+        }
+
+        // Si es TARJETA, el botón cambia a "Enviar cobro con tarjeta"
+        const btn = document.getElementById('fvPagoBtnRegistrar');
+        if (btn) {
+            if (tipo === 'TARJETA') {
+                btn.innerHTML = '<i class="bi bi-credit-card me-2"></i>Enviar cobro con tarjeta';
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-primary');
+            } else {
+                btn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Registrar Cobro';
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-success');
+            }
+        }
     }
+
+    // Decide el flujo del botón según el tipo de forma de cobro seleccionada
+    window.fvAccionCobro = function() {
+        const sel = document.getElementById('fvPagoFormaCobro');
+        const fp = (_fvIngresoDeps?.formas_cobro || []).find(x => x.id == (sel ? sel.value : ''));
+        const tipo = fp ? (fp.tipo || '').toUpperCase() : '';
+        if (tipo === 'TARJETA') {
+            fvEnviarCobroTarjeta();
+        } else {
+            fvRegistrarCobro();
+        }
+    };
 
     async function fvCargarSecuencialCobro(idPunto) {
         const elSec = document.getElementById('fvPagoSecuencial');
@@ -6005,9 +6022,25 @@ function FV_abrirModalWhatsapp() {
 
 // ─── PAGO CON TARJETA (envío por correo al cliente) ─────────────────────────
 
-window.fvAbrirPagoTarjeta = async function() {
+window.fvEnviarCobroTarjeta = async function() {
     var idFactura = parseInt(FV_ID_ACTIVO) || 0;
     if (idFactura <= 0) return;
+
+    // Forma de cobro (tipo TARJETA) y monto a cobrar
+    var idFormaCobro = document.getElementById('fvPagoFormaCobro').value;
+    if (!idFormaCobro) {
+        Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona la forma de cobro (Tarjeta).', target: document.getElementById('modalNuevaFactura') });
+        return;
+    }
+    var monto = parseFloat(document.getElementById('fvPagoMonto').value);
+    if (!monto || monto <= 0) {
+        Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa un monto a cobrar mayor a cero.', target: document.getElementById('modalNuevaFactura') });
+        return;
+    }
+    if (_fvSaldoPendiente > 0 && monto > _fvSaldoPendiente + 0.001) {
+        Swal.fire({ icon: 'warning', title: 'Atención', text: 'El monto a cobrar ($' + monto.toFixed(2) + ') no puede superar el saldo pendiente ($' + _fvSaldoPendiente.toFixed(2) + ').', target: document.getElementById('modalNuevaFactura') });
+        return;
+    }
 
     // Obtener correo actual del cliente — si hay varios, conservar solo el primero
     var mailLbl      = document.getElementById('m-lbl-cliente-correo');
@@ -6018,14 +6051,14 @@ window.fvAbrirPagoTarjeta = async function() {
 
     // Modal de confirmación con correo editable
     var result = await Swal.fire({
-        title: '<i class="bi bi-credit-card text-success me-2"></i>Enviar enlace de pago',
-        html: '<p class="text-muted small mb-3">Se enviará al cliente un enlace para pagar con tarjeta de forma segura, junto con el PDF de la factura.</p>'
+        title: '<i class="bi bi-credit-card text-primary me-2"></i>Enviar cobro con tarjeta',
+        html: '<p class="text-muted small mb-3">Se enviará al cliente un enlace para pagar <strong>$' + monto.toFixed(2) + '</strong> con tarjeta de forma segura, junto con el PDF de la factura.</p>'
             + '<label class="form-label small fw-bold d-block text-start mb-1">Correo del cliente</label>'
             + '<input id="swal-correo-tarjeta" type="email" class="swal2-input mx-0 w-100" style="max-width:100%;font-size:.9rem;" placeholder="correo@cliente.com" value="' + correoActual + '">',
         showCancelButton: true,
         confirmButtonText: '<i class="bi bi-send me-1"></i>Enviar',
         cancelButtonText: 'Cancelar',
-        confirmButtonColor: '#198754',
+        confirmButtonColor: '#0d6efd',
         target: document.getElementById('modalNuevaFactura'),
         width: '420px',
         focusConfirm: false,
@@ -6059,6 +6092,8 @@ window.fvAbrirPagoTarjeta = async function() {
     var fd = new FormData();
     fd.append('id_factura', idFactura);
     fd.append('correo_destino', correo);
+    fd.append('monto', monto.toFixed(2));
+    fd.append('id_forma_cobro', idFormaCobro);
 
     fetch(B_URL + '/' + RUTA_MODULO + '/prepararPagoTarjetaAjax', { method: 'POST', body: fd })
         .then(function(r) { return r.json(); })

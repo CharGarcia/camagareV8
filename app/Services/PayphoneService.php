@@ -355,6 +355,7 @@ class PayphoneService
             'url_exito'             => $params['url_exito']     ?? null,
             'id_usuario'            => $params['id_usuario']    ?? null,
             'tipo_flujo'            => 'cajita',
+            'id_forma_cobro'        => $params['id_forma_cobro'] ?? null,
         ]);
 
         $widget = [
