@@ -97,6 +97,38 @@ class PayphoneRepository extends BaseRepository
         $st->execute([':pid' => $paymentId, ':ctid' => $clientTransactionId]);
     }
 
+    public function vincularIngreso(string $clientTransactionId, int $idIngreso): void
+    {
+        $st = $this->db->prepare(
+            "UPDATE payphone_transacciones
+             SET id_ingreso = :iid, updated_at = CURRENT_TIMESTAMP
+             WHERE client_transaction_id = :ctid AND eliminado = false"
+        );
+        $st->execute([':iid' => $idIngreso, ':ctid' => $clientTransactionId]);
+    }
+
+    /**
+     * Busca la forma de cobro "Tarjeta" de una empresa (para registrar ingresos por tarjeta).
+     * Retorna el registro o null si no existe configurada.
+     */
+    public function getFormaCobroTarjeta(int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, nombre, tipo
+             FROM empresa_formas_pago
+             WHERE id_empresa = :ie
+               AND eliminado  = false
+               AND activo     = true
+               AND (aplica_en = 'AMBAS' OR aplica_en = 'INGRESO')
+               AND LOWER(nombre) LIKE '%tarjeta%'
+             ORDER BY nombre ASC
+             LIMIT 1"
+        );
+        $st->execute([':ie' => $idEmpresa]);
+        $row = $st->fetch();
+        return $row ?: null;
+    }
+
     public function actualizarResultado(string $clientTransactionId, array $d): void
     {
         $st = $this->db->prepare(

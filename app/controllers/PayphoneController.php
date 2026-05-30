@@ -56,6 +56,10 @@ class PayphoneController extends Controller
         $trans  = $resultado['transaccion'];
         $estado = $resultado['estado']; // aprobado | cancelado | rechazado | error | pendiente
 
+        if ($estado === 'aprobado') {
+            $this->procesarAprobacion($trans);
+        }
+
         // Si hay url_exito definida y el pago fue aprobado → redirigir al módulo
         if ($estado === 'aprobado' && !empty($trans['url_exito'])) {
             $sep = str_contains($trans['url_exito'], '?') ? '&' : '?';
@@ -69,6 +73,27 @@ class PayphoneController extends Controller
             'transaccion' => $trans,
             'resultado'   => $resultado,
         ]);
+    }
+
+    /**
+     * Acciones específicas por módulo cuando un pago se aprueba.
+     * Para factura_venta: genera automáticamente el Ingreso (cobro) vinculado.
+     */
+    private function procesarAprobacion(array $trans): void
+    {
+        try {
+            if (($trans['modulo'] ?? '') === 'factura_venta') {
+                $svc = new \App\Services\modulos\FacturaVentaService(
+                    new \App\repositories\modulos\FacturaVentaRepository(),
+                    new \App\Rules\modulos\FacturaVentaRules(),
+                    new \App\Services\LogSistemaService()
+                );
+                $svc->generarIngresoDesdePayphone($trans);
+            }
+        } catch (\Throwable $e) {
+            // No bloquear la pantalla de éxito del cliente si falla el registro del ingreso
+            error_log('[Payphone] Error generando ingreso desde pago aprobado: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -147,6 +172,10 @@ class PayphoneController extends Controller
 
         $trans  = $resultado['transaccion'];
         $estado = $resultado['estado'];
+
+        if ($estado === 'aprobado') {
+            $this->procesarAprobacion($trans);
+        }
 
         if ($estado === 'aprobado' && !empty($trans['url_exito'])) {
             $sep = str_contains($trans['url_exito'], '?') ? '&' : '?';

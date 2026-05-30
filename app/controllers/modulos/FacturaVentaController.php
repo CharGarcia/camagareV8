@@ -1312,7 +1312,7 @@ class FacturaVentaController extends BaseModuloController
             // ── Transacciones Payphone vinculadas ─────────────────────────────────
             $stPP = $db->prepare(
                 "SELECT client_transaction_id, payment_id, monto, estado,
-                        transaction_status, authorization_code, created_at, updated_at, tipo_flujo
+                        transaction_status, authorization_code, created_at, updated_at, tipo_flujo, id_ingreso
                  FROM payphone_transacciones
                  WHERE id_empresa    = ?
                    AND modulo        = 'factura_venta'
@@ -1604,6 +1604,16 @@ class FacturaVentaController extends BaseModuloController
                 exit;
             }
 
+            // Verificar que exista una forma de cobro "Tarjeta" para registrar el ingreso
+            $ppRepo = new \App\repositories\PayphoneRepository();
+            if (!$ppRepo->getFormaCobroTarjeta($idEmpresa)) {
+                echo json_encode([
+                    'ok'      => false,
+                    'mensaje' => 'No existe una forma de cobro "Tarjeta" configurada. Antes de enviar un cobro con tarjeta debes crear una forma de pago/cobro que contenga la palabra "Tarjeta" (aplicable a Ingresos), para poder registrar el ingreso cuando el cliente pague.',
+                ]);
+                exit;
+            }
+
             $total = (float) ($factura['importe_total'] ?? 0);
 
             // Calcular total cobrado real desde ingresos
@@ -1619,7 +1629,8 @@ class FacturaVentaController extends BaseModuloController
             $stCob->execute([$idFactura]);
             $cobrado = (float) $stCob->fetchColumn();
 
-            // Pagos con tarjeta (Payphone) ya APROBADOS para esta factura (en centavos → dólares)
+            // Pagos con tarjeta (Payphone) APROBADOS aún SIN ingreso vinculado
+            // (los que ya generaron ingreso se cuentan vía la suma de ingresos)
             $stPP = $this->db->prepare(
                 "SELECT COALESCE(SUM(monto), 0)
                  FROM payphone_transacciones
@@ -1627,6 +1638,7 @@ class FacturaVentaController extends BaseModuloController
                    AND modulo        = 'factura_venta'
                    AND id_referencia = ?
                    AND estado        = 'aprobado'
+                   AND id_ingreso    IS NULL
                    AND eliminado     = false"
             );
             $stPP->execute([$idEmpresa, $idFactura]);

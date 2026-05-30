@@ -5681,7 +5681,8 @@ $perm = $permOriginal;
                     const [bClass, bLabel] = badgePP[pp.estado] || badgePP['error'];
                     const montoNum = parseInt(pp.monto) / 100;
                     const monto = montoNum.toFixed(2);
-                    if (pp.estado === 'aprobado') totalPagadoTarjeta += montoNum;
+                    // Solo sumar aprobados que aún NO generaron ingreso (los que sí ya cuentan en cobros)
+                    if (pp.estado === 'aprobado' && !pp.id_ingreso) totalPagadoTarjeta += montoNum;
                     const auth  = pp.authorization_code ? '<code class="text-muted" style="font-size:.7rem;">' + pp.authorization_code + '</code>' : '—';
                     const tr = document.createElement('tr');
                     tr.innerHTML = '<td class="ps-3">' + fecha + '</td>'
