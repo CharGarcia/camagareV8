@@ -391,9 +391,30 @@ class PayphoneService
     }
 
     /**
+     * Normaliza la respuesta de un endpoint de confirmación a un transactionStatus.
+     * Soporta transactionStatus textual y statusCode numérico (3=Approved, 2=Cancelled).
+     */
+    private function extraerStatusConfirm(array $resp): string
+    {
+        if (!empty($resp['transactionStatus'])) {
+            return (string) $resp['transactionStatus'];
+        }
+        if (!empty($resp['status']) && is_string($resp['status'])) {
+            return $resp['status'];
+        }
+        if (isset($resp['statusCode'])) {
+            return match ((int) $resp['statusCode']) {
+                3 => 'Approved',
+                2 => 'Cancelled',
+                default => 'Error',
+            };
+        }
+        return 'Error';
+    }
+
+    /**
      * Confirma el resultado de un pago realizado con la Cajita de Pagos.
-     * Usa el endpoint exclusivo de cajita: paymentbox.payphonetodoesposible.com/api/confirm
-     * con payload { "id": ..., "clientTxId": ... }
+     * El widget box/v2.0 confirma vía /api/button/V2/Confirm; fallback a /api/confirm.
      */
     public function confirmarCajitaPago(string $clientTransactionId, int $paymentId, int $idUsuario = 0): array
     {
@@ -402,7 +423,9 @@ class PayphoneService
             return ['ok' => false, 'mensaje' => 'Transacción no encontrada.'];
         }
 
-        if ($trans['estado'] !== 'pendiente') {
+        // Re-confirmar si está pendiente o si un intento previo falló (error transitorio).
+        // Estados finales (aprobado/cancelado/rechazado) se devuelven tal cual (idempotente).
+        if (!in_array($trans['estado'], ['pendiente', 'error'], true)) {
             return [
                 'ok'          => true,
                 'estado'      => $trans['estado'],
@@ -410,21 +433,32 @@ class PayphoneService
             ];
         }
 
-        $cfg  = $this->getConfig((int) $trans['id_empresa']);
-        $resp = $this->apiPostCajita(self::ENDPOINT_CAJITA_CONFIRM, [
-            'id'        => $paymentId,
-            'clientTxId'=> $clientTransactionId,
+        $cfg = $this->getConfig((int) $trans['id_empresa']);
+
+        // El widget box/v2.0 (PPaymentButtonBox) registra la transacción en el
+        // sistema del Botón de pago, por lo que se confirma en /api/button/V2/Confirm
+        // con clientTransactionId. Si por algún motivo no resuelve, se intenta el
+        // endpoint exclusivo de la Cajita (/api/confirm con clientTxId).
+        $resp = $this->apiPost(self::ENDPOINT_CONFIRM, [
+            'id'                  => $paymentId,
+            'clientTransactionId' => $clientTransactionId,
         ], $cfg['token']);
 
-        $statusPayphone = $resp['transactionStatus'] ?? ($resp['status'] ?? 'Error');
-        // La cajita puede devolver statusCode: 3=aprobado, 2=cancelado
-        if (isset($resp['statusCode']) && !isset($resp['transactionStatus'])) {
-            $statusPayphone = match ((int) $resp['statusCode']) {
-                3 => 'Approved',
-                2 => 'Cancelled',
-                default => 'Error',
-            };
+        $statusPayphone = $this->extraerStatusConfirm($resp);
+
+        // Fallback al endpoint de cajita si el botón no devolvió un estado válido
+        if ($statusPayphone === 'Error' && !empty($resp['errorCode'])) {
+            $respCajita = $this->apiPostCajita(self::ENDPOINT_CAJITA_CONFIRM, [
+                'id'        => $paymentId,
+                'clientTxId'=> $clientTransactionId,
+            ], $cfg['token']);
+            $statusCajita = $this->extraerStatusConfirm($respCajita);
+            if ($statusCajita !== 'Error') {
+                $resp           = $respCajita;
+                $statusPayphone = $statusCajita;
+            }
         }
+
         $estadoInterno = self::STATUS_MAP[$statusPayphone] ?? 'error';
 
         $this->repo->actualizarResultado($clientTransactionId, [
