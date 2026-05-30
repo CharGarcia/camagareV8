@@ -1657,26 +1657,69 @@ class FacturaVentaController extends BaseModuloController
             }
 
             // Generar enlace público para el cliente
-            $urlPago = rtrim(BASE_URL, '/') . '/pago/' . $cajita['client_transaction_id'];
+            $urlPago       = rtrim(BASE_URL, '/') . '/pago/' . $cajita['client_transaction_id'];
+            $descripcion   = 'Factura ' . $numero;
 
             // Obtener nombre de la empresa
-            $empresaModel   = new \App\models\Empresa();
-            $empresaData    = $empresaModel->getPorId($idEmpresa);
-            $empresaNombre  = $empresaData['nombre_comercial'] ?? $empresaData['razon_social'] ?? '';
+            $empresaModel  = new \App\models\Empresa();
+            $empresaData   = $empresaModel->getPorId($idEmpresa) ?? [];
+            $empresaNombre = $empresaData['nombre_comercial'] ?? $empresaData['razon_social'] ?? '';
 
-            // Enviar correo al cliente
-            require_once MVC_APP . '/helpers/mail.php';
-            $enviado = enviar_correo_pago_tarjeta($correoCliente, [
-                'cliente_nombre' => $factura['cliente_nombre'] ?? '',
-                'empresa_nombre' => $empresaNombre,
-                'monto'          => $saldo,
-                'descripcion'    => 'Factura ' . $numero,
-                'url_pago'       => $urlPago,
-            ]);
+            // Generar PDF de la factura (igual que reenviarCorreoAjax)
+            $pdfString = '';
+            try {
+                $detalles = $this->repository->getDetalles($idFactura);
+                foreach ($detalles as &$d) {
+                    $d['impuestos'] = $this->repository->getImpuestosDetalle((int)$d['id']);
+                }
+                unset($d);
+                $pagos         = $this->repository->getPagos($idFactura);
+                $infoAdicional = $this->repository->getInfoAdicional($idFactura);
+
+                $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+                if (!empty($establecimientos)) {
+                    if (!empty($establecimientos[0]['logo_ruta']))    $empresaData['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+                    if (!empty($establecimientos[0]['direccion']))     $empresaData['direccion_establecimiento'] = $establecimientos[0]['direccion'];
+                    try {
+                        $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                        $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
+                        if ($estConfig) {
+                            $estConfig['direccion_matriz']          = $empresaData['direccion'] ?? '';
+                            $estConfig['direccion_establecimiento'] = $establecimientos[0]['direccion'] ?? '';
+                            if (!empty($establecimientos[0]['logo_ruta'])) $estConfig['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+                            $empresaData = array_merge($empresaData, $estConfig);
+                        }
+                    } catch (\Throwable $e) {}
+                }
+
+                $renderer     = new \App\Services\PlantillasPdfRendererService();
+                $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');
+                if ($plantillaPdf) {
+                    $pdfString = $renderer->generar($plantillaPdf, $factura, $detalles, $pagos, $infoAdicional, $empresaData, 'S');
+                } else {
+                    $pdfService = new \App\Services\modulos\FacturaVentaPdfService();
+                    $pdfString  = $pdfService->generar($factura, $detalles, $pagos, $infoAdicional, $empresaData, 'S');
+                }
+            } catch (\Throwable $e) {
+                // Si falla el PDF seguimos, solo enviamos sin adjunto
+                error_log('[PagoTarjeta] Error generando PDF: ' . $e->getMessage());
+            }
+
+            // Enviar correo usando la misma config que el envío de comprobantes
+            $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+            $enviado  = $emailSvc->enviarEnlacePagoTarjeta(
+                $idEmpresa,
+                $correoCliente,
+                $factura['cliente_nombre'] ?? '',
+                $empresaNombre,
+                $saldo,
+                $descripcion,
+                $urlPago,
+                $pdfString
+            );
 
             if (!$enviado) {
-                $err = $GLOBALS['LAST_EMAIL_ERROR'] ?? 'Error desconocido al enviar el correo.';
-                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo: ' . $err]);
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración de correo de la empresa.']);
                 exit;
             }
 

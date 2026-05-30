@@ -137,6 +137,95 @@ class EnvioDocumentosSRIService
         return $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $htmlCuerpo, $baseName, $xmlString, $pdfString);
     }
 
+    /**
+     * Envía al cliente el enlace de pago con tarjeta + PDF de la factura adjunto.
+     * Usa la misma configuración SMTP que el envío de comprobantes.
+     */
+    public function enviarEnlacePagoTarjeta(
+        int    $idEmpresa,
+        string $correoDestino,
+        string $clienteNombre,
+        string $empresaNombre,
+        float  $monto,
+        string $descripcion,
+        string $urlPago,
+        string $pdfString
+    ): bool {
+        $empresaRepo  = new EmpresaRepository();
+        $correoConfig = $empresaRepo->getCorreoConfig($idEmpresa);
+
+        $tipoCorreo = $correoConfig['tipo_correo'] ?? 'camagare';
+
+        if ($tipoCorreo === 'camagare') {
+            $smtpData = EmailConfigService::getPhpMailerConfig('envio_documentos_sri');
+            if (!$smtpData) {
+                error_log('[PagoTarjeta] No hay configuración SMTP (envio_documentos_sri).');
+                return false;
+            }
+        } else {
+            $enc = !empty($correoConfig['ssl_habilitado']) ? 'tls' : '';
+            $smtpData = [
+                'host'        => $correoConfig['host']                  ?? '',
+                'port'        => (int)($correoConfig['puerto']          ?? 587),
+                'username'    => $correoConfig['correo_emisor']         ?? '',
+                'password'    => $correoConfig['password_correo_emisor']?? '',
+                'from'        => $correoConfig['correo_emisor']         ?? '',
+                'fromName'    => $empresaNombre,
+                'smtpSecure'  => $enc,
+            ];
+        }
+
+        $docMailDir = MVC_APP . '/lib/mail';
+        require_once $docMailDir . '/phpmailer.php';
+        require_once $docMailDir . '/smtp.php';
+        require_once $docMailDir . '/exception.php';
+
+        $mail = new PHPMailer(true);
+        try {
+            $mail->isSMTP();
+            $mail->Host       = _mail_resolve_ipv4_host($smtpData['host']);
+            $mail->SMTPAuth   = true;
+            $mail->Username   = $smtpData['username'];
+            $mail->Password   = $smtpData['password'];
+            $mail->SMTPSecure = $smtpData['smtpSecure'] ?? 'tls';
+            $mail->Port       = $smtpData['port'];
+            $mail->CharSet    = 'UTF-8';
+
+            $config = require MVC_CONFIG . '/app.php';
+            if (!empty($config['mail_smtp_options'])) {
+                $mail->SMTPOptions = $config['mail_smtp_options'];
+            }
+
+            $mail->setFrom($smtpData['from'], $smtpData['fromName']);
+            $mail->addAddress($correoDestino, $clienteNombre);
+            $mail->Subject = 'Enlace de pago con tarjeta — ' . $descripcion;
+
+            // Cuerpo del correo
+            $data = [
+                'cliente_nombre' => $clienteNombre,
+                'empresa_nombre' => $empresaNombre,
+                'monto'          => $monto,
+                'descripcion'    => $descripcion,
+                'url_pago'       => $urlPago,
+            ];
+            ob_start();
+            require $docMailDir . '/email_pago_tarjeta.php';
+            $mail->Body = ob_get_clean();
+            $mail->isHTML(true);
+
+            // PDF adjunto
+            if (!empty($pdfString)) {
+                $nombreArchivo = str_replace([' ', '/'], '_', $descripcion) . '.pdf';
+                $mail->addStringAttachment($pdfString, $nombreArchivo, 'base64', 'application/pdf');
+            }
+
+            return $mail->send();
+        } catch (Exception $e) {
+            error_log('[PagoTarjeta] Mailer Error: ' . ($mail->ErrorInfo ?? $e->getMessage()));
+            return false;
+        }
+    }
+
     private function enviarPhpMailer(array $smtpData, array $toEmails, string $toName, string $subject, string $bodyHtml, string $baseName, string $xmlString, string $pdfString): bool
     {
         $docMailDir = MVC_APP . '/lib/mail';

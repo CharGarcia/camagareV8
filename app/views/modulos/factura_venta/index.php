@@ -6001,24 +6001,25 @@ window.fvAbrirPagoTarjeta = async function() {
     // Modal de confirmación con correo editable
     var result = await Swal.fire({
         title: '<i class="bi bi-credit-card text-success me-2"></i>Enviar enlace de pago',
-        html: '<div class="text-start small text-muted mb-2">Se enviará un enlace al cliente para que realice el pago con tarjeta de forma segura.</div>'
-            + '<label class="form-label small fw-bold mb-1">Correo del cliente</label>'
-            + '<input id="swal-correo-tarjeta" type="email" class="swal2-input" placeholder="correo@cliente.com" value="' + correoActual + '">',
+        html: '<p class="text-muted small mb-3">Se enviará al cliente un enlace para pagar con tarjeta de forma segura, junto con el PDF de la factura.</p>'
+            + '<label class="form-label small fw-bold d-block text-start mb-1">Correo del cliente</label>'
+            + '<input id="swal-correo-tarjeta" type="email" class="swal2-input mx-0 w-100" style="max-width:100%;font-size:.9rem;" placeholder="correo@cliente.com" value="' + correoActual + '">',
         showCancelButton: true,
-        confirmButtonText: '<i class="bi bi-send me-1"></i>Enviar enlace',
+        confirmButtonText: '<i class="bi bi-send me-1"></i>Enviar',
         cancelButtonText: 'Cancelar',
         confirmButtonColor: '#198754',
         target: document.getElementById('modalNuevaFactura'),
+        width: '420px',
         focusConfirm: false,
         preConfirm: function() {
             var correo = document.getElementById('swal-correo-tarjeta').value.trim();
             if (!correo) {
-                Swal.showValidationMessage('Ingresa un correo electrónico válido.');
+                Swal.showValidationMessage('Ingresa un correo electrónico.');
                 return false;
             }
             var re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!re.test(correo)) {
-                Swal.showValidationMessage('El correo ingresado no es válido.');
+                Swal.showValidationMessage('El formato del correo no es válido.');
                 return false;
             }
             return correo;
