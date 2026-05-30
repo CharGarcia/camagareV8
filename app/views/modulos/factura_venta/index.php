@@ -5994,9 +5994,12 @@ window.fvAbrirPagoTarjeta = async function() {
     var idFactura = parseInt(FV_ID_ACTIVO) || 0;
     if (idFactura <= 0) return;
 
-    // Obtener correo actual del cliente
+    // Obtener correo actual del cliente — si hay varios, conservar solo el primero
     var mailLbl      = document.getElementById('m-lbl-cliente-correo');
     var correoActual = (mailLbl && mailLbl.textContent !== 'Sin correo registrado') ? mailLbl.textContent.trim() : '';
+    if (correoActual) {
+        correoActual = correoActual.split(/[,;]+/)[0].trim();
+    }
 
     // Modal de confirmación con correo editable
     var result = await Swal.fire({
