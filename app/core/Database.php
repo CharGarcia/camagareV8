@@ -36,6 +36,7 @@ class Database
             self::$connection = new \PDO($dsn, $user, $pass, $opts);
 
             self::$connection->exec("SET client_encoding TO 'UTF8'");
+            self::$connection->exec("SET TIME ZONE 'America/Guayaquil'");
         }
 
         return self::$connection;
@@ -86,6 +87,7 @@ class Database
             self::$connection = new \PDO($dsn, $user, $pass, $opts);
 
             self::$connection->exec("SET client_encoding TO 'UTF8'");
+            self::$connection->exec("SET TIME ZONE 'America/Guayaquil'");
         }
 
         return self::$connection;
