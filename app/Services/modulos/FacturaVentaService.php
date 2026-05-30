@@ -118,6 +118,11 @@ class FacturaVentaService
         $numDoc = $factura['establecimiento'] . '-' . $factura['punto_emision'] . '-' . $factura['secuencial'];
         $obs    = 'Cobro con tarjeta (Payphone) — autorización ' . ($trans['authorization_code'] ?? '');
 
+        // Número de ingreso con formato 000-000-000000000
+        $numeroIngreso = str_pad((string) $punto['establecimiento'], 3, '0', STR_PAD_LEFT) . '-'
+                       . str_pad((string) $punto['punto'], 3, '0', STR_PAD_LEFT) . '-'
+                       . str_pad((string) $secRes['secuencial'], 9, '0', STR_PAD_LEFT);
+
         $payload = [
             'id_empresa'          => $idEmpresa,
             'id_establecimiento'  => (int) ($punto['id_establecimiento'] ?? 0),
@@ -128,7 +133,7 @@ class FacturaVentaService
             'establecimiento'     => $punto['establecimiento'],
             'punto_emision'       => $punto['punto'],
             'secuencial'          => $secRes['secuencial'],
-            'numero_ingreso'      => $punto['establecimiento'] . '-' . $punto['punto'] . '-' . $secRes['secuencial'],
+            'numero_ingreso'      => $numeroIngreso,
             'tipo_ingreso'        => 'FACTURA_VENTA',
             'id_ingreso_concepto' => null,
             'monto_total'         => $monto,
