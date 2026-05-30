@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace App\controllers;
 
-use App\controllers\BaseController;
+use App\core\Controller;
 use App\repositories\PayphoneRepository;
 use App\Services\PayphoneService;
 
@@ -17,7 +17,7 @@ use App\Services\PayphoneService;
  *   GET  /payphone/retorno     → el cliente llega aquí tras pagar (Payphone lo redirige)
  *   GET  /payphone/cancelacion → el cliente llega aquí si cancela el pago
  */
-class PayphoneController extends BaseController
+class PayphoneController extends Controller
 {
     private PayphoneService $pp;
 
