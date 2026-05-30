@@ -118,13 +118,13 @@ class FormaPagoRepository extends BaseRepository
     public function create(array $data): int
     {
         $sql = "INSERT INTO {$this->table} (
-                    id_empresa, nombre, tipo, aplica_en, id_banco, tipo_cuenta, numero_cuenta, 
-                    id_cuenta_contable, activo, created_by, created_at
+                    id_empresa, nombre, tipo, aplica_en, id_banco, tipo_cuenta, numero_cuenta,
+                    modalidad_tarjeta, id_cuenta_contable, activo, created_by, created_at
                 ) VALUES (
-                    :id_empresa, :nombre, :tipo, :aplica_en, :id_banco, :tipo_cuenta, :numero_cuenta, 
-                    :id_cuenta_contable, :activo, :created_by, CURRENT_TIMESTAMP
+                    :id_empresa, :nombre, :tipo, :aplica_en, :id_banco, :tipo_cuenta, :numero_cuenta,
+                    :modalidad_tarjeta, :id_cuenta_contable, :activo, :created_by, CURRENT_TIMESTAMP
                 )";
-        
+
         $st = $this->db->prepare($sql);
         $st->execute([
             ':id_empresa'         => $data['id_empresa'],
@@ -134,6 +134,7 @@ class FormaPagoRepository extends BaseRepository
             ':id_banco'           => !empty($data['id_banco']) ? $data['id_banco'] : null,
             ':tipo_cuenta'        => !empty($data['tipo_cuenta']) ? $data['tipo_cuenta'] : null,
             ':numero_cuenta'      => !empty($data['numero_cuenta']) ? $data['numero_cuenta'] : null,
+            ':modalidad_tarjeta'  => !empty($data['modalidad_tarjeta']) ? $data['modalidad_tarjeta'] : null,
             ':id_cuenta_contable' => !empty($data['id_cuenta_contable']) ? $data['id_cuenta_contable'] : null,
             ':activo'             => !empty($data['activo']) ? 'true' : 'false',
             ':created_by'         => $data['usuario_id'] ?? null
@@ -143,19 +144,20 @@ class FormaPagoRepository extends BaseRepository
 
     public function update(int $id, int $idEmpresa, array $data): bool
     {
-        $sql = "UPDATE {$this->table} SET 
+        $sql = "UPDATE {$this->table} SET
                     nombre = :nombre,
                     tipo = :tipo,
                     aplica_en = :aplica_en,
                     id_banco = :id_banco,
                     tipo_cuenta = :tipo_cuenta,
                     numero_cuenta = :numero_cuenta,
+                    modalidad_tarjeta = :modalidad_tarjeta,
                     id_cuenta_contable = :id_cuenta_contable,
                     activo = :activo,
                     updated_by = :updated_by,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = FALSE";
-        
+
         $st = $this->db->prepare($sql);
         return $st->execute([
             ':nombre'             => $data['nombre'],
@@ -164,6 +166,7 @@ class FormaPagoRepository extends BaseRepository
             ':id_banco'           => !empty($data['id_banco']) ? $data['id_banco'] : null,
             ':tipo_cuenta'        => !empty($data['tipo_cuenta']) ? $data['tipo_cuenta'] : null,
             ':numero_cuenta'      => !empty($data['numero_cuenta']) ? $data['numero_cuenta'] : null,
+            ':modalidad_tarjeta'  => !empty($data['modalidad_tarjeta']) ? $data['modalidad_tarjeta'] : null,
             ':id_cuenta_contable' => !empty($data['id_cuenta_contable']) ? $data['id_cuenta_contable'] : null,
             ':activo'             => !empty($data['activo']) ? 'true' : 'false',
             ':updated_by'         => $data['usuario_id'] ?? null,

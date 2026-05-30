@@ -73,6 +73,14 @@ class FormaPagoService
                 throw new Exception("El número de cuenta es obligatorio.");
             }
         }
+
+        // Validación especial para TARJETA: requiere modalidad (Débito/Crédito/Ambas)
+        if ($data['tipo'] === 'TARJETA') {
+            $mod = strtoupper((string)($data['modalidad_tarjeta'] ?? ''));
+            if (!in_array($mod, ['DEBITO', 'CREDITO', 'AMBAS'], true)) {
+                throw new Exception("Debe seleccionar al menos una modalidad de tarjeta (Débito o Crédito).");
+            }
+        }
     }
 
     public function eliminar(int $id, int $idEmpresa, int $usuarioId): bool

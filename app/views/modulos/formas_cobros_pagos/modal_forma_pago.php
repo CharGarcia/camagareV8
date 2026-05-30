@@ -97,6 +97,24 @@ try {
                             </div>
                         </div>
 
+                        <!-- SECCION DE TARJETA CONDICIONAL -->
+                        <div class="col-12 d-none" id="sec-tarjeta">
+                            <div class="card border border-primary bg-light bg-opacity-10 p-3">
+                                <h6 class="fw-bold text-primary small mb-3 border-bottom pb-1"><i class="bi bi-credit-card-2-front me-1"></i> Modalidad de Tarjeta</h6>
+                                <div class="d-flex gap-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="fp-chk-debito">
+                                        <label class="form-check-label small fw-medium" for="fp-chk-debito">Débito</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="fp-chk-credito">
+                                        <label class="form-check-label small fw-medium" for="fp-chk-credito">Crédito</label>
+                                    </div>
+                                </div>
+                                <input type="hidden" name="modalidad_tarjeta" id="fp-modalidad-tarjeta" value="">
+                            </div>
+                        </div>
+
                         <!-- Fila 4: Cuenta Contable y Estado -->
                         <div class="col-md-8">
                             <label class="form-label small fw-bold">Cuenta Contable (Opcional)</label>
@@ -230,10 +248,26 @@ try {
                 const formData = new FormData(this);
                 formData.set('aplica_en', aplicaVal);
 
-                // Validacion
+                // Validacion banco
                 if (formData.get('tipo') === 'BANCO' && (!formData.get('id_banco') || !formData.get('numero_cuenta'))) {
                     Swal.fire('Atención', 'Debe completar los campos de banco y número de cuenta para este tipo.', 'warning');
                     return;
+                }
+
+                // Modalidad de tarjeta (Débito / Crédito)
+                if (formData.get('tipo') === 'TARJETA') {
+                    const esDeb = document.getElementById('fp-chk-debito').checked;
+                    const esCre = document.getElementById('fp-chk-credito').checked;
+                    if (!esDeb && !esCre) {
+                        Swal.fire('Atención', 'Debe seleccionar al menos una modalidad de tarjeta (Débito o Crédito).', 'warning');
+                        return;
+                    }
+                    let modalidad = 'AMBAS';
+                    if (esDeb && !esCre) modalidad = 'DEBITO';
+                    else if (!esDeb && esCre) modalidad = 'CREDITO';
+                    formData.set('modalidad_tarjeta', modalidad);
+                } else {
+                    formData.set('modalidad_tarjeta', '');
                 }
 
                 fetch(`${URL_FP_SHARED}/guardarAjax`, {
@@ -287,15 +321,31 @@ try {
     }
 
     function toggleCamposBanco(tipo) {
-        const sec = document.getElementById('sec-banco');
-        if (!sec) return;
-        if (tipo === 'BANCO' || tipo === 'TARJETA') {
-            sec.classList.remove('d-none');
-        } else {
-            sec.classList.add('d-none');
-            document.getElementById('fp-banco').value = '';
-            document.getElementById('fp-tipocuenta').value = '';
-            document.getElementById('fp-numcuenta').value = '';
+        const secBanco   = document.getElementById('sec-banco');
+        const secTarjeta = document.getElementById('sec-tarjeta');
+
+        // Sección Bancaria: solo para BANCO
+        if (secBanco) {
+            if (tipo === 'BANCO') {
+                secBanco.classList.remove('d-none');
+            } else {
+                secBanco.classList.add('d-none');
+                document.getElementById('fp-banco').value = '';
+                document.getElementById('fp-tipocuenta').value = '';
+                document.getElementById('fp-numcuenta').value = '';
+            }
+        }
+
+        // Sección Tarjeta: solo para TARJETA
+        if (secTarjeta) {
+            if (tipo === 'TARJETA') {
+                secTarjeta.classList.remove('d-none');
+            } else {
+                secTarjeta.classList.add('d-none');
+                document.getElementById('fp-chk-debito').checked = false;
+                document.getElementById('fp-chk-credito').checked = false;
+                document.getElementById('fp-modalidad-tarjeta').value = '';
+            }
         }
     }
 
@@ -346,10 +396,15 @@ try {
                         document.getElementById('fp-activo').value = isActive ? '1' : '0';
 
                         toggleCamposBanco(d.tipo);
-                        if (d.tipo === 'BANCO' || d.tipo === 'TARJETA') {
+                        if (d.tipo === 'BANCO') {
                             document.getElementById('fp-banco').value = d.id_banco || '';
                             document.getElementById('fp-tipocuenta').value = d.tipo_cuenta || '';
                             document.getElementById('fp-numcuenta').value = d.numero_cuenta || '';
+                        } else if (d.tipo === 'TARJETA') {
+                            const mod = (d.modalidad_tarjeta || '').toUpperCase();
+                            document.getElementById('fp-chk-debito').checked  = (mod === 'DEBITO'  || mod === 'AMBAS');
+                            document.getElementById('fp-chk-credito').checked = (mod === 'CREDITO' || mod === 'AMBAS');
+                            document.getElementById('fp-modalidad-tarjeta').value = mod;
                         }
 
                         if (d.id_cuenta_contable) {
