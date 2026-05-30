@@ -1609,7 +1609,7 @@ class FacturaVentaController extends BaseModuloController
             if (!$ppRepo->getFormaCobroTarjeta($idEmpresa)) {
                 echo json_encode([
                     'ok'      => false,
-                    'mensaje' => 'No existe una forma de cobro "Tarjeta" configurada. Antes de enviar un cobro con tarjeta debes crear una forma de pago/cobro que contenga la palabra "Tarjeta" (aplicable a Ingresos), para poder registrar el ingreso cuando el cliente pague.',
+                    'mensaje' => 'No existe una forma de cobro de tipo "Tarjeta" configurada. Antes de enviar un cobro con tarjeta debes crear una forma de pago/cobro con tipo "Tarjeta" (aplicable a Ingresos), para poder registrar el ingreso cuando el cliente pague. Puedes nombrarla como quieras.',
                 ]);
                 exit;
             }

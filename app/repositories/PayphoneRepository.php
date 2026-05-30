@@ -108,7 +108,9 @@ class PayphoneRepository extends BaseRepository
     }
 
     /**
-     * Busca la forma de cobro "Tarjeta" de una empresa (para registrar ingresos por tarjeta).
+     * Busca la forma de cobro de tipo TARJETA de una empresa (para registrar
+     * ingresos por pagos con tarjeta). Se valida por TIPO, no por nombre, de modo
+     * que el cliente puede nombrar la forma de cobro libremente.
      * Retorna el registro o null si no existe configurada.
      */
     public function getFormaCobroTarjeta(int $idEmpresa): ?array
@@ -120,7 +122,7 @@ class PayphoneRepository extends BaseRepository
                AND eliminado  = false
                AND activo     = true
                AND (aplica_en = 'AMBAS' OR aplica_en = 'INGRESO')
-               AND LOWER(nombre) LIKE '%tarjeta%'
+               AND UPPER(tipo) = 'TARJETA'
              ORDER BY nombre ASC
              LIMIT 1"
         );
