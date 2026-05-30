@@ -281,13 +281,6 @@ class PayphoneService
         $estadoInterno  = self::STATUS_MAP[$statusPayphone] ?? 'error';
 
         $this->repo->actualizarPaymentId($clientTransactionId, $paymentId);
-        $resp['_debug'] = [
-            'via'         => 'confirmarPago',
-            'sent_id'     => $paymentId,
-            'sent_ctid'   => $clientTransactionId,
-            'request_uri' => $_SERVER['REQUEST_URI'] ?? '',
-            'get_params'  => $_GET ?? [],
-        ];
 
         $this->repo->actualizarResultado($clientTransactionId, [
             'transaction_id'     => $resp['transactionId']    ?? null,
@@ -471,16 +464,7 @@ class PayphoneService
 
         $estadoInterno = self::STATUS_MAP[$statusPayphone] ?? 'error';
 
-        // Guardar el id recibido para diagnóstico
         $this->repo->actualizarPaymentId($clientTransactionId, $paymentId);
-
-        // Adjuntar diagnóstico a la respuesta cruda
-        $resp['_debug'] = [
-            'sent_id'        => $paymentId,
-            'sent_ctid'      => $clientTransactionId,
-            'request_uri'    => $_SERVER['REQUEST_URI'] ?? '',
-            'get_params'     => $_GET ?? [],
-        ];
 
         $this->repo->actualizarResultado($clientTransactionId, [
             'transaction_id'     => $resp['transactionId']    ?? null,

@@ -1644,14 +1644,16 @@ class FacturaVentaController extends BaseModuloController
             $scheme  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
             $urlBaseAbs = $scheme . '://' . $host . rtrim(BASE_URL, '/');
 
+            // Payphone usa la Response URL registrada en su panel (/payphone/retorno).
+            // No se define url_exito: el cliente externo ve la página de resultado "aprobado".
             $cajita = $pp->prepararCajita($idEmpresa, [
                 'monto'          => \App\Services\PayphoneService::dolaresACentavos($saldo),
                 'descripcion'    => 'Factura ' . $numero,
                 'modulo'         => 'factura_venta',
                 'id_referencia'  => $idFactura,
-                'url_retorno'    => $urlBaseAbs . '/payphone/cajita-retorno',
+                'url_retorno'    => $urlBaseAbs . '/payphone/retorno',
                 'url_cancelacion'=> $urlBaseAbs . '/payphone/cancelacion',
-                'url_exito'      => $urlBaseAbs . '/payphone/cajita-retorno',
+                'url_exito'      => null,
                 'id_usuario'     => $idUsuario,
                 'email'          => $correoCliente,
             ]);
