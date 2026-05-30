@@ -1784,6 +1784,77 @@ class FacturaVentaController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Reversa un pago con tarjeta (Payphone) y anula automáticamente el ingreso vinculado.
+     * Solo aplica a transacciones de tipo tarjeta en estado 'aprobado'.
+     */
+    public function anularPagoTarjetaAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $ctid      = trim($_POST['client_transaction_id'] ?? '');
+
+            if ($ctid === '') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Transacción no especificada.']);
+                exit;
+            }
+
+            $ppRepo = new \App\repositories\PayphoneRepository();
+            $trans  = $ppRepo->getTransaccionByClientId($ctid);
+
+            if (!$trans || (int) $trans['id_empresa'] !== $idEmpresa || ($trans['modulo'] ?? '') !== 'factura_venta') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Pago con tarjeta no encontrado.']);
+                exit;
+            }
+            if (($trans['estado'] ?? '') !== 'aprobado') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Solo se puede reversar un pago en estado Aprobado.']);
+                exit;
+            }
+
+            // 1) Solicitar el reverso a Payphone
+            $pp  = new \App\Services\PayphoneService($ppRepo);
+            $rev = $pp->reversarPago($ctid, $idUsuario);
+
+            if (!$rev['ok']) {
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo reversar en Payphone: ' . ($rev['mensaje'] ?? 'error desconocido.')]);
+                exit;
+            }
+
+            // 2) Reverso aprobado → anular automáticamente el ingreso vinculado
+            $idIngreso = (int) ($trans['id_ingreso'] ?? 0);
+            if ($idIngreso > 0) {
+                try {
+                    $ingresoService = new \App\Services\modulos\IngresoService(
+                        new \App\repositories\modulos\IngresoRepository(),
+                        new \App\Rules\modulos\IngresoRules(),
+                        new \App\Services\LogSistemaService()
+                    );
+                    $ingresoService->anular($idIngreso, $idEmpresa, $idUsuario);
+                } catch (\Throwable $e) {
+                    // El reverso ya se hizo; informar pero no revertir el estado Payphone
+                    echo json_encode([
+                        'ok'      => true,
+                        'aviso'   => 'El pago fue reversado, pero no se pudo anular el ingreso automáticamente: ' . $e->getMessage(),
+                        'mensaje' => 'Pago reversado. Revisa la anulación del ingreso manualmente.',
+                    ]);
+                    exit;
+                }
+            }
+
+            echo json_encode([
+                'ok'      => true,
+                'mensaje' => 'Pago con tarjeta reversado y cobro anulado. La factura queda pendiente de pago.',
+            ]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function reenviarCorreoAjax(): void
     {
         ob_start();

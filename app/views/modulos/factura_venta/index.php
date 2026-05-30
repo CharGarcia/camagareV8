@@ -856,7 +856,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                             <th class="ps-3">Fecha</th>
                                                             <th>Estado</th>
                                                             <th>Autorización</th>
-                                                            <th class="text-end pe-3">Monto</th>
+                                                            <th class="text-end">Monto</th>
+                                                            <th class="text-center pe-3">Acción</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody id="fvPagoTarjetaTbody"></tbody>
@@ -5674,8 +5675,10 @@ $perm = $permOriginal;
                     'pendiente': ['bg-warning bg-opacity-10 text-warning border-warning', 'Pendiente'],
                     'cancelado': ['bg-secondary bg-opacity-10 text-secondary border-secondary', 'Cancelado'],
                     'rechazado': ['bg-danger bg-opacity-10 text-danger border-danger', 'Rechazado'],
+                    'reverso'  : ['bg-dark bg-opacity-10 text-dark border-dark', 'Reversado'],
                     'error'    : ['bg-danger bg-opacity-10 text-danger border-danger', 'Error'],
                 };
+                const puedeAnular = PERM_ACTUALIZAR;
                 jCob.pagos_tarjeta.forEach(function(pp) {
                     const fecha = (pp.updated_at || pp.created_at || '').slice(0, 10).split('-').reverse().join('/');
                     const [bClass, bLabel] = badgePP[pp.estado] || badgePP['error'];
@@ -5684,11 +5687,18 @@ $perm = $permOriginal;
                     // Solo sumar aprobados que aún NO generaron ingreso (los que sí ya cuentan en cobros)
                     if (pp.estado === 'aprobado' && !pp.id_ingreso) totalPagadoTarjeta += montoNum;
                     const auth  = pp.authorization_code ? '<code class="text-muted" style="font-size:.7rem;">' + pp.authorization_code + '</code>' : '—';
+                    let accion = '—';
+                    if (pp.estado === 'aprobado' && puedeAnular) {
+                        accion = '<button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:.7rem;" '
+                               + 'onclick="fvReversarPagoTarjeta(\'' + pp.client_transaction_id + '\')" title="Reversar pago en Payphone y anular el cobro">'
+                               + '<i class="bi bi-arrow-counterclockwise"></i> Reversar</button>';
+                    }
                     const tr = document.createElement('tr');
                     tr.innerHTML = '<td class="ps-3">' + fecha + '</td>'
                         + '<td><span class="badge ' + bClass + ' border border-opacity-25" style="font-size:.7rem;">' + bLabel + '</span></td>'
                         + '<td>' + auth + '</td>'
-                        + '<td class="text-end fw-bold pe-3">$ ' + monto + '</td>';
+                        + '<td class="text-end fw-bold">$ ' + monto + '</td>'
+                        + '<td class="text-center pe-3">' + accion + '</td>';
                     tbodyTarjeta.appendChild(tr);
                 });
             } else if (cardTarjeta) {
@@ -6070,6 +6080,53 @@ window.fvAbrirPagoTarjeta = async function() {
         .catch(function() {
             Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.', target: document.getElementById('modalNuevaFactura') });
         });
+};
+
+window.fvReversarPagoTarjeta = function(ctid) {
+    if (!ctid) return;
+    Swal.fire({
+        icon: 'warning',
+        title: '¿Reversar pago con tarjeta?',
+        html: 'Se solicitará a <strong>Payphone</strong> la devolución del dinero al cliente y se <strong>anulará el cobro</strong>. La factura quedará pendiente de pago.<br><br>'
+            + '<span class="text-muted small">Recuerda: Payphone solo permite reversos el mismo día antes de las 20:00.</span>',
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-arrow-counterclockwise me-1"></i>Sí, reversar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#dc3545',
+        target: document.getElementById('modalNuevaFactura'),
+    }).then(function(res) {
+        if (!res.isConfirmed) return;
+
+        Swal.fire({
+            title: 'Reversando pago...',
+            allowOutsideClick: false,
+            target: document.getElementById('modalNuevaFactura'),
+            didOpen: function() { Swal.showLoading(); }
+        });
+
+        var fd = new FormData();
+        fd.append('client_transaction_id', ctid);
+
+        fetch(B_URL + '/' + RUTA_MODULO + '/anularPagoTarjetaAjax', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) {
+                    Swal.fire({ icon: 'error', title: 'No se pudo reversar', text: data.mensaje, target: document.getElementById('modalNuevaFactura') });
+                    return;
+                }
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Pago reversado',
+                    text: data.aviso || data.mensaje,
+                    target: document.getElementById('modalNuevaFactura')
+                });
+                fvCargarCobrosTab();
+                if (typeof fetchSearchFn === 'function') fetchSearchFn(window.FV_currentPage || 1);
+            })
+            .catch(function() {
+                Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.', target: document.getElementById('modalNuevaFactura') });
+            });
+    });
 };
 </script>
 

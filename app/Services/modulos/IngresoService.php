@@ -223,6 +223,18 @@ class IngresoService
             throw new \Exception('El ingreso ya se encuentra anulado.');
         }
 
+        // Bloqueo: si el ingreso proviene de un pago con tarjeta (Payphone) que aún
+        // NO ha sido reversado, no se puede anular directamente. Primero debe reversarse el pago.
+        $db = Database::getConnection();
+        $stPP = $db->prepare(
+            "SELECT COUNT(*) FROM payphone_transacciones
+             WHERE id_ingreso = ? AND estado = 'aprobado' AND eliminado = false"
+        );
+        $stPP->execute([$id]);
+        if ((int) $stPP->fetchColumn() > 0) {
+            throw new \Exception('Este ingreso corresponde a un pago con tarjeta. Debes reversar el pago con tarjeta primero (desde la factura, pestaña Pagos) y el ingreso se anulará automáticamente.');
+        }
+
         // Validar Periodo Contable antes de anular
         $this->periodosService->validarFechaPermitida(
             $ingreso['fecha_emision'], 

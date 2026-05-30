@@ -49,6 +49,7 @@ class PayphoneService
     private const ENDPOINT_PREPARE   = '/api/button/Prepare';
     private const ENDPOINT_CONFIRM   = '/api/button/V2/Confirm';
     private const ENDPOINT_CAJITA_CONFIRM = '/api/confirm';
+    private const ENDPOINT_REVERSE   = '/api/Reverse';
 
     /** Mapa de transactionStatus de Payphone a estados internos */
     private const STATUS_MAP = [
@@ -487,6 +488,61 @@ class PayphoneService
     }
 
     /**
+     * Solicita a Payphone el reverso (devolución) de un pago aprobado.
+     * Endpoint: POST /api/Reverse con { "id": transactionId } → responde `true` si se aprueba.
+     * Solo se permite el mismo día antes de las 20:00 (regla de Payphone).
+     *
+     * Retorna:
+     *  ['ok' => true,  'estado' => 'reverso', 'transaccion' => [...]]
+     *  ['ok' => false, 'mensaje' => '...']
+     */
+    public function reversarPago(string $clientTransactionId, int $idUsuario = 0): array
+    {
+        $trans = $this->repo->getTransaccionByClientId($clientTransactionId);
+        if (!$trans) {
+            return ['ok' => false, 'mensaje' => 'Transacción no encontrada.'];
+        }
+        if ($trans['estado'] === 'reverso') {
+            return ['ok' => true, 'estado' => 'reverso', 'transaccion' => $trans];
+        }
+        if ($trans['estado'] !== 'aprobado') {
+            return ['ok' => false, 'mensaje' => 'Solo se puede reversar un pago aprobado.'];
+        }
+
+        // ID de transacción de Payphone para reversar (transactionId preferido, sino paymentId)
+        $idReverse = (int) ($trans['transaction_id'] ?? 0);
+        if ($idReverse <= 0) {
+            $idReverse = (int) ($trans['payment_id'] ?? 0);
+        }
+        if ($idReverse <= 0) {
+            return ['ok' => false, 'mensaje' => 'No se encontró el identificador de la transacción en Payphone.'];
+        }
+
+        $cfg  = $this->getConfig((int) $trans['id_empresa']);
+        $resp = $this->apiPost(self::ENDPOINT_REVERSE, ['id' => $idReverse], $cfg['token']);
+
+        // Respuesta exitosa: apiPost normaliza el booleano `true` a ['success' => true]
+        $exito = (($resp['success'] ?? null) === true)
+              || (($resp['reversed'] ?? null) === true);
+
+        if (!$exito) {
+            $msg = $resp['message'] ?? ($resp['error'] ?? 'Payphone rechazó el reverso (puede estar fuera del plazo permitido: mismo día antes de las 20:00).');
+            return ['ok' => false, 'mensaje' => (string) $msg, 'response' => $resp];
+        }
+
+        $this->repo->actualizarResultado($clientTransactionId, [
+            'transaction_status' => 'Reversed',
+            'estado'             => 'reverso',
+            'response_data'      => ['origen' => 'reverso', 'respuesta' => $resp],
+            'id_usuario'         => $idUsuario,
+        ]);
+
+        $trans = $this->repo->getTransaccionByClientId($clientTransactionId);
+
+        return ['ok' => true, 'estado' => 'reverso', 'transaccion' => $trans, 'response' => $resp];
+    }
+
+    /**
      * Reconstruye el array de configuración del widget a partir de una transacción guardada.
      * Usado en la página pública de pago para volver a renderizar la cajita.
      */
@@ -577,6 +633,7 @@ class PayphoneService
             'cancelado' => 'Cancelado',
             'rechazado' => 'Rechazado',
             'pendiente' => 'Pendiente',
+            'reverso'   => 'Reversado',
             'error'     => 'Error',
             default     => ucfirst($estado),
         };
@@ -592,6 +649,7 @@ class PayphoneService
             'cancelado' => 'secondary',
             'rechazado' => 'danger',
             'pendiente' => 'warning',
+            'reverso'   => 'dark',
             'error'     => 'danger',
             default     => 'secondary',
         };
@@ -666,7 +724,16 @@ class PayphoneService
 
         $data = json_decode($response, true);
 
+        // Algunos endpoints (ej. /api/Reverse) responden un booleano escalar `true`/`false`
+        if (is_bool($data)) {
+            return ['success' => $data];
+        }
+
         if (!is_array($data)) {
+            // HTTP 2xx sin cuerpo JSON válido también puede indicar éxito en /api/Reverse
+            if ($httpCode >= 200 && $httpCode < 300 && trim((string) $response) === '') {
+                return ['success' => true];
+            }
             return ['error' => 'Respuesta inválida de Payphone (HTTP ' . $httpCode . ').'];
         }
 
