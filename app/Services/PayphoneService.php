@@ -261,8 +261,8 @@ class PayphoneService
             return ['ok' => false, 'mensaje' => 'Transacción no encontrada.'];
         }
 
-        // Si ya fue procesada, devolver el estado actual (idempotente)
-        if ($trans['estado'] !== 'pendiente') {
+        // Re-confirmar si pendiente o si un intento previo falló; estados finales idempotentes
+        if (!in_array($trans['estado'], ['pendiente', 'error'], true)) {
             return [
                 'ok'         => true,
                 'estado'     => $trans['estado'],
@@ -278,6 +278,15 @@ class PayphoneService
 
         $statusPayphone = $resp['transactionStatus'] ?? 'Error';
         $estadoInterno  = self::STATUS_MAP[$statusPayphone] ?? 'error';
+
+        $this->repo->actualizarPaymentId($clientTransactionId, $paymentId);
+        $resp['_debug'] = [
+            'via'         => 'confirmarPago',
+            'sent_id'     => $paymentId,
+            'sent_ctid'   => $clientTransactionId,
+            'request_uri' => $_SERVER['REQUEST_URI'] ?? '',
+            'get_params'  => $_GET ?? [],
+        ];
 
         $this->repo->actualizarResultado($clientTransactionId, [
             'transaction_id'     => $resp['transactionId']    ?? null,
