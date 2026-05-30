@@ -1312,7 +1312,9 @@ class FacturaVentaController extends BaseModuloController
             // ── Transacciones Payphone vinculadas ─────────────────────────────────
             $stPP = $db->prepare(
                 "SELECT client_transaction_id, payment_id, monto, estado,
-                        transaction_status, authorization_code, created_at, updated_at, tipo_flujo, id_ingreso
+                        transaction_status, authorization_code, tipo_flujo, id_ingreso,
+                        (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Guayaquil') AS created_at,
+                        (updated_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Guayaquil') AS updated_at
                  FROM payphone_transacciones
                  WHERE id_empresa    = ?
                    AND modulo        = 'factura_venta'
