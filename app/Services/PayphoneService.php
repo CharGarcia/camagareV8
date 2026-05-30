@@ -271,9 +271,10 @@ class PayphoneService
         }
 
         $cfg  = $this->getConfig((int) $trans['id_empresa']);
+        // El endpoint /api/button/V2/Confirm espera el campo 'clientTxId' (no clientTransactionId)
         $resp = $this->apiPost(self::ENDPOINT_CONFIRM, [
-            'id'                  => $paymentId,
-            'clientTransactionId' => $clientTransactionId,
+            'id'         => $paymentId,
+            'clientTxId' => $clientTransactionId,
         ], $cfg['token']);
 
         $statusPayphone = $resp['transactionStatus'] ?? 'Error';
@@ -449,8 +450,8 @@ class PayphoneService
         // con clientTransactionId. Si por algún motivo no resuelve, se intenta el
         // endpoint exclusivo de la Cajita (/api/confirm con clientTxId).
         $resp = $this->apiPost(self::ENDPOINT_CONFIRM, [
-            'id'                  => $paymentId,
-            'clientTransactionId' => $clientTransactionId,
+            'id'         => $paymentId,
+            'clientTxId' => $clientTransactionId,
         ], $cfg['token']);
 
         $statusPayphone = $this->extraerStatusConfirm($resp);
