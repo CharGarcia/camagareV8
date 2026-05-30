@@ -5990,39 +5990,76 @@ function FV_abrirModalWhatsapp() {
 
 // ─── PAGO CON TARJETA (envío por correo al cliente) ─────────────────────────
 
-window.fvAbrirPagoTarjeta = function() {
+window.fvAbrirPagoTarjeta = async function() {
     var idFactura = parseInt(FV_ID_ACTIVO) || 0;
     if (idFactura <= 0) return;
 
-    var btn      = document.getElementById('m-btn-pagar-tarjeta');
-    var origHtml = btn ? btn.innerHTML : '';
-    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando...'; }
+    // Obtener correo actual del cliente
+    var mailLbl      = document.getElementById('m-lbl-cliente-correo');
+    var correoActual = (mailLbl && mailLbl.textContent !== 'Sin correo registrado') ? mailLbl.textContent.trim() : '';
+
+    // Modal de confirmación con correo editable
+    var result = await Swal.fire({
+        title: '<i class="bi bi-credit-card text-success me-2"></i>Enviar enlace de pago',
+        html: '<div class="text-start small text-muted mb-2">Se enviará un enlace al cliente para que realice el pago con tarjeta de forma segura.</div>'
+            + '<label class="form-label small fw-bold mb-1">Correo del cliente</label>'
+            + '<input id="swal-correo-tarjeta" type="email" class="swal2-input" placeholder="correo@cliente.com" value="' + correoActual + '">',
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-send me-1"></i>Enviar enlace',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#198754',
+        target: document.getElementById('modalNuevaFactura'),
+        focusConfirm: false,
+        preConfirm: function() {
+            var correo = document.getElementById('swal-correo-tarjeta').value.trim();
+            if (!correo) {
+                Swal.showValidationMessage('Ingresa un correo electrónico válido.');
+                return false;
+            }
+            var re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!re.test(correo)) {
+                Swal.showValidationMessage('El correo ingresado no es válido.');
+                return false;
+            }
+            return correo;
+        }
+    });
+
+    if (!result.isConfirmed) return;
+
+    var correo = result.value;
+
+    Swal.fire({
+        title: 'Enviando enlace...',
+        text: 'Por favor espera',
+        allowOutsideClick: false,
+        target: document.getElementById('modalNuevaFactura'),
+        didOpen: function() { Swal.showLoading(); }
+    });
 
     var fd = new FormData();
     fd.append('id_factura', idFactura);
+    fd.append('correo_destino', correo);
 
     fetch(B_URL + '/' + RUTA_MODULO + '/prepararPagoTarjetaAjax', { method: 'POST', body: fd })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (!data.ok) {
-                Swal.fire('No se puede procesar', data.mensaje, 'warning');
+                Swal.fire({ icon: 'warning', title: 'No se puede procesar', text: data.mensaje, target: document.getElementById('modalNuevaFactura') });
                 return;
             }
             Swal.fire({
                 icon: 'success',
                 title: 'Enlace enviado',
-                html: 'Se envió el enlace de pago al correo<br><strong>' + data.correo + '</strong>',
+                html: 'El enlace de pago fue enviado a<br><strong>' + data.correo + '</strong>',
                 timer: 4000,
-                showConfirmButton: false
+                showConfirmButton: false,
+                target: document.getElementById('modalNuevaFactura')
             });
-            // Refrescar la pestaña pagos para mostrar la transacción pendiente
             fvCargarCobrosTab();
         })
         .catch(function() {
-            Swal.fire('Error', 'No se pudo conectar con el servidor.', 'error');
-        })
-        .finally(function() {
-            if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.', target: document.getElementById('modalNuevaFactura') });
         });
 };
 </script>

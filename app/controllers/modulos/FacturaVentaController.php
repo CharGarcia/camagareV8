@@ -1628,9 +1628,14 @@ class FacturaVentaController extends BaseModuloController
             $pp     = new \App\Services\PayphoneService(new \App\repositories\PayphoneRepository());
             $numero = ($factura['establecimiento'] ?? '001') . '-' . ($factura['punto_emision'] ?? '001') . '-' . str_pad((string)($factura['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
 
-            $correoCliente = trim($factura['cliente_email'] ?? '');
+            // Usar correo del POST si viene, sino el de la factura
+            $correoPost    = trim($_POST['correo_destino'] ?? '');
+            $correoCliente = filter_var($correoPost, FILTER_VALIDATE_EMAIL)
+                ? $correoPost
+                : trim($factura['cliente_email'] ?? '');
+
             if (!filter_var($correoCliente, FILTER_VALIDATE_EMAIL)) {
-                echo json_encode(['ok' => false, 'mensaje' => 'El cliente no tiene un correo electrónico registrado.']);
+                echo json_encode(['ok' => false, 'mensaje' => 'El correo ingresado no es válido.']);
                 exit;
             }
 
