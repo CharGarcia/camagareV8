@@ -5,11 +5,11 @@
 $ruta_assets = '/sistema/public';
 ?>
 
-<div class="container-fluid h-100 p-0">
+<div class="container h-100 p-0 py-lg-3">
     <?php if (!$configurado): ?>
-    <div class="row h-100 m-0 align-items-center justify-content-center bg-light">
+    <div class="row h-100 m-0 align-items-center justify-content-center bg-light rounded shadow-sm border">
         <div class="col-md-6 text-center">
-            <div class="card shadow-sm border-0">
+            <div class="card shadow-none border-0 bg-transparent">
                 <div class="card-body p-5">
                     <i class="bi bi-whatsapp text-success mb-3" style="font-size: 4rem;"></i>
                     <h2 class="fw-bold mb-3">WhatsApp API no configurado</h2>
@@ -23,9 +23,9 @@ $ruta_assets = '/sistema/public';
     </div>
     <?php else: ?>
     
-    <div class="row h-100 m-0" style="min-height: calc(100vh - 120px);">
+    <div class="row m-0 border rounded shadow-sm overflow-hidden" style="height: calc(100vh - 160px);">
         <!-- Sidebar Izquierdo: Lista de Chats -->
-        <div class="col-md-4 col-lg-3 border-end bg-white p-0 d-flex flex-column" id="chatListContainer">
+        <div class="col-md-4 col-lg-3 border-end bg-white p-0 d-flex flex-column" id="chatListContainer" style="height: 100%;">
             <div class="p-3 border-bottom bg-light d-flex align-items-center justify-content-between">
                 <h5 class="m-0 fw-bold"><i class="bi bi-chat-left-text text-success me-2"></i> Chats</h5>
                 <button class="btn btn-sm btn-outline-secondary" onclick="WC_cargarChats()"><i class="bi bi-arrow-clockwise"></i></button>
@@ -35,13 +35,13 @@ $ruta_assets = '/sistema/public';
                 <input type="text" id="waSearchChat" class="form-control form-control-sm" placeholder="Buscar por número...">
             </div>
             <!-- Lista -->
-            <div class="flex-grow-1 overflow-auto" id="waChatsList" style="max-height: 100%;">
+            <div class="flex-grow-1 overflow-auto" id="waChatsList">
                 <div class="text-center p-4 text-muted"><div class="spinner-border spinner-border-sm" role="status"></div> Cargando chats...</div>
             </div>
         </div>
 
         <!-- Panel Derecho: Conversación -->
-        <div class="col-md-8 col-lg-9 p-0 d-flex flex-column bg-light" id="chatWindowContainer">
+        <div class="col-md-8 col-lg-9 p-0 d-flex flex-column bg-light" id="chatWindowContainer" style="height: 100%;">
             <!-- Header Chat -->
             <div class="p-3 border-bottom bg-white d-flex align-items-center d-none" id="waChatHeader">
                 <div class="bg-success text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 45px; height: 45px;">
@@ -61,7 +61,7 @@ $ruta_assets = '/sistema/public';
             </div>
 
             <!-- Cuerpo de Mensajes -->
-            <div class="flex-grow-1 overflow-auto p-4 d-none" id="waChatMessages" style="background-image: url('<?= $ruta_assets ?>/img/wa-bg.png'); background-color: #efeae2; max-height: 100%;">
+            <div class="flex-grow-1 overflow-auto p-4 d-none" id="waChatMessages" style="background-image: url('<?= $ruta_assets ?>/img/wa-bg.png'); background-color: #efeae2;">
                 <!-- Los mensajes se inyectan aquí -->
             </div>
 
