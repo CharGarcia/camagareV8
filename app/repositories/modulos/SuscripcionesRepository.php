@@ -358,6 +358,32 @@ class SuscripcionesRepository extends BaseRepository
         return $this->db->query($sql)->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function getParaGeneracionManual(int $idEmpresa, int $idPeriodicidad): array
+    {
+        $sql = "SELECT s.*,
+                       c.email          AS cliente_email,
+                       c.nombre         AS cliente_nombre,
+                       c.identificacion AS cliente_identificacion,
+                       c.tipo_id        AS cliente_tipo_id,
+                       per.meses        AS periodicidad_meses,
+                       per.codigo       AS periodicidad_codigo,
+                       per.nombre       AS periodicidad_nombre
+                FROM suscripciones s
+                LEFT JOIN clientes c   ON c.id = s.id_cliente
+                LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
+                WHERE s.id_empresa = :id_empresa
+                  AND s.id_periodicidad = :id_per
+                  AND s.estado = 'activo' 
+                  AND s.eliminado = false 
+                  AND s.proximo_cobro <= CURRENT_DATE
+                  AND (s.fecha_inicio IS NULL OR s.fecha_inicio <= CURRENT_DATE)
+                  AND (s.fecha_fin IS NULL OR s.fecha_fin >= CURRENT_DATE)
+                ORDER BY s.proximo_cobro ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':id_per' => $idPeriodicidad]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getDetalleParaCobro(int $idSuscripcion): array
     {
         $sql = "SELECT sd.*

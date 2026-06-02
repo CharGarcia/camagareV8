@@ -205,4 +205,10 @@ return [
 		'id_submodulo' => 66,
 		'legacy_rutas' => [],
 	],
+
+    // ─── AUTOMATIZACIONES (Cron dinámico) ─────────────────────────────────────
+    'modulos/automatizaciones' => [
+        'id_submodulo' => 184,
+        'legacy_rutas' => [],
+    ],
 ];

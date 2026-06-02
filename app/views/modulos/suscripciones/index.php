@@ -48,6 +48,9 @@ $estadoClases = [
     <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-repeat text-primary me-2"></i><?= htmlspecialchars($titulo) ?></h5>
     <div class="d-flex gap-2">
         <?php if ($perm['crear']): ?>
+            <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="abrirModalGenerarDocumentos()">
+                <i class="bi bi-file-earmark-text"></i> Generar Documentos
+            </button>
             <button type="button" class="btn btn-primary btn-sm px-3" onclick="abrirModalSuscCrear()">
                 <i class="bi bi-plus-lg"></i> Nueva
             </button>
@@ -187,6 +190,7 @@ $estadoClases = [
 
 <script>window.BASE_URL = '<?= $base ?>';</script>
 <?php include 'modal_suscripcion.php'; ?>
+<?php include 'modal_generar_documentos.php'; ?>
 <?php include 'modal_pagos.php'; ?>
 
 <script>

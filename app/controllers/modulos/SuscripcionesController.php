@@ -61,6 +61,13 @@ class SuscripcionesController extends BaseModuloController
         $stmt = $db->query("SELECT id, tarifa, porcentaje_iva FROM tarifa_iva WHERE status = 1 ORDER BY porcentaje_iva ASC");
         $tarifasIva = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
+        $empresaModel = new \App\models\Empresa();
+        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+        $puntos = [];
+        if (!empty($establecimientos)) {
+            $puntos = $empresaModel->getPuntosEmision((int) $establecimientos[0]['id']);
+        }
+
         $this->viewWithLayout('layouts.main', 'modulos.suscripciones.index', [
             'titulo'         => 'Suscripciones',
             'perm'           => $perm,
@@ -76,6 +83,7 @@ class SuscripcionesController extends BaseModuloController
             'vistaConfig'    => $prefsVista,
             'periodicidades' => $periodicidades,
             'tarifasIva'     => $tarifasIva,
+            'puntos'         => $puntos,
             'fullWidth'      => true,
         ]);
     }
@@ -330,5 +338,198 @@ class SuscripcionesController extends BaseModuloController
 
         echo json_encode(['ok' => true, 'rows' => $result['rows']]);
         exit;
+    }
+
+    public function generarFacturasManualAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'mensaje' => 'Método no permitido.']);
+            return;
+        }
+
+        $idEmpresa          = (int) $_SESSION['id_empresa'];
+        $idPuntoEmision     = (int) ($_POST['id_punto_emision'] ?? 0);
+        $idPeriodicidad     = (int) ($_POST['id_periodicidad'] ?? 0);
+        $textoItem          = trim($_POST['texto_item'] ?? '');
+        $infoConcepto       = trim($_POST['info_concepto'] ?? '');
+        $infoDetalle        = trim($_POST['info_detalle'] ?? '');
+
+        if ($idPuntoEmision <= 0) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Debe seleccionar una serie válida.']);
+            return;
+        }
+
+        if ($idPeriodicidad <= 0) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Debe seleccionar una periodicidad.']);
+            return;
+        }
+
+        try {
+            $db = \App\core\Database::getConnection();
+            
+            // 1. Obtener datos del Establecimiento y Punto de Emisión seleccionado
+            $stab = $db->prepare(
+                "SELECT ep.*, pe.id AS id_punto_emision, pe.codigo_punto AS punto_emision_codigo
+                 FROM empresa_establecimiento ep
+                 JOIN empresa_punto_emision pe ON pe.id_establecimiento = ep.id
+                 WHERE pe.id = :id_punto AND ep.id_empresa = :id_empresa AND ep.estado = 'activo' AND pe.eliminado = false AND ep.eliminado = false
+                 LIMIT 1"
+            );
+            $stab->execute([':id_punto' => $idPuntoEmision, ':id_empresa' => $idEmpresa]);
+            $estabConfig = $stab->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$estabConfig) {
+                echo json_encode(['ok' => false, 'mensaje' => 'La serie seleccionada no es válida o está inactiva.']);
+                return;
+            }
+
+            // 2. Obtener configuración de la empresa
+            $empresaModel = new \App\models\Empresa();
+            $empresaConfig = $empresaModel->getPorId($idEmpresa);
+            if (empty($empresaConfig)) {
+                echo json_encode(['ok' => false, 'mensaje' => 'No hay configuración de empresa.']);
+                return;
+            }
+
+            // 3. Obtener suscripciones vencidas para la periodicidad seleccionada
+            $suscRepo = new \App\repositories\modulos\SuscripcionesRepository();
+            $suscripciones = $suscRepo->getParaGeneracionManual($idEmpresa, $idPeriodicidad);
+            if (empty($suscripciones)) {
+                echo json_encode(['ok' => false, 'mensaje' => 'No hay suscripciones activas y vencidas para la periodicidad seleccionada.']);
+                return;
+            }
+
+            $factService = new \App\Services\modulos\FacturaVentaService(
+                new \App\repositories\modulos\FacturaVentaRepository(),
+                new \App\Rules\modulos\FacturaVentaRules(),
+                new \App\Services\LogSistemaService()
+            );
+            $secService = new \App\Services\SecuencialService();
+
+            $generadas = 0;
+            $errores   = 0;
+            $errorMsgs = [];
+
+            foreach ($suscripciones as $susc) {
+                $idSusc = (int) $susc['id'];
+                $meses  = (int) ($susc['periodicidad_meses'] ?? 1);
+                
+                try {
+                    $detalle = $suscRepo->getDetalleParaCobro($idSusc);
+                    $detallesFactura = [];
+                    $totalSinImp     = 0.0;
+                    $totalIva        = 0.0;
+
+                    foreach ($detalle as $det) {
+                        $base = round((float) $det['cantidad'] * (float) $det['precio_unitario'], 2);
+                        $iva  = round($base * ((float) ($det['porcentaje_iva'] ?? 0) / 100), 2);
+                        $totalSinImp += $base;
+                        $totalIva    += $iva;
+
+                        $descripcionItem = $det['descripcion'] ?? $det['nombre_producto'];
+                        if (!empty($textoItem)) {
+                            $descripcionItem .= ' - ' . $textoItem;
+                        }
+
+                        $detallesFactura[] = [
+                            'id_producto'               => $det['id_producto'],
+                            'descripcion'               => $descripcionItem,
+                            'cantidad'                  => $det['cantidad'],
+                            'precio_unitario'           => $det['precio_unitario'],
+                            'descuento'                 => 0,
+                            'precio_total_sin_impuesto' => $base,
+                            'impuestos'                 => $det['porcentaje_iva'] > 0 ? [[
+                                'codigo_impuesto'   => '2',
+                                'codigo_porcentaje' => '2',
+                                'tarifa'            => $det['porcentaje_iva'],
+                                'base_imponible'    => $base,
+                                'valor'             => $iva,
+                            ]] : [],
+                        ];
+                    }
+
+                    $importe = round($totalSinImp + $totalIva, 2);
+                    if ($importe <= 0) continue;
+
+                    // Avanzar próximo cobro
+                    $codigo       = $susc['periodicidad_codigo'] ?? '';
+                    $proximoCobro = $this->service->calcularProximoCobro($susc['proximo_cobro'], $meses, $codigo);
+                    $suscRepo->updateProximoCobro($idSusc, $proximoCobro);
+
+                    $secRes = $secService->obtenerSiguienteSecuencial(
+                        (int) $estabConfig['id_punto_emision'],
+                        'Facturas de venta'
+                    );
+                    $secuencial = $secRes['secuencial'];
+
+                    $infoAdicional = [
+                        ['nombre' => 'Suscripción', 'valor' => "Periodicidad: " . ($susc['periodicidad_nombre'] ?? '')]
+                    ];
+                    if (!empty($infoConcepto) && !empty($infoDetalle)) {
+                        $infoAdicional[] = ['nombre' => $infoConcepto, 'valor' => $infoDetalle];
+                    }
+
+                    $facturaData = [
+                        'id_empresa'          => $idEmpresa,
+                        'id_usuario'          => (int) $_SESSION['id_usuario'],
+                        'id_cliente'          => $susc['id_cliente'],
+                        'id_establecimiento'  => $estabConfig['id'],
+                        'id_punto_emision'    => $estabConfig['id_punto_emision'],
+                        'id_bodega'           => null,
+                        'fecha_emision'       => date('Y-m-d'),
+                        'establecimiento'     => $estabConfig['codigo'],
+                        'punto_emision'       => $estabConfig['punto_emision_codigo'],
+                        'secuencial'          => $secuencial,
+                        'empresa_config'      => $empresaConfig,
+                        'detalles'            => $detallesFactura,
+                        'pagos'               => [[
+                            'forma_pago' => $susc['forma_cobro'] === 'tarjeta' ? '16' : '20',
+                            'total'      => $importe,
+                            'plazo'      => 0,
+                        ]],
+                        'info_adicional'      => $infoAdicional,
+                        'total_sin_impuestos' => $totalSinImp,
+                        'total_descuento'     => 0,
+                        'importe_total'       => $importe,
+                        'propina'             => 0,
+                        'observaciones'       => "Factura generada manualmente por suscripción.",
+                    ];
+
+                    $idFactura = $factService->crear($facturaData);
+                    
+                    // Opcional: Registrar pago en suscripciones_pagos
+                    $suscRepo->insertPago([
+                        'id_suscripcion' => $idSusc,
+                        'id_empresa'     => $idEmpresa,
+                        'id_factura'     => $idFactura,
+                        'fecha_cobro'    => date('Y-m-d'),
+                        'monto'          => $importe,
+                        'estado'         => 'exitoso',
+                        'id_usuario'     => (int) $_SESSION['id_usuario'],
+                    ]);
+
+                    $generadas++;
+                } catch (\Throwable $e) {
+                    $errorMsgs[] = "Suscripcion {$idSusc}: " . $e->getMessage();
+                    $errores++;
+                }
+            }
+
+            if ($generadas === 0) {
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudieron generar facturas. Detalles: ' . implode(' | ', $errorMsgs)]);
+                return;
+            }
+
+            if ($generadas > 0) {
+                echo json_encode(['ok' => true, 'mensaje' => "Se generaron $generadas facturas correctamente." . ($errores > 0 ? " (Hubo $errores errores)." : '')]);
+            } else {
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudieron generar facturas. Revise los errores en el servidor.']);
+            }
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
     }
 }
