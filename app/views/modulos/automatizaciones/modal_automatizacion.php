@@ -59,6 +59,18 @@ $urlBaseAuto = BASE_URL . '/modulos/automatizaciones';
                         <div id="auto_accion_desc" class="form-text text-primary mt-1" style="font-size:0.78rem;"></div>
                     </div>
 
+                    <!-- ── Aviso: correo automático ya activo ───────────────── -->
+                    <div class="col-12" id="auto_aviso_correo_auto" style="display:none;">
+                        <div class="alert alert-warning border-0 py-2 px-3 mb-0 small">
+                            <i class="fas fa-triangle-exclamation me-1"></i>
+                            <strong>Atención:</strong> tu empresa tiene activada la opción
+                            <em>"Enviar correos de forma automática después de autorizar en el SRI"</em>.
+                            Si creas esta automatización de correo, el cliente podría recibir
+                            <strong>dos correos de la misma factura</strong>.
+                            Desactiva esa opción en <em>Empresa → Configuración → Correo</em> antes de continuar.
+                        </div>
+                    </div>
+
                     <!-- ── Parámetros de la acción ──────────────────────────── -->
                     <div class="col-12" id="auto_contenedor_params" style="display:none;">
                         <hr class="my-1">
@@ -315,12 +327,25 @@ $urlBaseAuto = BASE_URL . '/modulos/automatizaciones';
             });
     };
 
+    // Detecta la combinación que provocaría correos duplicados
+    function _esCorreoFacturaDuplicado() {
+        return document.getElementById('auto_modulo').value === 'facturas_venta'
+            && document.getElementById('auto_accion').value === 'enviar_correo'
+            && window.AUTO_ENVIO_AUTOMATICO_CORREO === true;
+    }
+    function _toggleAvisoCorreo() {
+        document.getElementById('auto_aviso_correo_auto').style.display =
+            _esCorreoFacturaDuplicado() ? 'block' : 'none';
+    }
+
     // ── Cargar parámetros dinámicos ────────────────────────────────────────────
     window.AUTO_cargarParametros = function (restore = {}) {
         const modulo = document.getElementById('auto_modulo').value;
         const accion = document.getElementById('auto_accion').value;
         const opt    = document.getElementById('auto_accion').selectedOptions[0];
         document.getElementById('auto_accion_desc').textContent = opt?.dataset?.desc ?? '';
+
+        _toggleAvisoCorreo();
 
         if (!modulo || !accion) {
             document.getElementById('auto_contenedor_params').style.display = 'none';
@@ -469,6 +494,19 @@ $urlBaseAuto = BASE_URL . '/modulos/automatizaciones';
 
     // ── Guardar ────────────────────────────────────────────────────────────────
     window.AUTO_guardar = function () {
+        // Bloquear si provocaría correos duplicados
+        if (_esCorreoFacturaDuplicado()) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'No se puede guardar',
+                html: 'Tu empresa tiene activado el <strong>envío automático de correo</strong> tras la autorización del SRI.<br><br>'
+                    + 'Esta automatización enviaría un <strong>segundo correo</strong> de la misma factura.<br><br>'
+                    + 'Desactiva esa opción en <em>Empresa → Configuración → Correo</em> antes de crear esta automatización.',
+                confirmButtonText: 'Entendido'
+            });
+            return;
+        }
+
         const id     = document.getElementById('auto_id').value;
         const params = {};
         document.querySelectorAll('#auto_campos_params [data-param]').forEach(el => {
@@ -627,6 +665,7 @@ $urlBaseAuto = BASE_URL . '/modulos/automatizaciones';
         document.getElementById('auto_accion_desc').textContent = '';
         document.getElementById('auto_campos_params').innerHTML = '';
         document.getElementById('auto_contenedor_params').style.display = 'none';
+        document.getElementById('auto_aviso_correo_auto').style.display = 'none';
         document.getElementById('auto_frecuencia_tipo').value  = 'diario';
         document.getElementById('auto_hora').value             = '20:00';
         document.getElementById('auto_dia_semana').value       = 'lunes';

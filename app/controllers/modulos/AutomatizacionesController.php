@@ -56,6 +56,13 @@ class AutomatizacionesController extends BaseModuloController
         $totalPages = $perPage > 0 ? (int)ceil($result['total'] / $perPage) : 1;
         $modulos    = $this->service->getModulosDisponibles();
 
+        // ¿La empresa tiene activado el envío automático de correo tras autorización SRI?
+        $envioAutomaticoCorreo = false;
+        try {
+            $correoConfig = (new \App\repositories\modulos\EmpresaRepository())->getCorreoConfig($idEmpresa);
+            $envioAutomaticoCorreo = !empty($correoConfig['envio_automatico']);
+        } catch (\Throwable) {}
+
         $this->viewWithLayout('layouts.main', 'modulos.automatizaciones.index', [
             'titulo'      => 'Automatizaciones',
             'perm'        => $perm,
@@ -70,6 +77,7 @@ class AutomatizacionesController extends BaseModuloController
             'ordenDir'    => $ordenDir,
             'modulos'     => $modulos,
             'vistaConfig' => $prefsVista,
+            'envioAutomaticoCorreo' => $envioAutomaticoCorreo,
             'fullWidth'   => true,
         ]);
     }
@@ -365,7 +373,7 @@ class AutomatizacionesController extends BaseModuloController
         $page      = max(1, (int)($_GET['page'] ?? 1));
 
         try {
-            $result = $this->service->getLog($id, $idEmpresa, $page, 20);
+            $result = $this->service->getLog($id, $idEmpresa, $page, 5);
             foreach ($result['rows'] as &$r) {
                 if (!empty($r['iniciado_en']))   $r['iniciado_en']   = date('d-m-Y H:i:s', strtotime($r['iniciado_en']));
                 if (!empty($r['finalizado_en'])) $r['finalizado_en'] = date('d-m-Y H:i:s', strtotime($r['finalizado_en']));

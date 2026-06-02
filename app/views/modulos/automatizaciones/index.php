@@ -197,6 +197,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <script>
 window.BASE_URL  = '<?= $base ?>';
 window.AUTO_MODS = <?= json_encode($modulos ?? []) ?>;
+window.AUTO_ENVIO_AUTOMATICO_CORREO = <?= !empty($envioAutomaticoCorreo) ? 'true' : 'false' ?>;
 </script>
 <?php include __DIR__ . '/modal_automatizacion.php'; ?>
 
