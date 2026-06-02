@@ -3,109 +3,135 @@ declare(strict_types=1);
 
 namespace App\Services\modulos\Handlers;
 
-use App\Services\modulos\HandlerFactory;
-
 /**
- * Maneja las acciones comunes a todos los módulos de documentos electrónicos.
+ * Acciones de documentos electrónicos.
  *
- * Procesa TODOS los documentos pendientes en lotes internos hasta vaciar la cola.
- * El parámetro 'lote_interno' solo controla cuántos registros se cargan en memoria
- * por vuelta (protección de RAM), no es un límite total de la ejecución.
+ * Estado de implementación:
+ *   - Facturas de venta: enviar_sri ✅ , enviar_correo ✅
+ *   - Otros documentos (retención, NC, liquidación, guía): pendiente de implementar
+ *     (sus métodos existen en SriEnvioService pero el envío en lote no está probado).
  */
 class DocumentosHandler extends BaseHandler
 {
+    private const USUARIO_SISTEMA = 0; // proceso automático (auditoría)
+
     public function ejecutar(int $idEmpresa, ?int $idEstablecimiento, array $parametros): array
     {
-        $cfg = HandlerFactory::getConfigTabla($this->modulo);
-        if ($cfg === null) {
-            throw new \RuntimeException("Módulo '{$this->modulo}' no tiene tabla configurada en HandlerFactory.");
-        }
-
         return match ($this->accion) {
-            'enviar_sri'      => $this->enviarSri($idEmpresa, $idEstablecimiento, $parametros, $cfg),
-            'enviar_correo'   => $this->enviarCorreo($idEmpresa, $idEstablecimiento, $parametros, $cfg),
-            'enviar_whatsapp' => $this->enviarWhatsapp($idEmpresa, $idEstablecimiento, $parametros, $cfg),
-            default           => throw new \RuntimeException("Acción '{$this->accion}' no implementada en DocumentosHandler."),
+            'enviar_sri'    => $this->enviarSri($idEmpresa, $idEstablecimiento, $parametros),
+            'enviar_correo' => $this->enviarCorreo($idEmpresa, $idEstablecimiento, $parametros),
+            default         => throw new \RuntimeException("Acción '{$this->accion}' no implementada en DocumentosHandler."),
         };
     }
 
-    // ── Enviar al SRI ─────────────────────────────────────────────────────────
-    private function enviarSri(int $idEmpresa, ?int $idEstablecimiento, array $p, array $cfg): array
+    // ════════════════════════════════════════════════════════════════════════
+    //  ENVIAR AL SRI
+    // ════════════════════════════════════════════════════════════════════════
+    private function enviarSri(int $idEmpresa, ?int $idEstablecimiento, array $p): array
     {
-        $tabla       = $cfg['tabla'];
-        $lote        = max(10, (int)($p['lote_interno'] ?? 100));
+        if ($this->modulo !== 'facturas_venta') {
+            return ['registros' => 0, 'mensaje' => 'El envío automático al SRI por ahora solo está disponible para Facturas de venta.'];
+        }
+
+        // estado_sri es la columna que controla el ciclo de envío al SRI
+        $hasCol = $this->db->query(
+            "SELECT 1 FROM information_schema.columns
+             WHERE table_name='ventas_cabecera' AND column_name='estado_sri' AND table_schema='public'"
+        )->fetchColumn();
+        if (!$hasCol) {
+            return ['registros' => 0, 'mensaje' => 'La columna estado_sri no existe en ventas_cabecera. Ejecute la migración de firma electrónica.'];
+        }
+
+        $lote        = max(10, (int)($p['lote_interno'] ?? 50));
         $estabFilter = $idEstablecimiento !== null ? "AND id_establecimiento = {$idEstablecimiento}" : '';
 
-        // Paginación por keyset (avanza por id) — termina aunque el stub aún no
-        // cambie el estado del documento (evita loops infinitos).
+        // Keyset por id: termina aunque queden documentos en 'error'
         $stmt = $this->db->prepare("
-            SELECT id, id_empresa, id_establecimiento, clave_acceso
-            FROM {$tabla}
-            WHERE id_empresa = :id_empresa
-              AND eliminado = false
-              AND estado = 'borrador'
+            SELECT id
+            FROM ventas_cabecera
+            WHERE eliminado = false
+              AND id_empresa = :id_empresa
+              AND estado IN ('borrador', 'autorizado')
+              AND estado_sri IN ('pendiente', 'en_procesamiento', 'error')
               AND id > :ultimo_id
               {$estabFilter}
             ORDER BY id ASC
             LIMIT :lote
         ");
 
-        $procesados = 0;
-        $errores    = 0;
-        $ultimoId   = 0;
+        $svc = new \App\Services\Sri\SriEnvioService(esperaInicial: 3, maxIntentos: 4, intervaloReintentos: 3);
+
+        $autorizadas = 0;
+        $errores     = 0;
+        $ultimoId    = 0;
 
         do {
             $stmt->bindValue(':id_empresa', $idEmpresa, \PDO::PARAM_INT);
             $stmt->bindValue(':ultimo_id',  $ultimoId,  \PDO::PARAM_INT);
             $stmt->bindValue(':lote',       $lote,      \PDO::PARAM_INT);
             $stmt->execute();
-            $documentos = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            $docs = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
-            foreach ($documentos as $doc) {
-                $ultimoId = (int)$doc['id'];
+            foreach ($docs as $doc) {
+                $id       = (int) $doc['id'];
+                $ultimoId = $id;
                 try {
-                    // TODO: invocar el servicio SRI según el módulo
-                    // Ej: $sriService->autorizar($doc['id'], $idEmpresa);
-                    $procesados++;
-                } catch (\Throwable) {
+                    // Marcar como "enviando" evita doble procesamiento en ejecuciones paralelas
+                    $this->db->prepare("UPDATE ventas_cabecera SET estado_sri = 'enviando' WHERE id = ?")->execute([$id]);
+
+                    $r      = $svc->enviarFacturaVenta($id, $idEmpresa, self::USUARIO_SISTEMA);
+                    $estado = $r['estado'] ?? 'error';
+
+                    if (($r['ok'] ?? false) || $estado === 'autorizado') {
+                        $autorizadas++;
+                    } else {
+                        $errores++;
+                    }
+                } catch (\Throwable $e) {
                     $errores++;
+                    try {
+                        $this->db->prepare("UPDATE ventas_cabecera SET estado_sri = 'error' WHERE id = ?")->execute([$id]);
+                    } catch (\Throwable) {}
                 }
             }
-        } while (count($documentos) === $lote);
+        } while (count($docs) === $lote);
 
-        $msg = "Se procesaron {$procesados} documentos para envío al SRI.";
-        if ($errores > 0) $msg .= " ({$errores} con error)";
-
-        return ['registros' => $procesados, 'mensaje' => $msg];
+        $total = $autorizadas + $errores;
+        $msg   = "Se procesaron {$total} factura(s): {$autorizadas} autorizada(s), {$errores} con error.";
+        return ['registros' => $autorizadas, 'mensaje' => $msg];
     }
 
-    // ── Enviar correo ─────────────────────────────────────────────────────────
-    private function enviarCorreo(int $idEmpresa, ?int $idEstablecimiento, array $p, array $cfg): array
+    // ════════════════════════════════════════════════════════════════════════
+    //  ENVIAR CORREO
+    // ════════════════════════════════════════════════════════════════════════
+    private function enviarCorreo(int $idEmpresa, ?int $idEstablecimiento, array $p): array
     {
-        $tabla              = $cfg['tabla'];
-        $lote               = max(10, (int)($p['lote_interno'] ?? 100));
-        $reintentarFallidos = !empty($p['reintentar_fallidos']);
-        $estabFilter        = $idEstablecimiento !== null ? "AND t.id_establecimiento = {$idEstablecimiento}" : '';
-        $estadoFilter       = $reintentarFallidos
-            ? "AND t.estado_correo IN ('pendiente', 'error')"
-            : "AND t.estado_correo = 'pendiente'";
+        if ($this->modulo !== 'facturas_venta') {
+            return ['registros' => 0, 'mensaje' => 'El envío de correo automático por ahora solo está disponible para Facturas de venta.'];
+        }
 
-        $joinEmail = $this->buildJoinEmail($tabla);
+        $reintentar   = !empty($p['reintentar_fallidos']);
+        $estadoFilter = $reintentar
+            ? "AND estado_correo IN ('pendiente', 'error')"
+            : "AND estado_correo = 'pendiente'";
+        $estabFilter  = $idEstablecimiento !== null ? "AND id_establecimiento = {$idEstablecimiento}" : '';
+        $lote         = 50;
 
+        // Solo facturas AUTORIZADAS con correo pendiente (no reenvía las ya enviadas)
         $stmt = $this->db->prepare("
-            SELECT t.id, t.id_empresa, t.clave_acceso,
-                   {$joinEmail['select']}
-            FROM {$tabla} t
-            {$joinEmail['join']}
-            WHERE t.id_empresa = :id_empresa
-              AND t.eliminado = false
-              AND t.estado = 'autorizado'
-              AND t.id > :ultimo_id
+            SELECT id
+            FROM ventas_cabecera
+            WHERE id_empresa = :id_empresa
+              AND eliminado = false
+              AND estado = 'autorizado'
+              AND id > :ultimo_id
               {$estadoFilter}
               {$estabFilter}
-            ORDER BY t.id ASC
+            ORDER BY id ASC
             LIMIT :lote
         ");
+
+        $repo = new \App\repositories\modulos\FacturaVentaRepository();
 
         $enviados = 0;
         $errores  = 0;
@@ -116,121 +142,106 @@ class DocumentosHandler extends BaseHandler
             $stmt->bindValue(':ultimo_id',  $ultimoId,  \PDO::PARAM_INT);
             $stmt->bindValue(':lote',       $lote,      \PDO::PARAM_INT);
             $stmt->execute();
-            $documentos = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
-            foreach ($documentos as $doc) {
-                $ultimoId = (int)$doc['id'];
-                if (empty($doc['email_destinatario'])) {
-                    // Sin email: marcar como no_aplica para no volver a intentarlo
-                    $this->db->prepare("UPDATE {$tabla} SET estado_correo = 'no_aplica', updated_at = NOW() WHERE id = :id")
-                             ->execute([':id' => $doc['id']]);
-                    continue;
-                }
+            foreach ($rows as $row) {
+                $id       = (int) $row['id'];
+                $ultimoId = $id;
                 try {
-                    // TODO: EmailService::enviarDocumento($doc)
-                    $this->db->prepare("UPDATE {$tabla} SET estado_correo = 'enviado', updated_at = NOW() WHERE id = :id")
-                             ->execute([':id' => $doc['id']]);
-                    $enviados++;
-                } catch (\Throwable) {
-                    $this->db->prepare("UPDATE {$tabla} SET estado_correo = 'error', updated_at = NOW() WHERE id = :id")
-                             ->execute([':id' => $doc['id']]);
+                    $resultado = $this->enviarCorreoFactura($idEmpresa, $id, $repo);
+                    $nuevoEstado = $resultado === true ? 'enviado' : ($resultado === null ? 'no_aplica' : 'error');
+                    $this->db->prepare("UPDATE ventas_cabecera SET estado_correo = ?, updated_at = NOW() WHERE id = ?")
+                             ->execute([$nuevoEstado, $id]);
+                    if ($resultado === true) $enviados++;
+                    elseif ($resultado === false) $errores++;
+                } catch (\Throwable $e) {
                     $errores++;
+                    try {
+                        $this->db->prepare("UPDATE ventas_cabecera SET estado_correo = 'error', updated_at = NOW() WHERE id = ?")->execute([$id]);
+                    } catch (\Throwable) {}
                 }
             }
-        } while (count($documentos) === $lote);
+        } while (count($rows) === $lote);
 
-        $msg = "Se enviaron {$enviados} correos de {$tabla}.";
+        $msg = "Se enviaron {$enviados} correo(s) de facturas.";
         if ($errores > 0) $msg .= " ({$errores} con error)";
-
         return ['registros' => $enviados, 'mensaje' => $msg];
     }
 
-    // ── Enviar WhatsApp ───────────────────────────────────────────────────────
-    private function enviarWhatsapp(int $idEmpresa, ?int $idEstablecimiento, array $p, array $cfg): array
+    /**
+     * Genera PDF + XML de una factura y la envía por correo (replica reenviarCorreoAjax).
+     * @return bool|null  true=enviado, false=error de envío, null=sin destinatario válido
+     */
+    private function enviarCorreoFactura(int $idEmpresa, int $id, \App\repositories\modulos\FacturaVentaRepository $repo): ?bool
     {
-        $tabla              = $cfg['tabla'];
-        $lote               = max(10, (int)($p['lote_interno'] ?? 100));
-        $reintentarFallidos = !empty($p['reintentar_fallidos']);
-        $estabFilter        = $idEstablecimiento !== null ? "AND t.id_establecimiento = {$idEstablecimiento}" : '';
-        $estadoFilter       = $reintentarFallidos
-            ? "AND (t.estado_whatsapp IS NULL OR t.estado_whatsapp IN ('pendiente', 'error'))"
-            : "AND (t.estado_whatsapp IS NULL OR t.estado_whatsapp = 'pendiente')";
+        $factura = $repo->getPorId($id);
+        if (!$factura || (int)($factura['id_empresa'] ?? 0) !== $idEmpresa) {
+            return false;
+        }
+        if (empty($factura['cliente_email']) && empty($factura['email'])) {
+            return null; // sin correo: no_aplica
+        }
 
-        $joinEmail = $this->buildJoinEmail($tabla);
+        $detalles = $repo->getDetalles($id);
+        foreach ($detalles as &$d) {
+            $d['impuestos'] = $repo->getImpuestosDetalle((int)$d['id']);
+        }
+        unset($d);
 
-        $stmt = $this->db->prepare("
-            SELECT t.id, t.id_empresa, t.clave_acceso,
-                   {$joinEmail['select']}
-            FROM {$tabla} t
-            {$joinEmail['join']}
-            WHERE t.id_empresa = :id_empresa
-              AND t.eliminado = false
-              AND t.estado = 'autorizado'
-              AND t.id > :ultimo_id
-              {$estadoFilter}
-              {$estabFilter}
-            ORDER BY t.id ASC
-            LIMIT :lote
-        ");
+        $pagos         = $repo->getPagos($id);
+        $infoAdicional = $repo->getInfoAdicional($id);
 
-        $enviados = 0;
-        $errores  = 0;
-        $ultimoId = 0;
+        $empresaModel = new \App\models\Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
 
-        do {
-            $stmt->bindValue(':id_empresa', $idEmpresa, \PDO::PARAM_INT);
-            $stmt->bindValue(':ultimo_id',  $ultimoId,  \PDO::PARAM_INT);
-            $stmt->bindValue(':lote',       $lote,      \PDO::PARAM_INT);
-            $stmt->execute();
-            $documentos = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-
-            foreach ($documentos as $doc) {
-                $ultimoId = (int)$doc['id'];
-                if (empty($doc['telefono_destinatario'])) {
-                    $this->db->prepare("UPDATE {$tabla} SET estado_whatsapp = 'no_aplica', updated_at = NOW() WHERE id = :id")
-                             ->execute([':id' => $doc['id']]);
-                    continue;
+        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+        if (!empty($establecimientos)) {
+            $est = $establecimientos[0];
+            if (!empty($est['logo_ruta']))           $empresa['logo_ruta'] = $est['logo_ruta'];
+            if (!empty($est['direccion']))           $empresa['direccion_establecimiento'] = $est['direccion'];
+            if (!empty($est['leyenda_pdf_titulo']))  $empresa['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+            if (!empty($est['leyenda_pdf_mensaje'])) $empresa['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+            try {
+                $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                $estConfig = $estRepo->getEstablecimientoConfig((int)$est['id']);
+                if ($estConfig) {
+                    $estConfig['direccion_matriz']          = $empresa['direccion'] ?? '';
+                    $estConfig['direccion_establecimiento'] = $est['direccion'] ?? '';
+                    if (!empty($est['logo_ruta']))           $estConfig['logo_ruta'] = $est['logo_ruta'];
+                    if (!empty($est['leyenda_pdf_titulo']))  $estConfig['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+                    if (!empty($est['leyenda_pdf_mensaje'])) $estConfig['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+                    $empresa = array_merge($empresa, $estConfig);
                 }
-                try {
-                    // TODO: WhatsappService::enviarDocumento($doc)
-                    $this->db->prepare("UPDATE {$tabla} SET estado_whatsapp = 'enviado', updated_at = NOW() WHERE id = :id")
-                             ->execute([':id' => $doc['id']]);
-                    $enviados++;
-                } catch (\Throwable) {
-                    $this->db->prepare("UPDATE {$tabla} SET estado_whatsapp = 'error', updated_at = NOW() WHERE id = :id")
-                             ->execute([':id' => $doc['id']]);
-                    $errores++;
+            } catch (\Throwable) {}
+        }
+
+        // PDF (plantilla activa o servicio por defecto)
+        $renderer     = new \App\Services\PlantillasPdfRendererService();
+        $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');
+        if ($plantillaPdf) {
+            $pdfString = $renderer->generar($plantillaPdf, $factura, $detalles, $pagos, $infoAdicional, $empresa, 'S');
+        } else {
+            $pdfService = new \App\Services\modulos\FacturaVentaPdfService();
+            $pdfString  = $pdfService->generar($factura, $detalles, $pagos, $infoAdicional, $empresa, 'S');
+        }
+
+        // XML autorizado (o regenerar como fallback)
+        $xmlString = $factura['detalle_xml'] ?? '';
+        $numAut    = $factura['numero_autorizacion'] ?? '';
+        if (empty($xmlString)) {
+            $dirEst = null;
+            if (!empty($factura['id_establecimiento'])) {
+                foreach ($establecimientos as $e) {
+                    if ((int)$e['id'] === (int)$factura['id_establecimiento']) { $dirEst = $e['direccion'] ?? null; break; }
                 }
             }
-        } while (count($documentos) === $lote);
-
-        $msg = "Se enviaron {$enviados} mensajes WhatsApp de {$tabla}.";
-        if ($errores > 0) $msg .= " ({$errores} con error)";
-
-        return ['registros' => $enviados, 'mensaje' => $msg];
-    }
-
-    // ── Helper JOIN para email/teléfono ───────────────────────────────────────
-    private function buildJoinEmail(string $tabla): array
-    {
-        $conCliente   = ['ventas_cabecera', 'notas_credito_cabecera', 'guias_remision_cabecera', 'notas_debito_cabecera'];
-        $conProveedor = ['retencion_compra_cabecera', 'liquidaciones_cabecera'];
-
-        if (in_array($tabla, $conCliente, true)) {
-            return [
-                'select' => 'c.email AS email_destinatario, c.telefono AS telefono_destinatario, c.nombre AS nombre_destinatario',
-                'join'   => 'LEFT JOIN clientes c ON c.id = t.id_cliente',
-            ];
+            $xmlService = new \App\Services\Xml\XmlFacturaVentaService();
+            $xmlString  = $xmlService->generar($factura, $detalles, $pagos, $infoAdicional, $empresa, $dirEst);
+            try { $repo->updateDetalleXml($id, $xmlString); } catch (\Throwable) {}
         }
-        if (in_array($tabla, $conProveedor, true)) {
-            return [
-                'select' => 'p.email AS email_destinatario, p.telefono AS telefono_destinatario, p.razon_social AS nombre_destinatario',
-                'join'   => 'LEFT JOIN proveedores p ON p.id = t.id_proveedor',
-            ];
-        }
-        return [
-            'select' => "'' AS email_destinatario, '' AS telefono_destinatario, '' AS nombre_destinatario",
-            'join'   => '',
-        ];
+
+        $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+        // forzarEnvio=true: el cron siempre envía si la factura está autorizada
+        return $emailSvc->enviarSiAplica($idEmpresa, 'factura_venta', $factura, $xmlString, $pdfString, $numAut, true);
     }
 }

@@ -34,15 +34,6 @@ class HandlerFactory
                      'ayuda' => 'Si está activo, vuelve a intentar enviar los documentos cuyo correo falló en ejecuciones anteriores. Recomendado: activado.'],
                 ],
             ],
-            'enviar_whatsapp' => [
-                'label'       => 'Enviar WhatsApp',
-                'descripcion' => 'Envía por WhatsApp todos los documentos autorizados pendientes',
-                'handler'     => Handlers\DocumentosHandler::class,
-                'parametros'  => [
-                    ['key' => 'reintentar_fallidos', 'label' => 'Reintentar los que fallaron antes', 'tipo' => 'checkbox', 'default' => true,
-                     'ayuda' => 'Si está activo, vuelve a intentar enviar los documentos cuyo WhatsApp falló en ejecuciones anteriores. Recomendado: activado.'],
-                ],
-            ],
         ];
     }
 
@@ -88,12 +79,6 @@ class HandlerFactory
                 'acciones' => $accionesDoc,
             ],
 
-            'notas_debito' => [
-                'label'   => 'Notas de débito',
-                'icono'   => 'fa-file-plus',
-                'acciones' => $accionesDoc,
-            ],
-
             'suscripciones' => [
                 'label'   => 'Suscripciones',
                 'icono'   => 'fa-repeat',
@@ -134,7 +119,6 @@ class HandlerFactory
         'notas_credito'         => ['tabla' => 'notas_credito_cabecera',    'tipo_doc' => '04'],
         'liquidaciones_compras' => ['tabla' => 'liquidaciones_cabecera',    'tipo_doc' => '03'],
         'guias_remision'        => ['tabla' => 'guias_remision_cabecera',   'tipo_doc' => '06'],
-        'notas_debito'          => ['tabla' => 'notas_debito_cabecera',     'tipo_doc' => '05'],
     ];
 
     // ── API pública ───────────────────────────────────────────────────────────
