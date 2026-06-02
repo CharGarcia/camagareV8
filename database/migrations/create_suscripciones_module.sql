@@ -1,11 +1,12 @@
 -- ============================================================
--- MÓDULO DE SUSCRIPCIONES
+-- MÓDULO DE SUSCRIPCIONES  (script idempotente)
 -- ============================================================
+-- Seguro de re-ejecutar: usa IF NOT EXISTS y ON CONFLICT DO NOTHING.
 -- Tablas:
---   suscripcion_periodicidades  (global, sin id_empresa)
---   suscripciones               (contrato principal)
---   suscripciones_detalle       (productos/servicios de cada suscripción)
---   suscripciones_pagos         (historial de cobros)
+--   suscripcion_periodicidades   (global, sin id_empresa)
+--   suscripciones                (contrato principal)
+--   suscripciones_detalle        (productos/servicios de cada suscripción)
+--   suscripciones_pagos          (historial de cobros / facturas generadas)
 --   suscripciones_notificaciones (log de emails)
 -- ============================================================
 
@@ -22,12 +23,17 @@ CREATE TABLE IF NOT EXISTS suscripcion_periodicidades (
     estado      BOOLEAN      NOT NULL DEFAULT true
 );
 
+-- NOTA: DIARIO/SEMANAL/QUINCENAL usan meses=1; el cálculo de próximo cobro
+-- las discrimina por 'codigo' (ver SuscripcionesService::calcularProximoCobro).
 INSERT INTO suscripcion_periodicidades (nombre, codigo, meses, descripcion, orden) VALUES
     ('Mensual',    'mensual',    1,  'Cobro cada mes',     1),
     ('Trimestral', 'trimestral', 3,  'Cobro cada 3 meses', 2),
     ('Semestral',  'semestral',  6,  'Cobro cada 6 meses', 3),
     ('Anual',      'anual',      12, 'Cobro cada año',     4),
-    ('Bianual',    'bianual',    24, 'Cobro cada 2 años',  5)
+    ('Bianual',    'bianual',    24, 'Cobro cada 2 años',  5),
+    ('Diario',     'DIARIO',     1,  'Cobro cada día',     1),
+    ('Semanal',    'SEMANAL',    1,  'Cobro cada semana',  2),
+    ('Quincenal',  'QUINCENAL',  1,  'Cobro cada 15 días', 3)
 ON CONFLICT (codigo) DO NOTHING;
 
 -- ------------------------------------------------------------
@@ -67,6 +73,10 @@ CREATE TABLE IF NOT EXISTS suscripciones (
     deleted_by  INTEGER
 );
 
+-- Columna agregada después del SQL base (la usa el repositorio: insert/update/listado)
+ALTER TABLE suscripciones
+    ADD COLUMN IF NOT EXISTS tipo_comprobante VARCHAR(30) NOT NULL DEFAULT 'factura';
+
 CREATE INDEX IF NOT EXISTS idx_suscripciones_empresa       ON suscripciones (id_empresa, eliminado);
 CREATE INDEX IF NOT EXISTS idx_suscripciones_cliente       ON suscripciones (id_cliente, id_empresa);
 CREATE INDEX IF NOT EXISTS idx_suscripciones_proximo_cobro ON suscripciones (proximo_cobro, estado, eliminado);
@@ -97,7 +107,7 @@ CREATE TABLE IF NOT EXISTS suscripciones_detalle (
 CREATE INDEX IF NOT EXISTS idx_susc_detalle_suscripcion ON suscripciones_detalle (id_suscripcion, eliminado);
 
 -- ------------------------------------------------------------
--- 4. Pagos / historial de cobros
+-- 4. Pagos / historial de cobros (y facturas generadas)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS suscripciones_pagos (
     id                      SERIAL PRIMARY KEY,
