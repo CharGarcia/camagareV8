@@ -136,7 +136,7 @@
             if (d.ok) {
                 bootstrap.Modal.getInstance(document.getElementById('modalGenerarDocumentos')).hide();
                 Swal.fire('Proceso Completado', d.mensaje || 'Las facturas han sido generadas exitosamente.', 'success');
-                if (window.Susc_fetchSearch) window.Susc_fetchSearch(); // Recargar tabla
+                if (window.fetchSearch) window.fetchSearch(); // Recargar tabla
             } else {
                 Swal.fire('Atención', d.mensaje || 'Error al generar facturas.', 'warning');
             }

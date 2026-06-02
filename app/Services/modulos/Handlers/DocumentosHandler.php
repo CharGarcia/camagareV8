@@ -36,28 +36,33 @@ class DocumentosHandler extends BaseHandler
         $lote        = max(10, (int)($p['lote_interno'] ?? 100));
         $estabFilter = $idEstablecimiento !== null ? "AND id_establecimiento = {$idEstablecimiento}" : '';
 
+        // Paginación por keyset (avanza por id) — termina aunque el stub aún no
+        // cambie el estado del documento (evita loops infinitos).
         $stmt = $this->db->prepare("
             SELECT id, id_empresa, id_establecimiento, clave_acceso
             FROM {$tabla}
             WHERE id_empresa = :id_empresa
               AND eliminado = false
               AND estado = 'borrador'
+              AND id > :ultimo_id
               {$estabFilter}
-            ORDER BY created_at ASC
+            ORDER BY id ASC
             LIMIT :lote
         ");
 
         $procesados = 0;
         $errores    = 0;
+        $ultimoId   = 0;
 
-        // Loop hasta que no queden documentos pendientes
         do {
             $stmt->bindValue(':id_empresa', $idEmpresa, \PDO::PARAM_INT);
+            $stmt->bindValue(':ultimo_id',  $ultimoId,  \PDO::PARAM_INT);
             $stmt->bindValue(':lote',       $lote,      \PDO::PARAM_INT);
             $stmt->execute();
             $documentos = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
             foreach ($documentos as $doc) {
+                $ultimoId = (int)$doc['id'];
                 try {
                     // TODO: invocar el servicio SRI según el módulo
                     // Ej: $sriService->autorizar($doc['id'], $idEmpresa);
@@ -66,7 +71,7 @@ class DocumentosHandler extends BaseHandler
                     $errores++;
                 }
             }
-        } while (count($documentos) === $lote); // Si devolvió menos que el lote, ya no hay más
+        } while (count($documentos) === $lote);
 
         $msg = "Se procesaron {$procesados} documentos para envío al SRI.";
         if ($errores > 0) $msg .= " ({$errores} con error)";
@@ -95,22 +100,26 @@ class DocumentosHandler extends BaseHandler
             WHERE t.id_empresa = :id_empresa
               AND t.eliminado = false
               AND t.estado = 'autorizado'
+              AND t.id > :ultimo_id
               {$estadoFilter}
               {$estabFilter}
-            ORDER BY t.created_at ASC
+            ORDER BY t.id ASC
             LIMIT :lote
         ");
 
         $enviados = 0;
         $errores  = 0;
+        $ultimoId = 0;
 
         do {
             $stmt->bindValue(':id_empresa', $idEmpresa, \PDO::PARAM_INT);
+            $stmt->bindValue(':ultimo_id',  $ultimoId,  \PDO::PARAM_INT);
             $stmt->bindValue(':lote',       $lote,      \PDO::PARAM_INT);
             $stmt->execute();
             $documentos = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
             foreach ($documentos as $doc) {
+                $ultimoId = (int)$doc['id'];
                 if (empty($doc['email_destinatario'])) {
                     // Sin email: marcar como no_aplica para no volver a intentarlo
                     $this->db->prepare("UPDATE {$tabla} SET estado_correo = 'no_aplica', updated_at = NOW() WHERE id = :id")
@@ -157,22 +166,26 @@ class DocumentosHandler extends BaseHandler
             WHERE t.id_empresa = :id_empresa
               AND t.eliminado = false
               AND t.estado = 'autorizado'
+              AND t.id > :ultimo_id
               {$estadoFilter}
               {$estabFilter}
-            ORDER BY t.created_at ASC
+            ORDER BY t.id ASC
             LIMIT :lote
         ");
 
         $enviados = 0;
         $errores  = 0;
+        $ultimoId = 0;
 
         do {
             $stmt->bindValue(':id_empresa', $idEmpresa, \PDO::PARAM_INT);
+            $stmt->bindValue(':ultimo_id',  $ultimoId,  \PDO::PARAM_INT);
             $stmt->bindValue(':lote',       $lote,      \PDO::PARAM_INT);
             $stmt->execute();
             $documentos = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
             foreach ($documentos as $doc) {
+                $ultimoId = (int)$doc['id'];
                 if (empty($doc['telefono_destinatario'])) {
                     $this->db->prepare("UPDATE {$tabla} SET estado_whatsapp = 'no_aplica', updated_at = NOW() WHERE id = :id")
                              ->execute([':id' => $doc['id']]);

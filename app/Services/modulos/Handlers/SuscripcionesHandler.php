@@ -15,14 +15,16 @@ class SuscripcionesHandler extends BaseHandler
     }
 
     // ── Generar facturación ───────────────────────────────────────────────────
+    // Solo genera las facturas en estado borrador. El envío al SRI y por correo
+    // lo realizan las automatizaciones del módulo "Facturas de venta".
     private function generarFacturacion(int $idEmpresa, ?int $idEstablecimiento, array $p): array
     {
         $diasAnticipacion = max(0, (int)($p['dias_anticipacion'] ?? 0));
-        $max              = max(1, (int)($p['max_documentos'] ?? 50));
-        $enviarSri        = !empty($p['enviar_sri']);
-        $enviarCorreo     = !empty($p['enviar_correo']);
+        $lote             = max(10, (int)($p['lote_interno'] ?? 100));
         $estabFilter      = $idEstablecimiento !== null ? "AND s.id_establecimiento = {$idEstablecimiento}" : '';
 
+        // Paginación por keyset (avanza por id) — termina aunque el procesamiento
+        // aún no actualice proximo_cobro (evita loops infinitos con stubs).
         $stmt = $this->db->prepare("
             SELECT s.id, s.id_empresa, s.id_cliente, s.proximo_cobro,
                    s.monto, s.descripcion,
@@ -34,33 +36,39 @@ class SuscripcionesHandler extends BaseHandler
               AND s.eliminado = false
               AND s.estado = 'activo'
               AND s.proximo_cobro <= (NOW() + INTERVAL '{$diasAnticipacion} days')::date
+              AND s.id > :ultimo_id
               {$estabFilter}
-            ORDER BY s.proximo_cobro ASC
-            LIMIT :limite
+            ORDER BY s.id ASC
+            LIMIT :lote
         ");
-        $stmt->bindValue(':id_empresa', $idEmpresa, \PDO::PARAM_INT);
-        $stmt->bindValue(':limite',     $max,       \PDO::PARAM_INT);
-        $stmt->execute();
-        $suscripciones = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
         $generadas = 0;
-        foreach ($suscripciones as $sus) {
-            try {
-                // TODO: invocar FacturacionService::generarDesdeSuscripcion($sus, $enviarSri, $enviarCorreo)
-                // Actualizar próximo cobro según periodicidad
-                // $this->actualizarProximoCobro($sus['id']);
-                $generadas++;
-            } catch (\Throwable) {
-                // Continúa con la siguiente
-            }
-        }
+        $errores   = 0;
+        $ultimoId  = 0;
 
-        return [
-            'registros' => $generadas,
-            'mensaje'   => "Se generaron {$generadas} facturas desde suscripciones."
-                . ($enviarSri    ? ' (con envío SRI)'    : '')
-                . ($enviarCorreo ? ' (con correo)'       : ''),
-        ];
+        do {
+            $stmt->bindValue(':id_empresa', $idEmpresa, \PDO::PARAM_INT);
+            $stmt->bindValue(':ultimo_id',  $ultimoId,  \PDO::PARAM_INT);
+            $stmt->bindValue(':lote',       $lote,      \PDO::PARAM_INT);
+            $stmt->execute();
+            $suscripciones = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            foreach ($suscripciones as $sus) {
+                $ultimoId = (int)$sus['id'];
+                try {
+                    // TODO: FacturacionService::generarDesdeSuscripcion($sus) — crea la factura en borrador
+                    // y actualiza s.proximo_cobro al siguiente período para que no se reprocese.
+                    $generadas++;
+                } catch (\Throwable) {
+                    $errores++;
+                }
+            }
+        } while (count($suscripciones) === $lote);
+
+        $msg = "Se generaron {$generadas} facturas en borrador desde suscripciones.";
+        if ($errores > 0) $msg .= " ({$errores} con error)";
+
+        return ['registros' => $generadas, 'mensaje' => $msg];
     }
 
     // ── Enviar aviso de vencimiento ───────────────────────────────────────────

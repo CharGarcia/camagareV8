@@ -23,17 +23,15 @@ class HandlerFactory
                 'label'       => 'Enviar al SRI',
                 'descripcion' => 'Autoriza y envía al SRI todos los documentos en estado borrador',
                 'handler'     => Handlers\DocumentosHandler::class,
-                'parametros'  => [
-                    ['key' => 'lote_interno', 'label' => 'Documentos por lote (control de memoria)', 'tipo' => 'number', 'default' => 100],
-                ],
+                'parametros'  => [],
             ],
             'enviar_correo' => [
                 'label'       => 'Enviar correo',
                 'descripcion' => 'Envía por email todos los documentos autorizados con correo pendiente',
                 'handler'     => Handlers\DocumentosHandler::class,
                 'parametros'  => [
-                    ['key' => 'lote_interno',        'label' => 'Documentos por lote (control de memoria)', 'tipo' => 'number',   'default' => 100],
-                    ['key' => 'reintentar_fallidos', 'label' => 'Reintentar envíos fallidos anteriores',    'tipo' => 'checkbox', 'default' => true],
+                    ['key' => 'reintentar_fallidos', 'label' => 'Reintentar los que fallaron antes', 'tipo' => 'checkbox', 'default' => true,
+                     'ayuda' => 'Si está activo, vuelve a intentar enviar los documentos cuyo correo falló en ejecuciones anteriores. Recomendado: activado.'],
                 ],
             ],
             'enviar_whatsapp' => [
@@ -41,8 +39,8 @@ class HandlerFactory
                 'descripcion' => 'Envía por WhatsApp todos los documentos autorizados pendientes',
                 'handler'     => Handlers\DocumentosHandler::class,
                 'parametros'  => [
-                    ['key' => 'lote_interno',        'label' => 'Documentos por lote (control de memoria)', 'tipo' => 'number',   'default' => 100],
-                    ['key' => 'reintentar_fallidos', 'label' => 'Reintentar envíos fallidos anteriores',    'tipo' => 'checkbox', 'default' => true],
+                    ['key' => 'reintentar_fallidos', 'label' => 'Reintentar los que fallaron antes', 'tipo' => 'checkbox', 'default' => true,
+                     'ayuda' => 'Si está activo, vuelve a intentar enviar los documentos cuyo WhatsApp falló en ejecuciones anteriores. Recomendado: activado.'],
                 ],
             ],
         ];
@@ -102,13 +100,11 @@ class HandlerFactory
                 'acciones' => [
                     'generar_facturacion' => [
                         'label'       => 'Generar facturación',
-                        'descripcion' => 'Genera y envía al SRI las facturas de suscripciones con cobro vencido',
+                        'descripcion' => 'Genera las facturas (en borrador) de suscripciones con cobro vencido. El envío al SRI y por correo lo realizan las automatizaciones de Facturas de venta.',
                         'handler'     => Handlers\SuscripcionesHandler::class,
                         'parametros'  => [
-                            ['key' => 'dias_anticipacion', 'label' => 'Generar con N días de anticipación', 'tipo' => 'number',   'default' => 0],
-                            ['key' => 'enviar_sri',        'label' => 'Enviar al SRI automáticamente',      'tipo' => 'checkbox', 'default' => true],
-                            ['key' => 'enviar_correo',     'label' => 'Enviar correo al cliente',           'tipo' => 'checkbox', 'default' => true],
-                            ['key' => 'lote_interno',      'label' => 'Suscripciones por lote',             'tipo' => 'number',   'default' => 100],
+                            ['key' => 'dias_anticipacion', 'label' => 'Generar con anticipación (días)', 'tipo' => 'number', 'default' => 0,
+                             'ayuda' => 'Cuántos días ANTES de la fecha de cobro se genera la factura. Use 0 para generar el mismo día del vencimiento. Ejemplo: 3 generaría las facturas 3 días antes de su cobro.'],
                         ],
                     ],
                     'enviar_aviso_vencimiento' => [
@@ -116,9 +112,11 @@ class HandlerFactory
                         'descripcion' => 'Notifica a los clientes cuya suscripción está próxima a vencer',
                         'handler'     => Handlers\SuscripcionesHandler::class,
                         'parametros'  => [
-                            ['key' => 'dias_antes', 'label' => 'Días antes del vencimiento', 'tipo' => 'number', 'default' => 5],
-                            ['key' => 'canal',      'label' => 'Canal de notificación',       'tipo' => 'select', 'default' => 'correo',
-                             'opciones' => ['correo' => 'Correo electrónico', 'whatsapp' => 'WhatsApp', 'ambos' => 'Correo y WhatsApp']],
+                            ['key' => 'dias_antes', 'label' => 'Avisar con anticipación (días)', 'tipo' => 'number', 'default' => 5,
+                             'ayuda' => 'Cuántos días ANTES del vencimiento se envía el aviso al cliente. Ejemplo: 5 avisa al cliente 5 días antes de que venza su suscripción.'],
+                            ['key' => 'canal', 'label' => '¿Por dónde se envía el aviso?', 'tipo' => 'select', 'default' => 'correo',
+                             'opciones' => ['correo' => 'Correo electrónico', 'whatsapp' => 'WhatsApp', 'ambos' => 'Correo y WhatsApp'],
+                             'ayuda' => 'Medio por el que el cliente recibirá la notificación. "Ambos" envía por correo y WhatsApp a la vez.'],
                         ],
                     ],
                 ],

@@ -470,7 +470,7 @@ class FacturaVentaController extends BaseModuloController
             // Generar o actualizar el asiento
             $this->service->procesarAsientoContable($idVenta, $data, $numFactura);
 
-            echo json_encode(['ok' => true, 'mensaje' => 'Asiento generado/actualizado con Ã©xito.']);
+            echo json_encode(['ok' => true, 'mensaje' => 'Asiento generado/actualizado con Ãexito.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -1572,7 +1572,7 @@ class FacturaVentaController extends BaseModuloController
             );
 
             $idIngreso = $ingresoService->crear($payload);
-            echo json_encode(['ok' => true, 'msg' => 'Cobro registrado con Ã©xito.', 'id_ingreso' => $idIngreso]);
+            echo json_encode(['ok' => true, 'msg' => 'Cobro registrado con Ãexito.', 'id_ingreso' => $idIngreso]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
@@ -1686,7 +1686,7 @@ class FacturaVentaController extends BaseModuloController
             );
             $stPend->execute([$idEmpresa, $idFactura]);
             if ((int) $stPend->fetchColumn() > 0) {
-                echo json_encode(['ok' => false, 'mensaje' => 'Ya existe un enlace de pago pendiente enviado en los Ãºltimos 15 minutos. Espera a que el cliente lo complete o a que expire.']);
+                echo json_encode(['ok' => false, 'mensaje' => 'Ya existe un enlace de pago pendiente enviado en los Ãultimos 15 minutos. Espera a que el cliente lo complete o a que expire.']);
                 exit;
             }
 

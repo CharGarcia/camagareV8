@@ -34,16 +34,16 @@ class FacturaVentaService
     }
 
     /**
-     * Genera automáticamente un Ingreso (cobro) a partir de una transacción
+     * Genera automÃ¡ticamente un Ingreso (cobro) a partir de una transacciÃ³n
      * Payphone APROBADA para una factura de venta. Idempotente: no crea el ingreso
-     * si la transacción ya tiene uno vinculado.
+     * si la transacciÃ³n ya tiene uno vinculado.
      *
      * @param array $trans Fila de payphone_transacciones (debe tener id_empresa, id_referencia, monto, etc.)
-     * @return int|null  ID del ingreso creado, o null si no aplica / ya existía.
+     * @return int|null  ID del ingreso creado, o null si no aplica / ya existÃ­a.
      */
     public function generarIngresoDesdePayphone(array $trans): ?int
     {
-        // Ya tiene ingreso vinculado → idempotente
+        // Ya tiene ingreso vinculado â idempotente
         if (!empty($trans['id_ingreso'])) {
             return (int) $trans['id_ingreso'];
         }
@@ -57,7 +57,7 @@ class FacturaVentaService
         $monto     = round(((int) $trans['monto']) / 100, 2);
         $idUsuario = !empty($trans['created_by']) ? (int) $trans['created_by'] : null;
 
-        // Forma de cobro: la específica guardada en la transacción, o cualquier tipo TARJETA
+        // Forma de cobro: la especÃ­fica guardada en la transacciÃ³n, o cualquier tipo TARJETA
         $ppRepo = new \App\repositories\PayphoneRepository();
         $idFormaCobro = !empty($trans['id_forma_cobro']) ? (int) $trans['id_forma_cobro'] : 0;
         if ($idFormaCobro > 0) {
@@ -75,7 +75,7 @@ class FacturaVentaService
             return null;
         }
 
-        // Punto de emisión de la factura (con fallback a tabla renombrada)
+        // Punto de emisiÃ³n de la factura (con fallback a tabla renombrada)
         $punto = null;
         try {
             $stPunto = $db->prepare(
@@ -121,9 +121,9 @@ class FacturaVentaService
         $saldoAnterior = round((float) $factura['importe_total'] - $totalCobrado, 2);
 
         $numDoc = $factura['establecimiento'] . '-' . $factura['punto_emision'] . '-' . $factura['secuencial'];
-        $obs    = 'Cobro con tarjeta (Payphone) — autorización ' . ($trans['authorization_code'] ?? '');
+        $obs    = 'Cobro con tarjeta (Payphone) â autorizaciÃ³n ' . ($trans['authorization_code'] ?? '');
 
-        // Número de ingreso con formato 000-000-000000000
+        // NÃºmero de ingreso con formato 000-000-000000000
         $numeroIngreso = str_pad((string) $punto['establecimiento'], 3, '0', STR_PAD_LEFT) . '-'
                        . str_pad((string) $punto['punto'], 3, '0', STR_PAD_LEFT) . '-'
                        . str_pad((string) $secRes['secuencial'], 9, '0', STR_PAD_LEFT);
@@ -214,7 +214,7 @@ class FacturaVentaService
      * y lo guarda en ventas_cabecera.detalle_xml.
      * Los errores se silencian para no revertir la factura ya guardada.
      *
-     * @param int   $idVenta      ID de la factura recién guardada
+     * @param int   $idVenta      ID de la factura reciÃ©n guardada
      * @param array $empresaConfig Fila de la tabla empresas (ya cargada en el servicio)
      */
     private function generarYGuardarXml(int $idVenta, array $empresaConfig): void
@@ -235,14 +235,14 @@ class FacturaVentaService
             $pagos         = $this->repository->getPagos($idVenta);
             $infoAdicional = $this->repository->getInfoAdicional($idVenta);
 
-            // Empresa: usar la config ya disponible; si está vacía cargar del modelo
+            // Empresa: usar la config ya disponible; si estÃ¡ vacÃ­a cargar del modelo
             $empresa = $empresaConfig;
             if (empty($empresa)) {
                 $empresaModel = new \App\models\Empresa();
                 $empresa = $empresaModel->getPorId((int)$cabecera['id_empresa']) ?? [];
             }
 
-            // Dirección del establecimiento
+            // DirecciÃ³n del establecimiento
             $dirEstablecimiento = null;
             if (!empty($cabecera['id_establecimiento'])) {
                 try {
@@ -278,7 +278,7 @@ class FacturaVentaService
     }
 
     /**
-     * Valida que el secuencial no esté duplicado
+     * Valida que el secuencial no estÃ© duplicado
      */
     private function validarSecuencial(array $data, ?int $excluirId = null): void
     {
@@ -289,7 +289,7 @@ class FacturaVentaService
             (string) $data['secuencial'],
             $excluirId
         )) {
-            throw new \Exception('El número de secuencial ya existe para este punto de emisión. Recargue e intente nuevamente.');
+            throw new \Exception('El nÃºmero de secuencial ya existe para este punto de emisiÃ³n. Recargue e intente nuevamente.');
         }
     }
 
@@ -341,7 +341,7 @@ class FacturaVentaService
         $data['tipo_ambiente'] = (string) ($empresaConfig['tipo_ambiente'] ?? '1');
         $data['tipo_emision']  = (string) ($empresaConfig['tipo_emision']  ?? '1');
 
-        // Regenerar clave de acceso reutilizando el código numérico original
+        // Regenerar clave de acceso reutilizando el cÃ³digo numÃ©rico original
         $codigoNumerico = \App\Services\ClaveAccesoService::extraerCodigoNumerico($cabecera['clave_acceso'] ?? '');
         $data['clave_acceso'] = \App\Services\ClaveAccesoService::generar(
             (string) ($data['fecha_emision']  ?? ''),
@@ -372,7 +372,7 @@ class FacturaVentaService
                     $det['nombre'] = $det['descripcion'];
                 }
                 
-                // Obtener info de control si es producto de catálogo
+                // Obtener info de control si es producto de catÃ¡logo
                 if (!empty($det['id_producto'])) {
                     $infoInv = $this->getInventarioService()->getProductoRepository()->getInfoControlInventario((int)$det['id_producto'], (int)$data['id_empresa']);
                     $det['inventariable']   = $infoInv['inventariable'] ?? false;
@@ -383,7 +383,7 @@ class FacturaVentaService
 
         $this->rules->validar($data, $estConfig ?? []);
 
-        // 2. Lógica de selección automática de lotes/stock si aplica (CON AGREGACIÓN PARA VALIDACIÓN)
+        // 2. LÃ³gica de selecciÃ³n automÃ¡tica de lotes/stock si aplica (CON AGREGACIÃN PARA VALIDACIÃN)
         if ($estConfig && !empty($data['detalles']) && is_array($data['detalles'])) {
             $cantidadesAgregadas = []; // [id_producto_bodega_lote] => total_cantidad
             
@@ -401,7 +401,7 @@ class FacturaVentaService
                             $det['nup']       = null;
                         }
                         
-                        // Agregar cantidad para validación posterior
+                        // Agregar cantidad para validaciÃ³n posterior
                         $key = (int)$det['id_producto'] . '_' . (int)($det['id_bodega'] ?? ($data['id_bodega'] ?? 0)) . '_' . ($det['lote'] ?? 'sin_lote');
                         $cantidadesAgregadas[$key] = ($cantidadesAgregadas[$key] ?? 0) + (float)($det['cantidad'] ?? 0);
                     }
@@ -539,10 +539,10 @@ class FacturaVentaService
 
             $db->commit();
 
-            // Generar XML y persistir en detalle_xml FUERA de la transacción principal
+            // Generar XML y persistir en detalle_xml FUERA de la transacciÃ³n principal
             $this->generarYGuardarXml($id, $data['empresa_config'] ?? []);
 
-            // Generar/actualizar asiento contable FUERA de la transacción principal
+            // Generar/actualizar asiento contable FUERA de la transacciÃ³n principal
             // para que un fallo en el asiento nunca revierta la factura ya guardada.
             $this->lastAsientoWarning = null;
             try {
@@ -563,13 +563,13 @@ class FacturaVentaService
     {
         $this->validarSecuencial($data);
 
-        // Tomar tipo_ambiente y tipo_emision desde la configuración de empresa
+        // Tomar tipo_ambiente y tipo_emision desde la configuraciÃ³n de empresa
         $empresaConfig = $data['empresa_config'] ?? [];
         $data['tipo_ambiente'] = (string) ($empresaConfig['tipo_ambiente'] ?? '1');
         $data['tipo_emision']  = (string) ($empresaConfig['tipo_emision']  ?? '1');
         $data['estado_correo'] = 'pendiente';
 
-        // Generar clave de acceso con código numérico nuevo
+        // Generar clave de acceso con cÃ³digo numÃ©rico nuevo
         $data['clave_acceso'] = \App\Services\ClaveAccesoService::generar(
             (string) ($data['fecha_emision']   ?? ''),
             \App\Services\ClaveAccesoService::FACTURA_VENTA,
@@ -598,7 +598,7 @@ class FacturaVentaService
                     $det['nombre'] = $det['descripcion'];
                 }
                 
-                // Obtener info de control si es producto de catálogo
+                // Obtener info de control si es producto de catÃ¡logo
                 if (!empty($det['id_producto'])) {
                     $infoInv = $this->getInventarioService()->getProductoRepository()->getInfoControlInventario((int)$det['id_producto'], (int)$data['id_empresa']);
                     $det['inventariable']   = $infoInv['inventariable'] ?? false;
@@ -609,7 +609,7 @@ class FacturaVentaService
 
         $this->rules->validar($data, $estConfig ?? []);
 
-        // 2. Lógica de selección automática de lotes/stock si aplica (CON AGREGACIÓN PARA VALIDACIÓN)
+        // 2. LÃ³gica de selecciÃ³n automÃ¡tica de lotes/stock si aplica (CON AGREGACIÃN PARA VALIDACIÃN)
         if ($estConfig && !empty($data['detalles']) && is_array($data['detalles'])) {
             $cantidadesAgregadas = []; // [id_producto_bodega_lote] => total_cantidad
             
@@ -627,7 +627,7 @@ class FacturaVentaService
                             $det['nup']       = null;
                         }
                         
-                        // Agregar cantidad para validación posterior
+                        // Agregar cantidad para validaciÃ³n posterior
                         $key = (int)$det['id_producto'] . '_' . (int)($det['id_bodega'] ?? ($data['id_bodega'] ?? 0)) . '_' . ($det['lote'] ?? 'sin_lote');
                         $cantidadesAgregadas[$key] = ($cantidadesAgregadas[$key] ?? 0) + (float)($det['cantidad'] ?? 0);
                     }
@@ -760,10 +760,10 @@ class FacturaVentaService
             throw $e;
         }
 
-        // Generar XML y persistir en detalle_xml FUERA de la transacción principal
+        // Generar XML y persistir en detalle_xml FUERA de la transacciÃ³n principal
         $this->generarYGuardarXml($idVenta, $data['empresa_config'] ?? []);
 
-        // Generar asiento contable FUERA de la transacción principal
+        // Generar asiento contable FUERA de la transacciÃ³n principal
         // para que un fallo en el asiento nunca revierta la factura ya guardada.
         $this->lastAsientoWarning = null;
         try {
@@ -804,7 +804,7 @@ class FacturaVentaService
         }
 
         if (($cabecera['estado'] ?? '') === 'anulado') {
-            throw new \Exception('La factura ya está anulada.');
+            throw new \Exception('La factura ya estÃ¡ anulada.');
         }
 
         $db = Database::getConnection();
@@ -852,7 +852,7 @@ class FacturaVentaService
         try {
             $this->repository->eliminarLogico($id, $idUsuario);
 
-            // Revertir inventario si existiera algo (aunque en borrador no debería haber kardex, pero por seguridad)
+            // Revertir inventario si existiera algo (aunque en borrador no deberÃ­a haber kardex, pero por seguridad)
             $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $id, $idEmpresa, $idUsuario);
 
             $this->logService->registrar(
@@ -890,7 +890,7 @@ class FacturaVentaService
 
         // Siempre regenerar el asiento desde el builder usando los valores actuales de la factura.
         // El asiento manual del frontend se ignora: para borradores siempre se recalcula,
-        // y para autorizados este método nunca se llama (ver guardarAjax).
+        // y para autorizados este mÃ©todo nunca se llama (ver guardarAjax).
         $data['id_venta'] = $idVenta;
         $detallesSugeridos = $this->obtenerAsientoSugerido($idEmpresa, $data);
 
@@ -922,10 +922,10 @@ class FacturaVentaService
             'id'               => $idAsiento > 0 ? $idAsiento : null,
             'fecha_asiento'    => $fechaEmision,
             'tipo_comprobante' => 'ventas',
-            // Para UPDATE el numero_comprobante no se modifica (no está en updateCabecera).
-            // Para INSERT nuevo (idAsiento == 0) se deja vacío para que guardarAsiento
-            // auto-genere un número único con el prefijo VE-, evitando duplicados cuando
-            // el asiento anterior fue anulado y tenía el mismo "VF-<factura>".
+            // Para UPDATE el numero_comprobante no se modifica (no estÃ¡ en updateCabecera).
+            // Para INSERT nuevo (idAsiento == 0) se deja vacÃ­o para que guardarAsiento
+            // auto-genere un nÃºmero Ãºnico con el prefijo VE-, evitando duplicados cuando
+            // el asiento anterior fue anulado y tenÃ­a el mismo "VF-<factura>".
             'numero_comprobante' => '',
             'concepto'         => "Factura # " . $numFactura . " - Cliente: " . $clienteNombre,
             'estado'           => 'contabilizado',

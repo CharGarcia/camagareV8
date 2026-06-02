@@ -343,6 +343,11 @@ class SuscripcionesController extends BaseModuloController
     public function generarFacturasManualAjax(): void
     {
         $this->requireCrear();
+        set_error_handler(function($errno, $errstr, $errfile, $errline) {
+            file_put_contents('debug_warnings.txt', "[$errno] $errstr in $errfile on line $errline\n", FILE_APPEND);
+            return false; // let it continue
+        });
+
         header('Content-Type: application/json');
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -418,7 +423,7 @@ class SuscripcionesController extends BaseModuloController
                 $meses  = (int) ($susc['periodicidad_meses'] ?? 1);
                 
                 try {
-                    $detalle = $suscRepo->getDetalleParaCobro($idSusc);
+                    $detalle = $suscRepo->getDetalle($idSusc);
                     $detallesFactura = [];
                     $totalSinImp     = 0.0;
                     $totalIva        = 0.0;
@@ -430,13 +435,17 @@ class SuscripcionesController extends BaseModuloController
                         $totalIva    += $iva;
 
                         $descripcionItem = $det['descripcion'] ?? $det['nombre_producto'];
+
+                        $infoAdicionalItem = null;
                         if (!empty($textoItem)) {
-                            $descripcionItem .= ' - ' . $textoItem;
+                            $infoAdicionalItem = $textoItem;
                         }
 
                         $detallesFactura[] = [
                             'id_producto'               => $det['id_producto'],
+                            'codigo_principal'          => $det['codigo_producto'] ?? '000',
                             'descripcion'               => $descripcionItem,
+                            'info_adicional'            => $infoAdicionalItem,
                             'cantidad'                  => $det['cantidad'],
                             'precio_unitario'           => $det['precio_unitario'],
                             'descuento'                 => 0,
@@ -463,11 +472,9 @@ class SuscripcionesController extends BaseModuloController
                         (int) $estabConfig['id_punto_emision'],
                         'Facturas de venta'
                     );
-                    $secuencial = $secRes['secuencial'];
+                    $secuencial = $secRes['formateado'];
 
-                    $infoAdicional = [
-                        ['nombre' => 'Suscripción', 'valor' => "Periodicidad: " . ($susc['periodicidad_nombre'] ?? '')]
-                    ];
+                    $infoAdicional = [];
                     if (!empty($infoConcepto) && !empty($infoDetalle)) {
                         $infoAdicional[] = ['nombre' => $infoConcepto, 'valor' => $infoDetalle];
                     }
@@ -519,17 +526,18 @@ class SuscripcionesController extends BaseModuloController
             }
 
             if ($generadas === 0) {
-                echo json_encode(['ok' => false, 'mensaje' => 'No se pudieron generar facturas. Detalles: ' . implode(' | ', $errorMsgs)]);
+                file_put_contents('debug_errors.txt', print_r($errorMsgs, true));
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudieron generar facturas. Detalles: ' . implode(' | ', $errorMsgs)], JSON_INVALID_UTF8_SUBSTITUTE);
                 return;
             }
 
             if ($generadas > 0) {
-                echo json_encode(['ok' => true, 'mensaje' => "Se generaron $generadas facturas correctamente." . ($errores > 0 ? " (Hubo $errores errores)." : '')]);
+                echo json_encode(['ok' => true, 'mensaje' => "Se generaron $generadas facturas correctamente." . ($errores > 0 ? " (Hubo $errores errores)." : '')], JSON_INVALID_UTF8_SUBSTITUTE);
             } else {
-                echo json_encode(['ok' => false, 'mensaje' => 'No se pudieron generar facturas. Revise los errores en el servidor.']);
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudieron generar facturas. Revise los errores en el servidor.'], JSON_INVALID_UTF8_SUBSTITUTE);
             }
         } catch (\Throwable $e) {
-            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
         }
     }
 }

@@ -2664,11 +2664,11 @@ $perm = $permOriginal;
 
     async function fvEliminarLogSri(idLog) {
         const confirm = await Swal.fire({
-            title: '¿Eliminar registro?',
-            text: 'Se eliminará este registro del historial de envíos (solo disponible en ambiente de pruebas).',
+            title: '��¿Eliminar registro?',
+            text: 'Se eliminara este registro del historial de envios (solo disponible en ambiente de pruebas).',
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonText: 'Sí, eliminar',
+            confirmButtonText: '<i class="bi bi-trash me-2"></i>Si, eliminar',
             cancelButtonText: 'Cancelar',
             confirmButtonColor: '#dc3545',
         });
@@ -4701,13 +4701,13 @@ $perm = $permOriginal;
         if (!FV_ID_ACTIVO) return;
 
         const result = await Swal.fire({
-            title: 'Â¿EstÃ¡s seguro?',
-            text: "Esta acciÃ³n eliminarÃ¡ el borrador permanentemente y no se puede deshacer.",
+            title: '¿Estas seguro?',
+            text: "Esta accion eliminara el borrador permanentemente y no se puede deshacer.",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',
             cancelButtonColor: '#6c757d',
-            confirmButtonText: '<i class="bi bi-trash me-2"></i>SÃ­, eliminar',
+            confirmButtonText: '<i class="bi bi-trash me-2"></i>Si, eliminar',
             cancelButtonText: 'Cancelar',
             reverseButtons: true,
             focusCancel: true
