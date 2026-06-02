@@ -33,26 +33,18 @@ class DocumentosHandler extends BaseHandler
             return ['registros' => 0, 'mensaje' => 'El envío automático al SRI por ahora solo está disponible para Facturas de venta.'];
         }
 
-        // estado_sri es la columna que controla el ciclo de envío al SRI
-        $hasCol = $this->db->query(
-            "SELECT 1 FROM information_schema.columns
-             WHERE table_name='ventas_cabecera' AND column_name='estado_sri' AND table_schema='public'"
-        )->fetchColumn();
-        if (!$hasCol) {
-            return ['registros' => 0, 'mensaje' => 'La columna estado_sri no existe en ventas_cabecera. Ejecute la migración de firma electrónica.'];
-        }
-
         $lote        = max(10, (int)($p['lote_interno'] ?? 50));
         $estabFilter = $idEstablecimiento !== null ? "AND id_establecimiento = {$idEstablecimiento}" : '';
 
-        // Keyset por id: termina aunque queden documentos en 'error'
+        // Facturas pendientes de autorizar = estado 'borrador'.
+        // Al autorizar, SriEnvioService cambia estado a 'autorizado' (sale del filtro).
+        // Las que fallan quedan en 'borrador'; el keyset por id evita reprocesarlas en esta corrida.
         $stmt = $this->db->prepare("
             SELECT id
             FROM ventas_cabecera
             WHERE eliminado = false
               AND id_empresa = :id_empresa
-              AND estado IN ('borrador', 'autorizado')
-              AND estado_sri IN ('pendiente', 'en_procesamiento', 'error')
+              AND estado = 'borrador'
               AND id > :ultimo_id
               {$estabFilter}
             ORDER BY id ASC
@@ -76,9 +68,6 @@ class DocumentosHandler extends BaseHandler
                 $id       = (int) $doc['id'];
                 $ultimoId = $id;
                 try {
-                    // Marcar como "enviando" evita doble procesamiento en ejecuciones paralelas
-                    $this->db->prepare("UPDATE ventas_cabecera SET estado_sri = 'enviando' WHERE id = ?")->execute([$id]);
-
                     $r      = $svc->enviarFacturaVenta($id, $idEmpresa, self::USUARIO_SISTEMA);
                     $estado = $r['estado'] ?? 'error';
 
@@ -89,15 +78,12 @@ class DocumentosHandler extends BaseHandler
                     }
                 } catch (\Throwable $e) {
                     $errores++;
-                    try {
-                        $this->db->prepare("UPDATE ventas_cabecera SET estado_sri = 'error' WHERE id = ?")->execute([$id]);
-                    } catch (\Throwable) {}
                 }
             }
         } while (count($docs) === $lote);
 
         $total = $autorizadas + $errores;
-        $msg   = "Se procesaron {$total} factura(s): {$autorizadas} autorizada(s), {$errores} con error.";
+        $msg   = "Se procesaron {$total} factura(s): {$autorizadas} autorizada(s), {$errores} no autorizada(s)/con error.";
         return ['registros' => $autorizadas, 'mensaje' => $msg];
     }
 
