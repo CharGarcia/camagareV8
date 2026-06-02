@@ -41,9 +41,10 @@ class SuscripcionFacturacionService
         array $extras = [],
         string $periodoFecha = ''
     ): array {
-        $textoItem    = $this->reemplazarPlaceholders(trim($extras['texto_item']   ?? ''), $periodoFecha);
-        $infoConcepto = $this->reemplazarPlaceholders(trim($extras['info_concepto'] ?? ''), $periodoFecha);
-        $infoDetalle  = $this->reemplazarPlaceholders(trim($extras['info_detalle']  ?? ''), $periodoFecha);
+        $reemplazos   = $this->construirReemplazos($periodoFecha, (int)($susc['periodicidad_meses'] ?? 1), (string)($susc['periodicidad_codigo'] ?? ''));
+        $textoItem    = strtr(trim($extras['texto_item']   ?? ''), $reemplazos);
+        $infoConcepto = strtr(trim($extras['info_concepto'] ?? ''), $reemplazos);
+        $infoDetalle  = strtr(trim($extras['info_detalle']  ?? ''), $reemplazos);
 
         $detallesFactura = [];
         $totalSinImp     = 0.0;
@@ -124,37 +125,49 @@ class SuscripcionFacturacionService
     ];
 
     /**
-     * Reemplaza placeholders dinámicos en los textos según el período facturado.
-     * Placeholders disponibles:
-     *   {mes}      → nombre del mes (ej: junio)
-     *   {MES}      → nombre del mes en mayúsculas (ej: JUNIO)
-     *   {mes_num}  → número de mes con cero (ej: 06)
-     *   {anio}     → año (ej: 2026)
-     *   {mes_anio} → mes y año (ej: junio 2026)
-     *   {fecha}    → fecha del período en formato d-m-Y
+     * Construye el mapa de placeholders para el período facturado y el anterior.
+     *
+     * Período actual (el que se factura por adelantado):
+     *   {mes} {MES} {mes_num} {anio}/{año} {mes_anio} {fecha}
+     * Período anterior (un período atrás según la periodicidad):
+     *   {mes_ant} {MES_ANT} {mes_num_ant} {anio_ant}/{año_ant} {mes_anio_ant} {fecha_ant}
      */
-    private function reemplazarPlaceholders(string $texto, string $periodoFecha): string
+    private function construirReemplazos(string $periodoFecha, int $meses, string $codigo): array
     {
-        if ($texto === '' || $periodoFecha === '' || !str_contains($texto, '{')) {
-            return $texto;
+        if ($periodoFecha === '') {
+            return [];
         }
         try {
             $dt = new \DateTime($periodoFecha);
         } catch (\Throwable) {
-            return $texto;
+            return [];
         }
-        $mesNum  = (int)$dt->format('n');
-        $mes     = self::MESES[$mesNum] ?? '';
-        $anio    = $dt->format('Y');
 
-        return strtr($texto, [
-            '{mes}'      => $mes,
-            '{MES}'      => mb_strtoupper($mes, 'UTF-8'),
-            '{mes_num}'  => $dt->format('m'),
-            '{anio}'     => $anio,
-            '{año}'      => $anio,
-            '{mes_anio}' => trim("{$mes} {$anio}"),
-            '{fecha}'    => $dt->format('d-m-Y'),
-        ]);
+        // Período anterior: resta una periodicidad (inverso de calcularProximoCobro)
+        $dtAnt = clone $dt;
+        if     ($codigo === 'DIARIO')    { $dtAnt->modify('-1 day');   }
+        elseif ($codigo === 'SEMANAL')   { $dtAnt->modify('-7 days');  }
+        elseif ($codigo === 'QUINCENAL') { $dtAnt->modify('-15 days'); }
+        else                             { $dtAnt->modify('-' . max(1, $meses) . ' months'); }
+
+        return array_merge(
+            $this->mapaPeriodo($dt,    ''),
+            $this->mapaPeriodo($dtAnt, '_ant')
+        );
+    }
+
+    private function mapaPeriodo(\DateTime $dt, string $suf): array
+    {
+        $mes  = self::MESES[(int)$dt->format('n')] ?? '';
+        $anio = $dt->format('Y');
+        return [
+            '{mes' . $suf . '}'      => $mes,
+            '{MES' . $suf . '}'      => mb_strtoupper($mes, 'UTF-8'),
+            '{mes_num' . $suf . '}'  => $dt->format('m'),
+            '{anio' . $suf . '}'     => $anio,
+            '{año' . $suf . '}'      => $anio,
+            '{mes_anio' . $suf . '}' => trim("{$mes} {$anio}"),
+            '{fecha' . $suf . '}'    => $dt->format('d-m-Y'),
+        ];
     }
 }
