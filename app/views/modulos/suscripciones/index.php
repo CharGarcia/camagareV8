@@ -146,7 +146,7 @@ $estadoClases = [
                 </thead>
                 <tbody id="tbodySusc">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="9" class="text-center py-5 text-muted">No se encontraron suscripciones.</td></tr>
+                        <tr><td colspan="10" class="text-center py-5 text-muted">No se encontraron suscripciones.</td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <?php
