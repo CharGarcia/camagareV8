@@ -94,11 +94,12 @@ $estadoClases = [
                     'nombre_cliente'         => 'Cliente',
                     'identificacion_cliente' => 'RUC/Cédula',
                     'nombre_periodicidad'    => 'Periodicidad',
+                    'tipo_comprobante'       => 'Comprobante',
                     'forma_cobro'            => 'Cobro',
                     'proximo_cobro'          => 'Próx. Cobro',
                     'fecha_inicio'           => 'Inicio',
                     'total_items'            => 'Ítems',
-                    'total_pagos'            => 'Pagos',
+                    'fecha_fin'              => 'Fin',
                     'estado'                 => 'Estado'
                 ];
                 ?>
@@ -131,11 +132,12 @@ $estadoClases = [
                         <th class="ps-3 sortable-header" role="button" data-sort="nombre_cliente" data-col="nombre_cliente">Cliente <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th data-col="identificacion_cliente">RUC/Cédula</th>
                         <th class="sortable-header" role="button" data-sort="nombre_periodicidad" data-col="nombre_periodicidad">Periodicidad <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" role="button" data-sort="tipo_comprobante" data-col="tipo_comprobante">Comprobante <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header" role="button" data-sort="forma_cobro" data-col="forma_cobro">Cobro <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header" role="button" data-sort="proximo_cobro" data-col="proximo_cobro">Próx. Cobro <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header" role="button" data-sort="fecha_inicio" data-col="fecha_inicio">Inicio <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center" data-col="total_items">Ítems</th>
-                        <th class="text-center" data-col="total_pagos">Pagos</th>
+                        <th class="text-center sortable-header" role="button" data-sort="fecha_fin" data-col="fecha_fin">Fin <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
@@ -149,6 +151,7 @@ $estadoClases = [
                             $lbl        = ucfirst($r['estado'] ?? 'activo');
                             $proxCobro  = !empty($r['proximo_cobro']) ? date('d-m-Y', strtotime($r['proximo_cobro'])) : '-';
                             $inicio     = !empty($r['fecha_inicio'])  ? date('d-m-Y', strtotime($r['fecha_inicio']))  : '-';
+                            $fin        = !empty($r['fecha_fin'])     ? date('d-m-Y', strtotime($r['fecha_fin']))     : '-';
                             $iconCobro  = ($r['forma_cobro'] ?? '') === 'tarjeta'
                                 ? '<i class="bi bi-credit-card text-primary" title="Tarjeta"></i>'
                                 : '<i class="bi bi-file-text text-muted" title="Crédito"></i>';
@@ -160,6 +163,7 @@ $estadoClases = [
                                 <td class="ps-3 fw-medium" data-col="nombre_cliente"><?= htmlspecialchars($r['nombre_cliente'] ?? '') ?></td>
                                 <td data-col="identificacion_cliente"><small class="text-muted"><?= htmlspecialchars($r['identificacion_cliente'] ?? '') ?></small></td>
                                 <td data-col="nombre_periodicidad"><?= htmlspecialchars($r['nombre_periodicidad'] ?? '-') ?></td>
+                                <td class="text-center" data-col="tipo_comprobante"><small class="text-muted"><?= htmlspecialchars(ucwords(str_replace('_', ' ', $r['tipo_comprobante'] ?? 'Factura'))) ?></small></td>
                                 <td class="text-center" data-col="forma_cobro"><?= $iconCobro ?> <?= ucfirst($r['forma_cobro'] ?? '') ?></td>
                                 <td class="text-center fw-medium" data-col="proximo_cobro"><?= $proxCobro ?></td>
                                 <td class="text-center" data-col="fecha_inicio"><?= $inicio ?></td>
@@ -168,7 +172,7 @@ $estadoClases = [
                                         <?= $totalItems ?> ítem<?= $totalItems !== 1 ? 's' : '' ?>
                                     </span>
                                 </td>
-                                <td class="text-center" data-col="total_pagos"><?= (int)($r['total_pagos'] ?? 0) ?></td>
+                                <td class="text-center" data-col="fecha_fin"><?= $fin ?></td>
                                 <td class="text-center pe-3" data-col="estado">
                                     <span class="badge bg-<?= $cls ?> bg-opacity-10 text-<?= $cls ?> border border-<?= $cls ?> border-opacity-25"><?= $lbl ?></span>
                                 </td>
@@ -195,6 +199,19 @@ $estadoClases = [
     window.currentPage = <?= $page ?>;
     let timer;
 
+    const updateIcons = () => {
+        document.querySelectorAll('.sortable-header').forEach(th => {
+            const icon = th.querySelector('i');
+            const field = th.dataset.sort;
+            if (field === window.currentSort) {
+                icon.className = (window.currentDir.toLowerCase() === 'asc') ? 'bi bi-sort-alpha-down text-primary ms-1' : 'bi bi-sort-alpha-up text-primary ms-1';
+            } else {
+                icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
+            }
+        });
+    };
+    updateIcons();
+
     window.cambiarPaginaAjax = n => window.fetchSearch(n);
 
     window.fetchSearch = async (page = 1) => {
@@ -211,15 +228,7 @@ $estadoClases = [
                 if (document.getElementById('btnExportPdf')) document.getElementById('btnExportPdf').href = data.pdf_url;
                 if (document.getElementById('btnExportExcel')) document.getElementById('btnExportExcel').href = data.excel_url;
 
-                document.querySelectorAll('.sortable-header').forEach(th => {
-                    const icon = th.querySelector('i');
-                    const field = th.dataset.sort;
-                    if (field === window.currentSort) {
-                        icon.className = (window.currentDir.toLowerCase() === 'asc') ? 'bi bi-sort-alpha-down text-primary ms-1' : 'bi bi-sort-alpha-up text-primary ms-1';
-                    } else {
-                        icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
-                    }
-                });
+                updateIcons();
             }
         } catch (e) { console.error(e); }
     };

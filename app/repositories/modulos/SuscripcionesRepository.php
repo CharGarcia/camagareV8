@@ -8,7 +8,7 @@ use PDO;
 
 class SuscripcionesRepository extends BaseRepository
 {
-    public const COLUMNAS_ORDEN = ['nombre_cliente', 'nombre_periodicidad', 'proximo_cobro', 'forma_cobro', 'estado', 'created_at'];
+    public const COLUMNAS_ORDEN = ['nombre_cliente', 'nombre_periodicidad', 'tipo_comprobante', 'forma_cobro', 'proximo_cobro', 'fecha_inicio', 'fecha_fin', 'estado', 'created_at'];
 
     public function __construct()
     {
@@ -96,13 +96,13 @@ class SuscripcionesRepository extends BaseRepository
         $sql = "INSERT INTO {$this->table}
                     (id_empresa, id_cliente, id_periodicidad,
                      fecha_inicio, fecha_fin, proximo_cobro,
-                     forma_cobro, estado,
+                     forma_cobro, estado, tipo_comprobante,
                      kushki_token, kushki_card_last4, kushki_card_brand, kushki_card_name,
                      observaciones, created_by, created_at, eliminado)
                 VALUES
                     (:id_empresa, :id_cliente, :id_periodicidad,
                      :fecha_inicio, :fecha_fin, :proximo_cobro,
-                     :forma_cobro, :estado,
+                     :forma_cobro, :estado, :tipo_comprobante,
                      :kushki_token, :kushki_card_last4, :kushki_card_brand, :kushki_card_name,
                      :observaciones, :created_by, CURRENT_TIMESTAMP, false)";
         $st = $this->db->prepare($sql);
@@ -111,10 +111,11 @@ class SuscripcionesRepository extends BaseRepository
             ':id_cliente'        => $data['id_cliente'],
             ':id_periodicidad'   => $data['id_periodicidad'],
             ':fecha_inicio'      => $data['fecha_inicio'],
-            ':fecha_fin'         => $data['fecha_fin'] ?? null,
+            ':fecha_fin'         => empty($data['fecha_fin']) ? null : $data['fecha_fin'],
             ':proximo_cobro'     => $data['proximo_cobro'],
             ':forma_cobro'       => $data['forma_cobro'] ?? 'credito',
             ':estado'            => $data['estado'] ?? 'activo',
+            ':tipo_comprobante'  => $data['tipo_comprobante'] ?? 'factura',
             ':kushki_token'      => $data['kushki_token'] ?? null,
             ':kushki_card_last4' => $data['kushki_card_last4'] ?? null,
             ':kushki_card_brand' => $data['kushki_card_brand'] ?? null,
@@ -135,6 +136,7 @@ class SuscripcionesRepository extends BaseRepository
                     proximo_cobro   = :proximo_cobro,
                     forma_cobro     = :forma_cobro,
                     estado          = :estado,
+                    tipo_comprobante= :tipo_comprobante,
                     observaciones   = :observaciones,
                     updated_by      = :updated_by,
                     updated_at      = CURRENT_TIMESTAMP
@@ -144,10 +146,11 @@ class SuscripcionesRepository extends BaseRepository
             ':id_cliente'      => $data['id_cliente'],
             ':id_periodicidad' => $data['id_periodicidad'],
             ':fecha_inicio'    => $data['fecha_inicio'],
-            ':fecha_fin'       => $data['fecha_fin'] ?? null,
+            ':fecha_fin'       => empty($data['fecha_fin']) ? null : $data['fecha_fin'],
             ':proximo_cobro'   => $data['proximo_cobro'],
             ':forma_cobro'     => $data['forma_cobro'],
             ':estado'          => $data['estado'],
+            ':tipo_comprobante'=> $data['tipo_comprobante'] ?? 'factura',
             ':observaciones'   => $data['observaciones'] ?? null,
             ':updated_by'      => $data['id_usuario'],
             ':id'              => $id,
@@ -203,7 +206,7 @@ class SuscripcionesRepository extends BaseRepository
 
     public function getDetalle(int $idSuscripcion): array
     {
-        $sql = "SELECT sd.*, p.nombre AS nombre_producto, p.codigo_principal AS codigo_producto
+        $sql = "SELECT sd.*, p.nombre AS nombre_producto, p.codigo AS codigo_producto
                 FROM suscripciones_detalle sd
                 LEFT JOIN productos p ON p.id = sd.id_producto
                 WHERE sd.id_suscripcion = :id AND sd.eliminado = false
@@ -343,6 +346,7 @@ class SuscripcionesRepository extends BaseRepository
                        c.identificacion AS cliente_identificacion,
                        c.tipo_id        AS cliente_tipo_id,
                        per.meses        AS periodicidad_meses,
+                       per.codigo       AS periodicidad_codigo,
                        per.nombre       AS periodicidad_nombre
                 FROM suscripciones s
                 LEFT JOIN clientes c   ON c.id = s.id_cliente

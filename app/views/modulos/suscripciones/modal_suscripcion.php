@@ -41,34 +41,33 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                 <div class="modal-header bg-light py-3">
                     <h5 class="modal-title fw-bold">
                         <i class="bi bi-arrow-repeat text-primary me-2"></i>
-                        <span id="tituloModalSusc">Nueva</span>
+                        <span id="tituloModalSusc">Nueva Suscripción</span>
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
 
                 <div class="modal-body">
-                    <div id="suscAlert" class="alert d-none mx-3 mt-3 mb-0 py-2 small shadow-sm border-0"></div>
                     <input type="hidden" id="susc_id" name="id" value="">
 
                     <!-- Pestañas -->
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 flex-nowrap tab-pestaña" role="tablist">
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link active py-2 small" id="susc-tab-servicios-btn" data-bs-toggle="tab" href="#pane-susc-servicios" role="tab" title="Cliente y Servicios">
-                                    <i class="bi bi-receipt me-1"></i>Cliente y Servicios
+                                <a class="nav-link active py-2 small" id="susc-tab-servicios-btn" data-bs-toggle="tab" href="#pane-susc-servicios" role="tab" title="Detalle suscripción">
+                                    <i class="bi bi-receipt me-1"></i>Detalle suscripción
                                 </a>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <a class="nav-link py-2 small" id="susc-tab-cobro-btn" data-bs-toggle="tab" href="#pane-susc-cobro" role="tab" title="Cobro">
-                                    <i class="bi bi-credit-card me-1"></i>Cobro
+                                <a class="nav-link py-2 small" id="susc-tab-cobro-btn" data-bs-toggle="tab" href="#pane-susc-cobro" role="tab" title="Forma de pago">
+                                    <i class="bi bi-credit-card me-1"></i>Forma de pago
                                 </a>
                             </li>
                         </ul>
                         <div class="pb-1 flex-shrink-0">
                             <?php
                             $pestanasConfigSusc = [
-                                'pane-susc-servicios' => 'Cliente y Servicios',
-                                'pane-susc-cobro'     => 'Cobro',
+                                'pane-susc-servicios' => 'Detalle suscripción',
+                                'pane-susc-cobro'     => 'Forma de pago',
                             ];
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigSusc, $vistaConfigSusc ?? [], 'suscripciones');
                             ?>
@@ -89,7 +88,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                     <div class="col-12">
                                         <div class="p-2 border rounded-3 bg-light bg-opacity-10">
                                             <div class="row g-2 align-items-center">
-                                                <div class="col-md-9 position-relative">
+                                                <div class="col-md-12 position-relative">
                                                     <div class="input-group input-group-sm rounded-pill overflow-hidden border bg-white">
                                                         <span class="input-group-text bg-white border-0 text-primary"><i class="bi bi-search"></i></span>
                                                         <input type="text" class="form-control border-0 px-1"
@@ -102,12 +101,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                                          class="list-group shadow dropdown-predictivo position-absolute d-none"
                                                          style="z-index:1090; width:100%; max-height:250px; overflow-y:auto; top:35px; left:0;"></div>
                                                 </div>
-                                                <div class="col-md-3">
-                                                    <select class="form-select form-select-sm border-0 bg-transparent text-muted fw-bold" name="tipo_documento_emision" id="susc_tipo_documento_emision">
-                                                        <option value="factura_venta" selected>Factura de Venta</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-12 d-none px-2" id="susc_info_cliente" style="font-size:.72rem; color:#6c757d;">
+                                                <div class="col-12 d-none px-2 mt-1" id="susc_info_cliente" style="font-size:.72rem; color:#6c757d;">
                                                     <span class="fw-bold text-dark border-end pe-2 me-1" id="susc_lbl_cli_ruc"></span>
                                                     <i class="bi bi-envelope me-1"></i><span id="susc_lbl_cli_email"></span>
                                                 </div>
@@ -116,12 +110,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                     </div>
 
                                     <!-- Fechas y periodicidad -->
+                                    <div class="col-md-2">
+                                        <label>Comprobante *</label>
+                                        <select class="form-select form-select-sm" name="tipo_comprobante" id="susc_tipo_comprobante" required>
+                                            <option value="factura">Factura de Venta</option>
+                                        </select>
+                                    </div>
                                     <div class="col-md-3">
                                         <label>Fecha Inicio *</label>
                                         <input type="date" class="form-control form-control-sm" name="fecha_inicio" id="susc_fecha_inicio" required onchange="suscRecalcularProximoCobro()">
                                     </div>
-                                    <div class="col-md-3">
-                                        <label>Fecha Fin <small class="text-muted fw-normal">(opcional)</small></label>
+                                    <div class="col-md-2">
+                                        <label>Fecha Fin <small class="text-muted fw-normal">(opc)</small></label>
                                         <input type="date" class="form-control form-control-sm" name="fecha_fin" id="susc_fecha_fin">
                                     </div>
                                     <div class="col-md-3">
@@ -129,13 +129,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                         <select class="form-select form-select-sm" name="id_periodicidad" id="susc_id_periodicidad" required onchange="suscRecalcularProximoCobro()">
                                             <option value="">- Seleccione -</option>
                                             <?php foreach ($periodicidades ?? [] as $p): ?>
-                                                <option value="<?= $p['id'] ?>" data-meses="<?= $p['meses'] ?>">
+                                                <option value="<?= $p['id'] ?>" data-meses="<?= $p['meses'] ?>" data-codigo="<?= htmlspecialchars($p['codigo'] ?? '') ?>">
                                                     <?= htmlspecialchars($p['nombre']) ?>
                                                 </option>
                                             <?php endforeach; ?>
                                         </select>
                                     </div>
-                                    <div class="col-md-3">
+                                    <div class="col-md-2">
                                         <label>Próximo Cobro</label>
                                         <input type="date" class="form-control form-control-sm" name="proximo_cobro" id="susc_proximo_cobro" required>
                                     </div>
@@ -181,8 +181,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                     </div>
                                 </div>
 
-                                <!-- Totales -->
-                                <div class="row justify-content-end mt-3">
+                                <!-- Totales e Información Adicional -->
+                                <div class="row mt-3 justify-content-between">
+                                    <div class="col-md-4">
+                                        <label>Estado</label>
+                                        <select class="form-select form-select-sm" name="estado" id="susc_estado">
+                                            <option value="activo">Activo</option>
+                                            <option value="pausado">Pausado</option>
+                                            <option value="suspendido">Suspendido</option>
+                                            <option value="cancelado">Cancelado</option>
+                                        </select>
+                                    </div>
                                     <div class="col-md-4">
                                         <div class="bg-white border rounded p-2 shadow-sm" style="font-size:0.75rem;">
                                             <!-- Subtotal General -->
@@ -214,20 +223,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                         <div class="tab-pane fade" id="pane-susc-cobro" role="tabpanel">
                             <div class="p-3">
                                 <div class="row g-3">
-                                    <div class="col-md-6">
+                                    <div class="col-md-12">
                                         <label>Forma de Cobro *</label>
                                         <select class="form-select form-select-sm" name="forma_cobro" id="susc_forma_cobro" required onchange="suscOnFormaCobro()">
                                             <option value="credito">Crédito (pago manual)</option>
                                             <option value="tarjeta">Tarjeta (cobro automático)</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label>Estado</label>
-                                        <select class="form-select form-select-sm" name="estado" id="susc_estado">
-                                            <option value="activo">Activo</option>
-                                            <option value="pausado">Pausado</option>
-                                            <option value="suspendido">Suspendido</option>
-                                            <option value="cancelado">Cancelado</option>
                                         </select>
                                     </div>
                                     <div class="col-12">
@@ -265,9 +265,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                         <?php endif; ?>
                     </div>
                     <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-outline-info btn-sm d-none" id="btnVerPagosSusc" onclick="abrirModalPagos()">
-                            <i class="bi bi-clock-history me-1"></i>Historial Pagos
-                        </button>
+
                         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
                             <i class="fa-solid fa-xmark me-1"></i>Cerrar
                         </button>
@@ -538,9 +536,21 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         const selPer      = document.getElementById('susc_id_periodicidad');
         const opt         = selPer.options[selPer.selectedIndex];
         const meses       = parseInt(opt?.dataset.meses ?? 0);
-        if (!fechaInicio || !meses) return;
+        const codigo      = opt?.dataset.codigo ?? '';
+        
+        if (!fechaInicio || selPer.value === '') return;
         const dt = new Date(fechaInicio + 'T00:00:00');
-        dt.setMonth(dt.getMonth() + meses);
+        
+        if (codigo === 'DIARIO') {
+            dt.setDate(dt.getDate() + 1);
+        } else if (codigo === 'SEMANAL') {
+            dt.setDate(dt.getDate() + 7);
+        } else if (codigo === 'QUINCENAL') {
+            dt.setDate(dt.getDate() + 15);
+        } else {
+            dt.setMonth(dt.getMonth() + meses);
+        }
+        
         document.getElementById('susc_proximo_cobro').value = dt.toISOString().split('T')[0];
     };
 
@@ -555,7 +565,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
     window.suscGuardarTarjeta = async function () {
         const id    = document.getElementById('susc_id').value;
         const token = document.getElementById('susc_kushki_token').value.trim();
-        if (!id || !token) { alert('Primero guarde la suscripción y proporcione el token de Kushki.'); return; }
+        if (!id || !token) { Swal.fire('Atención', 'Primero guarde la suscripción y proporcione el token de Kushki.', 'warning'); return; }
         const fd = new FormData();
         fd.append('id', id);
         fd.append('kushki_token', token);
@@ -565,9 +575,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
             if (d.ok) {
                 document.getElementById('susc_tarjeta_info').textContent = `${d.brand} **** ${d.last4}`;
                 document.getElementById('susc_tarjeta_actual').classList.remove('d-none');
-                alert(d.mensaje);
-            } else { alert(d.mensaje); }
-        } catch (e) { alert('Error de conexión.'); }
+                Swal.fire('Éxito', d.mensaje, 'success');
+            } else { Swal.fire('Error', d.mensaje, 'error'); }
+        } catch (e) { Swal.fire('Error', 'Error de conexión.', 'error'); }
     };
 
     /* ── Limpiar tabla detalle ────────────────────────────────────────────────── */
@@ -609,10 +619,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         document.getElementById('susc_forma_cobro').value       = 'credito';
         document.getElementById('susc_estado').value            = 'activo';
         document.getElementById('susc_observaciones').value     = '';
-        document.getElementById('tituloModalSusc').textContent  = 'Nueva';
+        document.getElementById('tituloModalSusc').textContent  = 'Nueva Suscripción';
         document.getElementById('btnEliminarSusc')?.classList.add('d-none');
         document.getElementById('btnVerPagosSusc')?.classList.add('d-none');
-        document.getElementById('suscAlert').className          = 'alert d-none';
         document.getElementById('susc_tarjeta_actual')?.classList.add('d-none');
         suscLimpiarDetalle();
         suscAgregarFilaVacia();
@@ -628,17 +637,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         const s = JSON.parse(el.dataset.susc);
 
         document.getElementById('susc_id').value                = s.id;
-        document.getElementById('susc_id_periodicidad').value   = s.id_periodicidad ?? '';
-        document.getElementById('susc_fecha_inicio').value      = s.fecha_inicio ?? '';
-        document.getElementById('susc_fecha_fin').value         = s.fecha_fin ?? '';
-        document.getElementById('susc_proximo_cobro').value     = s.proximo_cobro ?? '';
+        if (s.tipo_comprobante) document.getElementById('susc_tipo_comprobante').value = s.tipo_comprobante;
+        if (s.fecha_inicio) document.getElementById('susc_fecha_inicio').value = s.fecha_inicio;
+        if (s.fecha_fin) document.getElementById('susc_fecha_fin').value = s.fecha_fin;
+        if (s.id_periodicidad) document.getElementById('susc_id_periodicidad').value = s.id_periodicidad;
+        if (s.proximo_cobro) document.getElementById('susc_proximo_cobro').value = s.proximo_cobro;
         document.getElementById('susc_forma_cobro').value       = s.forma_cobro ?? 'credito';
         document.getElementById('susc_estado').value            = s.estado ?? 'activo';
         document.getElementById('susc_observaciones').value     = s.observaciones ?? '';
         document.getElementById('tituloModalSusc').textContent  = 'Suscripción: ' + (s.nombre_cliente ?? '');
         document.getElementById('btnEliminarSusc')?.classList.remove('d-none');
-        document.getElementById('btnVerPagosSusc')?.classList.remove('d-none');
-        document.getElementById('suscAlert').className          = 'alert d-none';
+
 
         // Poblar cliente
         if (s.id_cliente) {
@@ -672,24 +681,45 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         const id     = document.getElementById('susc_id').value;
         const method = id ? 'update' : 'store';
         const fd     = new FormData(this);
-        const alerta = document.getElementById('suscAlert');
         const btn    = document.getElementById('btnGuardarSusc');
         btn.disabled = true;
 
         try {
             const r = await fetch(`${urlBase}/${method}`, { method: 'POST', body: fd });
             const d = await r.json();
-            alerta.className   = 'alert mx-3 mt-3 mb-0 py-2 small shadow-sm border-0 ' + (d.ok ? 'alert-success' : 'alert-danger');
-            alerta.textContent = d.mensaje;
+            
             if (d.ok) {
-                setTimeout(() => {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Éxito',
+                    text: d.mensaje,
+                    timer: 1500,
+                    showConfirmButton: false
+                }).then(() => {
                     bootstrap.Modal.getInstance(document.getElementById('modalSusc'))?.hide();
                     window.fetchSearch(window.currentPage ?? 1);
-                }, 800);
+                });
+            } else {
+                Swal.fire('Atención', d.mensaje, 'warning').then(() => {
+                    if (d.focus) {
+                        const el = document.querySelector(d.focus);
+                        if (el) {
+                            const tabPane = el.closest('.tab-pane');
+                            if (tabPane && !tabPane.classList.contains('active')) {
+                                const tabLink = document.querySelector(`a[href="#${tabPane.id}"]`);
+                                if (tabLink) {
+                                    bootstrap.Tab.getOrCreateInstance(tabLink).show();
+                                    setTimeout(() => el.focus(), 250);
+                                    return;
+                                }
+                            }
+                            el.focus();
+                        }
+                    }
+                });
             }
         } catch (err) {
-            alerta.className   = 'alert mx-3 mt-3 mb-0 py-2 small shadow-sm border-0 alert-danger';
-            alerta.textContent = 'Error de conexión.';
+            Swal.fire('Error', 'Error de conexión.', 'error');
         } finally {
             btn.disabled = false;
         }
@@ -698,26 +728,37 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
     /* ── Eliminar ─────────────────────────────────────────────────────────────── */
     window.suscEliminar = async function () {
         const id = document.getElementById('susc_id').value;
-        if (!id || !confirm('¿Eliminar esta suscripción?')) return;
+        if (!id) return;
+        
+        const confirmacion = await Swal.fire({
+            title: '¿Eliminar esta suscripción?',
+            text: "Esta acción no se puede deshacer.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar'
+        });
+        
+        if (!confirmacion.isConfirmed) return;
+        
         const fd = new FormData(); fd.append('id', id);
         try {
             const r = await fetch(urlBase + '/delete', { method: 'POST', body: fd });
             const d = await r.json();
             if (d.ok) {
+                Swal.fire('Eliminado', 'La suscripción ha sido eliminada.', 'success');
                 bootstrap.Modal.getInstance(document.getElementById('modalSusc'))?.hide();
                 window.fetchSearch(1);
-            } else { alert(d.mensaje); }
-        } catch (e) { alert('Error de conexión.'); }
+            } else { Swal.fire('Error', d.mensaje, 'error'); }
+        } catch (e) { Swal.fire('Error', 'Error de conexión.', 'error'); }
     };
 
     // Alias para compatibilidad con modal_pagos
     window.eliminarSusc = window.suscEliminar;
 
-    /* ── Abrir modal pagos ────────────────────────────────────────────────────── */
-    window.abrirModalPagos = function () {
-        const id = document.getElementById('susc_id').value;
-        if (id) window.cargarModalPagos(id);
-    };
+
 
 })();
 </script>

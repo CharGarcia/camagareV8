@@ -196,7 +196,8 @@ foreach ($suscripciones as $susc) {
         ]);
 
         // ── 6. Avanzar próximo cobro ──────────────────────────────────────────
-        $proximoCobro = $suscService->calcularProximoCobro($susc['proximo_cobro'], $meses);
+        $codigo       = $susc['periodicidad_codigo'] ?? '';
+        $proximoCobro = $suscService->calcularProximoCobro($susc['proximo_cobro'], $meses, $codigo);
         $suscRepo->updateProximoCobro($idSusc, $proximoCobro);
         $log('INFO', "  → Próximo cobro: $proximoCobro");
 

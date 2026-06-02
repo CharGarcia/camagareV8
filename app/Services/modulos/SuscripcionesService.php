@@ -181,10 +181,18 @@ class SuscripcionesService
         }
     }
 
-    public function calcularProximoCobro(string $fechaActual, int $meses): string
+    public function calcularProximoCobro(string $fechaActual, int $meses, string $codigo = ''): string
     {
         $dt = new \DateTime($fechaActual);
-        $dt->modify("+{$meses} months");
+        if ($codigo === 'DIARIO') {
+            $dt->modify('+1 day');
+        } elseif ($codigo === 'SEMANAL') {
+            $dt->modify('+7 days');
+        } elseif ($codigo === 'QUINCENAL') {
+            $dt->modify('+15 days');
+        } else {
+            $dt->modify("+{$meses} months");
+        }
         return $dt->format('Y-m-d');
     }
 

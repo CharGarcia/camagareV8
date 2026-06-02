@@ -121,15 +121,17 @@ class SuscripcionesController extends BaseModuloController
             $totalItems = (int) ($r['total_items'] ?? 0);
 
             echo '<tr class="susc-row" role="button" data-susc=\'' . htmlspecialchars(json_encode($r), ENT_QUOTES) . '\' onclick="abrirModalSuscEditar(this)">';
-            echo '<td class="ps-3">' . htmlspecialchars($r['nombre_cliente'] ?? '') . '</td>';
-            echo '<td><small class="text-muted">' . htmlspecialchars($r['identificacion_cliente'] ?? '') . '</small></td>';
-            echo '<td>' . htmlspecialchars($r['nombre_periodicidad'] ?? '—') . '</td>';
-            echo '<td class="text-center">' . $iconoCobro . ' ' . ucfirst($r['forma_cobro'] ?? '') . '</td>';
-            echo '<td class="text-center fw-medium">' . $proxCobro . '</td>';
-            echo '<td class="text-center">' . $fechaIni . '</td>';
-            echo '<td class="text-center"><span class="badge bg-secondary bg-opacity-10 text-secondary border">' . $totalItems . ' ítem' . ($totalItems !== 1 ? 's' : '') . '</span></td>';
-            echo '<td class="text-center">' . (int) ($r['total_pagos'] ?? 0) . '</td>';
-            echo '<td class="text-center pe-3">';
+            echo '<td class="ps-3 fw-medium" data-col="nombre_cliente">' . htmlspecialchars($r['nombre_cliente'] ?? '') . '</td>';
+            echo '<td data-col="identificacion_cliente"><small class="text-muted">' . htmlspecialchars($r['identificacion_cliente'] ?? '') . '</small></td>';
+            echo '<td data-col="nombre_periodicidad">' . htmlspecialchars($r['nombre_periodicidad'] ?? '—') . '</td>';
+            echo '<td class="text-center" data-col="tipo_comprobante"><small class="text-muted">' . htmlspecialchars(ucwords(str_replace('_', ' ', $r['tipo_comprobante'] ?? 'Factura'))) . '</small></td>';
+            echo '<td class="text-center" data-col="forma_cobro">' . $iconoCobro . ' ' . ucfirst($r['forma_cobro'] ?? '') . '</td>';
+            echo '<td class="text-center fw-medium" data-col="proximo_cobro">' . $proxCobro . '</td>';
+            echo '<td class="text-center" data-col="fecha_inicio">' . $fechaIni . '</td>';
+            echo '<td class="text-center" data-col="total_items"><span class="badge bg-secondary bg-opacity-10 text-secondary border">' . $totalItems . ' ítem' . ($totalItems !== 1 ? 's' : '') . '</span></td>';
+            $fin        = !empty($r['fecha_fin'])     ? date('d-m-Y', strtotime($r['fecha_fin']))     : '—';
+            echo '<td class="text-center" data-col="fecha_fin">' . $fin . '</td>';
+            echo '<td class="text-center pe-3" data-col="estado">';
             echo "<span class=\"badge bg-{$cls} bg-opacity-10 text-{$cls} border border-{$cls} border-opacity-25\">{$lbl}</span>";
             echo '</td>';
             echo '</tr>';
@@ -162,7 +164,10 @@ class SuscripcionesController extends BaseModuloController
             $id = $this->service->crear($data);
             echo json_encode(['ok' => true, 'id' => $id, 'mensaje' => 'Suscripción creada correctamente.']);
         } catch (\InvalidArgumentException $e) {
-            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+            $parts = explode('|', $e->getMessage());
+            $mensaje = $parts[0];
+            $focus = $parts[1] ?? '';
+            echo json_encode(['ok' => false, 'mensaje' => $mensaje, 'focus' => $focus]);
         } catch (\Exception $e) {
             echo json_encode(['ok' => false, 'mensaje' => 'Error al crear la suscripción: ' . $e->getMessage()]);
         }
@@ -183,7 +188,10 @@ class SuscripcionesController extends BaseModuloController
             $this->service->actualizar($id, $idEmpresa, $data);
             echo json_encode(['ok' => true, 'mensaje' => 'Suscripción actualizada correctamente.']);
         } catch (\InvalidArgumentException $e) {
-            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+            $parts = explode('|', $e->getMessage());
+            $mensaje = $parts[0];
+            $focus = $parts[1] ?? '';
+            echo json_encode(['ok' => false, 'mensaje' => $mensaje, 'focus' => $focus]);
         } catch (\Exception $e) {
             echo json_encode(['ok' => false, 'mensaje' => 'Error al actualizar: ' . $e->getMessage()]);
         }
