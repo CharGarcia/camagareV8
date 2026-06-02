@@ -13,12 +13,10 @@ namespace App\Services\modulos\Handlers;
  */
 class DocumentosHandler extends BaseHandler
 {
-    private const USUARIO_SISTEMA = 0; // proceso automático (auditoría)
-
-    public function ejecutar(int $idEmpresa, ?int $idEstablecimiento, array $parametros): array
+    public function ejecutar(int $idEmpresa, ?int $idEstablecimiento, int $idUsuario, array $parametros): array
     {
         return match ($this->accion) {
-            'enviar_sri'    => $this->enviarSri($idEmpresa, $idEstablecimiento, $parametros),
+            'enviar_sri'    => $this->enviarSri($idEmpresa, $idEstablecimiento, $idUsuario, $parametros),
             'enviar_correo' => $this->enviarCorreo($idEmpresa, $idEstablecimiento, $parametros),
             default         => throw new \RuntimeException("Acción '{$this->accion}' no implementada en DocumentosHandler."),
         };
@@ -27,7 +25,7 @@ class DocumentosHandler extends BaseHandler
     // ════════════════════════════════════════════════════════════════════════
     //  ENVIAR AL SRI
     // ════════════════════════════════════════════════════════════════════════
-    private function enviarSri(int $idEmpresa, ?int $idEstablecimiento, array $p): array
+    private function enviarSri(int $idEmpresa, ?int $idEstablecimiento, int $idUsuario, array $p): array
     {
         if ($this->modulo !== 'facturas_venta') {
             return ['registros' => 0, 'mensaje' => 'El envío automático al SRI por ahora solo está disponible para Facturas de venta.'];
@@ -68,7 +66,7 @@ class DocumentosHandler extends BaseHandler
                 $id       = (int) $doc['id'];
                 $ultimoId = $id;
                 try {
-                    $r      = $svc->enviarFacturaVenta($id, $idEmpresa, self::USUARIO_SISTEMA);
+                    $r      = $svc->enviarFacturaVenta($id, $idEmpresa, $idUsuario);
                     $estado = $r['estado'] ?? 'error';
 
                     if (($r['ok'] ?? false) || $estado === 'autorizado') {

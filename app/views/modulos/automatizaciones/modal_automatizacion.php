@@ -369,6 +369,25 @@ $urlBaseAuto = BASE_URL . '/modulos/automatizaciones';
                     cont.appendChild(col);
                 });
                 document.getElementById('auto_contenedor_params').style.display = 'block';
+
+                // Poblar selectores dinámicos (ej: serie) vía AJAX
+                campos.filter(c => c.tipo === 'select_dinamico').forEach(c => {
+                    const val = c.key in restore ? restore[c.key] : (c.default ?? '');
+                    fetch(`${UBASE}/getOpcionesParametro?fuente=${encodeURIComponent(c.fuente)}`, { headers: XHRH })
+                        .then(r => r.json())
+                        .then(res => {
+                            const sel = document.querySelector(`#auto_campos_params [data-param="${c.key}"]`);
+                            if (!sel) return;
+                            const ops = res.opciones ?? {};
+                            const keys = Object.keys(ops);
+                            if (!keys.length) {
+                                sel.innerHTML = '<option value="">— No hay series configuradas —</option>';
+                                return;
+                            }
+                            sel.innerHTML = '<option value="">— Seleccione —</option>'
+                                + keys.map(k => `<option value="${k}"${String(k) === String(val) ? ' selected' : ''}>${ops[k]}</option>`).join('');
+                        });
+                });
             });
     };
 
@@ -378,6 +397,12 @@ $urlBaseAuto = BASE_URL . '/modulos/automatizaciones';
             ? `<div class="form-text text-muted mt-1" style="font-size:0.74rem;"><i class="fas fa-circle-info me-1"></i>${c.ayuda}</div>`
             : '';
 
+        if (c.tipo === 'select_dinamico') {
+            return `<label class="form-label small fw-bold mb-1">${c.label}</label>
+                    <select class="form-select form-select-sm" data-param="${c.key}">
+                        <option value="">— Cargando... —</option>
+                    </select>${ayuda}`;
+        }
         if (c.tipo === 'select') {
             const opts = Object.entries(c.opciones ?? {}).map(([k, v]) =>
                 `<option value="${k}"${String(k) === String(val) ? ' selected' : ''}>${v}</option>`

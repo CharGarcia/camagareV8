@@ -232,7 +232,8 @@ class AutomatizacionesService
                 ? json_decode($automatizacion['parametros'], true) ?? []
                 : ($automatizacion['parametros'] ?? []);
 
-            $retorno    = $handler->ejecutar($automatizacion['id_empresa'], $automatizacion['id_establecimiento'], $parametros);
+            $idUsuario  = (int)($automatizacion['created_by'] ?? 0);
+            $retorno    = $handler->ejecutar((int)$automatizacion['id_empresa'], $automatizacion['id_establecimiento'], $idUsuario, $parametros);
             $registros  = $retorno['registros'] ?? 0;
             $mensaje    = $retorno['mensaje'] ?? 'Ejecución completada.';
         } catch (\Throwable $e) {

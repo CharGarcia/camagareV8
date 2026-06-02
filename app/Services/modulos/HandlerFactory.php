@@ -85,11 +85,17 @@ class HandlerFactory
                 'acciones' => [
                     'generar_facturacion' => [
                         'label'       => 'Generar facturación',
-                        'descripcion' => 'Genera las facturas (en borrador) de suscripciones con cobro vencido. El envío al SRI y por correo lo realizan las automatizaciones de Facturas de venta.',
+                        'descripcion' => 'Genera las facturas (en borrador) de las suscripciones con períodos vencidos. El envío al SRI y por correo lo realizan las automatizaciones de Facturas de venta.',
                         'handler'     => Handlers\SuscripcionesHandler::class,
                         'parametros'  => [
-                            ['key' => 'dias_anticipacion', 'label' => 'Generar con anticipación (días)', 'tipo' => 'number', 'default' => 0,
-                             'ayuda' => 'Cuántos días ANTES de la fecha de cobro se genera la factura. Use 0 para generar el mismo día del vencimiento. Ejemplo: 3 generaría las facturas 3 días antes de su cobro.'],
+                            ['key' => 'id_punto_emision', 'label' => 'Serie (punto de emisión)', 'tipo' => 'select_dinamico', 'fuente' => 'series', 'default' => '',
+                             'ayuda' => 'Serie con la que se emitirán las facturas de las suscripciones.'],
+                            ['key' => 'texto_item', 'label' => 'Texto adicional en cada ítem (opcional)', 'tipo' => 'text', 'default' => '',
+                             'ayuda' => 'Texto que aparecerá como información adicional en cada producto de la factura. Déjelo vacío si no aplica.'],
+                            ['key' => 'info_concepto', 'label' => 'Concepto de info. adicional (opcional)', 'tipo' => 'text', 'default' => '',
+                             'ayuda' => 'Nombre del campo de información adicional de la factura. Ej: "Período".'],
+                            ['key' => 'info_detalle', 'label' => 'Detalle de info. adicional (opcional)', 'tipo' => 'text', 'default' => '',
+                             'ayuda' => 'Valor del campo de información adicional. Ej: "Mensualidad". Requiere también el concepto.'],
                         ],
                     ],
                     'enviar_aviso_vencimiento' => [

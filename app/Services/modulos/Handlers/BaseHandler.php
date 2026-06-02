@@ -21,5 +21,5 @@ abstract class BaseHandler
      *
      * @return array{registros: int, mensaje: string}
      */
-    abstract public function ejecutar(int $idEmpresa, ?int $idEstablecimiento, array $parametros): array;
+    abstract public function ejecutar(int $idEmpresa, ?int $idEstablecimiento, int $idUsuario, array $parametros): array;
 }

@@ -364,6 +364,26 @@ class AutomatizacionesController extends BaseModuloController
         $this->json(['ok' => true, 'parametros' => $parametros]);
     }
 
+    /** Opciones para selectores dinámicos de parámetros (AJAX). */
+    public function getOpcionesParametro(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int)$_SESSION['id_empresa'];
+        $fuente    = trim($_GET['fuente'] ?? '');
+
+        $opciones = [];
+        if ($fuente === 'series') {
+            $repo = new \App\repositories\modulos\SuscripcionesRepository();
+            foreach ($repo->getSeriesActivas($idEmpresa) as $s) {
+                $opciones[(string)$s['id_punto_emision']] =
+                    $s['establecimiento_codigo'] . '-' . $s['punto_emision_codigo']
+                    . (!empty($s['establecimiento_nombre']) ? ' (' . $s['establecimiento_nombre'] . ')' : '');
+            }
+        }
+
+        $this->json(['ok' => true, 'opciones' => $opciones]);
+    }
+
     /** Historial de ejecuciones de una automatización (AJAX) */
     public function log(): void
     {

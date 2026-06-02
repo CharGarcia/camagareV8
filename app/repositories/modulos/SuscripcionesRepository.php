@@ -384,6 +384,71 @@ class SuscripcionesRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Suscripciones de una empresa con al menos un período vencido por facturar.
+     * No filtra por periodicidad (el cron procesa todas).
+     * Incluye las que ya pasaron su fecha_fin pero tienen períodos previos pendientes
+     * (proximo_cobro <= fecha_fin). El bucle de "ponerse al día" del handler corta en fecha_fin.
+     */
+    public function getVencidasPorEmpresa(int $idEmpresa): array
+    {
+        $sql = "SELECT s.*,
+                       c.email          AS cliente_email,
+                       c.nombre         AS cliente_nombre,
+                       c.identificacion AS cliente_identificacion,
+                       c.tipo_id        AS cliente_tipo_id,
+                       per.meses        AS periodicidad_meses,
+                       per.codigo       AS periodicidad_codigo,
+                       per.nombre       AS periodicidad_nombre
+                FROM suscripciones s
+                LEFT JOIN clientes c ON c.id = s.id_cliente
+                LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
+                WHERE s.id_empresa = :id_empresa
+                  AND s.estado = 'activo'
+                  AND s.eliminado = false
+                  AND s.proximo_cobro <= CURRENT_DATE
+                  AND (s.fecha_inicio IS NULL OR s.fecha_inicio <= CURRENT_DATE)
+                  AND (s.fecha_fin IS NULL OR s.proximo_cobro <= s.fecha_fin)
+                ORDER BY s.proximo_cobro ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Datos del establecimiento + punto de emisión a partir de la serie elegida. */
+    public function getEstablecimientoPorPunto(int $idEmpresa, int $idPuntoEmision): ?array
+    {
+        $sql = "SELECT ep.*, pe.id AS id_punto_emision, pe.codigo_punto AS punto_emision_codigo
+                FROM empresa_establecimiento ep
+                JOIN empresa_punto_emision pe ON pe.id_establecimiento = ep.id
+                WHERE pe.id = :id_punto AND ep.id_empresa = :id_empresa
+                  AND ep.estado = 'activo' AND pe.eliminado = false AND ep.eliminado = false
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_punto' => $idPuntoEmision, ':id_empresa' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Series (puntos de emisión) activas de la empresa, para el selector del cron. */
+    public function getSeriesActivas(int $idEmpresa): array
+    {
+        $sql = "SELECT pe.id AS id_punto_emision,
+                       ep.codigo AS establecimiento_codigo,
+                       pe.codigo_punto AS punto_emision_codigo,
+                       ep.nombre AS establecimiento_nombre
+                FROM empresa_punto_emision pe
+                JOIN empresa_establecimiento ep ON ep.id = pe.id_establecimiento
+                WHERE ep.id_empresa = :id_empresa
+                  AND ep.estado = 'activo'
+                  AND ep.eliminado = false
+                  AND pe.eliminado = false
+                ORDER BY ep.codigo ASC, pe.codigo_punto ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getDetalleParaCobro(int $idSuscripcion): array
     {
         $sql = "SELECT sd.*
