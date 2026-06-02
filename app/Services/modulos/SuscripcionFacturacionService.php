@@ -27,7 +27,8 @@ class SuscripcionFacturacionService
      * @param array $detalle       Ítems (de SuscripcionesRepository::getDetalle)
      * @param array $estabConfig   Establecimiento + punto de emisión (de getSeriesActivas + datos)
      * @param array $empresaConfig Config de empresa (Empresa::getPorId)
-     * @param array $extras        ['texto_item','info_concepto','info_detalle']
+     * @param array  $extras        ['texto_item','info_concepto','info_detalle']
+     * @param string $periodoFecha  Fecha del período facturado (Y-m-d) para los placeholders
      * @return array{id_factura:int, importe:float}
      */
     public function generarUnPeriodo(
@@ -37,11 +38,12 @@ class SuscripcionFacturacionService
         array $detalle,
         array $estabConfig,
         array $empresaConfig,
-        array $extras = []
+        array $extras = [],
+        string $periodoFecha = ''
     ): array {
-        $textoItem    = trim($extras['texto_item']   ?? '');
-        $infoConcepto = trim($extras['info_concepto'] ?? '');
-        $infoDetalle  = trim($extras['info_detalle']  ?? '');
+        $textoItem    = $this->reemplazarPlaceholders(trim($extras['texto_item']   ?? ''), $periodoFecha);
+        $infoConcepto = $this->reemplazarPlaceholders(trim($extras['info_concepto'] ?? ''), $periodoFecha);
+        $infoDetalle  = $this->reemplazarPlaceholders(trim($extras['info_detalle']  ?? ''), $periodoFecha);
 
         $detallesFactura = [];
         $totalSinImp     = 0.0;
@@ -113,5 +115,46 @@ class SuscripcionFacturacionService
 
         $idFactura = $this->facturaService->crear($facturaData);
         return ['id_factura' => $idFactura, 'importe' => $importe];
+    }
+
+    private const MESES = [
+        1 => 'enero', 2 => 'febrero', 3 => 'marzo', 4 => 'abril',
+        5 => 'mayo', 6 => 'junio', 7 => 'julio', 8 => 'agosto',
+        9 => 'septiembre', 10 => 'octubre', 11 => 'noviembre', 12 => 'diciembre',
+    ];
+
+    /**
+     * Reemplaza placeholders dinámicos en los textos según el período facturado.
+     * Placeholders disponibles:
+     *   {mes}      → nombre del mes (ej: junio)
+     *   {MES}      → nombre del mes en mayúsculas (ej: JUNIO)
+     *   {mes_num}  → número de mes con cero (ej: 06)
+     *   {anio}     → año (ej: 2026)
+     *   {mes_anio} → mes y año (ej: junio 2026)
+     *   {fecha}    → fecha del período en formato d-m-Y
+     */
+    private function reemplazarPlaceholders(string $texto, string $periodoFecha): string
+    {
+        if ($texto === '' || $periodoFecha === '' || !str_contains($texto, '{')) {
+            return $texto;
+        }
+        try {
+            $dt = new \DateTime($periodoFecha);
+        } catch (\Throwable) {
+            return $texto;
+        }
+        $mesNum  = (int)$dt->format('n');
+        $mes     = self::MESES[$mesNum] ?? '';
+        $anio    = $dt->format('Y');
+
+        return strtr($texto, [
+            '{mes}'      => $mes,
+            '{MES}'      => mb_strtoupper($mes, 'UTF-8'),
+            '{mes_num}'  => $dt->format('m'),
+            '{anio}'     => $anio,
+            '{año}'      => $anio,
+            '{mes_anio}' => trim("{$mes} {$anio}"),
+            '{fecha}'    => $dt->format('d-m-Y'),
+        ]);
     }
 }

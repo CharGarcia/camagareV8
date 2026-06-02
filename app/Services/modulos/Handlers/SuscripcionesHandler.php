@@ -95,8 +95,9 @@ class SuscripcionesHandler extends BaseHandler
 
                 try {
                     // 1. Crear la factura (FacturaVentaService maneja su propia transacción)
+                    //    $proximo = fecha del período facturado → alimenta los placeholders {mes}, {anio}, etc.
                     $res = $facturacion->generarUnPeriodo(
-                        $idEmpresa, $idUsuario, $susc, $detalle, $estabConfig, $empresaConfig, $extras
+                        $idEmpresa, $idUsuario, $susc, $detalle, $estabConfig, $empresaConfig, $extras, $proximo
                     );
 
                     // 2. Avanzar el próximo cobro
