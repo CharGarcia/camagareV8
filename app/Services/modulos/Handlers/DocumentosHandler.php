@@ -97,9 +97,11 @@ class DocumentosHandler extends BaseHandler
         }
 
         $reintentar   = !empty($p['reintentar_fallidos']);
+        // NUNCA incluye 'enviado' ni 'no_aplica' → jamás reenvía un correo ya enviado.
+        // NULL se trata como pendiente (facturas autorizadas que nunca se intentaron enviar).
         $estadoFilter = $reintentar
-            ? "AND estado_correo IN ('pendiente', 'error')"
-            : "AND estado_correo = 'pendiente'";
+            ? "AND (estado_correo IN ('pendiente', 'error') OR estado_correo IS NULL)"
+            : "AND (estado_correo = 'pendiente' OR estado_correo IS NULL)";
         $estabFilter  = $idEstablecimiento !== null ? "AND id_establecimiento = {$idEstablecimiento}" : '';
         $lote         = 50;
 
