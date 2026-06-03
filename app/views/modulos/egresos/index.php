@@ -690,6 +690,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('eg-txt-punto').value = o.dataset.codPunto||'';
         if (!id) return;
         fetch(`${EGR_URL}/getSecuencialAjax?id_punto_emision=${id}`).then(r => r.json()).then(res => {
+            // En modo edición (ya existe un ID) NO se recalcula el secuencial:
+            // debe conservarse el secuencial original del documento que se está editando.
+            if (document.getElementById('eg-input-id')?.value) return;
             if (res.ok) document.getElementById('eg-input-secuencial').value = String(res.secuencial).padStart(9,'0');
         }).catch(console.error);
     }
@@ -1256,7 +1259,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('modalEgresoTitulo').textContent = `Ver Egreso #${e.numero_egreso}`;
             document.getElementById('eg-input-id').value = e.id;
             document.getElementById('eg-input-fecha').value = e.fecha_emision;
-            document.getElementById('eg-input-secuencial').value = e.secuencial;
+            // Mostrar la serie (punto) original del documento, sin disparar el cálculo del siguiente secuencial
+            if (e.id_punto_emision) {
+                document.getElementById('eg-select-punto').value = e.id_punto_emision;
+            }
+            document.getElementById('eg-input-secuencial').value = String(e.secuencial ?? '').padStart(9,'0');
             document.getElementById('eg-input-obs').value = e.observaciones || '';
             const comp = e.tipo_egreso || 'GENERAL';
             document.getElementById('eg-input-tipo-egreso').value = comp;

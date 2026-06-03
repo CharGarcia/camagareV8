@@ -658,6 +658,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/getSecuencialAjax?id_punto_emision=${idPunto}`)
             .then(r => r.json())
             .then(res => {
+                // En modo edición (ya existe un ID) NO se recalcula el secuencial:
+                // debe conservarse el secuencial original del documento que se está editando.
+                if (document.getElementById('m-input-id')?.value) return;
                 if (res.ok) {
                     document.getElementById('m-input-secuencial').value = String(res.secuencial).padStart(9, '0');
                 }
@@ -1573,7 +1576,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 
                 document.getElementById('m-input-id').value = ing.id;
                 document.getElementById('m-input-fecha').value = ing.fecha_emision;
-                document.getElementById('m-input-secuencial').value = ing.secuencial;
+                // Mostrar la serie (punto) original del documento, sin disparar el cálculo del siguiente secuencial
+                if (ing.id_punto_emision) {
+                    document.getElementById('m-select-punto').value = ing.id_punto_emision;
+                }
+                document.getElementById('m-input-secuencial').value = String(ing.secuencial ?? '').padStart(9, '0');
 
                 // Poblar "Recibo de"
                 const reciboDe = ing.recibo_de || ing.cliente_nombre || '';
