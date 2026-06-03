@@ -26,10 +26,10 @@ class DashboardService
         return [
             'ventas_mes_actual' => $this->getTotalVentasMes($idEmpresa, 0, $tipoAmbiente),
             'ventas_mes_anterior' => $this->getTotalVentasMes($idEmpresa, 1, $tipoAmbiente),
-            'compras_mes_actual' => $this->getTotalComprasMes($idEmpresa, 0),
-            'compras_mes_anterior' => $this->getTotalComprasMes($idEmpresa, 1),
+            'compras_mes_actual' => $this->getTotalComprasMes($idEmpresa, 0, $tipoAmbiente),
+            'compras_mes_anterior' => $this->getTotalComprasMes($idEmpresa, 1, $tipoAmbiente),
             'facturas_recientes' => $this->getVentasRecientes($idEmpresa, 5, $tipoAmbiente),
-            'compras_recientes' => $this->getComprasRecientes($idEmpresa, 5),
+            'compras_recientes' => $this->getComprasRecientes($idEmpresa, 5, $tipoAmbiente),
             'tendencia_6_meses' => $this->getTendenciaMensual($idEmpresa, 6, $tipoAmbiente),
         ];
     }
@@ -49,16 +49,17 @@ class DashboardService
         return (float) $st->fetchColumn();
     }
 
-    private function getTotalComprasMes(int $idEmpresa, int $mesesAtras): float
+    private function getTotalComprasMes(int $idEmpresa, int $mesesAtras, string $tipoAmbiente = '1'): float
     {
-        $sql = "SELECT COALESCE(SUM(importe_total), 0) as total 
-                FROM compras_cabecera 
-                WHERE id_empresa = :id_empresa 
-                  AND eliminado = false 
+        $sql = "SELECT COALESCE(SUM(importe_total), 0) as total
+                FROM compras_cabecera
+                WHERE id_empresa = :id_empresa
+                  AND eliminado = false
+                  AND COALESCE(tipo_ambiente::text, '1') = :tipo_ambiente
                   AND EXTRACT(MONTH FROM CAST(fecha_emision AS DATE)) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '$mesesAtras months')
                   AND EXTRACT(YEAR FROM CAST(fecha_emision AS DATE)) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '$mesesAtras months')";
         $st = $this->db->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa]);
+        $st->execute([':id_empresa' => $idEmpresa, ':tipo_ambiente' => $tipoAmbiente]);
         return (float) $st->fetchColumn();
     }
 
@@ -80,17 +81,19 @@ class DashboardService
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    private function getComprasRecientes(int $idEmpresa, int $limit): array
+    private function getComprasRecientes(int $idEmpresa, int $limit, string $tipoAmbiente = '1'): array
     {
         $sql = "SELECT p.razon_social as entidad, c.importe_total as total, c.fecha_emision as fecha, 'registrado' as estado,
                        CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) as comprobante
-                FROM compras_cabecera c 
-                INNER JOIN proveedores p ON p.id = c.id_proveedor 
-                WHERE c.id_empresa = :id_empresa AND c.eliminado = false 
-                ORDER BY c.fecha_emision DESC, c.id DESC 
+                FROM compras_cabecera c
+                INNER JOIN proveedores p ON p.id = c.id_proveedor
+                WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+                  AND COALESCE(c.tipo_ambiente::text, '1') = :tipo_ambiente
+                ORDER BY c.fecha_emision DESC, c.id DESC
                 LIMIT :limite";
         $st = $this->db->prepare($sql);
         $st->bindValue(':id_empresa', $idEmpresa, PDO::PARAM_INT);
+        $st->bindValue(':tipo_ambiente', $tipoAmbiente);
         $st->bindValue(':limite', $limit, PDO::PARAM_INT);
         $st->execute();
         return $st->fetchAll(PDO::FETCH_ASSOC);
@@ -122,13 +125,14 @@ class DashboardService
             }
         }
 
-        $sqlCompras = "SELECT TO_CHAR(CAST(fecha_emision AS DATE), 'YYYY-MM') as mes_key, SUM(importe_total) as total 
-                       FROM compras_cabecera 
-                       WHERE id_empresa = :id_empresa AND eliminado = false 
+        $sqlCompras = "SELECT TO_CHAR(CAST(fecha_emision AS DATE), 'YYYY-MM') as mes_key, SUM(importe_total) as total
+                       FROM compras_cabecera
+                       WHERE id_empresa = :id_empresa AND eliminado = false
+                         AND COALESCE(tipo_ambiente::text, '1') = :tipo_ambiente
                          AND CAST(fecha_emision AS DATE) >= CURRENT_DATE - INTERVAL '$meses months'
                        GROUP BY TO_CHAR(CAST(fecha_emision AS DATE), 'YYYY-MM')";
         $stC = $this->db->prepare($sqlCompras);
-        $stC->execute([':id_empresa' => $idEmpresa]);
+        $stC->execute([':id_empresa' => $idEmpresa, ':tipo_ambiente' => $tipoAmbiente]);
         foreach ($stC->fetchAll(PDO::FETCH_ASSOC) as $row) {
             if (isset($mesesData[$row['mes_key']])) {
                 $mesesData[$row['mes_key']]['compras'] = (float)$row['total'];
