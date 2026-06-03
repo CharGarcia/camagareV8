@@ -468,7 +468,7 @@ class FacturaVentaPdfService
                 'coda' => $d['codigo_auxiliar']  ?? '',
                 'cant' => number_format((float)($d['cantidad'] ?? 0), 2),
                 'desc' => $d['descripcion'] ?? '',
-                'deta' => $d['detalle_adicional'] ?? '',
+                'deta' => $d['info_adicional'] ?? ($d['detalle_adicional'] ?? ''),
                 'pu'   => number_format($pu, 2),
                 'sub'  => number_format($subsidio, 2),
                 'pss'  => number_format($pss, 2),

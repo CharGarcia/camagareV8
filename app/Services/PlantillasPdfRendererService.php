@@ -269,7 +269,7 @@ class PlantillasPdfRendererService
         $pdf->SetFont('helvetica', '', $rowSize);
         $pdf->SetTextColor(0, 0, 0);
         $numericKeys = ['cantidad', 'precio_unitario', 'descuento', 'precio_total_sin_impuesto'];
-        $wrapKeys    = ['descripcion', 'detalle_adicional'];
+        $wrapKeys    = ['descripcion', 'detalle_adicional', 'info_adicional'];
         $alt = false;
 
         foreach ($detalles as $d) {
@@ -279,7 +279,10 @@ class PlantillasPdfRendererService
 
             $vals = [];
             foreach ($cols as $col) {
-                $v = (string)($d[$col['key']] ?? '');
+                // La columna "Det. Adicional" se definió con key 'detalle_adicional',
+                // pero el dato se guarda en 'info_adicional'. Resolver con fallback.
+                $key = $col['key'] === 'detalle_adicional' ? 'info_adicional' : $col['key'];
+                $v   = (string)($d[$key] ?? $d[$col['key']] ?? '');
                 if (in_array($col['key'], $numericKeys)) {
                     $v = number_format((float)$v, 2);
                 }
