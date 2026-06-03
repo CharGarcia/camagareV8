@@ -3,7 +3,10 @@
 // Validaciones de completitud por pestaña
 $warnGeneral = empty($empresa['nombre_comercial']) || empty($empresa['tipo']) || empty($empresa['direccion']);
 $warnEmisor = empty($empresa['id_tipo_regimen']) || empty($empresa['tipo_ambiente']);
-$warnCorreo = empty($correo['host']) || empty($correo['correo_emisor']);
+// Con "Usar correo de Camagare" el correo ya está configurado (correo central),
+// por eso solo se marca pendiente cuando se usa correo propio y faltan datos SMTP.
+$tipoCorreoCfg = $correo['tipo_correo'] ?? 'camagare';
+$warnCorreo = ($tipoCorreoCfg === 'propio') && (empty($correo['host']) || empty($correo['correo_emisor']));
 $warnFirma = empty($firmas);
 $estPrincipal = $establecimientos[0] ?? null;
 $warnEst = !$estPrincipal || empty($estPrincipal['nombre']) || empty($estPrincipal['direccion']);
@@ -35,7 +38,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="correo-tab" data-bs-toggle="tab" data-bs-target="#correo" type="button" role="tab">
-                        Configuración Correo <?= $warnCorreo ? $warnIcon : '' ?>
+                        Configuración Correo <span id="warnCorreoIcon" style="display: <?= $warnCorreo ? 'inline' : 'none' ?>;"><?= $warnIcon ?></span>
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -1429,6 +1432,22 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     function toggleSmtpFields() {
         const isPropio = document.getElementById('tipo_propio').checked;
         document.getElementById('smtp_fields_container').style.display = isPropio ? 'block' : 'none';
+        actualizarAvisoCorreo();
+    }
+
+    // El aviso "Configuración pendiente" solo aplica al usar correo propio sin datos SMTP.
+    // Con "Usar correo de Camagare" el correo ya está configurado.
+    function actualizarAvisoCorreo() {
+        const icon = document.getElementById('warnCorreoIcon');
+        if (!icon) return;
+        const isPropio = document.getElementById('tipo_propio').checked;
+        if (!isPropio) {
+            icon.style.display = 'none';
+            return;
+        }
+        const host   = (document.querySelector('[name="host"]')?.value || '').trim();
+        const emisor = (document.querySelector('[name="correo_emisor"]')?.value || '').trim();
+        icon.style.display = (host === '' || emisor === '') ? 'inline' : 'none';
     }
 </script>
 <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
