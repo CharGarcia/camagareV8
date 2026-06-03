@@ -861,7 +861,7 @@ class DocumentoAutomatedRegisterService
         } catch (Exception $e) { $db->rollBack(); throw $e; }
     }
 
-    private function insertarNotaDebito(SimpleXMLElement $xml, int $idEmpresa, int $idCliente, int $idUsuario): int
+    private function insertarNotaDebito(SimpleXMLElement $xml, int $idEmpresa, int $idCliente, int $idUsuario, string $ambiente): int
     {
         $it     = $xml->infoTributaria;
         $info   = $xml->infoNotaDebito;
@@ -921,7 +921,7 @@ class DocumentoAutomatedRegisterService
         } catch (Exception $e) { $db->rollBack(); throw $e; }
     }
 
-    private function insertarRetencionCompra(SimpleXMLElement $xml, int $idEmpresa, int $idProv, int $idUsuario): int
+    private function insertarRetencionCompra(SimpleXMLElement $xml, int $idEmpresa, int $idProv, int $idUsuario, string $ambiente): int
     {
         $it = $xml->infoTributaria;
         $info = isset($xml->infoRetencion) ? $xml->infoRetencion : $xml->infoCompRetencion;
@@ -1157,6 +1157,7 @@ class DocumentoAutomatedRegisterService
             'lineas'         => $lineas,
             'origen'         => 'electronico',
             'detalle_xml'    => $xmlString,
+            'tipo_ambiente'  => $ambiente,
         ];
 
         // Insertar siempre como nuevo registro.
