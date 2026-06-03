@@ -488,7 +488,8 @@ class FacturaVentaPdfService
                 $val = $vals[$col['key']];
                 $pdf->SetXY($xCur, $yRow);
                 if ($col['key'] === 'desc' || $col['key'] === 'deta') {
-                    $pdf->MultiCell($col['w'], $ch, $val, 1, $col['align'], true, 0);
+                    // Alineación horizontal izquierda + vertical centrada (valign 'M')
+                    $pdf->MultiCell($col['w'], $ch, $val, 1, $col['align'], true, 0, '', '', true, 0, false, true, 0, 'M');
                 } else {
                     $pdf->Cell($col['w'], $ch, $val, 1, 0, $col['align'], true);
                 }
