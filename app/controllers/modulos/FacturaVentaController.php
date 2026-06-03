@@ -1287,16 +1287,38 @@ class FacturaVentaController extends BaseModuloController
             $stCobros->execute([$id, $idEmpresa]);
             $cobros = $stCobros->fetchAll(\PDO::FETCH_ASSOC);
 
-            // ── Total Retenciones en Ventas ────────────────────────────────────────
-            // retencion_venta_cabecera tiene id_venta (FK directa) — no hay columna estado
+            // ── Retenciones en Ventas ──────────────────────────────────────────────
             $sqlRet = "SELECT COALESCE(SUM(r.total_renta + r.total_iva + r.total_isd), 0)
                        FROM retencion_venta_cabecera r
-                       WHERE r.id_venta    = ?
-                         AND r.id_empresa  = ?
-                         AND r.eliminado   = false";
+                       WHERE r.id_empresa = ? AND r.eliminado = false
+                         AND (r.id_venta = ? 
+                              OR EXISTS (
+                                  SELECT 1 FROM retencion_venta_detalle rd 
+                                  WHERE rd.id_retencion = r.id 
+                                    AND rd.num_doc_sustento = ?
+                              )
+                             )";
             $stRet = $db->prepare($sqlRet);
-            $stRet->execute([$id, $idEmpresa]);
+            $stRet->execute([$idEmpresa, $id, $numeroFactura]);
             $totalRetenciones = (float) $stRet->fetchColumn();
+
+            $sqlRetDetalle = "SELECT r.id, r.establecimiento, r.punto_emision, r.secuencial,
+                                     r.fecha_emision, r.total_renta, r.total_iva, r.total_isd,
+                                     (r.total_renta + r.total_iva + r.total_isd) AS total_retenido,
+                                     r.origen
+                              FROM retencion_venta_cabecera r
+                              WHERE r.id_empresa = ? AND r.eliminado = false
+                                AND (r.id_venta = ? 
+                                     OR EXISTS (
+                                         SELECT 1 FROM retencion_venta_detalle rd 
+                                         WHERE rd.id_retencion = r.id 
+                                           AND rd.num_doc_sustento = ?
+                                     )
+                                    )
+                              ORDER BY r.fecha_emision DESC";
+            $stRetDetalle = $db->prepare($sqlRetDetalle);
+            $stRetDetalle->execute([$idEmpresa, $id, $numeroFactura]);
+            $retencionesArray = $stRetDetalle->fetchAll(\PDO::FETCH_ASSOC);
 
             // ── Total Notas de Crédito ─────────────────────────────────────────────
             $sqlNC = "SELECT COALESCE(SUM(nc.importe_total), 0)
@@ -1328,6 +1350,7 @@ class FacturaVentaController extends BaseModuloController
                 'factura'           => $factura,
                 'cobros'            => $cobros,
                 'total_retenciones' => round($totalRetenciones, 2),
+                'retenciones'       => $retencionesArray,
                 'total_nc'          => round($totalNC, 2),
                 'pagos_tarjeta'     => $pagosTarjeta,
             ]);

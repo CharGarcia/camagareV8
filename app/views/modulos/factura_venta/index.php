@@ -963,7 +963,28 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                         <!-- Pestaña: Retenciones -->
                         <div class="tab-pane fade p-3" id="m-tab-retenciones" role="tabpanel">
-                            <p class="text-muted small text-center py-4">No hay retenciones asociadas a esta factura.</p>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="fw-bold mb-0 small text-primary"><i class="bi bi-percent me-1"></i> Retenciones asociadas</h6>
+                            </div>
+                            <div class="table-responsive border rounded">
+                                <table class="table table-sm small mb-0 table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="ps-3 py-2">Fecha</th>
+                                            <th>Nº Retención</th>
+                                            <th>Origen</th>
+                                            <th class="text-end pe-3">Total Retenido</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="m-tbody-retenciones">
+                                        <tr>
+                                            <td colspan="4" class="text-center py-5 text-muted">
+                                                <i class="bi bi-info-circle me-1"></i> No se han encontrado retenciones para esta factura.
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
 
                         <!-- Pestaña: Notas de Crédito -->
@@ -5738,6 +5759,32 @@ $perm = $permOriginal;
                 });
             } else if (cardTarjeta) {
                 cardTarjeta.classList.add('d-none');
+            }
+
+            // Retenciones
+            const tbodyRet = document.getElementById('m-tbody-retenciones');
+            if (tbodyRet) {
+                tbodyRet.innerHTML = '';
+                if (jCob.retenciones && jCob.retenciones.length > 0) {
+                    jCob.retenciones.forEach(ret => {
+                        const fEmis = ret.fecha_emision
+                            ? ret.fecha_emision.slice(0, 10).split('-').reverse().join('/')
+                            : '—';
+                        const num = (ret.establecimiento || '000') + '-' + (ret.punto_emision || '000') + '-' + (ret.secuencial || '000000000');
+                        const origen = ret.origen || 'Manual';
+                        const total = parseFloat(ret.total_retenido || 0);
+
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = '<td class="ps-3">' + fEmis + '</td>'
+                            + '<td><code class="text-secondary fw-bold">' + num + '</code></td>'
+                            + '<td>' + origen.toUpperCase() + '</td>'
+                            + '<td class="text-end fw-bold pe-3">$ ' + total.toFixed(2) + '</td>';
+                        tbodyRet.appendChild(tr);
+                    });
+                } else {
+                    tbodyRet.innerHTML = '<tr><td colspan="4" class="text-center py-5 text-muted">'
+                        + '<i class="bi bi-info-circle me-1"></i> No se han encontrado retenciones para esta factura.</td></tr>';
+                }
             }
 
             // Saldo = Factura − Cobrado − Retenciones − Notas de Crédito − Pagos tarjeta aprobados
