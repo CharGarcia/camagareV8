@@ -88,6 +88,13 @@ class SuscripcionFacturacionService
             $infoAdicional[] = ['nombre' => $infoConcepto, 'valor' => $infoDetalle];
         }
 
+        // Correo del cliente: campo fijo, usa el nombre 'correo del cliente' que la vista
+        // reconoce como fila no eliminable (data-tipo="correo-cliente", sin botón borrar).
+        $emailCliente = trim((string)($susc['cliente_email'] ?? ''));
+        if ($emailCliente !== '') {
+            $infoAdicional[] = ['nombre' => 'correo del cliente', 'valor' => $emailCliente];
+        }
+
         $facturaData = [
             'id_empresa'          => $idEmpresa,
             'id_usuario'          => $idUsuario,
@@ -111,7 +118,7 @@ class SuscripcionFacturacionService
             'total_descuento'     => 0,
             'importe_total'       => $importe,
             'propina'             => 0,
-            'observaciones'       => 'Factura generada automáticamente por suscripción.',
+            'observaciones'       => '',
         ];
 
         $idFactura = $this->facturaService->crear($facturaData);

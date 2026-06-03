@@ -479,6 +479,13 @@ class SuscripcionesController extends BaseModuloController
                         $infoAdicional[] = ['nombre' => $infoConcepto, 'valor' => $infoDetalle];
                     }
 
+                    // Correo del cliente: campo fijo, usa el nombre 'correo del cliente' que la vista
+                    // reconoce como fila no eliminable (data-tipo="correo-cliente", sin botón borrar).
+                    $emailCliente = trim((string)($susc['cliente_email'] ?? ''));
+                    if ($emailCliente !== '') {
+                        $infoAdicional[] = ['nombre' => 'correo del cliente', 'valor' => $emailCliente];
+                    }
+
                     $facturaData = [
                         'id_empresa'          => $idEmpresa,
                         'id_usuario'          => (int) $_SESSION['id_usuario'],
@@ -502,7 +509,7 @@ class SuscripcionesController extends BaseModuloController
                         'total_descuento'     => 0,
                         'importe_total'       => $importe,
                         'propina'             => 0,
-                        'observaciones'       => "Factura generada manualmente por suscripción.",
+                        'observaciones'       => '',
                     ];
 
                     $idFactura = $factService->crear($facturaData);

@@ -188,10 +188,11 @@ class IngresoRepository extends BaseRepository
                        (v.importe_total - COALESCE(c.total_cobrado, 0)) AS saldo_pendiente
                 FROM ventas_cabecera v
                 LEFT JOIN cobrado c ON v.id = c.id_referencia_documento
-                WHERE v.id_cliente = :id_cliente 
+                WHERE v.id_cliente = :id_cliente
                   AND v.id_empresa = :id_empresa
                   AND v.estado = 'autorizado' -- Solo facturas vigentes/autorizadas
                   AND v.eliminado = FALSE
+                  AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                   AND (v.importe_total - COALESCE(c.total_cobrado, 0)) > 0.01
                 ORDER BY v.fecha_emision ASC, v.id ASC";
 
@@ -204,13 +205,14 @@ class IngresoRepository extends BaseRepository
                     id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario,
                     fecha_emision, establecimiento, punto_emision, secuencial, numero_ingreso,
                     tipo_ingreso, id_ingreso_concepto, monto_total, observaciones, estado,
-                    recibo_de, id_recibo_cliente,
+                    recibo_de, id_recibo_cliente, tipo_ambiente,
                     created_by, updated_by, created_at, updated_at
                 ) VALUES (
                     :id_empresa, :id_establecimiento, :id_punto_emision, :id_cliente, :id_usuario,
                     :fecha_emision, :establecimiento, :punto_emision, :secuencial, :numero_ingreso,
                     :tipo_ingreso, :id_ingreso_concepto, :monto_total, :observaciones, :estado,
                     :recibo_de, :id_recibo_cliente,
+                    (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa),
                     :id_usuario, :id_usuario, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 ) RETURNING id";
 
@@ -400,6 +402,7 @@ class IngresoRepository extends BaseRepository
                 WHERE v.id_empresa = :id_empresa
                   AND v.estado = 'autorizado'
                   AND v.eliminado = FALSE
+                  AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                   AND (v.importe_total - COALESCE(cb.total_cobrado, 0)) > 0.01
                   $filtroBusq
                 ORDER BY c.nombre ASC, v.fecha_emision ASC, v.id ASC
@@ -412,10 +415,11 @@ class IngresoRepository extends BaseRepository
 
     public function existeSecuencial(int $idEmpresa, int $idEstablecimiento, int $idPunto, string $secuencial, ?int $excluirId = null): bool
     {
-        $sql = "SELECT COUNT(*) FROM ingresos_cabecera 
-                WHERE id_empresa = ? AND id_establecimiento = ? AND id_punto_emision = ? 
-                  AND secuencial = ? AND eliminado = FALSE";
-        $params = [$idEmpresa, $idEstablecimiento, $idPunto, $secuencial];
+        $sql = "SELECT COUNT(*) FROM ingresos_cabecera
+                WHERE id_empresa = ? AND id_establecimiento = ? AND id_punto_emision = ?
+                  AND secuencial = ? AND eliminado = FALSE
+                  AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)";
+        $params = [$idEmpresa, $idEstablecimiento, $idPunto, $secuencial, $idEmpresa];
 
         if ($excluirId !== null) {
             $sql .= " AND id <> ?";

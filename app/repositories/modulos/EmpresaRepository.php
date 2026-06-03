@@ -347,6 +347,60 @@ class EmpresaRepository extends BaseModel
         return $this->execute($sql);
     }
 
+    /**
+     * Devuelve los módulos donde el punto de emisión ya está siendo utilizado en documentos.
+     * Si el resultado no está vacío, el punto no debe poder editarse ni eliminarse.
+     *
+     * IMPORTANTE: la verificación NO filtra por tipo_ambiente, por lo que detecta el uso
+     * en CUALQUIER ambiente (pruebas '1' y producción '2'). Un punto usado en pruebas
+     * tampoco podrá editarse/eliminarse aunque la empresa esté en producción, y viceversa.
+     * Cada módulo se reporta con el/los ambiente(s) donde tiene uso.
+     *
+     * @return string[] Nombres descriptivos de los módulos con uso (incluyendo ambiente)
+     */
+    public function puntoEmisionEnUso(int $idPunto, int $idEmpresa): array
+    {
+        $checks = [
+            'ventas_cabecera'            => 'Facturas de venta',
+            'ingresos_cabecera'          => 'Ingresos',
+            'egresos_cabecera'           => 'Egresos',
+            'notas_credito_cabecera'     => 'Notas de crédito',
+            'guias_remision_cabecera'    => 'Guías de remisión',
+            'liquidaciones_cabecera'     => 'Liquidaciones de compra',
+            'retencion_compra_cabecera'  => 'Retenciones en compras',
+            'ordenes_compra'             => 'Órdenes de compra',
+            'pedidos_cabecera'           => 'Pedidos',
+        ];
+
+        $idp = (int) $idPunto;
+        $ide = (int) $idEmpresa;
+
+        $usos = [];
+        foreach ($checks as $tabla => $nombre) {
+            try {
+                // Agrupa por tipo_ambiente para reportar en qué ambiente(s) hay uso.
+                // No se filtra por ambiente: se considera cualquier ambiente.
+                $res = $this->query(
+                    "SELECT DISTINCT tipo_ambiente FROM {$tabla}
+                     WHERE id_punto_emision = {$idp} AND id_empresa = {$ide} AND eliminado = false"
+                );
+                if (!empty($res)) {
+                    $ambientes = [];
+                    foreach ($res as $row) {
+                        $amb = (string) ($row['tipo_ambiente'] ?? '');
+                        $ambientes[] = $amb === '2' ? 'producción' : ($amb === '1' ? 'pruebas' : 'sin ambiente');
+                    }
+                    $ambientes = array_values(array_unique($ambientes));
+                    $usos[] = $nombre . ' (' . implode(' y ', $ambientes) . ')';
+                }
+            } catch (\Throwable) {
+                // Si la tabla no existe en alguna instalación, se ignora
+            }
+        }
+
+        return $usos;
+    }
+
     public function updateSecuencial(int $idPunto, string $tipo, int $numero, int $idEmpresa): bool
     {
         $id = (int) $idPunto;

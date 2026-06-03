@@ -173,6 +173,7 @@ class EgresoRepository extends BaseRepository
                 WHERE c.id_proveedor = :id_prov
                   AND c.id_empresa = :id_empresa
                   AND c.eliminado = FALSE
+                  AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                   AND (c.importe_total - COALESCE(p.total_pagado, 0)) > 0.01
                 UNION ALL
                 SELECT 'LIQUIDACION' as tipo_doc_bd, l.id,
@@ -188,6 +189,7 @@ class EgresoRepository extends BaseRepository
                   AND l.id_empresa = :id_empresa
                   AND l.eliminado = FALSE
                   AND l.estado = 'autorizado'
+                  AND l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                   AND (l.importe_total - COALESCE(p.total_pagado, 0)) > 0.01
                 ORDER BY fecha_emision ASC";
 
@@ -202,11 +204,13 @@ class EgresoRepository extends BaseRepository
         $sql = "INSERT INTO egresos_cabecera (
                     id_empresa, id_punto_emision, establecimiento, punto_emision, secuencial, numero_egreso,
                     fecha_emision, tipo_egreso, tipo_sujeto, id_proveedor, id_empleado, id_egreso_concepto,
-                    monto_total, observaciones, estado, created_by, updated_by
+                    monto_total, observaciones, estado, tipo_ambiente, created_by, updated_by
                 ) VALUES (
                     :id_empresa, :id_punto, :est, :pto, :sec, :num,
                     :fecha, :tipo_egreso, :tipo_sujeto, :id_prov, :id_emp, :id_conc,
-                    :total, :obs, :estado, :usr, :usr
+                    :total, :obs, :estado,
+                    (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa),
+                    :usr, :usr
                 ) RETURNING id";
 
         $st = $this->db->prepare($sql);
@@ -284,11 +288,12 @@ class EgresoRepository extends BaseRepository
     
     public function existeSecuencial(int $idEmpresa, int $idEstablecimiento, int $idPunto, string $secuencial): bool
     {
-        $sql = "SELECT COUNT(*) FROM egresos_cabecera 
-                WHERE id_empresa = ? AND establecimiento = (SELECT codigo FROM empresa_establecimiento WHERE id = ?) 
-                  AND punto_emision = (SELECT codigo_punto FROM empresa_punto_emision WHERE id = ?) 
-                  AND secuencial = ? AND eliminado = FALSE";
-        return (int) $this->query($sql, [$idEmpresa, $idEstablecimiento, $idPunto, $secuencial])->fetchColumn() > 0;
+        $sql = "SELECT COUNT(*) FROM egresos_cabecera
+                WHERE id_empresa = ? AND establecimiento = (SELECT codigo FROM empresa_establecimiento WHERE id = ?)
+                  AND punto_emision = (SELECT codigo_punto FROM empresa_punto_emision WHERE id = ?)
+                  AND secuencial = ? AND eliminado = FALSE
+                  AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)";
+        return (int) $this->query($sql, [$idEmpresa, $idEstablecimiento, $idPunto, $secuencial, $idEmpresa])->fetchColumn() > 0;
     }
 
     public function buscarDocumentosPendientesEgreso(int $idEmpresa, string $q = '', string $tipo = 'COMPRA', ?int $excluirEgresoId = null): array
@@ -339,6 +344,7 @@ class EgresoRepository extends BaseRepository
                     LEFT  JOIN pagado p ON cb.id = p.id_referencia_documento
                     WHERE cb.id_empresa = :id_empresa
                       AND cb.eliminado = FALSE
+                      AND cb.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                       AND (cb.importe_total - COALESCE(p.total_pagado, 0)) > 0.01
                       $filtroBusq
                     ORDER BY prov.razon_social ASC, cb.fecha_emision ASC
@@ -383,6 +389,7 @@ class EgresoRepository extends BaseRepository
                     WHERE l.id_empresa = :id_empresa
                       AND l.eliminado = FALSE
                       AND l.estado = 'autorizado'
+                      AND l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                       AND (l.importe_total - COALESCE(p.total_pagado, 0)) > 0.01
                       $filtroBusq
                     ORDER BY prov.razon_social ASC, l.fecha_emision ASC

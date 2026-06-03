@@ -350,6 +350,14 @@ class EmpresaService
     {
         $idPunto = (int) ($data['id'] ?? 0);
         if ($idPunto > 0) {
+            // No permitir editar un punto de emisión que ya tiene documentos asociados
+            $usos = $this->repository->puntoEmisionEnUso($idPunto, $idEmpresa);
+            if (!empty($usos)) {
+                throw new \Exception(
+                    'No se puede editar este punto de emisión porque ya está siendo utilizado en: ' .
+                    implode(', ', $usos) . '. Puede crear uno nuevo si lo requiere.'
+                );
+            }
             $ok = $this->repository->updatePuntoEmision($idPunto, $idEmpresa, $data);
             return ['ok' => $ok];
         } else {
@@ -360,6 +368,14 @@ class EmpresaService
 
     public function deletePunto(int $idPunto, int $idEmpresa): bool
     {
+        // No permitir eliminar un punto de emisión que ya tiene documentos asociados
+        $usos = $this->repository->puntoEmisionEnUso($idPunto, $idEmpresa);
+        if (!empty($usos)) {
+            throw new \Exception(
+                'No se puede eliminar este punto de emisión porque ya está siendo utilizado en: ' .
+                implode(', ', $usos) . '.'
+            );
+        }
         return $this->repository->deletePuntoEmision($idPunto, $idEmpresa);
     }
 

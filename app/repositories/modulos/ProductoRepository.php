@@ -552,6 +552,118 @@ class ProductoRepository extends BaseRepository
     }
 
     /**
+     * Devuelve un listado de los módulos donde el producto está siendo utilizado,
+     * filtrando por el ambiente activo de la empresa (tipo_ambiente).
+     *
+     * Regla de entornos separados:
+     *  - Si la empresa está en PRUEBAS (1): solo revisa documentos de pruebas.
+     *  - Si la empresa está en PRODUCCIÓN (2): solo revisa documentos de producción.
+     * Así, un producto usado únicamente en pruebas puede eliminarse cuando la empresa
+     * está en producción (y viceversa).
+     *
+     * Excepciones sin tipo_ambiente (suscripciones, órdenes, pedidos, componentes):
+     * se verifican siempre porque son catálogos que aplican a ambos entornos.
+     */
+    public function obtenerUsos(int $id, int $idEmpresa, ?string $tipoAmbiente = null): array
+    {
+        $usos = [];
+        $amb  = $tipoAmbiente; // '1' pruebas | '2' producción | null = todos
+
+        // Documentos transaccionales con tipo_ambiente
+        $checksAmbiente = [
+            [
+                'sql'    => "SELECT COUNT(*) FROM ventas_detalle vd
+                             JOIN ventas_cabecera vc ON vc.id = vd.id_venta
+                                AND vc.id_empresa = :ide AND vc.eliminado = false
+                                AND (:amb IS NULL OR vc.tipo_ambiente = :amb)
+                             WHERE vd.id_producto = :id",
+                'nombre' => 'Facturas de venta',
+            ],
+            [
+                'sql'    => "SELECT COUNT(*) FROM compras_detalle cd
+                             JOIN compras_cabecera cc ON cc.id = cd.id_compra
+                                AND cc.id_empresa = :ide AND cc.eliminado = false
+                                AND (:amb IS NULL OR cc.tipo_ambiente = :amb)
+                             WHERE cd.id_producto = :id",
+                'nombre' => 'Compras',
+            ],
+            [
+                'sql'    => "SELECT COUNT(*) FROM notas_credito_detalle ncd
+                             JOIN notas_credito_cabecera ncc ON ncc.id = ncd.id_nota_credito
+                                AND ncc.id_empresa = :ide AND ncc.eliminado = false
+                                AND (:amb IS NULL OR ncc.tipo_ambiente = :amb)
+                             WHERE ncd.id_producto = :id",
+                'nombre' => 'Notas de crédito',
+            ],
+            [
+                'sql'    => "SELECT COUNT(*) FROM inventario_kardex
+                             WHERE id_producto = :id AND id_empresa = :ide AND eliminado = false
+                               AND (:amb IS NULL OR tipo_ambiente = :amb)",
+                'nombre' => 'Movimientos de inventario',
+            ],
+        ];
+
+        // Catálogos sin tipo_ambiente: se verifican siempre (aplican a ambos entornos)
+        $checksSinAmbiente = [
+            [
+                'sql'    => "SELECT COUNT(*) FROM suscripciones_detalle sd
+                             WHERE sd.id_producto = :id AND sd.id_empresa = :ide AND sd.eliminado = false",
+                'nombre' => 'Suscripciones',
+            ],
+            [
+                'sql'    => "SELECT COUNT(*) FROM ordenes_compra_detalle od
+                             WHERE od.id_producto = :id AND od.id_empresa = :ide",
+                'nombre' => 'Órdenes de compra',
+            ],
+            [
+                'sql'    => "SELECT COUNT(*) FROM pedidos_detalle pd
+                             JOIN pedidos_cabecera pc ON pc.id = pd.id_pedido
+                                AND pc.id_empresa = :ide AND pc.eliminado = false
+                             WHERE pd.id_producto = :id",
+                'nombre' => 'Pedidos',
+            ],
+            [
+                'sql'    => "SELECT COUNT(*) FROM productos_componentes
+                             WHERE id_componente = :id AND id_empresa = :ide AND eliminado = false",
+                'nombre' => 'Componente de otros productos',
+            ],
+        ];
+
+        foreach ($checksAmbiente as $check) {
+            try {
+                $st = $this->db->prepare($check['sql']);
+                $st->execute([':id' => $id, ':ide' => $idEmpresa, ':amb' => $amb]);
+                if ((int)$st->fetchColumn() > 0) {
+                    $usos[] = $check['nombre'];
+                }
+            } catch (\Throwable) {}
+        }
+
+        foreach ($checksSinAmbiente as $check) {
+            try {
+                $st = $this->db->prepare($check['sql']);
+                $st->execute([':id' => $id, ':ide' => $idEmpresa]);
+                if ((int)$st->fetchColumn() > 0) {
+                    $usos[] = $check['nombre'];
+                }
+            } catch (\Throwable) {}
+        }
+
+        return $usos;
+    }
+
+    /**
+     * Retorna el tipo_ambiente activo de la empresa ('1' pruebas | '2' producción).
+     */
+    public function getTipoAmbienteEmpresa(int $idEmpresa): ?string
+    {
+        $st = $this->db->prepare("SELECT tipo_ambiente FROM empresas WHERE id = ? AND eliminado = false LIMIT 1");
+        $st->execute([$idEmpresa]);
+        $val = $st->fetchColumn();
+        return $val !== false ? (string)$val : null;
+    }
+
+    /**
      * Retorna los IDs del tipo medida "Unidad" (código "0") y su unidad "Unidad" para la empresa.
      */
     public function getMedidaDefaultUnidad(int $idEmpresa): ?array

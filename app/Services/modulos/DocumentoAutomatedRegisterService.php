@@ -96,27 +96,28 @@ class DocumentoAutomatedRegisterService
             }
 
             $it = $xml->infoTributaria;
-            $ambiente = (string) $it->ambiente;
-            $codDoc = (string) $it->codDoc;
+            $codDoc      = (string) $it->codDoc;
             $claveAcceso = (string) $it->claveAcceso;
-            $rucEmisor = trim((string) $it->ruc);
+            $rucEmisor   = trim((string) $it->ruc);
 
             // 0. Verificar si el documento está en la lista de ignorados
             if ($this->ignoradoRepo->existeClave($claveAcceso, $idEmpresa)) {
                 return [
-                    'ok' => false, 
-                    'error' => "Documento ignorado por el usuario (Lista Negra).", 
+                    'ok' => false,
+                    'error' => "Documento ignorado por el usuario (Lista Negra).",
                     'estado_registro' => 'IGNORADO',
                     'numero_documento' => (string)$it->estab . '-' . (string)$it->ptoEmi . '-' . (string)$it->secuencial,
                     'clave' => $claveAcceso
                 ];
             }
 
-            // 1. Ya no bloqueamos si es pruebas, simplemente lo procesamos y se guardará con su ambiente respectivo.
-            // Esto permite que el sistema de ambientes lo filtre en las vistas correspondientes.
-
-            // Obtener RUC de la empresa actual
-            $empresaActual = $this->empresaRepo->getEmisorConfig($idEmpresa);
+            // Obtener RUC y ambiente activo de la empresa
+            // Los XMLs del SRI siempre traen ambiente=2, pero en nuestro sistema
+            // usamos el ambiente activo de la empresa para registrar y verificar duplicados.
+            // Así, pruebas y producción son entornos separados: un documento registrado
+            // en pruebas no bloquea su registro cuando la empresa cambia a producción.
+            $empresaActual  = $this->empresaRepo->getEmisorConfig($idEmpresa);
+            $ambienteEmpresa = (string)($empresaActual['tipo_ambiente'] ?? (string)$it->ambiente);
             $rucActual = preg_replace('/[^0-9]/', '', (string)$empresaActual['ruc']);
             $rucEmisor = preg_replace('/[^0-9]/', '', (string)$it->ruc);
             
@@ -218,12 +219,14 @@ class DocumentoAutomatedRegisterService
             }
 
             // 2. Lógica por tipo de documento
+            // Se pasa $ambienteEmpresa (no el del XML) para que el registro y la verificación
+            // de duplicados usen el ambiente activo de la empresa.
             $res = match ($codDoc) {
-                '01' => $this->handleFactura($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambiente, $esGastoPersonal),
-                '03' => $this->handleLiquidacion($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambiente, $esGastoPersonal),
-                '04' => $this->handleNotaCredito($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambiente, $esGastoPersonal),
-                '05' => $this->handleNotaDebito($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambiente, $esGastoPersonal),
-                '07' => $this->handleRetencion($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambiente),
+                '01' => $this->handleFactura($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambienteEmpresa, $esGastoPersonal),
+                '03' => $this->handleLiquidacion($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambienteEmpresa, $esGastoPersonal),
+                '04' => $this->handleNotaCredito($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambienteEmpresa, $esGastoPersonal),
+                '05' => $this->handleNotaDebito($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambienteEmpresa, $esGastoPersonal),
+                '07' => $this->handleRetencion($xml, $idEmpresa, $idUsuario, $esEmitidaPorMi, $ambienteEmpresa),
                 default => ['ok' => false, 'error' => "Tipo de documento no soportado ($codDoc)", 'estado_registro' => 'ERROR']
             };
 
@@ -263,15 +266,15 @@ class DocumentoAutomatedRegisterService
         $tipoId = (string) $info->tipoIdentificacionComprador;
 
         if ($esEmitida) {
-            if ($this->existeEnTabla('ventas_cabecera', 'clave_acceso', $claveAcceso, $idEmpresa)) {
+            if ($this->existeEnTabla('ventas_cabecera', 'clave_acceso', $claveAcceso, $idEmpresa, false, $ambiente)) {
                 return ['ok' => true, 'mensaje' => "Venta ya registrada: $claveAcceso", 'existe' => true];
             }
             $idCliente = $this->getOrCreateCliente($info->identificacionComprador, $info->razonSocialComprador, $info->direccionComprador, $idEmpresa, $idUsuario, $tipoId);
-            
+
             $idFactura = $this->insertarVenta($xml, $idEmpresa, $idCliente, $idUsuario, $ambiente);
             return ['ok' => true, 'mensaje' => "Venta registrada con éxito.", 'id' => $idFactura, 'existe' => false];
         } else {
-            if ($this->existeEnTabla('compras_cabecera', 'numero_autorizacion', $claveAcceso, $idEmpresa)) {
+            if ($this->existeEnTabla('compras_cabecera', 'numero_autorizacion', $claveAcceso, $idEmpresa, false, $ambiente)) {
                 return ['ok' => true, 'mensaje' => "Compra ya registrada: $claveAcceso", 'existe' => true];
             }
             $idProv = $this->getOrCreateProveedor($it->ruc, $it->razonSocial, $it->dirMatriz, $idEmpresa, $idUsuario, null, (string)($it->nombreComercial ?? ''));
@@ -589,15 +592,15 @@ class DocumentoAutomatedRegisterService
         $claveAcceso = (string) $it->claveAcceso;
 
         if ($esEmitida) {
-            if ($this->existeEnTabla('liquidaciones_cabecera', 'clave_acceso', $claveAcceso, $idEmpresa)) {
+            if ($this->existeEnTabla('liquidaciones_cabecera', 'clave_acceso', $claveAcceso, $idEmpresa, false, $ambiente)) {
                 return ['ok' => true, 'mensaje' => "Liquidación ya registrada", 'existe' => true];
             }
             $idProv = $this->getOrCreateProveedor($info->identificacionProveedor, $info->razonSocialProveedor, $info->direccionProveedor, $idEmpresa, $idUsuario, $info->tipoIdentificacionProveedor, (string)($it->nombreComercial ?? ''));
-            
+
             $idLiq = $this->insertarLiquidacion($xml, $idEmpresa, $idProv, $idUsuario, $ambiente);
             return ['ok' => true, 'mensaje' => "Liquidación registrada (ID: $idLiq)", 'id' => $idLiq, 'existe' => false];
         } else {
-            if ($this->existeEnTabla('compras_cabecera', 'numero_autorizacion', $claveAcceso, $idEmpresa)) {
+            if ($this->existeEnTabla('compras_cabecera', 'numero_autorizacion', $claveAcceso, $idEmpresa, false, $ambiente)) {
                 return ['ok' => true, 'mensaje' => "Compra ya registrada", 'existe' => true];
             }
             $idProv = $this->getOrCreateProveedor($it->ruc, $it->razonSocial, $it->dirMatriz, $idEmpresa, $idUsuario, null, (string)($it->nombreComercial ?? ''));
@@ -712,15 +715,15 @@ class DocumentoAutomatedRegisterService
         $claveAcceso = (string) $it->claveAcceso;
 
         if ($esEmitida) {
-            if ($this->existeEnTabla('notas_credito_cabecera', 'clave_acceso', $claveAcceso, $idEmpresa)) {
+            if ($this->existeEnTabla('notas_credito_cabecera', 'clave_acceso', $claveAcceso, $idEmpresa, false, $ambiente)) {
                 return ['ok' => true, 'mensaje' => "Nota de Crédito ya registrada", 'existe' => true];
             }
             $idCliente = $this->getOrCreateCliente($info->identificacionComprador, $info->razonSocialComprador, $info->direccionComprador, $idEmpresa, $idUsuario, $info->tipoIdentificacionComprador);
-            
+
             $idNC = $this->insertarNotaCredito($xml, $idEmpresa, $idCliente, $idUsuario, $ambiente);
             return ['ok' => true, 'mensaje' => "Nota de Crédito (Venta) registrada (ID: $idNC)", 'id' => $idNC, 'existe' => false];
         } else {
-            if ($this->existeEnTabla('compras_cabecera', 'numero_autorizacion', $claveAcceso, $idEmpresa)) {
+            if ($this->existeEnTabla('compras_cabecera', 'numero_autorizacion', $claveAcceso, $idEmpresa, false, $ambiente)) {
                 return ['ok' => true, 'mensaje' => "NC Compra ya registrada", 'existe' => true];
             }
             $idProv = $this->getOrCreateProveedor($it->ruc, $it->razonSocial, $it->dirMatriz, $idEmpresa, $idUsuario, null, (string)($it->nombreComercial ?? ''));
@@ -737,14 +740,14 @@ class DocumentoAutomatedRegisterService
         $claveAcceso = (string) $it->claveAcceso;
 
         if ($esEmitida) {
-            if ($this->existeEnTabla('nota_debito_cabecera', 'clave_acceso', $claveAcceso, $idEmpresa)) {
+            if ($this->existeEnTabla('nota_debito_cabecera', 'clave_acceso', $claveAcceso, $idEmpresa, false, $ambiente)) {
                 return ['ok' => true, 'mensaje' => "Nota de Débito ya registrada", 'existe' => true];
             }
             $idCliente = $this->getOrCreateCliente($info->identificacionComprador, $info->razonSocialComprador, $info->direccionComprador, $idEmpresa, $idUsuario, $info->tipoIdentificacionComprador);
             $idND = $this->insertarNotaDebito($xml, $idEmpresa, $idCliente, $idUsuario, $ambiente);
             return ['ok' => true, 'mensaje' => "Nota de Débito (Venta) registrada (ID: $idND)", 'id' => $idND, 'existe' => false];
         } else {
-            if ($this->existeEnTabla('compras_cabecera', 'numero_autorizacion', $claveAcceso, $idEmpresa)) {
+            if ($this->existeEnTabla('compras_cabecera', 'numero_autorizacion', $claveAcceso, $idEmpresa, false, $ambiente)) {
                 return ['ok' => true, 'mensaje' => "ND Compra ya registrada", 'existe' => true];
             }
             $idProv = $this->getOrCreateProveedor($it->ruc, $it->razonSocial, $it->dirMatriz, $idEmpresa, $idUsuario, null, (string)($it->nombreComercial ?? ''));
@@ -762,7 +765,7 @@ class DocumentoAutomatedRegisterService
 
         if ($esEmitida) {
             // RETENCIÓN EMITIDA POR NOSOTROS (Retención en Compras)
-            if ($this->existeEnTabla('retencion_compra_cabecera', 'clave_acceso', $claveAcceso, $idEmpresa)) {
+            if ($this->existeEnTabla('retencion_compra_cabecera', 'clave_acceso', $claveAcceso, $idEmpresa, false, $ambiente)) {
                 return ['ok' => true, 'mensaje' => "Retención de Compra ya registrada", 'existe' => true];
             }
             
@@ -781,7 +784,7 @@ class DocumentoAutomatedRegisterService
             return ['ok' => true, 'mensaje' => "Retención de Compra (emitida) registrada con éxito.", 'id' => $idRet, 'existe' => false];
         } else {
             // RETENCIÓN EMITIDA A NOSOTROS (Retención en Ventas)
-            if ($this->existeEnTabla('retencion_venta_cabecera', 'clave_acceso', $claveAcceso, $idEmpresa)) {
+            if ($this->existeEnTabla('retencion_venta_cabecera', 'clave_acceso', $claveAcceso, $idEmpresa, false, $ambiente)) {
                 return ['ok' => true, 'mensaje' => "Retención de Venta ya registrada", 'existe' => true];
             }
             
@@ -1164,8 +1167,8 @@ class DocumentoAutomatedRegisterService
 
 
     // Métodos stub para compras de NC/ND (se registran en compras_cabecera por ahora como pidió el usuario)
-    private function insertarCompraNC($xml, $idEmpresa, $idProv, $idUsuario, bool $esGastoPersonal = false) { return $this->insertarCompra($xml, $idEmpresa, $idProv, $idUsuario, $esGastoPersonal); }
-    private function insertarCompraND($xml, $idEmpresa, $idProv, $idUsuario, bool $esGastoPersonal = false) { return $this->insertarCompra($xml, $idEmpresa, $idProv, $idUsuario, $esGastoPersonal); }
+    private function insertarCompraNC($xml, $idEmpresa, $idProv, $idUsuario, string $ambiente = '1', bool $esGastoPersonal = false): int { return $this->insertarCompra($xml, $idEmpresa, $idProv, $idUsuario, $ambiente, $esGastoPersonal); }
+    private function insertarCompraND($xml, $idEmpresa, $idProv, $idUsuario, string $ambiente = '1', bool $esGastoPersonal = false): int { return $this->insertarCompra($xml, $idEmpresa, $idProv, $idUsuario, $ambiente, $esGastoPersonal); }
 
 
 
@@ -1251,17 +1254,32 @@ class DocumentoAutomatedRegisterService
         return '06';
     }
 
-    private function existeEnTabla(string $tabla, string $campo, string $valor, int $idEmpresa, bool $incluirEliminados = false): bool
+    /**
+     * @param ?string $tipoAmbiente '1'=pruebas | '2'=producción. Si se pasa, solo cuenta registros del mismo ambiente.
+     *                               Garantiza que un documento de pruebas no bloquee el registro del mismo en producción.
+     */
+    private function existeEnTabla(string $tabla, string $campo, string $valor, int $idEmpresa, bool $incluirEliminados = false, ?string $tipoAmbiente = null): bool
     {
         try {
             $db = Database::getConnection();
             $whereEliminado = $incluirEliminados ? "" : " AND eliminado = false";
-            $sql = "SELECT id FROM $tabla WHERE $campo = ? AND id_empresa = ? $whereEliminado LIMIT 1";
-            $st = $db->prepare($sql);
-            $st->execute([$valor, $idEmpresa]);
+            $whereAmbiente  = '';
+            $params         = [$valor, $idEmpresa];
+
+            if ($tipoAmbiente !== null) {
+                // Verificar que la tabla tiene columna tipo_ambiente antes de filtrar
+                $cols = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = '$tabla' AND column_name = 'tipo_ambiente' AND table_schema = 'public'")->fetchColumn();
+                if ($cols) {
+                    $whereAmbiente = " AND tipo_ambiente = ?";
+                    $params[]      = $tipoAmbiente;
+                }
+            }
+
+            $sql = "SELECT id FROM $tabla WHERE $campo = ? AND id_empresa = ? $whereEliminado $whereAmbiente LIMIT 1";
+            $st  = $db->prepare($sql);
+            $st->execute($params);
             return (bool) $st->fetch();
         } catch (\PDOException $e) {
-            // Si la tabla no existe, asumimos que no hay registro (o manejamos error)
             return false;
         }
     }

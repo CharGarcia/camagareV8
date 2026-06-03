@@ -920,7 +920,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                                     <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Nº Referencia</label>
                                                                     <input type="text" class="form-control form-control-sm" id="fvPagoNumOp" placeholder="Nº doc / Transf">
                                                                 </div>
-                                                                <div class="col-12">
+                                                                <!-- Selección de banco oculta: no se solicita banco en cobros desde factura -->
+                                                                <div class="col-12 d-none">
                                                                     <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Banco</label>
                                                                     <select class="form-select form-select-sm" id="fvPagoBanco">
                                                                         <option value="">— Opcional —</option>
@@ -2099,10 +2100,15 @@ $perm = $permOriginal;
         if (btnPdf) btnPdf.disabled = false;
         if (btnCorreo) btnCorreo.disabled = !esAutorizado;
 
-        // Botón SRI: activo siempre que el documento esté en borrador
+        // Botón SRI: visible cuando NO está autorizado, oculto si ya está autorizado
         if (btnSri) {
-            btnSri.disabled = st !== 'borrador';
-            btnSri.title    = st !== 'borrador' ? 'Solo se pueden enviar documentos en estado borrador.' : '';
+            if (esAutorizado) {
+                btnSri.classList.add('d-none');
+            } else {
+                btnSri.classList.remove('d-none');
+                btnSri.disabled = false;
+                btnSri.title    = '';
+            }
         }
 
         // Botón Anular: SOLO en estado autorizado y con permiso de actualizar (Centralizado)
@@ -2442,21 +2448,28 @@ $perm = $permOriginal;
             const json = await resp.json();
 
             // ── Actualizar estado inmediatamente ───────────────────────────────
-            const nuevoEstado = (json.estado || (json.ok ? 'autorizado' : 'error')).toLowerCase();
+            // estadoSri  = respuesta del SRI (devuelta, no_autorizado, en_procesamiento, autorizado, error…)
+            //              SOLO se usa para la pestaña SRI (columna estado_sri del documento).
+            // estadoDoc  = estado real del DOCUMENTO. El documento únicamente pasa a 'autorizado'
+            //              cuando el SRI autoriza; en cualquier otra respuesta permanece en 'borrador'
+            //              para que siga apareciendo en los avisos del navbar y conserve su estado.
+            const estadoSri = (json.estado || (json.ok ? 'autorizado' : 'error')).toLowerCase();
+            const estadoDoc = (json.ok && estadoSri === 'autorizado') ? 'autorizado' : 'borrador';
 
-            // 1. Pestaña SRI y badge del header del modal
+            // 1. Pestaña SRI: refleja la respuesta real del SRI (estado_sri)
             fvActualizarPestanhaSri({
-                estado_sri:          nuevoEstado,
+                estado_sri:          estadoSri,
                 numero_autorizacion: json.numero_autorizacion || '',
                 fecha_autorizacion:  json.fecha_autorizacion  || '',
                 mensajes_sri:        json.errores?.length ? JSON.stringify(json.errores) : null,
             });
-            fvActualizarEstadoBotones(nuevoEstado);
+            // Botones y badge del header: reflejan el estado del DOCUMENTO, no el del SRI
+            fvActualizarEstadoBotones(estadoDoc);
             fvCargarHistorialSri(id);
 
-            // 2. Actualizar la fila de la tabla de fondo de forma síncrona
-            //    para que data-row tenga el estado correcto ANTES de que el usuario
-            //    pueda volver a abrirla (evita que el SRI button se reactive).
+            // 2. Actualizar la fila de la tabla de fondo de forma síncrona con el estado
+            //    del DOCUMENTO (borrador/autorizado), para que data-row, el badge visible y
+            //    el conteo de avisos del navbar permanezcan consistentes con la base de datos.
             (function fvActualizarFilaTabla(idVenta, estado) {
                 const clsMap = {
                     'autorizado':       'bg-success bg-opacity-10 text-success border-success',
@@ -2486,7 +2499,13 @@ $perm = $permOriginal;
                         }
                     } catch (e) { /* fila sin data-row válido */ }
                 });
-            })(id, nuevoEstado);
+            })(id, estadoDoc);
+
+            // 3. Refrescar el contador de "facturas en borrador" del navbar, ya que
+            //    el documento devuelto/no autorizado SIGUE en borrador y debe contarse.
+            if (typeof window.updateFacturasBorradorBadge === 'function') {
+                window.updateFacturasBorradorBadge();
+            }
 
             if (json.ok) {
                 Swal.fire({
@@ -2495,10 +2514,26 @@ $perm = $permOriginal;
                     html: `<p>${json.mensaje}</p><code class="small">${json.numero_autorizacion || ''}</code>`,
                     confirmButtonColor: '#0d6efd',
                 }).then(() => {
-                    bootstrap.Modal.getInstance(document.getElementById('modalNuevaFactura')).hide();
-                    // Refresco completo de la tabla al cerrar el modal (datos frescos del servidor)
-                    if (typeof window.FV_fetchSearch === 'function') {
-                        window.FV_fetchSearch(window.FV_currentPage || 1);
+                    const modalEl   = document.getElementById('modalNuevaFactura');
+                    const modalInst = bootstrap.Modal.getInstance(modalEl);
+
+                    // Refrescar la tabla DESPUÉS de que el modal se cierre completamente,
+                    // para preservar filtros activos (FiltrosBusqueda), favoritos y ordenamiento.
+                    // Si llamamos FV_fetchSearch antes de hidden.bs.modal, el modal todavía
+                    // está en animación y Bootstrap puede interferir con el estado de la vista.
+                    const refrescarTabla = () => {
+                        if (typeof window.FV_fetchSearch === 'function') {
+                            window.FV_fetchSearch(window.FV_currentPage || 1);
+                        }
+                    };
+
+                    if (modalInst) {
+                        // Listener de un solo disparo: se ejecuta cuando el modal termina de cerrarse
+                        modalEl.addEventListener('hidden.bs.modal', refrescarTabla, { once: true });
+                        modalInst.hide();
+                    } else {
+                        // Modal ya estaba cerrado — refrescar directamente
+                        refrescarTabla();
                     }
                 });
             } else {
@@ -2544,7 +2579,7 @@ $perm = $permOriginal;
                 'devuelta': ['bg-danger bg-opacity-10 text-danger border-danger', 'Devuelta'],
                 'en_procesamiento': ['bg-warning bg-opacity-10 text-warning border-warning', 'En procesamiento'],
                 'recibida': ['bg-info bg-opacity-10 text-info border-info', 'Recibida'],
-                'enviando': ['bg-primary bg-opacity-10 text-primary border-primary', 'Enviando€'],
+                'enviando': ['bg-primary bg-opacity-10 text-primary border-primary', 'Enviando'],
                 'error': ['bg-danger bg-opacity-10 text-danger border-danger', 'Error'],
                 'pendiente': ['bg-secondary bg-opacity-10 text-secondary border-secondary', 'Sin enviar'],
             };
@@ -2629,7 +2664,7 @@ $perm = $permOriginal;
                 const [bgCls, icon, lbl] = accionMap[row.accion] ?? ['bg-secondary', 'bi-question', row.accion];
                 const esPruebas = row.tipo_ambiente === '1';
                 const ambienteLbl = esPruebas ? '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.65rem;">PRUEBAS</span>' :
-                    '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:0.65rem;">PRODUCCI“N</span>';
+                    '<span class=”badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25” style=”font-size:0.65rem;”>PRODUCCIÓN</span>';
 
                 // Detalle: mensaje + errores del json
                 let detalle = row.mensaje || '';
@@ -2664,7 +2699,7 @@ $perm = $permOriginal;
 
     async function fvEliminarLogSri(idLog) {
         const confirm = await Swal.fire({
-            title: '��¿Eliminar registro?',
+            title: '��¿Eliminar registro?',
             text: 'Se eliminara este registro del historial de envios (solo disponible en ambiente de pruebas).',
             icon: 'warning',
             showCancelButton: true,
@@ -3214,7 +3249,7 @@ $perm = $permOriginal;
             <td>
                 <div class="d-flex align-items-center">
                     <input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="0.00" step="any" oninput="calcFila(this)" ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'readonly'}>
-                    <button type="button" class="btn btn-link btn-sm p-1 text-primary shadow-none border-0 ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'd-none'}" onclick="abrirModalDescuento(this)" title="Aplicar descuento rÃ¡pido">
+                    <button type="button" class="btn btn-link btn-sm p-1 text-primary shadow-none border-0 ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'd-none'}" onclick="abrirModalDescuento(this)" title="Aplicar descuento rápido">
                         <i class="bi bi-plus-circle"></i>
                     </button>
                 </div>
@@ -3244,7 +3279,7 @@ $perm = $permOriginal;
                 <span class="subtotal-line">0.00</span>
             </td>
             <td class="text-center p-0 align-middle" style="width: 40px;">
-                <button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="this.closest('tr').remove(); calcTotales();" title="Eliminar Ã­tem">
+                <button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="this.closest('tr').remove(); calcTotales();" title="Eliminar ítem">
                     <i class="bi bi-trash3 fs-6"></i>
                 </button>
             </td>
@@ -3395,7 +3430,7 @@ $perm = $permOriginal;
 
                 let compatibles = [];
                 if (p.id_tipo_medida) {
-                    compatibles = UNIDADES.filter(u => u.id_tipo == p.id_tipo_medida); // Usar id_tipo (no id_tipo_medida segÃºn el repo)
+                    compatibles = UNIDADES.filter(u => u.id_tipo == p.id_tipo_medida); // Usar id_tipo (no id_tipo_medida según el repo)
                 }
 
                 if (compatibles.length === 0 && p.id_medida) {
@@ -3542,7 +3577,7 @@ $perm = $permOriginal;
                     if (EMPRESA_CONFIG.facturacion_libre) {
                         agregarOpcionServicioLibre(q, tr, dropdownGlobal);
                     } else {
-                        dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">Sin coincidencias en el catÃ¡logo</div>';
+                        dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">Sin coincidencias en el catálogo</div>';
                     }
                 }
             } catch (err) {
@@ -4018,7 +4053,7 @@ $perm = $permOriginal;
             <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto" style="padding:0 4px;height:20px;font-size:0.78rem;" value="Cajero" readonly></td>
             <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle" style="padding:0 4px;height:20px;font-size:0.78rem;" value="${USUARIO_NOMBRE}" readonly></td>
             <td class="p-0 text-center pe-1">
-                <span class="text-muted small" title="Generado automÃ¡ticamente"><i class="bi bi-lock-fill"></i></span>
+                <span class="text-muted small" title="Generado automáticamente"><i class="bi bi-lock-fill"></i></span>
             </td>
         `;
         tbody.appendChild(tr);
@@ -4290,14 +4325,14 @@ $perm = $permOriginal;
 
             if (elAmbiente) {
                 const amb = parseInt(cab.tipo_ambiente);
-                elAmbiente.value = (amb === 1) ? '1 - PRUEBAS' : (amb === 2 ? '2 - PRODUCCIÃ“N' : (cab.tipo_ambiente || 'â€”'));
+                elAmbiente.value = (amb === 1) ? '1 - PRUEBAS' : (amb === 2 ? '2 - PRODUCCIÓN' : (cab.tipo_ambiente || '—'));
             }
             if (elEmision) {
                 const emi = parseInt(cab.tipo_emision);
-                elEmision.value = (emi === 1) ? '1 - NORMAL' : (cab.tipo_emision || 'â€”');
+                elEmision.value = (emi === 1) ? '1 - NORMAL' : (cab.tipo_emision || '—');
             }
 
-            // Actualizar badge estado SRI, fecha autorizaciÃ³n y mensajes
+            // Actualizar badge estado SRI, fecha autorización y mensajes
             fvActualizarPestanhaSri({
                 estado_sri: cab.estado_sri || cab.estado || 'pendiente',
                 numero_autorizacion: cab.numero_autorizacion || cab.clave_acceso || '',
@@ -4535,7 +4570,8 @@ $perm = $permOriginal;
             const tbodyInfo = document.getElementById('m-tbody-info-adicional');
             if (tbodyInfo) {
                 // Nombres de las filas fijas gestionadas automÃ¡ticamente (no se insertan como libres)
-                const NOMBRES_FIJOS = ['cajero', 'vendedor', 'correo del cliente'];
+                // 'correo' se mantiene por compatibilidad con registros anteriores
+                const NOMBRES_FIJOS = ['cajero', 'vendedor', 'correo del cliente', 'correo'];
                 tbodyInfo.querySelectorAll('tr:not([data-tipo])').forEach(tr => tr.remove());
                 json.info_adicional.forEach(ia => {
                     // Saltar entradas que corresponden a filas fijas para evitar duplicados
@@ -4557,7 +4593,10 @@ $perm = $permOriginal;
                     else tbodyInfo.appendChild(tr);
                 });
                 // Actualizar el valor de la fila fija de correo si viene en la info adicional
-                const correoGuardado = json.info_adicional.find(ia => (ia.nombre || '').toLowerCase().trim() === 'correo del cliente');
+                const correoGuardado = json.info_adicional.find(ia => {
+                    const n = (ia.nombre || '').toLowerCase().trim();
+                    return n === 'correo del cliente' || n === 'correo';
+                });
                 if (correoGuardado) actualizarInfoCorreoCliente(correoGuardado.valor || '');
             }
 
@@ -4645,7 +4684,7 @@ $perm = $permOriginal;
         const tbody = document.getElementById('m-tbody-notas-credito');
         if (!tbody) return;
 
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4"><span class="spinner-border spinner-border-sm me-2"></span> Cargando notas de crÃ©dito...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4"><span class="spinner-border spinner-border-sm me-2"></span> Cargando notas de crédito...</td></tr>';
 
         try {
             const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getNotasCreditoAjax?numero=${numeroFactura}`);
@@ -4662,9 +4701,9 @@ $perm = $permOriginal;
                         <tr class="nc-row-fv" role="button" 
                             data-nc='${JSON.stringify(nc).replace(/'/g, "&apos;")}' 
                             onclick='abrirModalEditarNCDesdeFV(JSON.parse(this.dataset.nc))'>
-                            <td class="ps-3">${nc.fecha_emision ? nc.fecha_emision.split(' ')[0] : 'â€”'}</td>
+                            <td class="ps-3">${nc.fecha_emision ? nc.fecha_emision.split(' ')[0] : '—'}</td>
                             <td><code class="text-primary">${nc.establecimiento}-${nc.punto_emision}-${nc.secuencial}</code></td>
-                            <td>${nc.motivo || 'â€”'}</td>
+                            <td>${nc.motivo || '—'}</td>
                             <td><span class="badge ${estadoClass} bg-opacity-10 text-${estadoClass.replace('bg-', '')} border border-${estadoClass.replace('bg-', '')} border-opacity-25">${estado.toUpperCase()}</span></td>
                             <td class="text-end pe-3 fw-bold">$${parseFloat(nc.importe_total || 0).toFixed(2)}</td>
                         </tr>
@@ -4672,16 +4711,16 @@ $perm = $permOriginal;
                 });
                 tbody.innerHTML = html;
             } else {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-info-circle me-1"></i> No se han encontrado notas de crÃ©dito para esta factura.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-info-circle me-1"></i> No se han encontrado notas de crédito para esta factura.</td></tr>';
             }
         } catch (e) {
-            console.error('Error al cargar notas de crÃ©dito:', e);
+            console.error('Error al cargar notas de crédito:', e);
             tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Error al cargar datos.</td></tr>';
         }
     }
 
     function renderDetalleHistorialVenta(detalle) {
-        if (!detalle || detalle.length === 0) return '<span class="text-muted">Sin detalles especÃ­ficos</span>';
+        if (!detalle || detalle.length === 0) return '<span class="text-muted">Sin detalles específicos</span>';
         if (typeof detalle === 'string') return detalle;
         if (Array.isArray(detalle)) {
             return `<ul class="list-unstyled mb-0">
@@ -4694,7 +4733,7 @@ $perm = $permOriginal;
                 }).join('')}
             </ul>`;
         }
-        return '<span class="text-muted">AcciÃ³n registrada</span>';
+        return '<span class="text-muted">Acción registrada</span>';
     }
 
     window.eliminarFacturaBorrador = async function() {
@@ -4756,7 +4795,7 @@ $perm = $permOriginal;
                 Swal.fire({
                     icon: 'error',
                     title: 'Error al eliminar',
-                    text: json.mensaje || 'No se pudo completar la operaciÃ³n.',
+                    text: json.mensaje || 'No se pudo completar la operación.',
                     confirmButtonColor: '#d33'
                 });
             }
@@ -4764,7 +4803,7 @@ $perm = $permOriginal;
             console.error(err);
             Swal.fire({
                 icon: 'error',
-                title: 'Error de conexiÃ³n',
+                title: 'Error de conexión',
                 text: 'No se pudo conectar con el servidor. Intente nuevamente.',
                 confirmButtonColor: '#d33'
             });
@@ -4884,7 +4923,7 @@ $perm = $permOriginal;
                 Swal.fire({
                     icon: 'error',
                     title: 'Error al anular',
-                    text: json.mensaje || 'No se pudo completar la operaciÃ³n.',
+                    text: json.mensaje || 'No se pudo completar la operación.',
                     confirmButtonColor: '#d33'
                 });
             }
@@ -4892,7 +4931,7 @@ $perm = $permOriginal;
             console.error(err);
             Swal.fire({
                 icon: 'error',
-                title: 'Error de conexiÃ³n',
+                title: 'Error de conexión',
                 text: 'Intente nuevamente.',
                 confirmButtonColor: '#d33'
             });
@@ -4908,7 +4947,7 @@ $perm = $permOriginal;
 <!-- Dropdown Global para Productos (evita recortes por overflow) -->
 <div id="m-dropdown-productos-global" class="list-group shadow position-fixed d-none" style="z-index: 9999; min-width: 400px; max-height: 250px; overflow-y: auto; background-color: white;"></div>
 
-<!-- Modal Descuento RÃ¡pido -->
+<!-- Modal Descuento Rápido -->
 <div class="modal fade" id="modalDescuentoRapido" tabindex="-1" aria-hidden="true" style="z-index: 2050;">
     <div class="modal-dialog modal-sm modal-dialog-centered" style="max-width: 320px;">
         <div class="modal-content border-0 shadow-lg">
@@ -4940,7 +4979,7 @@ $perm = $permOriginal;
 
                 <div class="form-check form-switch mb-1" style="min-height: auto;">
                     <input class="form-check-input" type="checkbox" id="checkAplicarTodo" style="height: 1rem; width: 1.8rem; margin-top: 0.2rem;">
-                    <label class="form-check-label text-muted ms-1" for="checkAplicarTodo" style="font-size: 0.7rem; vertical-align: middle;">Aplicar a todos los Ã­tems</label>
+                    <label class="form-check-label text-muted ms-1" for="checkAplicarTodo" style="font-size: 0.7rem; vertical-align: middle;">Aplicar a todos los ítems</label>
                 </div>
             </div>
             <div class="modal-footer bg-light p-2 border-top-0 justify-content-center">
@@ -5013,7 +5052,7 @@ $perm = $permOriginal;
         if (valorIngresado < 0) {
             return Swal.fire({
                 icon: 'warning',
-                title: 'Valor invÃ¡lido',
+                title: 'Valor inválido',
                 text: 'El valor no puede ser negativo.',
                 confirmButtonColor: '#ffc107'
             });
@@ -5051,7 +5090,7 @@ $perm = $permOriginal;
     });
 
     /**
-     * Puente entre Factura de Venta y Notas de CrÃ©dito
+     * Puente entre Factura de Venta y Notas de Crédito
      */
     async function abrirModalNuevaNCDesdeFV() {
         if (!FV_ID_ACTIVO) return;
@@ -5069,7 +5108,7 @@ $perm = $permOriginal;
 
         // Solo permitir si la factura estÃ¡ autorizada
         if (estadoFactura !== 'autorizado') {
-            return Swal.fire('AtenciÃ³n', 'Solo se pueden generar notas de crÃ©dito para facturas en estado "autorizado".', 'warning');
+            return Swal.fire('Atención', 'Solo se pueden generar notas de crédito para facturas en estado "autorizado".', 'warning');
         }
 
         // Validar suma de NC existentes
@@ -5086,7 +5125,7 @@ $perm = $permOriginal;
         });
 
         if (sumaNC >= importeTotal) {
-            return Swal.fire('AtenciÃ³n', 'La suma de las notas de crÃ©dito ya cubre el total de la factura.', 'warning');
+            return Swal.fire('Atención', 'La suma de las notas de crédito ya cubre el total de la factura.', 'warning');
         }
 
         // Abrir modal de NC
@@ -5146,7 +5185,7 @@ $perm = $permOriginal;
         const tbody = document.getElementById('m-tbody-guias-remision');
         if (!tbody) return;
 
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4"><span class="spinner-border spinner-border-sm me-2"></span> Cargando guÃ­as...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4"><span class="spinner-border spinner-border-sm me-2"></span> Cargando guías...</td></tr>';
 
         try {
             const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getGuiasAjax?numero=${numeroFactura}`);
@@ -5163,20 +5202,20 @@ $perm = $permOriginal;
                         <tr class="gr-row-fv" role="button" 
                             data-gr='${JSON.stringify(gr).replace(/'/g, "&apos;")}' 
                             onclick='abrirModalEditarGRDesdeFV(JSON.parse(this.dataset.gr))'>
-                            <td class="ps-3">${gr.fecha_emision ? gr.fecha_emision.split(' ')[0] : 'â€”'}</td>
+                            <td class="ps-3">${gr.fecha_emision ? gr.fecha_emision.split(' ')[0] : '—'}</td>
                             <td><code class="text-primary">${gr.establecimiento}-${gr.punto_emision}-${gr.secuencial}</code></td>
-                            <td>${gr.transportista_nombre || 'â€”'}</td>
+                            <td>${gr.transportista_nombre || '—'}</td>
                             <td><span class="badge ${estadoClass} bg-opacity-10 text-${estadoClass.replace('bg-', '')} border border-${estadoClass.replace('bg-', '')} border-opacity-25">${estado.toUpperCase()}</span></td>
-                            <td class="pe-3">${gr.placa || 'â€”'}</td>
+                            <td class="pe-3">${gr.placa || '—'}</td>
                         </tr>
                     `;
                 });
                 tbody.innerHTML = html;
             } else {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-info-circle me-1"></i> No se han encontrado guÃ­as de remisiÃ³n para esta factura.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-info-circle me-1"></i> No se han encontrado guías de remisión para esta factura.</td></tr>';
             }
         } catch (e) {
-            console.error('Error al cargar guÃ­as:', e);
+            console.error('Error al cargar guías:', e);
             tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Error al cargar datos.</td></tr>';
         }
     }
@@ -5196,7 +5235,7 @@ $perm = $permOriginal;
 
         // Solo permitir si la factura estÃ¡ autorizada (aunque las guÃ­as a veces se pueden emitir antes, seguimos el concepto de NC si el usuario lo pidiÃ³ asÃ­)
         if (estadoFactura !== 'autorizado') {
-            return Swal.fire('AtenciÃ³n', 'Solo se pueden generar guÃ­as de remisiÃ³n para facturas en estado "autorizado".', 'warning');
+            return Swal.fire('Atención', 'Solo se pueden generar guías de remisión para facturas en estado "autorizado".', 'warning');
         }
 
         if (typeof window.GR_abrirCrear === 'function') {
@@ -5573,7 +5612,9 @@ $perm = $permOriginal;
                         }
                     }
 
-                    // Concepto — auto-seleccionar el relacionado a facturas de venta
+                    // Concepto — siempre el relacionado a facturas de venta y BLOQUEADO.
+                    // El tipo de ingreso queda definido por la factura de venta, por lo que
+                    // el usuario no puede cambiar el concepto manualmente.
                     const comboConc = document.getElementById('fvPagoConcepto');
                     if (comboConc) {
                         comboConc.innerHTML = '<option value="">— Opcional —</option>'
@@ -5589,6 +5630,12 @@ $perm = $permOriginal;
                             return n.includes('cobro') || n.includes('factura') || n.includes('venta');
                         });
                         if (cDef) comboConc.value = cDef.id;
+
+                        // Bloquear el selector: queda fijo en el concepto de factura de venta.
+                        // Un <select disabled> sigue siendo legible por JS (.value) al registrar el cobro.
+                        comboConc.disabled = true;
+                        comboConc.classList.add('bg-light');
+                        comboConc.title = 'El concepto se define automáticamente para cobros de factura de venta.';
                     }
 
                     // Forma de cobro

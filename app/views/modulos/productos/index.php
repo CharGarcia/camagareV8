@@ -176,7 +176,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <tbody id="tbodyProductos">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="8" class="text-center py-5 text-muted">No se encontraron productos.</td>
+                            <td colspan="17" class="text-center py-5 text-muted">No se encontraron productos.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>

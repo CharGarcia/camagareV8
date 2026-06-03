@@ -475,8 +475,10 @@ class IngresosController extends BaseModuloController
                 'fecha_emision'       => $data['fecha_emision'],
                 'establecimiento'     => $punto['establecimiento'],
                 'punto_emision'       => $punto['punto'],
-                'secuencial'          => $secRes['secuencial'],
-                'numero_ingreso'      => $punto['establecimiento'] . '-' . $punto['punto'] . '-' . $secRes['secuencial'],
+                'secuencial'          => $secRes['formateado'],
+                'numero_ingreso'      => str_pad((string)($punto['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT)
+                                         . '-' . str_pad((string)($punto['punto'] ?? '001'), 3, '0', STR_PAD_LEFT)
+                                         . '-' . $secRes['formateado'],
                 'tipo_ingreso'        => 'FACTURA_VENTA',
                 'id_ingreso_concepto' => !empty($data['id_ingreso_concepto']) ? (int)$data['id_ingreso_concepto'] : null,
                 'monto_total'         => $montoCobrar,

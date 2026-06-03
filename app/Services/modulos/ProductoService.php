@@ -260,6 +260,18 @@ class ProductoService
         $antes = $this->repository->findById($id, $idEmpresa);
         if (!$antes) throw new Exception('El producto no existe.');
 
+        // Obtener el ambiente activo de la empresa para filtrar solo los documentos del entorno actual
+        $tipoAmbiente = $this->repository->getTipoAmbienteEmpresa($idEmpresa);
+
+        $usos = $this->repository->obtenerUsos($id, $idEmpresa, $tipoAmbiente);
+        if (!empty($usos)) {
+            $entorno = $tipoAmbiente === '2' ? 'producción' : 'pruebas';
+            throw new Exception(
+                "No se puede eliminar el producto porque está siendo utilizado en el entorno de {$entorno}: " .
+                implode(', ', $usos) . '. Desactívelo si no desea que aparezca en nuevos documentos.'
+            );
+        }
+
         $this->repository->beginTransaction();
         try {
             $this->repository->softDelete($id, $idEmpresa, $idUsuario);

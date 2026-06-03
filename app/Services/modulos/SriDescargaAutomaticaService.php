@@ -272,37 +272,58 @@ class SriDescargaAutomaticaService
      * de la tabla de comprobantes recibidos (un click por fila → intercepta respuesta).
      */
     /**
-     * Consulta todas las claves de acceso ya registradas en BD para esta empresa,
-     * en todas las tablas que almacenan comprobantes recibidos.
+     * Consulta las claves de acceso ya registradas en BD para esta empresa
+     * filtrando por el tipo_ambiente activo de la empresa.
+     * Pruebas y producción son entornos separados: claves de pruebas no deben
+     * bloquear la descarga/registro de los mismos documentos en producción.
      */
     private function obtenerClavesExistentes(int $idEmpresa): array
     {
         $db = \App\core\Database::getConnection();
 
-        // Tablas y columnas donde se guarda la clave/autorización de comprobantes recibidos
+        // Obtener el tipo_ambiente activo de la empresa
+        $stAmb = $db->prepare("SELECT tipo_ambiente FROM empresas WHERE id = ? LIMIT 1");
+        $stAmb->execute([$idEmpresa]);
+        $tipoAmbiente = (string)($stAmb->fetchColumn() ?: '2'); // default producción
+        $this->debugLog[] = "tipo_ambiente activo empresa #{$idEmpresa}: {$tipoAmbiente}";
+
+        // Tablas operativas con clave y su columna tipo_ambiente
+        // Los documentos_ignorados_sri se excluyen siempre sin filtro de ambiente
         $consultas = [
-            "SELECT clave_acceso        AS clave FROM ventas_cabecera            WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL",
-            "SELECT numero_autorizacion AS clave FROM compras_cabecera            WHERE id_empresa = :id AND eliminado = false AND numero_autorizacion IS NOT NULL",
-            "SELECT clave_acceso        AS clave FROM liquidaciones_cabecera      WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL",
-            "SELECT clave_acceso        AS clave FROM retencion_compra_cabecera   WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL",
-            "SELECT clave_acceso        AS clave FROM notas_credito_cabecera      WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL",
-            "SELECT clave_acceso        AS clave FROM retencion_venta_cabecera    WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL",
-            "SELECT clave_acceso        AS clave FROM notas_debito_cabecera       WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL",
-            "SELECT clave_acceso        AS clave FROM documentos_ignorados_sri    WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL",
+            "SELECT clave_acceso        AS clave FROM ventas_cabecera            WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
+            "SELECT numero_autorizacion AS clave FROM compras_cabecera            WHERE id_empresa = :id AND eliminado = false AND numero_autorizacion IS NOT NULL    AND tipo_ambiente = :amb",
+            "SELECT clave_acceso        AS clave FROM liquidaciones_cabecera      WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
+            "SELECT clave_acceso        AS clave FROM retencion_compra_cabecera   WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
+            "SELECT clave_acceso        AS clave FROM notas_credito_cabecera      WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
+            "SELECT clave_acceso        AS clave FROM retencion_venta_cabecera    WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
+            "SELECT clave_acceso        AS clave FROM notas_debito_cabecera       WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
         ];
 
+        // Ignorados aplica a todos los ambientes (es una lista negra global de la empresa)
+        $consultaIgnorados = "SELECT clave_acceso AS clave FROM documentos_ignorados_sri WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL";
+
         $claves = [];
+
         foreach ($consultas as $sql) {
             try {
                 $st = $db->prepare($sql);
-                $st->execute([':id' => $idEmpresa]);
+                $st->execute([':id' => $idEmpresa, ':amb' => $tipoAmbiente]);
                 foreach ($st->fetchAll(\PDO::FETCH_COLUMN) as $c) {
                     if (!empty($c)) $claves[] = $c;
                 }
             } catch (\Exception $e) {
-                // Tabla puede no existir aún — ignorar
                 $this->debugLog[] = 'WARN obtenerClavesExistentes: ' . $e->getMessage();
             }
+        }
+
+        try {
+            $st = $db->prepare($consultaIgnorados);
+            $st->execute([':id' => $idEmpresa]);
+            foreach ($st->fetchAll(\PDO::FETCH_COLUMN) as $c) {
+                if (!empty($c)) $claves[] = $c;
+            }
+        } catch (\Exception $e) {
+            $this->debugLog[] = 'WARN obtenerClavesExistentes (ignorados): ' . $e->getMessage();
         }
 
         return array_values(array_unique($claves));

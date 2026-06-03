@@ -470,7 +470,7 @@ class FacturaVentaController extends BaseModuloController
             // Generar o actualizar el asiento
             $this->service->procesarAsientoContable($idVenta, $data, $numFactura);
 
-            echo json_encode(['ok' => true, 'mensaje' => 'Asiento generado/actualizado con Ãexito.']);
+            echo json_encode(['ok' => true, 'mensaje' => 'Asiento generado/actualizado con ï¿½exito.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -1536,8 +1536,10 @@ class FacturaVentaController extends BaseModuloController
                 'fecha_emision'       => $data['fecha_emision'],
                 'establecimiento'     => $punto['establecimiento'],
                 'punto_emision'       => $punto['punto'],
-                'secuencial'          => $secRes['secuencial'],
-                'numero_ingreso'      => $punto['establecimiento'] . '-' . $punto['punto'] . '-' . $secRes['secuencial'],
+                'secuencial'          => $secRes['formateado'],
+                'numero_ingreso'      => str_pad((string)($punto['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT)
+                                         . '-' . str_pad((string)($punto['punto'] ?? '001'), 3, '0', STR_PAD_LEFT)
+                                         . '-' . $secRes['formateado'],
                 'tipo_ingreso'        => 'FACTURA_VENTA',
                 'id_ingreso_concepto' => !empty($data['id_ingreso_concepto']) ? (int)$data['id_ingreso_concepto'] : null,
                 'monto_total'         => $montoCobrar,
@@ -1572,7 +1574,7 @@ class FacturaVentaController extends BaseModuloController
             );
 
             $idIngreso = $ingresoService->crear($payload);
-            echo json_encode(['ok' => true, 'msg' => 'Cobro registrado con Ãexito.', 'id_ingreso' => $idIngreso]);
+            echo json_encode(['ok' => true, 'msg' => 'Cobro registrado con Ã©xito.', 'id_ingreso' => $idIngreso]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
@@ -1686,7 +1688,7 @@ class FacturaVentaController extends BaseModuloController
             );
             $stPend->execute([$idEmpresa, $idFactura]);
             if ((int) $stPend->fetchColumn() > 0) {
-                echo json_encode(['ok' => false, 'mensaje' => 'Ya existe un enlace de pago pendiente enviado en los Ãultimos 15 minutos. Espera a que el cliente lo complete o a que expire.']);
+                echo json_encode(['ok' => false, 'mensaje' => 'Ya existe un enlace de pago pendiente enviado en los ï¿½ultimos 15 minutos. Espera a que el cliente lo complete o a que expire.']);
                 exit;
             }
 

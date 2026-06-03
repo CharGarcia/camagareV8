@@ -66,6 +66,25 @@ class SriEnvioService
             throw new \RuntimeException("La factura no tiene clave de acceso generada.");
         }
 
+        $tipoAmbiente = $cabecera['tipo_ambiente'] ?? '1';
+        $claveAcceso  = $cabecera['clave_acceso'];
+
+        // Verificar primero si ya está autorizado en el SRI (antes de validar fecha u otro requisito).
+        // Cubre el caso donde el WS devolvió error de red pero el SRI sí procesó el comprobante.
+        $preCheck = $this->preVerificarAutorizacion(
+            'ventas_cabecera', $idVenta, $claveAcceso, $tipoAmbiente,
+            'factura_venta', $idEmpresa, $idUsuario, 'autorizado',
+            function (string $numAut, ?string $fechaAut, string $xmlDetalle) use ($repo, $idVenta, $idUsuario): void {
+                $db = Database::getConnection();
+                $db->prepare("UPDATE ventas_cabecera SET estado = 'autorizado', updated_by = ?, updated_at = NOW() WHERE id = ?")
+                   ->execute([$idUsuario, $idVenta]);
+                try { $repo->updateDetalleXml($idVenta, $xmlDetalle); } catch (\Throwable) {}
+            }
+        );
+        if ($preCheck !== null) {
+            return $preCheck;
+        }
+
         // El SRI exige que la fecha de emisión sea la fecha actual del día del envío.
         $fechaEmision = (new \DateTime($cabecera['fecha_emision']))->format('Y-m-d');
         $hoy          = (new \DateTime())->format('Y-m-d');
@@ -150,8 +169,6 @@ class SriEnvioService
         );
 
         // 4. Registrar inicio de envío
-        $tipoAmbiente = $cabecera['tipo_ambiente'] ?? '1';
-        $claveAcceso  = $cabecera['clave_acceso'];
         $logBase = [
             'id_empresa'      => $idEmpresa,
             'tipo_comprobante'=> 'factura_venta',
@@ -216,31 +233,13 @@ class SriEnvioService
             'fecha_autorizacion'  => $fechaAut,
         ]);
 
-        // Si fue autorizado, actualizar estado y guardar XML autorizado completo
         if ($estadoInterno === 'autorizado') {
             $db = Database::getConnection();
             $db->prepare("UPDATE ventas_cabecera SET estado = 'autorizado', updated_by = ?, updated_at = NOW() WHERE id = ?")
                ->execute([$idUsuario, $idVenta]);
 
-            // Construir el XML autorizado completo con el sobre de autorización del SRI.
-            // El comprobante es el XML firmado que enviamos (devuelto dentro de <comprobante>
-            // por el SRI, o el que tenemos localmente si el SRI no lo devuelve).
             $comprobante = !empty($xmlAutorizado) ? $xmlAutorizado : $xmlFirmado;
-            $ambiente    = $tipoAmbiente === '2' ? 'PRODUCCION' : 'PRUEBAS';
-
-            $xmlDetalleCompleto = implode("\n", [
-                '<?xml version="1.0" encoding="UTF-8"?>',
-                '<autorizaciones>',
-                '  <autorizacion>',
-                '    <estado>AUTORIZADO</estado>',
-                '    <numeroAutorizacion>' . htmlspecialchars($numAut,   ENT_XML1, 'UTF-8') . '</numeroAutorizacion>',
-                '    <fechaAutorizacion>'  . htmlspecialchars($fechaAut, ENT_XML1, 'UTF-8') . '</fechaAutorizacion>',
-                '    <ambiente>' . $ambiente . '</ambiente>',
-                '    <comprobante><![CDATA[' . $comprobante . ']]></comprobante>',
-                '    <mensajes/>',
-                '  </autorizacion>',
-                '</autorizaciones>',
-            ]);
+            $xmlDetalleCompleto = $this->buildXmlDetalleCompleto($numAut, (string)$fechaAut, $tipoAmbiente, $comprobante);
 
             try {
                 $repo->updateDetalleXml($idVenta, $xmlDetalleCompleto);
@@ -291,6 +290,23 @@ class SriEnvioService
             throw new \RuntimeException("La nota de crédito no tiene clave de acceso generada.");
         }
 
+        $tipoAmbiente = $cabecera['tipo_ambiente'] ?? '1';
+        $claveAcceso  = $cabecera['clave_acceso'];
+
+        $preCheck = $this->preVerificarAutorizacion(
+            'notas_credito_cabecera', $idNC, $claveAcceso, $tipoAmbiente,
+            'nota_credito', $idEmpresa, $idUsuario, 'autorizado',
+            function (string $numAut, ?string $fechaAut, string $xmlDetalle) use ($repo, $idNC, $idUsuario): void {
+                $db = Database::getConnection();
+                $db->prepare("UPDATE notas_credito_cabecera SET estado = 'autorizado', updated_by = ?, updated_at = NOW() WHERE id = ?")
+                   ->execute([$idUsuario, $idNC]);
+                try { $repo->updateDetalleXml($idNC, $xmlDetalle); } catch (\Throwable) {}
+            }
+        );
+        if ($preCheck !== null) {
+            return $preCheck;
+        }
+
         $detalles = $repo->getDetalles($idNC);
         foreach ($detalles as &$d) {
             $d['impuestos'] = $repo->getImpuestosDetalle((int)$d['id']);
@@ -314,8 +330,6 @@ class SriEnvioService
         $xmlFirmado = $this->firmador->firmar($xmlLimpio, $firmaConfig['archivo_path'], $firmaConfig['p12_password']);
 
         // 4. Enviar
-        $tipoAmbiente = $cabecera['tipo_ambiente'] ?? '1';
-        $claveAcceso  = $cabecera['clave_acceso'];
         $logBase = [
             'id_empresa'      => $idEmpresa,
             'tipo_comprobante'=> 'nota_credito',
@@ -372,21 +386,7 @@ class SriEnvioService
                ->execute([$idUsuario, $idNC]);
 
             $comprobante = !empty($xmlAutorizado) ? $xmlAutorizado : $xmlFirmado;
-            $ambiente    = $tipoAmbiente === '2' ? 'PRODUCCION' : 'PRUEBAS';
-
-            $xmlDetalleCompleto = implode("\n", [
-                '<?xml version="1.0" encoding="UTF-8"?>',
-                '<autorizaciones>',
-                '  <autorizacion>',
-                '    <estado>AUTORIZADO</estado>',
-                '    <numeroAutorizacion>' . htmlspecialchars($numAut,   ENT_XML1, 'UTF-8') . '</numeroAutorizacion>',
-                '    <fechaAutorizacion>'  . htmlspecialchars($fechaAut, ENT_XML1, 'UTF-8') . '</fechaAutorizacion>',
-                '    <ambiente>' . $ambiente . '</ambiente>',
-                '    <comprobante><![CDATA[' . $comprobante . ']]></comprobante>',
-                '    <mensajes/>',
-                '  </autorizacion>',
-                '</autorizaciones>',
-            ]);
+            $xmlDetalleCompleto = $this->buildXmlDetalleCompleto($numAut, (string)$fechaAut, $tipoAmbiente, $comprobante);
 
             try {
                 $repo->updateDetalleXml($idNC, $xmlDetalleCompleto);
@@ -427,6 +427,23 @@ class SriEnvioService
             throw new \RuntimeException("La retención no tiene clave de acceso generada.");
         }
 
+        $tipoAmbiente = $cabecera['tipo_ambiente'] ?? '1';
+        $claveAcceso  = $cabecera['clave_acceso'];
+
+        $preCheck = $this->preVerificarAutorizacion(
+            'retencion_compra_cabecera', $idRetencion, $claveAcceso, $tipoAmbiente,
+            'retencion_compra', $idEmpresa, $idUsuario, 'autorizada',
+            function (string $numAut, ?string $fechaAut, string $xmlDetalle) use ($repo, $idRetencion, $idUsuario): void {
+                $db = Database::getConnection();
+                $db->prepare("UPDATE retencion_compra_cabecera SET estado = 'autorizada', numero_autorizacion = ?, updated_by = ?, updated_at = NOW() WHERE id = ?")
+                   ->execute([$numAut, $idUsuario, $idRetencion]);
+                try { $repo->updateDetalleXml($idRetencion, $xmlDetalle); } catch (\Throwable) {}
+            }
+        );
+        if ($preCheck !== null) {
+            return $preCheck;
+        }
+
         $lineas = $repo->getDetalle($idRetencion);
 
         $empresaModel = new \App\models\Empresa();
@@ -463,8 +480,6 @@ class SriEnvioService
         $xmlFirmado = $this->firmador->firmar($xmlLimpio, $firmaConfig['archivo_path'], $firmaConfig['p12_password']);
 
         // 4. Registrar inicio
-        $tipoAmbiente = $cabecera['tipo_ambiente'] ?? '1';
-        $claveAcceso  = $cabecera['clave_acceso'];
         $logBase = [
             'id_empresa'       => $idEmpresa,
             'tipo_comprobante' => 'retencion_compra',
@@ -525,21 +540,7 @@ class SriEnvioService
             )->execute([$numAut, $idUsuario, $idRetencion]);
 
             $comprobante = !empty($xmlAutorizado) ? $xmlAutorizado : $xmlFirmado;
-            $ambiente    = $tipoAmbiente === '2' ? 'PRODUCCION' : 'PRUEBAS';
-
-            $xmlDetalleCompleto = implode("\n", [
-                '<?xml version="1.0" encoding="UTF-8"?>',
-                '<autorizaciones>',
-                '  <autorizacion>',
-                '    <estado>AUTORIZADO</estado>',
-                '    <numeroAutorizacion>' . htmlspecialchars($numAut,   ENT_XML1, 'UTF-8') . '</numeroAutorizacion>',
-                '    <fechaAutorizacion>'  . htmlspecialchars($fechaAut, ENT_XML1, 'UTF-8') . '</fechaAutorizacion>',
-                '    <ambiente>' . $ambiente . '</ambiente>',
-                '    <comprobante><![CDATA[' . $comprobante . ']]></comprobante>',
-                '    <mensajes/>',
-                '  </autorizacion>',
-                '</autorizaciones>',
-            ]);
+            $xmlDetalleCompleto = $this->buildXmlDetalleCompleto($numAut, (string)$fechaAut, $tipoAmbiente, $comprobante);
 
             try {
                 $repo->updateDetalleXml($idRetencion, $xmlDetalleCompleto);
@@ -558,6 +559,21 @@ class SriEnvioService
                 : 'El SRI no autorizó la retención.',
             'errores' => $autResult['errores'] ?? [],
         ];
+    }
+
+    // ── API pública de consulta ────────────────────────────────────────────────
+
+    /**
+     * Consulta en el SRI si un comprobante ya está autorizado.
+     * Útil para validar antes de enviar, al anular, o desde otros módulos.
+     *
+     * @param  string $claveAcceso   Clave de acceso de 49 dígitos
+     * @param  string $tipoAmbiente '1' pruebas | '2' producción
+     * @return array ['estado', 'numero_autorizacion', 'fecha_autorizacion', 'xml_autorizado', 'errores']
+     */
+    public function verificarAutorizacion(string $claveAcceso, string $tipoAmbiente = '1'): array
+    {
+        return $this->ws->consultarAutorizacion($claveAcceso, $tipoAmbiente);
     }
 
     // ── Helpers internos ───────────────────────────────────────────────────────
@@ -621,6 +637,103 @@ class SriEnvioService
         $params[] = $id;
         $sql = "UPDATE $tabla SET " . implode(', ', $sets) . " WHERE id = ?";
         $db->prepare($sql)->execute($params);
+    }
+
+    /**
+     * Construye el XML de autorización completo para guardar en detalle_xml.
+     */
+    private function buildXmlDetalleCompleto(
+        string $numAut,
+        string $fechaAut,
+        string $tipoAmbiente,
+        string $comprobante
+    ): string {
+        $ambiente = $tipoAmbiente === '2' ? 'PRODUCCION' : 'PRUEBAS';
+        return implode("\n", [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<autorizaciones>',
+            '  <autorizacion>',
+            '    <estado>AUTORIZADO</estado>',
+            '    <numeroAutorizacion>' . htmlspecialchars($numAut,   ENT_XML1, 'UTF-8') . '</numeroAutorizacion>',
+            '    <fechaAutorizacion>'  . htmlspecialchars($fechaAut, ENT_XML1, 'UTF-8') . '</fechaAutorizacion>',
+            '    <ambiente>' . $ambiente . '</ambiente>',
+            '    <comprobante><![CDATA[' . $comprobante . ']]></comprobante>',
+            '    <mensajes/>',
+            '  </autorizacion>',
+            '</autorizaciones>',
+        ]);
+    }
+
+    /**
+     * Verifica si el documento ya está autorizado en el SRI antes de enviar.
+     * Si está autorizado, actualiza la BD y retorna el array de resultado.
+     * Si no está autorizado, retorna null (continuar con el envío normal).
+     *
+     * @param string   $tabla          Tabla principal del documento
+     * @param int      $id             ID del documento
+     * @param string   $claveAcceso    Clave de acceso de 49 dígitos
+     * @param string   $tipoAmbiente   '1' pruebas | '2' producción
+     * @param string   $tipoComprobante Nombre para log (ej: 'factura_venta')
+     * @param int      $idEmpresa
+     * @param int      $idUsuario
+     * @param string   $estadoAutorizado  Estado interno a guardar ('autorizado' o 'autorizada')
+     * @param callable $onAutorizado   Callback con ($numAut, $fechaAut, $xmlDetalle) para updates específicos de tabla
+     */
+    private function preVerificarAutorizacion(
+        string   $tabla,
+        int      $id,
+        string   $claveAcceso,
+        string   $tipoAmbiente,
+        string   $tipoComprobante,
+        int      $idEmpresa,
+        int      $idUsuario,
+        string   $estadoAutorizado,
+        callable $onAutorizado
+    ): ?array {
+        try {
+            $consulta = $this->ws->consultarAutorizacion($claveAcceso, $tipoAmbiente);
+        } catch (\Throwable $e) {
+            // Si falla la consulta previa, no bloqueamos el envío
+            error_log("[SRI preVerificar] No se pudo consultar estado previo: " . $e->getMessage());
+            return null;
+        }
+
+        if (strtoupper($consulta['estado'] ?? '') !== 'AUTORIZADO') {
+            return null; // No está autorizado aún — continuar con envío normal
+        }
+
+        $numAut  = $consulta['numero_autorizacion'] ?: $claveAcceso;
+        $fechaAut = $consulta['fecha_autorizacion'] ?: null;
+        $xmlComp  = $consulta['xml_autorizado'] ?: '';
+
+        $xmlDetalle = $this->buildXmlDetalleCompleto($numAut, (string)$fechaAut, $tipoAmbiente, $xmlComp);
+
+        $this->actualizarEstadoDocumento($tabla, $id, $estadoAutorizado, $fechaAut, $xmlComp ?: null, null, $idUsuario);
+
+        $this->log([
+            'id_empresa'          => $idEmpresa,
+            'tipo_comprobante'    => $tipoComprobante,
+            'id_comprobante'      => $id,
+            'clave_acceso'        => $claveAcceso,
+            'tipo_ambiente'       => $tipoAmbiente,
+            'created_by'          => $idUsuario,
+            'accion'              => $estadoAutorizado,
+            'estado_sri'          => 'AUTORIZADO',
+            'mensaje'             => 'Comprobante ya autorizado en el SRI (verificación previa al envío).',
+            'numero_autorizacion' => $numAut,
+            'fecha_autorizacion'  => $fechaAut,
+        ]);
+
+        $onAutorizado($numAut, $fechaAut, $xmlDetalle);
+
+        return [
+            'ok'                  => true,
+            'estado'              => $estadoAutorizado,
+            'numero_autorizacion' => $numAut,
+            'fecha_autorizacion'  => $fechaAut,
+            'mensaje'             => 'El comprobante ya se encontraba autorizado en el SRI.',
+            'errores'             => [],
+        ];
     }
 
     private function actualizarEstadoSri(
@@ -693,6 +806,23 @@ class SriEnvioService
             throw new \RuntimeException("La guía de remisión no tiene clave de acceso generada.");
         }
 
+        $tipoAmbiente = $cabecera['tipo_ambiente'] ?? '1';
+        $claveAcceso  = $cabecera['clave_acceso'];
+
+        $preCheck = $this->preVerificarAutorizacion(
+            'guias_remision_cabecera', $idGuia, $claveAcceso, $tipoAmbiente,
+            'guia_remision', $idEmpresa, $idUsuario, 'autorizado',
+            function (string $numAut, ?string $fechaAut, string $xmlDetalle) use ($repo, $idGuia, $idUsuario): void {
+                $db = Database::getConnection();
+                $db->prepare("UPDATE guias_remision_cabecera SET estado = 'autorizado', numero_autorizacion = ?, updated_by = ?, updated_at = NOW() WHERE id = ?")
+                   ->execute([$numAut, $idUsuario, $idGuia]);
+                try { $repo->updateDetalleXml($idGuia, $xmlDetalle); } catch (\Throwable) {}
+            }
+        );
+        if ($preCheck !== null) {
+            return $preCheck;
+        }
+
         $fechaEmision = (new \DateTime($cabecera['fecha_emision']))->format('Y-m-d');
         $hoy          = (new \DateTime())->format('Y-m-d');
         if ($fechaEmision !== $hoy) {
@@ -738,8 +868,6 @@ class SriEnvioService
         $xmlFirmado = $this->firmador->firmar($xmlLimpio, $firmaConfig['archivo_path'], $firmaConfig['p12_password']);
 
         // 4. Log inicio
-        $tipoAmbiente = $cabecera['tipo_ambiente'] ?? '1';
-        $claveAcceso  = $cabecera['clave_acceso'];
         $logBase = [
             'id_empresa'      => $idEmpresa,
             'tipo_comprobante'=> 'guia_remision',
@@ -800,21 +928,7 @@ class SriEnvioService
 
             $xmlAutorizado = $autResult['xml_autorizado'] ?: null;
             $comprobante   = !empty($xmlAutorizado) ? $xmlAutorizado : $xmlFirmado;
-            $ambiente      = $tipoAmbiente === '2' ? 'PRODUCCION' : 'PRUEBAS';
-
-            $xmlDetalleCompleto = implode("\n", [
-                '<?xml version="1.0" encoding="UTF-8"?>',
-                '<autorizaciones>',
-                '  <autorizacion>',
-                '    <estado>AUTORIZADO</estado>',
-                '    <numeroAutorizacion>' . htmlspecialchars($numAut,   ENT_XML1, 'UTF-8') . '</numeroAutorizacion>',
-                '    <fechaAutorizacion>'  . htmlspecialchars($fechaAut, ENT_XML1, 'UTF-8') . '</fechaAutorizacion>',
-                '    <ambiente>' . $ambiente . '</ambiente>',
-                '    <comprobante><![CDATA[' . $comprobante . ']]></comprobante>',
-                '    <mensajes/>',
-                '  </autorizacion>',
-                '</autorizaciones>',
-            ]);
+            $xmlDetalleCompleto = $this->buildXmlDetalleCompleto($numAut, (string)$fechaAut, $tipoAmbiente, $comprobante);
 
             try {
                 $repo->updateDetalleXml($idGuia, $xmlDetalleCompleto);
@@ -845,6 +959,23 @@ class SriEnvioService
         }
         if (empty($cabecera['clave_acceso'])) {
             throw new \RuntimeException("La liquidación no tiene clave de acceso generada.");
+        }
+
+        $tipoAmbiente = $cabecera['tipo_ambiente'] ?? '1';
+        $claveAcceso  = $cabecera['clave_acceso'];
+
+        $preCheck = $this->preVerificarAutorizacion(
+            'liquidaciones_cabecera', $idLiq, $claveAcceso, $tipoAmbiente,
+            'liquidacion_compra', $idEmpresa, $idUsuario, 'autorizado',
+            function (string $numAut, ?string $fechaAut, string $xmlDetalle) use ($repo, $idLiq, $idUsuario): void {
+                $db = Database::getConnection();
+                $db->prepare("UPDATE liquidaciones_cabecera SET estado = 'autorizado', numero_autorizacion = ?, updated_by = ?, updated_at = NOW() WHERE id = ?")
+                   ->execute([$numAut, $idUsuario, $idLiq]);
+                try { $repo->updateDetalleXml($idLiq, $xmlDetalle); } catch (\Throwable) {}
+            }
+        );
+        if ($preCheck !== null) {
+            return $preCheck;
         }
 
         $fechaEmision = (new \DateTime($cabecera['fecha_emision']))->format('Y-m-d');
@@ -898,8 +1029,6 @@ class SriEnvioService
         $xmlFirmado = $this->firmador->firmar($xmlLimpio, $firmaConfig['archivo_path'], $firmaConfig['p12_password']);
 
         // 4. Log inicio
-        $tipoAmbiente = $cabecera['tipo_ambiente'] ?? '1';
-        $claveAcceso  = $cabecera['clave_acceso'];
         $logBase = [
             'id_empresa'       => $idEmpresa,
             'tipo_comprobante' => 'liquidacion_compra',
@@ -962,21 +1091,7 @@ class SriEnvioService
 
             $xmlAutorizado = $autResult['xml_autorizado'] ?: null;
             $comprobante   = !empty($xmlAutorizado) ? $xmlAutorizado : $xmlFirmado;
-            $ambiente      = $tipoAmbiente === '2' ? 'PRODUCCION' : 'PRUEBAS';
-
-            $xmlDetalleCompleto = implode("\n", [
-                '<?xml version="1.0" encoding="UTF-8"?>',
-                '<autorizaciones>',
-                '  <autorizacion>',
-                '    <estado>AUTORIZADO</estado>',
-                '    <numeroAutorizacion>' . htmlspecialchars($numAut,   ENT_XML1, 'UTF-8') . '</numeroAutorizacion>',
-                '    <fechaAutorizacion>'  . htmlspecialchars($fechaAut, ENT_XML1, 'UTF-8') . '</fechaAutorizacion>',
-                '    <ambiente>' . $ambiente . '</ambiente>',
-                '    <comprobante><![CDATA[' . $comprobante . ']]></comprobante>',
-                '    <mensajes/>',
-                '  </autorizacion>',
-                '</autorizaciones>',
-            ]);
+            $xmlDetalleCompleto = $this->buildXmlDetalleCompleto($numAut, (string)$fechaAut, $tipoAmbiente, $comprobante);
 
             try {
                 $repo->updateDetalleXml($idLiq, $xmlDetalleCompleto);
