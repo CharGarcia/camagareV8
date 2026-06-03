@@ -31,10 +31,18 @@ class DocumentosHandler extends BaseHandler
             return ['registros' => 0, 'mensaje' => 'El envío automático al SRI por ahora solo está disponible para Facturas de venta.'];
         }
 
+        // Tipo de ambiente activo de la empresa (1=Pruebas, 2=Producción).
+        // Solo se envían facturas cuyo tipo_ambiente coincida con el ambiente activo.
+        $emisor   = (new \App\repositories\modulos\EmpresaRepository())->getEmisorConfig($idEmpresa);
+        $ambiente = (string)($emisor['tipo_ambiente'] ?? '');
+        if ($ambiente === '') {
+            return ['registros' => 0, 'mensaje' => 'La empresa no tiene configurado el tipo de ambiente (Pruebas/Producción) en la ficha de Emisor Electrónico.'];
+        }
+
         $lote        = max(10, (int)($p['lote_interno'] ?? 50));
         $estabFilter = $idEstablecimiento !== null ? "AND id_establecimiento = {$idEstablecimiento}" : '';
 
-        // Facturas pendientes de autorizar = estado 'borrador'.
+        // Facturas pendientes de autorizar = estado 'borrador' + mismo ambiente activo.
         // Al autorizar, SriEnvioService cambia estado a 'autorizado' (sale del filtro).
         // Las que fallan quedan en 'borrador'; el keyset por id evita reprocesarlas en esta corrida.
         $stmt = $this->db->prepare("
@@ -43,6 +51,7 @@ class DocumentosHandler extends BaseHandler
             WHERE eliminado = false
               AND id_empresa = :id_empresa
               AND estado = 'borrador'
+              AND tipo_ambiente::text = :ambiente
               AND id > :ultimo_id
               {$estabFilter}
             ORDER BY id ASC
@@ -57,6 +66,7 @@ class DocumentosHandler extends BaseHandler
 
         do {
             $stmt->bindValue(':id_empresa', $idEmpresa, \PDO::PARAM_INT);
+            $stmt->bindValue(':ambiente',   $ambiente);
             $stmt->bindValue(':ultimo_id',  $ultimoId,  \PDO::PARAM_INT);
             $stmt->bindValue(':lote',       $lote,      \PDO::PARAM_INT);
             $stmt->execute();
@@ -80,8 +90,9 @@ class DocumentosHandler extends BaseHandler
             }
         } while (count($docs) === $lote);
 
+        $ambienteLabel = $ambiente === '2' ? 'Producción' : 'Pruebas';
         $total = $autorizadas + $errores;
-        $msg   = "Se procesaron {$total} factura(s): {$autorizadas} autorizada(s), {$errores} no autorizada(s)/con error.";
+        $msg   = "Ambiente {$ambienteLabel}: se procesaron {$total} factura(s): {$autorizadas} autorizada(s), {$errores} no autorizada(s)/con error.";
         return ['registros' => $autorizadas, 'mensaje' => $msg];
     }
 
