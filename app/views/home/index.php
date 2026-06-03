@@ -138,8 +138,11 @@ $base = rtrim(BASE_URL ?? '', '/');
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h3 class="fw-bold text-dark mb-1">Dashboard</h3>
-            <p class="text-muted small mb-0">Resumen general y métricas clave de la empresa</p>
+            <h3 class="fw-bold text-dark mb-1">
+                Dashboard
+                <span id="badgeAmbiente" class="badge rounded-pill align-middle ms-2 d-none" style="font-size:.6em;"></span>
+            </h3>
+            <p class="text-muted small mb-0">Resumen general y métricas clave de la empresa <span class="text-secondary">(ventas según el ambiente activo)</span></p>
         </div>
         <div>
             <button class="btn btn-primary shadow-sm" onclick="loadDashboardData()">
@@ -490,7 +493,15 @@ async function loadDashboardData() {
         
         if (json.ok) {
             const data = json.data;
-            
+
+            // Indicador de ambiente activo
+            const badge = document.getElementById('badgeAmbiente');
+            if (badge && data.tipo_ambiente_label) {
+                const esProd = String(data.tipo_ambiente) === '2';
+                badge.textContent = data.tipo_ambiente_label;
+                badge.className = 'badge rounded-pill align-middle ms-2 ' + (esProd ? 'bg-success' : 'bg-warning text-dark');
+            }
+
             updateMetricCard('valVentasMes', 'changeVentas', data.ventas_mes_actual, data.ventas_mes_anterior);
             updateMetricCard('valComprasMes', 'changeCompras', data.compras_mes_actual, data.compras_mes_anterior);
             
