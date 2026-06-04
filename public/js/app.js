@@ -13,18 +13,33 @@
         var rucInput = form.querySelector('input[name="ruc_empresa"]');
         var items = dropdown.querySelectorAll('.cmg-empresas-dropdown-item');
 
-        // Si el input está vacío pero hay un idInput válido, restaurar el valor desde el data-text del item correspondiente
-        if (input.value.trim() === '' && idInput && idInput.value) {
-            var selectedId = idInput.value;
+        // Restaurar empresa desde sessionStorage si el servidor no la renderizó correctamente
+        var storedEmpresaId = sessionStorage.getItem('cmg-empresa-id');
+        var storedEmpresaText = sessionStorage.getItem('cmg-empresa-text');
+        var currentId = idInput ? idInput.value : '';
+
+        // Si el input está vacío pero hay un idInput válido, restaurar desde data-text del item
+        if (input.value.trim() === '' && (currentId || storedEmpresaId)) {
+            var selectedId = currentId || storedEmpresaId;
             for (var i = 0; i < items.length; i++) {
                 if (items[i].getAttribute('data-id') === selectedId) {
                     var text = items[i].getAttribute('data-text');
                     if (text) {
                         input.value = text;
+                        if (idInput) idInput.value = selectedId;
+                        if (rucInput && items[i].getAttribute('data-ruc')) {
+                            rucInput.value = items[i].getAttribute('data-ruc');
+                        }
                     }
                     break;
                 }
             }
+        }
+
+        // Si todavía hay valor en input, guardar en sessionStorage para recuperar en navegación
+        if (input.value.trim() !== '' && idInput && idInput.value) {
+            sessionStorage.setItem('cmg-empresa-id', idInput.value);
+            sessionStorage.setItem('cmg-empresa-text', input.value);
         }
         var isOpening = false;
 
@@ -87,6 +102,11 @@
             if (idInput) idInput.value = id;
             if (rucInput) rucInput.value = ruc;
             input.value = text || '';
+
+            // Guardar en sessionStorage para preservar en navegación
+            sessionStorage.setItem('cmg-empresa-id', id);
+            sessionStorage.setItem('cmg-empresa-text', text);
+
             hideDropdown();
             form.submit();
         }

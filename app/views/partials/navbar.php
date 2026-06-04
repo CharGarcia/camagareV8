@@ -390,6 +390,15 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         if (btnTareas) {
             btnTareas.addEventListener('click', function(e) {
                 e.preventDefault();
+                // Guardar el id_empresa actual en sessionStorage antes de navegar
+                var idEmpresaInput = document.getElementById('input-id-empresa');
+                var empresasInput = document.getElementById('input-empresas');
+                if (idEmpresaInput && idEmpresaInput.value) {
+                    sessionStorage.setItem('cmg-empresa-id', idEmpresaInput.value);
+                }
+                if (empresasInput && empresasInput.value) {
+                    sessionStorage.setItem('cmg-empresa-text', empresasInput.value);
+                }
                 var url = this.getAttribute('data-url');
                 if (url) {
                     window.location.href = url;
