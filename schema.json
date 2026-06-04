@@ -1,0 +1,1610 @@
+{
+    "categorias": [
+        {
+            "column_name": "id",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_empresa",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_usuario",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "nombre",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 150
+        },
+        {
+            "column_name": "created_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "status",
+            "data_type": "smallint",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "eliminado",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        }
+    ],
+    "bodegas": [
+        {
+            "column_name": "id",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_empresa",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_usuario",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "nombre",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "status",
+            "data_type": "boolean",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_by",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "eliminado",
+            "data_type": "boolean",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        }
+    ],
+    "clientes": [
+        {
+            "column_name": "id",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_empresa",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_usuario",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "nombre",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 200
+        },
+        {
+            "column_name": "tipo_id",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 2
+        },
+        {
+            "column_name": "identificacion",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "telefono",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 20
+        },
+        {
+            "column_name": "email",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 200
+        },
+        {
+            "column_name": "direccion",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 200
+        },
+        {
+            "column_name": "plazo",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "provincia",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 10
+        },
+        {
+            "column_name": "ciudad",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 10
+        },
+        {
+            "column_name": "status",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_vendedor",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_cuenta_cobrar",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_cuenta_ingreso",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "eliminado",
+            "data_type": "boolean",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_forma_pago_sri",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_forma_cobro_predeterminada",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "monto_maximo_auto_cobro",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "latitud",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "longitud",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "geocodificado_en",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        }
+    ],
+    "empleados": [
+        {
+            "column_name": "id",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_empresa",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_usuario_sistema",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "tipo_id",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 20
+        },
+        {
+            "column_name": "identificacion",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 25
+        },
+        {
+            "column_name": "nombres_apellidos",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 255
+        },
+        {
+            "column_name": "direccion",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "email",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "telefono",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "contacto_emergencia",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "fecha_nacimiento",
+            "data_type": "date",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "sexo",
+            "data_type": "character",
+            "is_nullable": "YES",
+            "character_maximum_length": 1
+        },
+        {
+            "column_name": "estado",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 20
+        },
+        {
+            "column_name": "id_banco_ecuador",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "tipo_cuenta",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 20
+        },
+        {
+            "column_name": "numero_cuenta",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "eliminado",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_by",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "fondos_reserva",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 20
+        },
+        {
+            "column_name": "aporta_iess",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "decimo_tercero",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 20
+        },
+        {
+            "column_name": "decimo_cuarto",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 20
+        },
+        {
+            "column_name": "aporte_personal",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "aporte_patronal",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "sueldo_base",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "valor_quincena",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "region",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 20
+        },
+        {
+            "column_name": "cargo",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "lugar_trabajo",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 200
+        },
+        {
+            "column_name": "horario_trabajo",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "departamento",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "codigo_sectorial_iess",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "valor_semanal",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        }
+    ],
+    "marcas": [
+        {
+            "column_name": "id",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_empresa",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_usuario",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "nombre",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 150
+        },
+        {
+            "column_name": "created_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "status",
+            "data_type": "smallint",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "eliminado",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        }
+    ],
+    "productos": [
+        {
+            "column_name": "id",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_empresa",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "codigo",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "nombre",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 255
+        },
+        {
+            "column_name": "codigo_auxiliar",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "codigo_barras",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "precio_base",
+            "data_type": "numeric",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "tipo_produccion",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 2
+        },
+        {
+            "column_name": "tarifa_iva",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_medida",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "status",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_usuario",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "valor_ice",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "codigo_ice",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 20
+        },
+        {
+            "column_name": "imagen",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 255
+        },
+        {
+            "column_name": "nombre_ice",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "inventariable",
+            "data_type": "boolean",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_cuenta_costo_gasto",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_cuenta_inventario",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_categoria",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_marca",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "eliminado",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_tipo_medida",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "costo_producto",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "stock_minimo",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "stock_maximo",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_ice",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "opciones",
+            "data_type": "jsonb",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_cuenta_ingreso",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        }
+    ],
+    "proveedores": [
+        {
+            "column_name": "id",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_empresa",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_usuario",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "razon_social",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 200
+        },
+        {
+            "column_name": "nombre_comercial",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 200
+        },
+        {
+            "column_name": "tipo_id_proveedor",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 4
+        },
+        {
+            "column_name": "identificacion",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 25
+        },
+        {
+            "column_name": "email",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "direccion",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 150
+        },
+        {
+            "column_name": "telefono",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "tipo_empresa",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "plazo",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "unidad_tiempo",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "relacionado",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_banco",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "tipo_cta",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "numero_cta",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "status",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "eliminado",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_cuenta_pagar",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_cuenta_gasto",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_cuenta_inventario",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "provincia",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "ciudad",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "id_forma_pago_predeterminada",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "monto_maximo_auto_pago",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_retencion_renta",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_retencion_iva",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_sustento_tributario",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "tipo_operacion_bancaria_predeterminada",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "id_egreso_concepto_predeterminado",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "latitud",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "longitud",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "geocodificado_en",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        }
+    ],
+    "vehiculos": [
+        {
+            "column_name": "id",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_empresa",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_usuario",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "marca",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "placa",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 20
+        },
+        {
+            "column_name": "chasis",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "anio",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "propietario",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 200
+        },
+        {
+            "column_name": "estado",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 20
+        },
+        {
+            "column_name": "eliminado",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "correo",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 150
+        },
+        {
+            "column_name": "telefono",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 10
+        }
+    ],
+    "vendedores": [
+        {
+            "column_name": "id",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "identificacion",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "nombre",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "correo",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "id_empresa",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_usuario",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "telefono",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 20
+        },
+        {
+            "column_name": "direccion",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "status",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "creado_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "actualizado_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "eliminado",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        }
+    ],
+    "tipo_medida": [
+        {
+            "column_name": "id",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "codigo",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "id_empresa",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_usuario",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "nombre",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "status",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_by",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "eliminado",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        }
+    ],
+    "unidades_medida": [
+        {
+            "column_name": "id",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_tipo",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "codigo",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "nombre",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 100
+        },
+        {
+            "column_name": "abreviatura",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 20
+        },
+        {
+            "column_name": "factor_base",
+            "data_type": "numeric",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "status",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_empresa",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_by",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "eliminado",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "es_base",
+            "data_type": "boolean",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        }
+    ],
+    "plan_cuentas": [
+        {
+            "column_name": "id",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_empresa",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_usuario",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_centro_costos",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "id_proyecto",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "codigo",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "nivel",
+            "data_type": "character varying",
+            "is_nullable": "NO",
+            "character_maximum_length": 20
+        },
+        {
+            "column_name": "nombre",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "codigo_sri",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "supercias_esf",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "supercias_eri",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "supercias_ecp_codigo",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "supercias_ecp_subcodigo",
+            "data_type": "character varying",
+            "is_nullable": "YES",
+            "character_maximum_length": 50
+        },
+        {
+            "column_name": "status",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "eliminado",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "created_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "updated_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_at",
+            "data_type": "timestamp without time zone",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        },
+        {
+            "column_name": "deleted_by",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "character_maximum_length": null
+        }
+    ]
+}

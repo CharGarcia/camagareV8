@@ -12,6 +12,20 @@
         var idInput = form.querySelector('input[name="id_empresa"]');
         var rucInput = form.querySelector('input[name="ruc_empresa"]');
         var items = dropdown.querySelectorAll('.cmg-empresas-dropdown-item');
+
+        // Si el input está vacío pero hay un idInput válido, restaurar el valor desde el data-text del item correspondiente
+        if (input.value.trim() === '' && idInput && idInput.value) {
+            var selectedId = idInput.value;
+            for (var i = 0; i < items.length; i++) {
+                if (items[i].getAttribute('data-id') === selectedId) {
+                    var text = items[i].getAttribute('data-text');
+                    if (text) {
+                        input.value = text;
+                    }
+                    break;
+                }
+            }
+        }
         var isOpening = false;
 
         function showDropdown() {

@@ -442,6 +442,22 @@ class ConfigController extends Controller
         (new ProvinciaCiudadController())->index();
     }
 
+    public function importadorExcel(): void
+    {
+        $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
+        $c = new ImportadorExcelController();
+        $method = match ($sub) {
+            'descargarPlantillaAjax' => 'descargarPlantillaAjax',
+            'procesarImportacionAjax' => 'procesarImportacionAjax',
+            default => 'index',
+        };
+        if (method_exists($c, $method)) {
+            $c->$method();
+        } else {
+            $c->index();
+        }
+    }
+
     public function provinciaCiudadProvinciaStore(): void
     {
         (new ProvinciaCiudadController())->provinciaStore();
