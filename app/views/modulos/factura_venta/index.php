@@ -4927,6 +4927,15 @@ $perm = $permOriginal;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Anulando...';
         }
 
+        // Mensaje de progreso mientras se procesa la anulación (verificación SRI + cascada)
+        Swal.fire({
+            title: 'Procesando anulación...',
+            html: 'Estamos <strong>verificando el estado en el SRI</strong> y anulando el documento.<br>Esto puede tardar unos segundos, por favor espere.',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+
         try {
             const fd = new FormData();
             fd.append('id', FV_ID_ACTIVO);
