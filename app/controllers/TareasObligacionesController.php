@@ -70,16 +70,20 @@ class TareasObligacionesController extends Controller
         $empresasModel = new \App\models\Empresa();
         $empresas = [];
         $idEmpresaFavorita = null;
+
         try {
             $empresas = $empresasModel->getEmpresasAsignadas($idUsuario);
+        } catch (\Throwable $e) {
+            $empresas = [];
+        }
 
-            // Obtener el favorito del usuario actual
+        // Obtener el favorito del usuario actual (independiente de las empresas)
+        try {
             $resFav = $this->db->prepare("SELECT id_empresa_favorita FROM usuarios WHERE id = ?");
             $resFav->execute([$idUsuario]);
             $idEmpresaFavorita = $resFav->fetchColumn();
             $idEmpresaFavorita = $idEmpresaFavorita ? (int) $idEmpresaFavorita : null;
         } catch (\Throwable $e) {
-            $empresas = [];
             $idEmpresaFavorita = null;
         }
 
