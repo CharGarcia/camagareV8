@@ -15,6 +15,10 @@ $opcionesEmpresas = $opcionesEmpresas ?? [];
 $msg = $_SESSION['permisos_msg'] ?? null;
 unset($_SESSION['permisos_msg']);
 ?>
+<style>
+.permisos-scroll thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; }
+</style>
+
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div>
         <h5 class="mb-0"><i class="bi bi-shield-lock"></i> <?= htmlspecialchars($titulo) ?></h5>
@@ -86,7 +90,7 @@ unset($_SESSION['permisos_msg']);
                 <input type="hidden" name="action" value="guardar">
                 <input type="hidden" name="id_usuario" value="<?= (int)$idUsuarioSel ?>">
                 <input type="hidden" name="id_empresa" value="<?= (int)$idEmpresaSel ?>">
-                <div class="table-responsive">
+                <div class="table-responsive permisos-scroll" style="max-height:calc(100vh - 340px);overflow-y:auto;">
                     <table class="table table-sm table-hover mb-0">
                         <thead class="table-light">
                             <tr>
