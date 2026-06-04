@@ -82,6 +82,11 @@
 
                         // Actualizar la referencia a items
                         items = dropdown.querySelectorAll('.cmg-empresas-dropdown-item');
+
+                        // Actualizar botón de favorito después de cargar empresas
+                        if (typeof actualizarBtnFavorito === 'function') {
+                            actualizarBtnFavorito();
+                        }
                     } else {
                         console.warn('[CaMaGaRe] Respuesta AJAX inválida:', res);
                     }
@@ -91,9 +96,16 @@
                 });
         }
 
-        // Si no hay items O el input está vacío pero hay sesión guardada, cargar AJAX
-        if ((items.length === 0 || input.value.trim() === '') && storedEmpresaId) {
+        // Si no hay items en el dropdown, cargar vía AJAX (independientemente de sessionStorage)
+        if (items.length === 0) {
+            console.log('[CaMaGaRe] Dropdown vacío, cargando empresas vía AJAX');
             cargarEmpresasAjax();
+        }
+        // Si el input está vacío pero hay sesión guardada, restaurar y cargar AJAX si es necesario
+        else if (input.value.trim() === '' && storedEmpresaId) {
+            console.log('[CaMaGaRe] Input vacío pero hay sesión, restaurando...');
+            input.value = storedEmpresaText;
+            if (idInput) idInput.value = storedEmpresaId;
         }
 
         var isOpening = false;
