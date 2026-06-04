@@ -36,9 +36,24 @@
         // FALLBACK AGRESIVO: Si el dropdown está vacío O el input vacío, cargar empresas vía AJAX
         function cargarEmpresasAjax() {
             var baseUrl = (window.CMS_CONFIG && window.CMS_CONFIG.baseUrl) ? window.CMS_CONFIG.baseUrl : '/';
-            fetch(baseUrl + '/empresa/getEmpresasAsignadasAjax')
-                .then(r => r.json())
-                .then(res => {
+            var url = baseUrl + '/empresa/getEmpresasAsignadasAjax';
+
+            console.log('[CaMaGaRe] Cargando empresas desde AJAX: ' + url);
+
+            fetch(url, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            })
+                .then(function(r) {
+                    console.log('[CaMaGaRe] Respuesta AJAX status: ' + r.status);
+                    return r.json();
+                })
+                .then(function(res) {
+                    console.log('[CaMaGaRe] Datos AJAX recibidos:', res);
+
                     if (res.ok && res.empresas && res.empresas.length > 0) {
                         // Limpiar items existentes
                         var itemsExistentes = dropdown.querySelectorAll('.cmg-empresas-dropdown-item');
@@ -55,6 +70,8 @@
                             dropdown.appendChild(div);
                         });
 
+                        console.log('[CaMaGaRe] Dropdown reconstruido con ' + res.empresas.length + ' empresas');
+
                         // Agregar event listeners a los nuevos items
                         dropdown.querySelectorAll('.cmg-empresas-dropdown-item').forEach(function(item) {
                             item.addEventListener('mousedown', function(e) {
@@ -65,7 +82,12 @@
 
                         // Actualizar la referencia a items
                         items = dropdown.querySelectorAll('.cmg-empresas-dropdown-item');
+                    } else {
+                        console.warn('[CaMaGaRe] Respuesta AJAX inválida:', res);
                     }
+                })
+                .catch(function(err) {
+                    console.error('[CaMaGaRe] Error al cargar empresas AJAX:', err);
                 });
         }
 
