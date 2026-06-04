@@ -22,8 +22,32 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
 
     function setFavoriteGlobal(icon) {
         if (icon.classList.contains('cmg-loading')) return;
-        
-        var idEmpresa = icon.getAttribute('data-id');
+
+        // Validar que haya una empresa seleccionada
+        var inputEmpresa = document.getElementById('input-empresas');
+        var idEmpresaInput = document.getElementById('input-id-empresa');
+
+        if (!inputEmpresa || !inputEmpresa.value || inputEmpresa.value.trim() === '') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Sin empresa seleccionada',
+                text: 'Por favor, selecciona una empresa antes de marcar como favorita.',
+                confirmButtonText: 'Aceptar'
+            });
+            return;
+        }
+
+        var idEmpresa = idEmpresaInput ? idEmpresaInput.value : icon.getAttribute('data-id');
+        if (!idEmpresa || idEmpresa === '0') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Sin empresa seleccionada',
+                text: 'Por favor, selecciona una empresa válida.',
+                confirmButtonText: 'Aceptar'
+            });
+            return;
+        }
+
         console.log("Iniciando setFavoriteGlobal para empresa:", idEmpresa);
 
         // Guardar estado original
@@ -37,7 +61,7 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
 
         var params = new URLSearchParams();
         params.append('id_empresa', idEmpresa);
-        
+
         var url = window.CMS_CONFIG.favUrl;
 
         fetch(url, {
@@ -53,18 +77,34 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
             icon.classList.remove('cmg-loading', 'opacity-50');
             if (data.ok) {
                 icon.title = 'Esta es tu empresa favorita';
-                alert("¡Empresa guardada como favorita!");
+                Swal.fire({
+                    icon: 'success',
+                    title: '¡Empresa guardada!',
+                    text: 'La empresa ha sido marcada como favorita.',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
             } else {
                 icon.className = originalClasses;
                 icon.title = originalTitle;
-                alert("Error del sistema: " + data.error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error del sistema',
+                    text: data.error || 'No se pudo guardar la empresa como favorita.',
+                    confirmButtonText: 'Aceptar'
+                });
             }
         })
         .catch(function(err) {
             icon.className = originalClasses;
             icon.title = originalTitle;
             console.error(err);
-            alert("Error de conexión: " + err.message);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error de conexión',
+                text: err.message || 'No se pudo conectar con el servidor.',
+                confirmButtonText: 'Aceptar'
+            });
         });
     }
 </script>
