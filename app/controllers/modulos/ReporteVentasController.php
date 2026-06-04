@@ -275,7 +275,7 @@ class ReporteVentasController extends BaseModuloController
                     ];
                 }
             } else {
-                $headers = ['Fecha', 'Factura', 'Cliente', 'RUC/Cédula', 'Estado', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+                $headers = ['Fecha', 'Factura', 'Cliente', 'RUC/Cédula', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
                 $exportData = [];
                 foreach ($rows as $r) {
                     $exportData[] = [
@@ -283,7 +283,6 @@ class ReporteVentasController extends BaseModuloController
                         $r['numero_factura'],
                         $r['cliente_nombre'],
                         $r['cliente_ruc'],
-                        strtoupper($r['estado']),
                         (float)$r['base_0'],
                         (float)$r['base_iva'],
                         (float)$r['valor_iva'],
@@ -329,7 +328,7 @@ class ReporteVentasController extends BaseModuloController
             ob_start();
             ?>
             <style>
-                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 9pt; margin-bottom: 20px; }
+                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 9pt; margin: 0 auto 20px auto; }
                 th { background: #f2f2f2; border: 1px solid #ccc; padding: 6px; text-align: center; }
                 td { border: 1px solid #ccc; padding: 6px; }
                 .text-end { text-align: right; }
@@ -351,7 +350,7 @@ class ReporteVentasController extends BaseModuloController
                     <?php elseif ($filtros['agrupar_por'] === 'FECHA'): ?>
                         <tr><th>Fecha</th><th>Nro Facturas</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
                     <?php else: ?>
-                        <tr><th>Fecha</th><th>Factura</th><th>Cliente</th><th>Estado</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
+                        <tr><th>Fecha</th><th>Factura</th><th>Cliente</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
                     <?php endif; ?>
                 </thead>
                 <tbody>
@@ -383,7 +382,6 @@ class ReporteVentasController extends BaseModuloController
                                 <td class="text-center"><?= date('d/m/Y', strtotime($r['fecha_emision'])) ?></td>
                                 <td><?= htmlspecialchars($r['numero_factura']) ?></td>
                                 <td><?= htmlspecialchars($r['cliente_nombre']) ?></td>
-                                <td class="text-center"><?= strtoupper($r['estado']) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
@@ -392,20 +390,27 @@ class ReporteVentasController extends BaseModuloController
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
+                <tfoot>
+                    <tr style="background-color: #e9ecef;">
+                        <?php if ($filtros['agrupar_por'] === 'CLIENTE' || $filtros['agrupar_por'] === 'FECHA'): ?>
+                            <th colspan="2" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
+                        <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
+                            <th colspan="3" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
+                        <?php else: ?>
+                            <th colspan="3" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
+                        <?php endif; ?>
+                        
+                        <th class="text-end" style="font-size: 10pt;"><?= number_format((float)$totales['total_base_0'], 2) ?></th>
+                        <th class="text-end" style="font-size: 10pt;"><?= number_format((float)$totales['total_base_iva'], 2) ?></th>
+                        <th class="text-end" style="font-size: 10pt;"><?= number_format((float)$totales['total_iva'], 2) ?></th>
+                        <th class="text-end" style="font-size: 11pt; font-weight: bold; color: #198754;">$<?= number_format((float)$totales['gran_total'], 2) ?></th>
+                    </tr>
+                </tfoot>
             </table>
-            
-            <div style="width: 50%; float: right;">
-                <table class="totales-table">
-                    <tr><th>Total Base 0%</th><td class="text-end"><?= number_format((float)$totales['total_base_0'], 2) ?></td></tr>
-                    <tr><th>Total Base IVA</th><td class="text-end"><?= number_format((float)$totales['total_base_iva'], 2) ?></td></tr>
-                    <tr><th>Total IVA</th><td class="text-end"><?= number_format((float)$totales['total_iva'], 2) ?></td></tr>
-                    <tr><th>GRAN TOTAL</th><td class="text-end" style="font-weight: bold; font-size: 11pt;">$<?= number_format((float)$totales['gran_total'], 2) ?></td></tr>
-                </table>
-            </div>
             
             <?php
             $html = ob_get_clean();
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
             $html2pdf->writeHTML($html);
             $html2pdf->output('ReporteVentas_' . date('Ymd_His') . '.pdf', 'D');
             exit;

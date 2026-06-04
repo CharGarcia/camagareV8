@@ -52,13 +52,17 @@ class HomeController extends Controller
         }
 
         try {
-            // Ambiente activo de la empresa (1=Pruebas, 2=Producción)
             $emisor       = (new \App\repositories\modulos\EmpresaRepository())->getEmisorConfig($idEmpresa);
             $tipoAmbiente = (string)($emisor['tipo_ambiente'] ?? '1');
             if ($tipoAmbiente === '') $tipoAmbiente = '1';
 
+            // Parámetros de filtro desde POST
+            $anio      = (int) ($_POST['anio']       ?? 0);
+            $mes       = isset($_POST['mes']) ? (int)$_POST['mes'] : 0;
+            $cantMeses = (int) ($_POST['cant_meses'] ?? 6);
+
             $service = new DashboardService();
-            $data = $service->getDashboardData($idEmpresa, $tipoAmbiente);
+            $data = $service->getDashboardData($idEmpresa, $tipoAmbiente, $anio, $mes, $cantMeses);
             $data['tipo_ambiente']       = $tipoAmbiente;
             $data['tipo_ambiente_label'] = $tipoAmbiente === '2' ? 'Producción' : 'Pruebas';
             echo json_encode(['ok' => true, 'data' => $data]);
