@@ -170,8 +170,11 @@ class ConfiguracionOpcion extends BaseModel
             $errorCode = $e->getCode();
             $errorMsg = $e->getMessage();
 
-            // Log para debugging
-            error_log("ConfiguracionOpcion::crearOpcion() - Error Code: {$errorCode}, Message: {$errorMsg}");
+            // Log para debugging - archivo visible
+            $logFile = MVC_ROOT . '/storage/logs/configuracion_opciones.log';
+            @mkdir(dirname($logFile), 0777, true);
+            $logEntry = "[" . date('Y-m-d H:i:s') . "] Error Code: {$errorCode}, Message: {$errorMsg}\n";
+            file_put_contents($logFile, $logEntry, FILE_APPEND);
 
             if (strpos($errorMsg, '23505') !== false) {
                 // Error de clave duplicada
