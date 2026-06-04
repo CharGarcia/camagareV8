@@ -149,12 +149,12 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
 
                 <!-- Usuario, config, logout -->
                 <div class="d-flex align-items-center justify-content-center justify-content-lg-end gap-2 order-4 order-lg-5">
-                    <button type="button" class="btn btn-link text-white text-decoration-none position-relative me-2 p-0 border-0 cmg-btn-tareas" title="Tareas pendientes/vencidas" data-url="<?= $base ?>/config/tareas-obligaciones">
+                    <a href="<?= $base ?>/config/tareas-obligaciones" class="text-white text-decoration-none position-relative me-2" title="Tareas pendientes/vencidas" style="display: inline-block;">
                         <i class="bi bi-bell-fill" style="font-size: 1.1rem;"></i>
                         <span id="tareas-alertas-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" style="font-size: 0.6rem; padding: 0.25em 0.5em;">
                             0
                         </span>
-                    </button>
+                    </a>
                     <a id="pedidos-pendientes-icon" href="<?= $base ?>/modulos/pedidos" class="text-white text-decoration-none position-relative me-2 d-none" title="Pedidos pendientes">
                         <i class="bi bi-cart3" style="font-size: 1.1rem;"></i>
                         <span id="pedidos-pendientes-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" style="font-size: 0.6rem; padding: 0.25em 0.5em;">
@@ -385,27 +385,6 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
     };
 
     document.addEventListener('DOMContentLoaded', function() {
-        // Manejar el clic en el botón de tareas para navegar sin perder el estado del selector
-        var btnTareas = document.querySelector('.cmg-btn-tareas');
-        if (btnTareas) {
-            btnTareas.addEventListener('click', function(e) {
-                e.preventDefault();
-                // Guardar el id_empresa actual en sessionStorage antes de navegar
-                var idEmpresaInput = document.getElementById('input-id-empresa');
-                var empresasInput = document.getElementById('input-empresas');
-                if (idEmpresaInput && idEmpresaInput.value) {
-                    sessionStorage.setItem('cmg-empresa-id', idEmpresaInput.value);
-                }
-                if (empresasInput && empresasInput.value) {
-                    sessionStorage.setItem('cmg-empresa-text', empresasInput.value);
-                }
-                var url = this.getAttribute('data-url');
-                if (url) {
-                    window.location.href = url;
-                }
-            });
-        }
-
         window.updateTareasBadge();
         window.updatePedidosPendientesBadge();
         window.updateFacturasBorradorBadge();
