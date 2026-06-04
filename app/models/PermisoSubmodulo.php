@@ -153,6 +153,88 @@ class PermisoSubmodulo extends BaseModel
      * Solo se guardan filas con al menos un permiso (ver, crear, actualizar, eliminar).
      * Se eliminan las asignaciones que quedaron sin ningún permiso.
      */
+    /**
+     * Copia (modo REEMPLAZAR) los permisos de un usuario+empresa origen a un usuario+empresa destino.
+     * Borra los permisos previos del destino en esa empresa y replica exactamente los del origen.
+     */
+    public function copiarPermisosUsuario(int $idUsuarioOrigen, int $idEmpresaOrigen, int $idUsuarioDestino, int $idEmpresaDestino): bool
+    {
+        $uo = (int) $idUsuarioOrigen;
+        $eo = (int) $idEmpresaOrigen;
+        $ud = (int) $idUsuarioDestino;
+        $ed = (int) $idEmpresaDestino;
+        if ($uo <= 0 || $eo <= 0 || $ud <= 0 || $ed <= 0) return false;
+
+        $origen = $this->query("SELECT id_modulo, id_submodulo, COALESCE(r,0) AS r, COALESCE(w,0) AS w,
+                                       COALESCE(u,0) AS u, COALESCE(d,0) AS d, COALESCE(t,0) AS t
+                                FROM modulos_asignados WHERE id_usuario = {$uo} AND id_empresa = {$eo}");
+
+        $this->db->beginTransaction();
+        try {
+            // Reemplazar: borrar permisos previos del destino en la empresa destino
+            $this->execute("DELETE FROM modulos_asignados WHERE id_usuario = {$ud} AND id_empresa = {$ed}");
+
+            foreach ($origen as $row) {
+                $idMod = (int) $row['id_modulo'];
+                $idSub = (int) $row['id_submodulo'];
+                if ($idMod <= 0 || $idSub <= 0) continue;
+                $r = (int) $row['r']; $w = (int) $row['w'];
+                $u = (int) $row['u']; $d = (int) $row['d']; $t = (int) $row['t'];
+
+                $this->execute("INSERT INTO modulos_asignados (id_usuario, id_empresa, id_modulo, id_submodulo, r, w, u, d, t)
+                    VALUES ({$ud}, {$ed}, {$idMod}, {$idSub}, {$r}, {$w}, {$u}, {$d}, {$t})");
+            }
+
+            $this->db->commit();
+            return true;
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            return false;
+        }
+    }
+
+    /**
+     * Guarda (upsert/delete) el permiso de UN solo submódulo. Pensado para guardado inmediato vía AJAX.
+     */
+    public function guardarPermisoSubmodulo(int $idUsuario, int $idEmpresa, int $idModulo, int $idSubmodulo, array $p): bool
+    {
+        $idU = (int) $idUsuario;
+        $idE = (int) $idEmpresa;
+        $idM = (int) $idModulo;
+        $idS = (int) $idSubmodulo;
+        if ($idU <= 0 || $idE <= 0 || $idM <= 0 || $idS <= 0) return false;
+
+        $r = !empty($p['ver']) ? 1 : 0;
+        $w = !empty($p['crear']) ? 1 : 0;
+        $u = !empty($p['actualizar']) ? 1 : 0;
+        $d = !empty($p['eliminar']) ? 1 : 0;
+        $t = !empty($p['t']) ? 1 : 0;
+
+        $this->db->beginTransaction();
+        try {
+            // Si no queda ningún permiso marcado, eliminar la asignación
+            if ($r + $w + $u + $d + $t === 0) {
+                $this->execute("DELETE FROM modulos_asignados WHERE id_usuario = {$idU} AND id_empresa = {$idE} AND id_submodulo = {$idS}");
+                $this->db->commit();
+                return true;
+            }
+
+            $existe = $this->query("SELECT 1 FROM modulos_asignados WHERE id_usuario = {$idU} AND id_empresa = {$idE} AND id_submodulo = {$idS}");
+            if (!empty($existe)) {
+                $this->execute("UPDATE modulos_asignados SET r = {$r}, w = {$w}, u = {$u}, d = {$d}, t = {$t}
+                    WHERE id_usuario = {$idU} AND id_empresa = {$idE} AND id_submodulo = {$idS}");
+            } else {
+                $this->execute("INSERT INTO modulos_asignados (id_usuario, id_empresa, id_modulo, id_submodulo, r, w, u, d, t)
+                    VALUES ({$idU}, {$idE}, {$idM}, {$idS}, {$r}, {$w}, {$u}, {$d}, {$t})");
+            }
+            $this->db->commit();
+            return true;
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            return false;
+        }
+    }
+
     public function guardarPermisos(int $idUsuario, int $idEmpresa, array $permisos, array $idModuloPorSub): bool
     {
         $idU = (int) $idUsuario;

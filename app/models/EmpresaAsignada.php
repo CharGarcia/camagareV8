@@ -185,7 +185,7 @@ class EmpresaAsignada extends BaseModel
             $b = $this->escape($buscar);
             $where .= " AND (u.nombre LIKE '%{$b}%' OR u.cedula LIKE '%{$b}%')";
         }
-        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula FROM {$from} {$where} ORDER BY u.nombre LIMIT " . (int) $limit;
+        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel FROM {$from} {$where} ORDER BY u.nombre LIMIT " . (int) $limit;
         return $this->query($sql);
     }
 

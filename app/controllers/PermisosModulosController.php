@@ -100,11 +100,11 @@ class PermisosModulosController extends Controller
 
         $rowsUsuarios = $this->modelEmpresa->getUsuariosParaSelect($idActual, $nivel, '', 500);
         $opcionesUsuarios = array_map(function ($r) {
-            return ['value' => (int)$r['id'], 'text' => ($r['nombre'] ?? '') . ' (' . ($r['cedula'] ?? '') . ')'];
+            return ['value' => (int)$r['id'], 'text' => ($r['nombre'] ?? '') . ' (' . ($r['cedula'] ?? '') . ')', 'nivel' => (int)($r['nivel'] ?? 0)];
         }, $rowsUsuarios);
         $usuarioActual = $this->modelEmpresa->getUsuarioPorId($idActual);
         if ($usuarioActual) {
-            $optActual = ['value' => (int)$idActual, 'text' => ($usuarioActual['nombre'] ?? '') . ' (' . ($usuarioActual['cedula'] ?? '') . ')'];
+            $optActual = ['value' => (int)$idActual, 'text' => ($usuarioActual['nombre'] ?? '') . ' (' . ($usuarioActual['cedula'] ?? '') . ')', 'nivel' => (int)($usuarioActual['nivel'] ?? 0)];
             $existe = false;
             foreach ($opcionesUsuarios as $o) {
                 if (($o['value'] ?? 0) === $idActual) { $existe = true; break; }
@@ -163,6 +163,143 @@ class PermisosModulosController extends Controller
             return ['value' => (int)($r['id_empresa'] ?? $r['id'] ?? 0), 'text' => $text];
         }, $rows);
         $this->json($out);
+    }
+
+    /**
+     * Guardado inmediato de un solo submódulo vía AJAX (JSON).
+     */
+    public function guardarUno(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido.']);
+            exit;
+        }
+
+        $idUsuario = (int) ($_POST['id_usuario'] ?? 0);
+        $idEmpresa = (int) ($_POST['id_empresa'] ?? 0);
+        $idModulo  = (int) ($_POST['id_modulo'] ?? 0);
+        $idSub     = (int) ($_POST['id_submodulo'] ?? 0);
+        $idActual  = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
+
+        if ($idUsuario <= 0 || $idEmpresa <= 0 || $idModulo <= 0 || $idSub <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Datos incompletos.']);
+            exit;
+        }
+
+        if (!$this->puedeGestionarUsuario($idActual, $nivel, $idUsuario)) {
+            echo json_encode(['ok' => false, 'error' => 'Sin permiso para gestionar este usuario.']);
+            exit;
+        }
+
+        $p = [
+            'ver'        => !empty($_POST['ver']),
+            'crear'      => !empty($_POST['crear']),
+            'actualizar' => !empty($_POST['actualizar']),
+            'eliminar'   => !empty($_POST['eliminar']),
+            't'          => !empty($_POST['t']),
+        ];
+
+        $ok = $this->modelPermiso->guardarPermisoSubmodulo($idUsuario, $idEmpresa, $idModulo, $idSub, $p);
+
+        // Mantener la vista en sesión sincronizada
+        if ($ok && isset($_SESSION['permisos_vista']['modulos'])) {
+            foreach ($_SESSION['permisos_vista']['modulos'] as &$mod) {
+                foreach ($mod['submodulos'] as &$s) {
+                    if ((int)$s['id_submodulo'] === $idSub) {
+                        $s['ver']        = $p['ver'] ? 1 : 0;
+                        $s['crear']      = $p['crear'] ? 1 : 0;
+                        $s['actualizar'] = $p['actualizar'] ? 1 : 0;
+                        $s['eliminar']   = $p['eliminar'] ? 1 : 0;
+                        $s['t']          = $p['t'] ? 1 : 0;
+                    }
+                }
+                unset($s);
+            }
+            unset($mod);
+        }
+
+        echo json_encode(['ok' => $ok, 'error' => $ok ? null : 'Error al guardar.']);
+        exit;
+    }
+
+    /**
+     * Copia (REEMPLAZAR) los permisos de un usuario+empresa origen a un usuario+empresa destino. AJAX/JSON.
+     */
+    public function copiarPermisos(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido.']);
+            exit;
+        }
+
+        $idUsuarioOrigen = (int) ($_POST['id_usuario_origen'] ?? 0);
+        $idEmpresaOrigen = (int) ($_POST['id_empresa_origen'] ?? 0);
+        $idUsuarioDestino = (int) ($_POST['id_usuario_destino'] ?? 0);
+        $idEmpresaDestino = (int) ($_POST['id_empresa_destino'] ?? 0);
+        $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+
+        if ($idUsuarioOrigen <= 0 || $idEmpresaOrigen <= 0 || $idUsuarioDestino <= 0 || $idEmpresaDestino <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Datos incompletos.']);
+            exit;
+        }
+
+        if ($idUsuarioOrigen === $idUsuarioDestino && $idEmpresaOrigen === $idEmpresaDestino) {
+            echo json_encode(['ok' => false, 'error' => 'El origen y el destino son iguales.']);
+            exit;
+        }
+
+        // El gestor debe poder gestionar ambos usuarios
+        if (!$this->puedeGestionarUsuario($idActual, $nivel, $idUsuarioOrigen)
+            || !$this->puedeGestionarUsuario($idActual, $nivel, $idUsuarioDestino)) {
+            echo json_encode(['ok' => false, 'error' => 'Sin permiso para gestionar alguno de los usuarios.']);
+            exit;
+        }
+
+        // Validar combinación de niveles permitida:
+        // admin→admin (2→2), admin→usuario (2→1), usuario→usuario (1→1).
+        // No se permite usuario→admin (1→2) ni copiar desde/hacia superadministradores (nivel 3).
+        $usuOrigen  = $this->modelEmpresa->getUsuarioPorId($idUsuarioOrigen);
+        $usuDestino = $this->modelEmpresa->getUsuarioPorId($idUsuarioDestino);
+        $nivelOrigen  = (int) ($usuOrigen['nivel'] ?? 0);
+        $nivelDestino = (int) ($usuDestino['nivel'] ?? 0);
+
+        if ($nivelOrigen >= 3 || $nivelDestino >= 3) {
+            echo json_encode(['ok' => false, 'error' => 'No se pueden copiar permisos desde o hacia un superadministrador.']);
+            exit;
+        }
+        if ($nivelOrigen < 1 || $nivelDestino < 1) {
+            echo json_encode(['ok' => false, 'error' => 'Nivel de usuario no válido.']);
+            exit;
+        }
+        // Solo permitido cuando el origen tiene nivel mayor o igual al destino
+        if ($nivelOrigen < $nivelDestino) {
+            echo json_encode(['ok' => false, 'error' => 'Un usuario (nivel 1) no puede copiar permisos a un administrador (nivel 2).']);
+            exit;
+        }
+
+        // La empresa destino debe estar asignada al usuario destino
+        $empresasDestino = $this->modelEmpresa->getEmpresasParaPermisos($idUsuarioDestino, $idActual, $nivel);
+        if (!$this->buscarEmpresaEnLista($empresasDestino, $idEmpresaDestino)) {
+            echo json_encode(['ok' => false, 'error' => 'La empresa destino no está asignada al usuario destino.']);
+            exit;
+        }
+
+        $ok = $this->modelPermiso->copiarPermisosUsuario($idUsuarioOrigen, $idEmpresaOrigen, $idUsuarioDestino, $idEmpresaDestino);
+        echo json_encode([
+            'ok'    => $ok,
+            'error' => $ok ? null : 'Error al copiar los permisos.',
+        ]);
+        exit;
     }
 
     public function guardar(): void

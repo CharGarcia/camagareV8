@@ -45,6 +45,8 @@ class ConfigController extends Controller
         $c = new PermisosModulosController();
         $method = match ($sub) {
             'guardar' => 'guardar',
+            'guardarUno' => 'guardarUno',
+            'copiarPermisos' => 'copiarPermisos',
             'usuariosJson' => 'usuariosJson',
             'empresasJson' => 'empresasJson',
             default => 'index',
