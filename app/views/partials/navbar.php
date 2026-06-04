@@ -76,7 +76,11 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         .then(function(data) {
             icon.classList.remove('cmg-loading', 'opacity-50');
             if (data.ok) {
+                // Actualizar visualmente el botón para mostrar que es favorito
+                icon.classList.remove('bi-star', 'text-white-50');
+                icon.classList.add('bi-star-fill', 'text-warning');
                 icon.title = 'Esta es tu empresa favorita';
+
                 Swal.fire({
                     icon: 'success',
                     title: '¡Empresa guardada!',
@@ -424,7 +428,37 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         } catch (e) {}
     };
 
+    // Actualizar botón de favorito cuando cambia la empresa seleccionada
+    function actualizarBtnFavorito() {
+        var idEmpresaActual = document.getElementById('input-id-empresa');
+        var idEmpresaFavorita = <?= (int)($idEmpresaFavorita ?? 0) ?>;
+        var btnFavorito = document.getElementById('btn-favorito-global');
+
+        if (idEmpresaActual && btnFavorito) {
+            var esFavorita = parseInt(idEmpresaActual.value) === idEmpresaFavorita;
+
+            if (esFavorita) {
+                btnFavorito.classList.remove('bi-star', 'text-white-50');
+                btnFavorito.classList.add('bi-star-fill', 'text-warning');
+                btnFavorito.title = 'Esta es tu empresa favorita';
+            } else {
+                btnFavorito.classList.remove('bi-star-fill', 'text-warning');
+                btnFavorito.classList.add('bi-star', 'text-white-50');
+                btnFavorito.title = 'Marcar como empresa favorita';
+            }
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
+        // Actualizar favorito cuando se selecciona una empresa
+        var inputEmpresas = document.getElementById('input-empresas');
+        if (inputEmpresas) {
+            inputEmpresas.addEventListener('change', actualizarBtnFavorito);
+        }
+
+        // Actualizar al cargar la página
+        actualizarBtnFavorito();
+
         window.updateTareasBadge();
         window.updatePedidosPendientesBadge();
         window.updateFacturasBorradorBadge();
