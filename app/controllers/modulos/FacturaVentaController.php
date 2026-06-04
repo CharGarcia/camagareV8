@@ -970,6 +970,7 @@ class FacturaVentaController extends BaseModuloController
             echo json_encode([
                 'ok'                  => $resultado['ok'],
                 'estado'              => $resultado['estado'],
+                'estado_correo'       => $resultado['estado_correo'] ?? null,
                 'mensaje'             => $resultado['mensaje'],
                 'numero_autorizacion' => $resultado['numero_autorizacion'] ?? '',
                 'fecha_autorizacion'  => $resultado['fecha_autorizacion']  ?? '',

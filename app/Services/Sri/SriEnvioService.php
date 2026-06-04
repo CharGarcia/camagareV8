@@ -233,6 +233,7 @@ class SriEnvioService
             'fecha_autorizacion'  => $fechaAut,
         ]);
 
+        $estadoCorreo = null;
         if ($estadoInterno === 'autorizado') {
             $db = Database::getConnection();
             $db->prepare("UPDATE ventas_cabecera SET estado = 'autorizado', updated_by = ?, updated_at = NOW() WHERE id = ?")
@@ -251,7 +252,7 @@ class SriEnvioService
             try {
                 $renderer = new \App\Services\PlantillasPdfRendererService();
                 $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');
-                
+
                 if ($plantillaPdf) {
                     $pdfString = $renderer->generar($plantillaPdf, $cabecera, $detalles, $pagos, $infoAdicional, $empresa, 'S');
                 } else {
@@ -264,6 +265,7 @@ class SriEnvioService
                 if ($enviado) {
                     $db->prepare("UPDATE ventas_cabecera SET estado_correo = 'enviado', updated_at = NOW() WHERE id = ?")
                        ->execute([$idVenta]);
+                    $estadoCorreo = 'enviado';
                 }
             } catch (\Throwable $eEmail) {
                 error_log('[SRI] Error al procesar envío automático de correo: ' . $eEmail->getMessage());
@@ -273,6 +275,7 @@ class SriEnvioService
         return [
             'ok'                  => $estadoInterno === 'autorizado',
             'estado'              => $estadoInterno,
+            'estado_correo'       => $estadoCorreo,
             'numero_autorizacion' => $numAut,
             'fecha_autorizacion'  => $fechaAut,
             'mensaje'             => $estadoInterno === 'autorizado'

@@ -2510,6 +2510,17 @@ $perm = $permOriginal;
 
                         // Actualizar data-row para que abrirModalFacturaVer reciba el estado correcto
                         d.estado = estado;
+
+                        // Si el SRI autorizó y el correo salió, reflejar estado_correo = 'enviado'
+                        if (json.estado_correo === 'enviado') {
+                            d.estado_correo = 'enviado';
+                            const tdCorreo = row.querySelector('td[data-col="estado_correo"]');
+                            if (tdCorreo) {
+                                tdCorreo.innerHTML =
+                                    `<span class="badge bg-success bg-opacity-10 text-success border-success border border-opacity-25">Enviado</span>`;
+                            }
+                        }
+
                         row.dataset.row = JSON.stringify(d);
 
                         // Actualizar badge visible en la celda
