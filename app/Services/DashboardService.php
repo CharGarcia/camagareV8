@@ -49,9 +49,9 @@ class DashboardService
             // Egresos
             'egresos_mes_actual'    => $this->sumEgresos($idEmpresa, $tipoAmbiente, $desde, $hasta),
             'egresos_mes_anterior'  => $this->sumEgresos($idEmpresa, $tipoAmbiente, $antDes, $antHas),
-            // CxC / CxP (totales acumulados, sin filtro de período)
-            'cxc_total'             => $this->getCxcTotal($idEmpresa, $tipoAmbiente),
-            'cxp_total'             => $this->getCxpTotal($idEmpresa, $tipoAmbiente),
+            // CxC / CxP filtradas por período seleccionado
+            'cxc_total'             => $this->getCxcTotal($idEmpresa, $tipoAmbiente, $desde, $hasta),
+            'cxp_total'             => $this->getCxpTotal($idEmpresa, $tipoAmbiente, $desde, $hasta),
             // Tablas recientes
             'facturas_recientes'    => $this->getVentasRecientes($idEmpresa, 6, $tipoAmbiente),
             'compras_recientes'     => $this->getComprasRecientes($idEmpresa, 6, $tipoAmbiente),
@@ -160,7 +160,7 @@ class DashboardService
 
     // ── CxC / CxP ────────────────────────────────────────────────────────────
 
-    private function getCxcTotal(int $e, string $ta): float
+    private function getCxcTotal(int $e, string $ta, string $d, string $h): float
     {
         $st = $this->db->prepare(
             "SELECT COALESCE(SUM(v.importe_total - COALESCE(c.tc, 0)), 0)
@@ -175,13 +175,14 @@ class DashboardService
              WHERE v.id_empresa = ? AND v.eliminado = false
                AND v.estado NOT IN ('anulado', 'pagado')
                AND COALESCE(v.tipo_ambiente, '1') = ?
+               AND CAST(v.fecha_emision AS DATE) BETWEEN ? AND ?
                AND (v.importe_total - COALESCE(c.tc, 0)) > 0"
         );
-        $st->execute([$e, $ta]);
+        $st->execute([$e, $ta, $d, $h]);
         return (float) $st->fetchColumn();
     }
 
-    private function getCxpTotal(int $e, string $ta): float
+    private function getCxpTotal(int $e, string $ta, string $d, string $h): float
     {
         $st = $this->db->prepare(
             "SELECT COALESCE(SUM(c.importe_total - COALESCE(p.tp, 0)), 0)
@@ -195,9 +196,10 @@ class DashboardService
              ) p ON p.id_referencia_documento = c.id
              WHERE c.id_empresa = ? AND c.eliminado = false
                AND COALESCE(c.tipo_ambiente::text, '1') = ?
+               AND CAST(c.fecha_emision AS DATE) BETWEEN ? AND ?
                AND (c.importe_total - COALESCE(p.tp, 0)) > 0"
         );
-        $st->execute([$e, $ta]);
+        $st->execute([$e, $ta, $d, $h]);
         return (float) $st->fetchColumn();
     }
 

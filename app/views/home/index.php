@@ -176,7 +176,7 @@ $mesActual  = (int) date('n');
                 <div><p class="db-metric-label mb-1">CxC Pendiente</p><div class="db-metric-value text-tr sk" id="mValCxc">$0.00</div></div>
                 <div class="db-metric-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-person-check"></i></div>
             </div>
-            <div class="db-metric-change ch-neu mt-2 small text-muted">Total acumulado por cobrar</div>
+            <div class="db-metric-change ch-neu mt-2 small text-muted">Pendiente de cobro del período</div>
         </div>
     </div>
     <div class="col-6 col-xl-3">
@@ -185,7 +185,7 @@ $mesActual  = (int) date('n');
                 <div><p class="db-metric-label mb-1">CxP Pendiente</p><div class="db-metric-value text-tr sk" id="mValCxp">$0.00</div></div>
                 <div class="db-metric-icon bg-danger bg-opacity-10 text-danger"><i class="bi bi-building"></i></div>
             </div>
-            <div class="db-metric-change ch-neu mt-2 small text-muted">Total acumulado por pagar</div>
+            <div class="db-metric-change ch-neu mt-2 small text-muted">Pendiente de pago del período</div>
         </div>
     </div>
 </div>
