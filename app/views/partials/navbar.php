@@ -149,7 +149,7 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
 
                 <!-- Usuario, config, logout -->
                 <div class="d-flex align-items-center justify-content-center justify-content-lg-end gap-2 order-4 order-lg-5">
-                    <a href="<?= $base ?>/config/tareas-obligaciones" class="text-white text-decoration-none position-relative me-2" title="Tareas pendientes/vencidas" style="display: inline-block;">
+                    <a href="<?= $base ?>/config/tareas-obligaciones" class="text-white text-decoration-none position-relative me-2" title="Tareas pendientes/vencidas" style="display: inline-block;" data-navbar-link="true">
                         <i class="bi bi-bell-fill" style="font-size: 1.1rem;"></i>
                         <span id="tareas-alertas-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" style="font-size: 0.6rem; padding: 0.25em 0.5em;">
                             0

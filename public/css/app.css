@@ -956,3 +956,15 @@ th[data-col] {
         max-width: 100%;
     }
 }
+
+/* --- Dropdown de empresas en navbar: aparecer encima de todo --- */
+.cmg-empresas-dropdown {
+    z-index: 9999 !important;
+    position: absolute;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 0.25rem;
+    max-height: 400px;
+    overflow-y: auto;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}

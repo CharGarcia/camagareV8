@@ -42,18 +42,6 @@
             sessionStorage.setItem('cmg-empresa-text', input.value);
         }
 
-        // Monitor para restaurar el input si se borra accidentalmente
-        var autoRestoreInterval = setInterval(function() {
-            if (input.value.trim() === '') {
-                var storedId = sessionStorage.getItem('cmg-empresa-id');
-                var storedText = sessionStorage.getItem('cmg-empresa-text');
-                if (storedText && storedId) {
-                    input.value = storedText;
-                    if (idInput) idInput.value = storedId;
-                }
-            }
-        }, 100);
-
         var isOpening = false;
 
         function showDropdown() {
@@ -144,6 +132,8 @@
             });
         });
         document.addEventListener('click', function(e) {
+            // No cerrar dropdown si se hace clic en links de navegación del navbar
+            if (e.target.closest('[data-navbar-link]')) return;
             if (!form.contains(e.target) && !dropdown.contains(e.target)) hideDropdown();
         });
     });
