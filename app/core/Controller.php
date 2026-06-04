@@ -45,6 +45,10 @@ abstract class Controller
                 if (empty($empresas) && isset($_SESSION['id_empresa']) && (int)$_SESSION['id_empresa'] > 0) {
                     $empresa = $model->getPorId((int)$_SESSION['id_empresa']);
                     if ($empresa) {
+                        // Normalizar: getPorId devuelve 'id', pero getEmpresasAsignadas devuelve 'id_empresa'
+                        if (isset($empresa['id']) && !isset($empresa['id_empresa'])) {
+                            $empresa['id_empresa'] = $empresa['id'];
+                        }
                         $empresas = [$empresa];
                     }
                 }
@@ -62,6 +66,10 @@ abstract class Controller
                     try {
                         $empresa = $model->getPorId((int)$_SESSION['id_empresa']);
                         if ($empresa) {
+                            // Normalizar la estructura
+                            if (isset($empresa['id']) && !isset($empresa['id_empresa'])) {
+                                $empresa['id_empresa'] = $empresa['id'];
+                            }
                             $empresas = [$empresa];
                         }
                     } catch (\Throwable $e2) {
