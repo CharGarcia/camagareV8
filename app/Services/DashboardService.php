@@ -44,22 +44,22 @@ class DashboardService
             'compras_mes_actual'    => $this->sumCompras($idEmpresa, $tipoAmbiente, $desde, $hasta),
             'compras_mes_anterior'  => $this->sumCompras($idEmpresa, $tipoAmbiente, $antDes, $antHas),
             // Ingresos
-            'ingresos_mes_actual'   => $this->sumIngresos($idEmpresa, $desde, $hasta),
-            'ingresos_mes_anterior' => $this->sumIngresos($idEmpresa, $antDes, $antHas),
+            'ingresos_mes_actual'   => $this->sumIngresos($idEmpresa, $tipoAmbiente, $desde, $hasta),
+            'ingresos_mes_anterior' => $this->sumIngresos($idEmpresa, $tipoAmbiente, $antDes, $antHas),
             // Egresos
-            'egresos_mes_actual'    => $this->sumEgresos($idEmpresa, $desde, $hasta),
-            'egresos_mes_anterior'  => $this->sumEgresos($idEmpresa, $antDes, $antHas),
+            'egresos_mes_actual'    => $this->sumEgresos($idEmpresa, $tipoAmbiente, $desde, $hasta),
+            'egresos_mes_anterior'  => $this->sumEgresos($idEmpresa, $tipoAmbiente, $antDes, $antHas),
             // CxC / CxP (totales acumulados, sin filtro de período)
             'cxc_total'             => $this->getCxcTotal($idEmpresa, $tipoAmbiente),
-            'cxp_total'             => $this->getCxpTotal($idEmpresa),
+            'cxp_total'             => $this->getCxpTotal($idEmpresa, $tipoAmbiente),
             // Tablas recientes
             'facturas_recientes'    => $this->getVentasRecientes($idEmpresa, 6, $tipoAmbiente),
             'compras_recientes'     => $this->getComprasRecientes($idEmpresa, 6, $tipoAmbiente),
-            'ingresos_recientes'    => $this->getIngresosRecientes($idEmpresa, 5),
-            'egresos_recientes'     => $this->getEgresosRecientes($idEmpresa, 5),
+            'ingresos_recientes'    => $this->getIngresosRecientes($idEmpresa, 5, $tipoAmbiente),
+            'egresos_recientes'     => $this->getEgresosRecientes($idEmpresa, 5, $tipoAmbiente),
             // Vencidos
             'cxc_vencidas'          => $this->getCxcVencidas($idEmpresa, $tipoAmbiente, 5),
-            'cxp_vencidas'          => $this->getCxpVencidas($idEmpresa, 5),
+            'cxp_vencidas'          => $this->getCxpVencidas($idEmpresa, $tipoAmbiente, 5),
             // Gráficos
             'tendencia'             => $this->getTendenciaMensual($idEmpresa, $cantMeses, $tipoAmbiente),
             'top_productos'         => $this->getTopProductos($idEmpresa, $tipoAmbiente, $desde, $hasta, 5),
@@ -132,27 +132,29 @@ class DashboardService
         return (float) $st->fetchColumn();
     }
 
-    private function sumIngresos(int $e, string $d, string $h): float
+    private function sumIngresos(int $e, string $ta, string $d, string $h): float
     {
         $st = $this->db->prepare(
             "SELECT COALESCE(SUM(monto_total), 0)
              FROM ingresos_cabecera
              WHERE id_empresa = ? AND eliminado = false AND estado != 'anulado'
+               AND tipo_ambiente = ?
                AND CAST(fecha_emision AS DATE) BETWEEN ? AND ?"
         );
-        $st->execute([$e, $d, $h]);
+        $st->execute([$e, $ta, $d, $h]);
         return (float) $st->fetchColumn();
     }
 
-    private function sumEgresos(int $e, string $d, string $h): float
+    private function sumEgresos(int $e, string $ta, string $d, string $h): float
     {
         $st = $this->db->prepare(
             "SELECT COALESCE(SUM(monto_total), 0)
              FROM egresos_cabecera
              WHERE id_empresa = ? AND eliminado = false AND estado != 'anulado'
+               AND tipo_ambiente = ?
                AND CAST(fecha_emision AS DATE) BETWEEN ? AND ?"
         );
-        $st->execute([$e, $d, $h]);
+        $st->execute([$e, $ta, $d, $h]);
         return (float) $st->fetchColumn();
     }
 
@@ -179,7 +181,7 @@ class DashboardService
         return (float) $st->fetchColumn();
     }
 
-    private function getCxpTotal(int $e): float
+    private function getCxpTotal(int $e, string $ta): float
     {
         $st = $this->db->prepare(
             "SELECT COALESCE(SUM(c.importe_total - COALESCE(p.tp, 0)), 0)
@@ -192,9 +194,10 @@ class DashboardService
                  GROUP BY ed.id_referencia_documento
              ) p ON p.id_referencia_documento = c.id
              WHERE c.id_empresa = ? AND c.eliminado = false
+               AND COALESCE(c.tipo_ambiente::text, '1') = ?
                AND (c.importe_total - COALESCE(p.tp, 0)) > 0"
         );
-        $st->execute([$e]);
+        $st->execute([$e, $ta]);
         return (float) $st->fetchColumn();
     }
 
@@ -234,7 +237,7 @@ class DashboardService
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    private function getIngresosRecientes(int $e, int $lim): array
+    private function getIngresosRecientes(int $e, int $lim, string $ta): array
     {
         $st = $this->db->prepare(
             "SELECT COALESCE(i.recibo_de, cl.nombre, 'Sin nombre') AS entidad,
@@ -243,27 +246,29 @@ class DashboardService
              FROM ingresos_cabecera i
              LEFT JOIN clientes cl ON cl.id = i.id_cliente
              WHERE i.id_empresa = ? AND i.eliminado = false
+               AND i.tipo_ambiente = ?
              ORDER BY i.fecha_emision DESC, i.id DESC
              LIMIT ?"
         );
-        $st->execute([$e, $lim]);
+        $st->execute([$e, $ta, $lim]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    private function getEgresosRecientes(int $e, int $lim): array
+    private function getEgresosRecientes(int $e, int $lim, string $ta): array
     {
         $st = $this->db->prepare(
             "SELECT COALESCE(p.razon_social, emp.nombres_apellidos, 'Sin nombre') AS entidad,
                     eg.monto_total AS total, eg.fecha_emision AS fecha,
                     eg.estado, eg.numero_egreso AS comprobante
              FROM egresos_cabecera eg
-             LEFT JOIN proveedores p   ON p.id   = eg.id_proveedor
-             LEFT JOIN empleados  emp  ON emp.id  = eg.id_empleado
+             LEFT JOIN proveedores p  ON p.id  = eg.id_proveedor
+             LEFT JOIN empleados  emp ON emp.id = eg.id_empleado
              WHERE eg.id_empresa = ? AND eg.eliminado = false
+               AND eg.tipo_ambiente = ?
              ORDER BY eg.fecha_emision DESC, eg.id DESC
              LIMIT ?"
         );
-        $st->execute([$e, $lim]);
+        $st->execute([$e, $ta, $lim]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -298,7 +303,7 @@ class DashboardService
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    private function getCxpVencidas(int $e, int $lim): array
+    private function getCxpVencidas(int $e, string $ta, int $lim): array
     {
         $st = $this->db->prepare(
             "SELECT p.razon_social AS proveedor,
@@ -316,12 +321,13 @@ class DashboardService
                  GROUP BY ed.id_referencia_documento
              ) pg ON pg.id_referencia_documento = c.id
              WHERE c.id_empresa = ? AND c.eliminado = false
+               AND COALESCE(c.tipo_ambiente::text, '1') = ?
                AND (c.importe_total - COALESCE(pg.tp, 0)) > 0
                AND (CURRENT_DATE - CAST(c.fecha_emision AS DATE)) > COALESCE(p.plazo, 0)
              ORDER BY dias_vencido DESC
              LIMIT ?"
         );
-        $st->execute([$e, $lim]);
+        $st->execute([$e, $ta, $lim]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
