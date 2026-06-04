@@ -317,19 +317,19 @@ let chartTend = null, chartProd = null, chartCli = null;
 
 const LS_KEY = 'db_filtros';
 function saveFilters(){
+    // Año y mes NO se persisten: el dashboard siempre arranca en el mes/año actual.
+    // Solo se recuerdan las preferencias visuales (rango de tendencia y tipo de gráfico).
     localStorage.setItem(LS_KEY, JSON.stringify({
-        anio:$('fAnio').value, mes:$('fMes').value,
         meses:$('fMeses').value, tipoChart:$('fTipoChart').value
     }));
 }
 function loadFilters(){
     try {
         const f = JSON.parse(localStorage.getItem(LS_KEY)||'{}');
-        if(f.anio)  $('fAnio').value      = f.anio;
-        if(f.mes)   $('fMes').value       = f.mes;
         if(f.meses) $('fMeses').value     = f.meses;
         if(f.tipoChart) $('fTipoChart').value = f.tipoChart;
     } catch(e){}
+    // El año y el mes quedan en su valor por defecto del HTML (año y mes actuales)
 }
 function resetFilters(){
     $('fAnio').value      = '<?= $anioActual ?>';
