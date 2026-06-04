@@ -138,5 +138,31 @@
             if (e.target.closest('[data-navbar-link]')) return;
             if (!form.contains(e.target) && !dropdown.contains(e.target)) hideDropdown();
         });
+
+        // MONITOR CRÍTICO: El input NUNCA debe estar vacío si hay una empresa en sessionStorage
+        // Restaurar cada 50ms si se borra accidentalmente
+        var monitorInterval = setInterval(function() {
+            var storedId = sessionStorage.getItem('cmg-empresa-id');
+            var storedText = sessionStorage.getItem('cmg-empresa-text');
+            var currentInputValue = (input.value || '').trim();
+            var currentIdValue = (idInput && idInput.value) || '';
+
+            // Si el input está vacío pero hay un valor guardado, RESTAURAR INMEDIATAMENTE
+            if (currentInputValue === '' && storedText && storedId) {
+                input.value = storedText;
+                if (idInput) idInput.value = storedId;
+                console.log('[CaMaGaRe] Empresa restaurada desde sessionStorage: ' + storedText);
+            }
+            // Si hay valor en input pero NO en sessionStorage, GUARDAR
+            else if (currentInputValue !== '' && currentIdValue !== '' && (!storedId || !storedText)) {
+                sessionStorage.setItem('cmg-empresa-id', currentIdValue);
+                sessionStorage.setItem('cmg-empresa-text', currentInputValue);
+            }
+        }, 50); // Cada 50ms
+
+        // Limpiar el monitor cuando se descarga la página
+        window.addEventListener('beforeunload', function() {
+            clearInterval(monitorInterval);
+        });
     });
 })();
