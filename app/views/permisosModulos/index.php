@@ -16,7 +16,21 @@ $msg = $_SESSION['permisos_msg'] ?? null;
 unset($_SESSION['permisos_msg']);
 ?>
 <style>
-.permisos-scroll thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; }
+/* Contenedor scrollable propio (evita el CSS global de cmg-table-card que recortaba filas) */
+.permisos-tabla-wrap {
+    max-height: calc(100vh - 320px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    border: 1px solid #dee2e6;
+    border-radius: .375rem;
+}
+.permisos-tabla-wrap thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f8f9fa;
+    box-shadow: inset 0 -1px 0 #dee2e6;
+}
 </style>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -81,7 +95,7 @@ unset($_SESSION['permisos_msg']);
 </div>
 
 <?php if (!empty($modulos)): ?>
-    <div class="card cmg-table-card" id="card-modulos">
+    <div class="card" id="card-modulos">
         <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <strong><i class="bi bi-person-fill"></i> <?= htmlspecialchars($usuarioSel['nombre'] ?? '') ?> - <i class="bi bi-building"></i> <?= htmlspecialchars($empresaSel['nombre_comercial'] ?? $empresaSel['ruc'] ?? '') ?></strong>
             <?php if ((int)($usuarioSel['nivel'] ?? 0) < 3): ?>
@@ -95,7 +109,7 @@ unset($_SESSION['permisos_msg']);
                 <input type="hidden" name="action" value="guardar">
                 <input type="hidden" name="id_usuario" value="<?= (int)$idUsuarioSel ?>">
                 <input type="hidden" name="id_empresa" value="<?= (int)$idEmpresaSel ?>">
-                <div class="table-responsive permisos-scroll" style="max-height:calc(100vh - 340px);overflow-y:auto;">
+                <div class="permisos-tabla-wrap">
                     <table class="table table-sm table-hover mb-0">
                         <thead class="table-light">
                             <tr>
