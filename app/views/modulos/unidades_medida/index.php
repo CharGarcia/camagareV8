@@ -262,6 +262,7 @@ include 'modal_tipo.php';
 include 'modal_unidad.php';
 ?>
 
+<script>window.BASE_URL = '<?= $base ?>';</script>
 <script>
 (function () {
     'use strict';

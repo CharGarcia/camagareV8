@@ -20,6 +20,7 @@ $nivelUsuario = $nivel ?? 0;
             <div class="card-body">
                 <form id="formDescargarPlantilla" method="GET" action="<?= $base ?>/config/importadorExcel">
                     <input type="hidden" name="action" value="descargarPlantillaAjax">
+                    <input type="hidden" name="id_empresa" id="hiddenIdEmpresa" value="<?= htmlspecialchars((string)($empresasDestino[0]['id'] ?? '')) ?>">
                     <div class="mb-3">
                         <label class="form-label fw-semibold small">Tipo de Catálogo</label>
                         <div class="d-flex gap-4">
@@ -46,9 +47,15 @@ $nivelUsuario = $nivel ?? 0;
                     <div id="contenedorFiltrosDestino" class="d-none">
                         <div class="mb-3">
                             <label class="form-label fw-semibold small">Empresa de destino</label>
-                            <select class="form-select" name="id_empresa" id="selectEmpresa">
+                            <select class="form-select" id="selectEmpresa">
                                 <?php foreach ($empresasDestino as $emp): ?>
-                                    <option value="<?= $emp['id'] ?>"><?= htmlspecialchars($emp['razon_social']) ?></option>
+                                    <option value="<?= $emp['id'] ?>">
+                                        <?= htmlspecialchars(
+                                            ($emp['establecimiento'] ?? '001') . ' - ' .
+                                            $emp['razon_social'] .
+                                            (!empty($emp['ruc']) ? ' (' . $emp['ruc'] . ')' : '')
+                                        ) ?>
+                                    </option>
                                 <?php endforeach; ?>
                             </select>
                             <?php if($nivelUsuario < 3): ?>
@@ -125,6 +132,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let tsEntidad = null;
     let tsEmpresa = null;
 
+    const hiddenIdEmpresa = document.getElementById('hiddenIdEmpresa');
+
+    const syncEmpresaHidden = (val) => {
+        if (hiddenIdEmpresa && val) hiddenIdEmpresa.value = val;
+    };
+
     if (typeof TomSelect !== 'undefined') {
         tsEntidad = new TomSelect('#selectEntidad', {
             placeholder: '-- Seleccione el catálogo --',
@@ -136,8 +149,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         tsEmpresa = new TomSelect('#selectEmpresa', {
             searchField: ['text'],
-            maxOptions: 50
+            maxOptions: 50,
+            onChange: syncEmpresaHidden
         });
+        // Sincronizar valor inicial
+        if (tsEmpresa) syncEmpresaHidden(tsEmpresa.getValue());
+    } else {
+        document.getElementById('selectEmpresa')?.addEventListener('change', (e) => syncEmpresaHidden(e.target.value));
     }
 
     const radiosTipoCatalogo = document.querySelectorAll('.check-tipo-catalogo');
@@ -242,7 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (!isGlobal) {
-            formData.append('id_empresa', selectEmpresa.value);
+            formData.append('id_empresa', hiddenIdEmpresa ? hiddenIdEmpresa.value : (tsEmpresa ? tsEmpresa.getValue() : selectEmpresa.value));
             formData.append('tipo_ambiente', selectAmbiente.value);
         }
 

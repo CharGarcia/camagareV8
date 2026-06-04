@@ -316,9 +316,32 @@
         }
 
         const selFc = document.getElementById('cliente_id_forma_cobro_predeterminada');
-        if (selFc && datosCatalogos.bancos) {
+        if (selFc && datosCatalogos.formas_cobros_pagos) {
             selFc.innerHTML = '<option value="">— Seleccione forma de cobro —</option>';
-            // Aquí podrías poblar con bancos o formas de cobro específicas
+            datosCatalogos.formas_cobros_pagos.forEach(f => {
+                const opt = document.createElement('option');
+                opt.value = f.id;
+                opt.dataset.tipo = f.tipo || '';
+                let texto = f.nombre;
+                if (f.tipo !== 'EFECTIVO' && f.banco_nombre) {
+                    texto += ' (' + f.banco_nombre + ')';
+                }
+                opt.textContent = texto;
+                selFc.appendChild(opt);
+            });
+            
+            // Lógica para mostrar operación bancaria
+            selFc.addEventListener('change', function() {
+                const optSel = this.options[this.selectedIndex];
+                const wrp = document.getElementById('wrapper_tipo_operacion_bancaria');
+                if (!wrp) return;
+                if (optSel && optSel.dataset.tipo === 'BANCO') {
+                    wrp.classList.remove('d-none');
+                } else {
+                    wrp.classList.add('d-none');
+                    document.getElementById('cliente_tipo_operacion_bancaria').value = 'TRANSFERENCIA';
+                }
+            });
         }
     }
 
@@ -680,7 +703,14 @@
 
         setV('cliente_id_forma_pago_sri', data.id_forma_pago_sri);
         setV('cliente_id_forma_cobro_predeterminada', data.id_forma_cobro_predeterminada);
+        setV('cliente_tipo_operacion_bancaria', data.tipo_operacion_bancaria_predeterminada || 'TRANSFERENCIA');
         setV('cliente_monto_maximo_auto_cobro', data.monto_maximo_auto_cobro);
+
+        const selFc = document.getElementById('cliente_id_forma_cobro_predeterminada');
+        if (selFc) {
+            // trigger change to show/hide the wrapper
+            selFc.dispatchEvent(new Event('change'));
+        }
 
         // Coordenadas
         if (data.latitud && data.longitud) {

@@ -98,7 +98,7 @@
      *    para activar el layout de altura fija solo en esas páginas.
      * ---------------------------------------------------------------- */
     function applyAppShell() {
-        if (document.querySelector('.cmg-table-card')) {
+        if (document.querySelector('.cmg-table-card') && !document.body.classList.contains('cmg-no-app-shell')) {
             document.body.classList.add('cmg-has-table');
             // Bloquear scroll en html y body para que NADA fuera de
             // los contenedores de tabla pueda moverse

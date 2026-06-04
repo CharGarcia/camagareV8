@@ -28,20 +28,12 @@ class ModuloController extends Controller
         $this->requireAuth();
         $this->requireNivel(3);
 
-        $hasParams = isset($_GET['tipo']) || isset($_GET['b']) || isset($_GET['page']);
-        if ($hasParams) {
-            $_SESSION['modulo_vista'] = [
-                'tipo' => $_GET['tipo'] ?? 'modulos',
-                'buscar' => trim($_GET['b'] ?? ''),
-                'page' => max(1, (int) ($_GET['page'] ?? 1)),
-            ];
-            $this->redirect(BASE_URL . self::BASE_PATH);
-        }
+        $tipo   = trim($_GET['tipo'] ?? $_SESSION['modulo_vista']['tipo'] ?? 'modulos');
+        $buscar = trim($_GET['b']    ?? '');
+        $page   = max(1, (int)($_GET['page'] ?? 1));
 
-        $v = $_SESSION['modulo_vista'] ?? [];
-        $buscar = trim($v['buscar'] ?? '');
-        $tipo = $v['tipo'] ?? 'modulos';
-        $page = max(1, (int) ($v['page'] ?? 1));
+        // Guardar estado de pestaña activa en sesión (sin redirigir)
+        $_SESSION['modulo_vista'] = ['tipo' => $tipo, 'buscar' => $buscar, 'page' => $page];
 
         $modulos = $this->model->getModulos();
         $iconos = $this->model->getIconos();

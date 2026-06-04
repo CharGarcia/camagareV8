@@ -202,6 +202,15 @@ if (!defined('LEAFLET_LOADED')) {
 
                         <!-- Pestaña 4: COBROS -->
                         <div class="tab-pane fade" id="pane-cobros" role="tabpanel">
+                            
+                            <!-- Mensaje explicativo de auto-cobro -->
+                            <div class="alert alert-primary bg-primary bg-opacity-10 py-2 px-3 small border-primary border-opacity-25 d-flex align-items-start mb-3">
+                                <i class="bi bi-info-circle-fill text-primary me-2 mt-1 fs-6"></i>
+                                <div style="color: #052c65;">
+                                    <strong>Generación automática de cobros:</strong> Al establecer una <em>Forma de Cobro</em> predeterminada, el sistema registrará automáticamente un ingreso con esta forma de cobro cada vez que se genere una factura de venta para este cliente y sea autorizada por el SRI.
+                                </div>
+                            </div>
+
                             <div class="row g-3">
                                 <div class="col-md-12">
                                     <label for="cliente_id_forma_pago_sri" class="form-label small fw-bold">Forma de Pago SRI (Predeterminada)</label>
@@ -213,6 +222,13 @@ if (!defined('LEAFLET_LOADED')) {
                                     <label for="cliente_id_forma_cobro_predeterminada" class="form-label small fw-bold">Forma de Cobro</label>
                                     <select class="form-select form-select-sm" name="id_forma_cobro_predeterminada" id="cliente_id_forma_cobro_predeterminada">
                                         <option value="">- Seleccione -</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 d-none" id="wrapper_tipo_operacion_bancaria">
+                                    <label for="cliente_tipo_operacion_bancaria" class="form-label small fw-bold">Operación Bancaria</label>
+                                    <select class="form-select form-select-sm bg-warning bg-opacity-10" name="tipo_operacion_bancaria_predeterminada" id="cliente_tipo_operacion_bancaria">
+                                        <option value="DEPOSITO">Depósito</option>
+                                        <option value="TRANSFERENCIA" selected>Transferencia</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6">

@@ -135,13 +135,13 @@ class ClienteRepository extends BaseRepository
         $sql = "INSERT INTO {$this->table} (
                     id_empresa, id_usuario, nombre, tipo_id, identificacion, telefono, email,
                     direccion, plazo, provincia, ciudad, status, id_vendedor,
-                    id_forma_pago_sri, id_forma_cobro_predeterminada, monto_maximo_auto_cobro,
+                    id_forma_pago_sri, id_forma_cobro_predeterminada, tipo_operacion_bancaria_predeterminada, monto_maximo_auto_cobro,
                     latitud, longitud, geocodificado_en,
                     created_by, created_at, eliminado
                 ) VALUES (
                     :id_empresa, :id_usuario, :nombre, :tipo_id, :identificacion, :telefono, :email,
                     :direccion, :plazo, :provincia, :ciudad, :status, :id_vendedor,
-                    :id_forma_pago_sri, :id_forma_cobro_predeterminada, :monto_maximo_auto_cobro,
+                    :id_forma_pago_sri, :id_forma_cobro_predeterminada, :tipo_operacion_bancaria_predeterminada, :monto_maximo_auto_cobro,
                     :latitud::numeric, :longitud::numeric, :geocodificado_en::timestamp,
                     :id_u, CURRENT_TIMESTAMP, false
                 )";
@@ -162,6 +162,7 @@ class ClienteRepository extends BaseRepository
             ':id_vendedor'      => $data['id_vendedor'],
             ':id_forma_pago_sri' => $data['id_forma_pago_sri'] ?? null,
             ':id_forma_cobro_predeterminada' => $data['id_forma_cobro_predeterminada'] ?? null,
+            ':tipo_operacion_bancaria_predeterminada' => $data['tipo_operacion_bancaria_predeterminada'] ?? null,
             ':monto_maximo_auto_cobro' => $data['monto_maximo_auto_cobro'] ?? null,
             ':latitud'          => $data['latitud'] ?? null,
             ':longitud'         => $data['longitud'] ?? null,
@@ -197,6 +198,7 @@ class ClienteRepository extends BaseRepository
                 id_vendedor = :id_vendedor,
                 id_forma_pago_sri = :id_forma_pago_sri,
                 id_forma_cobro_predeterminada = :id_forma_cobro_predeterminada,
+                tipo_operacion_bancaria_predeterminada = :tipo_operacion_bancaria_predeterminada,
                 monto_maximo_auto_cobro = :monto_maximo_auto_cobro,
                 latitud = :latitud::numeric,
                 longitud = :longitud::numeric,
@@ -220,6 +222,7 @@ class ClienteRepository extends BaseRepository
             ':id_vendedor'      => $data['id_vendedor'],
             ':id_forma_pago_sri'             => $data['id_forma_pago_sri'] ?? null,
             ':id_forma_cobro_predeterminada' => $data['id_forma_cobro_predeterminada'] ?? null,
+            ':tipo_operacion_bancaria_predeterminada' => $data['tipo_operacion_bancaria_predeterminada'] ?? null,
             ':monto_maximo_auto_cobro'       => $data['monto_maximo_auto_cobro'] ?? null,
             ':latitud'          => $data['latitud'] ?? null,
             ':longitud'         => $data['longitud'] ?? null,

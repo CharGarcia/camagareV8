@@ -14,6 +14,7 @@ unset($_SESSION['modulo_msg']);
 ?>
 <style>
 .cmg-modulo-icono-fila { display: flex; align-items: stretch; gap: 0.5rem; }
+.cmg-table-card .table-responsive thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; }
 .cmg-modulo-icono-preview {
     flex: 0 0 2.25rem;
     width: 2.25rem;
@@ -59,34 +60,40 @@ unset($_SESSION['modulo_msg']);
 
 <div class="card mb-3">
     <div class="card-body py-2">
-        <form method="GET" action="<?= $base ?>/config/modulo" class="row g-2 align-items-center">
-            <input type="hidden" name="tipo" value="<?= htmlspecialchars($tipo) ?>">
+        <div class="row g-2 align-items-center">
             <div class="col-auto">
-                <a href="<?= $base ?>/config/modulo?tipo=modulos<?= $buscar ? '&b=' . urlencode($buscar) : '' ?>" class="btn btn-sm <?= $tipo === 'modulos' ? 'btn-primary' : 'btn-outline-secondary' ?>">
+                <a href="<?= $base ?>/config/modulo?tipo=modulos" class="btn btn-sm <?= $tipo === 'modulos' ? 'btn-primary' : 'btn-outline-secondary' ?>">
                     <i class="bi bi-folder"></i> Módulos
                 </a>
-                <a href="<?= $base ?>/config/modulo?tipo=submodulos<?= $buscar ? '&b=' . urlencode($buscar) : '' ?>" class="btn btn-sm <?= $tipo === 'submodulos' ? 'btn-primary' : 'btn-outline-secondary' ?>">
+                <a href="<?= $base ?>/config/modulo?tipo=submodulos" class="btn btn-sm <?= $tipo === 'submodulos' ? 'btn-primary' : 'btn-outline-secondary' ?>">
                     <i class="bi bi-file-earmark"></i> Submódulos
                 </a>
-                <a href="<?= $base ?>/config/modulo?tipo=iconos<?= $buscar ? '&b=' . urlencode($buscar) : '' ?>" class="btn btn-sm <?= $tipo === 'iconos' ? 'btn-primary' : 'btn-outline-secondary' ?>">
+                <a href="<?= $base ?>/config/modulo?tipo=iconos" class="btn btn-sm <?= $tipo === 'iconos' ? 'btn-primary' : 'btn-outline-secondary' ?>">
                     <i class="bi bi-emoji-smile"></i> Iconos
                 </a>
             </div>
             <div class="col-auto flex-grow-1">
-                <div class="input-group input-group-sm">
-                    <input type="text" name="b" class="form-control" placeholder="Buscar..." value="<?= htmlspecialchars($buscar) ?>" style="max-width:200px">
-                    <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-search"></i></button>
-                </div>
+                <form method="GET" action="<?= $base ?>/config/modulo" class="d-flex gap-1">
+                    <input type="hidden" name="tipo" value="<?= htmlspecialchars($tipo) ?>">
+                    <input type="hidden" name="page" value="1">
+                    <div class="input-group input-group-sm">
+                        <input type="text" name="b" id="inputBuscarModulo" class="form-control" placeholder="Buscar..." value="<?= htmlspecialchars($buscar) ?>" style="max-width:220px" autocomplete="off">
+                        <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-search"></i></button>
+                        <?php if ($buscar !== ''): ?>
+                        <a href="<?= $base ?>/config/modulo?tipo=<?= urlencode($tipo) ?>" class="btn btn-outline-secondary" title="Limpiar búsqueda"><i class="bi bi-x-lg"></i></a>
+                        <?php endif; ?>
+                    </div>
+                </form>
             </div>
-        </form>
+        </div>
     </div>
 </div>
 
 <div class="card cmg-table-card">
-    <div class="card-body">
+    <div class="card-body p-0">
         <?php if ($tipo === 'iconos'): ?>
-        <div class="table-responsive">
-            <table class="table table-hover table-sm">
+        <div class="table-responsive" style="max-height:calc(100vh - 290px);overflow-y:auto;">
+            <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
                         <th>Nombre</th>
@@ -112,8 +119,8 @@ unset($_SESSION['modulo_msg']);
             </table>
         </div>
         <?php elseif ($tipo === 'modulos'): ?>
-        <div class="table-responsive">
-            <table class="table table-hover table-sm">
+        <div class="table-responsive" style="max-height:calc(100vh - 290px);overflow-y:auto;">
+            <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
                         <th>Nombre</th>
@@ -144,8 +151,8 @@ unset($_SESSION['modulo_msg']);
             </table>
         </div>
         <?php else: ?>
-        <div class="table-responsive">
-            <table class="table table-hover table-sm">
+        <div class="table-responsive" style="max-height:calc(100vh - 290px);overflow-y:auto;">
+            <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
                         <th>Módulo</th>
@@ -193,20 +200,20 @@ unset($_SESSION['modulo_msg']);
         </div>
         <?php endif; ?>
 
-        <?php if (empty($rows)): ?>
-        <div class="text-center py-5 text-muted">
-            <i class="bi bi-inbox" style="font-size:2rem"></i>
-            <p class="mb-0 mt-2">No hay registros</p>
-        </div>
-        <?php endif; ?>
+    </div><!-- /.card-body -->
+    <?php if (empty($rows)): ?>
+    <div class="text-center py-5 text-muted">
+        <i class="bi bi-inbox" style="font-size:2rem"></i>
+        <p class="mb-0 mt-2">No hay registros<?= $buscar !== '' ? ' para "' . htmlspecialchars($buscar) . '"' : '' ?></p>
     </div>
+    <?php endif; ?>
     <?php if ($totalPages > 1): ?>
     <div class="card-footer py-2">
         <nav>
             <ul class="pagination pagination-sm mb-0 justify-content-center">
                 <?php for ($i = 1; $i <= $totalPages; $i++): ?>
                 <li class="page-item <?= $i === $page ? 'active' : '' ?>">
-                    <a class="page-link" href="<?= $base ?>/config/modulo?tipo=<?= urlencode($tipo) ?>&page=<?= $i ?><?= $buscar ? '&b=' . urlencode($buscar) : '' ?>"><?= $i ?></a>
+                    <a class="page-link" href="<?= $base ?>/config/modulo?tipo=<?= urlencode($tipo) ?>&page=<?= $i ?><?= $buscar !== '' ? '&b=' . urlencode($buscar) : '' ?>"><?= $i ?></a>
                 </li>
                 <?php endfor; ?>
             </ul>

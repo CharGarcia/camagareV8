@@ -5,7 +5,7 @@
     // LÓGICA TIPO DE MEDIDA
     // ══════════════════════════════════════════════════════════════════════
 
-    const urlBaseTipo = BASE_URL + '/modulos/unidades-medida';
+    const urlBaseTipo = (typeof BASE_URL !== 'undefined' ? BASE_URL : (window.BASE_URL || '')) + '/modulos/unidades-medida';
     const modalTipoEl = document.getElementById('modalTipoMedida');
     let modalTipoInst = null;
 
@@ -210,7 +210,7 @@
     // LÓGICA UNIDAD DE MEDIDA
     // ══════════════════════════════════════════════════════════════════════
 
-    const urlBaseUnidad = BASE_URL + '/modulos/unidades-medida';
+    const urlBaseUnidad = (typeof BASE_URL !== 'undefined' ? BASE_URL : (window.BASE_URL || '')) + '/modulos/unidades-medida';
     const modalUnidadEl = document.getElementById('modalUnidadMedida');
     let modalUnidadInst = null;
 
