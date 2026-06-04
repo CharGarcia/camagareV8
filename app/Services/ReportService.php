@@ -61,7 +61,8 @@ class ReportService
             // Escribir encabezados
             $col = 1;
             foreach ($headers as $headerText) {
-                $sheet->setCellValueExplicitByColumnAndRow($col, $dataRowStart, $headerText, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col);
+                $sheet->setCellValueExplicit($colLetter . $dataRowStart, $headerText, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 $col++;
             }
             
@@ -74,11 +75,12 @@ class ReportService
             foreach ($data as $rowData) {
                 $col = 1;
                 foreach ($rowData as $value) {
+                    $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col);
                     // Si el valor es numérico pero largo (como identificación), forzar string
                     if (is_string($value) && ctype_digit($value) && strlen($value) > 10) {
-                        $sheet->setCellValueExplicitByColumnAndRow($col, $rowNum, $value, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                        $sheet->setCellValueExplicit($colLetter . $rowNum, $value, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                     } else {
-                        $sheet->setCellValueByColumnAndRow($col, $rowNum, $value);
+                        $sheet->setCellValue($colLetter . $rowNum, $value);
                     }
                     $col++;
                 }
