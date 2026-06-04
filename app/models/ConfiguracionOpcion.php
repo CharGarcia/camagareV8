@@ -167,11 +167,17 @@ class ConfiguracionOpcion extends BaseModel
             return $id;
         } catch (\PDOException $e) {
             // Manejar errores específicos
-            if (strpos($e->getMessage(), '23505') !== false) {
+            $errorCode = $e->getCode();
+            $errorMsg = $e->getMessage();
+
+            // Log para debugging
+            error_log("ConfiguracionOpcion::crearOpcion() - Error Code: {$errorCode}, Message: {$errorMsg}");
+
+            if (strpos($errorMsg, '23505') !== false) {
                 // Error de clave duplicada
                 throw new \RuntimeException('Una opción con este nombre ya existe.', 0, $e);
             }
-            throw new \RuntimeException('Error al crear la opción de configuración: ' . $e->getMessage(), 0, $e);
+            throw new \RuntimeException('Error al crear la opción de configuración: ' . $errorMsg, 0, $e);
         }
     }
 
