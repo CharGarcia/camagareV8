@@ -328,12 +328,39 @@ class IngresoRepository extends BaseRepository
 
     public function anular(int $id, int $idEmpresa, int $idUsuario): bool
     {
-        $sql = "UPDATE ingresos_cabecera 
-                SET estado = 'anulado', updated_at = CURRENT_TIMESTAMP, updated_by = :usr 
+        $sql = "UPDATE ingresos_cabecera
+                SET estado = 'anulado', updated_at = CURRENT_TIMESTAMP, updated_by = :usr
                 WHERE id = :id AND id_empresa = :emp AND eliminado = FALSE";
         $st = $this->db->prepare($sql);
         $st->execute([':usr' => $idUsuario, ':id' => $id, ':emp' => $idEmpresa]);
         return $st->rowCount() > 0;
+    }
+
+    /**
+     * Devuelve los ingresos ACTIVOS (no anulados, no eliminados) que cobran la factura indicada,
+     * incluyendo cuántos documentos distintos cobra cada ingreso (para detectar cobros multi-factura).
+     *
+     * @return array Filas con: id_ingreso, numero_ingreso, total_documentos
+     */
+    public function getIngresosActivosPorFactura(int $idVenta, int $idEmpresa): array
+    {
+        $sql = "SELECT i.id AS id_ingreso,
+                       i.numero_ingreso,
+                       (SELECT COUNT(DISTINCT (d2.tipo_documento, d2.id_referencia_documento))
+                          FROM ingresos_detalle d2
+                         WHERE d2.id_ingreso = i.id) AS total_documentos
+                FROM ingresos_cabecera i
+                INNER JOIN ingresos_detalle d
+                        ON d.id_ingreso = i.id
+                       AND d.tipo_documento = 'FACTURA'
+                       AND d.id_referencia_documento = :id_venta
+                WHERE i.id_empresa = :emp
+                  AND i.eliminado = FALSE
+                  AND i.estado != 'anulado'
+                GROUP BY i.id, i.numero_ingreso";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_venta' => $idVenta, ':emp' => $idEmpresa]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     public function eliminarLogico(int $id, int $idEmpresa, int $idUsuario): bool

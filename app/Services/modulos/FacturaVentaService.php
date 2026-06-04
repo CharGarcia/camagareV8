@@ -804,19 +804,73 @@ class FacturaVentaService
         }
 
         if (($cabecera['estado'] ?? '') === 'anulado') {
-            throw new \Exception('La factura ya estÃ¡ anulada.');
+            throw new \Exception('La factura ya está anulada.');
         }
+
+        // 1. VERIFICACIÓN SRI: si la factura fue autorizada, solo se puede anular internamente
+        //    cuando el SRI YA NO la reporta como AUTORIZADO (es decir, ya se anuló en el SRI).
+        $claveAcceso  = trim((string)($cabecera['clave_acceso'] ?? ''));
+        $estadoActual = $cabecera['estado'] ?? '';
+        if ($estadoActual === 'autorizado' && $claveAcceso !== '') {
+            $tipoAmbiente = (string)($cabecera['tipo_ambiente'] ?? '1');
+            $envioSri = new \App\Services\Sri\SriEnvioService();
+            $consulta = $envioSri->verificarAutorizacion($claveAcceso, $tipoAmbiente);
+            $estadoSri = strtoupper($consulta['estado'] ?? '');
+            if ($estadoSri === 'AUTORIZADO') {
+                throw new \Exception(
+                    'No se puede anular: el documento sigue AUTORIZADO en el SRI. ' .
+                    'Primero debe anularlo en el portal del SRI; cuando deje de estar autorizado podrá anularlo aquí.'
+                );
+            }
+        }
+
+        // 2. INGRESOS asociados: se anularán por completo, aunque el cobro incluya otras facturas.
+        $ingresoRepo = new \App\repositories\modulos\IngresoRepository();
+        $ingresosAsociados = $ingresoRepo->getIngresosActivosPorFactura($id, $idEmpresa);
 
         $db = Database::getConnection();
         $managedTransaction = !$db->inTransaction();
         if ($managedTransaction) $db->beginTransaction();
 
         try {
+            // 3. Anular por completo los ingresos asociados (ingreso total + sus pagos),
+            //    aunque el cobro incluya otras facturas.
+            if (!empty($ingresosAsociados)) {
+                $ingresoService = new \App\Services\modulos\IngresoService(
+                    $ingresoRepo,
+                    new \App\Rules\modulos\IngresoRules(),
+                    $this->logService
+                );
+                foreach ($ingresosAsociados as $ing) {
+                    $ingresoService->anular((int)$ing['id_ingreso'], $idEmpresa, $idUsuario);
+                }
+            }
+
+            // 4. Anular el asiento contable de la factura (si existe)
+            $idAsiento = (int)($cabecera['id_asiento_contable'] ?? 0);
+            if ($idAsiento > 0) {
+                $asientoService = new \App\Services\modulos\AsientoContableService(
+                    new \App\repositories\modulos\AsientoContableRepository(),
+                    new \App\Rules\modulos\AsientoContableRules(),
+                    $this->logService
+                );
+                try {
+                    $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
+                } catch (\Throwable $eA) {
+                    // Si el asiento ya estaba anulado, continuar; otros errores se propagan.
+                    if (stripos($eA->getMessage(), 'ya se encuentra anulado') === false) {
+                        throw $eA;
+                    }
+                }
+            }
+
+            // 5. Anular la factura
             $this->repository->actualizarEstado($id, 'anulado', $idUsuario);
 
-            // Revertir inventario
+            // 6. Revertir inventario
             $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $id, $idEmpresa, $idUsuario);
 
+            // 7. Auditoría
             $this->logService->registrar(
                 $idUsuario,
                 $idEmpresa,
@@ -831,6 +885,14 @@ class FacturaVentaService
         } catch (\Throwable $e) {
             if ($managedTransaction && $db->inTransaction()) $db->rollBack();
             throw $e;
+        }
+
+        // 8. Correo de aviso de anulación al cliente (fuera de la transacción; un fallo aquí no revierte la anulación)
+        try {
+            (new \App\Services\EnvioDocumentosSRIService())
+                ->enviarAvisoAnulacion($idEmpresa, 'factura_venta', $cabecera);
+        } catch (\Throwable $eMail) {
+            error_log('[Anulación] No se pudo enviar el correo de aviso de anulación (factura #' . $id . '): ' . $eMail->getMessage());
         }
     }
 

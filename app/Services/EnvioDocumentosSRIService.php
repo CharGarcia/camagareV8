@@ -226,6 +226,95 @@ class EnvioDocumentosSRIService
         }
     }
 
+    /**
+     * Envía al cliente un aviso de que su comprobante fue ANULADO.
+     * Usa la misma configuración SMTP que el envío de comprobantes.
+     *
+     * @param array $cabecera Debe contener cliente_email/email, cliente_nombre y datos del documento.
+     */
+    public function enviarAvisoAnulacion(
+        int    $idEmpresa,
+        string $tipoDocumento,
+        array  $cabecera,
+        ?string $destinatariosAlternativos = null
+    ): bool {
+        $empresaRepo  = new EmpresaRepository();
+        $correoConfig = $empresaRepo->getCorreoConfig($idEmpresa);
+
+        // Destinatarios
+        $emailDestinoRaw = $destinatariosAlternativos
+            ?? ($cabecera['cliente_email'] ?? $cabecera['proveedor_email'] ?? $cabecera['email'] ?? '');
+        $nombreDestino = $cabecera['cliente_nombre'] ?? $cabecera['proveedor_nombre'] ?? $cabecera['nombre'] ?? 'Cliente';
+
+        $listaDestinos = [];
+        foreach (preg_split('/[,;]+/', (string)$emailDestinoRaw) as $c) {
+            $c = trim($c);
+            if (filter_var($c, FILTER_VALIDATE_EMAIL)) {
+                $listaDestinos[] = $c;
+            }
+        }
+        if (empty($listaDestinos)) {
+            error_log("[SRI Correo] Aviso anulación: sin destinatarios válidos para doc $tipoDocumento.");
+            return false;
+        }
+
+        // Credenciales SMTP (misma lógica que enviarSiAplica)
+        $tipoCorreo = $correoConfig['tipo_correo'] ?? 'camagare';
+        if ($tipoCorreo === 'camagare') {
+            $smtpData = EmailConfigService::getPhpMailerConfig('envio_documentos_sri');
+            if (!$smtpData) {
+                error_log("[SRI Correo] Aviso anulación: falta config 'envio_documentos_sri'.");
+                return false;
+            }
+        } else {
+            $enc = !empty($correoConfig['ssl_habilitado']) ? 'tls' : '';
+            $smtpData = [
+                'host'       => $correoConfig['host'] ?? '',
+                'port'       => (int)($correoConfig['puerto'] ?? 587),
+                'username'   => $correoConfig['correo_emisor'] ?? '',
+                'password'   => $correoConfig['password_correo_emisor'] ?? '',
+                'from'       => $correoConfig['correo_emisor'] ?? '',
+                'fromName'   => 'Emisor Electrónico',
+                'smtpSecure' => $enc,
+            ];
+        }
+
+        $nombreDocStr = match ($tipoDocumento) {
+            'factura_venta'      => 'Factura',
+            'nota_credito'       => 'Nota de Crédito',
+            'retencion_compra'   => 'Comprobante de Retención',
+            'guia_remision'      => 'Guía de Remisión',
+            'liquidacion_compra' => 'Liquidación de Compra',
+            default              => 'Comprobante Electrónico',
+        };
+
+        $secuencial      = $cabecera['secuencial'] ?? '';
+        $establecimiento = $cabecera['establecimiento'] ?? '001';
+        $puntoEmision    = $cabecera['punto_emision'] ?? '001';
+        $numComprobante  = !empty($secuencial)
+            ? $establecimiento . '-' . $puntoEmision . '-' . str_pad((string)$secuencial, 9, '0', STR_PAD_LEFT)
+            : (string)($cabecera['clave_acceso'] ?? '');
+
+        $asunto = "Comprobante ANULADO: {$nombreDocStr} {$numComprobante}";
+
+        $htmlCuerpo  = "<div style='font-family: Arial, sans-serif; line-height: 1.5;'>";
+        $htmlCuerpo .= "<p><strong>Estimad@:</strong> " . htmlspecialchars($nombreDestino) . "</p>";
+        $htmlCuerpo .= "<p>Le informamos que el siguiente comprobante electrónico ha sido <strong style='color:#b00020;'>ANULADO</strong>:</p>";
+        $htmlCuerpo .= "<p><strong>Tipo de documento:</strong> " . $nombreDocStr . "</p>";
+        $htmlCuerpo .= "<p><strong>Número de documento:</strong> " . htmlspecialchars((string)$numComprobante) . "</p>";
+        if (!empty($cabecera['clave_acceso'])) {
+            $htmlCuerpo .= "<p><strong>Clave de acceso:</strong> " . htmlspecialchars((string)$cabecera['clave_acceso']) . "</p>";
+        }
+        $htmlCuerpo .= "<hr style='border:0;border-top:1px solid #ccc;margin:16px 0;'>";
+        $htmlCuerpo .= "<p>Este comprobante ya no tiene validez. Si tiene alguna duda, comuníquese con nosotros.</p>";
+        $htmlCuerpo .= "</div>";
+
+        $baseName = str_replace(' ', '_', $nombreDocStr) . '_ANULADO_' . $numComprobante;
+
+        // Sin adjuntos (aviso informativo)
+        return $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $htmlCuerpo, $baseName, '', '');
+    }
+
     private function enviarPhpMailer(array $smtpData, array $toEmails, string $toName, string $subject, string $bodyHtml, string $baseName, string $xmlString, string $pdfString): bool
     {
         $docMailDir = MVC_APP . '/lib/mail';
