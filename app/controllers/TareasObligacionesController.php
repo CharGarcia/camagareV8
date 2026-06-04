@@ -65,6 +65,16 @@ class TareasObligacionesController extends Controller
         // Obtener responsables (ahora sin filtro por idEmpresa)
         $responsablesFiltro  = $this->tareaService->getResponsablesParaFiltro();
 
+        // Obtener todas las empresas asignadas al usuario para mostrar en el navbar
+        // (aunque este módulo es global, el navbar necesita mostrar todas las empresas)
+        $empresasModel = new \App\models\Empresa();
+        $empresas = [];
+        try {
+            $empresas = $empresasModel->getEmpresasAsignadas($idUsuario);
+        } catch (\Throwable $e) {
+            $empresas = [];
+        }
+
         $this->viewWithLayout('layouts.main', 'tareasObligaciones.index', [
             'titulo'              => 'Tareas y Obligaciones',
             'tab'                 => $tab,
@@ -72,6 +82,7 @@ class TareasObligacionesController extends Controller
             'nivelUsuarioActual'  => $nivel,
             'obligacionesActivas' => $obligacionesActivas,
             'responsablesFiltro'  => $responsablesFiltro,
+            'empresas'            => $empresas,  // Agregar explícitamente para navbar
         ]);
     }
 
