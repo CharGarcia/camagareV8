@@ -405,7 +405,7 @@ class ReporteVentasController extends BaseModuloController
             
             <?php
             $html = ob_get_clean();
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
             $html2pdf->writeHTML($html);
             $html2pdf->output('ReporteVentas_' . date('Ymd_His') . '.pdf', 'D');
             exit;
