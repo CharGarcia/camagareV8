@@ -260,7 +260,11 @@ class SriEnvioService
                 }
 
                 $emailSvc = new \App\Services\EnvioDocumentosSRIService();
-                $emailSvc->enviarSiAplica($idEmpresa, 'factura_venta', $cabecera, $xmlDetalleCompleto, $pdfString, $numAut);
+                $enviado = $emailSvc->enviarSiAplica($idEmpresa, 'factura_venta', $cabecera, $xmlDetalleCompleto, $pdfString, $numAut);
+                if ($enviado) {
+                    $db->prepare("UPDATE ventas_cabecera SET estado_correo = 'enviado', updated_at = NOW() WHERE id = ?")
+                       ->execute([$idVenta]);
+                }
             } catch (\Throwable $eEmail) {
                 error_log('[SRI] Error al procesar envío automático de correo: ' . $eEmail->getMessage());
             }
@@ -392,6 +396,21 @@ class SriEnvioService
                 $repo->updateDetalleXml($idNC, $xmlDetalleCompleto);
             } catch (\Throwable $eXml) {
                 error_log('[SRI] Error guardando detalle_xml en NC #' . $idNC . ': ' . $eXml->getMessage());
+            }
+
+            // --- ENVÍO AUTOMÁTICO DE CORREO ---
+            try {
+                $pdfService = new \App\Services\modulos\NotaCreditoPdfService();
+                $pdfString  = $pdfService->generarBytes($cabecera, $detalles, $empresa);
+
+                $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+                $enviado = $emailSvc->enviarSiAplica($idEmpresa, 'nota_credito', $cabecera, $xmlDetalleCompleto, $pdfString, $numAut);
+                if ($enviado) {
+                    $db->prepare("UPDATE notas_credito_cabecera SET estado_correo = 'enviado', updated_at = NOW() WHERE id = ?")
+                       ->execute([$idNC]);
+                }
+            } catch (\Throwable $eEmail) {
+                error_log('[SRI] Error al procesar envío automático de correo (NC #' . $idNC . '): ' . $eEmail->getMessage());
             }
         }
 
@@ -546,6 +565,21 @@ class SriEnvioService
                 $repo->updateDetalleXml($idRetencion, $xmlDetalleCompleto);
             } catch (\Throwable $eXml) {
                 error_log('[SRI] Error guardando detalle_xml en retención #' . $idRetencion . ': ' . $eXml->getMessage());
+            }
+
+            // --- ENVÍO AUTOMÁTICO DE CORREO ---
+            try {
+                $pdfService = new \App\Services\modulos\RetencionCompraPdfService();
+                $pdfString  = $pdfService->generarBytes($cabecera, $lineas, $empresa);
+
+                $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+                $enviado = $emailSvc->enviarSiAplica($idEmpresa, 'retencion_compra', $cabecera, $xmlDetalleCompleto, $pdfString, $numAut);
+                if ($enviado) {
+                    $db->prepare("UPDATE retencion_compra_cabecera SET estado_correo = 'enviado', updated_at = NOW() WHERE id = ?")
+                       ->execute([$idRetencion]);
+                }
+            } catch (\Throwable $eEmail) {
+                error_log('[SRI] Error al procesar envío automático de correo (retención #' . $idRetencion . '): ' . $eEmail->getMessage());
             }
         }
 
