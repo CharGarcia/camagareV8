@@ -69,10 +69,18 @@ class TareasObligacionesController extends Controller
         // (aunque este módulo es global, el navbar necesita mostrar todas las empresas)
         $empresasModel = new \App\models\Empresa();
         $empresas = [];
+        $idEmpresaFavorita = null;
         try {
             $empresas = $empresasModel->getEmpresasAsignadas($idUsuario);
+
+            // Obtener el favorito del usuario actual
+            $resFav = $this->db->prepare("SELECT id_empresa_favorita FROM usuarios WHERE id = ?");
+            $resFav->execute([$idUsuario]);
+            $idEmpresaFavorita = $resFav->fetchColumn();
+            $idEmpresaFavorita = $idEmpresaFavorita ? (int) $idEmpresaFavorita : null;
         } catch (\Throwable $e) {
             $empresas = [];
+            $idEmpresaFavorita = null;
         }
 
         $this->viewWithLayout('layouts.main', 'tareasObligaciones.index', [
@@ -83,6 +91,7 @@ class TareasObligacionesController extends Controller
             'obligacionesActivas' => $obligacionesActivas,
             'responsablesFiltro'  => $responsablesFiltro,
             'empresas'            => $empresas,  // Agregar explícitamente para navbar
+            'idEmpresaFavorita'   => $idEmpresaFavorita,  // Agregar favorito
         ]);
     }
 
