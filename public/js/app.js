@@ -33,14 +33,17 @@
             }
         }
 
-        // FALLBACK: Si no hay items en el dropdown (página sin $empresas),
-        // cargar las empresas vía AJAX (probablemente la página no renderizó bien)
-        if (items.length === 0 && storedEmpresaId) {
+        // FALLBACK AGRESIVO: Si el dropdown está vacío O el input vacío, cargar empresas vía AJAX
+        function cargarEmpresasAjax() {
             var baseUrl = (window.CMS_CONFIG && window.CMS_CONFIG.baseUrl) ? window.CMS_CONFIG.baseUrl : '/';
             fetch(baseUrl + '/empresa/getEmpresasAsignadasAjax')
                 .then(r => r.json())
                 .then(res => {
                     if (res.ok && res.empresas && res.empresas.length > 0) {
+                        // Limpiar items existentes
+                        var itemsExistentes = dropdown.querySelectorAll('.cmg-empresas-dropdown-item');
+                        itemsExistentes.forEach(function(item) { item.remove(); });
+
                         // Reconstruir el dropdown con los datos AJAX
                         res.empresas.forEach(function(emp) {
                             var div = document.createElement('div');
@@ -51,6 +54,7 @@
                             div.textContent = emp.texto;
                             dropdown.appendChild(div);
                         });
+
                         // Agregar event listeners a los nuevos items
                         dropdown.querySelectorAll('.cmg-empresas-dropdown-item').forEach(function(item) {
                             item.addEventListener('mousedown', function(e) {
@@ -58,8 +62,16 @@
                                 selectItem(item);
                             });
                         });
+
+                        // Actualizar la referencia a items
+                        items = dropdown.querySelectorAll('.cmg-empresas-dropdown-item');
                     }
                 });
+        }
+
+        // Si no hay items O el input está vacío pero hay sesión guardada, cargar AJAX
+        if ((items.length === 0 || input.value.trim() === '') && storedEmpresaId) {
+            cargarEmpresasAjax();
         }
 
         var isOpening = false;
