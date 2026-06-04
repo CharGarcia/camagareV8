@@ -129,33 +129,93 @@ class ConfiguracionOpcion extends BaseModel
 
     public function crearOpcion(array $data): int
     {
-        $nombre = $this->escape(trim($data['nombre'] ?? ''));
-        $descripcion = $this->escape(trim($data['descripcion'] ?? ''));
-        $icono = $this->escape(trim($data['icono'] ?? 'gear'));
-        $claseColor = $this->escape(trim($data['clase_color'] ?? 'primary'));
+        $nombre = trim($data['nombre'] ?? '');
+        $descripcion = trim($data['descripcion'] ?? '');
+        $icono = trim($data['icono'] ?? 'gear');
+        $claseColor = trim($data['clase_color'] ?? 'primary');
         $nivelMinimo = (int) ($data['nivel_minimo'] ?? 1);
         $orden = (int) ($data['orden'] ?? 0);
         $activo = isset($data['activo']) ? (bool) $data['activo'] : true;
-        $activoSql = $activo ? 'TRUE' : 'FALSE';
 
+        // Validar que el nombre no esté vacío
+        if (empty($nombre)) {
+            throw new \RuntimeException('El nombre de la opción no puede estar vacío.');
+        }
+
+        // Usar prepared statement para evitar inyección SQL
         $sql = "INSERT INTO configuracion_opciones (nombre, descripcion, icono, clase_color, nivel_minimo, orden, activo)
-                VALUES ('{$nombre}', '{$descripcion}', '{$icono}', '{$claseColor}', {$nivelMinimo}, {$orden}, {$activoSql})";
-        $this->execute($sql);
-        return $this->lastInsertId('configuracion_opciones_id_seq');
+                VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                $nombre,
+                $descripcion,
+                $icono,
+                $claseColor,
+                $nivelMinimo,
+                $orden,
+                $activo
+            ]);
+
+            // Obtener el ID generado
+            $id = (int) $this->db->lastInsertId('configuracion_opciones_id_seq');
+            if ($id <= 0) {
+                throw new \RuntimeException('No se pudo obtener el ID de la opción creada.');
+            }
+
+            return $id;
+        } catch (\PDOException $e) {
+            // Manejar errores específicos
+            if (strpos($e->getMessage(), '23505') !== false) {
+                // Error de clave duplicada
+                throw new \RuntimeException('Una opción con este nombre ya existe.', 0, $e);
+            }
+            throw new \RuntimeException('Error al crear la opción de configuración: ' . $e->getMessage(), 0, $e);
+        }
     }
 
     public function crearEnlace(int $idOpcion, array $data): int
     {
         $id = (int) $idOpcion;
-        $etiqueta = $this->escape(trim($data['etiqueta'] ?? ''));
-        $ruta = $this->escape(trim($data['ruta'] ?? ''));
-        $claseBtn = $this->escape(trim($data['clase_btn'] ?? 'outline-primary'));
+        $etiqueta = trim($data['etiqueta'] ?? '');
+        $ruta = trim($data['ruta'] ?? '');
+        $claseBtn = trim($data['clase_btn'] ?? 'outline-primary');
         $orden = (int) ($data['orden'] ?? 0);
 
+        // Validar que la opción exista
+        if ($id <= 0) {
+            throw new \RuntimeException('ID de opción inválido.');
+        }
+
+        // Usar prepared statement
         $sql = "INSERT INTO configuracion_opcion_enlaces (id_opcion, etiqueta, ruta, clase_btn, orden)
-                VALUES ({$id}, '{$etiqueta}', '{$ruta}', '{$claseBtn}', {$orden})";
-        $this->execute($sql);
-        return $this->lastInsertId('configuracion_opcion_enlaces_id_seq');
+                VALUES (?, ?, ?, ?, ?)";
+
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                $id,
+                $etiqueta,
+                $ruta,
+                $claseBtn,
+                $orden
+            ]);
+
+            // Obtener el ID generado
+            $enlaceId = (int) $this->db->lastInsertId('configuracion_opcion_enlaces_id_seq');
+            if ($enlaceId <= 0) {
+                throw new \RuntimeException('No se pudo obtener el ID del enlace creado.');
+            }
+
+            return $enlaceId;
+        } catch (\PDOException $e) {
+            if (strpos($e->getMessage(), '23502') !== false) {
+                // Error de clave foránea
+                throw new \RuntimeException('La opción especificada no existe.', 0, $e);
+            }
+            throw new \RuntimeException('Error al crear el enlace: ' . $e->getMessage(), 0, $e);
+        }
     }
 
     public function getOpcionPorId(int $id): ?array
@@ -175,20 +235,47 @@ class ConfiguracionOpcion extends BaseModel
     public function actualizarOpcion(int $id, array $data): bool
     {
         $id = (int) $id;
-        $nombre = $this->escape(trim($data['nombre'] ?? ''));
-        $descripcion = $this->escape(trim($data['descripcion'] ?? ''));
-        $icono = $this->escape(trim($data['icono'] ?? 'gear'));
-        $claseColor = $this->escape(trim($data['clase_color'] ?? 'primary'));
+        if ($id <= 0) {
+            throw new \RuntimeException('ID de opción inválido.');
+        }
+
+        $nombre = trim($data['nombre'] ?? '');
+        $descripcion = trim($data['descripcion'] ?? '');
+        $icono = trim($data['icono'] ?? 'gear');
+        $claseColor = trim($data['clase_color'] ?? 'primary');
         $nivelMinimo = (int) ($data['nivel_minimo'] ?? 1);
         $orden = (int) ($data['orden'] ?? 0);
         $activo = isset($data['activo']) ? (bool) $data['activo'] : true;
-        $activoSql = $activo ? 'TRUE' : 'FALSE';
+
+        if (empty($nombre)) {
+            throw new \RuntimeException('El nombre de la opción no puede estar vacío.');
+        }
 
         $sql = "UPDATE configuracion_opciones SET
-                nombre = '{$nombre}', descripcion = '{$descripcion}', icono = '{$icono}',
-                clase_color = '{$claseColor}', nivel_minimo = {$nivelMinimo}, orden = {$orden}, activo = {$activoSql}
-                WHERE id = {$id}";
-        return $this->execute($sql);
+                nombre = ?, descripcion = ?, icono = ?,
+                clase_color = ?, nivel_minimo = ?, orden = ?, activo = ?
+                WHERE id = ?";
+
+        try {
+            $stmt = $this->db->prepare($sql);
+            $result = $stmt->execute([
+                $nombre,
+                $descripcion,
+                $icono,
+                $claseColor,
+                $nivelMinimo,
+                $orden,
+                $activo,
+                $id
+            ]);
+
+            return $result;
+        } catch (\PDOException $e) {
+            if (strpos($e->getMessage(), '23505') !== false) {
+                throw new \RuntimeException('Una opción con este nombre ya existe.', 0, $e);
+            }
+            throw new \RuntimeException('Error al actualizar la opción: ' . $e->getMessage(), 0, $e);
+        }
     }
 
     public function eliminarEnlacesPorOpcion(int $idOpcion): bool
