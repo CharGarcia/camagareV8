@@ -47,4 +47,42 @@ class EmpresaController extends Controller
             $this->redirect(BASE_URL . '/home/index');
         }
     }
+
+    /**
+     * Endpoint AJAX que devuelve las empresas asignadas al usuario actual.
+     * Usado como fallback cuando el navbar no tiene $empresas renderizado.
+     */
+    public function getEmpresasAsignadasAjax(): void
+    {
+        $this->requireAuth();
+        header('Content-Type: application/json; charset=UTF-8');
+
+        try {
+            $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+            $model = new Empresa();
+            $empresas = $model->getEmpresasAsignadas($idUsuario);
+
+            $resultado = [];
+            foreach ($empresas as $emp) {
+                $nombre = !empty($emp['nombre_comercial']) ? $emp['nombre_comercial'] : $emp['nombre'];
+                $texto = ($emp['establecimiento'] ?? '001') . ' - ' . $nombre;
+                $resultado[] = [
+                    'id_empresa' => (int)$emp['id_empresa'],
+                    'texto' => $texto,
+                    'ruc' => $emp['ruc'] ?? '',
+                ];
+            }
+
+            echo json_encode([
+                'ok' => true,
+                'empresas' => $resultado,
+            ]);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            echo json_encode([
+                'ok' => false,
+                'error' => 'Error al obtener empresas',
+            ]);
+        }
+    }
 }

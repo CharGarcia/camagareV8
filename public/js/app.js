@@ -33,6 +33,35 @@
             }
         }
 
+        // FALLBACK: Si no hay items en el dropdown (página sin $empresas),
+        // cargar las empresas vía AJAX (probablemente la página no renderizó bien)
+        if (items.length === 0 && storedEmpresaId) {
+            var baseUrl = (window.CMS_CONFIG && window.CMS_CONFIG.baseUrl) ? window.CMS_CONFIG.baseUrl : '/';
+            fetch(baseUrl + '/empresa/getEmpresasAsignadasAjax')
+                .then(r => r.json())
+                .then(res => {
+                    if (res.ok && res.empresas && res.empresas.length > 0) {
+                        // Reconstruir el dropdown con los datos AJAX
+                        res.empresas.forEach(function(emp) {
+                            var div = document.createElement('div');
+                            div.className = 'cmg-empresas-dropdown-item';
+                            div.setAttribute('data-id', emp.id_empresa);
+                            div.setAttribute('data-text', emp.texto);
+                            div.setAttribute('data-ruc', emp.ruc || '');
+                            div.textContent = emp.texto;
+                            dropdown.appendChild(div);
+                        });
+                        // Agregar event listeners a los nuevos items
+                        dropdown.querySelectorAll('.cmg-empresas-dropdown-item').forEach(function(item) {
+                            item.addEventListener('mousedown', function(e) {
+                                e.preventDefault();
+                                selectItem(item);
+                            });
+                        });
+                    }
+                });
+        }
+
         var isOpening = false;
 
         function showDropdown() {
