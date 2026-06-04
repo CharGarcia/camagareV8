@@ -41,6 +41,13 @@ abstract class Controller
 
             try {
                 $empresas = $model->getEmpresasAsignadas($idUsuario);
+                // Si no hay empresas pero la sesión tiene id_empresa, obtener solo esa
+                if (empty($empresas) && isset($_SESSION['id_empresa']) && (int)$_SESSION['id_empresa'] > 0) {
+                    $empresa = $model->getPorId((int)$_SESSION['id_empresa']);
+                    if ($empresa) {
+                        $empresas = [$empresa];
+                    }
+                }
                 $perfil = $usuarioModel->getPerfil($idUsuario);
                 // getPerfil no traia id_empresa_favorita, voy a usar una consulta directa o actualizar getPerfil
                 // Para ser rápido y seguro, consulto directo el campo:
@@ -49,7 +56,18 @@ abstract class Controller
                 $idEmpresaFavorita = $resFav->fetchColumn();
                 $idEmpresaFavorita = $idEmpresaFavorita ? (int) $idEmpresaFavorita : null;
             } catch (\Throwable $e) {
+                // Si falla, intentar obtener al menos la empresa de la sesión
                 $empresas = [];
+                if (isset($_SESSION['id_empresa']) && (int)$_SESSION['id_empresa'] > 0) {
+                    try {
+                        $empresa = $model->getPorId((int)$_SESSION['id_empresa']);
+                        if ($empresa) {
+                            $empresas = [$empresa];
+                        }
+                    } catch (\Throwable $e2) {
+                        // Silenciar error fallback
+                    }
+                }
             }
 
             $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
