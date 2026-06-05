@@ -13,7 +13,7 @@ class EmpresaRepository extends BaseModel
                        resolucion_contribuyente, id_tipo_regimen, tipo_ambiente, agente_retencion, tipo_emision,
                        nom_rep_legal, ced_rep_legal, nombre_contador, ruc_contador, cod_prov, cod_ciudad,
                        tipo, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, estado,
-                       cancelar_renovacion
+                       cancelar_renovacion, obligado_contabilidad
                 FROM empresas
                 WHERE id = {$id} AND eliminado = false";
         $res = $this->query($sql);
@@ -39,7 +39,7 @@ class EmpresaRepository extends BaseModel
             'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov',
             'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'tipo',
             'resolucion_contribuyente', 'id_tipo_regimen', 'tipo_ambiente',
-            'agente_retencion', 'tipo_emision', 'cancelar_renovacion',
+            'agente_retencion', 'tipo_emision', 'cancelar_renovacion', 'obligado_contabilidad',
         ];
 
         foreach ($data as $k => $v) {

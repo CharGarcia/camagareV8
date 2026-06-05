@@ -83,9 +83,9 @@ class EmpresaService
     public function saveGeneral(int $idEmpresa, array $data): bool
     {
         $fields = [
-            'nombre', 'nombre_comercial', 'direccion', 'telefono', 'mail', 
+            'nombre', 'nombre_comercial', 'direccion', 'telefono', 'mail',
             'nom_rep_legal', 'ced_rep_legal', 'nombre_contador', 'ruc_contador',
-            'cod_prov', 'cod_ciudad', 'tipo', 'cancelar_renovacion'
+            'cod_prov', 'cod_ciudad', 'tipo', 'cancelar_renovacion', 'obligado_contabilidad'
         ];
         
         // Manejar checkbox cancelar_renovacion (si no viene es false)
@@ -94,6 +94,9 @@ class EmpresaService
         } else {
             $data['cancelar_renovacion'] = 'true';
         }
+
+        // Normalizar obligado_contabilidad a SI/NO
+        $data['obligado_contabilidad'] = strtoupper(trim($data['obligado_contabilidad'] ?? 'NO')) === 'SI' ? 'SI' : 'NO';
 
         $filtered = array_intersect_key($data, array_flip($fields));
         

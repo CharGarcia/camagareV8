@@ -117,11 +117,18 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                 <input type="text" name="telefono" class="form-control form-control-sm" value="<?= htmlspecialchars($empresa['telefono'] ?? '') ?>">
                             </div>
 
-                            <div class="col-md-6">
+                            <div class="col-md-2">
+                                <label class="form-label small fw-bold">Obligado a llevar contabilidad</label>
+                                <select name="obligado_contabilidad" class="form-select form-select-sm">
+                                    <option value="NO" <?= (($empresa['obligado_contabilidad'] ?? 'NO') === 'NO') ? 'selected' : '' ?>>NO</option>
+                                    <option value="SI" <?= (($empresa['obligado_contabilidad'] ?? 'NO') === 'SI') ? 'selected' : '' ?>>SI</option>
+                                </select>
+                            </div>
+                            <div class="col-md-5">
                                 <label class="form-label small fw-bold">Correo Empresa</label>
                                 <input type="email" name="mail" class="form-control form-control-sm" value="<?= htmlspecialchars($empresa['mail'] ?? '') ?>">
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-5">
                                 <label class="form-label small fw-bold">Dirección Matriz</label>
                                 <input type="text" name="direccion" class="form-control form-control-sm" id="direccion_empresa_general" value="<?= htmlspecialchars($empresa['direccion'] ?? '') ?>">
                             </div>

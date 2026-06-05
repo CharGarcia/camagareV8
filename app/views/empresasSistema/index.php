@@ -343,18 +343,18 @@ function estadoPagoBadge($estado) {
                                     <label for="edit-nombre-comercial" class="form-label">Nombre comercial</label>
                                     <input type="text" id="edit-nombre-comercial" name="nombre_comercial" class="form-control form-control-sm" placeholder="Nombre comercial">
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-2">
                                     <label for="edit-obligado-contabilidad" class="form-label">Obligado a llevar contabilidad</label>
                                     <select id="edit-obligado-contabilidad" name="obligado_contabilidad" class="form-select form-select-sm">
                                         <option value="NO">NO</option>
                                         <option value="SI">SI</option>
                                     </select>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-5">
                                     <label for="edit-mail" class="form-label">Correo empresa</label>
                                     <input type="email" id="edit-mail" name="mail" class="form-control form-control-sm" placeholder="correo@empresa.com">
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-5">
                                     <label for="edit-direccion" class="form-label">Dirección matriz</label>
                                     <input type="text" id="edit-direccion" name="direccion" class="form-control form-control-sm" placeholder="Dirección">
                                 </div>
