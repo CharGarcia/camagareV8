@@ -571,10 +571,12 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                     </div>
                                 </div>
                                 <div class="mt-5 border-top pt-3 d-flex justify-content-between align-items-center">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" onclick="agregarSecuencialPersonalizado()">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" id="btn-agregar-sec" onclick="agregarSecuencialPersonalizado()">
                                         <i class="bi bi-plus-lg me-1"></i>Agregar Tipo Documento
                                     </button>
-                                    <button type="submit" class="btn btn-primary btn-sm px-4 rounded-pill shadow-sm fw-bold">GUARDAR SECUENCIALES</button>
+                                    <button type="submit" id="btn-guardar-sec" class="btn btn-primary btn-sm px-4 rounded-pill shadow-sm fw-bold">
+                                        <i class="bi bi-save me-1"></i>GUARDAR SECUENCIALES
+                                    </button>
                                 </div>
                             </form>
                         </div>
@@ -1186,6 +1188,56 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         }
     }
 
+    function _setBtnSecuencialesEstado(tieneRegistros) {
+        const btn = document.getElementById('btn-guardar-sec');
+        const btnAgregar = document.getElementById('btn-agregar-sec');
+        if (!btn) return;
+        if (tieneRegistros) {
+            btn.type = 'submit';
+            btn.className = 'btn btn-primary btn-sm px-4 rounded-pill shadow-sm fw-bold';
+            btn.innerHTML = '<i class="bi bi-save me-1"></i>GUARDAR SECUENCIALES';
+            btn.onclick = null;
+            if (btnAgregar) btnAgregar.style.display = '';
+        } else {
+            btn.type = 'button';
+            btn.className = 'btn btn-success btn-sm px-4 rounded-pill shadow-sm fw-bold';
+            btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>CREAR INICIALES DE SECUENCIALES';
+            btn.onclick = crearSecuencialesIniciales;
+            if (btnAgregar) btnAgregar.style.display = 'none';
+        }
+    }
+
+    async function crearSecuencialesIniciales() {
+        const idPunto = document.getElementById('sec-punto-id').value;
+        if (!idPunto) return;
+
+        const btn = document.getElementById('btn-guardar-sec');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Creando...';
+
+        try {
+            const fd = new FormData();
+            fd.append('section', 'secuenciales_iniciales');
+            fd.append('id_punto_emision', idPunto);
+            const res = await fetch(`<?= $base ?>/modulos/empresa`, { method: 'POST', body: fd });
+            const json = await res.json();
+
+            if (json.ok) {
+                // Recargar la lista del punto activo
+                const link = document.querySelector('#secuenciales-puntos-list a.active');
+                if (link) await cargarSecuenciales(link, parseInt(idPunto));
+            } else {
+                alert(json.msg || 'Error al crear los secuenciales iniciales.');
+                btn.disabled = false;
+                _setBtnSecuencialesEstado(false);
+            }
+        } catch (e) {
+            alert('Error de conexión al crear secuenciales iniciales.');
+            btn.disabled = false;
+            _setBtnSecuencialesEstado(false);
+        }
+    }
+
     async function cargarSecuenciales(el, id) {
         document.querySelectorAll('#secuenciales-puntos-list a').forEach(a => a.classList.remove('active'));
         el.classList.add('active');
@@ -1194,21 +1246,20 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         const container = document.getElementById('secuenciales-fields');
         container.innerHTML = '<div class="col-12 text-center py-4"><div class="spinner-border spinner-border-sm text-primary" role="status"></div><span class="ms-2 small">Cargando secuenciales...</span></div>';
 
-        // Cargar valores actuales desde la BD
         try {
             const res = await fetch(`<?= $base ?>/modulos/empresa/getSecuenciales?id_punto=${id}`);
             const json = await res.json();
-            
-            container.innerHTML = ''; // Limpiar spinner
+
+            container.innerHTML = '';
 
             if (json.ok) {
                 const entries = Object.entries(json.data);
                 if (entries.length === 0) {
-                    container.innerHTML = '<div class="col-12 text-center py-4 text-muted small">No hay secuenciales registrados para este punto. Use el botón "Agregar Tipo Documento" para iniciar.</div>';
+                    container.innerHTML = '<div class="col-12 text-center py-4 text-muted small"><i class="bi bi-info-circle me-2"></i>Este punto aún no tiene secuenciales registrados. Use el botón para crear los tipos estándar.</div>';
+                    _setBtnSecuencialesEstado(false);
                     return;
                 }
 
-                // Renderizar SOLO lo que viene de la base de datos
                 for (const [nombre, valor] of entries) {
                     const div = document.createElement('div');
                     div.className = 'col-md-6 col-lg-4';
@@ -1221,6 +1272,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     `;
                     container.appendChild(div);
                 }
+                _setBtnSecuencialesEstado(true);
             }
         } catch (err) {
             container.innerHTML = '<div class="col-12 text-center py-4 text-danger small">Error al conectar con el servidor.</div>';

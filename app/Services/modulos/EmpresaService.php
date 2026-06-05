@@ -387,6 +387,11 @@ class EmpresaService
         return true;
     }
 
+    public function crearSecuencialesIniciales(int $idPunto, int $idEmpresa): bool
+    {
+        return $this->repository->crearSecuencialesIniciales($idPunto, $idEmpresa);
+    }
+
     public function getSecuencialesByPunto(int $idPunto, int $idEmpresa): array
     {
         return $this->repository->getSecuencialesByPunto($idPunto, $idEmpresa);

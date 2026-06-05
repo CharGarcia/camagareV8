@@ -442,6 +442,52 @@ class EmpresaRepository extends BaseModel
         return $map;
     }
 
+    public function hasSecuenciales(int $idPunto, int $idEmpresa): bool
+    {
+        $res = $this->query(
+            "SELECT 1 FROM empresa_secuencial WHERE id_punto_emision = {$idPunto} AND id_empresa = {$idEmpresa} AND eliminado = false LIMIT 1"
+        );
+        return !empty($res);
+    }
+
+    public function crearSecuencialesIniciales(int $idPunto, int $idEmpresa): bool
+    {
+        $user = (int) ($_SESSION['id_usuario'] ?? 0);
+        $tiposIniciales = [
+            'Facturas de venta',
+            'Nota de crédito',
+            'Nota de débito',
+            'Retenciones de compras',
+            'Guía de remisión',
+            'Liquidación de compras o servicios',
+            'Ingresos',
+            'Egresos',
+            'Pedidos',
+            'Órdenes de compra',
+        ];
+
+        $this->beginTransaction();
+        try {
+            foreach ($tiposIniciales as $tipo) {
+                $t = $this->escape($tipo);
+                $existe = $this->query(
+                    "SELECT id FROM empresa_secuencial WHERE id_punto_emision = {$idPunto} AND id_empresa = {$idEmpresa} AND tipo_documento = '{$t}' AND eliminado = false"
+                );
+                if (!empty($existe)) continue;
+
+                $this->execute(
+                    "INSERT INTO empresa_secuencial (id_punto_emision, id_empresa, tipo_documento, secuencial_inicial, created_by, updated_by)
+                     VALUES ({$idPunto}, {$idEmpresa}, '{$t}', 1, {$user}, {$user})"
+                );
+            }
+            $this->commit();
+            return true;
+        } catch (\Throwable $e) {
+            $this->rollBack();
+            return false;
+        }
+    }
+
     public function getIvaCasilleros(int $idEmpresa): array
     {
         $id = (int) $idEmpresa;
