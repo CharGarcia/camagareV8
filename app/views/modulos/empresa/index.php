@@ -1223,11 +1223,10 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             const json = await res.json();
 
             if (json.ok) {
-                // Recargar la lista del punto activo
                 const link = document.querySelector('#secuenciales-puntos-list a.active');
                 if (link) await cargarSecuenciales(link, parseInt(idPunto));
             } else {
-                alert(json.msg || 'Error al crear los secuenciales iniciales.');
+                alert(json.error || json.msg || 'Error al crear los secuenciales iniciales.');
                 btn.disabled = false;
                 _setBtnSecuencialesEstado(false);
             }

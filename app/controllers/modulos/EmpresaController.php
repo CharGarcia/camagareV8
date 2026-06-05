@@ -122,8 +122,8 @@ class EmpresaController extends BaseModuloController
                         echo json_encode(['ok' => false, 'msg' => 'Punto de emisión no válido.']);
                         break;
                     }
-                    $res = $this->service->crearSecuencialesIniciales($idPunto, $idEmpresa);
-                    echo json_encode(['ok' => $res, 'msg' => $res ? 'Secuenciales iniciales creados correctamente.' : 'Error al crear los secuenciales.']);
+                    $this->service->crearSecuencialesIniciales($idPunto, $idEmpresa);
+                    echo json_encode(['ok' => true, 'msg' => 'Secuenciales iniciales creados correctamente.']);
                     break;
                 case 'decimales':
                     $this->requireActualizar();

@@ -466,7 +466,7 @@ class EmpresaRepository extends BaseModel
             'Órdenes de compra',
         ];
 
-        $this->beginTransaction();
+        $this->db->beginTransaction();
         try {
             foreach ($tiposIniciales as $tipo) {
                 $t = $this->escape($tipo);
@@ -480,11 +480,11 @@ class EmpresaRepository extends BaseModel
                      VALUES ({$idPunto}, {$idEmpresa}, '{$t}', 1, {$user}, {$user})"
                 );
             }
-            $this->commit();
+            $this->db->commit();
             return true;
         } catch (\Throwable $e) {
-            $this->rollBack();
-            return false;
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            throw $e;
         }
     }
 
