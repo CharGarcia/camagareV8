@@ -192,6 +192,55 @@ class SuscripcionesRepository extends BaseRepository
         return $st->execute([':pc' => $proximoCobro, ':id' => $id]);
     }
 
+    /**
+     * Guarda/actualiza el método de pago Payphone de una suscripción.
+     * No se almacenan datos sensibles de tarjeta (solo referencia y datos no sensibles).
+     */
+    public function guardarMetodoPayphone(int $id, int $idEmpresa, array $d): bool
+    {
+        $sql = "UPDATE {$this->table} SET
+                    payphone_client_tx_id   = :ctx,
+                    payphone_estado         = :estado,
+                    payphone_card_last4     = :last4,
+                    payphone_card_brand     = :brand,
+                    payphone_fecha_registro = CASE WHEN :registrada = '1' THEN CURRENT_TIMESTAMP ELSE payphone_fecha_registro END,
+                    updated_at              = CURRENT_TIMESTAMP
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        return $st->execute([
+            ':ctx'        => $d['client_tx_id'] ?? null,
+            ':estado'     => $d['estado'] ?? 'sin_registrar',
+            ':last4'      => $d['last4'] ?? null,
+            ':brand'      => $d['brand'] ?? null,
+            ':registrada' => (($d['estado'] ?? '') === 'registrada') ? '1' : '0',
+            ':id'         => $id,
+            ':id_empresa' => $idEmpresa,
+        ]);
+    }
+
+    /** Suscripción con datos del cliente (para envío de enlace de pago). */
+    public function findByIdConCliente(int $id, int $idEmpresa): ?array
+    {
+        $sql = "SELECT s.*, c.nombre AS cliente_nombre, c.email AS cliente_email,
+                       c.telefono AS cliente_telefono, c.identificacion AS cliente_identificacion
+                FROM {$this->table} s
+                LEFT JOIN clientes c ON c.id = s.id_cliente
+                WHERE s.id = :id AND s.id_empresa = :id_empresa AND s.eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Busca la suscripción asociada a un client_transaction_id de Payphone. */
+    public function findByPayphoneCtx(string $ctx): ?array
+    {
+        $st = $this->db->prepare("SELECT * FROM {$this->table} WHERE payphone_client_tx_id = :ctx AND eliminado = false LIMIT 1");
+        $st->execute([':ctx' => $ctx]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     public function incrementarIntentosFallidos(int $id): void
     {
         $this->db->prepare("UPDATE {$this->table} SET intentos_fallidos = intentos_fallidos + 1, ultimo_intento_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = :id")->execute([':id' => $id]);

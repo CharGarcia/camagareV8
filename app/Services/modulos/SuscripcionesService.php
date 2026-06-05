@@ -4,8 +4,11 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\SuscripcionesRepository;
+use App\repositories\PayphoneRepository;
 use App\Rules\modulos\SuscripcionesRules;
 use App\Services\LogSistemaService;
+use App\Services\PayphoneService;
+use App\Services\EnvioDocumentosSRIService;
 use Exception;
 
 class SuscripcionesService
@@ -161,6 +164,159 @@ class SuscripcionesService
             $this->repository->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Calcula el monto del período a partir del detalle guardado de la suscripción.
+     * Retorna montos en CENTAVOS (formato Payphone): ['subtotal','iva','total'].
+     */
+    public function calcularMontoPeriodo(int $id, int $idEmpresa): array
+    {
+        $susc = $this->repository->findById($id, $idEmpresa);
+        if (!$susc) {
+            throw new Exception('Suscripción no encontrada.');
+        }
+        $detalle = $this->repository->getDetalle($id);
+        if (empty($detalle)) {
+            throw new Exception('La suscripción no tiene productos/servicios; no se puede determinar el monto.');
+        }
+
+        $subtotal = 0.0;
+        $iva      = 0.0;
+        foreach ($detalle as $d) {
+            $base = round((float)$d['cantidad'] * (float)$d['precio_unitario'], 2);
+            $subtotal += $base;
+            $iva      += round($base * ((float)($d['porcentaje_iva'] ?? 0) / 100), 2);
+        }
+        $total = round($subtotal + $iva, 2);
+        if ($total <= 0) {
+            throw new Exception('El monto del período debe ser mayor a cero.');
+        }
+
+        return [
+            'subtotal' => (int) round($subtotal * 100),
+            'iva'      => (int) round($iva * 100),
+            'total'    => (int) round($total * 100),
+            'total_dolares' => $total,
+            'suscripcion'   => $susc,
+        ];
+    }
+
+    /**
+     * Guarda/actualiza el método de pago Payphone de una suscripción.
+     * @param array $d ['client_tx_id','estado','last4','brand']
+     */
+    public function guardarMetodoPayphone(int $id, int $idEmpresa, array $d, int $idUsuario): void
+    {
+        $susc = $this->repository->findById($id, $idEmpresa);
+        if (!$susc) {
+            throw new Exception('Suscripción no encontrada.');
+        }
+        $this->repository->beginTransaction();
+        try {
+            $this->repository->guardarMetodoPayphone($id, $idEmpresa, $d);
+            $this->logService->registrar(
+                $idUsuario, $idEmpresa, 'metodo_pago_payphone', 'suscripciones', $id, null,
+                ['estado' => $d['estado'] ?? '', 'last4' => $d['last4'] ?? '']
+            );
+            $this->repository->commit();
+        } catch (Exception $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Prepara la Cajita de Payphone para registrar/cobrar el período de una suscripción.
+     * Devuelve el config del widget para renderizar en el modal.
+     */
+    public function prepararCajitaPayphone(int $id, int $idEmpresa, int $idUsuario): array
+    {
+        $montos = $this->calcularMontoPeriodo($id, $idEmpresa);
+        $susc   = $this->repository->findByIdConCliente($id, $idEmpresa) ?? [];
+
+        $base = rtrim(BASE_URL, '/');
+        $pp   = new PayphoneService(new PayphoneRepository());
+
+        return $pp->prepararCajita($idEmpresa, [
+            'monto'           => $montos['total'],
+            'impuesto'        => $montos['iva'],
+            'descripcion'     => 'Suscripción #' . $id . ' - ' . ($susc['cliente_nombre'] ?? ''),
+            'modulo'          => 'suscripciones',
+            'id_referencia'   => $id,
+            'url_retorno'     => $base . '/payphone/cajita-retorno',
+            'url_cancelacion' => $base . '/payphone/cancelacion',
+            'url_exito'       => $base . '/modulos/suscripciones?pago=ok',
+            'id_usuario'      => $idUsuario,
+            'email'           => $susc['cliente_email'] ?? '',
+            'telefono'        => $susc['cliente_telefono'] ?? '',
+        ]);
+    }
+
+    /**
+     * Genera un enlace de pago Payphone y lo envía al correo del cliente.
+     */
+    public function enviarEnlacePagoPayphone(int $id, int $idEmpresa, int $idUsuario): array
+    {
+        $montos = $this->calcularMontoPeriodo($id, $idEmpresa);
+        $susc   = $this->repository->findByIdConCliente($id, $idEmpresa);
+        if (!$susc) {
+            throw new Exception('Suscripción no encontrada.');
+        }
+
+        $email = trim((string)($susc['cliente_email'] ?? ''));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new Exception('El cliente no tiene un correo válido para enviar el enlace.');
+        }
+
+        $base = rtrim(BASE_URL, '/');
+        $pp   = new PayphoneService(new PayphoneRepository());
+
+        $prep = $pp->prepararPago($idEmpresa, [
+            'monto'           => $montos['total'],
+            'impuesto'        => $montos['iva'],
+            'descripcion'     => 'Suscripción #' . $id . ' - ' . ($susc['cliente_nombre'] ?? ''),
+            'modulo'          => 'suscripciones',
+            'id_referencia'   => $id,
+            'url_retorno'     => $base . '/payphone/retorno',
+            'url_cancelacion' => $base . '/payphone/cancelacion',
+            'url_exito'       => $base . '/modulos/suscripciones?pago=ok',
+            'id_usuario'      => $idUsuario,
+        ]);
+
+        if (empty($prep['ok']) || empty($prep['pay_url'])) {
+            throw new Exception($prep['mensaje'] ?? 'No se pudo generar el enlace de pago.');
+        }
+
+        // Datos de empresa para el remitente
+        $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+        $empresaNombre = trim((string)($empresa['nombre_comercial'] ?? $empresa['nombre'] ?? ''));
+
+        $mailSvc = new EnvioDocumentosSRIService();
+        $enviado = $mailSvc->enviarEnlacePagoTarjeta(
+            $idEmpresa,
+            $email,
+            (string)($susc['cliente_nombre'] ?? 'Cliente'),
+            $empresaNombre,
+            $montos['total_dolares'],
+            'Suscripción #' . $id,
+            $prep['pay_url'],
+            '' // sin PDF adjunto
+        );
+
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa, 'enlace_pago_payphone', 'suscripciones', $id, null,
+            ['email' => $email, 'enviado' => $enviado, 'ctid' => $prep['client_transaction_id'] ?? '']
+        );
+
+        return [
+            'ok'      => $enviado,
+            'email'   => $email,
+            'pay_url' => $prep['pay_url'],
+            'mensaje' => $enviado
+                ? 'Enlace de pago enviado a ' . $email
+                : 'No se pudo enviar el correo. Verifique la configuración de correo de la empresa.',
+        ];
     }
 
     public function eliminar(int $id, int $idEmpresa, int $idUsuario): void
