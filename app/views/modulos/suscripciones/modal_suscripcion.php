@@ -647,6 +647,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         if (!id) { Swal.fire('Atención', 'Guarde primero la suscripción.', 'warning'); return; }
         const btn = document.getElementById('btnSuscEnlace');
         btn.disabled = true;
+
+        // Aviso de progreso mientras se genera y envía el correo
+        Swal.fire({
+            title: 'Enviando enlace…',
+            html: 'Generando el enlace de pago y enviándolo al correo del cliente.<br><small class="text-muted">Por favor espere.</small>',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+
         const fd = new FormData();
         fd.append('id', id);
         try {

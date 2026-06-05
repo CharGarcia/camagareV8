@@ -265,18 +265,19 @@ class SuscripcionesService
             throw new Exception('Suscripción no encontrada.');
         }
 
-        // El cliente puede tener varios correos separados por coma o punto y coma.
-        $emailsValidos = [];
+        // El cliente puede tener varios correos separados por coma o punto y coma:
+        // se toma el primero válido (correo principal) para enviar el enlace.
+        $email = '';
         foreach (preg_split('/[,;]+/', (string)($susc['cliente_email'] ?? '')) as $e) {
             $e = trim($e);
             if (filter_var($e, FILTER_VALIDATE_EMAIL)) {
-                $emailsValidos[] = $e;
+                $email = $e;
+                break;
             }
         }
-        if (empty($emailsValidos)) {
+        if ($email === '') {
             throw new Exception('El cliente no tiene un correo válido para enviar el enlace.');
         }
-        $email = implode(',', $emailsValidos);
 
         $base = rtrim(BASE_URL, '/');
         $pp   = new PayphoneService(new PayphoneRepository());
