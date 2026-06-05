@@ -5768,6 +5768,10 @@ $perm = $permOriginal;
                         accion = '<button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:.7rem;" '
                                + 'onclick="fvReversarPagoTarjeta(\'' + pp.client_transaction_id + '\')" title="Reversar pago en Payphone y anular el cobro">'
                                + '<i class="bi bi-arrow-counterclockwise"></i> Reversar</button>';
+                    } else if (pp.estado === 'pendiente' && puedeAnular) {
+                        accion = '<button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem;" '
+                               + 'onclick="fvCancelarPagoTarjeta(\'' + pp.client_transaction_id + '\')" title="Cancelar la solicitud de pago enviada al cliente">'
+                               + '<i class="bi bi-x-circle"></i> Cancelar</button>';
                     }
                     const tr = document.createElement('tr');
                     tr.innerHTML = '<td class="ps-3">' + fecha + '</td>'

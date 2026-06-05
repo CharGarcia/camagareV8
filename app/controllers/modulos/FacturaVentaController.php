@@ -1904,6 +1904,48 @@ class FacturaVentaController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Cancela una solicitud de pago con tarjeta (Payphone) que está PENDIENTE.
+     * Se usa cuando se envió el enlace al cliente y se desea anular esa solicitud.
+     */
+    public function cancelarPagoTarjetaAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $ctid      = trim($_POST['client_transaction_id'] ?? '');
+
+            if ($ctid === '') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Transacción no especificada.']);
+                exit;
+            }
+
+            $ppRepo = new \App\repositories\PayphoneRepository();
+            $trans  = $ppRepo->getTransaccionByClientId($ctid);
+
+            if (!$trans || (int) $trans['id_empresa'] !== $idEmpresa || ($trans['modulo'] ?? '') !== 'factura_venta') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Solicitud de pago no encontrada.']);
+                exit;
+            }
+
+            $pp  = new \App\Services\PayphoneService($ppRepo);
+            $res = $pp->cancelarPagoPendiente($ctid, $idUsuario);
+
+            if (!$res['ok']) {
+                echo json_encode(['ok' => false, 'mensaje' => $res['mensaje'] ?? 'No se pudo cancelar la solicitud.']);
+                exit;
+            }
+
+            echo json_encode(['ok' => true, 'mensaje' => 'Solicitud de pago cancelada.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function reenviarCorreoAjax(): void
     {
         ob_start();

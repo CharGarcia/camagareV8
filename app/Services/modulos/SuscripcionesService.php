@@ -226,17 +226,25 @@ class SuscripcionesService
         }
     }
 
+    /** URL base absoluta del sistema (necesaria para Payphone: deben ser URLs públicas). */
+    private function urlBaseAbsoluta(): string
+    {
+        $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        return $scheme . '://' . $host . rtrim(BASE_URL, '/');
+    }
+
     /**
      * Prepara la Cajita de Payphone para registrar/cobrar el período de una suscripción.
-     * Devuelve el config del widget para renderizar en el modal.
+     * Mismo patrón que factura de venta: usa prepararCajita + URLs absolutas.
+     * Devuelve ['ok','widget','client_transaction_id'].
      */
     public function prepararCajitaPayphone(int $id, int $idEmpresa, int $idUsuario): array
     {
-        $montos = $this->calcularMontoPeriodo($id, $idEmpresa);
-        $susc   = $this->repository->findByIdConCliente($id, $idEmpresa) ?? [];
-
-        $base = rtrim(BASE_URL, '/');
-        $pp   = new PayphoneService(new PayphoneRepository());
+        $montos     = $this->calcularMontoPeriodo($id, $idEmpresa);
+        $susc       = $this->repository->findByIdConCliente($id, $idEmpresa) ?? [];
+        $urlBaseAbs = $this->urlBaseAbsoluta();
+        $pp         = new PayphoneService(new PayphoneRepository());
 
         return $pp->prepararCajita($idEmpresa, [
             // Se envía el total sin desglosar IVA: Payphone solo procesa el cobro;
@@ -245,9 +253,9 @@ class SuscripcionesService
             'descripcion'     => 'Suscripción #' . $id . ' - ' . ($susc['cliente_nombre'] ?? ''),
             'modulo'          => 'suscripciones',
             'id_referencia'   => $id,
-            'url_retorno'     => $base . '/payphone/cajita-retorno',
-            'url_cancelacion' => $base . '/payphone/cancelacion',
-            'url_exito'       => $base . '/modulos/suscripciones?pago=ok',
+            'url_retorno'     => $urlBaseAbs . '/payphone/retorno',
+            'url_cancelacion' => $urlBaseAbs . '/payphone/cancelacion',
+            'url_exito'       => null,
             'id_usuario'      => $idUsuario,
             'email'           => $susc['cliente_email'] ?? '',
             'telefono'        => $susc['cliente_telefono'] ?? '',
@@ -255,7 +263,8 @@ class SuscripcionesService
     }
 
     /**
-     * Genera un enlace de pago Payphone y lo envía al correo del cliente.
+     * Genera el enlace de pago (página pública /pago/{ctid}) y lo envía al correo del cliente.
+     * Mismo patrón que factura de venta: prepararCajita + enlace a la página propia.
      */
     public function enviarEnlacePagoPayphone(int $id, int $idEmpresa, int $idUsuario): array
     {
@@ -265,8 +274,7 @@ class SuscripcionesService
             throw new Exception('Suscripción no encontrada.');
         }
 
-        // El cliente puede tener varios correos separados por coma o punto y coma:
-        // se toma el primero válido (correo principal) para enviar el enlace.
+        // El cliente puede tener varios correos: se usa el primero válido (correo principal).
         $email = '';
         foreach (preg_split('/[,;]+/', (string)($susc['cliente_email'] ?? '')) as $e) {
             $e = trim($e);
@@ -279,27 +287,14 @@ class SuscripcionesService
             throw new Exception('El cliente no tiene un correo válido para enviar el enlace.');
         }
 
-        $base = rtrim(BASE_URL, '/');
-        $pp   = new PayphoneService(new PayphoneRepository());
-
-        $prep = $pp->prepararPago($idEmpresa, [
-            // Se envía el total sin desglosar IVA: Payphone solo procesa el cobro;
-            // el desglose fiscal corresponde a la factura (otro proceso).
-            'monto'           => $montos['total'],
-            'descripcion'     => 'Suscripción #' . $id . ' - ' . ($susc['cliente_nombre'] ?? ''),
-            'modulo'          => 'suscripciones',
-            'id_referencia'   => $id,
-            'url_retorno'     => $base . '/payphone/retorno',
-            'url_cancelacion' => $base . '/payphone/cancelacion',
-            'url_exito'       => $base . '/modulos/suscripciones?pago=ok',
-            'id_usuario'      => $idUsuario,
-        ]);
-
-        if (empty($prep['ok']) || empty($prep['pay_url'])) {
-            throw new Exception($prep['mensaje'] ?? 'No se pudo generar el enlace de pago.');
+        // Prepara la cajita (registra la transacción) y arma el enlace público propio.
+        $cajita = $this->prepararCajitaPayphone($id, $idEmpresa, $idUsuario);
+        if (empty($cajita['ok']) || empty($cajita['client_transaction_id'])) {
+            throw new Exception($cajita['mensaje'] ?? 'No se pudo generar el enlace de pago.');
         }
 
-        // Datos de empresa para el remitente
+        $urlPago = $this->urlBaseAbsoluta() . '/pago/' . $cajita['client_transaction_id'];
+
         $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
         $empresaNombre = trim((string)($empresa['nombre_comercial'] ?? $empresa['nombre'] ?? ''));
 
@@ -311,19 +306,19 @@ class SuscripcionesService
             $empresaNombre,
             $montos['total_dolares'],
             'Suscripción #' . $id,
-            $prep['pay_url'],
+            $urlPago,
             '' // sin PDF adjunto
         );
 
         $this->logService->registrar(
             $idUsuario, $idEmpresa, 'enlace_pago_payphone', 'suscripciones', $id, null,
-            ['email' => $email, 'enviado' => $enviado, 'ctid' => $prep['client_transaction_id'] ?? '']
+            ['email' => $email, 'enviado' => $enviado, 'ctid' => $cajita['client_transaction_id']]
         );
 
         return [
             'ok'      => $enviado,
             'email'   => $email,
-            'pay_url' => $prep['pay_url'],
+            'pay_url' => $urlPago,
             'mensaje' => $enviado
                 ? 'Enlace de pago enviado a ' . $email
                 : 'No se pudo enviar el correo. Verifique la configuración de correo de la empresa.',

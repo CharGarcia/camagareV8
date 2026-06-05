@@ -544,6 +544,38 @@ class PayphoneService
     }
 
     /**
+     * Cancela una solicitud de pago que aún está PENDIENTE (enlace enviado pero no pagado).
+     * No llama a la API de Payphone (no hubo cobro): solo marca la transacción como cancelada.
+     *
+     * Retorna:
+     *  ['ok' => true,  'estado' => 'cancelado', 'transaccion' => [...]]
+     *  ['ok' => false, 'mensaje' => '...']
+     */
+    public function cancelarPagoPendiente(string $clientTransactionId, int $idUsuario = 0): array
+    {
+        $trans = $this->repo->getTransaccionByClientId($clientTransactionId);
+        if (!$trans) {
+            return ['ok' => false, 'mensaje' => 'Transacción no encontrada.'];
+        }
+        if ($trans['estado'] === 'cancelado') {
+            return ['ok' => true, 'estado' => 'cancelado', 'transaccion' => $trans];
+        }
+        if ($trans['estado'] !== 'pendiente') {
+            return ['ok' => false, 'mensaje' => 'Solo se puede cancelar una solicitud de pago pendiente.'];
+        }
+
+        $this->repo->actualizarResultado($clientTransactionId, [
+            'transaction_status' => 'Cancelled',
+            'estado'             => 'cancelado',
+            'response_data'      => ['origen' => 'cancelacion_manual'],
+            'id_usuario'         => $idUsuario,
+        ]);
+
+        $trans = $this->repo->getTransaccionByClientId($clientTransactionId);
+        return ['ok' => true, 'estado' => 'cancelado', 'transaccion' => $trans];
+    }
+
+    /**
      * Reconstruye el array de configuración del widget a partir de una transacción guardada.
      * Usado en la página pública de pago para volver a renderizar la cajita.
      */
