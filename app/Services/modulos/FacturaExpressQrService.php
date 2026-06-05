@@ -375,7 +375,7 @@ class FacturaExpressQrService
                 'precio_total_sin_impuesto' => $base,
                 'impuestos'                 => $det['porcentaje_iva'] > 0 ? [[
                     'codigo_impuesto'   => '2',
-                    'codigo_porcentaje' => '2',
+                    'codigo_porcentaje' => \App\Helpers\SriIvaHelper::codigoPorcentaje($det['porcentaje_iva']),
                     'tarifa'            => $det['porcentaje_iva'],
                     'base_imponible'    => $base,
                     'valor'             => $iva,
