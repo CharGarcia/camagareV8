@@ -93,6 +93,7 @@ class EmpresasSistemaController extends Controller
             'nombre_contador' => trim($_POST['nombre_contador'] ?? ''),
             'ruc_contador' => trim($_POST['ruc_contador'] ?? ''),
             'estado' => trim($_POST['estado'] ?? '1'),
+            'obligado_contabilidad' => strtoupper(trim($_POST['obligado_contabilidad'] ?? 'NO')) === 'SI' ? 'SI' : 'NO',
             'id_usuario' => (string) $idUsuario,
             'valor_cobro' => $_POST['valor_cobro'] ?? null,
             'periodo_vigencia_desde' => trim($_POST['periodo_vigencia_desde'] ?? ''),
@@ -170,7 +171,7 @@ class EmpresasSistemaController extends Controller
             }
         }
 
-        $allKeys = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago'];
+        $allKeys = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad'];
         $data = [];
         foreach ($allKeys as $k) {
             if (array_key_exists($k, $_POST)) {

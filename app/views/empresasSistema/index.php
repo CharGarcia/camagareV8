@@ -169,6 +169,7 @@ function estadoPagoBadge($estado) {
                         data-periodo-vigencia-desde="<?= htmlspecialchars($r['periodo_vigencia_desde'] ?? '') ?>"
                         data-periodo-vigencia-hasta="<?= htmlspecialchars($r['periodo_vigencia_hasta'] ?? '') ?>"
                         data-estado-pago="<?= htmlspecialchars($r['estado_pago'] ?? 'pendiente') ?>"
+                        data-obligado-contabilidad="<?= htmlspecialchars($r['obligado_contabilidad'] ?? 'NO') ?>"
                         data-usuarios="<?= count($usuarios) ?>">
                         <td><?= htmlspecialchars($r['nombre'] ?? '-') ?></td>
                         <td><?= htmlspecialchars($r['nombre_comercial'] ?? '-') ?></td>
@@ -342,13 +343,20 @@ function estadoPagoBadge($estado) {
                                     <label for="edit-nombre-comercial" class="form-label">Nombre comercial</label>
                                     <input type="text" id="edit-nombre-comercial" name="nombre_comercial" class="form-control form-control-sm" placeholder="Nombre comercial">
                                 </div>
-                                <div class="col-12">
-                                    <label for="edit-direccion" class="form-label">Dirección</label>
-                                    <input type="text" id="edit-direccion" name="direccion" class="form-control form-control-sm" placeholder="Dirección">
+                                <div class="col-md-4">
+                                    <label for="edit-obligado-contabilidad" class="form-label">Obligado a llevar contabilidad</label>
+                                    <select id="edit-obligado-contabilidad" name="obligado_contabilidad" class="form-select form-select-sm">
+                                        <option value="NO">NO</option>
+                                        <option value="SI">SI</option>
+                                    </select>
                                 </div>
-                                <div class="col-12">
-                                    <label for="edit-mail" class="form-label">Correo</label>
+                                <div class="col-md-4">
+                                    <label for="edit-mail" class="form-label">Correo empresa</label>
                                     <input type="email" id="edit-mail" name="mail" class="form-control form-control-sm" placeholder="correo@empresa.com">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="edit-direccion" class="form-label">Dirección matriz</label>
+                                    <input type="text" id="edit-direccion" name="direccion" class="form-control form-control-sm" placeholder="Dirección">
                                 </div>
                                 <div class="col-md-4">
                                     <label for="edit-provincia" class="form-label">Provincia</label>
@@ -601,6 +609,7 @@ function estadoPagoBadge($estado) {
         document.getElementById('edit-direccion').value = el.dataset.direccion || '';
         document.getElementById('edit-telefono').value = el.dataset.telefono || '';
         document.getElementById('edit-mail').value = el.dataset.mail || '';
+        document.getElementById('edit-obligado-contabilidad').value = (el.dataset.obligadoContabilidad || 'NO').toUpperCase() === 'SI' ? 'SI' : 'NO';
         document.getElementById('edit-estado').value = (el.dataset.estado === '1') ? '1' : '0';
         var codProv = el.dataset.codProv || '';
         var codCiudad = el.dataset.codCiudad || '';
