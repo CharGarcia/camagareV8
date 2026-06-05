@@ -197,7 +197,19 @@ class EnvioDocumentosSRIService
             }
 
             $mail->setFrom($smtpData['from'], $smtpData['fromName']);
-            $mail->addAddress($correoDestino, $clienteNombre);
+            // Soporta uno o varios correos separados por coma/punto y coma
+            $algunDestino = false;
+            foreach (preg_split('/[,;]+/', $correoDestino) as $dest) {
+                $dest = trim($dest);
+                if (filter_var($dest, FILTER_VALIDATE_EMAIL)) {
+                    $mail->addAddress($dest, $clienteNombre);
+                    $algunDestino = true;
+                }
+            }
+            if (!$algunDestino) {
+                error_log('[PagoTarjeta] Sin destinatarios válidos: ' . $correoDestino);
+                return false;
+            }
             $mail->Subject = 'Enlace de pago con tarjeta — ' . $descripcion;
 
             // Cuerpo del correo

@@ -265,10 +265,18 @@ class SuscripcionesService
             throw new Exception('Suscripción no encontrada.');
         }
 
-        $email = trim((string)($susc['cliente_email'] ?? ''));
-        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        // El cliente puede tener varios correos separados por coma o punto y coma.
+        $emailsValidos = [];
+        foreach (preg_split('/[,;]+/', (string)($susc['cliente_email'] ?? '')) as $e) {
+            $e = trim($e);
+            if (filter_var($e, FILTER_VALIDATE_EMAIL)) {
+                $emailsValidos[] = $e;
+            }
+        }
+        if (empty($emailsValidos)) {
             throw new Exception('El cliente no tiene un correo válido para enviar el enlace.');
         }
+        $email = implode(',', $emailsValidos);
 
         $base = rtrim(BASE_URL, '/');
         $pp   = new PayphoneService(new PayphoneRepository());
