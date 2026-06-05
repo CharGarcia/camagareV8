@@ -1429,9 +1429,18 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         toggleDependencies();
     });
 
+    // Inicializar estado de campos SMTP al cargar
+    document.addEventListener('DOMContentLoaded', function() {
+        toggleSmtpFields();
+    });
+
     function toggleSmtpFields() {
         const isPropio = document.getElementById('tipo_propio').checked;
-        document.getElementById('smtp_fields_container').style.display = isPropio ? 'block' : 'none';
+        const container = document.getElementById('smtp_fields_container');
+        container.style.display = isPropio ? 'block' : 'none';
+        container.querySelectorAll('input, select, textarea').forEach(el => {
+            el.disabled = !isPropio;
+        });
         actualizarAvisoCorreo();
     }
 
