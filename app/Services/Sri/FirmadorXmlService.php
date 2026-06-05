@@ -71,12 +71,15 @@ class FirmadorXmlService
 
         $dsNs   = 'http://www.w3.org/2000/09/xmldsig#';
         $etsiNs = 'http://uri.etsi.org/01903/v1.3.2#';
-        $xmlns  = 'http://www.w3.org/2000/xmlns/';
 
         // ── 7. Construir ds:Signature con placeholders ────────────────────────
         $sigEl = $dom->createElementNS($dsNs, 'ds:Signature');
         $sigEl->setAttribute('Id', "Signature{$sigId}");
-        $sigEl->setAttributeNS($xmlns, 'xmlns:etsi', $etsiNs);
+        // NOTA: NO declarar xmlns:etsi en ds:Signature mediante setAttributeNS.
+        // PHP's C14N interno no lo reconoce como namespace en-scope, pero el
+        // validador Java del SRI sí lo leería al parsear el XML, causando mismatch
+        // en el digest de ds:SignedInfo → FIRMA INVALIDA.
+        // El namespace etsi: se declara automáticamente en etsi:QualifyingProperties.
 
         // ─── ds:SignedInfo ────────────────────────────────────────────────────
         $signedInfoEl = $dom->createElementNS($dsNs, 'ds:SignedInfo');
@@ -114,10 +117,15 @@ class FirmadorXmlService
         $ref3El = $dom->createElementNS($dsNs, 'ds:Reference');
         $ref3El->setAttribute('Id', "Reference-ID-{$docRefId}");
         $ref3El->setAttribute('URI', '#comprobante');
-        $transEl  = $dom->createElementNS($dsNs, 'ds:Transforms');
-        $transfEl = $dom->createElementNS($dsNs, 'ds:Transform');
+        $transEl   = $dom->createElementNS($dsNs, 'ds:Transforms');
+        $transfEl  = $dom->createElementNS($dsNs, 'ds:Transform');
         $transfEl->setAttribute('Algorithm', 'http://www.w3.org/2000/09/xmldsig#enveloped-signature');
         $transEl->appendChild($transfEl);
+        // Transform C14N explícito: elimina ambigüedad en cómo el validador
+        // serializa el node-set resultante del enveloped-signature.
+        $c14nTrEl = $dom->createElementNS($dsNs, 'ds:Transform');
+        $c14nTrEl->setAttribute('Algorithm', 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315');
+        $transEl->appendChild($c14nTrEl);
         $ref3El->appendChild($transEl);
         $ref3El->appendChild($this->digestMethodEl($dom, $dsNs));
         $dv3El = $dom->createElementNS($dsNs, 'ds:DigestValue');
@@ -149,7 +157,7 @@ class FirmadorXmlService
         $modEl->appendChild($dom->createTextNode("\n" . chunk_split($modulus, 76, "\n")));
         $rsaKeyEl->appendChild($modEl);
         $expEl = $dom->createElementNS($dsNs, 'ds:Exponent');
-        $expEl->appendChild($dom->createTextNode('AQAB'));
+        $expEl->appendChild($dom->createTextNode(base64_encode($pubDetails['rsa']['e'])));
         $rsaKeyEl->appendChild($expEl);
         $keyValEl->appendChild($rsaKeyEl);
         $keyInfoEl->appendChild($keyValEl);
