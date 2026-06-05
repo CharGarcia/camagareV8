@@ -71,15 +71,15 @@ class FirmadorXmlService
 
         $dsNs   = 'http://www.w3.org/2000/09/xmldsig#';
         $etsiNs = 'http://uri.etsi.org/01903/v1.3.2#';
+        $xmlns  = 'http://www.w3.org/2000/xmlns/';
 
         // ── 7. Construir ds:Signature con placeholders ────────────────────────
         $sigEl = $dom->createElementNS($dsNs, 'ds:Signature');
         $sigEl->setAttribute('Id', "Signature{$sigId}");
-        // NOTA: NO declarar xmlns:etsi en ds:Signature mediante setAttributeNS.
-        // PHP's C14N interno no lo reconoce como namespace en-scope, pero el
-        // validador Java del SRI sí lo leería al parsear el XML, causando mismatch
-        // en el digest de ds:SignedInfo → FIRMA INVALIDA.
-        // El namespace etsi: se declara automáticamente en etsi:QualifyingProperties.
+        // xmlns:etsi DEBE declararse en ds:Signature: el C14N inclusivo del SRI
+        // lo hereda hacia ds:SignedInfo. Verificado contra ejemplo SRI (Anexo 14)
+        // y factura Datil autorizada: openssl_verify del SignedInfo = válido.
+        $sigEl->setAttributeNS($xmlns, 'xmlns:etsi', $etsiNs);
 
         // ─── ds:SignedInfo ────────────────────────────────────────────────────
         $signedInfoEl = $dom->createElementNS($dsNs, 'ds:SignedInfo');
@@ -121,11 +121,8 @@ class FirmadorXmlService
         $transfEl  = $dom->createElementNS($dsNs, 'ds:Transform');
         $transfEl->setAttribute('Algorithm', 'http://www.w3.org/2000/09/xmldsig#enveloped-signature');
         $transEl->appendChild($transfEl);
-        // Transform C14N explícito: elimina ambigüedad en cómo el validador
-        // serializa el node-set resultante del enveloped-signature.
-        $c14nTrEl = $dom->createElementNS($dsNs, 'ds:Transform');
-        $c14nTrEl->setAttribute('Algorithm', 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315');
-        $transEl->appendChild($c14nTrEl);
+        // Solo enveloped-signature (sin C14N explícito): formato exacto del SRI
+        // (Anexo 14 ficha técnica) y de las facturas autorizadas por Datil.
         $ref3El->appendChild($transEl);
         $ref3El->appendChild($this->digestMethodEl($dom, $dsNs));
         $dv3El = $dom->createElementNS($dsNs, 'ds:DigestValue');
@@ -265,23 +262,95 @@ class FirmadorXmlService
     }
 
     /**
-     * Formatea el DN del emisor en el formato esperado por el SRI.
-     * PHP devuelve los componentes de más general a más específico;
-     * array_reverse da el orden más específico primero (L, CN, ST, OU, O, C).
+     * Formatea el DN del emisor replicando exactamente
+     * java.security.cert.X500Principal.getName(RFC2253), que es el formato con
+     * que el validador del SRI deriva el IssuerName del certificado para
+     * compararlo con ds:X509IssuerName.
+     *
+     * Diferencia clave con OpenSSL/PHP: Java SOLO reconoce los keywords
+     * CN, L, ST, O, OU, C, STREET, DC, UID. Cualquier otro atributo (p. ej.
+     * organizationIdentifier / OID 2.5.4.97 presente en certificados UANATACA,
+     * Camerfirma, etc.) se emite como "oid=#<hexDER>" en lugar del nombre largo.
+     * Si no se replica esto, certificados UANATACA producen FIRMA INVÁLIDA.
+     *
+     * PHP devuelve los componentes en orden DER; array_reverse da el orden
+     * RFC2253 (del más específico al más general).
      */
     private function formatIssuerDn(array $issuer): string
     {
+        // Keywords que Java X500Principal reconoce → se emiten como nombre corto.
+        $javaKeywords = [
+            'CN' => 'CN', 'L' => 'L', 'ST' => 'ST', 'O' => 'O', 'OU' => 'OU',
+            'C' => 'C', 'street' => 'STREET', 'STREET' => 'STREET',
+            'DC' => 'DC', 'UID' => 'UID',
+        ];
+        // Atributos que Java NO reconoce → se emiten como "oid=#<hexDER>".
+        $oidMap = [
+            'organizationIdentifier' => '2.5.4.97',
+            'serialNumber'           => '2.5.4.5',
+            'title'                  => '2.5.4.12',
+            'businessCategory'       => '2.5.4.15',
+            'givenName'              => '2.5.4.42',
+            'surname'                => '2.5.4.4',
+            'emailAddress'           => '1.2.840.113549.1.9.1',
+            'jurisdictionCountryName'      => '1.3.6.1.4.1.311.60.2.1.3',
+        ];
+
         $parts = [];
         foreach ($issuer as $key => $val) {
-            if (is_array($val)) {
-                foreach ($val as $v) {
-                    $parts[] = "$key=$v";
+            $values = is_array($val) ? $val : [$val];
+            foreach ($values as $v) {
+                $v = (string) $v;
+                if (isset($javaKeywords[$key])) {
+                    $parts[] = $javaKeywords[$key] . '=' . $this->escapeRfc2253($v);
+                } elseif (isset($oidMap[$key])) {
+                    $parts[] = $oidMap[$key] . '=#' . $this->valueToDerHex($v);
+                } else {
+                    $parts[] = $key . '=' . $this->escapeRfc2253($v);
                 }
-            } else {
-                $parts[] = "$key=$val";
             }
         }
         return implode(',', array_reverse($parts));
+    }
+
+    /** Escapa caracteres especiales de un valor de atributo según RFC 2253. */
+    private function escapeRfc2253(string $value): string
+    {
+        $value = str_replace(
+            ['\\', ',', '+', '"', '<', '>', ';'],
+            ['\\\\', '\\,', '\\+', '\\"', '\\<', '\\>', '\\;'],
+            $value
+        );
+        if ($value !== '' && ($value[0] === '#' || $value[0] === ' ')) {
+            $value = '\\' . $value;
+        }
+        if ($value !== '' && substr($value, -1) === ' ') {
+            $value = substr($value, 0, -1) . '\\ ';
+        }
+        return $value;
+    }
+
+    /**
+     * Codifica un valor como UTF8String DER y lo devuelve en hex, tal como Java
+     * representa los atributos de OID desconocido en RFC2253 ("oid=#<hex>").
+     * Soporta longitud en forma corta y larga (suficiente para cualquier DN).
+     */
+    private function valueToDerHex(string $value): string
+    {
+        $len = strlen($value);
+        if ($len < 128) {
+            $lenField = chr($len);
+        } else {
+            $lenBytes = '';
+            $n = $len;
+            while ($n > 0) {
+                $lenBytes = chr($n & 0xFF) . $lenBytes;
+                $n >>= 8;
+            }
+            $lenField = chr(0x80 | strlen($lenBytes)) . $lenBytes;
+        }
+        $der = chr(0x0c) . $lenField . $value; // 0x0c = UTF8String
+        return bin2hex($der);
     }
 
     /** Convierte un número de serie hexadecimal a decimal (usa GMP si está disponible). */
