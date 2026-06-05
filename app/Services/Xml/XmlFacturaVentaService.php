@@ -129,19 +129,44 @@ class XmlFacturaVentaService
         return $el;
     }
 
+    /**
+     * Determina el codigoPorcentaje del SRI para un impuesto.
+     *
+     * Para IVA (codigo_impuesto = 2) con tarifa > 0, el código se DERIVA de la
+     * tarifa real (dato confiable con el que se calcula el valor), evitando
+     * propagar al XML un codigo_porcentaje desactualizado guardado en BD
+     * (causa de "ERROR EN DIFERENCIAS" del SRI).
+     *
+     * Para tarifa 0 se respeta el código guardado, porque 0% (0), exento (7),
+     * no objeto (6) y tarifa especial comparten tarifa 0 pero distinto código.
+     * Para impuestos no-IVA (ICE, IRBPNR) se usa el código guardado.
+     */
+    private function codigoPorcentajeImpuesto(array $imp): string
+    {
+        $codImpuesto = (string)($imp['codigo_impuesto'] ?? '');
+        $guardado    = (string)($imp['codigo_porcentaje'] ?? '');
+        $tarifa      = (float)($imp['tarifa'] ?? 0);
+
+        if ($codImpuesto === '2' && $tarifa > 0) {
+            return \App\Helpers\SriIvaHelper::codigoPorcentaje($tarifa);
+        }
+        return $guardado;
+    }
+
     private function buildTotalConImpuestos(\DOMDocument $dom, array $detalles): \DOMElement
     {
         $el = $dom->createElement('totalConImpuestos');
 
-        // Agrupar por (codigo_impuesto, codigo_porcentaje)
+        // Agrupar por (codigo_impuesto, codigoPorcentaje derivado)
         $grupos = [];
         foreach ($detalles as $d) {
             foreach ($d['impuestos'] ?? [] as $imp) {
-                $key = ($imp['codigo_impuesto'] ?? '') . '|' . ($imp['codigo_porcentaje'] ?? '');
+                $codPorcentaje = $this->codigoPorcentajeImpuesto($imp);
+                $key = ($imp['codigo_impuesto'] ?? '') . '|' . $codPorcentaje;
                 if (!isset($grupos[$key])) {
                     $grupos[$key] = [
-                        'codigo'           => $imp['codigo_impuesto']   ?? '',
-                        'codigoPorcentaje' => $imp['codigo_porcentaje'] ?? '',
+                        'codigo'           => $imp['codigo_impuesto'] ?? '',
+                        'codigoPorcentaje' => $codPorcentaje,
                         'baseImponible'    => 0.0,
                         'valor'            => 0.0,
                     ];
@@ -183,8 +208,8 @@ class XmlFacturaVentaService
             $impuestosEl = $dom->createElement('impuestos');
             foreach ($d['impuestos'] ?? [] as $imp) {
                 $impEl = $dom->createElement('impuesto');
-                $this->txt($dom, $impEl, 'codigo',           $imp['codigo_impuesto']   ?? '');
-                $this->txt($dom, $impEl, 'codigoPorcentaje', $imp['codigo_porcentaje'] ?? '');
+                $this->txt($dom, $impEl, 'codigo',           $imp['codigo_impuesto'] ?? '');
+                $this->txt($dom, $impEl, 'codigoPorcentaje', $this->codigoPorcentajeImpuesto($imp));
                 $this->txt($dom, $impEl, 'tarifa',           $this->dec2($imp['tarifa']        ?? 0));
                 $this->txt($dom, $impEl, 'baseImponible',    $this->dec2($imp['base_imponible'] ?? 0));
                 $this->txt($dom, $impEl, 'valor',            $this->dec2($imp['valor']          ?? 0));
