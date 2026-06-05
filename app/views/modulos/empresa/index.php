@@ -392,7 +392,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                     <td class="align-middle"><?= $f['fecha_expiracion'] ? date('d-m-Y', strtotime($f['fecha_expiracion'])) : '-' ?></td>
                                                     <td class="align-middle">
                                                         <div class="d-flex align-items-center">
-                                                            <input type="password" class="form-control form-control-sm border-0 bg-transparent p-0 shadow-none text-muted" value="<?= htmlspecialchars($f['password_firma'] ?? '') ?>" readonly style="width: 70px;">
+                                                            <input type="password" class="form-control form-control-sm border-0 bg-transparent p-0 shadow-none text-muted" value="<?= htmlspecialchars($f['password_firma'] ?? '') ?>" readonly style="width: 140px; min-width: 100px;">
                                                             <button class="btn btn-link text-muted p-0 ms-2 text-decoration-none shadow-none" type="button" onclick="togglePassword(this)">
                                                                 <i class="bi bi-eye"></i>
                                                             </button>
@@ -404,7 +404,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                         </span>
                                                     </td>
                                                     <td class="text-center">
-                                                        <a href="<?= $base ?>/storage/descargar-firma?id=<?= $f['id'] ?>" class="btn btn-link btn-sm text-primary p-0 shadow-none"><i class="bi bi-cloud-download fs-5"></i></a>
+                                                        <a href="<?= $base ?>/modulos/empresa/descargarFirma?id=<?= $f['id'] ?>" class="btn btn-link btn-sm text-primary p-0 shadow-none"><i class="bi bi-cloud-download fs-5"></i></a>
                                                     </td>
                                                 </tr>
                                         <?php endforeach;

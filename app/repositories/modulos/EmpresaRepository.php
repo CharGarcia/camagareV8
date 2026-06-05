@@ -144,6 +144,13 @@ class EmpresaRepository extends BaseModel
         return $this->query("SELECT * FROM empresa_firma WHERE id_empresa = {$id} AND eliminado = false ORDER BY created_at DESC");
     }
 
+    public function getFirmaById(int $id): ?array
+    {
+        $id = (int) $id;
+        $res = $this->query("SELECT * FROM empresa_firma WHERE id = {$id} AND eliminado = false");
+        return $res[0] ?? null;
+    }
+
     public function getEstablecimientos(int $idEmpresa): array
     {
         $id = (int) $idEmpresa;

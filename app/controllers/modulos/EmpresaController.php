@@ -229,4 +229,41 @@ class EmpresaController extends BaseModuloController
         }
         exit;
     }
+
+    public function descargarFirma(): void
+    {
+        $this->requireLeer();
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+
+        if ($id <= 0) {
+            http_response_code(400);
+            echo 'ID de firma inválido.';
+            exit;
+        }
+
+        $repo  = new \App\repositories\modulos\EmpresaRepository();
+        $firma = $repo->getFirmaById($id);
+
+        if (!$firma || (int)$firma['id_empresa'] !== $idEmpresa) {
+            http_response_code(404);
+            echo 'Firma no encontrada o sin acceso.';
+            exit;
+        }
+
+        $ruta = $firma['archivo_ruta'] ?? '';
+        if (!$ruta || !file_exists($ruta)) {
+            http_response_code(404);
+            echo 'Archivo de firma no encontrado en el servidor.';
+            exit;
+        }
+
+        $nombre = $firma['archivo_nombre'] ?? 'firma.p12';
+        header('Content-Type: application/x-pkcs12');
+        header('Content-Disposition: attachment; filename="' . basename($nombre) . '"');
+        header('Content-Length: ' . filesize($ruta));
+        header('Cache-Control: no-cache, must-revalidate');
+        readfile($ruta);
+        exit;
+    }
 }
