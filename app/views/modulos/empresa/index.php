@@ -565,6 +565,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                             <form id="form-secuenciales" method="POST">
                                 <input type="hidden" name="section" value="secuenciales">
                                 <input type="hidden" name="id_punto_emision" id="sec-punto-id" value="<?= $puntos[0]['id'] ?? '' ?>">
+                                <div class="form-msg mb-3"></div>
                                 <div class="row g-3" id="secuenciales-fields">
                                     <div class="col-12 text-center py-4 text-muted small">
                                         <i class="bi bi-info-circle me-2"></i>Seleccione un punto de emisión para ver sus secuenciales.
@@ -1212,6 +1213,9 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         if (!idPunto) return;
 
         const btn = document.getElementById('btn-guardar-sec');
+        const msgContainer = document.querySelector('#form-secuenciales .form-msg');
+        if (msgContainer) msgContainer.innerHTML = '';
+
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Creando...';
 
@@ -1226,12 +1230,17 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                 const link = document.querySelector('#secuenciales-puntos-list a.active');
                 if (link) await cargarSecuenciales(link, parseInt(idPunto));
             } else {
-                alert(json.error || json.msg || 'Error al crear los secuenciales iniciales.');
+                const errMsg = json.error || json.msg || 'Error al crear los secuenciales iniciales.';
+                if (msgContainer) {
+                    msgContainer.innerHTML = `<div class="alert alert-danger py-2 px-3 small mb-0">${errMsg}</div>`;
+                }
                 btn.disabled = false;
                 _setBtnSecuencialesEstado(false);
             }
         } catch (e) {
-            alert('Error de conexión al crear secuenciales iniciales.');
+            if (msgContainer) {
+                msgContainer.innerHTML = `<div class="alert alert-danger py-2 px-3 small mb-0">Error de conexión con el servidor.</div>`;
+            }
             btn.disabled = false;
             _setBtnSecuencialesEstado(false);
         }
