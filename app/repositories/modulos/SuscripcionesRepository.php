@@ -415,6 +415,36 @@ class SuscripcionesRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Suscripciones de una empresa cuyo próximo cobro vence en EXACTAMENTE N días
+     * (proximo_cobro = hoy + diasAntes). Usada por el aviso de vencimiento.
+     * Solo activas, vigentes y con correo de cliente registrado.
+     */
+    public function getProximasAVencer(int $idEmpresa, int $diasAntes): array
+    {
+        $dias = max(0, $diasAntes);
+        $sql = "SELECT s.*,
+                       c.email          AS cliente_email,
+                       c.telefono       AS cliente_telefono,
+                       c.nombre         AS cliente_nombre,
+                       c.identificacion AS cliente_identificacion,
+                       per.meses        AS periodicidad_meses,
+                       per.codigo       AS periodicidad_codigo,
+                       per.nombre       AS periodicidad_nombre
+                FROM suscripciones s
+                LEFT JOIN clientes c ON c.id = s.id_cliente
+                LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
+                WHERE s.id_empresa = :id_empresa
+                  AND s.estado = 'activo'
+                  AND s.eliminado = false
+                  AND s.proximo_cobro = CURRENT_DATE + CAST(:dias AS INTEGER)
+                  AND (s.fecha_fin IS NULL OR s.proximo_cobro <= s.fecha_fin)
+                ORDER BY s.proximo_cobro ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':dias' => $dias]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /** Datos del establecimiento + punto de emisión a partir de la serie elegida. */
     public function getEstablecimientoPorPunto(int $idEmpresa, int $idPuntoEmision): ?array
     {

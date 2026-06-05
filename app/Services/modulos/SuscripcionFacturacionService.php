@@ -157,9 +157,18 @@ class SuscripcionFacturacionService
         elseif ($codigo === 'QUINCENAL') { $dtAnt->modify('-15 days'); }
         else                             { $dtAnt->modify('-' . max(1, $meses) . ' months'); }
 
+        // Fin del período actual: avanza una periodicidad y resta 1 día
+        $dtFin = clone $dt;
+        if     ($codigo === 'DIARIO')    { $dtFin->modify('+1 day');                        }
+        elseif ($codigo === 'SEMANAL')   { $dtFin->modify('+7 days');                       }
+        elseif ($codigo === 'QUINCENAL') { $dtFin->modify('+15 days');                      }
+        else                             { $dtFin->modify('+' . max(1, $meses) . ' months'); }
+        $dtFin->modify('-1 day');
+
         return array_merge(
             $this->mapaPeriodo($dt,    ''),
-            $this->mapaPeriodo($dtAnt, '_ant')
+            $this->mapaPeriodo($dtAnt, '_ant'),
+            $this->mapaFin($dt, $dtFin)
         );
     }
 
@@ -175,6 +184,21 @@ class SuscripcionFacturacionService
             '{año' . $suf . '}'      => $anio,
             '{mes_anio' . $suf . '}' => trim("{$mes} {$anio}"),
             '{fecha' . $suf . '}'    => $dt->format('d-m-Y'),
+        ];
+    }
+
+    /**
+     * Placeholders para inicio y fin del período facturado:
+     *   {anio_mes}     → 2026-06  (año-mes del inicio)
+     *   {anio_mes_fin} → 2027-05  (año-mes del último día del período)
+     *   {fecha_fin}    → 31-05-2027 (último día del período)
+     */
+    private function mapaFin(\DateTime $dtInicio, \DateTime $dtFin): array
+    {
+        return [
+            '{anio_mes}'     => $dtInicio->format('Y-m'),
+            '{anio_mes_fin}' => $dtFin->format('Y-m'),
+            '{fecha_fin}'    => $dtFin->format('d-m-Y'),
         ];
     }
 }

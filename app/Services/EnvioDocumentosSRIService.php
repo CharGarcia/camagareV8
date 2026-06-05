@@ -315,6 +315,64 @@ class EnvioDocumentosSRIService
         return $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $htmlCuerpo, $baseName, '', '');
     }
 
+    /**
+     * Envía un aviso simple (HTML, sin adjuntos) usando la config de correo de la empresa.
+     * Pensado para avisos de vencimiento de suscripciones u otros recordatorios.
+     *
+     * @param string $emailDestino   Uno o varios correos separados por coma/punto y coma
+     * @param string $nombreDestino  Nombre del destinatario
+     * @param string $empresaNombre  Nombre que aparece como remitente (fromName)
+     */
+    public function enviarAvisoSimple(
+        int    $idEmpresa,
+        string $emailDestino,
+        string $nombreDestino,
+        string $asunto,
+        string $cuerpoHtml,
+        string $empresaNombre = ''
+    ): bool {
+        $empresaRepo  = new EmpresaRepository();
+        $correoConfig = $empresaRepo->getCorreoConfig($idEmpresa);
+
+        // Destinatarios válidos
+        $listaDestinos = [];
+        foreach (preg_split('/[,;]+/', $emailDestino) as $c) {
+            $c = trim($c);
+            if (filter_var($c, FILTER_VALIDATE_EMAIL)) {
+                $listaDestinos[] = $c;
+            }
+        }
+        if (empty($listaDestinos)) {
+            return false;
+        }
+
+        // Credenciales SMTP (misma lógica que enviarSiAplica)
+        $tipoCorreo = $correoConfig['tipo_correo'] ?? 'camagare';
+        if ($tipoCorreo === 'camagare') {
+            $smtpData = EmailConfigService::getPhpMailerConfig('envio_documentos_sri');
+            if (!$smtpData) {
+                error_log("[Aviso Suscripción] Falta config 'envio_documentos_sri'.");
+                return false;
+            }
+            if ($empresaNombre !== '') {
+                $smtpData['fromName'] = $empresaNombre;
+            }
+        } else {
+            $enc = !empty($correoConfig['ssl_habilitado']) ? 'tls' : '';
+            $smtpData = [
+                'host'       => $correoConfig['host'] ?? '',
+                'port'       => (int)($correoConfig['puerto'] ?? 587),
+                'username'   => $correoConfig['correo_emisor'] ?? '',
+                'password'   => $correoConfig['password_correo_emisor'] ?? '',
+                'from'       => $correoConfig['correo_emisor'] ?? '',
+                'fromName'   => $empresaNombre !== '' ? $empresaNombre : 'Notificaciones',
+                'smtpSecure' => $enc,
+            ];
+        }
+
+        return $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $cuerpoHtml, 'aviso', '', '');
+    }
+
     private function enviarPhpMailer(array $smtpData, array $toEmails, string $toName, string $subject, string $bodyHtml, string $baseName, string $xmlString, string $pdfString): bool
     {
         $docMailDir = MVC_APP . '/lib/mail';

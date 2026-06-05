@@ -379,6 +379,12 @@ class AutomatizacionesController extends BaseModuloController
                     $s['establecimiento_codigo'] . '-' . $s['punto_emision_codigo']
                     . (!empty($s['establecimiento_nombre']) ? ' (' . $s['establecimiento_nombre'] . ')' : '');
             }
+        } elseif ($fuente === 'whatsapp_plantillas') {
+            $model = new \App\models\WhatsappPlantilla();
+            foreach ($model->getPlantillasAprobadas($idEmpresa) as $pl) {
+                // El value es el nombre (lo que requiere la API de Meta); el idioma se resuelve en el handler.
+                $opciones[(string)$pl['nombre']] = $pl['nombre'] . ' (' . $pl['idioma'] . ')';
+            }
         }
 
         $this->json(['ok' => true, 'opciones' => $opciones]);

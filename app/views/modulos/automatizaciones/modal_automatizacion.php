@@ -416,9 +416,78 @@ $urlBaseAuto = BASE_URL . '/modulos/automatizaciones';
                         <label class="form-check-label small fw-bold" for="param_${c.key}">${c.label}</label>
                     </div>${ayuda}`;
         }
+        if (c.tipo === 'textarea') {
+            const txt = String(val).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return `<label class="form-label small fw-bold mb-1">${c.label}</label>
+                    <textarea class="form-control form-control-sm" rows="5" data-param="${c.key}" placeholder="${c.label}">${txt}</textarea>${ayuda}`;
+        }
+        if (c.tipo === 'grupo_periodicidad') {
+            const periodos = [
+                {key:'MENSUAL',    label:'Mensual'},
+                {key:'BIMESTRAL',  label:'Bimestral'},
+                {key:'TRIMESTRAL', label:'Trimestral'},
+                {key:'SEMESTRAL',  label:'Semestral'},
+                {key:'ANUAL',      label:'Anual'},
+                {key:'DIARIO',     label:'Diario'},
+                {key:'SEMANAL',    label:'Semanal'},
+                {key:'QUINCENAL',  label:'Quincenal'},
+            ];
+            const uid    = 'per_' + Math.random().toString(36).slice(2, 8);
+            const valObj = (typeof val === 'string') ? (val ? (JSON.parse(val) || {}) : {}) : (val || {});
+
+            const tabs = periodos.map((p, i) =>
+                `<li class="nav-item" role="presentation">
+                    <button class="nav-link py-1 px-2${i===0?' active':''}" style="font-size:0.73rem;"
+                        data-bs-toggle="tab" data-bs-target="#${uid}_${p.key}" type="button">${p.label}</button>
+                </li>`
+            ).join('');
+
+            const camposGrupo = [
+                {f:'texto_item',    lbl:'Texto ítem'},
+                {f:'info_concepto', lbl:'Concepto info. adicional'},
+                {f:'info_detalle',  lbl:'Detalle info. adicional'},
+            ];
+
+            const contents = periodos.map((p, i) => {
+                const pVal = valObj[p.key] || {};
+                const rows = camposGrupo.map(({f, lbl}) => {
+                    const v = (pVal[f] || '').replace(/"/g, '&quot;');
+                    return `<div class="mb-1">
+                        <label style="font-size:0.71rem;margin-bottom:1px;" class="text-muted fw-semibold">${lbl}</label>
+                        <input type="text" class="form-control form-control-sm per-ovr-inp"
+                               data-uid="${uid}" data-per="${p.key}" data-field="${f}"
+                               value="${v}" placeholder="Vacío = usa el valor general">
+                    </div>`;
+                }).join('');
+                return `<div class="tab-pane fade${i===0?' show active':''}" id="${uid}_${p.key}" role="tabpanel">${rows}</div>`;
+            }).join('');
+
+            const jsonEsc = JSON.stringify(valObj).replace(/"/g, '&quot;');
+            return `<label class="form-label small fw-bold mb-1">${c.label}</label>
+                ${ayuda}
+                <ul class="nav nav-tabs flex-nowrap overflow-auto mb-0" style="font-size:0.73rem;">${tabs}</ul>
+                <div class="tab-content border border-top-0 rounded-bottom p-2 bg-white" style="min-height:88px;">${contents}</div>
+                <input type="hidden" data-param="${c.key}" data-uid-json="${uid}" value="${jsonEsc}">`;
+        }
         return `<label class="form-label small fw-bold mb-1">${c.label}</label>
                 <input type="${c.tipo}" class="form-control form-control-sm" data-param="${c.key}" value="${val}" placeholder="${c.label}">${ayuda}`;
     }
+
+    // Event delegation: actualiza el hidden JSON cuando cambia cualquier input de periodicidad
+    document.addEventListener('input', function (e) {
+        const inp = e.target;
+        if (!inp.classList.contains('per-ovr-inp')) return;
+        const uid    = inp.dataset.uid;
+        const hidden = document.querySelector(`[data-uid-json="${uid}"]`);
+        if (!hidden) return;
+        const obj = {};
+        document.querySelectorAll(`.per-ovr-inp[data-uid="${uid}"]`).forEach(el => {
+            if (el.value.trim() === '') return;
+            if (!obj[el.dataset.per]) obj[el.dataset.per] = {};
+            obj[el.dataset.per][el.dataset.field] = el.value.trim();
+        });
+        hidden.value = JSON.stringify(obj);
+    });
 
     // ── Frecuencia ─────────────────────────────────────────────────────────────
     const _DIAS_SEMANA = { lunes:'lunes', martes:'martes', miercoles:'miércoles',
@@ -615,6 +684,16 @@ $urlBaseAuto = BASE_URL . '/modulos/automatizaciones';
             if (!result.isConfirmed) return;
             const btn = document.getElementById('auto_btn_ejecutar');
             btn.disabled = true;
+
+            // Aviso de progreso: el usuario ve que el sistema está trabajando
+            Swal.fire({
+                title: 'Ejecutando…',
+                html: `Procesando la automatización <strong>"${nombre}"</strong>.<br><small class="text-muted">Esto puede tardar unos segundos, por favor espere.</small>`,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
             const fd = new FormData();
             fd.append('id', id);
             fetch(`${UBASE}/ejecutar`, { method: 'POST', body: fd, headers: XHRH })
