@@ -1219,7 +1219,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             const fd = new FormData();
             fd.append('section', 'secuenciales_iniciales');
             fd.append('id_punto_emision', idPunto);
-            const res = await fetch(`<?= $base ?>/modulos/empresa`, { method: 'POST', body: fd });
+            const res = await fetch(`<?= $base ?>/modulos/empresa/save`, { method: 'POST', body: fd });
             const json = await res.json();
 
             if (json.ok) {
