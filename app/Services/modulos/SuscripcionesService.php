@@ -239,8 +239,9 @@ class SuscripcionesService
         $pp   = new PayphoneService(new PayphoneRepository());
 
         return $pp->prepararCajita($idEmpresa, [
+            // Se envía el total sin desglosar IVA: Payphone solo procesa el cobro;
+            // el desglose fiscal corresponde a la factura (otro proceso).
             'monto'           => $montos['total'],
-            'impuesto'        => $montos['iva'],
             'descripcion'     => 'Suscripción #' . $id . ' - ' . ($susc['cliente_nombre'] ?? ''),
             'modulo'          => 'suscripciones',
             'id_referencia'   => $id,
@@ -273,8 +274,9 @@ class SuscripcionesService
         $pp   = new PayphoneService(new PayphoneRepository());
 
         $prep = $pp->prepararPago($idEmpresa, [
+            // Se envía el total sin desglosar IVA: Payphone solo procesa el cobro;
+            // el desglose fiscal corresponde a la factura (otro proceso).
             'monto'           => $montos['total'],
-            'impuesto'        => $montos['iva'],
             'descripcion'     => 'Suscripción #' . $id . ' - ' . ($susc['cliente_nombre'] ?? ''),
             'modulo'          => 'suscripciones',
             'id_referencia'   => $id,
