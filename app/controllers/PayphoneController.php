@@ -89,46 +89,11 @@ class PayphoneController extends Controller
                     new \App\Services\LogSistemaService()
                 );
                 $svc->generarIngresoDesdePayphone($trans);
-            } elseif (($trans['modulo'] ?? '') === 'suscripciones') {
-                $this->registrarMetodoSuscripcion($trans);
             }
         } catch (\Throwable $e) {
             // No bloquear la pantalla de éxito del cliente si falla el registro
             error_log('[Payphone] Error procesando aprobación: ' . $e->getMessage());
         }
-    }
-
-    /**
-     * Guarda en la suscripción el método de pago Payphone tras un pago aprobado.
-     * No se almacenan datos sensibles: solo referencia y datos no sensibles (últimos 4, marca).
-     */
-    private function registrarMetodoSuscripcion(array $trans): void
-    {
-        $idSusc    = (int) ($trans['id_referencia'] ?? 0);
-        $idEmpresa = (int) ($trans['id_empresa'] ?? 0);
-        if ($idSusc <= 0 || $idEmpresa <= 0) {
-            return;
-        }
-
-        // Extraer datos no sensibles de la respuesta de Payphone (si vienen)
-        $resp = $trans['response_data'] ?? [];
-        if (is_string($resp)) {
-            $resp = json_decode($resp, true) ?: [];
-        }
-        $last4 = (string) ($resp['lastDigits'] ?? $resp['cardLastDigits'] ?? $resp['last4'] ?? '');
-        $brand = (string) ($resp['cardBrand'] ?? $resp['cardType'] ?? '');
-
-        $svc = new \App\Services\modulos\SuscripcionesService(
-            new \App\repositories\modulos\SuscripcionesRepository(),
-            new \App\Rules\modulos\SuscripcionesRules(),
-            new \App\Services\LogSistemaService()
-        );
-        $svc->guardarMetodoPayphone($idSusc, $idEmpresa, [
-            'client_tx_id' => $trans['client_transaction_id'] ?? null,
-            'estado'       => 'registrada',
-            'last4'        => $last4 !== '' ? substr($last4, -4) : null,
-            'brand'        => $brand !== '' ? $brand : null,
-        ], 0);
     }
 
     /**

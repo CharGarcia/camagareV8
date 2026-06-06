@@ -301,58 +301,6 @@ class SuscripcionesController extends BaseModuloController
         }
     }
 
-    /** Prepara la Cajita de Payphone para registrar/cobrar el período (devuelve config del widget). */
-    public function prepararCajitaSuscAjax(): void
-    {
-        $this->requireActualizar();
-        header('Content-Type: application/json');
-
-        try {
-            $id        = (int) ($_POST['id'] ?? 0);
-            $idEmpresa = (int) $_SESSION['id_empresa'];
-            $idUsuario = (int) $_SESSION['id_usuario'];
-
-            if ($id <= 0) {
-                throw new \InvalidArgumentException('Guarde primero la suscripción.');
-            }
-
-            $cajita = $this->service->prepararCajitaPayphone($id, $idEmpresa, $idUsuario);
-            if (empty($cajita['ok'])) {
-                throw new \RuntimeException($cajita['mensaje'] ?? 'No se pudo iniciar el pago con Payphone.');
-            }
-
-            echo json_encode([
-                'ok'     => true,
-                'widget' => $cajita['widget'],
-                'ctid'   => $cajita['client_transaction_id'] ?? '',
-            ]);
-        } catch (\Throwable $e) {
-            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
-        }
-    }
-
-    /** Genera un enlace de pago Payphone y lo envía por correo al cliente. */
-    public function enviarEnlacePagoSuscAjax(): void
-    {
-        $this->requireActualizar();
-        header('Content-Type: application/json');
-
-        try {
-            $id        = (int) ($_POST['id'] ?? 0);
-            $idEmpresa = (int) $_SESSION['id_empresa'];
-            $idUsuario = (int) $_SESSION['id_usuario'];
-
-            if ($id <= 0) {
-                throw new \InvalidArgumentException('Guarde primero la suscripción.');
-            }
-
-            $res = $this->service->enviarEnlacePagoPayphone($id, $idEmpresa, $idUsuario);
-            echo json_encode($res);
-        } catch (\Throwable $e) {
-            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
-        }
-    }
-
     public function getPeriodicidadesAjax(): void
     {
         $this->requireLeer();

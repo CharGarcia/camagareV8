@@ -235,41 +235,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                         <textarea class="form-control form-control-sm" name="observaciones" id="susc_observaciones" rows="2" maxlength="500"></textarea>
                                     </div>
 
-                                    <!-- Sección Payphone (solo si forma_cobro = tarjeta) -->
+                                    <!-- Sección tarjeta (solo si forma_cobro = tarjeta) -->
                                     <div class="col-12" id="susc_sec_tarjeta" style="display:none;">
                                         <div class="border rounded-3 p-3 bg-light">
-                                            <h6 class="fw-bold small mb-3"><i class="bi bi-credit-card me-1 text-primary"></i>Pago con Tarjeta (Payphone)</h6>
-
-                                            <!-- Estado del método registrado -->
-                                            <div id="susc_metodo_estado" class="alert alert-secondary py-2 small mb-3">
+                                            <h6 class="fw-bold small mb-3"><i class="bi bi-credit-card me-1 text-primary"></i>Cobro con Tarjeta</h6>
+                                            <div id="susc_tarjeta_actual" class="alert alert-info py-2 small mb-3 d-none">
                                                 <i class="bi bi-credit-card me-1"></i>
-                                                <span id="susc_metodo_texto">Sin método registrado.</span>
+                                                Tarjeta registrada: <strong id="susc_tarjeta_info"></strong>
                                             </div>
-
-                                            <!-- Aviso: guardar primero -->
-                                            <div id="susc_tarjeta_guardar_primero" class="alert alert-warning py-2 small mb-3 d-none">
-                                                <i class="bi bi-exclamation-triangle me-1"></i>
-                                                Guarde primero la suscripción (con sus productos) para poder registrar la tarjeta.
-                                            </div>
-
-                                            <!-- Aviso de cobro -->
-                                            <div class="alert alert-primary py-2 small mb-3 bg-primary bg-opacity-10 text-primary border-primary border-opacity-25">
+                                            <div class="alert alert-secondary py-2 small mb-0">
                                                 <i class="bi bi-info-circle me-1"></i>
-                                                Al registrar la tarjeta se procesa el cobro del período por <strong>el total de la suscripción</strong>. Pago seguro por Payphone (no se almacena el número de tarjeta).
+                                                El cobro automático con tarjeta estará disponible próximamente con integración de tokenización.
                                             </div>
-
-                                            <!-- Acciones -->
-                                            <div class="d-flex gap-2 flex-wrap mb-3" id="susc_tarjeta_acciones">
-                                                <button type="button" class="btn btn-primary btn-sm" id="btnSuscCajita" onclick="suscMostrarCajita()">
-                                                    <i class="bi bi-credit-card-2-front me-1"></i>Registrar tarjeta aquí
-                                                </button>
-                                                <button type="button" class="btn btn-outline-primary btn-sm" id="btnSuscEnlace" onclick="suscEnviarEnlace()">
-                                                    <i class="bi bi-envelope me-1"></i>Enviar enlace al cliente
-                                                </button>
-                                            </div>
-
-                                            <!-- Cajita embebida -->
-                                            <div id="susc_cajita_container"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -306,7 +283,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
 (function () {
     'use strict';
     const urlBase  = '<?= $urlBase ?>';
-    const baseRoot = '<?= rtrim(BASE_URL, '/') ?>';
     const urlCli   = '<?= $urlBaseClientes ?>';
     const urlProd  = '<?= $urlBaseProductos ?>';
     const tarifasIva = <?= json_encode($tarifasIva ?? []) ?>;
@@ -583,88 +559,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         const forma = document.getElementById('susc_forma_cobro').value;
         const sec   = document.getElementById('susc_sec_tarjeta');
         sec.style.display = forma === 'tarjeta' ? 'block' : 'none';
-        if (forma === 'tarjeta') suscActualizarUITarjeta();
-    };
-
-    /* ── Pinta el estado del método de pago Payphone ──────────────────────────── */
-    function suscPintarMetodoPayphone(s) {
-        const box = document.getElementById('susc_metodo_estado');
-        const txt = document.getElementById('susc_metodo_texto');
-        if (!box || !txt) return;
-        if ((s.payphone_estado || 'sin_registrar') === 'registrada') {
-            const marca = s.payphone_card_brand || 'Tarjeta';
-            const last4 = s.payphone_card_last4 ? ' ****' + s.payphone_card_last4 : '';
-            const fecha = s.payphone_fecha_registro ? ' (' + String(s.payphone_fecha_registro).split(' ')[0] + ')' : '';
-            txt.textContent = 'Método registrado: ' + marca + last4 + fecha;
-            box.className = 'alert alert-success py-2 small mb-3';
-        } else {
-            txt.textContent = 'Sin método registrado.';
-            box.className = 'alert alert-secondary py-2 small mb-3';
-        }
-    }
-
-    /* ── UI de tarjeta: habilita acciones solo si la suscripción está guardada ──── */
-    function suscActualizarUITarjeta() {
-        const tieneId    = !!document.getElementById('susc_id').value;
-        const avisoGuard = document.getElementById('susc_tarjeta_guardar_primero');
-        const acciones   = document.getElementById('susc_tarjeta_acciones');
-        if (avisoGuard) avisoGuard.classList.toggle('d-none', tieneId);
-        if (acciones)   acciones.style.display = tieneId ? 'flex' : 'none';
-    }
-
-    /* ── Mostrar/registrar tarjeta con la Cajita de Payphone (en iframe aislado) ──
-       El SDK de Payphone trae CSS global que altera la tipografía de la página.
-       Para evitarlo, la cajita se carga DENTRO de un iframe (página /pago/{ctid}),
-       cuyo CSS queda totalmente aislado del resto del sistema. */
-    window.suscMostrarCajita = async function () {
-        const id = document.getElementById('susc_id').value;
-        if (!id) { Swal.fire('Atención', 'Guarde primero la suscripción.', 'warning'); return; }
-        const cont = document.getElementById('susc_cajita_container');
-        cont.innerHTML = '<div class="text-muted small py-2"><span class="spinner-border spinner-border-sm me-1"></span>Generando formulario de pago seguro...</div>';
-        const fd = new FormData();
-        fd.append('id', id);
-        try {
-            const r = await fetch(urlBase + '/prepararCajitaSuscAjax', { method: 'POST', body: fd });
-            const d = await r.json();
-            if (!d.ok || !d.ctid) { cont.innerHTML = ''; Swal.fire('Atención', d.mensaje || 'No se pudo iniciar el pago.', 'warning'); return; }
-
-            const iframe = document.createElement('iframe');
-            iframe.src = baseRoot + '/pago/' + encodeURIComponent(d.ctid);
-            iframe.title = 'Pago seguro Payphone';
-            iframe.style.width = '100%';
-            iframe.style.minHeight = '640px';
-            iframe.style.border = '1px solid #dee2e6';
-            iframe.style.borderRadius = '8px';
-            iframe.style.background = '#fff';
-            cont.innerHTML = '';
-            cont.appendChild(iframe);
-        } catch (e) { cont.innerHTML = ''; Swal.fire('Error', 'Error de conexión.', 'error'); }
-    };
-
-    /* ── Enviar enlace de pago al cliente ─────────────────────────────────────── */
-    window.suscEnviarEnlace = async function () {
-        const id = document.getElementById('susc_id').value;
-        if (!id) { Swal.fire('Atención', 'Guarde primero la suscripción.', 'warning'); return; }
-        const btn = document.getElementById('btnSuscEnlace');
-        btn.disabled = true;
-
-        // Aviso de progreso mientras se genera y envía el correo
-        Swal.fire({
-            title: 'Enviando enlace…',
-            html: 'Generando el enlace de pago y enviándolo al correo del cliente.<br><small class="text-muted">Por favor espere.</small>',
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            didOpen: () => { Swal.showLoading(); }
-        });
-
-        const fd = new FormData();
-        fd.append('id', id);
-        try {
-            const r = await fetch(urlBase + '/enviarEnlacePagoSuscAjax', { method: 'POST', body: fd });
-            const d = await r.json();
-            Swal.fire(d.ok ? 'Éxito' : 'Atención', d.mensaje || '', d.ok ? 'success' : 'warning');
-        } catch (e) { Swal.fire('Error', 'Error de conexión.', 'error'); }
-        finally { btn.disabled = false; }
     };
 
     /* ── Limpiar tabla detalle ────────────────────────────────────────────────── */
@@ -709,8 +603,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         document.getElementById('tituloModalSusc').textContent  = 'Nueva Suscripción';
         document.getElementById('btnEliminarSusc')?.classList.add('d-none');
         document.getElementById('btnVerPagosSusc')?.classList.add('d-none');
-        suscPintarMetodoPayphone({});
-        document.getElementById('susc_cajita_container').innerHTML = '';
+        document.getElementById('susc_tarjeta_actual')?.classList.add('d-none');
         suscLimpiarDetalle();
         suscAgregarFilaVacia();
         suscOnFormaCobro();
@@ -742,9 +635,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
             suscSetCliente({ id: s.id_cliente, nombre: s.nombre_cliente ?? '', identificacion: s.identificacion_cliente ?? '' });
         }
 
-        // Método de pago Payphone
-        suscPintarMetodoPayphone(s);
-        document.getElementById('susc_cajita_container').innerHTML = '';
+        // Tarjeta
+        if (s.kushki_card_last4) {
+            document.getElementById('susc_tarjeta_info').textContent = `${s.kushki_card_brand ?? ''} **** ${s.kushki_card_last4}`;
+            document.getElementById('susc_tarjeta_actual')?.classList.remove('d-none');
+        } else {
+            document.getElementById('susc_tarjeta_actual')?.classList.add('d-none');
+        }
 
         suscOnFormaCobro();
         window._suscId = s.id;
