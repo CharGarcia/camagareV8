@@ -868,7 +868,16 @@
         }
 
         const selTipo = document.getElementById('cliente_tipo_id');
-        if (selTipo) selTipo.addEventListener('change', () => { window.aplicarReglasIdentificacion(); document.getElementById('cliente_identificacion').value = ''; });
+        if (selTipo) {
+            selTipo.addEventListener('change', () => { 
+                window.aplicarReglasIdentificacion(); 
+                const tipo = getTipoNormalizado();
+                const campo = document.getElementById('cliente_identificacion');
+                if (tipo !== 'CONSUMIDOR_FINAL' && campo && !campo.readOnly) {
+                    campo.value = '';
+                }
+            });
+        }
 
         const campoId = document.getElementById('cliente_identificacion');
         if (campoId) {
