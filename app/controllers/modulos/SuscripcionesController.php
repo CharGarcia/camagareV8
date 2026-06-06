@@ -285,7 +285,7 @@ class SuscripcionesController extends BaseModuloController
                 throw new \InvalidArgumentException('Token de Kushki no recibido.');
             }
 
-            $kushki    = new KushkiService();
+            $kushki    = new KushkiService($idEmpresa);
             $tokenData = $kushki->crearTokenSuscripcion($onetimeToken);
 
             $this->service->guardarTokenKushki($id, $idEmpresa, $tokenData, $idUsuario);
