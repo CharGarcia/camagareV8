@@ -5769,8 +5769,8 @@ $perm = $permOriginal;
                                + 'onclick="fvReversarPagoTarjeta(\'' + pp.client_transaction_id + '\')" title="Reversar pago en Payphone y anular el cobro">'
                                + '<i class="bi bi-arrow-counterclockwise"></i> Reversar</button>';
                     } else if (pp.estado === 'pendiente' && puedeAnular) {
-                        accion = '<button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.7rem;" '
-                               + 'onclick="fvCancelarPagoTarjeta(\'' + pp.client_transaction_id + '\')" title="Cancelar la solicitud de pago enviada al cliente">'
+                        accion = '<button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 btn-fv-cancelar-pago" style="font-size:.7rem;" '
+                               + 'data-ctid="' + (pp.client_transaction_id || '').replace(/"/g, '&quot;') + '" title="Cancelar la solicitud de pago enviada al cliente">'
                                + '<i class="bi bi-x-circle"></i> Cancelar</button>';
                     }
                     const tr = document.createElement('tr');
@@ -5781,6 +5781,14 @@ $perm = $permOriginal;
                         + '<td class="text-center pe-3">' + accion + '</td>';
                     tbodyTarjeta.appendChild(tr);
                 });
+
+                // Delegación: clic en botón "Cancelar" de solicitud pendiente
+                tbodyTarjeta.querySelectorAll('.btn-fv-cancelar-pago').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        fvCancelarPagoTarjeta(this.dataset.ctid);
+                    });
+                });
+
             } else if (cardTarjeta) {
                 cardTarjeta.classList.add('d-none');
             }
@@ -6275,6 +6283,53 @@ window.fvReversarPagoTarjeta = function(ctid) {
                 });
                 fvCargarCobrosTab();
                 if (typeof fetchSearchFn === 'function') fetchSearchFn(window.FV_currentPage || 1);
+            })
+            .catch(function() {
+                Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.', target: document.getElementById('modalNuevaFactura') });
+            });
+    });
+};
+
+window.fvCancelarPagoTarjeta = function(ctid) {
+    if (!ctid) return;
+    Swal.fire({
+        icon: 'question',
+        title: '¿Cancelar solicitud de pago?',
+        html: 'El enlace de pago enviado al cliente quedará <strong>inválido</strong> y no podrá usarse.<br>'
+            + '<span class="text-muted small">No se ha cobrado ningún monto; esta acción solo anula la solicitud.</span>',
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-x-circle me-1"></i>Sí, cancelar solicitud',
+        cancelButtonText: 'Cerrar',
+        confirmButtonColor: '#6c757d',
+        target: document.getElementById('modalNuevaFactura'),
+    }).then(function(res) {
+        if (!res.isConfirmed) return;
+
+        Swal.fire({
+            title: 'Cancelando solicitud...',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            target: document.getElementById('modalNuevaFactura'),
+            didOpen: function() { Swal.showLoading(); }
+        });
+
+        var fd = new FormData();
+        fd.append('client_transaction_id', ctid);
+
+        fetch(B_URL + '/' + RUTA_MODULO + '/cancelarPagoTarjetaAjax', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) {
+                    Swal.fire({ icon: 'error', title: 'No se pudo cancelar', text: data.mensaje, target: document.getElementById('modalNuevaFactura') });
+                    return;
+                }
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Solicitud cancelada',
+                    text: data.mensaje,
+                    target: document.getElementById('modalNuevaFactura')
+                });
+                fvCargarCobrosTab();
             })
             .catch(function() {
                 Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.', target: document.getElementById('modalNuevaFactura') });
