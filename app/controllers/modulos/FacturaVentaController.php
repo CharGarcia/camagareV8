@@ -1411,6 +1411,7 @@ class FacturaVentaController extends BaseModuloController
         }
 
         // ── 2. Conceptos de Ingreso ───────────────────────────────────────────────
+        $error_conceptos = null;
         try {
             $stC = $db->prepare(
                 "SELECT id, nombre, comportamiento
@@ -1421,9 +1422,12 @@ class FacturaVentaController extends BaseModuloController
             );
             $stC->execute([$idEmpresa]);
             $conceptos = $stC->fetchAll(\PDO::FETCH_ASSOC);
-        } catch (\Throwable $ignored) {}
+        } catch (\Throwable $ignored) {
+            $error_conceptos = $ignored->getMessage();
+        }
 
         // ── 3. Formas de Cobro ────────────────────────────────────────────────────
+        $error_formas = null;
         try {
             $stF = $db->prepare(
                 "SELECT id, nombre, tipo
@@ -1434,9 +1438,12 @@ class FacturaVentaController extends BaseModuloController
             );
             $stF->execute([$idEmpresa]);
             $formas = $stF->fetchAll(\PDO::FETCH_ASSOC);
-        } catch (\Throwable $ignored) {}
+        } catch (\Throwable $ignored) {
+            $error_formas = $ignored->getMessage();
+        }
 
         // ── 4. Bancos (opcional — tabla puede no existir) ─────────────────────────
+        $error_bancos = null;
         try {
             $stB = $db->prepare(
                 "SELECT id, nombre_banco
@@ -1446,7 +1453,9 @@ class FacturaVentaController extends BaseModuloController
             );
             $stB->execute([$idEmpresa]);
             $bancos = $stB->fetchAll(\PDO::FETCH_ASSOC);
-        } catch (\Throwable $ignored) {}
+        } catch (\Throwable $ignored) {
+            $error_bancos = $ignored->getMessage();
+        }
 
         echo json_encode([
             'ok'   => true,
@@ -1455,6 +1464,11 @@ class FacturaVentaController extends BaseModuloController
                 'conceptos'    => $conceptos,
                 'formas_cobro' => $formas,
                 'bancos'       => $bancos,
+                'debug_errors' => [
+                    'conceptos' => $error_conceptos ?? null,
+                    'formas' => $error_formas ?? null,
+                    'bancos' => $error_bancos ?? null
+                ]
             ]
         ]);
         exit;
