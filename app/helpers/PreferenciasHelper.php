@@ -124,7 +124,7 @@ class PreferenciasHelper
             <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Personalizar Columnas">
                 <i class="bi bi-layout-three-columns"></i>
             </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow p-2" style="min-width: 200px;" data-modulo="' . htmlspecialchars(str_replace('-', '_', basename($modulo)), ENT_QUOTES) . '">
+            <ul class="dropdown-menu dropdown-menu-end shadow p-2" style="min-width: 200px; max-height: 350px; overflow-y: auto;" data-modulo="' . htmlspecialchars(str_replace('-', '_', basename($modulo)), ENT_QUOTES) . '">
                 <li><h6 class="dropdown-header px-1"><i class="bi bi-eye me-1"></i> Columnas Visibles</h6></li>';
 
         foreach ($columnas as $colKey => $colLabel) {
@@ -177,7 +177,7 @@ class PreferenciasHelper
             <button class="btn btn-link btn-sm text-muted p-0 border-0 shadow-none" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Configurar Pestañas">
                 <i class="bi bi-gear-fill"></i>
             </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow p-2" style="min-width: 200px;" data-modulo="' . htmlspecialchars(str_replace('-', '_', basename($modulo)), ENT_QUOTES) . '">
+            <ul class="dropdown-menu dropdown-menu-end shadow p-2" style="min-width: 200px; max-height: 350px; overflow-y: auto;" data-modulo="' . htmlspecialchars(str_replace('-', '_', basename($modulo)), ENT_QUOTES) . '">
                 <li><h6 class="dropdown-header px-1"><i class="bi bi-layers me-1"></i> Pestañas Visibles</h6></li>';
 
         foreach ($pestanas as $tabId => $tabLabel) {

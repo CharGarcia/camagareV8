@@ -263,6 +263,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'observaciones'       => 'Observaciones',
                     'usuario_nombre'      => 'Usuario',
                     'estado_correo'       => 'Estado correo',
+                    'estado_pago'         => 'Estado pago',
                     'estado'              => 'Estado',
                 ];
                 ?>
@@ -343,6 +344,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="text-center sortable-header" role="button" data-sort="estado_correo" data-col="estado_correo" onclick="window.FV_ordenar(this.dataset.sort)">
                             Correo <i class="bi <?= $ordenCol === 'estado_correo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
+                        <th class="text-center sortable-header" role="button" data-col="estado_pago">
+                            Pago
+                        </th>
                         <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado" onclick="window.FV_ordenar(this.dataset.sort)">
                             Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
@@ -351,7 +355,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <tbody id="tbodyFacturas">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="15" class="text-center py-5 text-muted"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No se encontraron facturas.</td>
+                            <td colspan="16" class="text-center py-5 text-muted"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No se encontraron facturas.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
@@ -368,6 +372,20 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 ? 'bg-success bg-opacity-10 text-success border-success'
                                 : 'bg-warning bg-opacity-10 text-warning border-warning';
                             $ivaCalc = max(0, (float)($r['importe_total'] ?? 0) - (float)($r['total_sin_impuestos'] ?? 0) + (float)($r['total_descuento'] ?? 0) - (float)($r['total_ice'] ?? 0) - (float)($r['propina'] ?? 0));
+                            
+                            $importeTotal = (float)($r['importe_total'] ?? 0);
+                            $cobrado      = (float)($r['total_cobrado'] ?? 0);
+                            $nc           = (float)($r['total_nc'] ?? 0);
+                            $retencion    = (float)($r['total_retencion'] ?? 0);
+                            $saldo        = max(0, $importeTotal - $cobrado - $nc - $retencion);
+
+                            if ($saldo <= 0.01) {
+                                $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
+                            } elseif (($cobrado + $nc + $retencion) > 0) {
+                                $estadoPagoBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Abonada</span>';
+                            } else {
+                                $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Pendiente</span>';
+                            }
                             ?>
                             <tr class="factura-row" role="button" tabindex="0" data-row='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8') ?>' onclick="abrirModalFacturaVer(this)">
                                 <td class="ps-3" data-col="numero"><code class="text-secondary"><?= htmlspecialchars(($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '')) ?></code></td>
@@ -386,6 +404,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td class="text-center" data-col="estado_correo">
                                     <span class="badge <?= $correoClass ?> border border-opacity-25"><?= ucfirst($estadoCorreo) ?></span>
                                 </td>
+                                <td class="text-center" data-col="estado_pago"><?= $estadoPagoBadge ?></td>
                                 <td class="text-center pe-3" data-col="estado">
                                     <span class="badge <?= $estadoClass ?> border border-opacity-25"><?= ucfirst($estado) ?></span>
                                 </td>

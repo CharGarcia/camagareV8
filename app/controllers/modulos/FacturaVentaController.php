@@ -132,7 +132,7 @@ class FacturaVentaController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="15" class="text-center py-5 text-muted"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No se encontraron facturas.</td></tr>';
+            echo '<tr><td colspan="16" class="text-center py-5 text-muted"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No se encontraron facturas.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 echo $this->renderFilaHtml($r);
@@ -2114,6 +2114,21 @@ class FacturaVentaController extends BaseModuloController
         $correoBadge  = '<span class="badge ' . $correoClass . ' border border-opacity-25">' . ucfirst($estadoCorreo) . '</span>';
         $ivaCalc      = max(0, (float)($r['importe_total'] ?? 0) - (float)($r['total_sin_impuestos'] ?? 0) + (float)($r['total_descuento'] ?? 0) - (float)($r['total_ice'] ?? 0) - (float)($r['propina'] ?? 0));
 
+        // Calcular estado de pago
+        $importeTotal = (float)($r['importe_total'] ?? 0);
+        $cobrado      = (float)($r['total_cobrado'] ?? 0);
+        $nc           = (float)($r['total_nc'] ?? 0);
+        $retencion    = (float)($r['total_retencion'] ?? 0);
+        $saldo        = max(0, $importeTotal - $cobrado - $nc - $retencion);
+
+        if ($saldo <= 0.01) {
+            $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
+        } elseif (($cobrado + $nc + $retencion) > 0) {
+            $estadoPagoBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Abonada</span>';
+        } else {
+            $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Pendiente</span>';
+        }
+
         return '<tr class="factura-row" role="button" tabindex="0" data-row=\'' . $rowData . '\' onclick="abrirModalFacturaVer(this)">
                 <td class="ps-3" data-col="numero"><code class="text-secondary">' . $numero . '</code></td>
                 <td data-col="fecha_emision">' . $fecha . '</td>
@@ -2129,6 +2144,7 @@ class FacturaVentaController extends BaseModuloController
                 <td data-col="observaciones" class="text-truncate" style="max-width:180px">' . htmlspecialchars($r['observaciones'] ?? '') . '</td>
                 <td data-col="usuario_nombre">' . htmlspecialchars($r['usuario_nombre'] ?? '') . '</td>
                 <td class="text-center" data-col="estado_correo">' . $correoBadge . '</td>
+                <td class="text-center" data-col="estado_pago">' . $estadoPagoBadge . '</td>
                 <td class="text-center pe-3" data-col="estado">' . $estadoBadge . '</td>
               </tr>';
     }
