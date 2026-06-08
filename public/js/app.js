@@ -239,5 +239,51 @@
         window.addEventListener('beforeunload', function() {
             clearInterval(monitorInterval);
         });
+
+        // =====================================================================
+        // GLOBAL: Actualizar tabla de listado al cerrar modales principales
+        // =====================================================================
+        document.addEventListener('hidden.bs.modal', function(e) {
+            var modalId = e.target.id;
+            // Solo actuar si el modal tiene ID y parece ser un modal principal
+            if (!modalId || modalId.toLowerCase().indexOf('modal') === -1) return;
+
+            // Evitar re-render innecesario si es un modal pequeño genérico
+            var ignoredModals = ['modalFavoritos', 'modalAlert', 'modalConfirm', 'modalColumnas'];
+            if (ignoredModals.includes(modalId)) return;
+
+            // Lista de funciones de búsqueda principales registradas en window
+            var searchFuncs = [
+                'fetchSearch',
+                'CMG_fetchSearch',
+                'VT_fetchSearch',
+                'LC_fetchSearch',
+                'NC_fetchSearch',
+                'PED_fetchSearch',
+                'PF_fetchSearch',
+                'ING_fetchSearch',
+                'EGR_fetchSearch',
+                'RET_fetchSearch',
+                'GR_fetchSearch',
+                'fetchSearchCat',
+                'fetchSearchMar',
+                'fetchSearchFirmas'
+            ];
+
+            for (var i = 0; i < searchFuncs.length; i++) {
+                var funcName = searchFuncs[i];
+                if (typeof window[funcName] === 'function') {
+                    var page = 1;
+                    if (funcName === 'CMG_fetchSearch' && typeof window.CMG_currentPage !== 'undefined') page = window.CMG_currentPage;
+                    else if (funcName === 'VT_fetchSearch' && typeof window.VT_currentPage !== 'undefined') page = window.VT_currentPage;
+                    else if (funcName === 'LC_fetchSearch' && typeof window.LC_currentPage !== 'undefined') page = window.LC_currentPage;
+                    else if (typeof window.currentPage !== 'undefined') page = window.currentPage;
+
+                    window[funcName](page);
+                    // Una vez que encontramos y llamamos a la principal, detenemos la búsqueda
+                    break;
+                }
+            }
+        });
     });
 })();

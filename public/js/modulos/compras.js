@@ -9,11 +9,12 @@ const CMG_TIPOS_MASCARA = ['01', '03', '04', '05', '06', '09', '11', '12', '15',
 const _esPersonaNatural = (window.CMG_empresa?.tipo == '1' || window.CMG_empresa?.tipo == '01');
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Buscar el IVA por defecto en el catálogo cargado (que ya viene filtrado por status=1)
     if (window.CMG_tarifasIva && window.CMG_tarifasIva.length > 0) {
         const tDefault = window.CMG_tarifasIva.find(t => parseFloat(t.porcentaje_iva) > 0) || window.CMG_tarifasIva[0];
         _ivaDefault = parseFloat(tDefault.porcentaje_iva);
     }
+    
+
     if (_esPersonaNatural) {
         // Ocultar campos no requeridos para Persona Natural
         const selectors = [
