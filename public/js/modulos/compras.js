@@ -2540,8 +2540,8 @@ window.CMG_registrarPagoEgreso = async function(e) {
             await window.CMG_cargarPagosTab();
             
             // Recargar listado principal de compras en el fondo para reflejar saldos si aplica
-            if (typeof window.fetchSearch === 'function') {
-                window.fetchSearch(window.currentPage || 1);
+            if (typeof window.CMG_fetchSearch === 'function') {
+                window.CMG_fetchSearch(window.CMG_currentPage || 1);
             }
         } else {
             Swal.fire('Error', res.error || 'No se pudo generar el pago.', 'error');

@@ -232,7 +232,7 @@
                         <!-- Contenido dinámico desde JS -->
                     </thead>
                     <tbody id="rv_tbody">
-                        <tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y haz clic en Generar para ver los resultados.</td></tr>
+                        <tr><td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y haz clic en Generar para ver los resultados.</td></tr>
                     </tbody>
                 </table>
             </div>

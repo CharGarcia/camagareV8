@@ -201,7 +201,8 @@ window.RV_generarReporte = function () {
     RV_dibujarCabecera(agruparPor);
 
     const tbody = document.getElementById('rv_tbody');
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div><br><span class="text-muted small mt-2 d-inline-block">Generando reporte...</span></td></tr>';
+    const colSpanActual = agruparPor === 'NINGUNO' ? 12 : (agruparPor === 'PRODUCTO' ? 7 : 6);
+    tbody.innerHTML = `<tr><td colspan="${colSpanActual}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div><br><span class="text-muted small mt-2 d-inline-block">Generando reporte...</span></td></tr>`;
 
     fetch(BASE_URL + '/' + RUTA_MODULO + '/generarAjax', {
         method: 'POST',
@@ -248,14 +249,14 @@ window.RV_generarReporte = function () {
 
         } else {
             Swal.fire('Error', res.error || 'Ocurrió un error al generar el reporte', 'error');
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-danger">Error al generar reporte.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="${colSpanActual}" class="text-center py-4 text-danger">Error al generar reporte.</td></tr>`;
             document.getElementById('chart-container').style.display = 'none';
         }
     })
     .catch(err => {
         console.error(err);
         Swal.fire('Error del Servidor', 'Detalle: ' + err.message, 'error');
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-danger">Error de conexión.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="${colSpanActual}" class="text-center py-4 text-danger">Error de conexión.</td></tr>`;
         document.getElementById('chart-container').style.display = 'none';
     });
 };
@@ -401,10 +402,14 @@ function RV_dibujarCabecera(agruparPor) {
             <th>Nro Documento</th>
             <th>Cliente</th>
             <th class="text-center">Estado</th>
+            <th>Vendedor</th>
+            <th>Cajero</th>
+            <th>Usuario</th>
             <th class="text-end">Base 0% / Exento</th>
             <th class="text-end">Base IVA</th>
             <th class="text-end">Total IVA</th>
             <th class="text-end pe-4">Gran Total</th>
+            <th class="text-end pe-4">Retenciones</th>
         `;
     }
     

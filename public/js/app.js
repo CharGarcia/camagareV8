@@ -252,37 +252,38 @@
             var ignoredModals = ['modalFavoritos', 'modalAlert', 'modalConfirm', 'modalColumnas'];
             if (ignoredModals.includes(modalId)) return;
 
-            // Lista de funciones de búsqueda principales registradas en window
-            var searchFuncs = [
-                'fetchSearch',
-                'CMG_fetchSearch',
-                'VT_fetchSearch',
-                'LC_fetchSearch',
-                'NC_fetchSearch',
-                'PED_fetchSearch',
-                'PF_fetchSearch',
-                'ING_fetchSearch',
-                'EGR_fetchSearch',
-                'RET_fetchSearch',
-                'GR_fetchSearch',
-                'fetchSearchCat',
-                'fetchSearchMar',
-                'fetchSearchFirmas'
-            ];
+            // Mapa de Modal IDs a sus respectivas funciones de búsqueda globales
+            var modalFetchMap = {
+                'modalCompra': 'CMG_fetchSearch',
+                'modalVenta': 'VT_fetchSearch',
+                'modalLiquidacion': 'LC_fetchSearch',
+                'modalNC': 'NC_fetchSearch',
+                'modalPedido': 'PED_fetchSearch',
+                'modalProforma': 'PF_fetchSearch',
+                'modalIngreso': 'ING_fetchSearch',
+                'modalEgreso': 'EGR_fetchSearch',
+                'modalRetencion': 'RET_fetchSearch',
+                'modalGuiaRemision': 'GR_fetchSearch',
+                'modalCategoria': 'fetchSearchCat',
+                'modalMarca': 'fetchSearchMar',
+                'modalFirma': 'fetchSearchFirmas'
+            };
 
-            for (var i = 0; i < searchFuncs.length; i++) {
-                var funcName = searchFuncs[i];
-                if (typeof window[funcName] === 'function') {
-                    var page = 1;
-                    if (funcName === 'CMG_fetchSearch' && typeof window.CMG_currentPage !== 'undefined') page = window.CMG_currentPage;
-                    else if (funcName === 'VT_fetchSearch' && typeof window.VT_currentPage !== 'undefined') page = window.VT_currentPage;
-                    else if (funcName === 'LC_fetchSearch' && typeof window.LC_currentPage !== 'undefined') page = window.LC_currentPage;
-                    else if (typeof window.currentPage !== 'undefined') page = window.currentPage;
+            // Determinar qué función llamar
+            var funcToCall = 'fetchSearch'; // Por defecto la mayoría usan fetchSearch
+            if (modalFetchMap[modalId]) {
+                funcToCall = modalFetchMap[modalId];
+            }
 
-                    window[funcName](page);
-                    // Una vez que encontramos y llamamos a la principal, detenemos la búsqueda
-                    break;
-                }
+            // Ejecutar la función si existe
+            if (typeof window[funcToCall] === 'function') {
+                var page = 1;
+                if (funcToCall === 'CMG_fetchSearch' && typeof window.CMG_currentPage !== 'undefined') page = window.CMG_currentPage;
+                else if (funcToCall === 'VT_fetchSearch' && typeof window.VT_currentPage !== 'undefined') page = window.VT_currentPage;
+                else if (funcToCall === 'LC_fetchSearch' && typeof window.LC_currentPage !== 'undefined') page = window.LC_currentPage;
+                else if (typeof window.currentPage !== 'undefined') page = window.currentPage;
+
+                window[funcToCall](page);
             }
         });
     });

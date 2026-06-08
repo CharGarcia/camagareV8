@@ -91,8 +91,8 @@ class ReporteVentasController extends BaseModuloController
             // Generar HTML de las filas según la agrupación
             ob_start();
             if (empty($rows)) {
-                $colSpan = ($filtros['agrupar_por'] === 'NINGUNO') ? 8 : 
-                           (($filtros['agrupar_por'] === 'CLIENTE') ? 6 : 
+                $colSpan = ($filtros['agrupar_por'] === 'NINGUNO') ? 12 :
+                           (($filtros['agrupar_por'] === 'CLIENTE') ? 6 :
                            (($filtros['agrupar_por'] === 'PRODUCTO') ? 7 : 5));
                 echo '<tr><td colspan="'.$colSpan.'" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-bar-graph fs-3 d-block mb-2"></i>No se encontraron resultados.</td></tr>';
             } else {
@@ -166,15 +166,20 @@ class ReporteVentasController extends BaseModuloController
                 'anulado' => 'bg-danger bg-opacity-10 text-danger border-danger',
                 default => 'bg-primary bg-opacity-10 text-primary border-primary'
             };
-            
+            $retenciones = number_format((float)($r['retenciones'] ?? 0), 2);
+
             $html .= "<td class='text-center'>".date('d/m/Y', strtotime($r['fecha_emision'] ?? ''))."</td>";
             $html .= "<td><span class='fw-bold'>".htmlspecialchars($r['numero_factura'] ?? '')."</span></td>";
             $html .= "<td><span class='fw-bold'>".htmlspecialchars($r['cliente_nombre'] ?? '')."</span><br><small class='text-muted'>".htmlspecialchars($r['cliente_ruc'] ?? '')."</small></td>";
             $html .= "<td class='text-center'><span class='badge border {$badgeColor}'>".strtoupper($estado)."</span></td>";
+            $html .= "<td>".htmlspecialchars($r['vendedor_nombre'] ?? '')."</td>";
+            $html .= "<td>".htmlspecialchars($r['cajero_nombre']   ?? '')."</td>";
+            $html .= "<td>".htmlspecialchars($r['usuario_nombre']  ?? '')."</td>";
             $html .= "<td class='text-end'>$base0</td>";
             $html .= "<td class='text-end'>$baseIva</td>";
             $html .= "<td class='text-end'>$iva</td>";
             $html .= "<td class='text-end fw-bold text-success'>$total</td>";
+            $html .= "<td class='text-end text-danger'>$retenciones</td>";
         }
         
         $html .= '</tr>';
@@ -275,7 +280,7 @@ class ReporteVentasController extends BaseModuloController
                     ];
                 }
             } else {
-                $headers = ['Fecha', 'Factura', 'Cliente', 'RUC/Cédula', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+                $headers = ['Fecha', 'Factura', 'Cliente', 'RUC/Cédula', 'Vendedor', 'Cajero', 'Usuario', 'Clave Acceso', 'Base 0%', 'Base IVA', 'IVA', 'Total', 'Retenciones'];
                 $exportData = [];
                 foreach ($rows as $r) {
                     $exportData[] = [
@@ -283,10 +288,15 @@ class ReporteVentasController extends BaseModuloController
                         $r['numero_factura'],
                         $r['cliente_nombre'],
                         $r['cliente_ruc'],
-                        (float)$r['base_0'],
-                        (float)$r['base_iva'],
-                        (float)$r['valor_iva'],
-                        (float)$r['total']
+                        $r['vendedor_nombre'] ?? '',
+                        $r['cajero_nombre']   ?? '',
+                        $r['usuario_nombre']  ?? '',
+                        $r['clave_acceso']    ?? '',
+                        (float)($r['base_0']    ?? 0),
+                        (float)($r['base_iva']  ?? 0),
+                        (float)($r['valor_iva'] ?? 0),
+                        (float)($r['total']     ?? 0),
+                        (float)($r['retenciones'] ?? 0),
                     ];
                 }
             }
@@ -350,7 +360,7 @@ class ReporteVentasController extends BaseModuloController
                     <?php elseif ($filtros['agrupar_por'] === 'FECHA'): ?>
                         <tr><th>Fecha</th><th>Nro Facturas</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
                     <?php else: ?>
-                        <tr><th>Fecha</th><th>Factura</th><th>Cliente</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
+                        <tr><th>Fecha</th><th>Factura</th><th>Cliente</th><th>Estado</th><th>Vendedor</th><th>Cajero</th><th>Usuario</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th><th>Retenciones</th></tr>
                     <?php endif; ?>
                 </thead>
                 <tbody>
@@ -382,10 +392,15 @@ class ReporteVentasController extends BaseModuloController
                                 <td class="text-center"><?= date('d/m/Y', strtotime($r['fecha_emision'])) ?></td>
                                 <td><?= htmlspecialchars($r['numero_factura']) ?></td>
                                 <td><?= htmlspecialchars($r['cliente_nombre']) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
-                                <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
+                                <td class="text-center"><?= htmlspecialchars(strtoupper($r['estado'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars($r['vendedor_nombre'] ?? '') ?></td>
+                                <td><?= htmlspecialchars($r['cajero_nombre']   ?? '') ?></td>
+                                <td><?= htmlspecialchars($r['usuario_nombre']  ?? '') ?></td>
+                                <td class="text-end"><?= number_format((float)($r['base_0'] ?? 0), 2) ?></td>
+                                <td class="text-end"><?= number_format((float)($r['base_iva'] ?? 0), 2) ?></td>
+                                <td class="text-end"><?= number_format((float)($r['valor_iva'] ?? 0), 2) ?></td>
+                                <td class="text-end"><strong><?= number_format((float)($r['total'] ?? 0), 2) ?></strong></td>
+                                <td class="text-end"><?= number_format((float)($r['retenciones'] ?? 0), 2) ?></td>
                             <?php endif; ?>
                         </tr>
                     <?php endforeach; ?>
@@ -397,13 +412,16 @@ class ReporteVentasController extends BaseModuloController
                         <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
                             <th colspan="3" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
                         <?php else: ?>
-                            <th colspan="3" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
+                            <th colspan="7" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
                         <?php endif; ?>
                         
                         <th class="text-end" style="font-size: 10pt;"><?= number_format((float)$totales['total_base_0'], 2) ?></th>
                         <th class="text-end" style="font-size: 10pt;"><?= number_format((float)$totales['total_base_iva'], 2) ?></th>
                         <th class="text-end" style="font-size: 10pt;"><?= number_format((float)$totales['total_iva'], 2) ?></th>
                         <th class="text-end" style="font-size: 11pt; font-weight: bold; color: #198754;">$<?= number_format((float)$totales['gran_total'], 2) ?></th>
+                        <?php if ($filtros['agrupar_por'] === 'NINGUNO'): ?>
+                        <th class="text-end" style="font-size: 10pt;">-</th>
+                        <?php endif; ?>
                     </tr>
                 </tfoot>
             </table>

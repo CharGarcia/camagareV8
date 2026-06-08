@@ -115,23 +115,35 @@ class ReporteVentasRepository extends BaseRepository
     public function getReporteDetallado(int $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
-        
+
         $sql = "
             WITH bases AS (" . $this->getCteBasesImpuestos() . ")
-            SELECT 
+            SELECT
                 v.id,
                 v.fecha_emision,
                 CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) as numero_factura,
                 c.identificacion as cliente_ruc,
                 c.nombre as cliente_nombre,
                 v.estado,
-                COALESCE(b.base_0, 0) as base_0,
+                COALESCE(b.base_0, 0)   as base_0,
                 COALESCE(b.base_iva, 0) as base_iva,
                 COALESCE(b.valor_iva, 0) as valor_iva,
-                v.importe_total as total
+                v.importe_total          as total,
+                COALESCE(vend.nombre, '')   as vendedor_nombre,
+                COALESCE(ucaj.nombre, '')   as cajero_nombre,
+                COALESCE(uusr.nombre, '')   as usuario_nombre,
+                COALESCE(v.clave_acceso, '') as clave_acceso,
+                COALESCE((
+                    SELECT SUM(r.total_iva + r.total_renta + r.total_isd)
+                    FROM retencion_venta_cabecera r
+                    WHERE r.id_venta = v.id AND r.eliminado = false
+                ), 0) as retenciones
             FROM ventas_cabecera v
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN bases b ON b.id_venta = v.id
+            LEFT JOIN vendedores  vend ON vend.id = v.id_vendedor
+            LEFT JOIN usuarios    ucaj ON ucaj.id = v.id_usuario
+            LEFT JOIN usuarios    uusr ON uusr.id = v.created_by
             WHERE {$where}
             ORDER BY v.fecha_emision DESC, v.secuencial DESC
         ";
