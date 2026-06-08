@@ -114,12 +114,27 @@ class ComprasController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-cart fs-3 d-block mb-2"></i>No se encontraron compras.</td></tr>';
+            echo '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-cart fs-3 d-block mb-2"></i>No se encontraron compras.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 $rowData     = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
                 $numero      = htmlspecialchars(($r['establecimiento_prov'] ?? '') . '-' . ($r['punto_emision_prov'] ?? '') . '-' . ($r['secuencial_prov'] ?? ''));
                 $fechaEmision = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
+                
+                $importeTotal = (float)($r['importe_total'] ?? 0);
+                $pagado       = (float)($r['total_pagado'] ?? 0);
+                $nc           = (float)($r['total_nc'] ?? 0);
+                $retencion    = (float)($r['total_retencion'] ?? 0);
+                $saldo        = max(0, $importeTotal - $pagado - $nc - $retencion);
+
+                if ($saldo <= 0.01) {
+                    $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
+                } elseif (($pagado + $nc + $retencion) > 0) {
+                    $estadoPagoBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Abonada</span>';
+                } else {
+                    $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Pendiente</span>';
+                }
+
                 $estado      = $r['estado'] ?? 'borrador';
                 $estadoClass = match ($estado) {
                     'registrado'             => 'bg-success bg-opacity-10 text-success border-success',
@@ -139,6 +154,8 @@ class ComprasController extends BaseModuloController
                         <td class="text-end" data-col="total_sin_impuestos">' . number_format((float)($r['total_sin_impuestos'] ?? 0), 2) . '</td>
                         <td class="text-end" data-col="monto_iva">$' . number_format((float)($r['monto_iva'] ?? 0), 2) . '</td>
                         <td class="text-end fw-bold" data-col="importe_total">$' . number_format((float)($r['importe_total'] ?? 0), 2) . '</td>
+                        <td class="text-center" data-col="estado_pago">' . $estadoPagoBadge . '</td>
+                        <td class="text-center pe-3" data-col="estado">' . $estadoBadge . '</td>
                       </tr>';
             }
         }

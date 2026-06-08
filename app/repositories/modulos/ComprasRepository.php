@@ -128,7 +128,10 @@ class ComprasRepository extends BaseRepository
                        st.nombre           AS sustento_nombre,
                        st.codigo           AS sustento_codigo,
                        u.nombre            AS usuario_nombre,
-                       ca.comprobante      AS tipo_comprobante_nombre
+                       ca.comprobante      AS tipo_comprobante_nombre,
+                       (SELECT COALESCE(SUM(ed.monto_pagado), 0) FROM egresos_detalle ed INNER JOIN egresos_cabecera ec ON ed.id_egreso = ec.id WHERE ed.tipo_documento = 'COMPRA' AND ed.id_referencia_documento = c.id AND ed.eliminado = false AND ec.estado != 'anulado' AND ec.eliminado = false) AS total_pagado,
+                       (SELECT COALESCE(SUM(nc.importe_total), 0) FROM compras_cabecera nc WHERE nc.tipo_comprobante = '04' AND nc.documento_modificado = CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) AND nc.id_proveedor = c.id_proveedor AND nc.id_empresa = c.id_empresa AND nc.eliminado = false) AS total_nc,
+                       (SELECT COALESCE(SUM(r.total_retenido), 0) FROM retencion_compra_cabecera r WHERE r.id_compra = c.id AND r.eliminado = false AND r.estado != 'anulada') AS total_retencion
                 FROM compras_cabecera c
                 INNER JOIN proveedores p        ON c.id_proveedor = p.id
                 LEFT  JOIN sustento_tributario st ON c.id_sustento_tributario = st.id

@@ -171,6 +171,7 @@ $tiposComprobanteMap = [
                     'total_sin_impuestos' => 'Subtotal',
                     'monto_iva'        => 'IVA',
                     'importe_total'    => 'Total',
+                    'estado_pago'      => 'Pago',
                     'estado'           => 'Estado',
                 ];
                 ?>
@@ -204,14 +205,38 @@ $tiposComprobanteMap = [
                         <th class="text-end sortable-header" role="button" data-sort="total_sin_impuestos" data-col="total_sin_impuestos">Subtotal <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end sortable-header" role="button" data-sort="monto_iva" data-col="monto_iva">IVA <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end sortable-header fw-bold" role="button" data-sort="importe_total" data-col="importe_total">Total <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" role="button" data-col="estado_pago">Pago</th>
+                        <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyCompras">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-cart3 fs-3 d-block mb-2"></i>No se encontraron compras.</td>
+                            <td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-cart3 fs-3 d-block mb-2"></i>No se encontraron compras.</td>
                         </tr>
-                        <?php else: foreach ($rows as $r): ?>
+                        <?php else: foreach ($rows as $r): 
+                            $importeTotal = (float)($r['importe_total'] ?? 0);
+                            $pagado       = (float)($r['total_pagado'] ?? 0);
+                            $nc           = (float)($r['total_nc'] ?? 0);
+                            $retencion    = (float)($r['total_retencion'] ?? 0);
+                            $saldo        = max(0, $importeTotal - $pagado - $nc - $retencion);
+
+                            if ($saldo <= 0.01) {
+                                $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
+                            } elseif (($pagado + $nc + $retencion) > 0) {
+                                $estadoPagoBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Abonada</span>';
+                            } else {
+                                $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Pendiente</span>';
+                            }
+                            
+                            $estado = $r['estado'] ?? 'borrador';
+                            $estadoClass = match ($estado) {
+                                'registrado'             => 'bg-success bg-opacity-10 text-success border-success',
+                                'anulado'                => 'bg-danger bg-opacity-10 text-danger border-danger',
+                                'borrador'               => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
+                                default                  => 'bg-primary bg-opacity-10 text-primary border-primary',
+                            };
+                        ?>
                             <tr class="compra-row" role="button" tabindex="0"
                                 data-row='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8') ?>'
                                 onclick="abrirModalCompra(this)">
@@ -224,6 +249,8 @@ $tiposComprobanteMap = [
                                 <td class="text-end" data-col="total_sin_impuestos"><?= number_format((float)($r['total_sin_impuestos'] ?? 0), 2) ?></td>
                                 <td class="text-end" data-col="monto_iva">$<?= number_format((float)($r['monto_iva'] ?? 0), 2) ?></td>
                                 <td class="text-end fw-bold" data-col="importe_total">$<?= number_format((float)($r['importe_total'] ?? 0), 2) ?></td>
+                                <td class="text-center" data-col="estado_pago"><?= $estadoPagoBadge ?></td>
+                                <td class="text-center pe-3" data-col="estado"><span class="badge <?= $estadoClass ?> border border-opacity-25"><?= ucfirst($estado) ?></span></td>
                             </tr>
                     <?php endforeach;
                     endif; ?>
