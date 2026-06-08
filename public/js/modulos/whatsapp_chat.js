@@ -2,6 +2,17 @@ let WC_currentChatId = 0;
 let WC_currentPhone = '';
 let WC_pollingInterval = null;
 
+/**
+ * Convierte una ruta relativa de media (storage/whatsapp_media/...)
+ * en la URL del endpoint PHP seguro que sirve el archivo.
+ * Usa el endpoint serveMedia para validar sesión, empresa y prevenir 404 estáticos.
+ */
+function WC_mediaUrl(path) {
+    if (!path) return '';
+    if (path.startsWith('http')) return path; // URL externa (Meta CDN, etc.)
+    return `${B_URL}/modulos/whatsapp-chat/serveMedia?file=${encodeURIComponent(path)}`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     WC_cargarChats();
 
@@ -165,11 +176,14 @@ function WC_renderMensajes(mensajes) {
 
             // Cabecera de la plantilla
             if (headerType === 'image' && c.header_local_path) {
-                parts.push(`<a href="${B_URL}/${c.header_local_path}" target="_blank">
-                    <img src="${B_URL}/${c.header_local_path}" style="max-width:200px;border-radius:8px;display:block;" alt="Imagen">
+                const hUrl = WC_mediaUrl(c.header_local_path);
+                parts.push(`<a href="${hUrl}" target="_blank">
+                    <img src="${hUrl}" style="max-width:200px;border-radius:8px;display:block;" alt="Imagen"
+                         onerror="this.onerror=null;this.style.display='none';">
                 </a>`);
             } else if (headerType === 'document' && c.header_local_path) {
-                parts.push(`<a href="${B_URL}/${c.header_local_path}" target="_blank"
+                const hUrl = WC_mediaUrl(c.header_local_path);
+                parts.push(`<a href="${hUrl}" target="_blank"
                     class="btn btn-sm btn-light text-primary border mb-1">
                     <i class="bi bi-file-earmark-text"></i> Ver documento
                 </a>`);
@@ -210,7 +224,7 @@ function WC_renderMensajes(mensajes) {
         } else if (m.tipo_mensaje === 'image') {
             const c    = m.contenido || {};
             const path = c.local_path || c.image?.link || '';
-            const url  = path ? (path.startsWith('http') ? path : `${B_URL}/${path}`) : '';
+            const url  = WC_mediaUrl(path);
             if (url) {
                 contentHtml = `
                     <a href="${url}" target="_blank" style="display:inline-block;">
@@ -229,7 +243,7 @@ function WC_renderMensajes(mensajes) {
         } else if (m.tipo_mensaje === 'document') {
             const c        = m.contenido || {};
             const path     = c.local_path || c.document?.link || '';
-            const url      = path ? (path.startsWith('http') ? path : `${B_URL}/${path}`) : '';
+            const url      = WC_mediaUrl(path);
             const filename = c.document?.filename || c.filename || 'Documento';
             contentHtml = url
                 ? `<a href="${url}" target="_blank"
@@ -241,7 +255,7 @@ function WC_renderMensajes(mensajes) {
         } else if (m.tipo_mensaje === 'audio') {
             const c    = m.contenido || {};
             const path = c.local_path || c.audio?.link || '';
-            const url  = path ? (path.startsWith('http') ? path : `${B_URL}/${path}`) : '';
+            const url  = WC_mediaUrl(path);
             if (url) {
                 contentHtml = `
                     <div class="d-flex align-items-center gap-2 py-1">
@@ -262,7 +276,7 @@ function WC_renderMensajes(mensajes) {
         } else if (m.tipo_mensaje === 'video') {
             const c    = m.contenido || {};
             const path = c.local_path || c.video?.link || '';
-            const url  = path ? (path.startsWith('http') ? path : `${B_URL}/${path}`) : '';
+            const url  = WC_mediaUrl(path);
             contentHtml = url
                 ? `<div>
                        <video controls preload="none"
@@ -280,7 +294,7 @@ function WC_renderMensajes(mensajes) {
         } else if (m.tipo_mensaje === 'sticker') {
             const c    = m.contenido || {};
             const path = c.local_path || '';
-            const url  = path ? `${B_URL}/${path}` : '';
+            const url  = WC_mediaUrl(path);
             contentHtml = url
                 ? `<img src="${url}" style="max-width:110px;" alt="Sticker">`
                 : `<span class="text-muted">🖼️ Sticker</span>`;

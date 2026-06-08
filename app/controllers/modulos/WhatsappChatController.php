@@ -324,60 +324,196 @@ class WhatsappChatController extends Controller
         $fileName  = uniqid('wa_', true) . '.' . $extension;
         $localPath = $uploadDir . '/' . $fileName;
 
-        if (move_uploaded_file($file['tmp_name'], $localPath)) {
-            $whatsappService = new \App\services\WhatsappService();
-            $mimeType = mime_content_type($localPath);
-            
-            // Subir a Meta
-            $uploadResult = $whatsappService->uploadMessageMedia($idEmpresa, $localPath, $mimeType);
-            
-            if ($uploadResult['success']) {
-                $mediaId = $uploadResult['media_id'];
-                
-                // Determinar tipo (image o document)
-                $type = (strpos($mimeType, 'image/') === 0) ? 'image' : 'document';
-                
-                // Enviar el mensaje con el media_id
-                $sendResult = $whatsappService->sendMediaMessage($idEmpresa, $telefono, $mediaId, $type);
-                
-                if ($sendResult['success']) {
-                    $metaMessageId = $sendResult['data']['messages'][0]['id'] ?? null;
-                    
-                    $contenido = [
-                        'local_path' => 'storage/whatsapp_media/' . $idEmpresa . '/' . $fileName,
-                        'mime_type' => $mimeType,
-                        'media_id' => $mediaId
-                    ];
+        if (!move_uploaded_file($file['tmp_name'], $localPath)) {
+            echo json_encode(['ok' => false, 'error' => 'No se pudo guardar el archivo en el servidor']);
+            return;
+        }
 
-                    $msgId = $this->repository->saveMessage(
-                        $idEmpresa,
-                        $idChat,
-                        'OUT',
-                        $telefono,
-                        $type,
-                        $contenido,
-                        $metaMessageId,
-                        'sent'
-                    );
+        $mimeType = @mime_content_type($localPath) ?: $file['type'] ?: 'application/octet-stream';
 
-                    echo json_encode([
-                        'ok' => true,
-                        'id_mensaje' => $msgId,
-                        'local_path' => $contenido['local_path'],
-                        'type' => $type,
-                        'fecha_hora' => date('Y-m-d H:i:s')
-                    ]);
-                    return;
-                } else {
-                    echo json_encode(['ok' => false, 'error' => $sendResult['message']]);
-                    return;
-                }
-            } else {
-                echo json_encode(['ok' => false, 'error' => $uploadResult['message']]);
-                return;
+        // Determinar tipo de mensaje WhatsApp según MIME
+        if (str_starts_with($mimeType, 'image/')) {
+            $type = 'image';
+        } elseif (str_starts_with($mimeType, 'audio/')) {
+            $type = 'audio';
+        } elseif (str_starts_with($mimeType, 'video/')) {
+            $type = 'video';
+        } else {
+            $type = 'document';
+        }
+
+        // Subir archivo a Meta
+        $uploadResult = $this->whatsappService->uploadMessageMedia($idEmpresa, $localPath, $mimeType);
+
+        if (!$uploadResult['success']) {
+            // Archivo ya guardado localmente — solo falla el envío a Meta
+            echo json_encode(['ok' => false, 'error' => $uploadResult['message']]);
+            return;
+        }
+
+        $mediaId = $uploadResult['media_id'];
+
+        // Enviar el mensaje con el media_id a Meta
+        $sendResult = $this->whatsappService->sendMediaMessage($idEmpresa, $telefono, $mediaId, $type);
+
+        if (!$sendResult['success']) {
+            echo json_encode(['ok' => false, 'error' => $sendResult['message']]);
+            return;
+        }
+
+        $metaMessageId = $sendResult['data']['messages'][0]['id'] ?? null;
+
+        $contenido = [
+            'local_path' => 'storage/whatsapp_media/' . $idEmpresa . '/' . $fileName,
+            'mime_type'  => $mimeType,
+            'media_id'   => $mediaId,
+        ];
+
+        $msgId = $this->repository->saveMessage(
+            $idEmpresa,
+            $idChat,
+            'OUT',
+            $telefono,
+            $type,
+            $contenido,
+            $metaMessageId,
+            'sent'
+        );
+
+        echo json_encode([
+            'ok'              => true,
+            'id_mensaje'      => $msgId,
+            'local_path'      => $contenido['local_path'],
+            'type'            => $type,
+            'fecha_hora'      => date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    /**
+     * Sirve un archivo multimedia de WhatsApp de forma segura.
+     * Valida que el archivo pertenezca a la empresa activa del usuario.
+     * URL: /modulos/whatsapp-chat/serveMedia?file=storage/whatsapp_media/{idEmpresa}/{archivo}
+     */
+    public function serveMedia(): void
+    {
+        if (empty($_SESSION['id_empresa'])) {
+            http_response_code(403);
+            exit;
+        }
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $file      = trim($_GET['file'] ?? '');
+
+        // ── Seguridad: solo permitir rutas dentro de storage/whatsapp_media/{empresa}/ ──
+        if (empty($file)) {
+            http_response_code(400);
+            exit;
+        }
+
+        // Normalizar separadores y bloquear path traversal
+        $file = str_replace('\\', '/', $file);
+        if (str_contains($file, '..') || str_contains($file, "\0")) {
+            http_response_code(403);
+            exit;
+        }
+
+        // El archivo DEBE estar bajo storage/whatsapp_media/{idEmpresa}/
+        $allowedPrefix = 'storage/whatsapp_media/' . $idEmpresa . '/';
+        if (!str_starts_with($file, $allowedPrefix)) {
+            http_response_code(403);
+            exit;
+        }
+
+        $fullPath = MVC_ROOT . '/public/' . $file;
+
+        if (!file_exists($fullPath) || !is_file($fullPath)) {
+            // ── Intentar re-descargar desde Meta si tenemos el media_id en la BD ──
+            $redownloaded = $this->tryRedownloadMedia($idEmpresa, $file, $fullPath);
+            if (!$redownloaded) {
+                http_response_code(404);
+                echo 'Archivo no encontrado';
+                exit;
             }
         }
-        
-        echo json_encode(['ok' => false, 'error' => 'No se pudo guardar el archivo en el servidor']);
+
+        $mimeType = @mime_content_type($fullPath) ?: 'application/octet-stream';
+        $fileName = basename($fullPath);
+        $fileSize = filesize($fullPath);
+
+        // Cabeceras para streaming inline (imágenes y audio) o descarga (documentos)
+        $isInline = str_starts_with($mimeType, 'image/')
+                 || str_starts_with($mimeType, 'audio/')
+                 || str_starts_with($mimeType, 'video/');
+
+        header('Content-Type: ' . $mimeType);
+        header('Content-Length: ' . $fileSize);
+        header('Content-Disposition: ' . ($isInline ? 'inline' : 'attachment') . '; filename="' . rawurlencode($fileName) . '"');
+        header('Cache-Control: private, max-age=86400');
+        header('X-Content-Type-Options: nosniff');
+
+        // Limpiar cualquier buffer previo
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        readfile($fullPath);
+        exit;
+    }
+
+    /**
+     * Intenta re-descargar un archivo de Media desde Meta usando el media_id
+     * almacenado en whatsapp_mensajes para esa ruta.
+     */
+    private function tryRedownloadMedia(int $idEmpresa, string $relPath, string $fullPath): bool
+    {
+        try {
+            // Buscar el media_id en whatsapp_mensajes cuyo contenido tiene ese local_path
+            $stmt = $this->db->prepare(
+                "SELECT contenido FROM whatsapp_mensajes
+                 WHERE id_empresa = ?
+                   AND eliminado = false
+                   AND (
+                         contenido::text LIKE ?
+                       )
+                 LIMIT 1"
+            );
+            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $relPath) . '%';
+            $stmt->execute([$idEmpresa, $like]);
+            $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$row) {
+                return false;
+            }
+
+            $contenido = is_string($row['contenido'])
+                ? (json_decode($row['contenido'], true) ?? [])
+                : ($row['contenido'] ?? []);
+
+            // Buscar media_id en el contenido (puede estar directamente o anidado)
+            $mediaId = $contenido['media_id']
+                ?? $contenido['image']['id']
+                ?? $contenido['audio']['id']
+                ?? $contenido['video']['id']
+                ?? $contenido['document']['id']
+                ?? $contenido['sticker']['id']
+                ?? null;
+
+            if (empty($mediaId)) {
+                return false;
+            }
+
+            // Crear directorio si no existe
+            $dir = dirname($fullPath);
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+
+            $result = $this->whatsappService->downloadMedia($idEmpresa, (string)$mediaId, $fullPath);
+            return $result['success'] ?? false;
+
+        } catch (\Throwable $e) {
+            error_log('[serveMedia] Error re-descargando: ' . $e->getMessage());
+            return false;
+        }
     }
 }

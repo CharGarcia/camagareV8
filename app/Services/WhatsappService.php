@@ -190,12 +190,17 @@ class WhatsappService
             return ['success' => false, 'message' => 'Falta token de acceso o phone_number_id.'];
         }
 
+        if (!file_exists($filePath)) {
+            return ['success' => false, 'message' => 'El archivo no existe en el servidor: ' . basename($filePath)];
+        }
+
         $url = self::BASE_URL . $config['phone_number_id'] . '/media';
-        
-        $cFile = curl_file_create($filePath, $mimeType, basename($filePath));
+
+        $cFile = new \CURLFile($filePath, $mimeType, basename($filePath));
         $postData = [
             'messaging_product' => 'whatsapp',
-            'file' => $cFile
+            'type'              => $mimeType,
+            'file'              => $cFile,
         ];
 
         $ch = curl_init();
@@ -204,18 +209,26 @@ class WhatsappService
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Authorization: Bearer ' . $config['access_token']
+            'Authorization: Bearer ' . $config['access_token'],
         ]);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
 
         $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
         curl_close($ch);
+
+        if ($response === false || $curlError) {
+            return ['success' => false, 'message' => 'Error de red al subir media: ' . $curlError];
+        }
 
         $data = json_decode($response, true) ?? [];
 
         if ($httpCode !== 200 || isset($data['error']) || empty($data['id'])) {
-            return ['success' => false, 'message' => 'Error al subir media: ' . ($data['error']['message'] ?? 'Desconocido')];
+            $errMsg = $data['error']['message'] ?? ('HTTP ' . $httpCode . ' — ' . substr($response, 0, 300));
+            error_log('[uploadMessageMedia] Error: ' . $errMsg . ' | raw: ' . $response);
+            return ['success' => false, 'message' => 'Error al subir media: ' . $errMsg];
         }
 
         return ['success' => true, 'media_id' => $data['id']];
@@ -282,7 +295,12 @@ class WhatsappService
         $response = $this->makeRequest('POST', $url, $config['access_token'], $payload);
 
         if (isset($response['error'])) {
-            return ['success' => false, 'message' => 'Error enviando media: ' . ($response['error']['message'] ?? 'Desconocido'), 'data' => $response];
+            $err    = $response['error'];
+            $detail = ($err['message'] ?? 'Desconocido')
+                    . (isset($err['error_subcode']) ? ' (subcode: ' . $err['error_subcode'] . ')' : '')
+                    . (isset($err['error_data'])    ? ' — ' . $err['error_data'] : '');
+            error_log('[sendMediaMessage] Error: ' . $detail);
+            return ['success' => false, 'message' => 'Error enviando media: ' . $detail, 'data' => $response];
         }
 
         return ['success' => true, 'data' => $response];
