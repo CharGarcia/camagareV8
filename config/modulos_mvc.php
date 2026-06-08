@@ -88,6 +88,11 @@ return [
         'legacy_rutas' => [],
     ],
 
+    'modulos/opciones_ingreso_egreso' => [
+        'id_submodulo' => 44,
+        'legacy_rutas' => ['modulos/opciones-ingreso-egreso'],
+    ],
+
     // Pendientes de implementación (agregar cuando se cree el controlador):
     'modulos/vendedores' => ['id_submodulo' => 151, 'legacy_rutas' => []],
     'modulos/productos'  => ['id_submodulo' => 152, 'legacy_rutas' => []],
