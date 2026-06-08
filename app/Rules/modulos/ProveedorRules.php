@@ -74,9 +74,7 @@ class ProveedorRules
             $errores[] = 'El tipo de identificación es obligatorio.';
         }
 
-        if (empty(trim($data['email'] ?? ''))) {
-            $errores[] = 'El correo electrónico es obligatorio.';
-        } else {
+        if (!empty(trim($data['email'] ?? ''))) {
             $emails = array_map('trim', explode(',', trim($data['email'])));
             foreach ($emails as $email) {
                 if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {

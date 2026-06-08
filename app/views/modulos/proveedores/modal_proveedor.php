@@ -150,8 +150,8 @@ if (!defined('LEAFLET_LOADED')) {
                                     <input type="text" class="form-control form-control-sm" name="nombre_comercial" id="prov_nombre_comercial" maxlength="200" autocomplete="off">
                                 </div>
                                 <div class="col-md-9">
-                                    <label class="form-label small fw-bold">Correo Electrónico *</label>
-                                    <input type="text" class="form-control form-control-sm" name="email" id="prov_email" required maxlength="150" autocomplete="off" placeholder="Ej: info@proveedor.com, ventas@proveedor.com">
+                                    <label for="prov_email" class="form-label small fw-bold">Correo Electrónico <small class="text-muted fw-normal">(separados por coma)</small></label>
+                                    <input type="text" class="form-control form-control-sm" name="email" id="prov_email" maxlength="150" autocomplete="off" placeholder="Ej: info@proveedor.com, ventas@proveedor.com">
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label small fw-bold">Teléfono/Celular</label>
