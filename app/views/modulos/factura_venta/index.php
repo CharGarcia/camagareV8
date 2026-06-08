@@ -1231,6 +1231,13 @@ $perm = $permOriginal;
         }
     });
 
+    // Fix: Restaurar scroll al cerrar modal secundario si hay otro abierto
+    document.addEventListener('hidden.bs.modal', function(event) {
+        if (document.querySelectorAll('.modal.show').length > 0) {
+            document.body.classList.add('modal-open');
+        }
+    });
+
     const B_URL = '<?= $base ?>';
     const RUTA_MODULO = '<?= $rutaModulo ?>';
     // ID de la factura actualmente abierta en el modal (0 = nueva)

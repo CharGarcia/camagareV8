@@ -479,23 +479,23 @@ let WC_rrVisible  = false;  // panel visible
 let WC_rrCache    = null;   // { empresa: [], personales: [] }
 let WC_rrEditId   = 0;      // id en edición (0 = nuevo)
 
-/** Abre o cierra el panel. Si se llama sin arg alterna; con false cierra. */
+/** Abre o cierra el panel. Sin arg = alterna; false = cierra. */
 function WC_toggleRespuestasPanel(forzarEstado) {
     const panel = document.getElementById('waRespuestasPanel');
+    const btn   = document.getElementById('waChatBtnRespuestas');
     if (!panel) return;
 
     const abrir = (forzarEstado !== undefined) ? !!forzarEstado : !WC_rrVisible;
 
     if (abrir) {
-        panel.classList.remove('d-none');
         panel.style.display = 'flex';
-        panel.style.flexDirection = 'column';
         WC_rrVisible = true;
+        if (btn) btn.classList.add('active');
         WC_cargarRespuestasRapidas();
     } else {
-        panel.classList.add('d-none');
-        panel.style.display = '';
+        panel.style.display = 'none';
         WC_rrVisible = false;
+        if (btn) btn.classList.remove('active');
         WC_cancelarFormRR();
     }
 }
@@ -624,18 +624,16 @@ function WC_insertarRespuesta(id) {
 /** Muestra el formulario para crear una nueva respuesta */
 function WC_nuevaRespuesta(tipo) {
     WC_rrEditId = 0;
-    document.getElementById('waRRFormId').value      = '';
-    document.getElementById('waRRFormTipo').value    = tipo;
-    document.getElementById('waRRFormTitulo').value  = '';
+    document.getElementById('waRRFormId').value        = '';
+    document.getElementById('waRRFormTipo').value      = tipo;
+    document.getElementById('waRRFormTitulo').value    = '';
     document.getElementById('waRRFormContenido').value = '';
 
-    const form = document.getElementById('waRRForm');
-    form.classList.remove('d-none');
-
-    // Actualizar placeholder del tipo
     document.getElementById('waRRFormTitulo').placeholder =
         tipo === 'empresa' ? 'Título (ej: Cuentas bancarias)' : 'Título (ej: Mi saludo)';
 
+    const form = document.getElementById('waRRForm');
+    form.style.display = 'block';
     document.getElementById('waRRFormTitulo').focus();
 }
 
@@ -652,18 +650,15 @@ function WC_editarRespuesta(id, tipo) {
     document.getElementById('waRRFormContenido').value = item.contenido;
 
     const form = document.getElementById('waRRForm');
-    form.classList.remove('d-none');
+    form.style.display = 'block';
     document.getElementById('waRRFormTitulo').focus();
-
-    // Scroll al formulario
-    form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 /** Cancela el formulario inline */
 function WC_cancelarFormRR() {
     WC_rrEditId = 0;
     const form = document.getElementById('waRRForm');
-    if (form) form.classList.add('d-none');
+    if (form) form.style.display = 'none';
 }
 
 /** Envía al servidor crear o actualizar */
