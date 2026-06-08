@@ -58,27 +58,163 @@ class WhatsappChatController extends Controller
     public function getMensajesAjax(): void
     {
         $idEmpresa = $_SESSION['id_empresa'];
-        $idChat = (int)($_GET['id_chat'] ?? 0);
+        $idChat    = (int)($_GET['id_chat'] ?? 0);
 
         if ($idChat <= 0) {
-            echo json_encode(['ok' => false, 'error' => 'Chat no vlido']);
+            echo json_encode(['ok' => false, 'error' => 'Chat no válido']);
             return;
         }
 
-        // Marcar como ledos
+        // Marcar como leídos
         $this->repository->resetUnread($idChat);
 
         // Obtener mensajes
         $mensajes = $this->repository->getChatMessages($idEmpresa, $idChat);
 
-        // Procesar contenido JSON para enviar fcilmente al frontend
+        // Decodificar contenido JSON
         foreach ($mensajes as &$msg) {
             if (is_string($msg['contenido'])) {
                 $msg['contenido'] = json_decode($msg['contenido'], true);
             }
         }
+        unset($msg);
+
+        // Enriquecer mensajes de tipo "template" sin template_text
+        $mensajes = $this->enriquecerMensajesPlantilla($mensajes, $idEmpresa);
 
         echo json_encode(['ok' => true, 'mensajes' => $mensajes]);
+    }
+
+    /**
+     * Para cada mensaje de tipo "template" que no tenga template_text,
+     * reconstruye el contenido completo (header, body con variables,
+     * footer, botones) consultando la tabla whatsapp_plantillas.
+     */
+    private function enriquecerMensajesPlantilla(array $mensajes, int $idEmpresa): array
+    {
+        // Caché local: evita múltiples consultas por la misma plantilla
+        $plantillasCache = [];
+
+        foreach ($mensajes as &$msg) {
+            if ($msg['tipo_mensaje'] !== 'template') {
+                continue;
+            }
+
+            $c = $msg['contenido'] ?? [];
+
+            // Si ya tiene template_text con valor, no hay nada que hacer
+            if (!empty($c['template_text'])) {
+                continue;
+            }
+
+            // ── Detectar nombre de plantilla según el formato del contenido ──
+            // Formato 1 (campaña): { "template": "nombre", "variables": [...] }
+            // Formato 2 (API payload): { "template": { "name": "nombre", "components": [...] } }
+            $templateName = '';
+            $apiComponents = [];
+
+            if (is_string($c['template'] ?? null) && !empty($c['template'])) {
+                $templateName = $c['template'];
+            } elseif (is_array($c['template'] ?? null)) {
+                $templateName  = $c['template']['name'] ?? '';
+                $apiComponents = $c['template']['components'] ?? [];
+            }
+
+            if (empty($templateName)) {
+                continue;
+            }
+
+            // ── Cargar componentes de la plantilla desde la BD (con caché) ──
+            if (!array_key_exists($templateName, $plantillasCache)) {
+                $stmt = $this->db->prepare(
+                    "SELECT componentes FROM whatsapp_plantillas
+                     WHERE id_empresa = ? AND nombre = ? AND eliminado = false
+                     ORDER BY id DESC
+                     LIMIT 1"
+                );
+                $stmt->execute([$idEmpresa, $templateName]);
+                $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+                if ($row && !empty($row['componentes'])) {
+                    $plantillasCache[$templateName] = json_decode($row['componentes'], true) ?? [];
+                } else {
+                    $plantillasCache[$templateName] = null; // Plantilla no encontrada
+                }
+            }
+
+            $componentes = $plantillasCache[$templateName];
+            if (!is_array($componentes) || empty($componentes)) {
+                continue;
+            }
+
+            // ── Extraer parámetros para el BODY ──
+            // Formato campaña: "variables" = ['val1', 'val2', ...]
+            // Formato API:     "template.components" = [{type:'body', parameters:[{type:'text',text:'val'}]}]
+            $bodyParams = [];
+
+            if (!empty($c['variables']) && is_array($c['variables'])) {
+                $bodyParams = array_values($c['variables']);
+            } elseif (!empty($apiComponents)) {
+                foreach ($apiComponents as $comp) {
+                    if (strtolower($comp['type'] ?? '') === 'body') {
+                        foreach ($comp['parameters'] ?? [] as $p) {
+                            $bodyParams[] = $p['text'] ?? '';
+                        }
+                    }
+                }
+            }
+
+            // ── Reconstruir cada componente de la plantilla ──
+            $headerType = 'none';
+            $headerText = '';
+            $bodyText   = '';
+            $footerText = '';
+            $buttons    = [];
+
+            foreach ($componentes as $comp) {
+                $type = strtoupper($comp['type'] ?? '');
+
+                if ($type === 'HEADER') {
+                    $fmt        = strtolower($comp['format'] ?? 'text');
+                    $headerType = $fmt;
+                    if ($fmt === 'text') {
+                        $headerText = $comp['text'] ?? '';
+                    }
+
+                } elseif ($type === 'BODY') {
+                    $bodyText = $comp['text'] ?? '';
+                    // Sustituir {{1}}, {{2}}, ...
+                    foreach ($bodyParams as $idx => $val) {
+                        $n        = $idx + 1;
+                        $bodyText = str_replace('{{' . $n . '}}', $val, $bodyText);
+                    }
+
+                } elseif ($type === 'FOOTER') {
+                    $footerText = $comp['text'] ?? '';
+
+                } elseif ($type === 'BUTTONS') {
+                    foreach ($comp['buttons'] ?? [] as $btn) {
+                        if (!empty($btn['text'])) {
+                            $buttons[] = ['text' => $btn['text']];
+                        }
+                    }
+                }
+            }
+
+            // ── Inyectar los campos reconstruidos en el contenido ──
+            $msg['contenido']['template_text'] = $bodyText;
+            $msg['contenido']['header_type']   = $headerType;
+            $msg['contenido']['header_text']   = $headerText;
+            $msg['contenido']['footer_text']   = $footerText;
+            $msg['contenido']['buttons']       = $buttons;
+
+            // Normalizar "template" a string (puede ser array en formato API)
+            if (!is_string($msg['contenido']['template'] ?? null)) {
+                $msg['contenido']['template'] = $templateName;
+            }
+        }
+        unset($msg);
+
+        return $mensajes;
     }
 
     public function enviarMensajeAjax(): void

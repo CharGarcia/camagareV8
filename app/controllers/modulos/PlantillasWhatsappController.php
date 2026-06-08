@@ -93,7 +93,8 @@ class PlantillasWhatsappController extends BaseModuloController
                         </td>
                         <td class="text-center pe-3">
                             <button class="btn btn-sm btn-outline-secondary me-1" title="Ver detalles" onclick="WA_verDetalles(' . $r['id'] . ')"><i class="bi bi-eye"></i></button>
-                            <button class="btn btn-sm btn-outline-primary" title="Probar Envío" onclick="WA_abrirModalProbar(' . $r['id'] . ')"><i class="bi bi-send"></i></button>
+                            <button class="btn btn-sm btn-outline-primary me-1" title="Probar Envío" onclick="WA_abrirModalProbar(' . $r['id'] . ')"><i class="bi bi-send"></i></button>
+                            <button class="btn btn-sm btn-outline-warning" title="Editar" onclick="WA_abrirModalEditar(' . $r['id'] . ')"><i class="bi bi-pencil"></i></button>
                         </td>
                       </tr>';
             }
@@ -517,6 +518,161 @@ class PlantillasWhatsappController extends BaseModuloController
         $model->upsertPlantilla($idEmpresa, $metaTemplate, $idUsuario);
 
         echo json_encode(['ok' => true, 'mensaje' => 'Plantilla creada exitosamente. Se encuentra en revisión por Meta.']);
+        exit;
+    }
+
+    public function getParaEditarAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $id = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if ($id <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'ID inválido']);
+            return;
+        }
+
+        $stmt = $this->db->prepare("SELECT * FROM whatsapp_plantillas WHERE id = ? AND id_empresa = ? AND eliminado = FALSE");
+        $stmt->execute([$id, $idEmpresa]);
+        $plantilla = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$plantilla) {
+            echo json_encode(['ok' => false, 'error' => 'Plantilla no encontrada']);
+            return;
+        }
+
+        $componentes = json_decode($plantilla['componentes'], true) ?? [];
+        $cuerpo = '';
+        $tipoCabecera = 'NONE';
+        
+        foreach ($componentes as $comp) {
+            $type = $comp['type'] ?? '';
+            if ($type === 'BODY') {
+                $cuerpo = $comp['text'] ?? '';
+            } elseif ($type === 'HEADER') {
+                $tipoCabecera = $comp['format'] ?? 'NONE';
+            }
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'plantilla' => [
+                'id' => $plantilla['id'],
+                'nombre' => $plantilla['nombre'],
+                'categoria' => $plantilla['categoria'],
+                'idioma' => $plantilla['idioma'],
+                'cuerpo' => $cuerpo,
+                'tipo_cabecera' => $tipoCabecera
+            ]
+        ]);
+        exit;
+    }
+
+    public function update(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido']);
+            return;
+        }
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idPlantilla = (int) ($_POST['id_plantilla'] ?? 0);
+        $cuerpo = trim($_POST['cuerpo'] ?? '');
+        $tipoCabecera = trim($_POST['tipo_cabecera'] ?? 'NONE');
+
+        if ($idPlantilla <= 0 || empty($cuerpo)) {
+            echo json_encode(['ok' => false, 'error' => 'El cuerpo del mensaje es obligatorio.']);
+            return;
+        }
+
+        $stmt = $this->db->prepare("SELECT * FROM whatsapp_plantillas WHERE id = ? AND id_empresa = ? AND eliminado = FALSE");
+        $stmt->execute([$idPlantilla, $idEmpresa]);
+        $plantilla = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$plantilla || empty($plantilla['meta_id'])) {
+            echo json_encode(['ok' => false, 'error' => 'Plantilla no encontrada o sin ID de Meta.']);
+            return;
+        }
+
+        $components = [];
+
+        if ($tipoCabecera === 'DOCUMENT') {
+            if (isset($_FILES['pdf_ejemplo']) && $_FILES['pdf_ejemplo']['error'] === UPLOAD_ERR_OK) {
+                $mimeType = $_FILES['pdf_ejemplo']['type'];
+                if ($mimeType !== 'application/pdf') {
+                    echo json_encode(['ok' => false, 'error' => 'El archivo debe ser un PDF válido.']);
+                    return;
+                }
+
+                $configModel = new \App\models\WhatsappConfig();
+                $config = $configModel->obtenerConfiguracion($idEmpresa);
+                if (empty($config['app_id'])) {
+                    echo json_encode(['ok' => false, 'error' => 'Falta App ID de Meta en Configuración.']);
+                    return;
+                }
+
+                $tmpName = $_FILES['pdf_ejemplo']['tmp_name'];
+                $fileSize = filesize($tmpName);
+
+                $uploadResult = $this->whatsappService->uploadMedia($idEmpresa, $config['app_id'], $tmpName, $mimeType, $fileSize);
+
+                if (!$uploadResult['success']) {
+                    echo json_encode(['ok' => false, 'error' => $uploadResult['message']]);
+                    return;
+                }
+
+                $components[] = [
+                    'type' => 'HEADER',
+                    'format' => 'DOCUMENT',
+                    'example' => ['header_handle' => [$uploadResult['handle']]]
+                ];
+            } else {
+                $components[] = [
+                    'type' => 'HEADER',
+                    'format' => 'DOCUMENT'
+                ];
+            }
+        }
+
+        preg_match_all('/{{(\d+)}}/', $cuerpo, $matches);
+        $bodyComponent = [
+            'type' => 'BODY',
+            'text' => $cuerpo
+        ];
+
+        if (!empty($matches[1])) {
+            $numVars = max($matches[1]);
+            $ejemplos = [];
+            for ($i = 1; $i <= $numVars; $i++) {
+                $ejemplos[] = "ejemplo_$i";
+            }
+            $bodyComponent['example'] = [
+                'body_text' => [$ejemplos]
+            ];
+        }
+
+        $components[] = $bodyComponent;
+
+        $data = [
+            'components' => $components
+        ];
+
+        $updateResult = $this->whatsappService->updateTemplate($idEmpresa, (string)$plantilla['meta_id'], $data);
+
+        if (!$updateResult['success']) {
+            echo json_encode(['ok' => false, 'error' => $updateResult['message']]);
+            return;
+        }
+
+        $this->db->prepare("UPDATE whatsapp_plantillas SET componentes = ?, estado_meta = 'PENDING' WHERE id = ?")
+                 ->execute([json_encode($components), $idPlantilla]);
+
+        echo json_encode(['ok' => true, 'mensaje' => 'Plantilla actualizada exitosamente. El estado ahora es PENDING en Meta.']);
         exit;
     }
 }

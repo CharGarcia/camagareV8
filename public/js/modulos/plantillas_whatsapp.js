@@ -276,4 +276,104 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
+
+    // Modal Editar Plantilla - select cabecera
+    const selectEditarTipoCabecera = document.getElementById('editarTipoCabecera');
+    if (selectEditarTipoCabecera) {
+        selectEditarTipoCabecera.addEventListener('change', (e) => {
+            const divPdf = document.getElementById('divEditarPdfEjemplo');
+            if (e.target.value === 'DOCUMENT') {
+                divPdf.classList.remove('d-none');
+            } else {
+                divPdf.classList.add('d-none');
+            }
+        });
+    }
+
+    // Submit formEditarPlantilla
+    const formEditar = document.getElementById('formEditarPlantilla');
+    if (formEditar) {
+        formEditar.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btnActualizarPlantilla');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Enviando...';
+            btn.disabled = true;
+
+            const formData = new FormData(formEditar);
+
+            fetch(WA_URL + '/update', {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.ok) {
+                    Swal.fire('¡Éxito!', data.mensaje, 'success').then(() => {
+                        bootstrap.Modal.getInstance(document.getElementById('modalEditarPlantilla')).hide();
+                        fetchSearch(window.currentPage);
+                    });
+                } else {
+                    Swal.fire('Error', data.error || 'Ocurrió un error al actualizar.', 'error');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                Swal.fire('Error', 'Error de red al actualizar.', 'error');
+            })
+            .finally(() => {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            });
+        });
+    }
 });
+
+window.WA_abrirModalEditar = function(id) {
+    document.getElementById('editarIdPlantilla').value = id;
+    const form = document.getElementById('formEditarPlantilla');
+    form.reset();
+
+    const btn = document.getElementById('btnActualizarPlantilla');
+    btn.disabled = true;
+
+    Swal.fire({
+        title: 'Cargando...',
+        text: 'Obteniendo detalles de la plantilla',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
+
+    fetch(WA_URL + '/getParaEditarAjax?id=' + id, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(res => res.json())
+    .then(data => {
+        Swal.close();
+        if (data.ok) {
+            const p = data.plantilla;
+            document.getElementById('editarNombre').value = p.nombre;
+            document.getElementById('editarCategoria').value = p.categoria;
+            document.getElementById('editarIdioma').value = p.idioma;
+            document.getElementById('editarCuerpo').value = p.cuerpo;
+            
+            const selectCab = document.getElementById('editarTipoCabecera');
+            selectCab.value = p.tipo_cabecera;
+            selectCab.dispatchEvent(new Event('change'));
+
+            btn.disabled = false;
+            
+            const modal = new bootstrap.Modal(document.getElementById('modalEditarPlantilla'));
+            modal.show();
+        } else {
+            Swal.fire('Error', data.error || 'No se pudo cargar la información.', 'error');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        Swal.close();
+        Swal.fire('Error', 'Error de red al cargar.', 'error');
+    });
+};
+

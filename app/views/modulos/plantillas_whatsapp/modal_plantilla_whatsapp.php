@@ -85,3 +85,71 @@
         </div>
     </div>
 </div>
+
+<!-- Modal Editar Plantilla -->
+<div class="modal fade" id="modalEditarPlantilla" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light border-bottom-0">
+                <h5 class="modal-title fw-bold"><i class="fas fa-edit text-warning me-2"></i>Editar Plantilla WhatsApp</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            
+            <form id="formEditarPlantilla">
+                <div class="modal-body p-4">
+                    <input type="hidden" name="id_plantilla" id="editarIdPlantilla">
+                    
+                    <div class="alert alert-warning bg-warning bg-opacity-10 border-warning border-opacity-25 small mb-4">
+                        <i class="fas fa-exclamation-triangle me-1"></i> <strong>Aviso:</strong> Los cambios enviarán la plantilla a revisión en Meta nuevamente.
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-medium small text-muted">Nombre de la Plantilla</label>
+                            <input type="text" class="form-control bg-light" id="editarNombre" readonly>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label fw-medium small text-muted">Categoría</label>
+                            <input type="text" class="form-control bg-light" id="editarCategoria" readonly>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label fw-medium small text-muted">Idioma</label>
+                            <input type="text" class="form-control bg-light" id="editarIdioma" readonly>
+                        </div>
+                    </div>
+
+                    <hr class="my-4 text-muted opacity-25">
+
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label fw-medium small text-muted">Tipo de Cabecera (Opcional)</label>
+                            <select class="form-select w-auto mb-2" id="editarTipoCabecera" name="tipo_cabecera">
+                                <option value="NONE">Ninguna / Solo Texto</option>
+                                <option value="DOCUMENT">Documento (PDF)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-12 mb-3 d-none" id="divEditarPdfEjemplo">
+                            <label class="form-label fw-medium small text-muted">PDF de Ejemplo (Obligatorio para Meta si cambias la cabecera)</label>
+                            <input type="file" class="form-control" name="pdf_ejemplo" id="inputEditarPdfEjemplo" accept="application/pdf">
+                            <div class="form-text" style="font-size: 0.75rem;">Sube un PDF de muestra solo si necesitas enviar un nuevo ejemplo.</div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium small text-muted">Cuerpo del Mensaje (Body)</label>
+                        <textarea class="form-control" name="cuerpo" id="editarCuerpo" rows="5" required></textarea>
+                        <div class="form-text" style="font-size: 0.75rem;">Puedes usar variables usando llaves dobles: {{1}}, {{2}}, etc.</div>
+                    </div>
+
+                </div>
+                <div class="modal-footer bg-light border-top-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning" id="btnActualizarPlantilla">
+                        <i class="fas fa-save me-1"></i> Guardar y Enviar a Revisión
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

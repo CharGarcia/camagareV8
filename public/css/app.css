@@ -794,32 +794,67 @@ th[data-col] {
     }
 }
 
-/* --- Tablas de módulos: scroll contenido (sin mover la página) --- */
-/* NOTA: se excluye [class*="cmg-"] para no afectar cmg-menu-scroll-wrap */
+/* --- Tablas de módulos en móvil: desactivar app-shell de altura fija ---
+   El sistema body.cmg-has-table fue diseñado para desktop con overflow:hidden
+   en cascada. En móvil eso impide mostrar el scrollbar horizontal.
+   Solución: resetear todo el app-shell y usar scroll natural de página. */
 @media (max-width: 767.98px) {
-    /* overflow-x: clip en el contenido principal evita que la página se mueva
-       horizontalmente sin crear un scroll container (no rompe sticky ni el menú) */
-    .cmg-main-content {
-        overflow-x: clip;
+    /* 1. Resetear body: la PÁGINA puede hacer scroll vertical normalmente.
+          El header sticky sigue funcionando con position:sticky. */
+    body.cmg-has-table {
+        overflow: auto !important;
+        height: auto !important;
+        touch-action: auto !important;
     }
 
-    /* CONTENEDOR (-scroll): solo scroll vertical, sin arrastre lateral */
+    /* 2. Resetear el área de contenido principal */
+    body.cmg-has-table .cmg-main-content {
+        height: auto !important;
+        overflow: visible !important;
+        display: block !important;
+    }
+    body.cmg-has-table .cmg-main-content > .container,
+    body.cmg-has-table .cmg-main-content > .container-fluid {
+        display: block !important;
+        overflow: visible !important;
+        flex: none !important;
+    }
+
+    /* 3. Resetear la tarjeta de tabla: sin overflow:hidden que corte el scrollbar */
+    body.cmg-has-table .cmg-main-content .cmg-table-card {
+        display: block !important;
+        overflow: visible !important;
+        flex: none !important;
+    }
+    body.cmg-has-table .cmg-main-content .cmg-table-card > .card-body {
+        overflow: visible !important;
+        padding: 0 !important;
+    }
+
+    /* 4. CONTENEDOR (-scroll): el único scroll container, maneja ambas direcciones.
+          height:auto + max-height para que la tabla no sea infinita en vertical. */
+    body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]),
     [class*="-scroll"]:not([class*="cmg-"]) {
-        overflow-x: hidden !important;
+        height: auto !important;
+        max-height: calc(100vh - 260px) !important;
+        overflow-x: auto !important;
         overflow-y: auto !important;
-        max-width: 100% !important;
         width: 100% !important;
-        max-height: calc(100vh - 200px) !important;
-        overscroll-behavior-y: contain;
-        touch-action: pan-y;
+        max-width: 100% !important;
+        overscroll-behavior: contain;
+        touch-action: pan-x pan-y;
+        -webkit-overflow-scrolling: touch;
     }
 
-    /* Tabla: columnas se adaptan al ancho de pantalla */
+    /* 5. Tabla: ancho por contenido, mínimo el 100% del contenedor */
+    body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) .table,
     [class*="-scroll"]:not([class*="cmg-"]) .table {
-        width: 100% !important;
-        min-width: 0 !important;
-        table-layout: fixed;
+        width: auto !important;
+        min-width: 100% !important;
+        table-layout: auto;
     }
+    body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) .table td,
+    body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) .table th,
     [class*="-scroll"]:not([class*="cmg-"]) .table td,
     [class*="-scroll"]:not([class*="cmg-"]) .table th {
         overflow: hidden;
@@ -827,13 +862,19 @@ th[data-col] {
         white-space: nowrap;
     }
 
-    /* Card que envuelve la tabla */
-    .cmg-table-card {
-        max-width: 100% !important;
-        overflow: hidden;
+    /* 6. Clip horizontal en el contenido principal: la PÁGINA no se mueve
+          hacia los lados; solo se mueve dentro del contenedor -scroll */
+    .cmg-main-content {
+        overflow-x: clip;
     }
 
-    /* Columna de acciones: espacio mínimo para los botones */
+    /* 7. Card contenedor: sin overflow que corte */
+    .cmg-table-card {
+        max-width: 100% !important;
+        overflow: visible !important;
+    }
+
+    /* 8. Columna de acciones: ancho mínimo */
     [class*="-scroll"]:not([class*="cmg-"]) .table th:last-child,
     [class*="-scroll"]:not([class*="cmg-"]) .table td:last-child {
         min-width: 70px;
@@ -954,6 +995,52 @@ th[data-col] {
     .card-body .row .col-md-3 {
         flex: 0 0 100%;
         max-width: 100%;
+    }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Scrollbar visible en contenedores de tabla (webkit + Firefox)
+   En móvil overlay los scrollbars son automáticamente overlay,
+   por lo que además se agrega un indicador de gradiente derecho.
+   ──────────────────────────────────────────────────────────────── */
+[class*="-scroll"]:not([class*="cmg-"]) {
+    scrollbar-width: thin;
+    scrollbar-color: #adb5bd #f1f3f5;
+}
+[class*="-scroll"]:not([class*="cmg-"])::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+[class*="-scroll"]:not([class*="cmg-"])::-webkit-scrollbar-track {
+    background: #f1f3f5;
+}
+[class*="-scroll"]:not([class*="cmg-"])::-webkit-scrollbar-thumb {
+    background: #adb5bd;
+    border-radius: 4px;
+}
+[class*="-scroll"]:not([class*="cmg-"])::-webkit-scrollbar-thumb:hover {
+    background: #6c757d;
+}
+[class*="-scroll"]:not([class*="cmg-"])::-webkit-scrollbar-corner {
+    background: #f1f3f5;
+}
+
+/* En móvil: gradiente indicador de scroll horizontal en el borde derecho */
+@media (max-width: 767.98px) {
+    .cmg-table-card .card-body {
+        position: relative;
+    }
+    .cmg-table-card .card-body::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 32px;
+        height: 100%;
+        background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.75));
+        pointer-events: none;
+        z-index: 3;
+        transition: opacity 0.2s;
     }
 }
 

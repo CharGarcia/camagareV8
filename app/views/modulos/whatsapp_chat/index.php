@@ -69,7 +69,11 @@ $ruta_assets = '/sistema/public';
             <div class="p-3 bg-white border-top d-none" id="waChatInputArea">
                 <form id="waChatForm" class="d-flex align-items-end" onsubmit="event.preventDefault(); WC_enviarMensaje();">
                     <input type="file" id="waChatFileInput" class="d-none" accept="image/*,.pdf,.doc,.docx">
-                    <button type="button" class="btn btn-light text-muted me-2 rounded-circle" id="waChatBtnAttach" onclick="document.getElementById('waChatFileInput').click();"><i class="bi bi-paperclip"></i></button>
+                    <button type="button" class="btn btn-light text-muted me-2 rounded-circle" id="waChatBtnAttach"
+                        title="Adjuntar archivo"
+                        onclick="document.getElementById('waChatFileInput').click();">
+                        <i class="bi bi-paperclip"></i>
+                    </button>
                     <textarea class="form-control bg-light border-0 me-2" id="waChatInputText" rows="1" placeholder="Escribe un mensaje..." style="resize: none;"></textarea>
                     <button type="submit" class="btn btn-success rounded-circle" id="waChatBtnSend" style="width: 45px; height: 45px;"><i class="bi bi-send-fill"></i></button>
                 </form>

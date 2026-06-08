@@ -153,26 +153,111 @@ function WC_renderMensajes(mensajes) {
             }
             contentHtml = text.replace(/\n/g, '<br>');
         } else if (m.tipo_mensaje === 'template') {
-            if (m.contenido.template_text) {
-                // Si guardamos el texto de la plantilla en el backend
-                const tText = m.contenido.template_text.replace(/\n/g, '<br>');
+            const c = m.contenido;
+            const parts = [];
+            const headerType = (c.header_type || 'none').toLowerCase();
+
+            // Cabecera de la plantilla
+            if (headerType === 'image' && c.header_local_path) {
+                parts.push(`<a href="${B_URL}/${c.header_local_path}" target="_blank">
+                    <img src="${B_URL}/${c.header_local_path}" style="max-width:200px;border-radius:8px;display:block;" alt="Imagen">
+                </a>`);
+            } else if (headerType === 'document' && c.header_local_path) {
+                parts.push(`<a href="${B_URL}/${c.header_local_path}" target="_blank"
+                    class="btn btn-sm btn-light text-primary border mb-1">
+                    <i class="bi bi-file-earmark-text"></i> Ver documento
+                </a>`);
+            } else if (headerType === 'text' && c.header_text) {
+                parts.push(`<div class="fw-bold mb-1">${WC_escHtml(c.header_text)}</div>`);
+            }
+
+            // Cuerpo de la plantilla
+            if (c.template_text) {
+                parts.push(`<div>${WC_escHtml(c.template_text).replace(/\n/g, '<br>')}</div>`);
+            } else {
+                parts.push(`<i class="text-muted">[Plantilla: ${WC_escHtml(c.template || '')}]</i>`);
+            }
+
+            // Pie de plantilla
+            if (c.footer_text) {
+                parts.push(`<div class="text-muted mt-1" style="font-size:0.78rem;">${WC_escHtml(c.footer_text)}</div>`);
+            }
+
+            // Etiqueta de plantilla
+            parts.push(`<div class="text-muted mt-1 border-top pt-1" style="font-size:0.71rem;">
+                <i class="bi bi-megaphone"></i> Plantilla: ${WC_escHtml(c.template || '')}
+            </div>`);
+
+            // Botones (solo visual)
+            if (c.buttons && c.buttons.length > 0) {
+                let btnHtml = '<div class="mt-2 d-flex flex-wrap gap-1 border-top pt-1">';
+                c.buttons.forEach(btn => {
+                    const label = typeof btn === 'string' ? btn : (btn.text || '');
+                    if (label) btnHtml += `<span class="badge bg-white text-primary border" style="font-size:0.75rem;">${WC_escHtml(label)}</span>`;
+                });
+                btnHtml += '</div>';
+                parts.push(btnHtml);
+            }
+
+            contentHtml = parts.join('');
+
+        } else if (m.tipo_mensaje === 'image') {
+            const path = m.contenido.local_path || m.contenido.image?.link || '';
+            contentHtml = path
+                ? `<a href="${B_URL}/${path}" target="_blank">
+                       <img src="${B_URL}/${path}" style="max-width:220px;border-radius:8px;display:block;" alt="Imagen">
+                   </a>`
+                : `<span class="text-muted"><i class="bi bi-image me-1"></i>Imagen no disponible</span>`;
+
+        } else if (m.tipo_mensaje === 'document') {
+            const path     = m.contenido.local_path || m.contenido.document?.link || '';
+            const filename = m.contenido.document?.filename || 'Documento';
+            contentHtml = path
+                ? `<a href="${B_URL}/${path}" target="_blank"
+                       class="btn btn-sm btn-light text-primary border">
+                       <i class="bi bi-file-earmark-text me-1"></i>${WC_escHtml(filename)}
+                   </a>`
+                : `<span class="text-muted"><i class="bi bi-file-earmark me-1"></i>Documento no disponible</span>`;
+
+        } else if (m.tipo_mensaje === 'audio') {
+            const path = m.contenido.local_path || m.contenido.audio?.link || '';
+            if (path) {
                 contentHtml = `
-                    <div class="mb-1" style="font-size: 0.95em;">${tText}</div>
-                    <div class="text-muted" style="font-size: 0.75rem;"><i class="bi bi-megaphone"></i> Plantilla: ${m.contenido.template || ''}</div>
-                `;
+                    <div class="d-flex align-items-center gap-2 py-1">
+                        <i class="bi bi-mic-fill text-success fs-5"></i>
+                        <audio controls preload="none"
+                            style="max-width:220px; height:36px; outline:none; border-radius:20px;">
+                            <source src="${B_URL}/${path}">
+                        </audio>
+                        <a href="${B_URL}/${path}" target="_blank" download
+                           class="btn btn-sm btn-light border" title="Descargar audio">
+                            <i class="bi bi-download"></i>
+                        </a>
+                    </div>`;
             } else {
-                contentHtml = `<i>[Plantilla enviada: ${m.contenido.template || ''}]</i>`;
+                contentHtml = `<span class="text-muted"><i class="bi bi-mic-fill me-1"></i>Audio no disponible</span>`;
             }
-        } else if (m.tipo_mensaje === 'image' || m.tipo_mensaje === 'document') {
-            // Media support
-            const path = m.contenido.local_path || (m.contenido[m.tipo_mensaje]?.link) || '';
-            if (m.tipo_mensaje === 'image') {
-                contentHtml = path ? `<a href="${B_URL}/${path}" target="_blank"><img src="${B_URL}/${path}" style="max-width: 200px; border-radius: 8px;" alt="Imagen"></a>` : `<i>[Imagen no disponible]</i>`;
-            } else {
-                contentHtml = path ? `<a href="${B_URL}/${path}" target="_blank" class="btn btn-sm btn-light text-primary"><i class="bi bi-file-earmark-text"></i> Descargar Documento</a>` : `<i>[Documento no disponible]</i>`;
-            }
+
+        } else if (m.tipo_mensaje === 'video') {
+            const path = m.contenido.local_path || m.contenido.video?.link || '';
+            contentHtml = path
+                ? `<video controls preload="none"
+                       style="max-width:240px;border-radius:8px;display:block;">
+                       <source src="${B_URL}/${path}">
+                       <a href="${B_URL}/${path}" target="_blank" class="btn btn-sm btn-light text-primary">
+                           <i class="bi bi-camera-video"></i> Descargar video
+                       </a>
+                   </video>`
+                : `<span class="text-muted"><i class="bi bi-camera-video me-1"></i>Video no disponible</span>`;
+
+        } else if (m.tipo_mensaje === 'sticker') {
+            const path = m.contenido.local_path || '';
+            contentHtml = path
+                ? `<img src="${B_URL}/${path}" style="max-width:110px;" alt="Sticker">`
+                : `<span class="text-muted">🖼️ Sticker</span>`;
+
         } else {
-            contentHtml = `<i>[Mensaje multimedia: ${m.tipo_mensaje}]</i>`;
+            contentHtml = `<span class="text-muted"><i class="bi bi-paperclip me-1"></i>[${WC_escHtml(m.tipo_mensaje)}]</span>`;
         }
 
         let dateObj = new Date(m.fecha_hora);
@@ -262,6 +347,23 @@ function WC_enviarMensaje() {
         btn.disabled = false;
         Swal.fire('Error', 'Problema de red al enviar.', 'error');
     });
+}
+
+// ═══════════════════════════════════════════════════════
+//  PLANTILLAS
+// ═══════════════════════════════════════════════════════
+
+/** Caché de plantillas cargadas */
+let WC_plantillasCache = [];
+
+/** Escapa HTML para evitar XSS al renderizar contenido dinámico */
+function WC_escHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 function WC_subirArchivo(file) {

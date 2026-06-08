@@ -154,6 +154,28 @@ class WhatsappService
     }
 
     /**
+     * Actualiza una plantilla existente en Meta
+     */
+    public function updateTemplate(int $idEmpresa, string $metaTemplateId, array $data): array
+    {
+        $config = $this->configModel->obtenerConfiguracion($idEmpresa);
+
+        if (!$config || empty($config['access_token']) || empty($config['waba_id'])) {
+            return ['success' => false, 'message' => 'Configuración incompleta.'];
+        }
+
+        $url = self::BASE_URL . $metaTemplateId;
+        
+        $response = $this->makeRequest('POST', $url, $config['access_token'], $data);
+
+        if (isset($response['error'])) {
+            return ['success' => false, 'message' => 'Error al actualizar plantilla en Meta: ' . ($response['error']['message'] ?? 'Desconocido'), 'data' => $response];
+        }
+
+        return ['success' => true, 'data' => $response];
+    }
+
+    /**
      * Sube un archivo a Meta para enviar en un mensaje (POST /{phone_number_id}/media)
      */
     public function uploadMessageMedia(int $idEmpresa, string $filePath, string $mimeType): array

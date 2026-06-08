@@ -121,32 +121,55 @@ class WhatsappWebhookController extends Controller
                 if (isset($value['messages']) && is_array($value['messages'])) {
                     foreach ($value['messages'] as $message) {
                         $metaMessageId = $message['id'] ?? '';
-                        $fromPhone = $message['from'] ?? '';
-                        $type = $message['type'] ?? 'text';
-                        
-                        // Preparar el extracto rapido
-                        $extracto = $type;
+                        $fromPhone     = $message['from'] ?? '';
+                        $type          = $message['type'] ?? 'text';
+
+                        // Extracto legible para la lista de chats
+                        $extractosLabels = [
+                            'image'    => '📷 Imagen',
+                            'document' => '📄 Documento',
+                            'audio'    => '🎵 Audio',
+                            'video'    => '🎬 Video',
+                            'sticker'  => '🖼️ Sticker',
+                            'location' => '📍 Ubicación',
+                            'contacts' => '👤 Contacto',
+                        ];
+                        $extracto = $extractosLabels[$type] ?? $type;
+
                         if ($type === 'text') {
-                            $extracto = mb_substr($message['text']['body'] ?? '', 0, 50);
-                        } else if (in_array($type, ['image', 'document'])) {
-                            // Descargar media
-                            $mediaId = $message[$type]['id'] ?? '';
+                            $extracto = mb_substr($message['text']['body'] ?? '', 0, 80);
+                        }
+
+                        // Tipos de mensajes que incluyen media descargable
+                        $tiposMedia = ['image', 'document', 'audio', 'video', 'sticker'];
+
+                        if (in_array($type, $tiposMedia)) {
+                            $mediaId  = $message[$type]['id'] ?? '';
+                            $mimeType = $message[$type]['mime_type'] ?? '';
+
                             if ($mediaId) {
                                 $whatsappService = new \App\services\WhatsappService();
-                                $fileName = $mediaId . ($type === 'image' ? '.jpg' : '.pdf'); // simplificado, idealmente inferir del mime
-                                // Guardar en carpeta local
-                                $savePath = $_SERVER['DOCUMENT_ROOT'] . '/sistema/public/storage/whatsapp_media/' . $idEmpresa . '/' . $fileName;
-                                
+                                $ext      = $this->getExtensionFromMime($mimeType, $type);
+                                $fileName = $mediaId . '.' . $ext;
+                                $saveDir  = $_SERVER['DOCUMENT_ROOT'] . '/sistema/public/storage/whatsapp_media/' . $idEmpresa;
+                                $savePath = $saveDir . '/' . $fileName;
+
+                                if (!is_dir($saveDir)) {
+                                    mkdir($saveDir, 0755, true);
+                                }
+
                                 $result = $whatsappService->downloadMedia($idEmpresa, $mediaId, $savePath);
                                 if ($result['success']) {
                                     $message['local_path'] = 'storage/whatsapp_media/' . $idEmpresa . '/' . $fileName;
-                                    $extracto = 'Archivo adjunto (' . $type . ')';
+                                    $message['mime_type']  = $result['mime_type'] ?? $mimeType;
                                 }
                             }
                         }
 
                         // Crear o actualizar chat
-                        $idChat = $this->repository->getOrCreateChat($idEmpresa, $fromPhone, $contactName, $extracto, true);
+                        $idChat = $this->repository->getOrCreateChat(
+                            $idEmpresa, $fromPhone, $contactName, $extracto, true
+                        );
 
                         // Guardar el mensaje entrante
                         $this->repository->saveMessage(
@@ -168,5 +191,63 @@ class WhatsappWebhookController extends Controller
         http_response_code(200);
         echo "EVENT_RECEIVED";
         exit;
+    }
+
+    /**
+     * Determina la extensión de archivo a partir del MIME type.
+     * Utilizado para guardar los archivos multimedia recibidos con la extensión correcta.
+     */
+    private function getExtensionFromMime(string $mimeType, string $fallbackType): string
+    {
+        // Quitar parámetros del mime (ej: "audio/ogg; codecs=opus" → "audio/ogg")
+        $mimeBase = strtolower(trim(explode(';', $mimeType)[0]));
+
+        $map = [
+            // Imágenes
+            'image/jpeg'          => 'jpg',
+            'image/jpg'           => 'jpg',
+            'image/png'           => 'png',
+            'image/gif'           => 'gif',
+            'image/webp'          => 'webp',
+            'image/bmp'           => 'bmp',
+            // Audio
+            'audio/ogg'           => 'ogg',
+            'audio/mpeg'          => 'mp3',
+            'audio/mp4'           => 'm4a',
+            'audio/aac'           => 'aac',
+            'audio/amr'           => 'amr',
+            'audio/wav'           => 'wav',
+            'audio/x-wav'         => 'wav',
+            // Video
+            'video/mp4'           => 'mp4',
+            'video/3gpp'          => '3gp',
+            'video/quicktime'     => 'mov',
+            'video/webm'          => 'webm',
+            // Documentos
+            'application/pdf'                                                              => 'pdf',
+            'application/msword'                                                           => 'doc',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'     => 'docx',
+            'application/vnd.ms-excel'                                                     => 'xls',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'           => 'xlsx',
+            'application/vnd.ms-powerpoint'                                                => 'ppt',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation'   => 'pptx',
+            'text/plain'                                                                   => 'txt',
+            'application/zip'                                                              => 'zip',
+        ];
+
+        if (isset($map[$mimeBase])) {
+            return $map[$mimeBase];
+        }
+
+        // Fallback por tipo genérico
+        $defaults = [
+            'image'    => 'jpg',
+            'audio'    => 'ogg',
+            'video'    => 'mp4',
+            'document' => 'pdf',
+            'sticker'  => 'webp',
+        ];
+
+        return $defaults[$fallbackType] ?? 'bin';
     }
 }

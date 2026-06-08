@@ -5,7 +5,7 @@
 
 $base = BASE_URL;
 $urlModulo  = rtrim($base, '/') . '/modulos/configuracion-whatsapp';
-$webhookUrl = 'https://www.camagare.com.ec/whatsapp-webhook';
+$webhookUrl = 'https://erp.camagare.com.ec/whatsapp-webhook';
 ?>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
