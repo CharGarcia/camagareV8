@@ -19,7 +19,7 @@ $colorDark = $color; // se manejará con opacity en CSS
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         :root { --portal-color: <?= $color ?>; }
-        body { background: #f1f5f9; min-height: 100vh; font-family: 'Segoe UI', sans-serif; }
+        body { background: #f1f5f9; min-height: 100dvh; font-family: 'Segoe UI', sans-serif; }
 
         .portal-header { background: var(--portal-color); color: #fff; padding: 2rem 1.5rem 1.2rem; text-align: center; }
         .portal-header h4 { font-weight: 700; margin-bottom: .25rem; }

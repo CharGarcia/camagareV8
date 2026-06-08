@@ -47,7 +47,7 @@ function thSortUni($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $filtr
 }
 ?>
 <style>
-.unidades-scroll { max-height: calc(100vh - 320px); overflow-y: auto; }
+.unidades-scroll { max-height: calc(100dvh - 320px); overflow-y: auto; }
 .unidades-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
 .tipo-row, .unidad-row { cursor: pointer; }
 .tipo-row:hover, .unidad-row:hover { background-color: rgba(0,0,0,.04); }

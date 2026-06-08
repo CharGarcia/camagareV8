@@ -18,7 +18,7 @@ unset($_SESSION['permisos_msg']);
 <style>
 /* Contenedor scrollable propio (evita el CSS global de cmg-table-card que recortaba filas) */
 .permisos-tabla-wrap {
-    max-height: calc(100vh - 320px);
+    max-height: calc(100dvh - 320px);
     overflow-y: auto;
     overflow-x: hidden;
     border: 1px solid #dee2e6;

@@ -56,7 +56,7 @@ $colsRecursos = [
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfigRecursos, 'estiloVistaRecursos') ?>
 
 <style>
-    .table-container { max-height: calc(100vh - 310px); overflow-y: auto; }
+    .table-container { max-height: calc(100dvh - 310px); overflow-y: auto; }
     .table-container thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
     .clickable-row { cursor: pointer; }
     .clickable-row:hover { background-color: rgba(0,0,0,.03); }

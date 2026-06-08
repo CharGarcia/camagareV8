@@ -28,7 +28,7 @@ $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
 $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 ?>
 <style>
-    .fexqr-scroll { max-height: calc(100vh - 240px); overflow-y: auto; }
+    .fexqr-scroll { max-height: calc(100dvh - 240px); overflow-y: auto; }
     .fexqr-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
     .fexqr-row { cursor: pointer; }
     .fexqr-row:hover { background: rgba(0,0,0,.04); }

@@ -52,7 +52,7 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
     }
 
     .usuarios-sistema-scroll {
-        max-height: calc(100vh - 280px);
+        max-height: calc(100dvh - 280px);
         overflow-y: auto;
     }
 

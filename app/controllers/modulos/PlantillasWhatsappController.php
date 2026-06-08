@@ -580,12 +580,11 @@ class PlantillasWhatsappController extends BaseModuloController
             return;
         }
 
-        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEmpresa   = (int) $_SESSION['id_empresa'];
         $idPlantilla = (int) ($_POST['id_plantilla'] ?? 0);
-        $cuerpo = trim($_POST['cuerpo'] ?? '');
-        $tipoCabecera = trim($_POST['tipo_cabecera'] ?? 'NONE');
+        $nuevoCuerpo = trim($_POST['cuerpo'] ?? '');
 
-        if ($idPlantilla <= 0 || empty($cuerpo)) {
+        if ($idPlantilla <= 0 || empty($nuevoCuerpo)) {
             echo json_encode(['ok' => false, 'error' => 'El cuerpo del mensaje es obligatorio.']);
             return;
         }
@@ -599,68 +598,99 @@ class PlantillasWhatsappController extends BaseModuloController
             return;
         }
 
-        $components = [];
+        // ── Partir de los componentes actuales almacenados en la BD ───────────
+        // Meta exige recibir TODOS los componentes existentes (HEADER, BODY,
+        // FOOTER, BUTTONS). Sólo modificamos el BODY con el nuevo texto.
+        $componentesActuales = json_decode($plantilla['componentes'] ?? '[]', true) ?? [];
 
-        if ($tipoCabecera === 'DOCUMENT') {
-            if (isset($_FILES['pdf_ejemplo']) && $_FILES['pdf_ejemplo']['error'] === UPLOAD_ERR_OK) {
-                $mimeType = $_FILES['pdf_ejemplo']['type'];
-                if ($mimeType !== 'application/pdf') {
-                    echo json_encode(['ok' => false, 'error' => 'El archivo debe ser un PDF válido.']);
-                    return;
+        $updatedComponents = [];
+        $newHeaderHandle   = null; // solo si se sube nuevo PDF
+
+        foreach ($componentesActuales as $comp) {
+            $type   = strtoupper($comp['type'] ?? '');
+            $format = strtoupper($comp['format'] ?? '');
+
+            if ($type === 'HEADER') {
+                // Si es DOCUMENT y el usuario subió un PDF nuevo, actualizar handle
+                if ($format === 'DOCUMENT'
+                    && isset($_FILES['pdf_ejemplo'])
+                    && $_FILES['pdf_ejemplo']['error'] === UPLOAD_ERR_OK
+                ) {
+                    $mimeType = $_FILES['pdf_ejemplo']['type'];
+                    if ($mimeType !== 'application/pdf') {
+                        echo json_encode(['ok' => false, 'error' => 'El archivo debe ser un PDF válido.']);
+                        return;
+                    }
+
+                    $configModel = new \App\models\WhatsappConfig();
+                    $config      = $configModel->obtenerConfiguracion($idEmpresa);
+                    if (empty($config['app_id'])) {
+                        echo json_encode(['ok' => false, 'error' => 'Falta App ID de Meta en Configuración.']);
+                        return;
+                    }
+
+                    $tmpName    = $_FILES['pdf_ejemplo']['tmp_name'];
+                    $fileSize   = filesize($tmpName);
+                    $uploadResult = $this->whatsappService->uploadMedia($idEmpresa, $config['app_id'], $tmpName, $mimeType, $fileSize);
+
+                    if (!$uploadResult['success']) {
+                        echo json_encode(['ok' => false, 'error' => $uploadResult['message']]);
+                        return;
+                    }
+
+                    $newHeaderHandle = $uploadResult['handle'];
+                    $headerComp      = [
+                        'type'    => 'HEADER',
+                        'format'  => 'DOCUMENT',
+                        'example' => ['header_handle' => [$newHeaderHandle]]
+                    ];
+                    $updatedComponents[] = $headerComp;
+                } else {
+                    // Conservar el componente HEADER tal como está (sin example innecesario)
+                    $keep = ['type' => $comp['type'], 'format' => $comp['format']];
+                    if (!empty($comp['text'])) {
+                        $keep['text'] = $comp['text'];
+                    }
+                    $updatedComponents[] = $keep;
                 }
 
-                $configModel = new \App\models\WhatsappConfig();
-                $config = $configModel->obtenerConfiguracion($idEmpresa);
-                if (empty($config['app_id'])) {
-                    echo json_encode(['ok' => false, 'error' => 'Falta App ID de Meta en Configuración.']);
-                    return;
-                }
-
-                $tmpName = $_FILES['pdf_ejemplo']['tmp_name'];
-                $fileSize = filesize($tmpName);
-
-                $uploadResult = $this->whatsappService->uploadMedia($idEmpresa, $config['app_id'], $tmpName, $mimeType, $fileSize);
-
-                if (!$uploadResult['success']) {
-                    echo json_encode(['ok' => false, 'error' => $uploadResult['message']]);
-                    return;
-                }
-
-                $components[] = [
-                    'type' => 'HEADER',
-                    'format' => 'DOCUMENT',
-                    'example' => ['header_handle' => [$uploadResult['handle']]]
+            } elseif ($type === 'BODY') {
+                // Reemplazar el texto con el nuevo cuerpo
+                // NO incluir 'example' en actualizaciones (Meta lo rechaza en algunos casos)
+                $updatedComponents[] = [
+                    'type' => 'BODY',
+                    'text' => $nuevoCuerpo,
                 ];
+
+            } elseif ($type === 'FOOTER') {
+                $updatedComponents[] = [
+                    'type' => 'FOOTER',
+                    'text' => $comp['text'] ?? '',
+                ];
+
+            } elseif ($type === 'BUTTONS') {
+                // Conservar botones tal como están
+                $updatedComponents[] = $comp;
+
             } else {
-                $components[] = [
-                    'type' => 'HEADER',
-                    'format' => 'DOCUMENT'
-                ];
+                // Cualquier otro componente: conservar sin modificar
+                $updatedComponents[] = $comp;
             }
         }
 
-        preg_match_all('/{{(\d+)}}/', $cuerpo, $matches);
-        $bodyComponent = [
-            'type' => 'BODY',
-            'text' => $cuerpo
-        ];
-
-        if (!empty($matches[1])) {
-            $numVars = max($matches[1]);
-            $ejemplos = [];
-            for ($i = 1; $i <= $numVars; $i++) {
-                $ejemplos[] = "ejemplo_$i";
+        // Si la plantilla no tenía BODY (caso raro), agregarlo
+        $tieneBody = false;
+        foreach ($updatedComponents as $uc) {
+            if (strtoupper($uc['type'] ?? '') === 'BODY') {
+                $tieneBody = true;
+                break;
             }
-            $bodyComponent['example'] = [
-                'body_text' => [$ejemplos]
-            ];
+        }
+        if (!$tieneBody) {
+            $updatedComponents[] = ['type' => 'BODY', 'text' => $nuevoCuerpo];
         }
 
-        $components[] = $bodyComponent;
-
-        $data = [
-            'components' => $components
-        ];
+        $data = ['components' => $updatedComponents];
 
         $updateResult = $this->whatsappService->updateTemplate($idEmpresa, (string)$plantilla['meta_id'], $data);
 
@@ -669,10 +699,11 @@ class PlantillasWhatsappController extends BaseModuloController
             return;
         }
 
-        $this->db->prepare("UPDATE whatsapp_plantillas SET componentes = ?, estado_meta = 'PENDING' WHERE id = ?")
-                 ->execute([json_encode($components), $idPlantilla]);
+        // Actualizar componentes en la BD con los nuevos valores
+        $this->db->prepare("UPDATE whatsapp_plantillas SET componentes = ?, estado_meta = 'PENDING', updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+                 ->execute([json_encode($updatedComponents, JSON_UNESCAPED_UNICODE), $idPlantilla]);
 
-        echo json_encode(['ok' => true, 'mensaje' => 'Plantilla actualizada exitosamente. El estado ahora es PENDING en Meta.']);
+        echo json_encode(['ok' => true, 'mensaje' => 'Plantilla actualizada correctamente. Estado: PENDING (en revisión por Meta).']);
         exit;
     }
 }

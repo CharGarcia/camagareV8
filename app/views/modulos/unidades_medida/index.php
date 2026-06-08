@@ -48,7 +48,7 @@ $fromUni   = $totalUni   > 0 ? (($pageUni - 1) * $perPage) + 1 : 0;
 $toUni     = $totalUni   > 0 ? min($pageUni * $perPage, $totalUni)   : 0;
 ?>
 <style>
-.um-scroll { max-height: calc(100vh - 300px); overflow-y: auto; }
+.um-scroll { max-height: calc(100dvh - 300px); overflow-y: auto; }
 .um-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
 .tipo-row, .unidad-row { cursor: pointer; }
 .tipo-row:hover, .unidad-row:hover { background-color: rgba(0,0,0,.04); }

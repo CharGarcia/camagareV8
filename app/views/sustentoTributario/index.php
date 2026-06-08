@@ -25,7 +25,7 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 <style>
 .sustento-row { cursor: pointer; }
 .sustento-row:hover { background-color: rgba(0,0,0,.04); }
-.sustento-scroll { max-height: calc(100vh - 280px); overflow-y: auto; }
+.sustento-scroll { max-height: calc(100dvh - 280px); overflow-y: auto; }
 .sustento-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
 .min-h-badge { min-height: 28px; }
 .badge-comp-rm { cursor: pointer; }

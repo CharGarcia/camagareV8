@@ -27,7 +27,7 @@ $tiposId = ['04' => 'RUC', '05' => 'Cédula', '06' => 'Pasaporte'];
 ?>
 <style>
 .transp-header { flex-shrink: 0; }
-.transp-scroll { max-height: calc(100vh - 240px); overflow-y: auto; }
+.transp-scroll { max-height: calc(100dvh - 240px); overflow-y: auto; }
 .transp-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
 .transp-row { cursor: pointer; }
 .transp-row:hover { background-color: rgba(0,0,0,.04); }

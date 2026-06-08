@@ -36,7 +36,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     .x-small { font-size: 0.75rem; }
     /* Estilos para el listado */
     .fv-scroll {
-        max-height: calc(100vh - 240px);
+        max-height: calc(100dvh - 240px);
         overflow-y: auto;
     }
 

@@ -9,7 +9,7 @@ $cfgJs = json_encode($cfg, JSON_UNESCAPED_UNICODE);
 ?>
 <style>
 /* ── Layout diseñador ──────────────────────────────────────── */
-#disenador-wrap { display:flex; height:calc(100vh - 110px); overflow:hidden; gap:0; }
+#disenador-wrap { display:flex; height:calc(100dvh - 110px); overflow:hidden; gap:0; }
 
 #panel-campos {
     width:200px; min-width:200px; background:#f8f9fa; border-right:1px solid #dee2e6;

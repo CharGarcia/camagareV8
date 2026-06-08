@@ -31,7 +31,7 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 .retencion-row { cursor: pointer; }
 .retencion-row:hover { background-color: rgba(0,0,0,.04); }
 .retenciones-sri-header { flex-shrink: 0; }
-.retenciones-sri-scroll { max-height: calc(100vh - 280px); overflow-y: auto; }
+.retenciones-sri-scroll { max-height: calc(100dvh - 280px); overflow-y: auto; }
 .retenciones-sri-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
 </style>
 <div class="retenciones-sri-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">

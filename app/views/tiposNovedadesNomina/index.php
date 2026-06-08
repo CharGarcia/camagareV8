@@ -23,7 +23,7 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 <style>
 .tipo-novedad-row { cursor: pointer; }
 .tipo-novedad-row:hover { background-color: rgba(0,0,0,.04); }
-.tipos-novedades-scroll { max-height: calc(100vh - 280px); overflow-y: auto; }
+.tipos-novedades-scroll { max-height: calc(100dvh - 280px); overflow-y: auto; }
 .tipos-novedades-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
 </style>
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">

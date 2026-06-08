@@ -19,7 +19,7 @@ $rutaModulo  = $rutaModulo  ?? 'modulos/citas-agenda';
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig) ?>
 
 <style>
-    .agenda-scroll { max-height: calc(100vh - 260px); overflow-y: auto; }
+    .agenda-scroll { max-height: calc(100dvh - 260px); overflow-y: auto; }
     .agenda-scroll thead th {
         position: sticky; top: 0; z-index: 1;
         background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6;

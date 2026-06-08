@@ -314,14 +314,14 @@ class WhatsappChatController extends Controller
             return;
         }
 
-        // Crear directorio local
-        $uploadDir = $_SERVER['DOCUMENT_ROOT'] . '/sistema/public/storage/whatsapp_media/' . $idEmpresa;
+        // Crear directorio local (usando MVC_ROOT para ser independiente del DocumentRoot del servidor)
+        $uploadDir = MVC_ROOT . '/public/storage/whatsapp_media/' . $idEmpresa;
         if (!is_dir($uploadDir)) {
             mkdir($uploadDir, 0755, true);
         }
 
-        $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-        $fileName = uniqid() . '.' . $extension;
+        $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION) ?: 'bin');
+        $fileName  = uniqid('wa_', true) . '.' . $extension;
         $localPath = $uploadDir . '/' . $fileName;
 
         if (move_uploaded_file($file['tmp_name'], $localPath)) {

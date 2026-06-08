@@ -26,7 +26,7 @@ $cfg = $cfgs[$estado] ?? $cfgs['error'];
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
-        body { background: #f1f5f9; min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI', sans-serif; }
+        body { background: #f1f5f9; min-height: 100dvh; display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI', sans-serif; }
         .result-card { max-width: 460px; width: 100%; margin: 2rem auto; }
         .result-icon { font-size: 3.5rem; }
     </style>

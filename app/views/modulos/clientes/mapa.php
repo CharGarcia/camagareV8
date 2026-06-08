@@ -14,7 +14,7 @@ $urlBase = rtrim(BASE_URL, '/') . '/' . ltrim($rutaModulo, '/');
 
 <style>
     #mapa_clientes_principal {
-        height: calc(100vh - 220px);
+        height: calc(100dvh - 220px);
         min-height: 400px;
         border-radius: 0 0 12px 12px;
         z-index: 0;

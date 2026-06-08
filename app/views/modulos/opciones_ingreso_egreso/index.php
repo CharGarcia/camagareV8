@@ -22,7 +22,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
     }
 
     .table-container {
-        max-height: calc(100vh - 240px);
+        max-height: calc(100dvh - 240px);
         overflow-y: auto;
     }
 

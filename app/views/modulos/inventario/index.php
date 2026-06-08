@@ -37,7 +37,7 @@ $columnasTabla = [
 ?>
 <style>
     .inv-header { flex-shrink: 0; }
-    .inv-scroll { max-height: calc(100vh - 280px); overflow-y: auto; }
+    .inv-scroll { max-height: calc(100dvh - 280px); overflow-y: auto; }
     .inv-scroll thead th { position: sticky; top: 0; z-index: 10; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
     .inventario-row { cursor: pointer; }
     .inventario-row:hover { background-color: rgba(0, 0, 0, .04); }

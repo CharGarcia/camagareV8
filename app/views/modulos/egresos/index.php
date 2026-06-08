@@ -38,7 +38,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         flex-shrink: 0;
     }
     .egreso-scroll {
-        max-height: calc(100vh - 240px);
+        max-height: calc(100dvh - 240px);
         overflow-y: auto;
     }
     .egreso-scroll thead th {
@@ -2034,7 +2034,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             </div>
 
             <!-- Listado de Ítems -->
-            <div class="flex-grow-1 overflow-auto p-3" style="max-height: calc(100vh - 260px);">
+            <div class="flex-grow-1 overflow-auto p-3" style="max-height: calc(100dvh - 260px);">
                 <h6 class="small fw-bold text-muted mb-2" style="font-size:0.75rem; letter-spacing: 0.5px;">ÍTEMS DETALLADOS</h6>
                 <div id="p-container-items" class="d-flex flex-column gap-2">
                     <!-- Tarjetas de ítems inyectadas aquí -->

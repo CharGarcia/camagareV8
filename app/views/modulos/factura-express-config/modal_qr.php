@@ -19,7 +19,7 @@
     justify-content: center;
     padding: 80px 40px 40px;
     width: 100%;
-    min-height: 100vh;
+    min-height: 100dvh;
     font-family: Arial, sans-serif;
     text-align: center;
     background: #fff;

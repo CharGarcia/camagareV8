@@ -18,7 +18,7 @@ $adjBox = function(string $campo, string $label, string $icon, string $accept) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         :root { --bs-primary: #3b82f6; }
-        body { background: linear-gradient(135deg,#f8fafc 0%,#e2e8f0 100%); min-height: 100vh; font-family: 'Segoe UI', sans-serif; }
+        body { background: linear-gradient(135deg,#f8fafc 0%,#e2e8f0 100%); min-height: 100dvh; font-family: 'Segoe UI', sans-serif; }
         .page-header { background: linear-gradient(135deg,#1e293b 0%,#334155 100%); color:#fff; padding: 2rem 1.5rem; border-radius: 0 0 1.5rem 1.5rem; margin-bottom: 2rem; }
         .section-title { font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #64748b; margin-bottom: .5rem; }
         .form-label { font-size: .82rem; font-weight: 500; color: #374151; margin-bottom: .25rem; }

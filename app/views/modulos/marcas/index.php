@@ -20,7 +20,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <style>
     .marcas-scroll {
-        max-height: calc(100vh - 250px);
+        max-height: calc(100dvh - 250px);
         overflow-y: auto;
     }
 

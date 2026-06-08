@@ -27,7 +27,7 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 .icono-row { cursor: pointer; }
 .icono-row:hover { background-color: rgba(0,0,0,.04); }
 .iconos-fontawesome-header { flex-shrink: 0; }
-.iconos-fontawesome-scroll { max-height: calc(100vh - 280px); overflow-y: auto; }
+.iconos-fontawesome-scroll { max-height: calc(100dvh - 280px); overflow-y: auto; }
 .iconos-fontawesome-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
 .icon-preview { width: 28px; text-align: center; font-size: 1.1rem; }
 </style>

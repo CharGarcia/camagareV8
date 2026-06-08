@@ -38,7 +38,7 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones'], true) ? $tab : 'tareas';
 
     .cmg-table-card .table-scroll {
         overflow-y: auto;
-        max-height: calc(100vh - 290px);
+        max-height: calc(100dvh - 290px);
     }
 
     .cmg-table-card .table thead th {

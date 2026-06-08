@@ -151,7 +151,7 @@ class WhatsappWebhookController extends Controller
                                 $whatsappService = new \App\services\WhatsappService();
                                 $ext      = $this->getExtensionFromMime($mimeType, $type);
                                 $fileName = $mediaId . '.' . $ext;
-                                $saveDir  = $_SERVER['DOCUMENT_ROOT'] . '/sistema/public/storage/whatsapp_media/' . $idEmpresa;
+                                $saveDir  = MVC_ROOT . '/public/storage/whatsapp_media/' . $idEmpresa;
                                 $savePath = $saveDir . '/' . $fileName;
 
                                 if (!is_dir($saveDir)) {

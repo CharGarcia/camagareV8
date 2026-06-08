@@ -22,7 +22,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 <style>
 .gr-row { cursor: pointer; }
 .gr-row:hover { background-color: rgba(0,0,0,.04); }
-.gr-scroll { max-height: calc(100vh - 230px); overflow-y: auto; }
+.gr-scroll { max-height: calc(100dvh - 230px); overflow-y: auto; }
 .gr-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
 .gr-sortable-header { cursor: pointer; user-select: none; white-space: nowrap; }
 .modal-gr .modal-header { background: #f8f9fa; border-bottom: 1px solid #dee2e6; padding: 0.75rem 1rem; }

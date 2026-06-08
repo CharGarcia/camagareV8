@@ -21,7 +21,7 @@ $estado       = $estado ?? null; // 'aprobado' | 'cancelado' | 'rechazado' | 'er
 <link rel="stylesheet" href="https://cdn.payphonetodoesposible.com/box/v2.0/payphone-payment-box.css">
 <style>
   html { font-size: 16px !important; }
-  body { background: #f0f4f8; min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI', sans-serif; }
+  body { background: #f0f4f8; min-height: 100dvh; display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI', sans-serif; }
   .pay-card { max-width: 480px; width: 100%; margin: 2rem auto; }
 </style>
 </head>

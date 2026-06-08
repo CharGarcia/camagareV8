@@ -20,7 +20,7 @@ if (!defined('LEAFLET_LOADED')) {
 ?>
 <style>
     #mapa-proveedores {
-        height: calc(100vh - 220px);
+        height: calc(100dvh - 220px);
         min-height: 400px;
         border-radius: 10px;
         border: 1px solid #dee2e6;

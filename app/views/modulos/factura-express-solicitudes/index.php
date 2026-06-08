@@ -39,7 +39,7 @@ $estadosOpc = [
 $estadoClases = ['pendiente' => 'warning', 'aprobada' => 'info', 'rechazada' => 'danger', 'facturada' => 'success'];
 ?>
 <style>
-    .fexsol-scroll { max-height: calc(100vh - 240px); overflow-y: auto; }
+    .fexsol-scroll { max-height: calc(100dvh - 240px); overflow-y: auto; }
     .fexsol-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
     .fexsol-row { cursor: pointer; }
     .fexsol-row:hover { background: rgba(0,0,0,.04); }

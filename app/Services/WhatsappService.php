@@ -169,7 +169,11 @@ class WhatsappService
         $response = $this->makeRequest('POST', $url, $config['access_token'], $data);
 
         if (isset($response['error'])) {
-            return ['success' => false, 'message' => 'Error al actualizar plantilla en Meta: ' . ($response['error']['message'] ?? 'Desconocido'), 'data' => $response];
+            $err  = $response['error'];
+            $msg  = $err['message'] ?? 'Desconocido';
+            $sub  = isset($err['error_subcode']) ? ' (subcode: ' . $err['error_subcode'] . ')' : '';
+            $data = isset($err['error_data']) ? ' — ' . $err['error_data'] : '';
+            return ['success' => false, 'message' => 'Error al actualizar en Meta: ' . $msg . $sub . $data, 'raw' => $response];
         }
 
         return ['success' => true, 'data' => $response];

@@ -33,7 +33,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     .mesas-scroll {
-        max-height: calc(100vh - 240px);
+        max-height: calc(100dvh - 240px);
         overflow-y: auto;
     }
 

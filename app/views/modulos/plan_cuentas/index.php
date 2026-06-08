@@ -25,7 +25,7 @@ $proyectos  = $proyectos ?? [];
 ?>
 <style>
     .pc-header { flex-shrink: 0; }
-    .pc-content { max-height: calc(100vh - 200px); overflow-y: auto; padding-bottom: 20px; }
+    .pc-content { max-height: calc(100dvh - 200px); overflow-y: auto; padding-bottom: 20px; }
     .accordion-button:not(.collapsed) { background-color: rgba(13, 110, 253, 0.05); color: #0d6efd; box-shadow: none; }
     .accordion-button:focus { box-shadow: none; border-color: rgba(0,0,0,.125); }
     .accordion-item { border: 1px solid rgba(0,0,0,.08); margin-bottom: 4px; border-radius: 8px !important; overflow: hidden; }

@@ -10,7 +10,7 @@ $base = BASE_URL;
 
 <style>
     .config-scroll {
-        max-height: calc(100vh - 300px);
+        max-height: calc(100dvh - 300px);
         overflow-y: auto;
     }
 

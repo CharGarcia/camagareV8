@@ -140,20 +140,26 @@ function WC_renderMensajes(mensajes) {
     mensajes.forEach(m => {
         const isOut = m.direccion === 'OUT';
         const bubbleClass = isOut ? 'wa-bubble-out' : 'wa-bubble-in';
-        
+
+        // Garantizar que contenido sea siempre un objeto
+        if (m.contenido === null || m.contenido === undefined) {
+            m.contenido = {};
+        }
+        if (typeof m.contenido === 'string') {
+            try { m.contenido = JSON.parse(m.contenido); } catch(e) { m.contenido = {}; }
+        }
+
         let contentHtml = '';
         if (m.tipo_mensaje === 'text') {
             let text = '';
             if (isOut) {
-                // Outbound guardamos distinto o es text simple
-                text = typeof m.contenido === 'string' ? m.contenido : (m.contenido.text?.body || JSON.stringify(m.contenido));
+                text = m.contenido.text?.body || m.contenido.body || '';
             } else {
-                // Incoming
                 text = m.contenido.text?.body || '';
             }
-            contentHtml = text.replace(/\n/g, '<br>');
+            contentHtml = WC_escHtml(text).replace(/\n/g, '<br>');
         } else if (m.tipo_mensaje === 'template') {
-            const c = m.contenido;
+            const c = m.contenido || {};
             const parts = [];
             const headerType = (c.header_type || 'none').toLowerCase();
 
@@ -202,34 +208,49 @@ function WC_renderMensajes(mensajes) {
             contentHtml = parts.join('');
 
         } else if (m.tipo_mensaje === 'image') {
-            const path = m.contenido.local_path || m.contenido.image?.link || '';
-            contentHtml = path
-                ? `<a href="${B_URL}/${path}" target="_blank">
-                       <img src="${B_URL}/${path}" style="max-width:220px;border-radius:8px;display:block;" alt="Imagen">
-                   </a>`
-                : `<span class="text-muted"><i class="bi bi-image me-1"></i>Imagen no disponible</span>`;
+            const c    = m.contenido || {};
+            const path = c.local_path || c.image?.link || '';
+            const url  = path ? (path.startsWith('http') ? path : `${B_URL}/${path}`) : '';
+            if (url) {
+                contentHtml = `
+                    <a href="${url}" target="_blank" style="display:inline-block;">
+                        <img src="${url}"
+                             style="max-width:220px;max-height:300px;border-radius:8px;display:block;cursor:pointer;"
+                             alt="Imagen"
+                             onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='inline-flex';">
+                        <span class="btn btn-sm btn-light text-primary border" style="display:none;">
+                            <i class="bi bi-image me-1"></i>Ver imagen
+                        </span>
+                    </a>`;
+            } else {
+                contentHtml = `<span class="text-muted"><i class="bi bi-image me-1"></i>Imagen no disponible</span>`;
+            }
 
         } else if (m.tipo_mensaje === 'document') {
-            const path     = m.contenido.local_path || m.contenido.document?.link || '';
-            const filename = m.contenido.document?.filename || 'Documento';
-            contentHtml = path
-                ? `<a href="${B_URL}/${path}" target="_blank"
+            const c        = m.contenido || {};
+            const path     = c.local_path || c.document?.link || '';
+            const url      = path ? (path.startsWith('http') ? path : `${B_URL}/${path}`) : '';
+            const filename = c.document?.filename || c.filename || 'Documento';
+            contentHtml = url
+                ? `<a href="${url}" target="_blank"
                        class="btn btn-sm btn-light text-primary border">
                        <i class="bi bi-file-earmark-text me-1"></i>${WC_escHtml(filename)}
                    </a>`
                 : `<span class="text-muted"><i class="bi bi-file-earmark me-1"></i>Documento no disponible</span>`;
 
         } else if (m.tipo_mensaje === 'audio') {
-            const path = m.contenido.local_path || m.contenido.audio?.link || '';
-            if (path) {
+            const c    = m.contenido || {};
+            const path = c.local_path || c.audio?.link || '';
+            const url  = path ? (path.startsWith('http') ? path : `${B_URL}/${path}`) : '';
+            if (url) {
                 contentHtml = `
                     <div class="d-flex align-items-center gap-2 py-1">
                         <i class="bi bi-mic-fill text-success fs-5"></i>
                         <audio controls preload="none"
                             style="max-width:220px; height:36px; outline:none; border-radius:20px;">
-                            <source src="${B_URL}/${path}">
+                            <source src="${url}">
                         </audio>
-                        <a href="${B_URL}/${path}" target="_blank" download
+                        <a href="${url}" target="_blank" download
                            class="btn btn-sm btn-light border" title="Descargar audio">
                             <i class="bi bi-download"></i>
                         </a>
@@ -239,25 +260,33 @@ function WC_renderMensajes(mensajes) {
             }
 
         } else if (m.tipo_mensaje === 'video') {
-            const path = m.contenido.local_path || m.contenido.video?.link || '';
-            contentHtml = path
-                ? `<video controls preload="none"
-                       style="max-width:240px;border-radius:8px;display:block;">
-                       <source src="${B_URL}/${path}">
-                       <a href="${B_URL}/${path}" target="_blank" class="btn btn-sm btn-light text-primary">
-                           <i class="bi bi-camera-video"></i> Descargar video
+            const c    = m.contenido || {};
+            const path = c.local_path || c.video?.link || '';
+            const url  = path ? (path.startsWith('http') ? path : `${B_URL}/${path}`) : '';
+            contentHtml = url
+                ? `<div>
+                       <video controls preload="none"
+                           style="max-width:240px;border-radius:8px;display:block;">
+                           <source src="${url}">
+                       </video>
+                       <a href="${url}" target="_blank" download
+                          class="btn btn-sm btn-light text-primary border mt-1"
+                          style="font-size:0.75rem;">
+                          <i class="bi bi-download me-1"></i>Descargar video
                        </a>
-                   </video>`
+                   </div>`
                 : `<span class="text-muted"><i class="bi bi-camera-video me-1"></i>Video no disponible</span>`;
 
         } else if (m.tipo_mensaje === 'sticker') {
-            const path = m.contenido.local_path || '';
-            contentHtml = path
-                ? `<img src="${B_URL}/${path}" style="max-width:110px;" alt="Sticker">`
+            const c    = m.contenido || {};
+            const path = c.local_path || '';
+            const url  = path ? `${B_URL}/${path}` : '';
+            contentHtml = url
+                ? `<img src="${url}" style="max-width:110px;" alt="Sticker">`
                 : `<span class="text-muted">🖼️ Sticker</span>`;
 
         } else {
-            contentHtml = `<span class="text-muted"><i class="bi bi-paperclip me-1"></i>[${WC_escHtml(m.tipo_mensaje)}]</span>`;
+            contentHtml = `<span class="text-muted"><i class="bi bi-paperclip me-1"></i>[${WC_escHtml(m.tipo_mensaje || '')}]</span>`;
         }
 
         let dateObj = new Date(m.fecha_hora);

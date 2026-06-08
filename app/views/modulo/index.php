@@ -92,7 +92,7 @@ unset($_SESSION['modulo_msg']);
 <div class="card cmg-table-card">
     <div class="card-body p-0">
         <?php if ($tipo === 'iconos'): ?>
-        <div class="table-responsive" style="max-height:calc(100vh - 290px);overflow-y:auto;">
+        <div class="table-responsive" style="max-height:calc(100dvh - 290px);overflow-y:auto;">
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
@@ -119,7 +119,7 @@ unset($_SESSION['modulo_msg']);
             </table>
         </div>
         <?php elseif ($tipo === 'modulos'): ?>
-        <div class="table-responsive" style="max-height:calc(100vh - 290px);overflow-y:auto;">
+        <div class="table-responsive" style="max-height:calc(100dvh - 290px);overflow-y:auto;">
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
@@ -151,7 +151,7 @@ unset($_SESSION['modulo_msg']);
             </table>
         </div>
         <?php else: ?>
-        <div class="table-responsive" style="max-height:calc(100vh - 290px);overflow-y:auto;">
+        <div class="table-responsive" style="max-height:calc(100dvh - 290px);overflow-y:auto;">
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>

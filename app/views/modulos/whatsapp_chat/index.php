@@ -23,7 +23,7 @@ $ruta_assets = '/sistema/public';
     </div>
     <?php else: ?>
     
-    <div class="row m-0 border rounded shadow-sm overflow-hidden" style="height: calc(100vh - 160px);">
+    <div class="row m-0 border rounded shadow-sm overflow-hidden" style="height: calc(100dvh - 160px);">
         <!-- Sidebar Izquierdo: Lista de Chats -->
         <div class="col-md-4 col-lg-3 border-end bg-white p-0 d-flex flex-column" id="chatListContainer" style="height: 100%;">
             <div class="p-3 border-bottom bg-light d-flex align-items-center justify-content-between">

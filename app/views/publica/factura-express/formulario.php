@@ -7,7 +7,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
-        body { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); min-height: 100vh; font-family: 'Segoe UI', sans-serif; }
+        body { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); min-height: 100dvh; font-family: 'Segoe UI', sans-serif; }
         .page-header { background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%); color: #fff; padding: 2rem 1.5rem 1.5rem; }
         .form-label { font-size: .82rem; font-weight: 500; color: #374151; margin-bottom: .25rem; }
         .form-control, .form-select { font-size: .88rem; }

@@ -35,7 +35,7 @@ $estadoClases = [
 ?>
 
 <style>
-    .susc-scroll { max-height: calc(100vh - 240px); overflow-y: auto; }
+    .susc-scroll { max-height: calc(100dvh - 240px); overflow-y: auto; }
     .susc-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
     .susc-row { cursor: pointer; }
     .susc-row:hover { background-color: rgba(0,0,0,.04); }
