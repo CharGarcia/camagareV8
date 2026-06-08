@@ -230,7 +230,7 @@ class ProveedoresController extends BaseModuloController
             $data['formas_pago'] = $repoFP->getFormasFiltradas($idEmpresa, 'EGRESO');
 
             // 8. Conceptos de Egreso
-            $sqlConceptos = "SELECT id, nombre FROM empresa_opciones_ingreso_egreso WHERE id_empresa = ? AND aplica_egresos = TRUE AND comportamiento != 'GENERAL' AND eliminado = FALSE ORDER BY nombre ASC";
+            $sqlConceptos = "SELECT id, nombre, comportamiento FROM empresa_opciones_ingreso_egreso WHERE id_empresa = ? AND aplica_egresos = TRUE AND eliminado = FALSE ORDER BY nombre ASC";
             $stConceptos = $db->prepare($sqlConceptos);
             $stConceptos->execute([$idEmpresa]);
             $data['conceptos_egreso'] = $stConceptos->fetchAll(\PDO::FETCH_ASSOC);

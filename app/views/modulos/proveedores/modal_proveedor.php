@@ -264,7 +264,6 @@ if (!defined('LEAFLET_LOADED')) {
                                         <option value="">- Seleccione -</option>
                                         <option value="TRANSFERENCIA">Transferencia</option>
                                         <option value="DEBITO">Débito</option>
-                                        <option value="CHEQUE">Cheque</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6">
@@ -276,9 +275,10 @@ if (!defined('LEAFLET_LOADED')) {
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold"><i class="bi bi-tags me-1"></i>Concepto de egreso predeterminado</label>
-                                    <select class="form-select form-select-sm" name="id_egreso_concepto_predeterminado" id="prov_id_egreso_concepto">
+                                    <select class="form-select form-select-sm bg-light" id="prov_id_egreso_concepto" disabled>
                                         <option value="">-- Seleccione --</option>
                                     </select>
+                                    <input type="hidden" name="id_egreso_concepto_predeterminado" id="prov_id_egreso_concepto_hidden">
                                     <div class="form-text text-muted" style="font-size: 10px;">Concepto utilizado para generar el egreso.</div>
                                 </div>
                             </div>

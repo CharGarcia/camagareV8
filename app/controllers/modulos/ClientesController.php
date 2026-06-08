@@ -291,6 +291,12 @@ class ClientesController extends BaseModuloController
                 return strtoupper($f['tipo'] ?? '') !== 'TARJETA';
             }));
 
+            // 6. Conceptos de Ingreso (Para auto-cobro)
+            $db = \App\core\Database::getConnection();
+            $stC = $db->prepare("SELECT id, nombre, comportamiento FROM empresa_opciones_ingreso_egreso WHERE id_empresa = ? AND aplica_ingresos = TRUE AND eliminado = FALSE ORDER BY nombre ASC");
+            $stC->execute([$idEmpresa]);
+            $data['conceptos_ingreso'] = $stC->fetchAll(\PDO::FETCH_ASSOC);
+
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

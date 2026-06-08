@@ -224,6 +224,14 @@ if (!defined('LEAFLET_LOADED')) {
                                         <option value="">- Seleccione -</option>
                                     </select>
                                 </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold"><i class="bi bi-tags me-1"></i>Concepto de ingreso predeterminado</label>
+                                    <select class="form-select form-select-sm bg-light" id="cliente_id_ingreso_concepto" disabled>
+                                        <option value="">-- Seleccione --</option>
+                                    </select>
+                                    <input type="hidden" name="id_ingreso_concepto_predeterminado" id="cliente_id_ingreso_concepto_hidden">
+                                    <div class="form-text text-muted" style="font-size: 10px;">Concepto utilizado para generar el cobro automático.</div>
+                                </div>
                                 <div class="col-md-6 d-none" id="wrapper_tipo_operacion_bancaria">
                                     <label for="cliente_tipo_operacion_bancaria" class="form-label small fw-bold">Operación Bancaria</label>
                                     <select class="form-select form-select-sm bg-warning bg-opacity-10" name="tipo_operacion_bancaria_predeterminada" id="cliente_tipo_operacion_bancaria">

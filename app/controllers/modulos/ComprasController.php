@@ -391,7 +391,7 @@ class ComprasController extends BaseModuloController
                     [
                         'id_forma_pago'             => $idFormaPago,
                         'monto'                     => $montoPagar,
-                        'fecha_cobro'               => $fechaEgreso,
+                        'fecha_cobro'               => ($tipoOp === 'CHEQUE' && !empty($post['fecha_cobro'])) ? $post['fecha_cobro'] : $fechaEgreso,
                         'tipo_operacion_bancaria'   => $tipoOp,
                         'numero_cheque'             => ($tipoOp === 'CHEQUE') ? (!empty($post['numero_operacion']) ? trim($post['numero_operacion']) : null) : null,
                         'referencia'                => !empty($post['numero_operacion']) ? trim($post['numero_operacion']) : (!empty($post['observaciones']) ? trim($post['observaciones']) : null),

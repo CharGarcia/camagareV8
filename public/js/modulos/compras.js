@@ -2245,8 +2245,30 @@ window.CMG_cargarPagosTab = async function() {
                         (_egresoDeps.conceptos || []).map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
                     
                     // Autoseleccionar el primer concepto que tenga comportamiento 'COMPRA'
-                    const cCompra = (_egresoDeps.conceptos || []).find(c => c.comportamiento === 'COMPRA');
-                    if (cCompra) comboConc.value = cCompra.id;
+                    let cCompra = (_egresoDeps.conceptos || []).find(c => c.comportamiento === 'COMPRA');
+                    if (!cCompra) {
+                        cCompra = (_egresoDeps.conceptos || []).find(c => {
+                            const n = (c.nombre || '').toLowerCase();
+                            return n.includes('compra') || n.includes('proveedor');
+                        });
+                    }
+                    if (cCompra) {
+                        comboConc.value = cCompra.id;
+                        comboConc.disabled = true;
+                        comboConc.classList.add('bg-light');
+                        comboConc.title = 'El concepto se define automáticamente para egresos de compras.';
+                        
+                        // Asegurarnos de que el valor se envíe en el FormData a pesar de estar disabled
+                        let hd = document.getElementById('pagoConcepto_hidden');
+                        if (!hd) {
+                            hd = document.createElement('input');
+                            hd.type = 'hidden';
+                            hd.id = 'pagoConcepto_hidden';
+                            hd.name = 'id_egreso_concepto'; // o el nombre que use para enviar al backend
+                            comboConc.parentNode.appendChild(hd);
+                        }
+                        hd.value = cCompra.id;
+                    }
                 }
 
                 const comboFP = document.getElementById('pagoFormaPago');
@@ -2379,6 +2401,11 @@ window.CMG_toggleEgresoBancoForm = function(formaPagoId) {
         divBanco.classList.remove('d-none');
         const inputOp = document.getElementById('pagoTipoOp');
         if (inputOp) inputOp.required = true;
+        
+        // Disparar toggle interno
+        if (inputOp && window.CMG_toggleTipoOp) {
+            window.CMG_toggleTipoOp(inputOp.value);
+        }
     } else {
         divBanco.classList.add('d-none');
         const inputOp = document.getElementById('pagoTipoOp');
@@ -2386,8 +2413,32 @@ window.CMG_toggleEgresoBancoForm = function(formaPagoId) {
         // Limpiar campos
         const inputNum = document.getElementById('pagoNumOp');
         if (inputNum) inputNum.value = '';
-        const inputB = document.getElementById('pagoBancoId');
-        if (inputB) inputB.value = '';
+        const inputFC = document.getElementById('pagoFechaCobro');
+        if (inputFC) inputFC.value = '';
+    }
+};
+
+window.CMG_toggleTipoOp = function(tipo) {
+    const divNumOp = document.getElementById('pagoDivNumOp');
+    const lblNumOp = document.getElementById('pagoLblNumOp');
+    const divFechaCobro = document.getElementById('pagoDivFechaCobro');
+    const inputNumOp = document.getElementById('pagoNumOp');
+
+    if (tipo === 'CHEQUE') {
+        if (lblNumOp) lblNumOp.innerHTML = '<i class="bi bi-card-checklist me-1"></i>Nº Cheque';
+        if (inputNumOp) inputNumOp.placeholder = 'Autogenerado / Nº';
+        if (divFechaCobro) divFechaCobro.classList.remove('d-none');
+        
+        // Fecha cobro por defecto a hoy si esta vacía
+        const inputFC = document.getElementById('pagoFechaCobro');
+        if (inputFC && !inputFC.value) {
+            const d = new Date();
+            inputFC.value = d.toISOString().split('T')[0];
+        }
+    } else {
+        if (lblNumOp) lblNumOp.textContent = 'Nº Referencia';
+        if (inputNumOp) inputNumOp.placeholder = 'Nº doc / Transf';
+        if (divFechaCobro) divFechaCobro.classList.add('d-none');
     }
 };
 
@@ -2459,7 +2510,7 @@ window.CMG_registrarPagoEgreso = async function(e) {
             id_forma_pago: parseInt(document.getElementById('pagoFormaPago').value, 10),
             tipo_operacion_bancaria: esBanco ? (document.getElementById('pagoTipoOp')?.value || null) : null,
             numero_operacion: esBanco ? (document.getElementById('pagoNumOp')?.value || null) : null,
-            banco_id: esBanco ? (document.getElementById('pagoBancoId')?.value || null) : null,
+            fecha_cobro: esBanco && document.getElementById('pagoTipoOp')?.value === 'CHEQUE' ? (document.getElementById('pagoFechaCobro')?.value || null) : null,
             observaciones: document.getElementById('pagoObservaciones')?.value || ''
         };
 

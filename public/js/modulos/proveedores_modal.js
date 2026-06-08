@@ -57,10 +57,15 @@
         const selOp = document.getElementById('prov_tipo_operacion_bancaria');
         if (!selFp || !divOp || !selOp) return;
 
+        // Si forceId es un objeto Event (cuando se llama desde addEventListener), lo ignoramos
+        if (forceId && typeof forceId === 'object') {
+            forceId = null;
+        }
+
         const val = parseInt(forceId !== null ? forceId : selFp.value, 10) || 0;
         const fp = datosCatalogosProv?.formas_pago?.find(x => parseInt(x.id, 10) === val);
 
-        if (fp && fp.tipo === 'BANCO') {
+        if (fp && fp.tipo && fp.tipo.toUpperCase() === 'BANCO') {
             divOp.classList.remove('d-none');
         } else {
             divOp.classList.add('d-none');
@@ -174,12 +179,37 @@
         const selConcepto = document.getElementById('prov_id_egreso_concepto');
         if (selConcepto && datosCatalogosProv.conceptos_egreso) {
             selConcepto.innerHTML = '<option value="">-- Seleccione --</option>';
+            let idCompraDefault = null;
+            let fallbackDefault = null;
+            
             datosCatalogosProv.conceptos_egreso.forEach(c => {
                 const opt = document.createElement('option');
                 opt.value = c.id;
                 opt.textContent = c.nombre;
+                
+                if (c.comportamiento === 'COMPRA') {
+                    idCompraDefault = c.id;
+                } else {
+                    const n = (c.nombre || '').toLowerCase();
+                    if (n.includes('compra') || n.includes('proveedor')) {
+                        fallbackDefault = c.id;
+                    }
+                }
                 selConcepto.appendChild(opt);
             });
+            
+            if (!idCompraDefault && fallbackDefault) {
+                idCompraDefault = fallbackDefault;
+            }
+            
+            // Auto-seleccionar siempre el concepto por defecto de Compras (porque está deshabilitado)
+            if (idCompraDefault) {
+                selConcepto.value = idCompraDefault;
+            }
+            
+            // Sincronizar siempre el hidden
+            const hdConcepto = document.getElementById('prov_id_egreso_concepto_hidden');
+            if (hdConcepto) hdConcepto.value = selConcepto.value;
         }
     }
 
@@ -367,7 +397,10 @@
         setVal('prov_tipo_operacion_bancaria', data.tipo_operacion_bancaria_predeterminada);
         toggleOperacionBancaria(data.id_forma_pago_predeterminada);
         setVal('prov_monto_maximo', data.monto_maximo_auto_pago);
-        setVal('prov_id_egreso_concepto', data.id_egreso_concepto_predeterminado);
+        if (data.id_egreso_concepto_predeterminado) {
+            setVal('prov_id_egreso_concepto', data.id_egreso_concepto_predeterminado);
+            setVal('prov_id_egreso_concepto_hidden', data.id_egreso_concepto_predeterminado);
+        }
         const statusVal = (data.status === false || data.status === 'false' || data.status === 0) ? '0' : '1';
         setVal('prov_status', statusVal);
 

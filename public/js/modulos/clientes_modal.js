@@ -343,6 +343,40 @@
                 }
             });
         }
+
+        const selConcepto = document.getElementById('cliente_id_ingreso_concepto');
+        if (selConcepto && datosCatalogos.conceptos_ingreso) {
+            selConcepto.innerHTML = '<option value="">-- Seleccione --</option>';
+            let idVentaDefault = null;
+            let fallbackDefault = null;
+            
+            datosCatalogos.conceptos_ingreso.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = c.nombre;
+                
+                if (c.comportamiento === 'FACTURA_VENTA' || c.comportamiento === 'COBRO_FACTURA') {
+                    idVentaDefault = c.id;
+                } else {
+                    const n = (c.nombre || '').toLowerCase();
+                    if (n.includes('venta') || n.includes('factura')) {
+                        fallbackDefault = c.id;
+                    }
+                }
+                selConcepto.appendChild(opt);
+            });
+            
+            if (!idVentaDefault && fallbackDefault) {
+                idVentaDefault = fallbackDefault;
+            }
+            
+            if (idVentaDefault) {
+                selConcepto.value = idVentaDefault;
+            }
+            
+            const hdConcepto = document.getElementById('cliente_id_ingreso_concepto_hidden');
+            if (hdConcepto) hdConcepto.value = selConcepto.value;
+        }
     }
 
 
@@ -705,6 +739,11 @@
         setV('cliente_id_forma_cobro_predeterminada', data.id_forma_cobro_predeterminada);
         setV('cliente_tipo_operacion_bancaria', data.tipo_operacion_bancaria_predeterminada || 'TRANSFERENCIA');
         setV('cliente_monto_maximo_auto_cobro', data.monto_maximo_auto_cobro);
+
+        if (data.id_ingreso_concepto_predeterminado) {
+            setV('cliente_id_ingreso_concepto', data.id_ingreso_concepto_predeterminado);
+            setV('cliente_id_ingreso_concepto_hidden', data.id_ingreso_concepto_predeterminado);
+        }
 
         const selFc = document.getElementById('cliente_id_forma_cobro_predeterminada');
         if (selFc) {

@@ -17,6 +17,14 @@ class ClienteRepository extends BaseRepository
     public function __construct()
     {
         parent::__construct('clientes');
+        
+        try {
+            // Inyectar columna id_ingreso_concepto_predeterminado si no existe
+            $check = $this->db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'clientes' AND column_name = 'id_ingreso_concepto_predeterminado'");
+            if (!$check->fetch()) {
+                $this->db->exec("ALTER TABLE clientes ADD COLUMN id_ingreso_concepto_predeterminado INT NULL");
+            }
+        } catch (\Throwable $e) {}
     }
 
     /**
@@ -135,13 +143,13 @@ class ClienteRepository extends BaseRepository
         $sql = "INSERT INTO {$this->table} (
                     id_empresa, id_usuario, nombre, tipo_id, identificacion, telefono, email,
                     direccion, plazo, provincia, ciudad, status, id_vendedor,
-                    id_forma_pago_sri, id_forma_cobro_predeterminada, tipo_operacion_bancaria_predeterminada, monto_maximo_auto_cobro,
+                    id_forma_pago_sri, id_forma_cobro_predeterminada, tipo_operacion_bancaria_predeterminada, monto_maximo_auto_cobro, id_ingreso_concepto_predeterminado,
                     latitud, longitud, geocodificado_en,
                     created_by, created_at, eliminado
                 ) VALUES (
                     :id_empresa, :id_usuario, :nombre, :tipo_id, :identificacion, :telefono, :email,
                     :direccion, :plazo, :provincia, :ciudad, :status, :id_vendedor,
-                    :id_forma_pago_sri, :id_forma_cobro_predeterminada, :tipo_operacion_bancaria_predeterminada, :monto_maximo_auto_cobro,
+                    :id_forma_pago_sri, :id_forma_cobro_predeterminada, :tipo_operacion_bancaria_predeterminada, :monto_maximo_auto_cobro, :id_ingreso_concepto_predeterminado,
                     :latitud::numeric, :longitud::numeric, :geocodificado_en::timestamp,
                     :id_u, CURRENT_TIMESTAMP, false
                 )";
@@ -164,12 +172,13 @@ class ClienteRepository extends BaseRepository
             ':id_forma_cobro_predeterminada' => $data['id_forma_cobro_predeterminada'] ?? null,
             ':tipo_operacion_bancaria_predeterminada' => $data['tipo_operacion_bancaria_predeterminada'] ?? null,
             ':monto_maximo_auto_cobro' => $data['monto_maximo_auto_cobro'] ?? null,
+            ':id_ingreso_concepto_predeterminado' => $data['id_ingreso_concepto_predeterminado'] ?? null,
             ':latitud'          => $data['latitud'] ?? null,
             ':longitud'         => $data['longitud'] ?? null,
             ':geocodificado_en' => (isset($data['latitud']) && $data['latitud'] !== null) ? date('Y-m-d H:i:s') : null,
             ':id_u'             => $data['id_usuario']
         ]);
-        return $this->lastInsertId('clientes_id_seq');
+        return (int) $this->db->lastInsertId('clientes_id_seq');
     }
 
     /**
@@ -200,6 +209,7 @@ class ClienteRepository extends BaseRepository
                 id_forma_cobro_predeterminada = :id_forma_cobro_predeterminada,
                 tipo_operacion_bancaria_predeterminada = :tipo_operacion_bancaria_predeterminada,
                 monto_maximo_auto_cobro = :monto_maximo_auto_cobro,
+                id_ingreso_concepto_predeterminado = :id_ingreso_concepto_predeterminado,
                 latitud = :latitud::numeric,
                 longitud = :longitud::numeric,
                 {$campoCodificado}
@@ -224,6 +234,7 @@ class ClienteRepository extends BaseRepository
             ':id_forma_cobro_predeterminada' => $data['id_forma_cobro_predeterminada'] ?? null,
             ':tipo_operacion_bancaria_predeterminada' => $data['tipo_operacion_bancaria_predeterminada'] ?? null,
             ':monto_maximo_auto_cobro'       => $data['monto_maximo_auto_cobro'] ?? null,
+            ':id_ingreso_concepto_predeterminado' => $data['id_ingreso_concepto_predeterminado'] ?? null,
             ':latitud'          => $data['latitud'] ?? null,
             ':longitud'         => $data['longitud'] ?? null,
             ':id_u'             => $data['id_usuario'],

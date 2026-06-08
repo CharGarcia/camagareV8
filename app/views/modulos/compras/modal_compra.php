@@ -452,21 +452,19 @@
                             <div class="border border-warning border-opacity-25 rounded-2 p-2 bg-warning bg-opacity-10 mb-1 row g-2">
                               <div class="col-6">
                                 <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Op. Bancaria</label>
-                                <select class="form-select form-select-sm" id="pagoTipoOp">
+                                <select class="form-select form-select-sm" id="pagoTipoOp" onchange="CMG_toggleTipoOp(this.value)">
                                   <option value="TRANSFERENCIA">Transferencia</option>
                                   <option value="DEBITO">Débito</option>
                                   <option value="CHEQUE">Cheque</option>
                                 </select>
                               </div>
-                              <div class="col-6">
-                                <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Nº Referencia</label>
+                              <div class="col-6" id="pagoDivNumOp">
+                                <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;" id="pagoLblNumOp">Nº Referencia</label>
                                 <input type="text" class="form-control form-control-sm" id="pagoNumOp" placeholder="Nº doc / Transf">
                               </div>
-                              <div class="col-12">
-                                <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Banco</label>
-                                <select class="form-select form-select-sm" id="pagoBancoId">
-                                  <option value="">- Opcional -</option>
-                                </select>
+                              <div class="col-6 d-none" id="pagoDivFechaCobro">
+                                <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Fecha Cobro</label>
+                                <input type="date" class="form-control form-control-sm" id="pagoFechaCobro">
                               </div>
                             </div>
                           </div>
