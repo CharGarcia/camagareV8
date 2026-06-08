@@ -65,6 +65,48 @@ $ruta_assets = '/sistema/public';
                 <!-- Los mensajes se inyectan aquí -->
             </div>
 
+            <!-- Panel Respuestas Rápidas (flotante sobre el input) -->
+            <div id="waRespuestasPanel" class="d-none bg-white border rounded-3 shadow-sm mx-3 mb-1"
+                 style="max-height:340px;overflow:hidden;display:flex;flex-direction:column;">
+                <!-- Header del panel -->
+                <div class="d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-light rounded-top-3">
+                    <span class="fw-semibold" style="font-size:.85rem;"><i class="bi bi-lightning-charge-fill text-warning me-1"></i>Respuestas rápidas</span>
+                    <button type="button" class="btn-close btn-close-sm" onclick="WC_toggleRespuestasPanel(false)"></button>
+                </div>
+                <!-- Formulario inline crear/editar -->
+                <div id="waRRForm" class="d-none px-3 py-2 border-bottom bg-white" style="font-size:.82rem;">
+                    <div class="mb-1">
+                        <input type="hidden" id="waRRFormId" value="">
+                        <input type="hidden" id="waRRFormTipo" value="personal">
+                        <input type="text" id="waRRFormTitulo" class="form-control form-control-sm mb-1" placeholder="Título (ej: Cuentas bancarias)" maxlength="100">
+                        <textarea id="waRRFormContenido" class="form-control form-control-sm" rows="3"
+                                  placeholder="Texto completo que se insertará en el chat..."
+                                  style="resize:vertical;min-height:60px;"></textarea>
+                    </div>
+                    <div class="d-flex gap-1 justify-content-end">
+                        <button type="button" class="btn btn-sm btn-light border" onclick="WC_cancelarFormRR()">Cancelar</button>
+                        <button type="button" class="btn btn-sm btn-success" onclick="WC_guardarRespuesta()">
+                            <i class="bi bi-check-lg me-1"></i>Guardar
+                        </button>
+                    </div>
+                </div>
+                <!-- Lista scrolleable -->
+                <div id="waRRLista" class="overflow-auto flex-grow-1" style="font-size:.82rem;">
+                    <div class="text-center text-muted py-3"><div class="spinner-border spinner-border-sm"></div></div>
+                </div>
+                <!-- Footer: botones nueva respuesta -->
+                <div class="d-flex border-top bg-light rounded-bottom-3" style="font-size:.78rem;">
+                    <button type="button" class="btn btn-sm btn-light flex-fill rounded-0 rounded-bottom-start py-1 border-end"
+                            onclick="WC_nuevaRespuesta('empresa')" title="Nueva respuesta compartida para toda la empresa">
+                        <i class="bi bi-building me-1 text-primary"></i>+ Empresa
+                    </button>
+                    <button type="button" class="btn btn-sm btn-light flex-fill rounded-0 rounded-bottom-end py-1"
+                            onclick="WC_nuevaRespuesta('personal')" title="Nueva respuesta solo para ti">
+                        <i class="bi bi-person me-1 text-secondary"></i>+ Personal
+                    </button>
+                </div>
+            </div>
+
             <!-- Input Area -->
             <div class="p-3 bg-white border-top d-none" id="waChatInputArea">
                 <form id="waChatForm" class="d-flex align-items-end" onsubmit="event.preventDefault(); WC_enviarMensaje();">
@@ -73,6 +115,11 @@ $ruta_assets = '/sistema/public';
                         title="Adjuntar archivo"
                         onclick="document.getElementById('waChatFileInput').click();">
                         <i class="bi bi-paperclip"></i>
+                    </button>
+                    <button type="button" class="btn btn-light text-muted me-2 rounded-circle" id="waChatBtnRespuestas"
+                        title="Respuestas rápidas"
+                        onclick="WC_toggleRespuestasPanel()">
+                        <i class="bi bi-lightning-charge-fill text-warning"></i>
                     </button>
                     <textarea class="form-control bg-light border-0 me-2" id="waChatInputText" rows="1" placeholder="Escribe un mensaje..." style="resize: none;"></textarea>
                     <button type="submit" class="btn btn-success rounded-circle" id="waChatBtnSend" style="width: 45px; height: 45px;"><i class="bi bi-send-fill"></i></button>
@@ -142,5 +189,19 @@ $ruta_assets = '/sistema/public';
 #waChatMessages {
     display: flex;
     flex-direction: column;
+}
+
+/* Respuestas rápidas */
+#waRespuestasPanel {
+    position: relative;
+    z-index: 10;
+}
+.wa-rr-item:hover {
+    background-color: #f8f9fa;
+}
+#waChatBtnRespuestas.active,
+#waChatBtnRespuestas:focus {
+    background-color: #fff8e1;
+    color: #e6a800;
 }
 </style>

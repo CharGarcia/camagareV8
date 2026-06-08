@@ -2087,6 +2087,7 @@ $perm = $permOriginal;
         const btnPdf       = document.getElementById('m-btn-pdf');
         const btnXml       = document.getElementById('m-btn-xml');
         const btnCorreo    = document.getElementById('m-btn-correo');
+        const btnWhatsapp  = document.getElementById('m-btn-whatsapp');
         const btnTicket    = document.getElementById('m-btn-ticket');
         const btnAnular    = document.getElementById('btnAnularFacturaModal');
         const vrs = document.querySelectorAll('.modal-body .vr'); // Separadores visuales
@@ -2098,6 +2099,7 @@ $perm = $permOriginal;
             if (btnPdf) btnPdf.classList.add('d-none');
             if (btnXml) btnXml.classList.add('d-none');
             if (btnCorreo) btnCorreo.classList.add('d-none');
+            if (btnWhatsapp) btnWhatsapp.classList.add('d-none');
             if (btnTicket) btnTicket.classList.add('d-none');
             if (btnAnular) btnAnular.classList.add('d-none');
             vrs.forEach(v => v.classList.add('d-none'));
@@ -2110,6 +2112,7 @@ $perm = $permOriginal;
         if (btnPdf) btnPdf.classList.remove('d-none');
         if (btnXml) btnXml.classList.remove('d-none');
         if (btnCorreo) btnCorreo.classList.remove('d-none');
+        if (btnWhatsapp) btnWhatsapp.classList.remove('d-none');
         if (btnTicket) btnTicket.classList.remove('d-none');
         vrs.forEach(v => v.classList.remove('d-none'));
 
@@ -2120,6 +2123,7 @@ $perm = $permOriginal;
         if (btnDuplicar) btnDuplicar.disabled = false;
         if (btnPdf) btnPdf.disabled = false;
         if (btnCorreo) btnCorreo.disabled = !esAutorizado;
+        if (btnWhatsapp) btnWhatsapp.disabled = !esAutorizado;
 
         // Botón SRI: visible cuando NO está autorizado, oculto si ya está autorizado
         if (btnSri) {
@@ -6007,6 +6011,11 @@ $perm = $permNCRespaldo;
 <script src="<?= BASE_URL ?>/js/modulos/transportistas_modal.js?v=<?= time() ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/guias_remision_modal.js?v=<?= time() ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/notas_credito.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/clientes_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/productos_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/categorias_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/marcas_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/unidades_medida_modal.js?v=<?= time() ?>"></script>
 <script>
 // ── Descargar XML Original de Factura de Venta (detalle_xml de ventas_cabecera) ──
 </script>

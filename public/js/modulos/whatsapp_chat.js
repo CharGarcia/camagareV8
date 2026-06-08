@@ -5,12 +5,14 @@ let WC_pollingInterval = null;
 /**
  * Convierte una ruta relativa de media (storage/whatsapp_media/...)
  * en la URL del endpoint PHP seguro que sirve el archivo.
- * Usa el endpoint serveMedia para validar sesión, empresa y prevenir 404 estáticos.
+ * @param {string} path  - Ruta relativa almacenada en BD
+ * @param {boolean} dl   - true para forzar descarga (Content-Disposition: attachment)
  */
-function WC_mediaUrl(path) {
+function WC_mediaUrl(path, dl = false) {
     if (!path) return '';
     if (path.startsWith('http')) return path; // URL externa (Meta CDN, etc.)
-    return `${B_URL}/modulos/whatsapp-chat/serveMedia?file=${encodeURIComponent(path)}`;
+    const base = `${B_URL}/modulos/whatsapp-chat/serveMedia?file=${encodeURIComponent(path)}`;
+    return dl ? base + '&dl=1' : base;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -222,20 +224,37 @@ function WC_renderMensajes(mensajes) {
             contentHtml = parts.join('');
 
         } else if (m.tipo_mensaje === 'image') {
-            const c    = m.contenido || {};
-            const path = c.local_path || c.image?.link || '';
-            const url  = WC_mediaUrl(path);
-            if (url) {
+            const c       = m.contenido || {};
+            const path    = c.local_path || c.image?.link || '';
+            const urlView = WC_mediaUrl(path);          // abre inline en nueva pestaña
+            const urlDl   = WC_mediaUrl(path, true);    // fuerza descarga
+            const fileName = path ? path.split('/').pop() : 'imagen.jpg';
+            if (urlView) {
                 contentHtml = `
-                    <a href="${url}" target="_blank" style="display:inline-block;">
-                        <img src="${url}"
-                             style="max-width:220px;max-height:300px;border-radius:8px;display:block;cursor:pointer;"
-                             alt="Imagen"
-                             onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.style.display='inline-flex';">
-                        <span class="btn btn-sm btn-light text-primary border" style="display:none;">
-                            <i class="bi bi-image me-1"></i>Ver imagen
-                        </span>
-                    </a>`;
+                    <div class="wa-img-wrap" style="display:inline-block;max-width:220px;">
+                        <a href="${urlView}" target="_blank" style="display:block;">
+                            <img src="${urlView}"
+                                 style="width:100%;max-height:300px;object-fit:cover;border-radius:8px 8px 0 0;display:block;cursor:pointer;"
+                                 alt="Imagen"
+                                 onerror="this.onerror=null;this.style.display='none';this.closest('.wa-img-wrap').querySelector('.wa-img-fallback').style.display='flex';">
+                        </a>
+                        <div class="wa-img-fallback align-items-center gap-1 p-2 text-primary border-bottom"
+                             style="display:none;font-size:0.82rem;">
+                            <i class="bi bi-image"></i> Imagen no disponible
+                        </div>
+                        <div class="d-flex border-top bg-white" style="border-radius:0 0 8px 8px;overflow:hidden;">
+                            <a href="${urlView}" target="_blank"
+                               class="btn btn-sm btn-light flex-fill py-1 rounded-0"
+                               style="font-size:0.75rem;border-right:1px solid #dee2e6;">
+                                <i class="bi bi-eye me-1"></i>Ver
+                            </a>
+                            <a href="${urlDl}"
+                               class="btn btn-sm btn-light flex-fill py-1 rounded-0"
+                               style="font-size:0.75rem;">
+                                <i class="bi bi-download me-1"></i>Descargar
+                            </a>
+                        </div>
+                    </div>`;
             } else {
                 contentHtml = `<span class="text-muted"><i class="bi bi-image me-1"></i>Imagen no disponible</span>`;
             }
@@ -449,5 +468,273 @@ function WC_subirArchivo(file) {
         const upMsg = document.getElementById('msg-uploading');
         if (upMsg) upMsg.remove();
         Swal.fire('Error', 'Problema de red.', 'error');
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  RESPUESTAS RÁPIDAS
+// ═══════════════════════════════════════════════════════════════════════════
+
+let WC_rrVisible  = false;  // panel visible
+let WC_rrCache    = null;   // { empresa: [], personales: [] }
+let WC_rrEditId   = 0;      // id en edición (0 = nuevo)
+
+/** Abre o cierra el panel. Si se llama sin arg alterna; con false cierra. */
+function WC_toggleRespuestasPanel(forzarEstado) {
+    const panel = document.getElementById('waRespuestasPanel');
+    if (!panel) return;
+
+    const abrir = (forzarEstado !== undefined) ? !!forzarEstado : !WC_rrVisible;
+
+    if (abrir) {
+        panel.classList.remove('d-none');
+        panel.style.display = 'flex';
+        panel.style.flexDirection = 'column';
+        WC_rrVisible = true;
+        WC_cargarRespuestasRapidas();
+    } else {
+        panel.classList.add('d-none');
+        panel.style.display = '';
+        WC_rrVisible = false;
+        WC_cancelarFormRR();
+    }
+}
+
+/** Carga desde servidor (o usa caché) y renderiza */
+function WC_cargarRespuestasRapidas(forzar = false) {
+    if (WC_rrCache && !forzar) {
+        WC_renderRespuestasRapidas(WC_rrCache);
+        return;
+    }
+    fetch(`${B_URL}/modulos/whatsapp-chat/getRespuestasRapidas`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            WC_rrCache = { empresa: data.empresa, personales: data.personales };
+            WC_renderRespuestasRapidas(WC_rrCache);
+        }
+    })
+    .catch(console.error);
+}
+
+/** Renderiza empresa + personales en el listado */
+function WC_renderRespuestasRapidas(data) {
+    const lista = document.getElementById('waRRLista');
+    if (!lista) return;
+
+    const empresa    = data.empresa    || [];
+    const personales = data.personales || [];
+
+    if (empresa.length === 0 && personales.length === 0) {
+        lista.innerHTML = `<div class="text-center text-muted py-4" style="font-size:.82rem;">
+            <i class="bi bi-lightning-charge fs-3 d-block mb-1 opacity-50"></i>
+            Aún no hay respuestas guardadas.<br>Usa los botones de abajo para crear una.
+        </div>`;
+        return;
+    }
+
+    let html = '';
+
+    if (empresa.length > 0) {
+        html += `<div class="px-3 pt-2 pb-1 text-uppercase fw-semibold text-primary"
+                      style="font-size:.7rem;letter-spacing:.06em;">
+                     <i class="bi bi-building me-1"></i>Empresa
+                 </div>`;
+        empresa.forEach(r => { html += WC_rrItem(r, 'empresa'); });
+    }
+
+    if (personales.length > 0) {
+        html += `<div class="px-3 pt-2 pb-1 text-uppercase fw-semibold text-secondary"
+                      style="font-size:.7rem;letter-spacing:.06em;${empresa.length ? 'border-top:1px solid #f0f0f0;margin-top:4px;' : ''}">
+                     <i class="bi bi-person me-1"></i>Personales
+                 </div>`;
+        personales.forEach(r => { html += WC_rrItem(r, 'personal'); });
+    }
+
+    lista.innerHTML = html;
+}
+
+/** HTML de un ítem de la lista */
+function WC_rrItem(r, tipo) {
+    const preview = WC_escHtml(r.contenido.length > 80
+        ? r.contenido.substring(0, 80) + '…'
+        : r.contenido);
+    return `
+    <div class="d-flex align-items-start gap-2 px-3 py-2 wa-rr-item border-bottom"
+         style="cursor:default;">
+        <div class="flex-grow-1 min-w-0">
+            <div class="fw-semibold text-truncate" style="font-size:.8rem;">${WC_escHtml(r.titulo)}</div>
+            <div class="text-muted text-truncate" style="font-size:.75rem;">${preview}</div>
+        </div>
+        <div class="d-flex gap-1 flex-shrink-0">
+            <button type="button" class="btn btn-sm btn-success py-0 px-2"
+                    style="font-size:.73rem;"
+                    onclick="WC_insertarRespuesta(${r.id})"
+                    title="Insertar en el campo de texto">
+                <i class="bi bi-arrow-up-left"></i> Usar
+            </button>
+            <button type="button" class="btn btn-sm btn-light border py-0 px-1"
+                    style="font-size:.73rem;"
+                    onclick="WC_editarRespuesta(${r.id}, '${tipo}')"
+                    title="Editar">
+                <i class="bi bi-pencil"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-light border py-0 px-1 text-danger"
+                    style="font-size:.73rem;"
+                    onclick="WC_eliminarRespuesta(${r.id})"
+                    title="Eliminar">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+    </div>`;
+}
+
+/** Inserta el contenido de la respuesta en el textarea */
+function WC_insertarRespuesta(id) {
+    const item = [...(WC_rrCache?.empresa || []), ...(WC_rrCache?.personales || [])]
+        .find(r => r.id === id);
+    if (!item) return;
+
+    const textarea = document.getElementById('waChatInputText');
+    if (!textarea) return;
+
+    // Insertar en posición del cursor o al final
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end   = textarea.selectionEnd   ?? textarea.value.length;
+    const antes  = textarea.value.substring(0, start);
+    const despues = textarea.value.substring(end);
+    const sep = (antes && !antes.endsWith('\n')) ? '\n' : '';
+    textarea.value = antes + sep + item.contenido + despues;
+
+    // Ajustar alto del textarea
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+
+    // Activar botón enviar
+    const btn = document.getElementById('waChatBtnSend');
+    if (btn) btn.disabled = false;
+
+    // Cerrar panel y enfocar textarea
+    WC_toggleRespuestasPanel(false);
+    textarea.focus();
+}
+
+/** Muestra el formulario para crear una nueva respuesta */
+function WC_nuevaRespuesta(tipo) {
+    WC_rrEditId = 0;
+    document.getElementById('waRRFormId').value      = '';
+    document.getElementById('waRRFormTipo').value    = tipo;
+    document.getElementById('waRRFormTitulo').value  = '';
+    document.getElementById('waRRFormContenido').value = '';
+
+    const form = document.getElementById('waRRForm');
+    form.classList.remove('d-none');
+
+    // Actualizar placeholder del tipo
+    document.getElementById('waRRFormTitulo').placeholder =
+        tipo === 'empresa' ? 'Título (ej: Cuentas bancarias)' : 'Título (ej: Mi saludo)';
+
+    document.getElementById('waRRFormTitulo').focus();
+}
+
+/** Carga el formulario con los datos de un ítem para editar */
+function WC_editarRespuesta(id, tipo) {
+    const item = [...(WC_rrCache?.empresa || []), ...(WC_rrCache?.personales || [])]
+        .find(r => r.id === id);
+    if (!item) return;
+
+    WC_rrEditId = id;
+    document.getElementById('waRRFormId').value        = id;
+    document.getElementById('waRRFormTipo').value      = tipo;
+    document.getElementById('waRRFormTitulo').value    = item.titulo;
+    document.getElementById('waRRFormContenido').value = item.contenido;
+
+    const form = document.getElementById('waRRForm');
+    form.classList.remove('d-none');
+    document.getElementById('waRRFormTitulo').focus();
+
+    // Scroll al formulario
+    form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/** Cancela el formulario inline */
+function WC_cancelarFormRR() {
+    WC_rrEditId = 0;
+    const form = document.getElementById('waRRForm');
+    if (form) form.classList.add('d-none');
+}
+
+/** Envía al servidor crear o actualizar */
+function WC_guardarRespuesta() {
+    const titulo    = document.getElementById('waRRFormTitulo').value.trim();
+    const contenido = document.getElementById('waRRFormContenido').value.trim();
+    const tipo      = document.getElementById('waRRFormTipo').value;
+    const id        = parseInt(document.getElementById('waRRFormId').value || '0');
+
+    if (!titulo) {
+        document.getElementById('waRRFormTitulo').focus();
+        return;
+    }
+    if (!contenido) {
+        document.getElementById('waRRFormContenido').focus();
+        return;
+    }
+
+    const payload = { id, titulo, contenido, tipo };
+
+    fetch(`${B_URL}/modulos/whatsapp-chat/saveRespuestaRapida`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            WC_cancelarFormRR();
+            WC_rrCache = null;                      // invalidar caché
+            WC_cargarRespuestasRapidas(true);       // recargar lista
+        } else {
+            Swal.fire('Error', data.error || 'No se pudo guardar.', 'error');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        Swal.fire('Error', 'Problema de red.', 'error');
+    });
+}
+
+/** Elimina con confirmación */
+function WC_eliminarRespuesta(id) {
+    Swal.fire({
+        title: '¿Eliminar respuesta?',
+        text: 'Esta acción no se puede deshacer.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonText: 'Cancelar',
+        confirmButtonText: 'Sí, eliminar'
+    }).then(result => {
+        if (!result.isConfirmed) return;
+
+        fetch(`${B_URL}/modulos/whatsapp-chat/deleteRespuestaRapida`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ id })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                WC_rrCache = null;
+                WC_cargarRespuestasRapidas(true);
+            } else {
+                Swal.fire('Error', data.error || 'No se pudo eliminar.', 'error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            Swal.fire('Error', 'Problema de red.', 'error');
+        });
     });
 }

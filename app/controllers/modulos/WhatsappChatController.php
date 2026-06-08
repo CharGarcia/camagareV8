@@ -436,14 +436,18 @@ class WhatsappChatController extends Controller
             }
         }
 
-        $mimeType = @mime_content_type($fullPath) ?: 'application/octet-stream';
-        $fileName = basename($fullPath);
-        $fileSize = filesize($fullPath);
+        $mimeType   = @mime_content_type($fullPath) ?: 'application/octet-stream';
+        $fileName   = basename($fullPath);
+        $fileSize   = filesize($fullPath);
+        $forceDownload = !empty($_GET['dl']); // ?dl=1 fuerza descarga (Content-Disposition: attachment)
 
-        // Cabeceras para streaming inline (imágenes y audio) o descarga (documentos)
-        $isInline = str_starts_with($mimeType, 'image/')
-                 || str_starts_with($mimeType, 'audio/')
-                 || str_starts_with($mimeType, 'video/');
+        // Sin ?dl=1: imágenes/audio/video se muestran inline; documentos se descargan
+        // Con ?dl=1: siempre descarga (attachment)
+        $isInline = !$forceDownload && (
+            str_starts_with($mimeType, 'image/')
+         || str_starts_with($mimeType, 'audio/')
+         || str_starts_with($mimeType, 'video/')
+        );
 
         header('Content-Type: ' . $mimeType);
         header('Content-Length: ' . $fileSize);
@@ -515,5 +519,177 @@ class WhatsappChatController extends Controller
             error_log('[serveMedia] Error re-descargando: ' . $e->getMessage());
             return false;
         }
+    }
+
+    // =========================================================================
+    // RESPUESTAS RÁPIDAS
+    // =========================================================================
+
+    /**
+     * Devuelve todas las respuestas rápidas de la empresa
+     * y las personales del usuario actual.
+     * GET /modulos/whatsapp-chat/getRespuestasRapidas
+     */
+    public function getRespuestasRapidas(): void
+    {
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $stmt = $this->db->prepare(
+            "SELECT id, id_usuario, titulo, contenido, orden
+             FROM whatsapp_respuestas_rapidas
+             WHERE id_empresa = ?
+               AND eliminado  = FALSE
+               AND (id_usuario IS NULL OR id_usuario = ?)
+             ORDER BY id_usuario NULLS FIRST, orden ASC, titulo ASC"
+        );
+        $stmt->execute([$idEmpresa, $idUsuario]);
+        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        // Separar en empresa y personales
+        $empresa    = [];
+        $personales = [];
+        foreach ($rows as $r) {
+            $item = [
+                'id'        => (int) $r['id'],
+                'titulo'    => $r['titulo'],
+                'contenido' => $r['contenido'],
+                'orden'     => (int) $r['orden'],
+            ];
+            if ($r['id_usuario'] === null) {
+                $empresa[] = $item;
+            } else {
+                $personales[] = $item;
+            }
+        }
+
+        echo json_encode(['ok' => true, 'empresa' => $empresa, 'personales' => $personales]);
+    }
+
+    /**
+     * Crea o actualiza una respuesta rápida.
+     * POST /modulos/whatsapp-chat/saveRespuestaRapida
+     * Body JSON: { id?, titulo, contenido, tipo: 'empresa'|'personal' }
+     */
+    public function saveRespuestaRapida(): void
+    {
+        header('Content-Type: application/json');
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido']);
+            return;
+        }
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $input     = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $id        = (int) ($input['id'] ?? 0);
+        $titulo    = trim($input['titulo']    ?? '');
+        $contenido = trim($input['contenido'] ?? '');
+        $tipo      = $input['tipo'] ?? 'personal'; // 'empresa' | 'personal'
+
+        if (empty($titulo) || empty($contenido)) {
+            echo json_encode(['ok' => false, 'error' => 'El título y el contenido son obligatorios.']);
+            return;
+        }
+
+        // id_usuario: NULL si es de empresa, id del usuario si es personal
+        $idUsuarioDb = ($tipo === 'empresa') ? null : $idUsuario;
+
+        if ($id > 0) {
+            // ── Actualizar ────────────────────────────────────────────────────
+            // Solo puede editar la suya: si es de empresa necesita permiso,
+            // si es personal debe ser del mismo usuario.
+            $check = $this->db->prepare(
+                "SELECT id, id_usuario FROM whatsapp_respuestas_rapidas
+                 WHERE id = ? AND id_empresa = ? AND eliminado = FALSE"
+            );
+            $check->execute([$id, $idEmpresa]);
+            $existing = $check->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$existing) {
+                echo json_encode(['ok' => false, 'error' => 'Respuesta no encontrada.']);
+                return;
+            }
+
+            // Verificar propiedad: personal solo la edita su dueño
+            if ($existing['id_usuario'] !== null && (int)$existing['id_usuario'] !== $idUsuario) {
+                echo json_encode(['ok' => false, 'error' => 'No tienes permiso para editar esta respuesta.']);
+                return;
+            }
+
+            $this->db->prepare(
+                "UPDATE whatsapp_respuestas_rapidas
+                    SET titulo = ?, contenido = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ?
+                  WHERE id = ? AND id_empresa = ?"
+            )->execute([$titulo, $contenido, $idUsuario, $id, $idEmpresa]);
+
+            echo json_encode(['ok' => true, 'id' => $id, 'mensaje' => 'Respuesta actualizada.']);
+
+        } else {
+            // ── Crear ─────────────────────────────────────────────────────────
+            $stmt = $this->db->prepare(
+                "INSERT INTO whatsapp_respuestas_rapidas
+                    (id_empresa, id_usuario, titulo, contenido, orden, created_by, updated_by)
+                 VALUES (?, ?, ?, ?, 0, ?, ?)
+                 RETURNING id"
+            );
+            $stmt->execute([$idEmpresa, $idUsuarioDb, $titulo, $contenido, $idUsuario, $idUsuario]);
+            $newId = $stmt->fetchColumn();
+
+            echo json_encode(['ok' => true, 'id' => (int)$newId, 'mensaje' => 'Respuesta creada.']);
+        }
+    }
+
+    /**
+     * Elimina (lógicamente) una respuesta rápida.
+     * POST /modulos/whatsapp-chat/deleteRespuestaRapida
+     * Body JSON: { id }
+     */
+    public function deleteRespuestaRapida(): void
+    {
+        header('Content-Type: application/json');
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido']);
+            return;
+        }
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $input     = json_decode(file_get_contents('php://input'), true) ?? [];
+        $id        = (int) ($input['id'] ?? 0);
+
+        if ($id <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'ID inválido.']);
+            return;
+        }
+
+        // Verificar que existe y pertenece a esta empresa
+        $check = $this->db->prepare(
+            "SELECT id, id_usuario FROM whatsapp_respuestas_rapidas
+             WHERE id = ? AND id_empresa = ? AND eliminado = FALSE"
+        );
+        $check->execute([$id, $idEmpresa]);
+        $existing = $check->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$existing) {
+            echo json_encode(['ok' => false, 'error' => 'Respuesta no encontrada.']);
+            return;
+        }
+
+        // Personal: solo la borra su dueño
+        if ($existing['id_usuario'] !== null && (int)$existing['id_usuario'] !== $idUsuario) {
+            echo json_encode(['ok' => false, 'error' => 'No tienes permiso para eliminar esta respuesta.']);
+            return;
+        }
+
+        $this->db->prepare(
+            "UPDATE whatsapp_respuestas_rapidas
+                SET eliminado = TRUE, deleted_at = CURRENT_TIMESTAMP, deleted_by = ?
+              WHERE id = ? AND id_empresa = ?"
+        )->execute([$idUsuario, $id, $idEmpresa]);
+
+        echo json_encode(['ok' => true, 'mensaje' => 'Respuesta eliminada.']);
     }
 }
