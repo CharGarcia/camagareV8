@@ -174,6 +174,8 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
     .cmg-offcanvas-scrollable {
         overflow-y: auto !important;
         -webkit-overflow-scrolling: touch !important;
+        height: 100%;
+        touch-action: pan-y;
     }
 </style>
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary cmg-navbar-compact position-relative">
