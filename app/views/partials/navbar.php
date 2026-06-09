@@ -313,7 +313,7 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         </h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
     </div>
-    <div class="offcanvas-body bg-light p-0 d-flex flex-column">
+    <div class="offcanvas-body bg-light p-0">
         <!-- Opciones de Empresa y Acceso Rapido -->
         <div class="p-3 bg-white border-bottom">
             <label class="form-label small fw-bold text-muted mb-1">Empresa actual:</label>
@@ -389,7 +389,7 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         </div>
 
         <!-- Módulos Móvil (Acordeón) -->
-        <div class="flex-grow-1 bg-white overflow-auto">
+        <div class="bg-white">
             <div class="accordion accordion-flush cmg-offcanvas-menu-accordion" id="accordionMobileMenu">
                 <?php 
                 $modulosMovil = array_values(array_filter($menuModulos ?? [], fn($m) => !empty($m['submodulos'] ?? [])));
