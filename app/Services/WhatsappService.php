@@ -363,6 +363,36 @@ class WhatsappService
     }
 
     /**
+     * Envía un mensaje de texto libre a un número
+     * (solo funciona dentro de la ventana de 24 h o si el número ha iniciado conversación)
+     */
+    public function sendTextMessage(int $idEmpresa, string $to, string $text): array
+    {
+        $config = $this->configModel->obtenerConfiguracion($idEmpresa);
+
+        if (!$config || empty($config['access_token']) || empty($config['phone_number_id'])) {
+            return ['success' => false, 'message' => 'Configuración incompleta.'];
+        }
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type'    => 'individual',
+            'to'                => $to,
+            'type'              => 'text',
+            'text'              => ['preview_url' => false, 'body' => $text],
+        ];
+
+        $url      = self::BASE_URL . $config['phone_number_id'] . '/messages';
+        $response = $this->makeRequest('POST', $url, $config['access_token'], $payload);
+
+        if (isset($response['error'])) {
+            return ['success' => false, 'message' => $response['error']['message'] ?? 'Error desconocido'];
+        }
+
+        return ['success' => true, 'data' => $response];
+    }
+
+    /**
      * Elimina una plantilla en Meta
      */
     public function deleteTemplate(int $idEmpresa, string $templateName, string $metaId = ''): array
