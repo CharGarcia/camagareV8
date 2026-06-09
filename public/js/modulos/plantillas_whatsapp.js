@@ -330,6 +330,71 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+window.WA_eliminarPlantilla = function(id) {
+    Swal.fire({
+        title: '¿Eliminar plantilla?',
+        html: `<p class="mb-3">Selecciona cómo deseas eliminar esta plantilla:</p>
+               <div class="form-check text-start mb-2">
+                   <input class="form-check-input" type="radio" name="opcionEliminar" id="opcionSolo" value="0" checked>
+                   <label class="form-check-label" for="opcionSolo">
+                       <strong>Solo quitar del sistema</strong><br>
+                       <small class="text-muted">La plantilla seguirá existiendo en Meta (WhatsApp Business).</small>
+                   </label>
+               </div>
+               <div class="form-check text-start">
+                   <input class="form-check-input" type="radio" name="opcionEliminar" id="opcionMeta" value="1">
+                   <label class="form-check-label" for="opcionMeta">
+                       <strong>Eliminar también en Meta</strong><br>
+                       <small class="text-danger">Esto eliminará la plantilla permanentemente de WhatsApp Business. Esta acción no se puede deshacer.</small>
+                   </label>
+               </div>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Eliminar',
+        cancelButtonText: 'Cancelar',
+        preConfirm: () => {
+            const opcion = document.querySelector('input[name="opcionEliminar"]:checked');
+            return opcion ? opcion.value : '0';
+        }
+    }).then((result) => {
+        if (!result.isConfirmed) return;
+
+        const eliminarMeta = result.value === '1';
+
+        const formData = new FormData();
+        formData.append('id', id);
+        formData.append('eliminar_meta', eliminarMeta ? '1' : '0');
+
+        Swal.fire({
+            title: 'Eliminando...',
+            allowOutsideClick: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+
+        fetch(WA_URL + '/destroy', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.ok) {
+                Swal.fire('¡Eliminada!', data.mensaje, 'success').then(() => {
+                    fetchSearch(window.currentPage);
+                });
+            } else {
+                Swal.fire('Error', data.error || 'No se pudo eliminar la plantilla.', 'error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            Swal.fire('Error', 'Error de red al eliminar.', 'error');
+        });
+    });
+};
+
 window.WA_abrirModalEditar = function(id) {
     document.getElementById('editarIdPlantilla').value = id;
     const form = document.getElementById('formEditarPlantilla');

@@ -363,6 +363,31 @@ class WhatsappService
     }
 
     /**
+     * Elimina una plantilla en Meta
+     */
+    public function deleteTemplate(int $idEmpresa, string $templateName, string $metaId = ''): array
+    {
+        $config = $this->configModel->obtenerConfiguracion($idEmpresa);
+
+        if (!$config || empty($config['access_token']) || empty($config['waba_id'])) {
+            return ['success' => false, 'message' => 'Configuración incompleta.'];
+        }
+
+        $url = self::BASE_URL . $config['waba_id'] . '/message_templates?name=' . urlencode($templateName);
+        if (!empty($metaId)) {
+            $url .= '&hsm_id=' . urlencode($metaId);
+        }
+
+        $response = $this->makeRequest('DELETE', $url, $config['access_token']);
+
+        if (isset($response['error'])) {
+            return ['success' => false, 'message' => 'Error al eliminar en Meta: ' . ($response['error']['message'] ?? 'Desconocido')];
+        }
+
+        return ['success' => true, 'data' => $response];
+    }
+
+    /**
      * Método interno para realizar peticiones cURL (JSON)
      */
     private function makeRequest(string $method, string $url, string $token, array $data = []): array

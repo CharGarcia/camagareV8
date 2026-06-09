@@ -74,6 +74,8 @@ class PlantillasWhatsappController extends BaseModuloController
         $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
         $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
+        $permisos = $this->getPermisos();
+
         ob_start();
         if (empty($rows)) {
             echo '<tr><td colspan="5" class="text-center py-5 text-muted"><i class="fab fa-whatsapp fs-3 d-block mb-2 text-success opacity-50"></i>Aún no hay plantillas sincronizadas.</td></tr>';
@@ -83,6 +85,16 @@ class PlantillasWhatsappController extends BaseModuloController
                 $badgeClass = 'bg-success text-success border-success';
                 if ($estado === 'PENDING' || $estado === 'IN_APPEAL') $badgeClass = 'bg-warning text-warning border-warning';
                 else if ($estado === 'REJECTED' || $estado === 'DELETED') $badgeClass = 'bg-danger text-danger border-danger';
+
+                $btnEliminar = '';
+                if ($permisos['eliminar']) {
+                    $btnEliminar = '<button class="btn btn-sm btn-outline-danger" title="Eliminar" onclick="WA_eliminarPlantilla(' . $r['id'] . ')"><i class="bi bi-trash"></i></button>';
+                }
+
+                $btnEditar = '';
+                if ($permisos['actualizar']) {
+                    $btnEditar = '<button class="btn btn-sm btn-outline-warning me-1" title="Editar" onclick="WA_abrirModalEditar(' . $r['id'] . ')"><i class="bi bi-pencil"></i></button>';
+                }
 
                 echo '<tr class="plantilla-row" role="button" tabindex="0">
                         <td class="ps-3" data-col="nombre">' . htmlspecialchars($r['nombre'] ?? '') . '</td>
@@ -94,7 +106,7 @@ class PlantillasWhatsappController extends BaseModuloController
                         <td class="text-center pe-3">
                             <button class="btn btn-sm btn-outline-secondary me-1" title="Ver detalles" onclick="WA_verDetalles(' . $r['id'] . ')"><i class="bi bi-eye"></i></button>
                             <button class="btn btn-sm btn-outline-primary me-1" title="Probar Envío" onclick="WA_abrirModalProbar(' . $r['id'] . ')"><i class="bi bi-send"></i></button>
-                            <button class="btn btn-sm btn-outline-warning" title="Editar" onclick="WA_abrirModalEditar(' . $r['id'] . ')"><i class="bi bi-pencil"></i></button>
+                            ' . $btnEditar . $btnEliminar . '
                         </td>
                       </tr>';
             }
@@ -404,6 +416,53 @@ class PlantillasWhatsappController extends BaseModuloController
         }
 
         echo json_encode(['ok' => true, 'mensaje' => 'Mensaje de prueba enviado exitosamente.']);
+        exit;
+    }
+
+    public function destroy(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido']);
+            return;
+        }
+
+        $idEmpresa   = (int) $_SESSION['id_empresa'];
+        $idUsuario   = (int) $_SESSION['id_usuario'];
+        $id          = (int) ($_POST['id'] ?? 0);
+        $eliminarMeta = filter_var($_POST['eliminar_meta'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        if ($id <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'ID inválido.']);
+            return;
+        }
+
+        $stmt = $this->db->prepare("SELECT * FROM whatsapp_plantillas WHERE id = ? AND id_empresa = ? AND eliminado = FALSE");
+        $stmt->execute([$id, $idEmpresa]);
+        $plantilla = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$plantilla) {
+            echo json_encode(['ok' => false, 'error' => 'Plantilla no encontrada.']);
+            return;
+        }
+
+        // Eliminar en Meta si se solicita y tiene meta_id
+        if ($eliminarMeta && !empty($plantilla['meta_id'])) {
+            $result = $this->whatsappService->deleteTemplate($idEmpresa, $plantilla['nombre'], (string) $plantilla['meta_id']);
+            if (!$result['success']) {
+                echo json_encode(['ok' => false, 'error' => 'No se pudo eliminar en Meta: ' . $result['message']]);
+                return;
+            }
+        }
+
+        $this->db->prepare(
+            "UPDATE whatsapp_plantillas SET eliminado = TRUE, deleted_at = CURRENT_TIMESTAMP, deleted_by = ? WHERE id = ? AND id_empresa = ?"
+        )->execute([$idUsuario, $id, $idEmpresa]);
+
+        $accion = $eliminarMeta ? 'Plantilla eliminada en Meta y en el sistema.' : 'Plantilla removida del sistema (sigue existiendo en Meta).';
+        echo json_encode(['ok' => true, 'mensaje' => $accion]);
         exit;
     }
 
