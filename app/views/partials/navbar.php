@@ -169,6 +169,12 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         background-color: #e9ecef;
         color: var(--bs-primary);
     }
+    
+    /* Safari WebKit Scrolling Fix */
+    .cmg-offcanvas-scrollable {
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
 </style>
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary cmg-navbar-compact position-relative">
     <div class="container-fluid gap-2 align-items-center py-1 d-flex flex-wrap flex-lg-nowrap">
@@ -313,7 +319,7 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         </h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
     </div>
-    <div class="offcanvas-body bg-light p-0">
+    <div class="offcanvas-body bg-light p-0 cmg-offcanvas-scrollable">
         <!-- Opciones de Empresa y Acceso Rapido -->
         <div class="p-3 bg-white border-bottom">
             <label class="form-label small fw-bold text-muted mb-1">Empresa actual:</label>
