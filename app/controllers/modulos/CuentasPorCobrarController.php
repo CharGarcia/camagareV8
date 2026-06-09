@@ -319,9 +319,9 @@ class CuentasPorCobrarController extends BaseModuloController
             return;
         }
 
-        $smtpData = EmailConfigService::getPhpMailerConfig('envio_documentos_sri');
+        $smtpData = EmailConfigService::getPhpMailerConfig('notificaciones');
         if (!$smtpData) {
-            $this->jsonError('No hay configuración de correo activa (envio_documentos_sri).');
+            $this->jsonError('No hay configuración de correo activa. Configure el correo con código "notificaciones" en Configuración → Correos.');
             return;
         }
 
@@ -340,6 +340,7 @@ class CuentasPorCobrarController extends BaseModuloController
             $mail->SMTPSecure = $smtpData['smtpSecure'] ?? 'tls';
             $mail->Port       = $smtpData['port'];
             $mail->CharSet    = 'UTF-8';
+            $mail->Timeout    = 15;  // máximo 15 seg esperando al SMTP
 
             $cfg = require MVC_CONFIG . '/app.php';
             if (!empty($cfg['mail_smtp_options'])) {
@@ -623,7 +624,7 @@ class CuentasPorCobrarController extends BaseModuloController
     {
         $nombre   = htmlspecialchars($factura['cliente_nombre'] ?? '');
         $nroFact  = htmlspecialchars($factura['numero_factura'] ?? '');
-        $total    = '$' . number_format((float)($factura['total'] ?? 0), 2);
+        $total    = '$' . number_format((float)($factura['importe_total'] ?? 0), 2);
         $saldo    = '$' . number_format((float)($factura['saldo'] ?? 0), 2);
         $vence    = !empty($factura['fecha_vencimiento'])
                     ? date('d-m-Y', strtotime($factura['fecha_vencimiento']))
