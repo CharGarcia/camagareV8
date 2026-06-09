@@ -169,14 +169,6 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         background-color: #e9ecef;
         color: var(--bs-primary);
     }
-    
-    /* Safari WebKit Scrolling Fix */
-    .cmg-offcanvas-scrollable {
-        overflow-y: auto !important;
-        -webkit-overflow-scrolling: touch !important;
-        height: 100%;
-        touch-action: pan-y;
-    }
 </style>
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary cmg-navbar-compact position-relative">
     <div class="container-fluid gap-2 align-items-center py-1 d-flex flex-wrap flex-lg-nowrap">
@@ -321,7 +313,8 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         </h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
     </div>
-    <div class="offcanvas-body bg-light p-0 cmg-offcanvas-scrollable">
+    <div class="offcanvas-body bg-light p-0">
+    <div style="max-height: calc(100vh - 70px); overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y;">
         <!-- Opciones de Empresa y Acceso Rapido -->
         <div class="p-3 bg-white border-bottom">
             <label class="form-label small fw-bold text-muted mb-1">Empresa actual:</label>
@@ -433,6 +426,7 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                 <?php endforeach; ?>
             </div>
         </div>
+    </div>
     </div>
 </div>
 

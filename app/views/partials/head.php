@@ -11,3 +11,11 @@
 <link href="<?= rtrim(BASE_URL ?? '', '/') ?>/css/app.css?v=<?= time() ?>" rel="stylesheet">
 <link href="<?= rtrim(BASE_URL ?? '', '/') ?>/css/theme.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
+<style>
+    /* Prevent horizontal scrolling ("floating paper" effect on mobile) */
+    html, body {
+        overflow-x: hidden;
+        width: 100%;
+        position: relative;
+    }
+</style>
