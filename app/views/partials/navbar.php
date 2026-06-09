@@ -389,7 +389,7 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         </div>
 
         <!-- Módulos Móvil (Acordeón) -->
-        <div class="flex-grow-1 bg-white">
+        <div class="flex-grow-1 bg-white overflow-auto">
             <div class="accordion accordion-flush cmg-offcanvas-menu-accordion" id="accordionMobileMenu">
                 <?php 
                 $modulosMovil = array_values(array_filter($menuModulos ?? [], fn($m) => !empty($m['submodulos'] ?? [])));
