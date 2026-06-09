@@ -105,129 +105,117 @@ class CuentasPorCobrarController extends BaseModuloController
     public function registrarCobroAjax(): void
     {
         $this->requireCrear();
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idUsuario = (int) $_SESSION['id_usuario'];
+        $idEmpresa    = (int) $_SESSION['id_empresa'];
+        $idUsuario    = (int) $_SESSION['id_usuario'];
 
-        $idVenta     = (int)($_POST['id_venta'] ?? 0);
-        $monto       = (float)($_POST['monto'] ?? 0);
-        $idFormaCobro= (int)($_POST['id_forma_cobro'] ?? 0);
-        $fechaCobro  = trim($_POST['fecha_cobro'] ?? date('Y-m-d'));
-        $observ      = trim($_POST['observaciones'] ?? '');
+        $idVenta      = (int)($_POST['id_venta']          ?? 0);
+        $monto        = (float)($_POST['monto']           ?? 0);
+        $idFormaCobro = (int)($_POST['id_forma_cobro']    ?? 0);
+        $idPunto      = (int)($_POST['id_punto_emision']  ?? 0);
+        $idConcepto   = !empty($_POST['id_ingreso_concepto']) ? (int)$_POST['id_ingreso_concepto'] : null;
+        $fechaCobro   = trim($_POST['fecha_cobro']        ?? date('Y-m-d'));
+        $observ       = trim($_POST['observaciones']      ?? '');
+        $tipoOp       = trim($_POST['tipo_operacion_bancaria'] ?? '');
+        $numOp        = trim($_POST['numero_operacion']        ?? '');
 
-        if ($idVenta <= 0 || $monto <= 0 || $idFormaCobro <= 0) {
-            $this->jsonError('Datos incompletos.');
+        if ($idVenta <= 0 || $monto <= 0 || $idFormaCobro <= 0 || $idPunto <= 0) {
+            $this->jsonError('Datos incompletos. Verifique serie, monto y forma de cobro.');
             return;
         }
 
-        // Validar que la factura pertenece a la empresa y tiene saldo
+        // Validar punto de emisión
+        $punto = $this->repo->getPuntoEmisionPorId($idPunto, $idEmpresa);
+        if (!$punto) {
+            $this->jsonError('Punto de emisión no válido.');
+            return;
+        }
+
+        // Validar factura y saldo
         $factura = $this->repo->getFacturaParaCobro($idVenta, $idEmpresa);
         if (!$factura) {
             $this->jsonError('Factura no encontrada.');
             return;
         }
-
-        $saldo = (float)$factura['saldo'];
+        $saldo       = (float)$factura['saldo'];
+        $totalFact   = (float)$factura['importe_total'];
         if ($saldo <= 0) {
             $this->jsonError('Esta factura ya se encuentra pagada.');
             return;
         }
         if ($monto > $saldo + 0.001) {
-            $this->jsonError("El monto ($monto) supera el saldo ($saldo).");
+            $this->jsonError("El monto ($monto) supera el saldo pendiente ($saldo).");
             return;
         }
 
-        $db = $this->repo->getDb();
-        $db->beginTransaction();
         try {
-            $secuencial  = $this->repo->getSiguienteSecuencial($idEmpresa);
-            $now         = date('Y-m-d H:i:s');
-            $fechaEmision= $fechaCobro ?: date('Y-m-d');
+            // Obtener siguiente secuencial mediante SecuencialService
+            $secuencialService = new \App\Services\SecuencialService();
+            $secRes    = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Ingresos');
+            $secuencial = $secRes['formateado'];
 
-            // 1. ingresos_cabecera
-            $stIng = $db->prepare("
-                INSERT INTO ingresos_cabecera
-                    (id_empresa, id_cliente, tipo_ingreso, fecha_emision, secuencial,
-                     numero_ingreso, monto_total, estado, observaciones,
-                     id_usuario, created_by, updated_by, created_at, updated_at, eliminado)
-                VALUES
-                    (:id_empresa, :id_cliente, 'FACTURA_VENTA', :fecha_emision, :secuencial,
-                     :numero_ingreso, :monto, 'registrado', :observaciones,
-                     :id_usuario, :created_by, :updated_by, :created_at, :updated_at, false)
-                RETURNING id
-            ");
-            $stIng->execute([
-                ':id_empresa'    => $idEmpresa,
-                ':id_cliente'    => $factura['id_cliente'],
-                ':fecha_emision' => $fechaEmision,
-                ':secuencial'    => $secuencial,
-                ':numero_ingreso'=> "ING-{$secuencial}",
-                ':monto'         => $monto,
-                ':observaciones' => $observ,
-                ':id_usuario'    => $idUsuario,
-                ':created_by'    => $idUsuario,
-                ':updated_by'    => $idUsuario,
-                ':created_at'    => $now,
-                ':updated_at'    => $now,
-            ]);
-            $idIngreso = (int)$stIng->fetchColumn();
+            $codEst  = str_pad((string)($punto['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT);
+            $codPto  = str_pad((string)($punto['punto']           ?? '001'), 3, '0', STR_PAD_LEFT);
+            $numDoc  = "{$codEst}-{$codPto}-{$secuencial}";
+            $numFact = ($factura['establecimiento'] ?? '') . '-'
+                     . ($factura['punto_emision']   ?? '') . '-'
+                     . ($factura['secuencial']       ?? '');
 
-            if (!$idIngreso) {
-                throw new \RuntimeException('No se pudo crear el ingreso.');
-            }
+            // Delegar al IngresoService (igual que FacturaVentaController)
+            $payload = [
+                'id_empresa'          => $idEmpresa,
+                'id_establecimiento'  => (int)($punto['id_establecimiento'] ?? 0),
+                'id_punto_emision'    => $idPunto,
+                'id_cliente'          => (int)$factura['id_cliente'],
+                'id_usuario'          => $idUsuario,
+                'fecha_emision'       => $fechaCobro ?: date('Y-m-d'),
+                'establecimiento'     => $codEst,
+                'punto_emision'       => $codPto,
+                'secuencial'          => $secuencial,
+                'numero_ingreso'      => $numDoc,
+                'tipo_ingreso'        => 'FACTURA_VENTA',
+                'id_ingreso_concepto' => $idConcepto,
+                'monto_total'         => $monto,
+                'observaciones'       => $observ ?: "Cobro de factura {$numFact}",
+                'recibo_de'           => $factura['cliente_nombre'] ?? '',
+                'id_recibo_cliente'   => (int)$factura['id_cliente'],
+                'detalles'            => [[
+                    'tipo_documento'          => 'FACTURA',
+                    'id_referencia_documento' => $idVenta,
+                    'numero_documento'        => $numFact,
+                    'descripcion'             => "Cobro de factura {$numFact}",
+                    'monto_documento'         => $totalFact,
+                    'saldo_anterior'          => $saldo,
+                    'monto_cobrado'           => $monto,
+                    'saldo_actual'            => max(0.0, $saldo - $monto),
+                ]],
+                'pagos' => [[
+                    'id_forma_cobro'          => $idFormaCobro,
+                    'monto'                   => $monto,
+                    'fecha_cobro'             => $fechaCobro,
+                    'observaciones'           => $observ ?: null,
+                    'tipo_operacion_bancaria' => $tipoOp ?: null,
+                    'numero_cheque'           => $numOp  ?: null,
+                    'referencia'              => $numOp  ?: null,
+                ]],
+            ];
 
-            // 2. ingresos_detalle
-            $db->prepare("
-                INSERT INTO ingresos_detalle
-                    (id_ingreso, tipo_documento, id_referencia_documento,
-                     monto_documento, saldo_anterior, monto_cobrado, saldo_actual)
-                VALUES
-                    (:id_ingreso, 'FACTURA', :id_venta,
-                     :monto_doc, :saldo_anterior, :monto_cobrado, :saldo_actual)
-            ")->execute([
-                ':id_ingreso'    => $idIngreso,
-                ':id_venta'      => $idVenta,
-                ':monto_doc'     => $factura['total'],
-                ':saldo_anterior'=> $factura['saldo'],
-                ':monto_cobrado' => $monto,
-                ':saldo_actual'  => max(0, $saldo - $monto),
-            ]);
-
-            // 3. ingresos_pagos
-            $db->prepare("
-                INSERT INTO ingresos_pagos
-                    (id_ingreso, id_forma_cobro, monto, fecha_cobro, observaciones)
-                VALUES
-                    (:id_ingreso, :id_forma_cobro, :monto, :fecha_cobro, :observaciones)
-            ")->execute([
-                ':id_ingreso'    => $idIngreso,
-                ':id_forma_cobro'=> $idFormaCobro,
-                ':monto'         => $monto,
-                ':fecha_cobro'   => $fechaCobro,
-                ':observaciones' => $observ,
-            ]);
-
-            // 4. Auditoría
-            $this->log->registrar(
-                (int)$_SESSION['id_usuario'],
-                $idEmpresa,
-                'CREAR',
-                'ingresos_cabecera',
-                $idIngreso,
-                null,
-                ['id_ingreso' => $idIngreso, 'id_venta' => $idVenta, 'monto' => $monto]
+            $ingresoService = new \App\Services\modulos\IngresoService(
+                new \App\repositories\modulos\IngresoRepository(),
+                new \App\Rules\modulos\IngresoRules(),
+                new \App\Services\LogSistemaService()
             );
 
-            $db->commit();
+            $idIngreso = $ingresoService->crear($payload);
 
             $nuevoSaldo = $saldo - $monto;
             $this->jsonSuccess([
-                'mensaje'    => 'Cobro registrado correctamente.',
-                'id_ingreso' => $idIngreso,
-                'nuevo_saldo'=> number_format($nuevoSaldo, 2, '.', ''),
-                'pagada'     => $nuevoSaldo <= 0.001,
+                'mensaje'        => "Cobro registrado correctamente. Ingreso: {$numDoc}",
+                'id_ingreso'     => $idIngreso,
+                'numero_ingreso' => $numDoc,
+                'nuevo_saldo'    => number_format($nuevoSaldo, 2, '.', ''),
+                'pagada'         => $nuevoSaldo <= 0.001,
             ]);
         } catch (\Throwable $e) {
-            $db->rollBack();
             error_log('[CxC registrarCobro] ' . $e->getMessage());
             $this->jsonError('Error al registrar el cobro: ' . $e->getMessage());
         }
@@ -255,6 +243,38 @@ class CuentasPorCobrarController extends BaseModuloController
     // ─────────────────────────────────────────────────────────────────────
     // AJAX – FORMAS DE COBRO
     // ─────────────────────────────────────────────────────────────────────
+
+    // ─────────────────────────────────────────────────────────────────────
+    // AJAX – CATÁLOGOS PARA EL MODAL COBRO (puntos, conceptos, formas)
+    // ─────────────────────────────────────────────────────────────────────
+
+    public function getCatalogosCobroAjax(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $this->jsonSuccess([
+            'puntos'    => $this->repo->getPuntosEmision($idEmpresa),
+            'conceptos' => $this->repo->getConceptos($idEmpresa),
+            'formas'    => $this->repo->getFormasCobro($idEmpresa),
+        ]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // AJAX – SIGUIENTE SECUENCIAL DE INGRESO PARA UN PUNTO DE EMISIÓN
+    // ─────────────────────────────────────────────────────────────────────
+
+    public function getSecuencialAjax(): void
+    {
+        $this->requireLeer();
+        $idPunto = (int) ($_GET['id_punto_emision'] ?? 0);
+        if ($idPunto <= 0) {
+            $this->jsonError('ID de punto de emisión inválido.');
+            return;
+        }
+        $secuencialService = new \App\Services\SecuencialService();
+        $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Ingresos');
+        $this->jsonSuccess($res);
+    }
 
     public function getFormasCobroAjax(): void
     {

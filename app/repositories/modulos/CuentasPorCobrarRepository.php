@@ -223,6 +223,96 @@ class CuentasPorCobrarRepository extends BaseRepository
     }
 
     /**
+     * Puntos de emisión activos de la empresa (para el select Serie del cobro).
+     */
+    public function getPuntosEmision(int $idEmpresa): array
+    {
+        try {
+            $sql = "SELECT p.id         AS id_punto,
+                           e.codigo     AS cod_establecimiento,
+                           p.codigo_punto,
+                           p.id_establecimiento
+                    FROM empresa_punto_emision p
+                    JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+                    WHERE p.id_empresa = :id_empresa
+                      AND p.eliminado  = false
+                      AND e.eliminado  = false
+                    ORDER BY e.codigo, p.codigo_punto";
+            $st = $this->db->prepare($sql);
+            $st->execute([':id_empresa' => $idEmpresa]);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            // Fallback tabla alternativa
+            try {
+                $sql2 = "SELECT id AS id_punto,
+                                establecimiento AS cod_establecimiento,
+                                punto AS codigo_punto,
+                                id_establecimiento
+                         FROM empresa_puntos_emision
+                         WHERE id_empresa = :id_empresa AND eliminado = false
+                         ORDER BY establecimiento, punto";
+                $st2 = $this->db->prepare($sql2);
+                $st2->execute([':id_empresa' => $idEmpresa]);
+                return $st2->fetchAll(PDO::FETCH_ASSOC);
+            } catch (\Throwable $e2) {
+                return [];
+            }
+        }
+    }
+
+    /**
+     * Datos de un punto de emisión específico (para construir el número de ingreso).
+     */
+    public function getPuntoEmisionPorId(int $idPunto, int $idEmpresa): ?array
+    {
+        try {
+            $sql = "SELECT p.id,
+                           e.codigo       AS establecimiento,
+                           p.codigo_punto AS punto,
+                           p.id_establecimiento
+                    FROM empresa_punto_emision p
+                    JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+                    WHERE p.id = :id AND p.id_empresa = :id_empresa AND p.eliminado = false";
+            $st = $this->db->prepare($sql);
+            $st->execute([':id' => $idPunto, ':id_empresa' => $idEmpresa]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+            if ($row) return $row;
+        } catch (\Throwable $e) {}
+
+        try {
+            $sql2 = "SELECT id, establecimiento, punto, id_establecimiento
+                     FROM empresa_puntos_emision
+                     WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+            $st2 = $this->db->prepare($sql2);
+            $st2->execute([':id' => $idPunto, ':id_empresa' => $idEmpresa]);
+            return $st2->fetch(PDO::FETCH_ASSOC) ?: null;
+        } catch (\Throwable $e2) {
+            return null;
+        }
+    }
+
+    /**
+     * Conceptos de ingreso activos de la empresa.
+     */
+    public function getConceptos(int $idEmpresa): array
+    {
+        try {
+            $sql = "SELECT id, nombre, comportamiento
+                    FROM empresa_opciones_ingreso_egreso
+                    WHERE id_empresa = :id_empresa
+                      AND aplica_ingresos = TRUE
+                      AND UPPER(estado) = 'ACTIVO'
+                      AND eliminado = FALSE
+                    ORDER BY nombre ASC";
+            $st = $this->db->prepare($sql);
+            $st->execute([':id_empresa' => $idEmpresa]);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /**
      * Formas de cobro activas de la empresa.
      */
     public function getFormasCobro(int $idEmpresa): array
@@ -240,43 +330,40 @@ class CuentasPorCobrarRepository extends BaseRepository
 
     /**
      * Plantillas de WhatsApp aprobadas de la empresa.
+     * Retorna [] si la tabla no existe (módulo no instalado).
      */
     public function getPlantillasWA(int $idEmpresa): array
     {
-        $sql = "SELECT id, nombre, idioma, componentes
-                FROM whatsapp_plantillas
-                WHERE id_empresa   = :id_empresa
-                  AND estado_meta  = 'APPROVED'
-                  AND eliminado    = false
-                ORDER BY nombre";
-        $st = $this->db->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa]);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+        try {
+            $sql = "SELECT id, nombre, idioma, componentes
+                    FROM whatsapp_plantillas
+                    WHERE id_empresa   = :id_empresa
+                      AND estado_meta  = 'APPROVED'
+                      AND eliminado    = false
+                    ORDER BY nombre";
+            $st = $this->db->prepare($sql);
+            $st->execute([':id_empresa' => $idEmpresa]);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     /**
      * Verifica si la empresa tiene WhatsApp configurado.
+     * Retorna false si la tabla no existe (módulo no instalado).
      */
     public function tieneWhatsappConfigurado(int $idEmpresa): bool
     {
-        $sql = "SELECT COUNT(*) FROM whatsapp_config
-                WHERE id_empresa = :id_empresa AND activo = true";
-        $st = $this->db->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa]);
-        return (int)$st->fetchColumn() > 0;
-    }
-
-    /**
-     * Genera el siguiente secuencial de ingreso para la empresa.
-     */
-    public function getSiguienteSecuencial(int $idEmpresa): string
-    {
-        $sql = "SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(secuencial,'[^0-9]','','g'),'') AS INTEGER)), 0) + 1
-                FROM ingresos_cabecera
-                WHERE id_empresa = :id_empresa AND eliminado = false";
-        $st = $this->db->prepare($sql);
-        $st->execute([':id_empresa' => $idEmpresa]);
-        return str_pad((string)($st->fetchColumn() ?: 1), 9, '0', STR_PAD_LEFT);
+        try {
+            $sql = "SELECT COUNT(*) FROM whatsapp_config
+                    WHERE id_empresa = :id_empresa AND activo = true";
+            $st = $this->db->prepare($sql);
+            $st->execute([':id_empresa' => $idEmpresa]);
+            return (int)$st->fetchColumn() > 0;
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     /**
@@ -303,9 +390,12 @@ class CuentasPorCobrarRepository extends BaseRepository
         $where = "v.id_empresa = :id_empresa
               AND v.eliminado  = false
               AND v.estado    IN ('autorizado','autorizada')
-              AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+              AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_ta)";
 
-        $params = [':id_empresa' => $idEmpresa];
+        $params = [
+            ':id_empresa'    => $idEmpresa,
+            ':id_empresa_ta' => $idEmpresa,
+        ];
 
         // Filtro de estado CxC
         $estado = $filtros['estado'] ?? 'PENDIENTES';

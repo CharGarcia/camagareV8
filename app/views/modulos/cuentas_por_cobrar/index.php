@@ -20,11 +20,11 @@
             <small class="text-muted">Seguimiento de saldos pendientes, cobros y recordatorios</small>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-            <?php if (!empty($tieneWA)): ?>
-            <button class="btn btn-success btn-sm" onclick="CXC_envioMasivoWA()" title="Enviar recordatorio WhatsApp a todos los seleccionados">
+            <button class="btn btn-sm fw-semibold" style="background:#25d366;color:#fff;"
+                    onclick="CXC_envioMasivoWA()"
+                    title="Enviar recordatorio WhatsApp a todos los seleccionados">
                 <i class="bi bi-whatsapp me-1"></i>Envío Masivo WA
             </button>
-            <?php endif; ?>
             <button class="btn btn-outline-primary btn-sm" onclick="CXC_envioMasivoEmail()" title="Enviar correo a todos los seleccionados">
                 <i class="bi bi-envelope me-1"></i>Envío Masivo Email
             </button>
@@ -198,13 +198,12 @@
                         <col style="width:130px;">
                         <col>
                         <col style="width:110px;">
-                        <col style="width:105px;">
-                        <col style="width:105px;">
-                        <col style="width:65px;">
-                        <col style="width:100px;">
-                        <col style="width:100px;">
-                        <col style="width:100px;">
                         <col style="width:115px;">
+                        <col style="width:100px;">
+                        <col style="width:100px;">
+                        <col style="width:100px;">
+                        <col style="width:90px;">
+                        <col style="width:155px;">
                     </colgroup>
                     <thead class="table-light">
                         <tr>
@@ -269,24 +268,65 @@
                     </div>
                 </div>
                 <div class="row g-2">
-                    <div class="col-md-6">
-                        <label class="form-label small fw-bold mb-1">Monto a Cobrar <span class="text-danger">*</span></label>
-                        <div class="input-group input-group-sm">
-                            <span class="input-group-text">$</span>
-                            <input type="number" id="cobro-monto" class="form-control shadow-none"
-                                   step="0.01" min="0.01" placeholder="0.00">
-                        </div>
+                    <div class="col-7">
+                        <label class="form-label small fw-bold mb-1">Serie <span class="text-danger">*</span></label>
+                        <select id="cobro-punto-emision" class="form-select form-select-sm shadow-none"
+                                onchange="CXC_cargarSecuencial(this.value)">
+                            <option value="">— Seleccione —</option>
+                        </select>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-5">
+                        <label class="form-label small fw-bold mb-1">Nº Secuencial</label>
+                        <input type="text" id="cobro-secuencial" readonly
+                               class="form-control form-control-sm shadow-none bg-light text-center fw-bold font-monospace"
+                               placeholder="—" style="font-size:0.8rem;">
+                    </div>
+                    <div class="col-6">
                         <label class="form-label small fw-bold mb-1">Fecha de Cobro <span class="text-danger">*</span></label>
                         <input type="date" id="cobro-fecha" class="form-control form-control-sm shadow-none"
                                value="<?php echo date('Y-m-d'); ?>">
                     </div>
-                    <div class="col-12">
-                        <label class="form-label small fw-bold mb-1">Forma de Cobro <span class="text-danger">*</span></label>
-                        <select id="cobro-forma" class="form-select form-select-sm shadow-none">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold mb-1">Concepto <span class="text-danger">*</span></label>
+                        <select id="cobro-concepto"
+                                class="form-select form-select-sm shadow-none bg-light"
+                                style="pointer-events:none;cursor:default;" tabindex="-1"
+                                title="El concepto se define automáticamente para cobros de factura de venta.">
                             <option value="">Cargando…</option>
                         </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold mb-1 text-danger">Monto a Cobrar ($) <span class="text-danger">*</span></label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text fw-bold text-danger border-danger border-opacity-50">$</span>
+                            <input type="number" id="cobro-monto" class="form-control shadow-none fw-bold text-danger border-danger border-opacity-50"
+                                   step="0.01" min="0.01" placeholder="0.00">
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold mb-1">Forma de Cobro <span class="text-danger">*</span></label>
+                        <select id="cobro-forma" class="form-select form-select-sm shadow-none"
+                                onchange="CXC_toggleBancoDatos(this.value)">
+                            <option value="">Cargando…</option>
+                        </select>
+                    </div>
+                    <!-- Campos bancarios condicionales (visibles cuando tipo = BANCO) -->
+                    <div class="col-12 d-none" id="cobro-div-banco">
+                        <div class="border border-warning border-opacity-25 rounded-2 p-2 bg-warning bg-opacity-10 row g-2">
+                            <div class="col-6">
+                                <label class="form-label small fw-bold mb-1">Op. Bancaria</label>
+                                <select id="cobro-tipo-op" class="form-select form-select-sm shadow-none">
+                                    <option value="TRANSFERENCIA">Transferencia</option>
+                                    <option value="DEBITO">Débito</option>
+                                    <option value="CHEQUE">Cheque</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-bold mb-1">Nº Referencia / Cheque</label>
+                                <input type="text" id="cobro-num-op" class="form-control form-control-sm shadow-none"
+                                       placeholder="Nº transf / cheque" maxlength="100">
+                            </div>
+                        </div>
                     </div>
                     <div class="col-12">
                         <label class="form-label small fw-bold mb-1">Observaciones</label>

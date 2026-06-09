@@ -1433,7 +1433,7 @@ class FacturaVentaController extends BaseModuloController
                 "SELECT id, nombre, tipo
                  FROM empresa_formas_pago
                  WHERE id_empresa = ? AND eliminado = false AND activo = true
-                   AND (aplica_en = 'AMBAS' OR aplica_en = 'INGRESO')
+                   AND (aplica_en IN ('AMBAS','INGRESO') OR aplica_en IS NULL)
                  ORDER BY nombre ASC"
             );
             $stF->execute([$idEmpresa]);

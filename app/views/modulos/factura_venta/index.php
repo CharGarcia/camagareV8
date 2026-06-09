@@ -909,9 +909,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                             <input type="date" class="form-control form-control-sm shadow-none border-secondary-subtle" id="fvPagoFecha" value="<?= date('Y-m-d') ?>" required>
                                                         </div>
                                                         <div class="col-6">
-                                                            <label class="form-label fw-bold mb-0 text-muted" style="font-size:0.7rem;">Concepto</label>
-                                                            <select class="form-select form-select-sm shadow-none border-secondary-subtle" id="fvPagoConcepto">
-                                                                <option value="">— Opcional —</option>
+                                                            <label class="form-label fw-bold mb-0 text-muted" style="font-size:0.7rem;">Concepto <span class="text-danger">*</span></label>
+                                                            <select class="form-select form-select-sm shadow-none border-secondary-subtle bg-light"
+                                                                    id="fvPagoConcepto"
+                                                                    style="pointer-events:none;cursor:default;"
+                                                                    tabindex="-1"
+                                                                    title="El concepto se define automáticamente para cobros de factura de venta.">
+                                                                <option value="">Cargando…</option>
                                                             </select>
                                                         </div>
                                                         <div class="col-12">
@@ -924,27 +928,20 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                                 <option value="">— Seleccione —</option>
                                                             </select>
                                                         </div>
-                                                        <!-- Campos banco condicionales -->
+                                                        <!-- Campos banco condicionales (se muestran cuando la forma de cobro es tipo BANCO) -->
                                                         <div class="col-12 d-none" id="fvPagoDivBanco">
                                                             <div class="border border-warning border-opacity-25 rounded-2 p-2 bg-warning bg-opacity-10 mb-1 row g-2">
                                                                 <div class="col-6">
                                                                     <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Op. Bancaria</label>
-                                                                    <select class="form-select form-select-sm" id="fvPagoTipoOp">
+                                                                    <select class="form-select form-select-sm shadow-none" id="fvPagoTipoOp">
                                                                         <option value="TRANSFERENCIA">Transferencia</option>
                                                                         <option value="DEBITO">Débito</option>
                                                                         <option value="CHEQUE">Cheque</option>
                                                                     </select>
                                                                 </div>
                                                                 <div class="col-6">
-                                                                    <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Nº Referencia</label>
-                                                                    <input type="text" class="form-control form-control-sm" id="fvPagoNumOp" placeholder="Nº doc / Transf">
-                                                                </div>
-                                                                <!-- Selección de banco oculta: no se solicita banco en cobros desde factura -->
-                                                                <div class="col-12 d-none">
-                                                                    <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Banco</label>
-                                                                    <select class="form-select form-select-sm" id="fvPagoBanco">
-                                                                        <option value="">— Opcional —</option>
-                                                                    </select>
+                                                                    <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Nº Referencia / Cheque</label>
+                                                                    <input type="text" class="form-control form-control-sm shadow-none" id="fvPagoNumOp" placeholder="Nº transf / cheque">
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -5683,30 +5680,39 @@ $perm = $permOriginal;
                         }
                     }
 
-                    // Concepto — siempre el relacionado a facturas de venta y BLOQUEADO.
-                    // El tipo de ingreso queda definido por la factura de venta, por lo que
-                    // el usuario no puede cambiar el concepto manualmente.
-                    const comboConc = document.getElementById('fvPagoConcepto');
-                    if (comboConc) {
-                        comboConc.innerHTML = '<option value="">— Opcional —</option>'
-                            + con.map(c => `<option value="${c.id}" data-comp="${c.comportamiento || 'GENERAL'}">${c.nombre}</option>`).join('');
+                    // Concepto — solo lectura, auto-seleccionado según comportamiento FACTURA_VENTA.
+                    // Si no se encuentra en el catálogo se habilita para selección manual.
+                    {
+                        const selConc = document.getElementById('fvPagoConcepto');
+                        if (selConc) {
+                            selConc.innerHTML = con.length
+                                ? con.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('')
+                                : '<option value="">— Sin conceptos configurados —</option>';
 
-                        // 1) Buscar por comportamiento exacto
-                        let cDef = con.find(c =>
-                            c.comportamiento === 'FACTURA_VENTA' || c.comportamiento === 'COBRO_FACTURA'
-                        );
-                        // 2) Fallback: por palabras clave en el nombre
-                        if (!cDef) cDef = con.find(c => {
-                            const n = (c.nombre || '').toLowerCase();
-                            return n.includes('cobro') || n.includes('factura') || n.includes('venta');
-                        });
-                        if (cDef) comboConc.value = cDef.id;
+                            // 1) Buscar por comportamiento exacto
+                            let cDef = con.find(c =>
+                                c.comportamiento === 'FACTURA_VENTA' || c.comportamiento === 'COBRO_FACTURA'
+                            );
+                            // 2) Fallback por palabras clave en el nombre
+                            if (!cDef) cDef = con.find(c => {
+                                const n = (c.nombre || '').toLowerCase();
+                                return n.includes('cobro') || n.includes('factura') || n.includes('venta');
+                            });
 
-                        // Bloquear el selector: queda fijo en el concepto de factura de venta.
-                        // Un <select disabled> sigue siendo legible por JS (.value) al registrar el cobro.
-                        comboConc.disabled = true;
-                        comboConc.classList.add('bg-light');
-                        comboConc.title = 'El concepto se define automáticamente para cobros de factura de venta.';
+                            if (cDef) {
+                                // Concepto encontrado → auto-seleccionar y bloquear
+                                selConc.value = cDef.id;
+                                selConc.style.pointerEvents = 'none';
+                                selConc.style.cursor        = 'default';
+                                selConc.tabIndex            = -1;
+                            } else {
+                                // No encontrado → habilitar para selección manual
+                                selConc.style.pointerEvents = '';
+                                selConc.style.cursor        = '';
+                                selConc.tabIndex            = 0;
+                                selConc.classList.remove('bg-light');
+                            }
+                        }
                     }
 
                     // Forma de cobro

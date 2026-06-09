@@ -14,13 +14,16 @@ let CXC_agingChart    = null;
 let CXC_formasCobro   = [];
 let CXC_plantillasWA  = [];
 let CXC_seleccionados = new Set(); // ids de facturas seleccionadas
+// Catálogos del modal cobro
+let CXC_catalogos = { puntos: [], conceptos: [], formas: [] };
+let CXC_catalogosCargados = false;
 
 /* ════════════════════════════════════════════════════
    INICIALIZACIÓN
 ════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
     CXC_cargar();
-    CXC_cargarFormasCobro();
+    CXC_cargarCatalogos();
     if (CXC_TIENE_WA) CXC_cargarPlantillasWA();
     CXC_initBuscadorClientes();
 });
@@ -185,7 +188,7 @@ function CXC_renderTabla(filas) {
             <td class="text-end fw-bold pe-3" style="font-size:.82rem;color:${saldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(saldo)}</td>
             <td class="text-center">${badgeHtml}</td>
             <td class="text-center">
-                <div class="d-flex justify-content-center gap-1 flex-nowrap">
+                <div class="d-flex justify-content-center gap-1 flex-wrap">
                     ${saldo > 0 ? `
                     <button class="btn btn-success btn-sm py-0 px-2" style="font-size:.72rem;" title="Registrar cobro"
                             onclick="CXC_abrirModalCobro(${r.id})">
@@ -199,11 +202,10 @@ function CXC_renderTabla(filas) {
                             onclick="CXC_abrirEmail(${r.id}, '${esc(r.numero_factura)}', '${esc(r.cliente_email || '')}', '${esc(r.cliente_nombre)}')">
                         <i class="bi bi-envelope"></i>
                     </button>
-                    ${CXC_TIENE_WA ? `
                     <button class="btn btn-sm py-0 px-2" style="font-size:.72rem;background:#25d366;color:#fff;" title="Enviar WhatsApp"
                             onclick="CXC_abrirWA(${r.id}, '${esc(r.numero_factura)}', '${esc(r.cliente_telefono || '')}', '${esc(r.cliente_nombre)}')">
                         <i class="bi bi-whatsapp"></i>
-                    </button>` : ''}
+                    </button>
                 </div>
             </td>
         </tr>`;
@@ -247,36 +249,127 @@ function CXC_abrirModalCobro(idVenta) {
     const fila = CXC_datos.find(r => r.id == idVenta);
     if (!fila) return;
 
-    document.getElementById('cobro-id-venta').value      = idVenta;
+    // Info factura
+    document.getElementById('cobro-id-venta').value         = idVenta;
     document.getElementById('cobro-nro-factura').textContent = fila.numero_factura;
     document.getElementById('cobro-cliente').textContent     = fila.cliente_nombre;
     document.getElementById('cobro-total-fact').textContent  = CXC_fmt(fila.total);
     document.getElementById('cobro-ya-cobrado').textContent  = CXC_fmt(fila.total_cobrado);
     document.getElementById('cobro-saldo-pend').textContent  = CXC_fmt(fila.saldo);
-    document.getElementById('cobro-monto').value             = parseFloat(fila.saldo).toFixed(2);
-    document.getElementById('cobro-monto').max               = parseFloat(fila.saldo).toFixed(2);
-    document.getElementById('cobro-fecha').value             = new Date().toISOString().slice(0,10);
-    document.getElementById('cobro-observaciones').value     = '';
 
-    // Poblar formas de cobro
-    const sel = document.getElementById('cobro-forma');
-    sel.innerHTML = CXC_formasCobro.length
-        ? CXC_formasCobro.map(f => `<option value="${f.id}">${f.nombre}</option>`).join('')
+    // Monto y fecha
+    const elMonto = document.getElementById('cobro-monto');
+    elMonto.value = parseFloat(fila.saldo).toFixed(2);
+    elMonto.max   = parseFloat(fila.saldo).toFixed(2);
+    document.getElementById('cobro-fecha').value         = new Date().toISOString().slice(0,10);
+    document.getElementById('cobro-observaciones').value = '';
+
+    // ── Serie (puntos de emisión) ──────────────────────────────────────────
+    const selPunto = document.getElementById('cobro-punto-emision');
+    const pts = CXC_catalogos.puntos;
+    selPunto.innerHTML = '<option value="">— Seleccione —</option>'
+        + pts.map(p => `<option value="${p.id_punto}">${p.cod_establecimiento}-${p.codigo_punto}</option>`).join('');
+    if (pts.length === 1) {
+        selPunto.selectedIndex = 1;
+        CXC_cargarSecuencial(pts[0].id_punto);
+    } else {
+        document.getElementById('cobro-secuencial').value = '';
+    }
+
+    // ── Concepto (solo lectura, auto-seleccionado) ─────────────────────────
+    const selConc = document.getElementById('cobro-concepto');
+    const cons = CXC_catalogos.conceptos;
+    selConc.innerHTML = cons.length
+        ? cons.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('')
+        : '<option value="">Sin conceptos configurados</option>';
+
+    let cDef = cons.find(c => c.comportamiento === 'FACTURA_VENTA' || c.comportamiento === 'COBRO_FACTURA');
+    if (!cDef) cDef = cons.find(c => {
+        const n = (c.nombre || '').toLowerCase();
+        return n.includes('cobro') || n.includes('factura') || n.includes('venta');
+    });
+    if (cDef) {
+        selConc.value = cDef.id;
+        selConc.style.pointerEvents = 'none';
+        selConc.style.cursor        = 'default';
+        selConc.tabIndex            = -1;
+        selConc.classList.add('bg-light');
+    } else {
+        selConc.style.pointerEvents = '';
+        selConc.style.cursor        = '';
+        selConc.tabIndex            = 0;
+        selConc.classList.remove('bg-light');
+    }
+
+    // ── Formas de cobro ────────────────────────────────────────────────────
+    const selForma = document.getElementById('cobro-forma');
+    const fps = CXC_catalogos.formas;
+    selForma.innerHTML = fps.length
+        ? fps.map(f => `<option value="${f.id}" data-tipo="${(f.tipo||'').toUpperCase()}">${f.nombre}</option>`).join('')
         : '<option value="">Sin formas de cobro configuradas</option>';
+    if (fps.length === 1) selForma.selectedIndex = 0;
+
+    // Resetear bloque banco
+    CXC_toggleBancoDatos(selForma.value);
+    const elTipoOp = document.getElementById('cobro-tipo-op');
+    const elNumOp  = document.getElementById('cobro-num-op');
+    if (elTipoOp) elTipoOp.value = 'TRANSFERENCIA';
+    if (elNumOp)  elNumOp.value  = '';
 
     new bootstrap.Modal(document.getElementById('modalCobro')).show();
 }
 
-async function CXC_guardarCobro() {
-    const idVenta   = document.getElementById('cobro-id-venta').value;
-    const monto     = parseFloat(document.getElementById('cobro-monto').value);
-    const forma     = document.getElementById('cobro-forma').value;
-    const fecha     = document.getElementById('cobro-fecha').value;
-    const obs       = document.getElementById('cobro-observaciones').value;
+async function CXC_cargarSecuencial(idPunto) {
+    const el = document.getElementById('cobro-secuencial');
+    if (!el) return;
+    if (!idPunto) { el.value = ''; return; }
+    el.value = '…';
+    try {
+        const r = await fetch(
+            `${BASE_URL}/${RUTA_MODULO_CXC}/getSecuencialAjax?id_punto_emision=${idPunto}`,
+            { headers: { 'X-Requested-With': 'XMLHttpRequest' } }
+        );
+        const data = await r.json();
+        if (data.ok) {
+            el.value = data.formateado || String(data.secuencial).padStart(9, '0');
+            el.classList.toggle('border-warning', !!data.es_gap);
+            el.classList.toggle('text-warning',   !!data.es_gap);
+        } else {
+            el.value = '—';
+        }
+    } catch {
+        el.value = '—';
+    }
+}
 
-    if (!monto || monto <= 0)   { CXC_toast('Ingrese un monto válido.', 'warning'); return; }
-    if (!forma)                  { CXC_toast('Seleccione una forma de cobro.', 'warning'); return; }
-    if (!fecha)                  { CXC_toast('Seleccione la fecha de cobro.', 'warning'); return; }
+/**
+ * Muestra u oculta el bloque de datos bancarios según el tipo de forma de cobro seleccionada.
+ */
+function CXC_toggleBancoDatos(idForma) {
+    const divBanco = document.getElementById('cobro-div-banco');
+    if (!divBanco) return;
+    const fp   = CXC_formasCobro.find(f => f.id == idForma);
+    const tipo = fp ? (fp.tipo || '').toUpperCase() : '';
+    if (tipo === 'BANCO') {
+        divBanco.classList.remove('d-none');
+    } else {
+        divBanco.classList.add('d-none');
+    }
+}
+
+async function CXC_guardarCobro() {
+    const idVenta  = document.getElementById('cobro-id-venta').value;
+    const idPunto  = document.getElementById('cobro-punto-emision').value;
+    const concepto = document.getElementById('cobro-concepto').value;
+    const monto    = parseFloat(document.getElementById('cobro-monto').value);
+    const forma    = document.getElementById('cobro-forma').value;
+    const fecha    = document.getElementById('cobro-fecha').value;
+    const obs      = document.getElementById('cobro-observaciones').value;
+
+    if (!idPunto)              { CXC_toast('Seleccione la serie (punto de emisión).', 'warning'); return; }
+    if (!monto || monto <= 0)  { CXC_toast('Ingrese un monto válido.', 'warning'); return; }
+    if (!forma)                { CXC_toast('Seleccione una forma de cobro.', 'warning'); return; }
+    if (!fecha)                { CXC_toast('Seleccione la fecha de cobro.', 'warning'); return; }
 
     const btn = document.getElementById('btn-guardar-cobro');
     btn.disabled = true;
@@ -284,12 +377,20 @@ async function CXC_guardarCobro() {
 
     try {
         const fd = new FormData();
-        fd.append('accion',          'registrarCobroAjax');
-        fd.append('id_venta',        idVenta);
-        fd.append('monto',           monto);
-        fd.append('id_forma_cobro',  forma);
-        fd.append('fecha_cobro',     fecha);
-        fd.append('observaciones',   obs);
+        fd.append('id_venta',           idVenta);
+        fd.append('id_punto_emision',   idPunto);
+        fd.append('id_ingreso_concepto',concepto);
+        fd.append('monto',              monto);
+        fd.append('id_forma_cobro',     forma);
+        fd.append('fecha_cobro',        fecha);
+        fd.append('observaciones',      obs);
+
+        // Datos bancarios si el bloque está visible
+        const divBanco = document.getElementById('cobro-div-banco');
+        if (divBanco && !divBanco.classList.contains('d-none')) {
+            fd.append('tipo_operacion_bancaria', document.getElementById('cobro-tipo-op')?.value || '');
+            fd.append('numero_operacion',        document.getElementById('cobro-num-op')?.value  || '');
+        }
 
         const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/registrarCobroAjax`, {
             method: 'POST',
@@ -450,6 +551,11 @@ function CXC_envioMasivoEmail() {
    MODAL WHATSAPP
 ════════════════════════════════════════════════════ */
 function CXC_abrirWA(idVenta, nroFactura, telefono, clienteNombre) {
+    if (!CXC_TIENE_WA) {
+        CXC_toast('WhatsApp no está configurado para esta empresa. Active el módulo de WhatsApp para usar esta función.', 'warning');
+        return;
+    }
+
     document.getElementById('wa-id-venta').value         = idVenta;
     document.getElementById('wa-subtitulo').textContent  = `Factura: ${nroFactura} — ${clienteNombre}`;
     document.getElementById('wa-telefono').value         = (telefono || '').replace(/[^0-9]/g, '');
@@ -578,9 +684,13 @@ async function CXC_enviarWA() {
    ENVÍO MASIVO WHATSAPP
 ════════════════════════════════════════════════════ */
 function CXC_envioMasivoWA() {
+    if (!CXC_TIENE_WA) {
+        CXC_toast('WhatsApp no está configurado para esta empresa. Active el módulo de WhatsApp para usar esta función.', 'warning');
+        return;
+    }
     const ids = [...CXC_seleccionados];
     if (!ids.length) {
-        CXC_toast('Seleccione al menos una factura.', 'warning');
+        CXC_toast('Seleccione al menos una factura para el envío masivo.', 'warning');
         return;
     }
     CXC_toast('Para envíos masivos de WhatsApp, use el botón individual por cliente.', 'info');
@@ -589,14 +699,22 @@ function CXC_envioMasivoWA() {
 /* ════════════════════════════════════════════════════
    CARGA DE CATÁLOGOS
 ════════════════════════════════════════════════════ */
-async function CXC_cargarFormasCobro() {
+async function CXC_cargarCatalogos() {
     try {
-        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/getFormasCobroAjax`, {
+        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/getCatalogosCobroAjax`, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         const data = await r.json();
-        if (data.ok) CXC_formasCobro = data.formas || [];
-    } catch {}
+        if (data.ok) {
+            CXC_catalogos.puntos    = data.puntos    || [];
+            CXC_catalogos.conceptos = data.conceptos || [];
+            CXC_catalogos.formas    = data.formas    || [];
+            CXC_formasCobro         = CXC_catalogos.formas; // alias para toggleBancoDatos
+            CXC_catalogosCargados   = true;
+        }
+    } catch (e) {
+        console.warn('[CxC] Error cargando catálogos:', e);
+    }
 }
 
 async function CXC_cargarPlantillasWA() {
@@ -668,9 +786,9 @@ function CXC_agregarCliente(id, nombre, ruc) {
 function CXC_renderChipsClientes() {
     const cont = document.getElementById('cxc-chips-cliente');
     cont.innerHTML = CXC_clientesSeleccionados.map(c => `
-        <span class="badge bg-success bg-opacity-15 text-success border border-success border-opacity-25 rounded-pill px-2 py-1">
+        <span style="display:inline-flex;align-items:center;gap:4px;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;border-radius:20px;padding:2px 10px;font-size:.78rem;font-weight:500;">
             ${esc(c.nombre)}
-            <button type="button" class="btn-close btn-close-sm ms-1" style="font-size:.6rem;"
+            <button type="button" class="btn-close btn-close-sm ms-1" style="font-size:.55rem;"
                     onclick="CXC_quitarCliente(${c.id})"></button>
         </span>`).join('');
 }
@@ -734,27 +852,15 @@ function esc(s) {
 }
 
 function CXC_toast(msg, type = 'info') {
-    const id  = 'toast-cxc-' + Date.now();
-    const cls = { success:'bg-success', danger:'bg-danger', warning:'bg-warning text-dark', info:'bg-primary' }[type] || 'bg-secondary';
-
-    let cont = document.getElementById('cxc-toast-container');
-    if (!cont) {
-        cont = document.createElement('div');
-        cont.id = 'cxc-toast-container';
-        cont.className = 'toast-container position-fixed bottom-0 end-0 p-3';
-        cont.style.zIndex = 9999;
-        document.body.appendChild(cont);
-    }
-
-    cont.insertAdjacentHTML('beforeend', `
-        <div id="${id}" class="toast align-items-center text-white ${cls} border-0" role="alert">
-            <div class="d-flex">
-                <div class="toast-body">${msg}</div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-            </div>
-        </div>`);
-
-    const el = document.getElementById(id);
-    new bootstrap.Toast(el, { delay: 4500 }).show();
-    el.addEventListener('hidden.bs.toast', () => el.remove());
+    const map = {
+        success : { icon: 'success', title: 'Éxito',       timer: 2500, showConfirmButton: false },
+        danger  : { icon: 'error',   title: 'Error',        timer: undefined, showConfirmButton: true },
+        warning : { icon: 'warning', title: 'Atención',     timer: undefined, showConfirmButton: true },
+        info    : { icon: 'info',    title: 'Información',  timer: 3000, showConfirmButton: false },
+    };
+    const cfg = map[type] || map.info;
+    const opts = { icon: cfg.icon, title: cfg.title, text: msg };
+    if (cfg.timer)               opts.timer             = cfg.timer;
+    if (!cfg.showConfirmButton)  opts.showConfirmButton = false;
+    Swal.fire(opts);
 }
