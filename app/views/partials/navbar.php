@@ -313,8 +313,8 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         </h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
     </div>
-    <div class="offcanvas-body bg-light p-0">
-    <div style="max-height: calc(100vh - 70px); overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y;">
+    <div class="offcanvas-body bg-light p-0" style="min-height: 0; -webkit-overflow-scrolling: touch;">
+    
         <!-- Opciones de Empresa y Acceso Rapido -->
         <div class="p-3 bg-white border-bottom">
             <label class="form-label small fw-bold text-muted mb-1">Empresa actual:</label>
@@ -427,10 +427,17 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
             </div>
         </div>
     </div>
-    </div>
 </div>
 
 <script>
+    // Safari/iOS FIX: Mover el offcanvas al final del body para escapar 
+    // de cualquier restricción de position: sticky del header padre.
+    document.addEventListener("DOMContentLoaded", function() {
+        var offcanvasMenu = document.getElementById('offcanvasMobileMenu');
+        if (offcanvasMenu && offcanvasMenu.parentNode !== document.body) {
+            document.body.appendChild(offcanvasMenu);
+        }
+    });
     window.updateGuiasRemisionBorradorBadge = async function() {
         const icons = document.querySelectorAll('.guias-remision-borrador-icon');
         const badges = document.querySelectorAll('.guias-remision-borrador-badge');
