@@ -817,13 +817,41 @@ class FacturaVentaController extends BaseModuloController
                 $metaMessageId = $result['data']['messages'][0]['id'] ?? null;
                 $repoMsj = new \App\repositories\modulos\WhatsappMensajeRepository();
                 $idChat = $repoMsj->getOrCreateChat($idEmpresa, $telefono, $nombreCliente, 'Factura enviada', false);
+
+                // Extraer valores de variables desde $apiComponents ya construido
+                $variablesGuardar = [];
+                foreach ($apiComponents as $comp) {
+                    if (strtolower($comp['type'] ?? '') === 'body') {
+                        foreach ($comp['parameters'] ?? [] as $p) {
+                            $variablesGuardar[] = $p['text'] ?? '';
+                        }
+                        break;
+                    }
+                }
+
+                // Construir template_text con variables sustituidas
+                $templateTextGuardar = '';
+                foreach ($componentes as $comp) {
+                    if (($comp['type'] ?? '') === 'BODY') {
+                        $templateTextGuardar = $comp['text'] ?? '';
+                        foreach ($variablesGuardar as $idx => $val) {
+                            $templateTextGuardar = str_replace('{{' . ($idx + 1) . '}}', $val, $templateTextGuardar);
+                        }
+                        break;
+                    }
+                }
+
                 $repoMsj->saveMessage(
                     $idEmpresa,
                     $idChat,
                     'OUT',
                     $telefono,
                     'template',
-                    ['template' => $plantillaMeta['nombre']],
+                    [
+                        'template'      => $plantillaMeta['nombre'],
+                        'variables'     => $variablesGuardar,
+                        'template_text' => $templateTextGuardar,
+                    ],
                     $metaMessageId,
                     'sent'
                 );

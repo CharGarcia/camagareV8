@@ -5,7 +5,7 @@ $menuModulos = $menuModulos ?? [];
 $base = $base ?? BASE_URL;
 $menuModulos = array_values(array_filter($menuModulos, fn($m) => !empty($m['submodulos'] ?? [])));
 ?>
-<nav class="cmg-menu-modulos" aria-label="Módulos del sistema">
+<nav class="cmg-menu-modulos d-none d-lg-flex" aria-label="Módulos del sistema">
     <button type="button" class="cmg-menu-scroll-btn cmg-menu-scroll-left" aria-label="Desplazar izquierda">
         <i class="bi bi-chevron-left"></i>
     </button>

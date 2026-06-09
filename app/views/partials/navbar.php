@@ -112,303 +112,465 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         });
     }
 </script>
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary cmg-navbar-compact">
-    <div class="container-fluid gap-2 align-items-center py-0">
-        <!-- Brand CaMaGaRe -->
-        <a class="navbar-brand text-white fw-bold text-decoration-none py-0" href="<?= $base ?>/home/index">CaMaGaRe</a>
+<style>
+    
+    /* Agrupación de íconos en móvil */
+    .cmg-mobile-icons-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        text-align: center;
+    }
+    .cmg-mobile-icons-grid a {
+        background: #f8f9fa;
+        border-radius: 0.5rem;
+        padding: 0.75rem;
+        color: var(--bs-primary) !important;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-decoration: none;
+        border: 1px solid #dee2e6;
+        position: relative;
+    }
+    .cmg-mobile-icons-grid a i {
+        font-size: 1.5rem !important;
+        margin-bottom: 0.25rem;
+    }
+    .cmg-mobile-icons-grid a span.badge {
+        font-size: 0.7rem !important;
+        top: 5px !important;
+        right: 5px !important;
+        transform: none !important;
+        left: auto !important;
+    }
+    .cmg-offcanvas-menu-accordion .accordion-button {
+        padding: 1rem;
+        font-weight: 500;
+        color: var(--bs-dark);
+        background-color: transparent;
+        box-shadow: none;
+    }
+    .cmg-offcanvas-menu-accordion .accordion-button:not(.collapsed) {
+        color: var(--bs-primary);
+        background-color: rgba(var(--bs-primary-rgb), 0.05);
+    }
+    .cmg-offcanvas-menu-accordion .accordion-body {
+        padding: 0;
+    }
+    .cmg-offcanvas-menu-accordion .list-group-item {
+        border: none;
+        border-radius: 0;
+        padding: 0.75rem 1rem 0.75rem 3rem;
+        color: var(--bs-secondary);
+        background-color: #f8f9fa;
+    }
+    .cmg-offcanvas-menu-accordion .list-group-item:hover {
+        background-color: #e9ecef;
+        color: var(--bs-primary);
+    }
+</style>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary cmg-navbar-compact position-relative">
+    <div class="container-fluid gap-2 align-items-center py-1 d-flex flex-wrap flex-lg-nowrap">
+        <!-- 1. Brand CaMaGaRe -->
+        <a class="navbar-brand text-white fw-bold text-decoration-none py-0 order-0 m-0" href="<?= $base ?>/home/index">CaMaGaRe</a>
 
-        <!-- Toggler para móvil -->
-        <button class="navbar-toggler cmg-navbar-toggler border-0 py-1 px-2" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Abrir menú">
-            <i class="bi bi-list text-white"></i>
-        </button>
+        <!-- 2. Select empresas (Desktop: order 1, Mobile: order 1 flex-grow) -->
+        <div class="d-flex align-items-center order-1 me-lg-auto flex-grow-1 flex-lg-grow-0" style="min-width: 0;">
+            <?php $esFavorita = (int)($_SESSION['id_empresa'] ?? 0) === (int)($idEmpresaFavorita ?? 0); ?>
+            <i id="btn-favorito-global" class="bi <?= $esFavorita ? 'bi-star-fill text-warning' : 'bi-star text-white-50' ?> cursor-pointer me-2" 
+               style="font-size: 1.1rem; cursor: pointer;" 
+               title="<?= $esFavorita ? 'Esta es tu empresa favorita' : 'Marcar como empresa favorita' ?>"
+               data-id="<?= (int)($_SESSION['id_empresa'] ?? 0) ?>"
+               onclick="setFavoriteGlobal(this)"></i>
 
-        <!-- Contenido colapsable -->
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <div class="d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center gap-2 gap-lg-0 w-100 py-2 py-lg-0">
-                 <!-- Select empresas -->
-                <div class="d-flex align-items-center order-1 order-lg-2">
-                    <?php $esFavorita = (int)($_SESSION['id_empresa'] ?? 0) === (int)($idEmpresaFavorita ?? 0); ?>
-                    <i id="btn-favorito-global" class="bi <?= $esFavorita ? 'bi-star-fill text-warning' : 'bi-star text-white-50' ?> cursor-pointer me-2" 
-                       style="font-size: 1.1rem; cursor: pointer;" 
-                       title="<?= $esFavorita ? 'Esta es tu empresa favorita' : 'Marcar como empresa favorita' ?>"
-                       data-id="<?= (int)($_SESSION['id_empresa'] ?? 0) ?>"
-                       onclick="setFavoriteGlobal(this)"></i>
-
-                    <form id="form-cambiar-empresa" method="POST" action="<?= $base ?>/empresa/setEmpresa" class="cmg-empresas-form cmg-empresas-dropdown-wrap">
-                        <input type="hidden" name="id_usuario" value="<?= (int) ($_SESSION['id_usuario'] ?? 0) ?>">
-                        <input type="hidden" name="id_empresa" id="input-id-empresa" value="<?= (int) ($_SESSION['id_empresa'] ?? 0) ?>">
-                        <input type="hidden" name="ruc_empresa" id="input-ruc-empresa" value="<?= htmlspecialchars($_SESSION['ruc_empresa'] ?? '') ?>">
-                        <input type="text" id="input-empresas" class="form-control cmg-empresas-input" autocomplete="off"
-                            placeholder="Seleccionar empresa..."
-                            value="<?= htmlspecialchars($valorInicial) ?>"
-                            data-options="<?= htmlspecialchars(json_encode(array_map(function ($e) {
-                                                $nombre = !empty($e['nombre_comercial']) ? $e['nombre_comercial'] : ($e['nombre'] ?? $e['ruc'] ?? '');
-                                                $texto = ($e['establecimiento'] ?? '001') . ' - ' . $nombre;
-                                                return ['id' => (int)$e['id_empresa'], 'text' => $texto, 'ruc' => $e['ruc'] ?? ''];
-                                            }, $empresas))) ?>">
-                        <div class="cmg-empresas-dropdown" id="dropdown-empresas" role="listbox">
-                            <?php foreach ($empresas as $emp):
-                                $nombreEmp = !empty($emp['nombre_comercial']) ? $emp['nombre_comercial'] : ($emp['nombre'] ?? $emp['ruc'] ?? '');
-                                $textoEmp = ($emp['establecimiento'] ?? '001') . ' - ' . $nombreEmp;
-                            ?>
-                                <div class="cmg-empresas-dropdown-item" role="option" data-id="<?= (int)($emp['id_empresa'] ?? 0) ?>" data-text="<?= htmlspecialchars($textoEmp) ?>" data-ruc="<?= htmlspecialchars($emp['ruc'] ?? '') ?>">
-                                    <?= htmlspecialchars($textoEmp) ?>
-                                </div>
-                            <?php endforeach; ?>
+            <form id="form-cambiar-empresa" method="POST" action="<?= $base ?>/empresa/setEmpresa" class="cmg-empresas-form cmg-empresas-dropdown-wrap flex-grow-1">
+                <input type="hidden" name="id_usuario" value="<?= (int) ($_SESSION['id_usuario'] ?? 0) ?>">
+                <input type="hidden" name="id_empresa" id="input-id-empresa" value="<?= (int) ($_SESSION['id_empresa'] ?? 0) ?>">
+                <input type="hidden" name="ruc_empresa" id="input-ruc-empresa" value="<?= htmlspecialchars($_SESSION['ruc_empresa'] ?? '') ?>">
+                <input type="text" id="input-empresas" class="form-control cmg-empresas-input w-100" autocomplete="off"
+                    placeholder="Seleccionar empresa..."
+                    value="<?= htmlspecialchars($valorInicial) ?>"
+                    data-options="<?= htmlspecialchars(json_encode(array_map(function ($e) {
+                                        $nombre = !empty($e['nombre_comercial']) ? $e['nombre_comercial'] : ($e['nombre'] ?? $e['ruc'] ?? '');
+                                        $texto = ($e['establecimiento'] ?? '001') . ' - ' . $nombre;
+                                        return ['id' => (int)$e['id_empresa'], 'text' => $texto, 'ruc' => $e['ruc'] ?? ''];
+                                    }, $empresas))) ?>">
+                <div class="cmg-empresas-dropdown" id="dropdown-empresas" role="listbox">
+                    <?php foreach ($empresas as $emp):
+                        $nombreEmp = !empty($emp['nombre_comercial']) ? $emp['nombre_comercial'] : ($emp['nombre'] ?? $emp['ruc'] ?? '');
+                        $textoEmp = ($emp['establecimiento'] ?? '001') . ' - ' . $nombreEmp;
+                    ?>
+                        <div class="cmg-empresas-dropdown-item" role="option" data-id="<?= (int)($emp['id_empresa'] ?? 0) ?>" data-text="<?= htmlspecialchars($textoEmp) ?>" data-ruc="<?= htmlspecialchars($emp['ruc'] ?? '') ?>">
+                            <?= htmlspecialchars($textoEmp) ?>
                         </div>
-                    </form>
+                    <?php endforeach; ?>
                 </div>
+            </form>
+        </div>
 
-                <!-- Label mensajes -->
-                <span class="navbar-text text-white-50 text-center text-lg-center small order-2 order-lg-3 flex-grow-1" id="navbar-mensajes">&nbsp;</span>
+        <!-- Fila extra en móvil -->
+        <div class="w-100 d-lg-none order-2 m-0 p-0"></div>
 
-                <!-- Buscador de Módulos -->
-                <?php
-                $flatModulos = [];
-                $menuModulosParaSearch = $menuModulos ?? [];
-                foreach ($menuModulosParaSearch as $mod) {
-                    if (!empty($mod['submodulos'])) {
-                        foreach ($mod['submodulos'] as $sub) {
-                            $href = $sub['ruta'] ?? '#';
-                            if ($href !== '#' && !preg_match('#^https?://#', $href) && !str_starts_with($href, '/')) {
-                                $href = rtrim($base, '/') . '/' . ltrim($href, '/');
-                            }
-                            $flatModulos[] = [
-                                'title' => $sub['nombre_submodulo'],
-                                'path' => $mod['nombre_modulo'],
-                                'icon' => iconoClase($sub['icono_submodulo'] ?? $mod['icono_modulo'] ?? ''),
-                                'url' => $href
-                            ];
-                        }
+        <!-- 3. Buscador de Módulos (Mobile: order 3, Desktop: order 2) -->
+        <?php
+        $flatModulos = [];
+        $menuModulosParaSearch = $menuModulos ?? [];
+        foreach ($menuModulosParaSearch as $mod) {
+            if (!empty($mod['submodulos'])) {
+                foreach ($mod['submodulos'] as $sub) {
+                    $href = $sub['ruta'] ?? '#';
+                    if ($href !== '#' && !preg_match('#^https?://#', $href) && !str_starts_with($href, '/')) {
+                        $href = rtrim($base, '/') . '/' . ltrim($href, '/');
                     }
+                    $flatModulos[] = [
+                        'title' => $sub['nombre_submodulo'],
+                        'path' => $mod['nombre_modulo'],
+                        'icon' => iconoClase($sub['icono_submodulo'] ?? $mod['icono_modulo'] ?? ''),
+                        'url' => $href
+                    ];
                 }
-                ?>
-                <div class="cmg-nav-search-wrap order-3 order-lg-4">
-                    <input type="text" id="cmg-nav-search" class="form-control cmg-nav-search-input shadow-none" placeholder="Buscar módulo..." autocomplete="off">
-                    <i class="bi bi-search cmg-nav-search-icon"></i>
-                    <div id="cmg-nav-search-results" class="cmg-nav-search-results">
-                        <!-- Resultados AJAX local -->
-                    </div>
-                </div>
-
-                <!-- Usuario, config, logout -->
-                <div class="d-flex align-items-center justify-content-center justify-content-lg-end gap-2 order-4 order-lg-5">
-                    <a id="tareas-alertas-link" href="<?= $base ?>/config/tareas-obligaciones" class="text-white text-decoration-none position-relative me-2 d-none" title="Tareas pendientes/vencidas" style="display: inline-block;" data-navbar-link="true">
-                        <i class="bi bi-bell-fill" style="font-size: 1.1rem;"></i>
-                        <span id="tareas-alertas-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem; padding: 0.25em 0.5em;">
-                            0
-                        </span>
-                    </a>
-                    <a id="pedidos-pendientes-icon" href="<?= $base ?>/modulos/pedidos" class="text-white text-decoration-none position-relative me-2 d-none" title="Pedidos pendientes">
-                        <i class="bi bi-cart3" style="font-size: 1.1rem;"></i>
-                        <span id="pedidos-pendientes-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" style="font-size: 0.6rem; padding: 0.25em 0.5em;">
-                            0
-                        </span>
-                    </a>
-                    <a id="facturas-borrador-icon" href="<?= $base ?>/modulos/factura-venta" class="text-white text-decoration-none position-relative me-2 d-none" title="Facturas en borrador">
-                        <i class="bi bi-receipt" style="font-size: 1.1rem;"></i>
-                        <span id="facturas-borrador-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" style="font-size: 0.6rem; padding: 0.25em 0.5em;">
-                            0
-                        </span>
-                    </a>
-                    <a id="liquidaciones-borrador-icon" href="<?= $base ?>/modulos/liquidacion-compra" class="text-white text-decoration-none position-relative me-2 d-none" title="Liquidaciones de compra en borrador">
-                        <i class="bi bi-file-earmark-text" style="font-size: 1.1rem;"></i>
-                        <span id="liquidaciones-borrador-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" style="font-size: 0.6rem; padding: 0.25em 0.5em;">
-                            0
-                        </span>
-                    </a>
-                    <a id="retenciones-compras-borrador-icon" href="<?= $base ?>/modulos/retenciones_compras" class="text-white text-decoration-none position-relative me-2 d-none" title="Retenciones en compras en borrador">
-                        <i class="bi bi-percent" style="font-size: 1.1rem;"></i>
-                        <span id="retenciones-compras-borrador-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" style="font-size: 0.6rem; padding: 0.25em 0.5em;">
-                            0
-                        </span>
-                    </a>
-                    <a id="notas-credito-borrador-icon" href="<?= $base ?>/modulos/notas_credito" class="text-white text-decoration-none position-relative me-2 d-none" title="Notas de crédito en borrador">
-                        <i class="bi bi-file-earmark-minus" style="font-size: 1.1rem;"></i>
-                        <span id="notas-credito-borrador-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" style="font-size: 0.6rem; padding: 0.25em 0.5em;">
-                            0
-                        </span>
-                    </a>
-                    <a id="guias-remision-borrador-icon" href="<?= $base ?>/modulos/guias_remision" class="text-white text-decoration-none position-relative me-2 d-none" title="Guías de remisión en borrador">
-                        <i class="bi bi-truck" style="font-size: 1.1rem;"></i>
-                        <span id="guias-remision-borrador-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" style="font-size: 0.6rem; padding: 0.25em 0.5em;">
-                            0
-                        </span>
-                    </a>
-                    <a id="factura-express-pendientes-icon" href="<?= $base ?>/modulos/factura-express-solicitudes" class="text-white text-decoration-none position-relative me-2 d-none" title="Solicitudes Factura Express pendientes">
-                        <i class="bi bi-qr-code" style="font-size: 1.1rem;"></i>
-                        <span id="factura-express-pendientes-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" style="font-size: 0.6rem; padding: 0.25em 0.5em;">
-                            0
-                        </span>
-                    </a>
-                    <a id="ordenes-compra-borrador-icon" href="<?= $base ?>/modulos/ordenes-compra" class="text-white text-decoration-none position-relative me-2 d-none" title="Órdenes de compra en borrador">
-                        <i class="bi bi-cart-plus" style="font-size: 1.1rem;"></i>
-                        <span id="ordenes-compra-borrador-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" style="font-size: 0.6rem; padding: 0.25em 0.5em;">
-                            0
-                        </span>
-                    </a>
-                    <a id="whatsapp-unread-icon" href="<?= $base ?>/modulos/whatsapp-chat" class="text-white text-decoration-none position-relative me-3 d-none" title="Mensajes de WhatsApp sin leer">
-                        <i class="bi bi-whatsapp" style="font-size: 1.1rem;"></i>
-                        <span id="whatsapp-unread-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white" style="font-size: 0.6rem; padding: 0.25em 0.5em;">
-                            0
-                        </span>
-                    </a>
-                    <a href="<?= $base ?>/perfil" class="text-white text-decoration-none" style="font-size:0.8rem" title="Mi perfil"><i class="bi bi-person-fill me-1"></i><?= htmlspecialchars($nombre) ?></a>
-                    <a href="<?= $base ?>/config" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Configuración">
-                        <i class="bi bi-gear-fill"></i>
-                    </a>
-                    <a href="<?= rtrim($base ?? BASE_URL ?? '', '/') ?>/auth/logout" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Cerrar sesión">
-                        <i class="bi bi-box-arrow-right"></i>
-                    </a>
-                </div>
+            }
+        }
+        ?>
+        <style>
+            .cmg-mobile-row-2 { width: 100%; margin-top: 0.5rem; }
+            @media (min-width: 992px) { .cmg-mobile-row-2 { width: auto; margin-top: 0; } }
+        </style>
+        <div class="d-flex align-items-center order-3 order-lg-2 cmg-mobile-row-2">
+            <div class="cmg-nav-search-wrap d-flex align-items-center flex-grow-1 flex-lg-grow-0 position-relative" id="cmg-nav-search-wrap">
+                <input type="text" id="cmg-nav-search" class="form-control cmg-nav-search-input shadow-none w-100" placeholder="Buscar módulo..." autocomplete="off">
+                <i class="bi bi-search cmg-nav-search-icon d-none d-lg-block position-absolute" style="right: 10px;"></i>
+                <div id="cmg-nav-search-results" class="cmg-nav-search-results" style="top: 100%; right: 0; left: 0;"></div>
             </div>
+
+            <!-- 4. Toggler para móvil (Mobile: order 4, Desktop: hidden) -->
+            <button class="navbar-toggler cmg-navbar-toggler border-0 py-1 px-2 ms-2 d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasMobileMenu" aria-controls="offcanvasMobileMenu" aria-expanded="false" aria-label="Abrir menú">
+                <i class="bi bi-list text-white" style="font-size: 1.6rem;"></i>
+            </button>
+        </div>
+
+        <!-- 5. Iconos, Usuario, Config, Logout (Desktop: order 5, Mobile: hidden) -->
+        <div class="d-none d-lg-flex flex-row align-items-center gap-2 order-lg-5 ms-lg-3">
+            <span class="navbar-text text-white-50 small me-2" id="navbar-mensajes">&nbsp;</span>
+            <a id="tareas-alertas-link" href="<?= $base ?>/config/tareas-obligaciones" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update tareas-alertas-link" title="Tareas pendientes/vencidas" data-navbar-link="true">
+                <i class="bi bi-bell-fill" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger tareas-alertas-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
+            <a href="<?= $base ?>/modulos/pedidos" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update pedidos-pendientes-icon" title="Pedidos pendientes">
+                <i class="bi bi-cart3" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark pedidos-pendientes-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
+            <a href="<?= $base ?>/modulos/factura-venta" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update facturas-borrador-icon" title="Facturas en borrador">
+                <i class="bi bi-receipt" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark facturas-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
+            <a href="<?= $base ?>/modulos/liquidacion-compra" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update liquidaciones-borrador-icon" title="Liquidaciones en borrador">
+                <i class="bi bi-file-earmark-text" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark liquidaciones-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
+            <a href="<?= $base ?>/modulos/retenciones_compras" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update retenciones-compras-borrador-icon" title="Retenciones en borrador">
+                <i class="bi bi-percent" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark retenciones-compras-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
+            <a href="<?= $base ?>/modulos/notas_credito" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update notas-credito-borrador-icon" title="Notas crédito borrador">
+                <i class="bi bi-file-earmark-minus" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark notas-credito-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
+            <a href="<?= $base ?>/modulos/guias_remision" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update guias-remision-borrador-icon" title="Guías en borrador">
+                <i class="bi bi-truck" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark guias-remision-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
+            <a href="<?= $base ?>/modulos/factura-express-solicitudes" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update factura-express-pendientes-icon" title="Solicitudes Factura Express">
+                <i class="bi bi-qr-code" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark factura-express-pendientes-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
+            <a href="<?= $base ?>/modulos/ordenes-compra" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update ordenes-compra-borrador-icon" title="Órdenes borrador">
+                <i class="bi bi-cart-plus" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark ordenes-compra-borrador-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
+            <a href="<?= $base ?>/modulos/whatsapp-chat" class="text-white text-decoration-none position-relative me-3 d-none cmg-icon-update whatsapp-unread-icon" title="WhatsApp sin leer">
+                <i class="bi bi-whatsapp" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white whatsapp-unread-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
+            
+            <a href="<?= $base ?>/perfil" class="text-white text-decoration-none" style="font-size:0.8rem" title="Mi perfil"><i class="bi bi-person-fill me-1"></i><?= htmlspecialchars($nombre) ?></a>
+            <a href="<?= $base ?>/config" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Configuración">
+                <i class="bi bi-gear-fill"></i>
+            </a>
+            <a href="<?= rtrim($base ?? BASE_URL ?? '', '/') ?>/auth/logout" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Cerrar sesión">
+                <i class="bi bi-box-arrow-right"></i>
+            </a>
         </div>
     </div>
 </nav>
 
+<!-- Offcanvas Móvil (Menu Lateral) -->
+<div class="offcanvas offcanvas-start d-lg-none" tabindex="-1" id="offcanvasMobileMenu" aria-labelledby="offcanvasMobileMenuLabel">
+    <div class="offcanvas-header bg-primary text-white align-items-center py-3">
+        <h5 class="offcanvas-title fw-bold m-0" id="offcanvasMobileMenuLabel">
+            <i class="bi bi-person-circle me-2"></i><?= htmlspecialchars($nombre) ?>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+    <div class="offcanvas-body bg-light p-0 d-flex flex-column">
+        <!-- Opciones de Empresa y Acceso Rapido -->
+        <div class="p-3 bg-white border-bottom">
+            <label class="form-label small fw-bold text-muted mb-1">Empresa actual:</label>
+            <div class="d-flex align-items-center mb-3">
+                <i class="bi <?= $esFavorita ? 'bi-star-fill text-warning' : 'bi-star text-secondary' ?> me-2" style="font-size: 1.2rem;"></i>
+                <div class="flex-grow-1 text-truncate fw-bold text-primary" style="font-size: 0.9rem;">
+                    <?= htmlspecialchars($valorInicial) ?>
+                </div>
+            </div>
+
+            <label class="form-label small fw-bold text-muted mb-2">Notificaciones y Tareas</label>
+            <div class="cmg-mobile-icons-grid mb-3">
+                <a class="cmg-icon-update tareas-alertas-link d-none" href="<?= $base ?>/config/tareas-obligaciones">
+                    <i class="bi bi-bell-fill"></i>
+                    <span class="position-absolute badge rounded-pill bg-danger tareas-alertas-badge">0</span>
+                    <small>Tareas</small>
+                </a>
+                <a class="cmg-icon-update pedidos-pendientes-icon d-none" href="<?= $base ?>/modulos/pedidos">
+                    <i class="bi bi-cart3"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark pedidos-pendientes-badge">0</span>
+                    <small>Pedidos</small>
+                </a>
+                <a class="cmg-icon-update facturas-borrador-icon d-none" href="<?= $base ?>/modulos/factura-venta">
+                    <i class="bi bi-receipt"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark facturas-borrador-badge">0</span>
+                    <small>Facturas</small>
+                </a>
+                <a class="cmg-icon-update liquidaciones-borrador-icon d-none" href="<?= $base ?>/modulos/liquidacion-compra">
+                    <i class="bi bi-file-earmark-text"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark liquidaciones-borrador-badge">0</span>
+                    <small>Liquida.</small>
+                </a>
+                <a class="cmg-icon-update retenciones-compras-borrador-icon d-none" href="<?= $base ?>/modulos/retenciones_compras">
+                    <i class="bi bi-percent"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark retenciones-compras-borrador-badge">0</span>
+                    <small>Reten.</small>
+                </a>
+                <a class="cmg-icon-update notas-credito-borrador-icon d-none" href="<?= $base ?>/modulos/notas_credito">
+                    <i class="bi bi-file-earmark-minus"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark notas-credito-borrador-badge">0</span>
+                    <small>N/C</small>
+                </a>
+                <a class="cmg-icon-update guias-remision-borrador-icon d-none" href="<?= $base ?>/modulos/guias_remision">
+                    <i class="bi bi-truck"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark guias-remision-borrador-badge">0</span>
+                    <small>Guías</small>
+                </a>
+                <a class="cmg-icon-update factura-express-pendientes-icon d-none" href="<?= $base ?>/modulos/factura-express-solicitudes">
+                    <i class="bi bi-qr-code"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark factura-express-pendientes-badge">0</span>
+                    <small>Express</small>
+                </a>
+                <a class="cmg-icon-update ordenes-compra-borrador-icon d-none" href="<?= $base ?>/modulos/ordenes-compra">
+                    <i class="bi bi-cart-plus"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark ordenes-compra-borrador-badge">0</span>
+                    <small>Órdenes</small>
+                </a>
+                <a class="cmg-icon-update whatsapp-unread-icon d-none" href="<?= $base ?>/modulos/whatsapp-chat">
+                    <i class="bi bi-whatsapp"></i>
+                    <span class="position-absolute badge rounded-pill bg-danger text-white whatsapp-unread-badge">0</span>
+                    <small>WhatsApp</small>
+                </a>
+            </div>
+
+            <div class="d-flex gap-2">
+                <a href="<?= $base ?>/config" class="btn btn-outline-secondary btn-sm flex-grow-1">
+                    <i class="bi bi-gear-fill me-1"></i>Ajustes
+                </a>
+                <a href="<?= rtrim($base ?? BASE_URL ?? '', '/') ?>/auth/logout" class="btn btn-outline-danger btn-sm flex-grow-1">
+                    <i class="bi bi-box-arrow-right me-1"></i>Salir
+                </a>
+            </div>
+        </div>
+
+        <!-- Módulos Móvil (Acordeón) -->
+        <div class="flex-grow-1 bg-white">
+            <div class="accordion accordion-flush cmg-offcanvas-menu-accordion" id="accordionMobileMenu">
+                <?php 
+                $modulosMovil = array_values(array_filter($menuModulos ?? [], fn($m) => !empty($m['submodulos'] ?? [])));
+                foreach ($modulosMovil as $index => $mod): 
+                    $headingId = "flush-heading" . $index;
+                    $collapseId = "flush-collapse" . $index;
+                ?>
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="<?= $headingId ?>">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#<?= $collapseId ?>" aria-expanded="false" aria-controls="<?= $collapseId ?>">
+                            <i class="<?= htmlspecialchars(iconoClase($mod['icono_modulo'] ?? '')) ?> me-2"></i>
+                            <?= htmlspecialchars($mod['nombre_modulo'] ?? '') ?>
+                        </button>
+                    </h2>
+                    <div id="<?= $collapseId ?>" class="accordion-collapse collapse" aria-labelledby="<?= $headingId ?>" data-bs-parent="#accordionMobileMenu">
+                        <div class="accordion-body">
+                            <div class="list-group list-group-flush">
+                                <?php foreach ($mod['submodulos'] as $sub): 
+                                    $href = $sub['ruta'] ?? '#';
+                                    if ($href !== '#' && !preg_match('#^https?://#', $href) && !str_starts_with($href, '/')) {
+                                        $href = rtrim($base, '/') . '/' . ltrim($href, '/');
+                                    }
+                                ?>
+                                <a href="<?= htmlspecialchars($href) ?>" class="list-group-item list-group-item-action">
+                                    <i class="<?= htmlspecialchars(iconoClase($sub['icono_submodulo'] ?? '')) ?> me-2"></i>
+                                    <?= htmlspecialchars($sub['nombre_submodulo'] ?? '') ?>
+                                </a>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     window.updateGuiasRemisionBorradorBadge = async function() {
-        const icon  = document.getElementById('guias-remision-borrador-icon');
-        const badge = document.getElementById('guias-remision-borrador-badge');
-        if (!icon || !badge) return;
+        const icons = document.querySelectorAll('.guias-remision-borrador-icon');
+        const badges = document.querySelectorAll('.guias-remision-borrador-badge');
+        if (icons.length === 0 || badges.length === 0) return;
         try {
             const resp = await fetch('<?= $base ?>/modulos/guias_remision/countBorradoresAjax');
             const data = await resp.json();
             if (data.ok && data.count > 0) {
-                badge.textContent = data.count > 99 ? '99+' : data.count;
-                icon.classList.remove('d-none');
+                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
+                icons.forEach(i => i.classList.remove('d-none'));
             } else {
-                icon.classList.add('d-none');
+                icons.forEach(i => i.classList.add('d-none'));
             }
         } catch (e) {}
     };
 
     window.updateNotasCreditoBorradorBadge = async function() {
-        const icon  = document.getElementById('notas-credito-borrador-icon');
-        const badge = document.getElementById('notas-credito-borrador-badge');
-        if (!icon || !badge) return;
+        const icons = document.querySelectorAll('.notas-credito-borrador-icon');
+        const badges = document.querySelectorAll('.notas-credito-borrador-badge');
+        if (icons.length === 0 || badges.length === 0) return;
         try {
             const resp = await fetch('<?= $base ?>/modulos/notas_credito/countBorradoresAjax');
             const data = await resp.json();
             if (data.ok && data.count > 0) {
-                badge.textContent = data.count > 99 ? '99+' : data.count;
-                icon.classList.remove('d-none');
+                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
+                icons.forEach(i => i.classList.remove('d-none'));
             } else {
-                icon.classList.add('d-none');
+                icons.forEach(i => i.classList.add('d-none'));
             }
         } catch (e) {}
     };
 
     window.updateRetencionesComprasBorradorBadge = async function() {
-        const icon  = document.getElementById('retenciones-compras-borrador-icon');
-        const badge = document.getElementById('retenciones-compras-borrador-badge');
-        if (!icon || !badge) return;
+        const icons = document.querySelectorAll('.retenciones-compras-borrador-icon');
+        const badges = document.querySelectorAll('.retenciones-compras-borrador-badge');
+        if (icons.length === 0 || badges.length === 0) return;
         try {
             const resp = await fetch('<?= $base ?>/modulos/retenciones_compras/countBorradoresAjax');
             const data = await resp.json();
             if (data.ok && data.count > 0) {
-                badge.textContent = data.count > 99 ? '99+' : data.count;
-                icon.classList.remove('d-none');
+                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
+                icons.forEach(i => i.classList.remove('d-none'));
             } else {
-                icon.classList.add('d-none');
+                icons.forEach(i => i.classList.add('d-none'));
             }
         } catch (e) {}
     };
 
     window.updateLiquidacionesBorradorBadge = async function() {
-        const icon  = document.getElementById('liquidaciones-borrador-icon');
-        const badge = document.getElementById('liquidaciones-borrador-badge');
-        if (!icon || !badge) return;
+        const icons = document.querySelectorAll('.liquidaciones-borrador-icon');
+        const badges = document.querySelectorAll('.liquidaciones-borrador-badge');
+        if (icons.length === 0 || badges.length === 0) return;
         try {
             const resp = await fetch('<?= $base ?>/modulos/liquidacion-compra/countBorradoresAjax');
             const data = await resp.json();
             if (data.ok && data.count > 0) {
-                badge.textContent = data.count > 99 ? '99+' : data.count;
-                icon.classList.remove('d-none');
+                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
+                icons.forEach(i => i.classList.remove('d-none'));
             } else {
-                icon.classList.add('d-none');
+                icons.forEach(i => i.classList.add('d-none'));
             }
         } catch (e) {}
     };
 
     window.updateFacturasBorradorBadge = async function() {
-        const icon  = document.getElementById('facturas-borrador-icon');
-        const badge = document.getElementById('facturas-borrador-badge');
-        if (!icon || !badge) return;
+        const icons = document.querySelectorAll('.facturas-borrador-icon');
+        const badges = document.querySelectorAll('.facturas-borrador-badge');
+        if (icons.length === 0 || badges.length === 0) return;
         try {
             const resp = await fetch('<?= $base ?>/modulos/factura-venta/countBorradoresAjax');
             const data = await resp.json();
             if (data.ok && data.count > 0) {
-                badge.textContent = data.count > 99 ? '99+' : data.count;
-                icon.classList.remove('d-none');
+                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
+                icons.forEach(i => i.classList.remove('d-none'));
             } else {
-                icon.classList.add('d-none');
+                icons.forEach(i => i.classList.add('d-none'));
             }
         } catch (e) {}
     };
 
     window.updateOrdenesCompraBorradorBadge = async function() {
-        const icon  = document.getElementById('ordenes-compra-borrador-icon');
-        const badge = document.getElementById('ordenes-compra-borrador-badge');
-        if (!icon || !badge) return;
+        const icons = document.querySelectorAll('.ordenes-compra-borrador-icon');
+        const badges = document.querySelectorAll('.ordenes-compra-borrador-badge');
+        if (icons.length === 0 || badges.length === 0) return;
         try {
             const resp = await fetch('<?= $base ?>/modulos/ordenes-compra/countBorradoresAjax');
             const data = await resp.json();
             if (data.ok && data.count > 0) {
-                badge.textContent = data.count > 99 ? '99+' : data.count;
-                icon.classList.remove('d-none');
+                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
+                icons.forEach(i => i.classList.remove('d-none'));
             } else {
-                icon.classList.add('d-none');
+                icons.forEach(i => i.classList.add('d-none'));
             }
         } catch (e) {}
     };
 
     window.updateFacturaExpressPendientesBadge = async function() {
-        const icon  = document.getElementById('factura-express-pendientes-icon');
-        const badge = document.getElementById('factura-express-pendientes-badge');
-        if (!icon || !badge) return;
+        const icons = document.querySelectorAll('.factura-express-pendientes-icon');
+        const badges = document.querySelectorAll('.factura-express-pendientes-badge');
+        if (icons.length === 0 || badges.length === 0) return;
         try {
             const resp = await fetch('<?= $base ?>/modulos/factura-express-solicitudes/countPendientesAjax');
             const data = await resp.json();
             if (data.ok && data.count > 0) {
-                badge.textContent = data.count > 99 ? '99+' : data.count;
-                icon.classList.remove('d-none');
+                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
+                icons.forEach(i => i.classList.remove('d-none'));
             } else {
-                icon.classList.add('d-none');
+                icons.forEach(i => i.classList.add('d-none'));
             }
         } catch (e) {}
     };
 
     window.updatePedidosPendientesBadge = async function() {
-        const icon  = document.getElementById('pedidos-pendientes-icon');
-        const badge = document.getElementById('pedidos-pendientes-badge');
-        if (!icon || !badge) return;
+        const icons = document.querySelectorAll('.pedidos-pendientes-icon');
+        const badges = document.querySelectorAll('.pedidos-pendientes-badge');
+        if (icons.length === 0 || badges.length === 0) return;
         try {
             const resp = await fetch('<?= $base ?>/modulos/pedidos/countPendientesAjax');
             const data = await resp.json();
             if (data.ok && data.count > 0) {
-                badge.textContent = data.count > 99 ? '99+' : data.count;
-                icon.classList.remove('d-none');
+                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
+                icons.forEach(i => i.classList.remove('d-none'));
             } else {
-                icon.classList.add('d-none');
+                icons.forEach(i => i.classList.add('d-none'));
             }
         } catch (e) {}
     };
 
     window.updateTareasBadge = async function() {
-        const link = document.getElementById('tareas-alertas-link');
-        const badge = document.getElementById('tareas-alertas-badge');
-        if (!badge || !link) return;
+        const links = document.querySelectorAll('.tareas-alertas-link');
+        const badges = document.querySelectorAll('.tareas-alertas-badge');
+        if (badges.length === 0 || links.length === 0) return;
         try {
             const response = await fetch('<?= $base ?>/config/tareas-obligaciones?action=tareas-alertas-count');
             const data = await response.json();
             if (data.ok && data.count > 0) {
                 // Mostrar el enlace y actualizar el badge
-                link.classList.remove('d-none');
-                badge.textContent = data.count > 99 ? '99+' : data.count;
+                links.forEach(l => l.classList.remove('d-none'));
+                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
             } else {
                 // Ocultar el enlace cuando no hay avisos
-                link.classList.add('d-none');
+                links.forEach(l => l.classList.add('d-none'));
             }
         } catch (error) {
             console.error('Error al obtener alertas de tareas:', error);
@@ -416,17 +578,17 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
     };
 
     window.updateWhatsappUnreadBadge = async function() {
-        const icon  = document.getElementById('whatsapp-unread-icon');
-        const badge = document.getElementById('whatsapp-unread-badge');
-        if (!icon || !badge) return;
+        const icons = document.querySelectorAll('.whatsapp-unread-icon');
+        const badges = document.querySelectorAll('.whatsapp-unread-badge');
+        if (icons.length === 0 || badges.length === 0) return;
         try {
             const resp = await fetch('<?= $base ?>/modulos/whatsapp-chat/countUnreadAjax');
             const data = await resp.json();
             if (data.ok && data.count > 0) {
-                badge.textContent = data.count > 99 ? '99+' : data.count;
-                icon.classList.remove('d-none');
+                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
+                icons.forEach(i => i.classList.remove('d-none'));
             } else {
-                icon.classList.add('d-none');
+                icons.forEach(i => i.classList.add('d-none'));
             }
         } catch (e) {}
     };
@@ -484,7 +646,33 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         setInterval(window.updateOrdenesCompraBorradorBadge, 60000);
         setInterval(window.updateWhatsappUnreadBadge, 15000); // 15s para Whatsapp
 
-        // Lógica del buscador de módulos
+                const btnMobileSearchToggle = document.getElementById('btn-mobile-search-toggle');
+        const searchWrap = document.getElementById('cmg-nav-search-wrap');
+        const searchInputEl = document.getElementById('cmg-nav-search');
+        if (btnMobileSearchToggle && searchWrap) {
+            btnMobileSearchToggle.addEventListener('click', function(e) {
+                e.stopPropagation(); // Prevenir que el click se propague
+                searchWrap.classList.toggle('expanded');
+                if (searchWrap.classList.contains('expanded')) {
+                    setTimeout(() => searchInputEl.focus(), 100);
+                } else {
+                    const searchResults = document.getElementById('cmg-nav-search-results');
+                    if(searchResults) searchResults.classList.remove('show');
+                }
+            });
+            // Ocultar buscador si se hace clic fuera de él en móvil
+            document.addEventListener('click', function(e) {
+                if (window.innerWidth < 992 && searchWrap.classList.contains('expanded')) {
+                    if (!searchWrap.contains(e.target)) {
+                        searchWrap.classList.remove('expanded');
+                        const searchResults = document.getElementById('cmg-nav-search-results');
+                        if(searchResults) searchResults.classList.remove('show');
+                    }
+                }
+            });
+        }
+
+                // Lógica del buscador de módulos
         const searchInput = document.getElementById('cmg-nav-search');
         const searchResults = document.getElementById('cmg-nav-search-results');
         const portal = document.getElementById('cmg-dropdown-portal');

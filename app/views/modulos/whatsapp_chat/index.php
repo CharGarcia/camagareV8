@@ -25,7 +25,7 @@ $ruta_assets = '/sistema/public';
     
     <div class="row m-0 border rounded shadow-sm overflow-hidden" style="height: calc(100dvh - 160px);">
         <!-- Sidebar Izquierdo: Lista de Chats -->
-        <div class="col-md-4 col-lg-3 border-end bg-white p-0 d-flex flex-column" id="chatListContainer" style="height: 100%;">
+        <div class="col-12 col-md-4 col-lg-3 border-end bg-white p-0 d-flex flex-column" id="chatListContainer" style="height: 100%;">
             <div class="p-3 border-bottom bg-light d-flex align-items-center justify-content-between">
                 <h5 class="m-0 fw-bold"><i class="bi bi-chat-left-text text-success me-2"></i> Chats</h5>
                 <button class="btn btn-sm btn-outline-secondary" onclick="WC_cargarChats()"><i class="bi bi-arrow-clockwise"></i></button>
@@ -41,10 +41,16 @@ $ruta_assets = '/sistema/public';
         </div>
 
         <!-- Panel Derecho: Conversación -->
-        <div class="col-md-8 col-lg-9 p-0 d-flex flex-column bg-light" id="chatWindowContainer" style="height:100%;position:relative;">
+        <div class="col-12 col-md-8 col-lg-9 p-0 d-flex flex-column bg-light" id="chatWindowContainer" style="height:100%;position:relative;">
             <!-- Header Chat -->
             <div class="p-3 border-bottom bg-white d-flex align-items-center d-none" id="waChatHeader">
-                <div class="bg-success text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width:45px;height:45px;">
+                <!-- Botón retroceso — solo mobile -->
+                <button class="btn btn-sm btn-light me-2 d-flex d-md-none align-items-center justify-content-center"
+                        style="width:36px;height:36px;border-radius:50%;flex-shrink:0;"
+                        onclick="WC_volverALista()" title="Volver a chats">
+                    <i class="bi bi-arrow-left"></i>
+                </button>
+                <div class="bg-success text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width:45px;height:45px;flex-shrink:0;">
                     <i class="bi bi-person-fill fs-4"></i>
                 </div>
                 <div>
@@ -225,5 +231,27 @@ $ruta_assets = '/sistema/public';
 #waChatBtnRespuestas.active {
     background-color: #fff8e1 !important;
     box-shadow: 0 0 0 2px #ffc10740;
+}
+
+/* ── Mobile: un panel a la vez ───────────────────────────── */
+@media (max-width: 767.98px) {
+    #chatListContainer,
+    #chatWindowContainer {
+        width: 100% !important;
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+        height: 100% !important;
+    }
+    /* Panel de chat oculto por defecto en mobile */
+    #chatWindowContainer {
+        display: none !important;
+    }
+    /* Cuando hay un chat abierto en mobile: muestra ventana, oculta lista */
+    #chatWindowContainer.wa-chat-abierto {
+        display: flex !important;
+    }
+    #chatListContainer.wa-lista-oculta {
+        display: none !important;
+    }
 }
 </style>

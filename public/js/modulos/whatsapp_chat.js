@@ -1,6 +1,7 @@
 let WC_currentChatId = 0;
 let WC_currentPhone = '';
 let WC_pollingInterval = null;
+let WC_lastMsgSignature = '';
 
 /**
  * Convierte una ruta relativa de media (storage/whatsapp_media/...)
@@ -115,6 +116,7 @@ function WC_renderChats(chats) {
 function WC_seleccionarChat(id, telefono, nombre) {
     WC_currentChatId = id;
     WC_currentPhone = telefono;
+    WC_lastMsgSignature = ''; // resetear para forzar render en la primera carga
 
     // UI Updates
     document.getElementById('waChatEmptyState').classList.add('d-none');
@@ -129,7 +131,18 @@ function WC_seleccionarChat(id, telefono, nombre) {
     document.querySelectorAll('.wa-chat-item').forEach(el => el.classList.remove('wa-chat-active'));
     // (El polling de cargarChats re-aplicará la clase en el próximo ciclo)
 
+    // Mobile: mostrar panel de chat, ocultar lista
+    if (window.innerWidth < 768) {
+        document.getElementById('chatListContainer').classList.add('wa-lista-oculta');
+        document.getElementById('chatWindowContainer').classList.add('wa-chat-abierto');
+    }
+
     WC_cargarMensajes(id, telefono, false);
+}
+
+function WC_volverALista() {
+    document.getElementById('chatListContainer').classList.remove('wa-lista-oculta');
+    document.getElementById('chatWindowContainer').classList.remove('wa-chat-abierto');
 }
 
 function WC_cargarMensajes(idChat, telefono, silencioso = false) {
@@ -139,15 +152,27 @@ function WC_cargarMensajes(idChat, telefono, silencioso = false) {
     .then(res => res.json())
     .then(data => {
         if (data.ok) {
-            WC_renderMensajes(data.mensajes);
+            WC_renderMensajes(data.mensajes, !silencioso);
         }
     })
     .catch(err => console.error(err));
 }
 
-function WC_renderMensajes(mensajes) {
+function WC_renderMensajes(mensajes, esInicial = false) {
     const container = document.getElementById('waChatMessages');
     if (!container) return;
+
+    // Firma del estado actual: id + estado_meta de cada mensaje
+    const firma = mensajes.map(m => m.id + ':' + (m.estado_meta || '')).join('|');
+    if (!esInicial && firma === WC_lastMsgSignature) {
+        return; // nada cambió, evitar reconstruir el DOM
+    }
+    WC_lastMsgSignature = firma;
+
+    // Posición del scroll ANTES de actualizar (para no forzar scroll si el usuario está revisando)
+    const margen = 120;
+    const estabaAbajo = container.scrollHeight <= container.clientHeight
+        || (container.scrollHeight - container.clientHeight - container.scrollTop) <= margen;
 
     let html = '';
     mensajes.forEach(m => {
@@ -347,13 +372,12 @@ function WC_renderMensajes(mensajes) {
         </div>`;
     });
 
-    // Solo auto-scroll si el html cambió (muy básico)
-    const isScrolledToBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 50;
-    
     container.innerHTML = html;
 
-    // Bajar scroll
-    container.scrollTop = container.scrollHeight;
+    // Scroll inteligente: solo bajar al fondo si es carga inicial o el usuario ya estaba abajo
+    if (esInicial || estabaAbajo) {
+        container.scrollTop = container.scrollHeight;
+    }
 }
 
 function WC_enviarMensaje() {
