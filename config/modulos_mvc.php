@@ -216,4 +216,20 @@ return [
         'id_submodulo' => 184,
         'legacy_rutas' => [],
     ],
+
+    // ─── REPORTES ─────────────────────────────────────────────────────────────
+    'modulos/reporte_ventas' => [
+        'id_submodulo' => 38,
+        'legacy_rutas' => [],
+    ],
+    'modulos/reporte_compras' => [
+        'id_submodulo' => 39,
+        'legacy_rutas' => [],
+    ],
+
+    // ─── CUENTAS POR COBRAR ───────────────────────────────────────────────────
+    'modulos/cuentas_por_cobrar' => [
+        'id_submodulo' => 36,
+        'legacy_rutas' => [],
+    ],
 ];
