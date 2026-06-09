@@ -356,8 +356,11 @@ class CuentasPorCobrarRepository extends BaseRepository
     public function tieneWhatsappConfigurado(int $idEmpresa): bool
     {
         try {
-            $sql = "SELECT COUNT(*) FROM whatsapp_config
-                    WHERE id_empresa = :id_empresa AND activo = true";
+            $sql = "SELECT COUNT(*) FROM empresa_whatsapp_config
+                    WHERE id_empresa       = :id_empresa
+                      AND eliminado        = false
+                      AND access_token     IS NOT NULL AND access_token     <> ''
+                      AND phone_number_id  IS NOT NULL AND phone_number_id  <> ''";
             $st = $this->db->prepare($sql);
             $st->execute([':id_empresa' => $idEmpresa]);
             return (int)$st->fetchColumn() > 0;

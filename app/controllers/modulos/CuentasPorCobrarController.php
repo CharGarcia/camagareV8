@@ -6,7 +6,6 @@ namespace App\controllers\modulos;
 
 use App\repositories\modulos\CuentasPorCobrarRepository;
 use App\services\WhatsappService;
-use App\services\EmailConfigService;
 use App\Services\LogSistemaService;
 use PDO;
 
@@ -319,62 +318,38 @@ class CuentasPorCobrarController extends BaseModuloController
             return;
         }
 
-        $smtpData = EmailConfigService::getPhpMailerConfig('notificaciones');
-        if (!$smtpData) {
-            $this->jsonError('No hay configuración de correo activa. Configure el correo con código "notificaciones" en Configuración → Correos.');
+        $asuntoFinal = $asunto ?: 'Recordatorio de pago — Factura ' . ($factura['numero_factura'] ?? '');
+        $htmlBody    = $this->renderEmailBody($factura, $mensaje);
+
+        // Usar el mismo servicio de envío que el resto del sistema
+        // (incluye _mail_resolve_ipv4_host y config SMTP por empresa)
+        $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+        $enviado  = $emailSvc->enviarAvisoSimple(
+            $idEmpresa,
+            $emailDest,
+            $factura['cliente_nombre'] ?? '',
+            $asuntoFinal,
+            $htmlBody
+        );
+
+        if (!$enviado) {
+            $detalle = $GLOBALS['LAST_EMAIL_ERROR'] ?? null;
+            $this->jsonError('No se pudo enviar el correo. Verifica la configuración de correo de la empresa.'
+                . ($detalle ? ' Detalle: ' . $detalle : ''));
             return;
         }
 
-        $docMailDir = MVC_APP . '/lib/mail';
-        require_once $docMailDir . '/phpmailer.php';
-        require_once $docMailDir . '/smtp.php';
-        require_once $docMailDir . '/exception.php';
+        $this->log->registrar(
+            (int)$_SESSION['id_usuario'],
+            $idEmpresa,
+            'EMAIL_CXC',
+            'ventas_cabecera',
+            $idVenta,
+            null,
+            ['email' => $emailDest]
+        );
 
-        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
-        try {
-            $mail->isSMTP();
-            $mail->Host       = $smtpData['host'];
-            $mail->SMTPAuth   = true;
-            $mail->Username   = $smtpData['username'];
-            $mail->Password   = $smtpData['password'];
-            $mail->SMTPSecure = $smtpData['smtpSecure'] ?? 'tls';
-            $mail->Port       = $smtpData['port'];
-            $mail->CharSet    = 'UTF-8';
-            $mail->Timeout    = 15;  // máximo 15 seg esperando al SMTP
-
-            $cfg = require MVC_CONFIG . '/app.php';
-            if (!empty($cfg['mail_smtp_options'])) {
-                $mail->SMTPOptions = $cfg['mail_smtp_options'];
-            }
-
-            $mail->setFrom($smtpData['from'], $smtpData['fromName']);
-            $mail->addAddress($emailDest, $factura['cliente_nombre']);
-
-            $asuntoFinal = $asunto ?: 'Recordatorio de pago — Factura ' . $factura['numero_factura'];
-            $mail->Subject = $asuntoFinal;
-
-            // HTML del correo
-            $mail->isHTML(true);
-            $mail->Body = $this->renderEmailBody($factura, $mensaje);
-            $mail->AltBody = strip_tags($mail->Body);
-
-            $mail->send();
-
-            $this->log->registrar(
-                (int)$_SESSION['id_usuario'],
-                $idEmpresa,
-                'EMAIL_CXC',
-                'ventas_cabecera',
-                $idVenta,
-                null,
-                ['email' => $emailDest]
-            );
-
-            $this->jsonSuccess(['mensaje' => 'Correo enviado correctamente a ' . $emailDest]);
-        } catch (\Throwable $e) {
-            error_log('[CxC enviarEmail] ' . $e->getMessage());
-            $this->jsonError('Error al enviar correo: ' . $e->getMessage());
-        }
+        $this->jsonSuccess(['mensaje' => 'Correo enviado correctamente a ' . $emailDest]);
     }
 
     // ─────────────────────────────────────────────────────────────────────
