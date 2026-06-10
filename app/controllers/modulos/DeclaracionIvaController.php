@@ -44,6 +44,12 @@ class DeclaracionIvaController extends BaseModuloController
                     $db->exec("ALTER TABLE casilleros_declaracion_sri ADD COLUMN concepto TEXT DEFAULT NULL");
                 }
             }
+
+            // Validar que la tabla sri_casilleros_etiquetas tenga la columna eliminado
+            $st4 = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'sri_casilleros_etiquetas' AND column_name = 'eliminado'");
+            if ($st4->rowCount() === 0) {
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN eliminado BOOLEAN DEFAULT FALSE");
+            }
         } catch (\Throwable $e) {
             // Ignorar errores de migración si ocurren (por locks u otra causa)
             error_log("Error migracion casilleros: " . $e->getMessage());
