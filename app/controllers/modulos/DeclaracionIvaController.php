@@ -324,33 +324,97 @@ class DeclaracionIvaController extends BaseModuloController
             $sheet2->setCellValue('C1', 'Fecha');
             $sheet2->setCellValue('D1', 'Entidad');
             $sheet2->setCellValue('E1', 'Concepto');
-            $sheet2->setCellValue('F1', 'Casillero');
-            $sheet2->setCellValue('G1', 'Valor');
-            $sheet2->setCellValue('H1', 'Manual');
 
-            $sheet2->getStyle('A1:H1')->applyFromArray($headerStyle1);
             $sheet2->getColumnDimension('A')->setWidth(20);
             $sheet2->getColumnDimension('B')->setWidth(20);
             $sheet2->getColumnDimension('C')->setWidth(15);
             $sheet2->getColumnDimension('D')->setWidth(40);
             $sheet2->getColumnDimension('E')->setWidth(30);
-            $sheet2->getColumnDimension('G')->setWidth(15);
 
-            $rowIdx = 2;
+            // Agrupar los detalles por documento y concepto
+            $grupos = [];
             foreach ($detalleDocumentos as $d) {
                 $docNum = !empty($d['establecimiento']) ? "{$d['establecimiento']}-{$d['punto_emision']}-{$d['secuencial']}" : "ID: {$d['id_origen']}";
+                $keyDoc = "{$d['origen']}_{$docNum}";
                 
-                $sheet2->setCellValue('A' . $rowIdx, str_replace('_', ' ', $d['origen'] ?? ''));
-                $sheet2->setCellValueExplicit('B' . $rowIdx, $docNum, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $sheet2->setCellValue('C' . $rowIdx, $d['fecha'] ?? '');
-                $sheet2->setCellValue('D' . $rowIdx, $d['entidad'] ?? '');
-                $sheet2->setCellValue('E' . $rowIdx, $d['concepto'] ?? 'Sin concepto');
-                $sheet2->setCellValueExplicit('F' . $rowIdx, $d['casillero'] ?? '', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $sheet2->setCellValue('G' . $rowIdx, (float)($d['valor'] ?? 0));
-                $sheet2->setCellValue('H' . $rowIdx, !empty($d['editado_manualmente']) ? 'SÍ' : 'NO');
+                $concepto = $d['concepto'] ?? 'Sin concepto';
+                $concepto = preg_replace('/\s*\((Base|IVA)\)$/i', '', $concepto);
                 
-                $sheet2->getStyle("G{$rowIdx}")->getNumberFormat()->setFormatCode('#,##0.00');
+                $keyGrupo = "{$keyDoc}_{$concepto}";
+                
+                if (!isset($grupos[$keyGrupo])) {
+                    $grupos[$keyGrupo] = [
+                        'origen' => $d['origen'],
+                        'docNum' => $docNum,
+                        'fecha' => $d['fecha'],
+                        'entidad' => $d['entidad'],
+                        'concepto' => $concepto,
+                        'casilleros' => []
+                    ];
+                }
+                
+                $grupos[$keyGrupo]['casilleros'][] = [
+                    'casillero' => $d['casillero'],
+                    'valor' => $d['valor'],
+                    'manual' => !empty($d['editado_manualmente'])
+                ];
+            }
+
+            $rowIdx = 2;
+            $maxCasilleros = 0;
+
+            foreach ($grupos as $g) {
+                $sheet2->setCellValue('A' . $rowIdx, str_replace('_', ' ', $g['origen'] ?? ''));
+                $sheet2->setCellValueExplicit('B' . $rowIdx, $g['docNum'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet2->setCellValue('C' . $rowIdx, $g['fecha'] ?? '');
+                $sheet2->setCellValue('D' . $rowIdx, $g['entidad'] ?? '');
+                $sheet2->setCellValue('E' . $rowIdx, $g['concepto']);
+                
+                // Ordenar casilleros
+                usort($g['casilleros'], function($a, $b) {
+                    return (int)$a['casillero'] <=> (int)$b['casillero'];
+                });
+
+                $colIndex = 6; // F
+
+                foreach ($g['casilleros'] as $cas) {
+                    $colLetterCasillero = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
+                    $sheet2->setCellValueExplicit($colLetterCasillero . $rowIdx, $cas['casillero'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    
+                    $colIndex++;
+                    $colLetterValor = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
+                    $sheet2->setCellValue($colLetterValor . $rowIdx, (float)($cas['valor'] ?? 0));
+                    $sheet2->getStyle($colLetterValor . $rowIdx)->getNumberFormat()->setFormatCode('#,##0.00');
+                    
+                    $colIndex++;
+                }
+
+                $numCasilleros = count($g['casilleros']);
+                if ($numCasilleros > $maxCasilleros) {
+                    $maxCasilleros = $numCasilleros;
+                }
+
                 $rowIdx++;
+            }
+
+            // Encabezados dinámicos para casilleros
+            $colIndex = 6;
+            for ($i = 1; $i <= $maxCasilleros; $i++) {
+                $colLetterCasillero = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
+                $sheet2->setCellValue($colLetterCasillero . '1', 'Casillero ' . $i);
+                $sheet2->getColumnDimension($colLetterCasillero)->setWidth(12);
+                $colIndex++;
+                
+                $colLetterValor = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
+                $sheet2->setCellValue($colLetterValor . '1', 'Valor ' . $i);
+                $sheet2->getColumnDimension($colLetterValor)->setWidth(15);
+                $colIndex++;
+            }
+
+            // Aplicar estilo al encabezado
+            if ($colIndex > 1) {
+                $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex - 1);
+                $sheet2->getStyle("A1:{$lastColLetter}1")->applyFromArray($headerStyle1);
             }
 
             // Descarga
