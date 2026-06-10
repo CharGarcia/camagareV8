@@ -29,10 +29,24 @@ class SriCasillerosEtiquetasController extends Controller
             $db = \App\core\Database::getConnection();
             $st = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'sri_casilleros_etiquetas' AND column_name = 'id'");
             if ($st->rowCount() === 0) {
+                // Si no hay id, asume que falta y recrea la llave primaria
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas DROP CONSTRAINT IF EXISTS sri_casilleros_etiquetas_pkey CASCADE");
                 $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN id SERIAL PRIMARY KEY");
+            }
+
+            // Validar columnas de auditoría
+            $st2 = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'sri_casilleros_etiquetas' AND column_name = 'updated_at'");
+            if ($st2->rowCount() === 0) {
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN deleted_at TIMESTAMP NULL");
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN created_by INT NULL");
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN updated_by INT NULL");
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN deleted_by INT NULL");
             }
         } catch (\Throwable $e) {
             // Ignorar errores en producción
+            error_log("Error migracion etiquetas: " . $e->getMessage());
         }
     }
 
