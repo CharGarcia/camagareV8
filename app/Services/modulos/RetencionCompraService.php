@@ -449,12 +449,12 @@ class RetencionCompraService
             if (!isset($confRet[$codRet])) continue;
 
             $c = $confRet[$codRet];
-            $imp = $c['impuesto'] ?? '';
+            $casilleroCompras = $c['bruto'] ?? '';
 
-            if ($imp !== '') {
+            if ($casilleroCompras !== '') {
                 $decIvaRepo->insertarCasilleroDeclaracion([
                     'id_empresa' => $idEmpresa, 'origen' => 'retenciones_compras', 'id_origen' => $idRetencion,
-                    'fecha' => $fechaEmision, 'casillero' => $imp, 'valor' => $valor, 'concepto' => 'Retención IVA (Cód: ' . $codRet . ')'
+                    'fecha' => $fechaEmision, 'casillero' => $casilleroCompras, 'valor' => $valor, 'concepto' => 'Retención IVA (Cód: ' . $codRet . ')'
                 ]);
             }
         }

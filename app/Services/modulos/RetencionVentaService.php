@@ -253,32 +253,37 @@ class RetencionVentaService
         // Obtener configuración de casilleros de la empresa
         $empresaConfigRepo = new \App\repositories\modulos\EmpresaRepository();
         $configDec = $empresaConfigRepo->getIvaCasilleros($idEmpresa);
-        if (!$configDec || empty($configDec['retencion_venta'])) return;
-        
-        // Asumiendo que el código genérico o el primero tiene la info para retencion_venta
-        $casillero = '';
-        foreach ($configDec['retencion_venta'] as $c) {
-            if (!empty($c['impuesto'])) {
-                $casillero = (string)$c['impuesto'];
-                break;
-            }
-        }
+        if (!$configDec || !isset($configDec['retencion_iva'])) return;
 
-        if ($casillero === '') return;
+        $confRet = $configDec['retencion_iva'];
 
+        // Agrupar por codigo_retencion (solo IVA)
+        $agrupacion = [];
         $lineas = $data['lineas'] ?? [];
         foreach ($lineas as $linea) {
             $codImp = strtoupper((string)($linea['codigo_impuesto'] ?? ''));
             if ($codImp === '2' || $codImp === 'IVA') {
-                $val = (float)($linea['valor_retenido'] ?? 0);
                 $codRet = (string)($linea['codigo_retencion'] ?? '');
-                
-                if ($val > 0) {
-                    $decIvaRepo->insertarCasilleroDeclaracion([
-                        'id_empresa' => $idEmpresa, 'origen' => 'retenciones_ventas', 'id_origen' => $idRetencion,
-                        'fecha' => $fechaEmision, 'casillero' => $casillero, 'valor' => $val, 'concepto' => 'Retención IVA en Venta (Cód: ' . $codRet . ')'
-                    ]);
+                if (!isset($agrupacion[$codRet])) {
+                    $agrupacion[$codRet] = 0.0;
                 }
+                $agrupacion[$codRet] += (float)($linea['valor_retenido'] ?? 0);
+            }
+        }
+
+        // Mapear y guardar en el casillero de ventas (neto)
+        foreach ($agrupacion as $codRet => $valor) {
+            if ($valor <= 0) continue;
+            if (!isset($confRet[$codRet])) continue;
+
+            $c = $confRet[$codRet];
+            $casilleroVentas = $c['neto'] ?? '';
+
+            if ($casilleroVentas !== '') {
+                $decIvaRepo->insertarCasilleroDeclaracion([
+                    'id_empresa' => $idEmpresa, 'origen' => 'retenciones_ventas', 'id_origen' => $idRetencion,
+                    'fecha' => $fechaEmision, 'casillero' => $casilleroVentas, 'valor' => $valor, 'concepto' => 'Retención IVA en Venta (Cód: ' . $codRet . ')'
+                ]);
             }
         }
     }
