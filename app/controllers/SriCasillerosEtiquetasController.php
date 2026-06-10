@@ -20,6 +20,20 @@ class SriCasillerosEtiquetasController extends Controller
     {
         parent::__construct();
         $this->model = new SriCasilleroEtiqueta();
+        $this->verificarEstructuraBaseDatos();
+    }
+
+    private function verificarEstructuraBaseDatos(): void
+    {
+        try {
+            $db = \App\core\Database::getConnection();
+            $st = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'sri_casilleros_etiquetas' AND column_name = 'id'");
+            if ($st->rowCount() === 0) {
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN id SERIAL PRIMARY KEY");
+            }
+        } catch (\Throwable $e) {
+            // Ignorar errores en producción
+        }
     }
 
     public function index(): void

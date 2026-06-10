@@ -50,6 +50,12 @@ class DeclaracionIvaController extends BaseModuloController
             if ($st4->rowCount() === 0) {
                 $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN eliminado BOOLEAN DEFAULT FALSE");
             }
+            
+            // Validar que la tabla sri_casilleros_etiquetas tenga la columna id
+            $st_id_etq = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'sri_casilleros_etiquetas' AND column_name = 'id'");
+            if ($st_id_etq->rowCount() === 0) {
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN id SERIAL PRIMARY KEY");
+            }
 
             // Validar tipo_ambiente en casilleros_declaracion_sri
             $st5 = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'casilleros_declaracion_sri' AND column_name = 'tipo_ambiente'");
