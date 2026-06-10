@@ -14,7 +14,33 @@ try {
     echo "Conexion DB OK.<br>";
 
     // Prueba 1: sri_casilleros_etiquetas
-    echo "Probando sri_casilleros_etiquetas... ";
+    echo "Probando sri_casilleros_etiquetas... <br>";
+    $stSchema = $db->query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'sri_casilleros_etiquetas'");
+    echo "Columnas en sri_casilleros_etiquetas:<br>";
+    while ($col = $stSchema->fetch()) {
+        echo "- " . $col['column_name'] . " (" . $col['data_type'] . ")<br>";
+    }
+    
+    $stFirstRow = $db->query("SELECT * FROM sri_casilleros_etiquetas LIMIT 1");
+    echo "Primera fila de sri_casilleros_etiquetas:<br>";
+    print_r($stFirstRow->fetch(PDO::FETCH_ASSOC));
+    echo "<br><br>";
+
+    echo "Intentando agregar ID manual si no existe...<br>";
+    try {
+        $st_id_etq = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'sri_casilleros_etiquetas' AND column_name = 'id'");
+        if ($st_id_etq->rowCount() === 0) {
+            echo "No hay ID, agregando...<br>";
+            $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN id SERIAL PRIMARY KEY");
+            echo "Añadido correctamente.<br>";
+        } else {
+            echo "La columna ID YA EXISTE.<br>";
+        }
+    } catch (\Throwable $e) {
+        echo "<b>ERROR al agregar ID:</b> " . $e->getMessage() . "<br>";
+    }
+    echo "<br>";
+
     $sql1 = "SELECT * FROM sri_casilleros_etiquetas WHERE eliminado = false ORDER BY seccion ASC, orden ASC";
     $st1 = $db->query($sql1);
     echo "OK. Registros: " . $st1->rowCount() . "<br>";
