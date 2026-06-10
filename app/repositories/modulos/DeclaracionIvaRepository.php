@@ -145,7 +145,18 @@ class DeclaracionIvaRepository extends BaseRepository
      */
     public function getEstructuraFormulario(): array
     {
-        $sql = "SELECT * FROM sri_casilleros_etiquetas WHERE eliminado = false ORDER BY seccion ASC, orden ASC";
+        // Secciones agrupadas: la posición de cada sección la define el menor
+        // valor de 'orden' entre sus filas; dentro de la sección manda 'orden'.
+        $sql = "SELECT e.*
+                FROM sri_casilleros_etiquetas e
+                JOIN (
+                    SELECT seccion, MIN(orden) AS min_orden
+                    FROM sri_casilleros_etiquetas
+                    WHERE eliminado = false
+                    GROUP BY seccion
+                ) s ON s.seccion = e.seccion
+                WHERE e.eliminado = false
+                ORDER BY s.min_orden ASC, e.seccion ASC, e.orden ASC, e.id ASC";
         return $this->query($sql)->fetchAll(\PDO::FETCH_ASSOC);
     }
 

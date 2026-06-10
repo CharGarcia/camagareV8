@@ -22,12 +22,12 @@ class SriCasilleroEtiqueta extends BaseModel
         $col = in_array($ordenCol, self::COLUMNAS_ORDEN, true) ? $ordenCol : 'seccion';
         $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
         $where = " WHERE eliminado = false ";
-        
+
         if ($buscar !== '') {
             $b = $this->escape($buscar);
             $where .= " AND (COALESCE(casillero_bruto,'') LIKE '%{$b}%' OR seccion LIKE '%{$b}%' OR descripcion LIKE '%{$b}%') ";
         }
-        
+
         $sql = "SELECT * FROM sri_casilleros_etiquetas {$where} ORDER BY {$col} {$dir}, orden ASC";
         
         try {
@@ -136,10 +136,10 @@ class SriCasilleroEtiqueta extends BaseModel
         $tipo = $this->escape($tipo);
         $idUsuario = (int) $idUsuario;
 
-        $sql = "UPDATE sri_casilleros_etiquetas 
+        $sql = "UPDATE sri_casilleros_etiquetas
                 SET casillero_bruto = {$cBruto}, casillero_neto = {$cNeto}, casillero_impuesto = {$cImp},
-                    seccion = '{$seccion}', descripcion = '{$descripcion}', 
-                    orden = {$orden}, indent = {$indent}, bold = {$boldVal}, tipo = '{$tipo}', 
+                    seccion = '{$seccion}', descripcion = '{$descripcion}',
+                    orden = {$orden}, indent = {$indent}, bold = {$boldVal}, tipo = '{$tipo}',
                     formula_bruto = {$fBruto}, formula_neto = {$fNeto}, formula_impuesto = {$fImp},
                     updated_by = {$idUsuario}, updated_at = CURRENT_TIMESTAMP
                 WHERE id = {$id}";

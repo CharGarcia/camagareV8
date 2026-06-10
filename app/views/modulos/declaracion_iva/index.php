@@ -134,7 +134,7 @@
         function renderVentas(resumenData) {
             const layout = resumenData.layout;
             const valores = resumenData.valores;
-            
+
             let currentSeccion = '';
             let html = '';
 
