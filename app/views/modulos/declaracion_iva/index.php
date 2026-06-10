@@ -39,11 +39,17 @@
                         <?php foreach ($anios as $a): ?><option value="<?= $a ?>" <?= $a == $anio ? 'selected' : '' ?>><?= $a ?></option><?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label fw-bold small text-uppercase text-muted mb-1" id="labelPeriodo" style="font-size: 0.6rem;">Mes</label>
                     <select name="periodo" class="form-select form-select-sm border-0 bg-light fw-bold" id="periodo"></select>
                 </div>
-                <div class="col-md-3 d-flex gap-2 align-items-end">
+                <div class="col-md-2 text-start pb-1">
+                    <div class="form-check form-switch mb-0 ms-2" title="Mostrar solo las filas que tengan algún valor">
+                        <input class="form-check-input" type="checkbox" id="checkSoloValores">
+                        <label class="form-check-label fw-bold small text-muted" for="checkSoloValores" style="font-size: 0.7rem;">Solo valores</label>
+                    </div>
+                </div>
+                <div class="col-md-4 d-flex gap-2 align-items-end">
                     <button type="submit" class="btn btn-primary btn-sm flex-grow-1 fw-bold py-1">GENERAR</button>
                     <button type="button" id="btnExportarExcel" class="btn btn-success btn-sm flex-grow-1 fw-bold py-1 d-none" onclick="exportarExcel()">
                         <i class="bi bi-file-earmark-excel"></i> EXCEL
@@ -109,6 +115,19 @@
         }
         document.querySelectorAll('input[name="tipo_periodo"]').forEach(el => el.addEventListener('change', actualizarPeriodos));
         actualizarPeriodos();
+
+        document.getElementById('checkSoloValores').addEventListener('change', function() {
+            const isChecked = this.checked;
+            document.querySelectorAll('.sri-row-data').forEach(row => {
+                if (row.getAttribute('data-has-values') === '0') {
+                    if (isChecked) {
+                        row.classList.add('d-none');
+                    } else {
+                        row.classList.remove('d-none');
+                    }
+                }
+            });
+        });
 
         form.addEventListener('submit', e => {
             e.preventDefault();
@@ -179,7 +198,11 @@
                     const dec = esConteo ? 0 : 2;
                     const fmt = v => v.toLocaleString('en-US', {minimumFractionDigits: dec, maximumFractionDigits: dec});
 
-                    html += `<tr class="${rowClass}">
+                    const hasValues = (vBruto !== null && vBruto !== 0) || (vNeto !== null && vNeto !== 0) || (vImp !== null && vImp !== 0);
+                    const isChecked = document.getElementById('checkSoloValores').checked;
+                    const dNone = (isChecked && !hasValues) ? 'd-none' : '';
+
+                    html += `<tr class="${rowClass} sri-row-data ${dNone}" data-has-values="${hasValues ? '1' : '0'}">
                         <td class="ps-2" style="padding-left: calc(0.5rem + ${marginLeft}) !important;">${descFormatted}</td>
                         <td class="text-center text-muted" style="font-size:0.7rem;">${cBruto ? '<b>'+cBruto+'</b>' : ''}</td>
                         <td class="text-end">${vBruto !== null ? fmt(vBruto) : ''}</td>
