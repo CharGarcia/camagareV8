@@ -48,7 +48,7 @@ class DeclaracionIvaService
 
         // 1. Facturas de Venta
         $ventas = $this->repository->getDocumentosPeriodo($idEmpresa, 'ventas_cabecera', $fechaDesde, $fechaHasta);
-        $fvService = new FacturaVentaService($this->fvRepository, new \App\Rules\modulos\FacturaVentaRules(), new \App\Services\LogSistemaService());
+        $fvService = new FacturaVentaService($this->fvRepository, new \App\Rules\modulos\FacturaVentaRules(), new \App\services\LogSistemaService());
         foreach ($ventas as $v) {
             $fvService->sincronizarCasilleros((int)$v['id'], null);
         }
@@ -61,30 +61,30 @@ class DeclaracionIvaService
         }
 
         // 3. Liquidaciones de Compra
-        $liq = $this->repository->getDocumentosPeriodo($idEmpresa, 'liquidaciones_cabecera', $fechaDesde, $fechaHasta);
-        $liqService = new LiquidacionCompraService(new \App\repositories\modulos\LiquidacionCompraRepository(), new \App\Rules\modulos\LiquidacionCompraRules(), new \App\Services\LogSistemaService());
-        foreach ($liq as $l) {
+        $liquidaciones = $this->repository->getDocumentosPeriodo($idEmpresa, 'liquidaciones_cabecera', $fechaDesde, $fechaHasta);
+        $liqService = new LiquidacionCompraService(new \App\repositories\modulos\LiquidacionCompraRepository(), new \App\Rules\modulos\LiquidacionCompraRules(), new \App\services\LogSistemaService());
+        foreach ($liquidaciones as $l) {
             $liqService->sincronizarCasilleros((int)$l['id'], null);
         }
 
         // 4. Notas de Crédito
-        $ncs = $this->repository->getDocumentosPeriodo($idEmpresa, 'notas_credito_cabecera', $fechaDesde, $fechaHasta);
-        $ncService = new NotaCreditoService(new \App\repositories\modulos\NotaCreditoRepository(), new \App\Rules\modulos\NotaCreditoRules(), new \App\Services\LogSistemaService());
-        foreach ($ncs as $nc) {
-            $ncService->sincronizarCasilleros((int)$nc['id'], null);
+        $notasCredito = $this->repository->getDocumentosPeriodo($idEmpresa, 'notas_credito_cabecera', $fechaDesde, $fechaHasta);
+        $ncService = new NotaCreditoService(new \App\repositories\modulos\NotaCreditoRepository(), new \App\Rules\modulos\NotaCreditoRules(), new \App\services\LogSistemaService());
+        foreach ($notasCredito as $n) {
+            $ncService->sincronizarCasilleros((int)$n['id'], null);
         }
 
         // 5. Retenciones en Compras
-        $retC = $this->repository->getDocumentosPeriodo($idEmpresa, 'retencion_compra_cabecera', $fechaDesde, $fechaHasta);
-        $retCService = new RetencionCompraService(new \App\repositories\modulos\RetencionCompraRepository(), new \App\Rules\modulos\RetencionCompraRules(), new \App\Services\LogSistemaService());
-        foreach ($retC as $rc) {
+        $retCompras = $this->repository->getDocumentosPeriodo($idEmpresa, 'retencion_compra_cabecera', $fechaDesde, $fechaHasta);
+        $retCService = new RetencionCompraService(new \App\repositories\modulos\RetencionCompraRepository(), new \App\Rules\modulos\RetencionCompraRules(), new \App\services\LogSistemaService());
+        foreach ($retCompras as $rc) {
             $retCService->sincronizarCasilleros((int)$rc['id'], null);
         }
 
         // 6. Retenciones en Ventas
-        $retV = $this->repository->getDocumentosPeriodo($idEmpresa, 'retencion_venta_cabecera', $fechaDesde, $fechaHasta);
-        $retVService = new RetencionVentaService(new \App\repositories\modulos\RetencionVentaRepository(), new \App\Rules\modulos\RetencionVentaRules(), new \App\Services\LogSistemaService());
-        foreach ($retV as $rv) {
+        $retVentas = $this->repository->getDocumentosPeriodo($idEmpresa, 'retencion_venta_cabecera', $fechaDesde, $fechaHasta);
+        $retVService = new RetencionVentaService(new \App\repositories\modulos\RetencionVentaRepository(), new \App\Rules\modulos\RetencionVentaRules(), new \App\services\LogSistemaService());
+        foreach ($retVentas as $rv) {
             $retVService->sincronizarCasilleros((int)$rv['id'], null);
         }
 
