@@ -1,78 +1,12 @@
 <style>
-    .sri-container {
-        background: #fff;
-        border: 1px solid #ccc;
-        padding: 10px;
-        font-family: 'Arial', sans-serif;
-    }
-
-    .sri-section-title {
-        background: #333;
-        color: white;
-        padding: 3px 8px;
-        font-weight: 700;
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        border: 1px solid #000;
-    }
-
-    .sri-sub-title {
-        background: #eee;
-        color: #444;
-        padding: 2px 8px;
-        font-weight: 800;
-        font-size: 0.68rem;
-        text-transform: uppercase;
-        border: 1px solid #ccc;
-        border-top: 0;
-    }
-
-    .casillero-tag {
-        background: #eee;
-        color: #000;
-        border: 1px solid #999;
-        padding: 0px 4px;
-        font-weight: 700;
-        font-size: 0.65rem;
-        min-width: 30px;
-        display: inline-block;
-        text-align: center;
-        border-radius: 1px;
-        margin-right: 3px;
-    }
-
-    .val-cell {
-        background: #fff;
-        border: 1px solid #bbb;
-        padding: 1px 4px;
-        text-align: right;
-        font-family: 'Courier New', monospace;
-        font-weight: 700;
-        font-size: 0.78rem;
-        flex-grow: 1;
-        min-height: 22px;
-    }
-
-    .sri-table td {
-        padding: 2px 4px !important;
-        vertical-align: middle;
-        border: 1px solid #ccc;
-        font-size: 0.7rem;
-    }
-
-    .sri-table .row-bold {
-        background-color: #f2f2f2;
-        font-weight: 700;
-    }
-
-    .sri-header-row {
-        background: #ddd;
-        font-weight: 800;
-        color: #333;
-        font-size: 0.6rem;
-        text-transform: uppercase;
-        text-align: center;
-    }
+    .sri-container { background: #fff; border: 1px solid #ccc; padding: 10px; font-family: 'Arial', sans-serif; overflow-y: auto; overflow-x: auto; max-height: 50vh; margin-bottom: 10px; }
+    .sri-section-title { background: #333; color: white; padding: 3px 8px; font-weight: 700; font-size: 0.72rem; text-transform: uppercase; border: 1px solid #000; }
+    .casillero-tag { background: #eee; color: #000; border: 1px solid #999; padding: 0px 4px; font-weight: 700; font-size: 0.65rem; min-width: 30px; display: inline-block; text-align: center; border-radius: 1px; margin-right: 3px; }
+    .val-cell { background: #fff; border: 1px solid #bbb; padding: 1px 4px; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; font-size: 0.78rem; flex-grow: 1; min-height: 22px; }
+    .sri-table td { padding: 2px 4px !important; vertical-align: middle; border: 1px solid #ccc; font-size: 0.7rem; }
+    .sri-table .row-bold { background-color: #f2f2f2; font-weight: 700; }
+    .nav-tabs .nav-link { font-weight: 700; font-size: 0.8rem; color: #555; }
+    .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; }
 </style>
 
 <div class="container-fluid py-2">
@@ -84,7 +18,7 @@
                 <p class="text-muted mb-0 small" style="font-size: 0.7rem;">Detalle de la declaración de IVA</p>
             </div>
             <div class="d-flex gap-2">
-                <button type="button" class="btn btn-dark btn-xs px-3" style="font-size: 0.65rem;" onclick="window.print()">
+                <button type="button" class="btn btn-secondary btn-xs px-3" style="font-size: 0.65rem;" onclick="window.print()">
                     <i class="bi bi-printer-fill me-1"></i> IMPRIMIR
                 </button>
             </div>
@@ -99,9 +33,9 @@
                     <label class="form-label fw-bold small text-uppercase text-muted mb-1" style="font-size: 0.6rem;">Período</label>
                     <div class="btn-group btn-group-sm w-100">
                         <input type="radio" class="btn-check" name="tipo_periodo" id="tipo_mensual" value="mensual" checked>
-                        <label class="btn btn-outline-dark fw-bold" for="tipo_mensual">Mensual</label>
+                        <label class="btn btn-outline-primary fw-bold" for="tipo_mensual">Mensual</label>
                         <input type="radio" class="btn-check" name="tipo_periodo" id="tipo_semestral" value="semestral">
-                        <label class="btn btn-outline-dark fw-bold" for="tipo_semestral">Semestral</label>
+                        <label class="btn btn-outline-primary fw-bold" for="tipo_semestral">Semestral</label>
                     </div>
                 </div>
                 <div class="col-md-2">
@@ -115,45 +49,30 @@
                     <select name="periodo" class="form-select form-select-sm border-0 bg-light fw-bold" id="periodo"></select>
                 </div>
                 <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold py-1">PROCESAR</button>
-                </div>
-                <div class="col-md-2">
-                    <button type="button" id="btnSinc" class="btn btn-outline-success btn-sm w-100 fw-bold py-1 d-none">SINCRONIZAR</button>
+                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold py-1">GENERAR</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Alert Auditoría -->
-    <div id="integridadAlert" class="alert alert-danger border-0 d-none mb-2 p-1 small print-none" style="font-size: 0.65rem;">
-        <i class="bi bi-exclamation-triangle-fill me-1"></i><b>AUDITORÍA:</b> Descuadres detectados. <a href="#" onclick="verAuditoria()" class="alert-link">Ver detalles</a>
-    </div>
+    <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña d-none print-none" id="myTab" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="resumen-tab" data-bs-toggle="tab" data-bs-target="#resumen" type="button" role="tab">Resumen 104</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="detalle-tab" data-bs-toggle="tab" data-bs-target="#detalle" type="button" role="tab">Detalle de Casilleros</button>
+        </li>
+    </ul>
 
-    <!-- Contenedor del Formulario -->
-    <div id="formSRI" class="sri-container d-none"></div>
-</div>
-
-<!-- Modal Auditoría -->
-<div class="modal fade" id="modalAudit" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content border-0">
-            <div class="modal-header bg-danger text-white py-1">
-                <h6 class="modal-title fw-bold small">Descuadres Encontrados</h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-0">
-                <table class="table table-sm table-hover mb-0 fw-bold" style="font-size: 0.65rem;">
-                    <thead class="bg-light">
-                        <tr>
-                            <th class="ps-2">FACTURA</th>
-                            <th>FECHA</th>
-                            <th class="text-end">BASE+IVA</th>
-                            <th class="text-end">REGISTRADO</th>
-                            <th class="text-end pe-2 text-danger">DIF.</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tbodyAudit"></tbody>
-                </table>
-            </div>
+    <div class="tab-content border-top bg-white p-3 d-none" id="myTabContent">
+        <!-- Pestaña 1 -->
+        <div class="tab-pane fade show active" id="resumen" role="tabpanel">
+            <div id="formSRI" class="sri-container"></div>
+        </div>
+        
+        <!-- Pestaña 2 -->
+        <div class="tab-pane fade" id="detalle" role="tabpanel">
+            <div id="accordionDetalle" class="accordion accordion-flush" style="max-height: 50vh; overflow-y: auto;"></div>
         </div>
     </div>
 </div>
@@ -164,27 +83,15 @@
         const selPeriodo = document.getElementById('periodo');
         const labelPeriodo = document.getElementById('labelPeriodo');
         const formSRI = document.getElementById('formSRI');
-        const alertInt = document.getElementById('integridadAlert');
-        const btnSinc = document.getElementById('btnSinc');
+        const tabsContainer = document.getElementById('myTab');
+        const tabContent = document.getElementById('myTabContent');
 
         const meses = {
-            '01': 'Enero',
-            '02': 'Febrero',
-            '03': 'Marzo',
-            '04': 'Abril',
-            '05': 'Mayo',
-            '06': 'Junio',
-            '07': 'Julio',
-            '08': 'Agosto',
-            '09': 'Septiembre',
-            '10': 'Octubre',
-            '11': 'Noviembre',
-            '12': 'Diciembre'
+            '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril',
+            '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto',
+            '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre'
         };
-        const semestres = {
-            '1': 'Primer Semestre',
-            '2': 'Segundo Semestre'
-        };
+        const semestres = { '1': 'Primer Semestre', '2': 'Segundo Semestre' };
 
         function actualizarPeriodos() {
             const tipo = document.querySelector('input[name="tipo_periodo"]:checked').value;
@@ -204,195 +111,222 @@
             e.preventDefault();
             generar();
         });
-        btnSinc.addEventListener('click', sincronizar);
-        window.verAuditoria = () => new bootstrap.Modal(document.getElementById('modalAudit')).show();
 
         function generar() {
             const params = new URLSearchParams(new FormData(form)).toString();
-            formSRI.innerHTML = '<div class="text-center py-5 small text-muted"><div class="spinner-border spinner-border-sm mb-2"></div><br>Cargando reporte de ventas...</div>';
-            formSRI.classList.remove('d-none');
-            alertInt.classList.add('d-none');
-            btnSinc.classList.add('d-none');
+            tabsContainer.classList.remove('d-none');
+            tabContent.classList.remove('d-none');
+            formSRI.innerHTML = '<div class="text-center py-5 small text-muted"><div class="spinner-border spinner-border-sm mb-2"></div><br>Sincronizando y generando reporte...</div>';
+            document.getElementById('accordionDetalle').innerHTML = '<div class="text-center py-3">Cargando detalles...</div>';
 
-            fetch(`<?= $base ?>/<?= $rutaModulo ?>/auditar-ajax?${params}`).then(res => res.json()).then(data => {
+            fetch(`<?= $base ?>/<?= $rutaModulo ?>/generar-ajax?${params}`).then(res => res.json()).then(data => {
                 if (!data.ok) return Swal.fire('Error', data.mensaje, 'error');
-                renderVentas(data.estructura, data.resumen);
-                renderAudit(data.descuadres);
+                renderVentas(data.resumen_completo);
+                renderDetalle(data.detalle_documentos);
             });
         }
 
-        function renderVentas(estructura, resumen) {
-            const map = {};
-            resumen.forEach(r => map[r.casillero] = parseFloat(r.total));
+        function renderVentas(resumenData) {
+            const layout = resumenData.layout;
+            const valores = resumenData.valores;
+            
+            let currentSeccion = '';
+            let html = '';
 
-            // Estructura de Triplets (Section 400)
-            const rubrosVentas = [{
-                    desc: 'Ventas locales tarifa diferente de cero',
-                    c: ['401', '411', '421']
-                },
-                {
-                    desc: 'Ventas de activos fijos tarifa diferente de cero',
-                    c: ['402', '412', '422']
-                },
-                {
-                    desc: 'Ventas locales 0% (sin derecho a crédito)',
-                    c: ['403', '413', null]
-                },
-                {
-                    desc: 'Ventas locales 0% (con derecho a crédito)',
-                    c: ['405', '415', null]
-                },
-                {
-                    desc: 'Exportaciones de bienes',
-                    c: ['407', '417', null]
-                },
-                {
-                    desc: 'Exportaciones de servicios y/o derechos',
-                    c: ['408', '418', null]
-                },
-                {
-                    desc: 'Transferencias no objeto o exentas de IVA',
-                    c: ['431', '441', null]
-                },
-                {
-                    desc: 'Ventas de activos fijos gravadas diferente 0% (Simplificado)',
-                    c: ['409', '419', null]
-                },
-                {
-                    desc: 'Notas de crédito por compensar el próximo mes',
-                    c: ['442', '443', null]
+            layout.forEach(r => {
+                if (r.seccion !== currentSeccion) {
+                    if (currentSeccion !== '') html += '</tbody></table></div>';
+                    html += `<div class="sri-section-title mt-3">SECCIÓN: ${r.seccion}</div>`;
+                    html += `<div class="table-responsive"><table class="table table-bordered table-sm sri-table align-middle w-100 mb-0" style="font-size: 0.8rem;">`;
+                    html += `<thead class="table-light text-center">
+                                <tr>
+                                    <th style="width:40%;">Concepto</th>
+                                    <th style="width:5%;">Cas.</th><th style="width:15%;">Valor Bruto</th>
+                                    <th style="width:5%;">Cas.</th><th style="width:15%;">Valor Neto</th>
+                                    <th style="width:5%;">Cas.</th><th style="width:15%;">Impuesto Gen.</th>
+                                </tr>
+                             </thead><tbody>`;
+                    currentSeccion = r.seccion;
                 }
-            ];
 
-            let html = `
-            <div class="sri-section-title">1. RESUMEN DE VENTAS Y OTRAS OPERACIONES DEL PERÍODO QUE SE DECLARA</div>
-            <table class="table sri-table w-100 mb-0">
-                <tr class="sri-header-row"><th style="width: 46%; text-align: left;">RUBRO</th><th colspan="2" style="width: 18%;">VALOR BRUTO</th><th colspan="2" style="width: 18%;">VALOR NETO</th><th colspan="2" style="width: 18%;">IMPUESTO GENERADO</th></tr>
-        `;
-            rubrosVentas.forEach(f => {
-                html += `<tr><td class="ps-2">${f.desc}</td>`;
-                f.c.forEach(casId => {
-                    if (casId) {
-                        html += `<td class="text-center" style="width: 4%; border-right: 0;"><span class="casillero-tag">${casId}</span></td><td class="text-end" style="width: 14%; border-left: 0;"><div class="val-cell">$${(map[casId]||0).toLocaleString('en-US',{minimumFractionDigits:2})}</div></td>`;
-                    } else {
-                        html += `<td colspan="2" class="bg-light bg-opacity-10"></td>`;
-                    }
-                });
-                html += `</tr>`;
-            });
-            html += '</table>';
+                const marginLeft = r.indent > 0 ? (r.indent * 15) + 'px' : '0px';
+                const rowClass = r.bold ? 'fw-bold text-dark bg-light' : '';
+                const descFormatted = r.descripcion;
+                
+                if (r.tipo === 'titulo') {
+                    html += `<tr class="${rowClass}"><td colspan="7" class="ps-2 py-2" style="padding-left: calc(0.5rem + ${marginLeft}) !important;">${descFormatted}</td></tr>`;
+                } else {
+                    const cBruto = r.casillero_bruto || '';
+                    const vBruto = cBruto ? (parseFloat(valores[cBruto]) || 0) : null;
+                    const cNeto = r.casillero_neto || '';
+                    const vNeto = cNeto ? (parseFloat(valores[cNeto]) || 0) : null;
+                    const cImp = r.casillero_impuesto || '';
+                    const vImp = cImp ? (parseFloat(valores[cImp]) || 0) : null;
 
-            // 2. LIQUIDACIÓN DEL IVA EN EL MES
-            const rubrosLiq = [{
-                    desc: 'Total transferencias gravadas tarifa diferente de cero a contado este mes',
-                    c: '480'
-                },
-                {
-                    desc: 'Total transferencias gravadas tarifa diferente de cero a crédito este mes',
-                    c: '481'
-                },
-                {
-                    desc: 'Total impuesto generado',
-                    c: '429',
-                    bold: true
-                },
-                {
-                    desc: 'Impuesto a liquidar del mes anterior',
-                    c: '483'
-                },
-                {
-                    desc: 'Impuesto a liquidar en este mes',
-                    c: '484',
-                    bold: true
-                },
-                {
-                    desc: 'Impuesto a liquidar en el próximo mes',
-                    c: '485'
+                    html += `<tr class="${rowClass}">
+                        <td class="ps-2" style="padding-left: calc(0.5rem + ${marginLeft}) !important;">${descFormatted}</td>
+                        <td class="text-center text-muted" style="font-size:0.7rem;">${cBruto ? '<b>'+cBruto+'</b>' : ''}</td>
+                        <td class="text-end">${vBruto !== null ? vBruto.toLocaleString('en-US',{minimumFractionDigits:2}) : ''}</td>
+                        <td class="text-center text-muted" style="font-size:0.7rem;">${cNeto ? '<b>'+cNeto+'</b>' : ''}</td>
+                        <td class="text-end">${vNeto !== null ? vNeto.toLocaleString('en-US',{minimumFractionDigits:2}) : ''}</td>
+                        <td class="text-center text-muted" style="font-size:0.7rem;">${cImp ? '<b>'+cImp+'</b>' : ''}</td>
+                        <td class="text-end">${vImp !== null ? vImp.toLocaleString('en-US',{minimumFractionDigits:2}) : ''}</td>
+                    </tr>`;
                 }
-            ];
-            html += `<div class="sri-sub-title">LIQUIDACIÓN DEL IVA EN EL MES</div><table class="table sri-table w-100 mb-0">`;
-            rubrosLiq.forEach(f => {
-                const val = map[f.c] || 0;
-                html += `<tr class="${f.bold?'row-bold':''}"><td class="ps-2">${f.desc}</td><td class="text-center" style="width: 4%; border-right: 0;"><span class="casillero-tag">${f.c}</span></td><td class="text-end" style="width: 20%; border-left: 0;"><div class="val-cell">$${val.toLocaleString('en-US',{minimumFractionDigits:2})}</div></td></tr>`;
             });
-            html += `</table>`;
-
-            // 3. TOTAL IMPUESTO A LIQUIDAR
-            html += `
-            <div class="sri-sub-title">TOTAL IMPUESTO A LIQUIDAR EN ESTE MES</div>
-            <table class="table sri-table w-100 mb-0">
-                <tr class="row-bold text-dark"><td class="ps-2">TOTAL IMPUESTO A LIQUIDAR EN ESTE MES</td><td class="text-center" style="width: 4%; border-right: 0;"><span class="casillero-tag">499</span></td><td class="text-end" style="width: 20%; border-left: 0;"><div class="val-cell">$${(map['499']||0).toLocaleString('en-US',{minimumFractionDigits:2})}</div></td></tr>
-            </table>
-        `;
-
-            // 4. CONTROL DOCUMENTAL (INFORMACIÓN)
-            const info = [{
-                    d: 'C.V. Emitidos',
-                    c: '111',
-                    d2: 'C.V. Anulados',
-                    c2: '113'
-                },
-                {
-                    d: 'Ret. Emitidas',
-                    c: '115',
-                    d2: 'Ret. Anuladas',
-                    c2: '117'
-                },
-                {
-                    d: 'N.C. Emitidas',
-                    c: '119',
-                    d2: 'N.C. Anuladas',
-                    c2: '121'
-                },
-                {
-                    d: 'N.D. Emitidas',
-                    c: '123',
-                    d2: 'N.D. Anuladas',
-                    c2: '125'
-                },
-                {
-                    d: 'Guías Emitidas',
-                    c: '127',
-                    d2: 'Guías Anuladas',
-                    c2: '129'
-                }
-            ];
-            html += `<div class="sri-sub-title">CONTROL DOCUMENTAL (INFORMATIVO)</div><table class="table sri-table w-100 mb-0">`;
-            info.forEach(f => {
-                html += `<tr>
-                <td class="ps-2" style="width: 25%">${f.d}</td><td class="text-center" style="width: 5%"><span class="casillero-tag">${f.c}</span></td><td class="text-end" style="width: 20%"><div class="val-cell">${(map[f.c]||0)}</div></td>
-                <td class="ps-2" style="width: 25%">${f.d2}</td><td class="text-center" style="width: 5%"><span class="casillero-tag">${f.c2}</span></td><td class="text-end" style="width: 20%"><div class="val-cell">${(map[f.c2]||0)}</div></td>
-            </tr>`;
-            });
-            html += `</table>`;
-
+            if (currentSeccion !== '') html += '</tbody></table></div>';
             formSRI.innerHTML = html;
         }
 
-        function renderAudit(descuadres) {
-            const tb = document.getElementById('tbodyAudit');
-            tb.innerHTML = '';
-            if (descuadres.length > 0) {
-                alertInt.classList.remove('d-none');
-                btnSinc.classList.remove('d-none');
-                descuadres.forEach(d => {
-                    const diff = Math.abs(parseFloat(d.total_esperado_total) - parseFloat(d.total_registrado_casilleros));
-                    tb.insertAdjacentHTML('beforeend', `<tr><td class="ps-2">${d.establecimiento}-${d.punto_emision}-${d.secuencial}</td><td>${new Date(d.fecha_emision).toLocaleDateString()}</td><td class="text-end">$${parseFloat(d.total_esperado_total).toFixed(2)}</td><td class="text-end">$${parseFloat(d.total_registrado_casilleros).toFixed(2)}</td><td class="text-end pe-2 text-danger">$${diff.toFixed(2)}</td></tr>`);
-                });
+        function renderDetalle(detalle) {
+            let html = '';
+            const accordionDetalle = document.getElementById('accordionDetalle');
+            if (detalle.length === 0) {
+                accordionDetalle.innerHTML = '<div class="text-center text-muted py-3">No hay documentos sincronizados.</div>';
+                return;
             }
+
+            // Agrupar por docNum
+            const grupos = {};
+            detalle.forEach(d => {
+                const docNum = d.establecimiento ? `${d.establecimiento}-${d.punto_emision}-${d.secuencial}` : `ID: ${d.id_origen}`;
+                const key = `${d.origen}_${docNum}`;
+                if (!grupos[key]) {
+                    grupos[key] = {
+                        origen: d.origen,
+                        docNum: docNum,
+                        fecha: d.fecha,
+                        entidad: d.entidad || '',
+                        items: [],
+                        total: 0
+                    };
+                }
+                grupos[key].items.push(d);
+                grupos[key].total += parseFloat(d.valor) || 0;
+            });
+
+            let i = 0;
+            for (const key in grupos) {
+                const g = grupos[key];
+                const headerId = 'heading' + i;
+                const collapseId = 'collapse' + i;
+                
+                // Agrupar items por concepto unificando Base e IVA
+                const conceptosMap = {};
+                g.items.forEach(d => {
+                    let concepto = d.concepto || 'Sin concepto';
+                    concepto = concepto.replace(/\s\((Base|IVA)\)$/i, '');
+                    if (!conceptosMap[concepto]) conceptosMap[concepto] = [];
+                    conceptosMap[concepto].push(d);
+                });
+
+                let filasHtml = '';
+                for (const concepto in conceptosMap) {
+                    const casillerosItems = conceptosMap[concepto];
+                    
+                    // Ordenar casilleros de menor a mayor
+                    casillerosItems.sort((a, b) => parseInt(a.casillero) - parseInt(b.casillero));
+                    
+                    let badgesHtml = '';
+                    casillerosItems.forEach(d => {
+                        const val = parseFloat(d.valor) || 0;
+                        const modBadge = d.editado_manualmente ? `<i class="bi bi-exclamation-triangle-fill text-warning ms-1" title="Editado Manualmente" style="font-size: 0.75rem;"></i>` : '';
+                        
+                        badgesHtml += `
+                        <div class="d-inline-flex align-items-center bg-light border rounded px-2 py-1 me-2 mb-1" 
+                             style="cursor: pointer; transition: all 0.2s ease;"
+                             onmouseover="this.classList.add('shadow-sm', 'border-primary')"
+                             onmouseout="this.classList.remove('shadow-sm', 'border-primary')"
+                             onclick="editarCasillero(${d.id}, '${d.casillero}')" 
+                             title="Clic para cambiar a qué casillero pertenece este valor">
+                            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 me-2">${d.casillero}</span>
+                            <span class="fw-bold text-dark" style="font-size: 0.85rem;">${val.toLocaleString('en-US',{minimumFractionDigits:2})}</span>
+                            ${modBadge}
+                        </div>`;
+                    });
+
+                    filasHtml += `<tr>
+                        <td class="text-start ps-3 fw-medium text-dark align-middle">${concepto}</td>
+                        <td class="text-start pe-3 align-middle py-2">${badgesHtml}</td>
+                    </tr>`;
+                }
+
+                // Determinar color por origen
+                let colorOrigen = 'secondary';
+                if (g.origen === 'facturas de venta') colorOrigen = 'primary';
+                else if (g.origen === 'compras') colorOrigen = 'success';
+                else if (g.origen === 'notas_credito') colorOrigen = 'warning';
+                else if (g.origen === 'liquidaciones_compras') colorOrigen = 'info';
+
+                html += `
+                <div class="accordion-item border-0 mb-2 shadow-sm rounded">
+                    <h2 class="accordion-header" id="${headerId}">
+                        <button class="accordion-button collapsed py-3 rounded" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" style="background-color: #f8f9fa;">
+                            <div class="d-flex justify-content-between align-items-center w-100 pe-3">
+                                <div class="d-flex align-items-center gap-3">
+                                    <span class="badge bg-${colorOrigen} bg-opacity-10 text-${colorOrigen} border border-${colorOrigen} border-opacity-25 px-2 py-1 text-uppercase" style="font-size: 0.7rem;">${g.origen.replace(/_/g, ' ')}</span>
+                                    <span class="fw-bold text-dark font-monospace" style="font-size: 0.85rem;">#${g.docNum}</span>
+                                    <span class="fw-medium text-secondary" style="font-size: 0.85rem;"><i class="bi bi-person-fill text-muted me-1"></i>${g.entidad ? g.entidad : 'Sin entidad asignada'}</span>
+                                    <span class="text-muted small"><i class="bi bi-calendar3 me-1"></i>${new Date(g.fecha).toLocaleDateString('es-ES', {day: '2-digit', month: 'short', year: 'numeric'})}</span>
+                                </div>
+                            </div>
+                        </button>
+                    </h2>
+                    <div id="${collapseId}" class="accordion-collapse collapse" data-bs-parent="#accordionDetalle">
+                        <div class="accordion-body p-3 bg-white border border-top-0 rounded-bottom">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.8rem;">
+                                    <thead class="table-light text-start border-bottom">
+                                        <tr>
+                                            <th class="text-start ps-3 text-muted fw-semibold" style="width: 40%;">Concepto del Valor</th>
+                                            <th class="text-muted fw-semibold">Casilleros Reportados <small class="text-primary fw-normal ms-2">(Clic en un casillero para editarlo)</small></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="border-top-0">${filasHtml}</tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+                i++;
+            }
+            accordionDetalle.innerHTML = html;
         }
 
-        function sincronizar() {
-            btnSinc.disabled = true;
-            fetch(`<?= $base ?>/<?= $rutaModulo ?>/sincronizar-ajax`, {
-                    method: 'POST',
-                    body: new FormData(form)
-                })
-                .then(res => res.json()).then(data => {
-                    Swal.fire(data.ok ? 'Éxito' : 'Error', data.mensaje, data.ok ? 'success' : 'error');
-                    if (data.ok) generar();
-                })
-                .finally(() => btnSinc.disabled = false);
-        }
+        window.editarCasillero = function(id, casilleroActual) {
+            Swal.fire({
+                title: 'Editar Casillero',
+                input: 'text',
+                inputLabel: 'Ingresa el nuevo código de casillero para este valor',
+                inputValue: casilleroActual,
+                showCancelButton: true,
+                confirmButtonText: 'Guardar',
+                cancelButtonText: 'Cancelar',
+                inputValidator: (value) => {
+                    if (!value) return 'El casillero no puede estar vacío';
+                    if (!/^[0-9]{3}$/.test(value)) return 'El casillero debe ser de 3 dígitos numéricos';
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const fd = new FormData();
+                    fd.append('id', id);
+                    fd.append('casillero', result.value);
+
+                    fetch(`<?= $base ?>/<?= $rutaModulo ?>/actualizar-casillero-ajax`, {
+                        method: 'POST',
+                        body: fd
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.ok) {
+                            Swal.fire({ title: 'Éxito', text: 'Casillero actualizado.', icon: 'success', timer: 1500, showConfirmButton: false });
+                            generar(); // Recargar datos
+                        } else {
+                            Swal.fire('Error', data.mensaje, 'error');
+                        }
+                    });
+                }
+            });
+        };
     });
 </script>

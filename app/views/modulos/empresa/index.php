@@ -24,60 +24,57 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     </div>
 
     <div class="card shadow-sm border-0 rounded-3">
-        <div class="card-header bg-white border-bottom-0 pt-3">
-            <ul class="nav nav-pills card-header-pills" id="empresaTabs" role="tablist">
+        <div class="d-flex align-items-center bg-light px-3 pt-2 rounded-top border-bottom">
+            <ul class="nav nav-tabs border-bottom-0 flex-nowrap overflow-x-auto tab-pestaña pb-1" style="scrollbar-width: none;" id="empresaTabs" role="tablist">
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button" role="tab">
+                    <button class="nav-link active px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button" role="tab">
                         Información General <?= $warnGeneral ? $warnIcon : '' ?>
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="emisor-tab" data-bs-toggle="tab" data-bs-target="#emisor" type="button" role="tab">
+                    <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="emisor-tab" data-bs-toggle="tab" data-bs-target="#emisor" type="button" role="tab">
                         Emisor Electrónico <?= $warnEmisor ? $warnIcon : '' ?>
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="correo-tab" data-bs-toggle="tab" data-bs-target="#correo" type="button" role="tab">
+                    <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="correo-tab" data-bs-toggle="tab" data-bs-target="#correo" type="button" role="tab">
                         Configuración Correo <span id="warnCorreoIcon" style="display: <?= $warnCorreo ? 'inline' : 'none' ?>;"><?= $warnIcon ?></span>
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="firma-tab" data-bs-toggle="tab" data-bs-target="#firma" type="button" role="tab">
+                    <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="firma-tab" data-bs-toggle="tab" data-bs-target="#firma" type="button" role="tab">
                         Firma Electrónica <?= $warnFirma ? $warnIcon : '' ?>
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="establecimientos-tab" data-bs-toggle="tab" data-bs-target="#establecimientos" type="button" role="tab">
-                        Establecimiento <?= $warnEst ? $warnIcon : '' ?>
+                    <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="establecimientos-tab" data-bs-toggle="tab" data-bs-target="#establecimientos" type="button" role="tab">
+                        Establecimientos <?= $warnEst ? $warnIcon : '' ?>
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="puntos-tab" data-bs-toggle="tab" data-bs-target="#puntos" type="button" role="tab">
+                    <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="puntos-tab" data-bs-toggle="tab" data-bs-target="#puntos" type="button" role="tab">
                         Puntos de Emisión <?= $warnPuntos ? $warnIcon : '' ?>
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="secuenciales-tab" data-bs-toggle="tab" data-bs-target="#secuenciales" type="button" role="tab">Secuenciales</button>
+                    <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="iva-tab" data-bs-toggle="tab" data-bs-target="#iva" type="button" role="tab">
+                        Form 104 IVA
+                    </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="decimales-tab" data-bs-toggle="tab" data-bs-target="#decimales" type="button" role="tab">Decimales</button>
+                    <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="ice-tab" data-bs-toggle="tab" data-bs-target="#ice" type="button" role="tab">
+                        Configuración ICE
+                    </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="iva-tab" data-bs-toggle="tab" data-bs-target="#iva" type="button" role="tab">Form 104 IVA</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="ice-tab" data-bs-toggle="tab" data-bs-target="#ice" type="button" role="tab">Configuración ICE</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="facturacion_config-tab" data-bs-toggle="tab" data-bs-target="#facturacion_config" type="button" role="tab">Reglas Facturación</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="inventario_config-tab" data-bs-toggle="tab" data-bs-target="#inventario_config" type="button" role="tab">Reglas Inventario</button>
+                    <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="facturacion-tab" data-bs-toggle="tab" data-bs-target="#facturacion_config" type="button" role="tab">
+                        Facturación
+                    </button>
                 </li>
             </ul>
         </div>
-        <div class="card-body p-4">
-            <div class="tab-content" id="empresaTabsContent">
+        <div class="card-body p-0">
+            <div class="tab-content border-top px-3 py-3" id="empresaTabsContent">
 
                 <!-- Pestaña: Información General -->
                 <div class="tab-pane fade show active" id="general" role="tabpanel">
@@ -317,7 +314,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                     <div class="col-md-6">
                                         <label class="form-label small fw-bold">Contraseña del Correo</label>
                                         <div class="input-group input-group-sm">
-                                            <input type="password" name="password_correo_emisor" class="form-control" value="<?= htmlspecialchars($correo['password_correo_emisor'] ?? '') ?>">
+                                            <input type="password" name="password_correo_emisor" class="form-control" autocomplete="new-password" value="<?= htmlspecialchars($correo['password_correo_emisor'] ?? '') ?>">
                                             <button class="btn btn-outline-secondary" type="button" onclick="togglePassword(this)"><i class="bi bi-eye"></i></button>
                                         </div>
                                     </div>
@@ -359,7 +356,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                 <div class="mb-4">
                                     <label class="form-label small fw-bold">Contraseña de la Firma</label>
                                     <div class="input-group input-group-sm">
-                                        <input type="password" name="password_firma" class="form-control" required>
+                                        <input type="password" name="password_firma" class="form-control" autocomplete="new-password" required>
                                         <button class="btn btn-outline-secondary" type="button" onclick="togglePassword(this)"><i class="bi bi-eye"></i></button>
                                     </div>
                                 </div>
@@ -632,69 +629,90 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
 
                             <!-- Tabla: Casilleros IVA por Tarifa -->
                             <div class="col-12">
-                                <h6 class="fw-bold fs-6 text-primary mb-3"><i class="bi bi-list-check me-2"></i>Casilleros SRI Formulario 104 IVA</h6>
-                                <p class="text-muted small mb-4">Configura los códigos de los casilleros del SRI para cada tarifa de IVA. Estos códigos se utilizarán al categorizar productos y generar reportes tributarios.</p>
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div>
+                                        <h6 class="fw-bold fs-6 text-primary mb-1"><i class="bi bi-list-check me-2"></i>Casilleros SRI Formulario 104 IVA</h6>
+                                        <p class="text-muted small mb-0">Configura los códigos de los casilleros del SRI para cada tipo de documento y tarifa de IVA.</p>
+                                    </div>
+                                    <div>
+                                        <!-- button type="button" class="btn btn-sm btn-outline-success me-2" onclick="importarExcelCasilleros()">
+                                            <i class="bi bi-file-earmark-excel me-1"></i> Importar Excel
+                                        </button -->
+                                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="cargarCasillerosDefault()">
+                                            <i class="bi bi-cloud-download me-1"></i> Carga Rápida
+                                        </button>
+                                    </div>
+                                </div>
 
-                                <div class="table-responsive rounded-3 border mb-5">
-                                    <table class="table table-sm table-hover mb-0 small">
-                                        <thead class="table-light">
-                                            <tr>
-                                                <th class="ps-3 py-2" style="width: 15%;">Tarifa</th>
-                                                <th class="py-2 text-center" style="width: 7%;">%</th>
-                                                <th class="py-2 text-center" colspan="2" style="width: 39%;">Ventas</th>
-                                                <th class="py-2 text-center" colspan="2" style="width: 39%;">Compras</th>
-                                            </tr>
-                                            <tr class="table-light border-top-0">
-                                                <th colspan="2"></th>
-                                                <th class="text-center small py-1 bg-light bg-opacity-50">Subtotal</th>
-                                                <th class="text-center small py-1 bg-light bg-opacity-50">IVA</th>
-                                                <th class="text-center small py-1 bg-light bg-opacity-50">Subtotal</th>
-                                                <th class="text-center small py-1 bg-light bg-opacity-50">IVA</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php foreach ($tarifasIva as $tar):
-                                                $idTar = $tar['id'];
-                                                $vSub  = $iva_casilleros[$idTar]['subtotal_ventas'] ?? '';
-                                                $vIva  = $iva_casilleros[$idTar]['iva_ventas'] ?? '';
-                                                $cSub  = $iva_casilleros[$idTar]['subtotal_compras'] ?? '';
-                                                $cIva  = $iva_casilleros[$idTar]['iva_compras'] ?? '';
-                                                $tabla = $iva_casilleros[$idTar]['tabla'] ?? 'iva';
-                                            ?>
-                                                <tr>
-                                                    <td class="ps-3 align-middle fw-medium"><?= htmlspecialchars($tar['tarifa']) ?></td>
-                                                    <td class="text-center align-middle">
-                                                        <span class="badge bg-secondary bg-opacity-10 text-secondary"><?= $tar['porcentaje_iva'] ?>%</span>
-                                                    </td>
-                                                    <td class="align-middle">
-                                                        <input type="text" name="iva_casilleros[<?= $idTar ?>][subtotal_ventas]"
-                                                            class="form-control form-control-sm border-0 bg-light text-center"
-                                                            value="<?= htmlspecialchars($vSub) ?>"
-                                                            placeholder="código casillero">
-                                                    </td>
-                                                    <td class="align-middle">
-                                                        <input type="text" name="iva_casilleros[<?= $idTar ?>][iva_ventas]"
-                                                            class="form-control form-control-sm border-0 bg-light text-center"
-                                                            value="<?= htmlspecialchars($vIva) ?>"
-                                                            placeholder="código casillero">
-                                                    </td>
-                                                    <td class="align-middle">
-                                                        <input type="text" name="iva_casilleros[<?= $idTar ?>][subtotal_compras]"
-                                                            class="form-control form-control-sm border-0 bg-light text-center"
-                                                            value="<?= htmlspecialchars($cSub) ?>"
-                                                            placeholder="código casillero">
-                                                    </td>
-                                                    <td class="align-middle">
-                                                        <input type="text" name="iva_casilleros[<?= $idTar ?>][iva_compras]"
-                                                            class="form-control form-control-sm border-0 bg-light text-center"
-                                                            value="<?= htmlspecialchars($cIva) ?>"
-                                                            placeholder="código casillero">
-                                                        <input type="hidden" name="iva_casilleros[<?= $idTar ?>][tabla]" value="<?= htmlspecialchars($tabla) ?>">
-                                                    </td>
-                                                </tr>
-                                            <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
+                                <?php 
+                                $tiposDocumento = [
+                                    'factura_venta' => 'Facturas de Venta',
+                                    'nota_credito_venta' => 'Notas de Crédito (Venta)',
+                                    'factura_compra' => 'Facturas de Compra',
+                                    'nota_venta_compra' => 'Notas de Venta (Compra)',
+                                    'liquidacion_compra' => 'Liquidaciones de Compra',
+                                    'nota_credito_compra' => 'Notas de Crédito (Compra)',
+                                    'nota_debito_compra' => 'Notas de Débito (Compra)',
+                                ];
+                                $idxAcc = 0;
+                                ?>
+                                <div class="accordion mb-5 shadow-sm" id="accordionCasillerosIva">
+                                    <?php foreach ($tiposDocumento as $tdKey => $tdName): $idxAcc++; ?>
+                                        <div class="accordion-item border-0 border-bottom">
+                                            <h2 class="accordion-header" id="heading<?= $idxAcc ?>">
+                                                <button class="accordion-button <?= $idxAcc === 1 ? '' : 'collapsed' ?> bg-white text-dark fw-medium" type="button" data-bs-toggle="collapse" data-bs-target="#collapse<?= $idxAcc ?>" aria-expanded="<?= $idxAcc === 1 ? 'true' : 'false' ?>" aria-controls="collapse<?= $idxAcc ?>">
+                                                    <?= $tdName ?>
+                                                </button>
+                                            </h2>
+                                            <div id="collapse<?= $idxAcc ?>" class="accordion-collapse collapse <?= $idxAcc === 1 ? 'show' : '' ?>" aria-labelledby="heading<?= $idxAcc ?>" data-bs-parent="#accordionCasillerosIva">
+                                                <div class="accordion-body p-0">
+                                                    <div class="table-responsive">
+                                                        <table class="table table-sm table-hover mb-0 small border-top-0">
+                                                            <thead class="table-light">
+                                                                <tr>
+                                                                    <th class="ps-3 py-2 text-muted fw-semibold" style="width: 25%;">Tarifa</th>
+                                                                    <th class="py-2 text-center text-muted fw-semibold" style="width: 15%;">%</th>
+                                                                    <th class="py-2 text-center text-muted fw-semibold" style="width: 20%;">Casillero Bruto</th>
+                                                                    <th class="py-2 text-center text-muted fw-semibold" style="width: 20%;">Casillero Neto</th>
+                                                                    <th class="py-2 text-center text-muted fw-semibold" style="width: 20%;">Casillero Impuesto</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <?php foreach ($tarifasIva as $tar):
+                                                                    $idTar = $tar['id'];
+                                                                    $bruto = $iva_casilleros[$tdKey][$idTar]['bruto'] ?? '';
+                                                                    $neto  = $iva_casilleros[$tdKey][$idTar]['neto'] ?? '';
+                                                                    $imp   = $iva_casilleros[$tdKey][$idTar]['impuesto'] ?? '';
+                                                                ?>
+                                                                    <tr>
+                                                                        <td class="ps-3 align-middle fw-medium text-dark"><?= htmlspecialchars($tar['tarifa']) ?></td>
+                                                                        <td class="text-center align-middle">
+                                                                            <span class="badge bg-secondary bg-opacity-10 text-secondary border"><?= $tar['porcentaje_iva'] ?>%</span>
+                                                                        </td>
+                                                                        <td class="align-middle">
+                                                                            <input type="text" name="iva_casilleros[<?= $tdKey ?>][<?= $idTar ?>][bruto]"
+                                                                                class="form-control form-control-sm border-0 bg-light text-center"
+                                                                                value="<?= htmlspecialchars($bruto) ?>">
+                                                                        </td>
+                                                                        <td class="align-middle">
+                                                                            <input type="text" name="iva_casilleros[<?= $tdKey ?>][<?= $idTar ?>][neto]"
+                                                                                class="form-control form-control-sm border-0 bg-light text-center"
+                                                                                value="<?= htmlspecialchars($neto) ?>">
+                                                                        </td>
+                                                                        <td class="align-middle">
+                                                                            <input type="text" name="iva_casilleros[<?= $tdKey ?>][<?= $idTar ?>][impuesto]"
+                                                                                class="form-control form-control-sm border-0 bg-light text-center"
+                                                                                value="<?= htmlspecialchars($imp) ?>">
+                                                                        </td>
+                                                                    </tr>
+                                                                <?php endforeach; ?>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
                                 </div>
                             </div>
 
@@ -734,14 +752,12 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                         <td class="text-center align-middle">
                                                             <input type="text" name="ret_casilleros[<?= $idRet ?>][cas_compras]"
                                                                 class="form-control form-control-sm border-0 bg-light text-center"
-                                                                value="<?= htmlspecialchars($casComp) ?>"
-                                                                placeholder="cód. casillero">
+                                                                value="<?= htmlspecialchars($casComp) ?>">
                                                         </td>
                                                         <td class="pe-3 text-center align-middle">
                                                             <input type="text" name="ret_casilleros[<?= $idRet ?>][cas_ventas]"
                                                                 class="form-control form-control-sm border-0 bg-light text-center"
-                                                                value="<?= htmlspecialchars($casVen) ?>"
-                                                                placeholder="cód. casillero">
+                                                                value="<?= htmlspecialchars($casVen) ?>">
                                                         </td>
                                                     </tr>
                                                 <?php endforeach; ?>
@@ -1016,11 +1032,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                         </div>
                         <div class="col-md-6">
                             <label class="form-label small fw-bold">Casillero Base ICE (SRI)</label>
-                            <input type="text" name="casillero_base_ice" id="ice-casillero-base" class="form-control form-control-sm" placeholder="Ej: 851">
+                            <input type="text" name="casillero_base_ice" id="ice-casillero-base" class="form-control form-control-sm">
                         </div>
                         <div class="col-md-3">
                             <label class="form-label small fw-bold">Casillero ICE (SRI)</label>
-                            <input type="text" name="casillero_ice" id="ice-casillero" class="form-control form-control-sm" placeholder="Ej: 301">
+                            <input type="text" name="casillero_ice" id="ice-casillero" class="form-control form-control-sm">
                         </div>
                         <div class="col-md-3">
                             <label class="form-label small fw-bold">Valor (%)</label>
@@ -1525,6 +1541,38 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         const emisor = (document.querySelector('[name="correo_emisor"]')?.value || '').trim();
         icon.style.display = (host === '' || emisor === '') ? 'inline' : 'none';
     }
+
+    function cargarCasillerosDefault() {
+        Swal.fire({
+            title: '¿Cargar casilleros predeterminados?',
+            text: "Se reemplazarán los casilleros actuales de IVA y Retenciones con la configuración estándar del SRI 104.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Sí, cargar',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                fetch('<?= BASE_URL ?>/modulos/empresa/cargarPredefinidos104', {
+                    method: 'POST'
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.ok) {
+                        Swal.fire('Cargado!', 'Los casilleros han sido configurados.', 'success')
+                        .then(() => location.reload());
+                    } else {
+                        Swal.fire('Error', data.error || 'No se pudo cargar la configuración', 'error');
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    Swal.fire('Error', 'Error de conexión', 'error');
+                });
+            }
+        });
+    }
 </script>
 <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
 <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
@@ -1554,73 +1602,3 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         }
     });
 </script>
-
-<style>
-    #empresaTabs .nav-link {
-        color: #64748b;
-        font-size: 0.7rem;
-        font-weight: 500;
-        border-radius: 6px;
-        padding: 0.3rem 0.4rem;
-        margin-right: 0.2rem;
-        transition: all 0.2s;
-        border: 1px solid transparent;
-        white-space: nowrap;
-    }
-
-    #empresaTabs .nav-link:hover {
-        background: #f8fafc;
-        border-color: #e2e8f0;
-    }
-
-    #empresaTabs .nav-link.active {
-        background: #ffffff !important;
-        color: #0d6efd !important;
-        font-weight: 600;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        border-color: #e2e8f0;
-    }
-
-    .tab-content {
-        min-height: 450px;
-    }
-
-    /* Asegurar que SweetAlert aparezca sobre los modales (z-index modal: 5060) */
-    .swal2-container {
-        z-index: 10000 !important;
-    }
-
-    .point-card {
-        transition: transform 0.2s, box-shadow 0.2s;
-        cursor: pointer;
-    }
-
-    .point-card h6 {
-        font-size: 0.7rem !important;
-    }
-
-    .point-card .bg-primary {
-        padding: 0.5rem !important;
-    }
-
-    .point-card .bi-shop {
-        font-size: 1rem !important;
-    }
-
-    .list-group-item {
-        padding: 0.4rem 0.75rem !important;
-        font-size: 0.75rem !important;
-    }
-
-    .form-control-sm,
-    .form-select-sm,
-    .btn-sm {
-        padding: 0.35rem 0.6rem !important;
-        font-size: 0.75rem !important;
-    }
-
-    .form-label {
-        margin-bottom: 0.2rem !important;
-        font-size: 0.7rem !important;
-    }
-</style>

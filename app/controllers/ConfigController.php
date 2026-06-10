@@ -480,6 +480,26 @@ class ConfigController extends Controller
         (new ProvinciaCiudadController())->ciudadUpdate();
     }
 
+    public function sriCasillerosEtiquetas(): void
+    {
+        (new SriCasillerosEtiquetasController())->index();
+    }
+
+    public function sriCasillerosEtiquetasStore(): void
+    {
+        (new SriCasillerosEtiquetasController())->store();
+    }
+
+    public function sriCasillerosEtiquetasUpdate(): void
+    {
+        (new SriCasillerosEtiquetasController())->update();
+    }
+
+    public function sriCasillerosEtiquetasDelete(): void
+    {
+        (new SriCasillerosEtiquetasController())->delete();
+    }
+
     public function index(): void
     {
         $this->requireAuth();

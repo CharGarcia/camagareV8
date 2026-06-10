@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\controllers\modulos;
 
 use App\models\WhatsappConfig;
+use App\models\WhatsappPlantilla;
 use App\services\WhatsappService;
 
 class ConfiguracionWhatsappController extends BaseModuloController
@@ -144,11 +145,15 @@ class ConfiguracionWhatsappController extends BaseModuloController
         $stmtLog->execute([$idEmpresa]);
         $ultimoAviso = $stmtLog->fetch(\PDO::FETCH_ASSOC);
 
+        // Plantillas aprobadas disponibles
+        $plantillas = (new WhatsappPlantilla())->getPlantillasAprobadas($idEmpresa);
+
         echo json_encode([
             'ok'           => true,
             'config'       => $config ?: null,
             'numeros'      => $numeros,
             'ultimo_aviso' => $ultimoAviso ?: null,
+            'plantillas'   => $plantillas,
         ]);
     }
 
@@ -169,9 +174,20 @@ class ConfiguracionWhatsappController extends BaseModuloController
         $idUsuario       = (int) $_SESSION['id_usuario'];
         $activo          = filter_var($_POST['activo'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $umbral          = max(1, min(1440, (int) ($_POST['umbral_minutos'] ?? 30)));
-        $cooldown        = max(1, min(1440, (int) ($_POST['cooldown_minutos'] ?? 60)));
+        $cooldown        = $umbral; // El intervalo entre avisos es igual al tiempo de espera configurado
         $plantillaNombre = trim($_POST['plantilla_nombre'] ?? '');
-        $plantillaIdioma = trim($_POST['plantilla_idioma'] ?? 'es') ?: 'es';
+
+        // Resolver idioma automáticamente desde la plantilla seleccionada
+        $plantillaIdioma = 'es';
+        if (!empty($plantillaNombre)) {
+            $stmtIdioma = $this->db->prepare(
+                "SELECT idioma FROM whatsapp_plantillas
+                  WHERE id_empresa = ? AND nombre = ? AND eliminado = FALSE
+                  LIMIT 1"
+            );
+            $stmtIdioma->execute([$idEmpresa, $plantillaNombre]);
+            $plantillaIdioma = $stmtIdioma->fetchColumn() ?: 'es';
+        }
 
         // Upsert
         $stmtCheck = $this->db->prepare(

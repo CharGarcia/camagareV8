@@ -56,17 +56,27 @@ async function WACFG_cargarAvisoConfig() {
         const data = await resp.json();
         if (!data.ok) return;
 
+        // Poblar select de plantillas
+        const selPlantilla = document.getElementById('avisoPlantillaNombre');
+        if (selPlantilla) {
+            // Limpiar opciones previas (mantener la opción vacía)
+            selPlantilla.innerHTML = '<option value="">— Sin plantilla (texto libre) —</option>';
+            (data.plantillas || []).forEach(pl => {
+                const opt = document.createElement('option');
+                opt.value       = pl.nombre;
+                opt.textContent = pl.nombre + ' (' + pl.idioma + ')';
+                selPlantilla.appendChild(opt);
+            });
+        }
+
         // Llenar formulario de config
         const cfg = data.config;
         if (cfg) {
             const sw = document.getElementById('avisoActivo');
             sw.checked = cfg.activo == true || cfg.activo === 't';
             document.getElementById('lblAvisoActivo').textContent = sw.checked ? 'Activado' : 'Desactivado';
-            document.getElementById('avisoUmbral').value          = cfg.umbral_minutos   || 30;
-            document.getElementById('avisoCooldown').value        = cfg.cooldown_minutos  || 60;
-            document.getElementById('avisoPlantillaNombre').value = cfg.plantilla_nombre  || '';
-            const selIdioma = document.getElementById('avisoIdioma');
-            if (selIdioma) selIdioma.value = cfg.plantilla_idioma || 'es';
+            document.getElementById('avisoUmbral').value = cfg.umbral_minutos || 30;
+            if (selPlantilla) selPlantilla.value = cfg.plantilla_nombre || '';
         }
 
         // Último aviso enviado
@@ -142,23 +152,19 @@ async function WACFG_guardarAvisoConfig() {
     const form = document.getElementById('formAvisoConfig');
     if (!form) return;
 
-    const activo   = document.getElementById('avisoActivo').checked ? '1' : '0';
-    const umbral   = document.getElementById('avisoUmbral').value.trim();
-    const cooldown = document.getElementById('avisoCooldown').value.trim();
-    const plantilla = document.getElementById('avisoPlantillaNombre').value.trim();
-    const idioma   = document.getElementById('avisoIdioma').value;
+    const activo    = document.getElementById('avisoActivo').checked ? '1' : '0';
+    const umbral    = document.getElementById('avisoUmbral').value.trim();
+    const plantilla = document.getElementById('avisoPlantillaNombre').value;
 
-    if (!umbral || !cooldown) {
-        Swal.fire('Error', 'El umbral y el cooldown son obligatorios.', 'error');
+    if (!umbral) {
+        Swal.fire('Error', 'El tiempo de aviso es obligatorio.', 'error');
         return;
     }
 
     const fd = new FormData();
     fd.append('activo',           activo);
     fd.append('umbral_minutos',   umbral);
-    fd.append('cooldown_minutos', cooldown);
     fd.append('plantilla_nombre', plantilla);
-    fd.append('plantilla_idioma', idioma);
 
     try {
         Swal.fire({ title: 'Guardando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });

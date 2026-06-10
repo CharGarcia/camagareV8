@@ -127,20 +127,21 @@ class EmpresaService
         $idEst = (int) ($data['id_establecimiento'] ?? 0);
         if (!$idEst) $idEst = $this->repository->getPrimerEstablecimientoId($idEmpresa);
 
-        // Guardar casilleros de IVA por tarifa
+        // Guardar casilleros de IVA por tipo de documento y tarifa
         $casilleros = $data['iva_casilleros'] ?? [];
-        foreach ($casilleros as $idTarifa => $valores) {
-            $this->repository->updateIvaCasillero(
-                $idEmpresa,
-                (int) $idTarifa,
-                [
-                    'subtotal_ventas'  => $valores['subtotal_ventas']  ?? '',
-                    'iva_ventas'       => $valores['iva_ventas']       ?? '',
-                    'subtotal_compras' => $valores['subtotal_compras'] ?? '',
-                    'iva_compras'      => $valores['iva_compras']      ?? '',
-                    'tabla'            => $valores['tabla']            ?? 'iva',
-                ]
-            );
+        foreach ($casilleros as $tipoDocumento => $tarifas) {
+            foreach ($tarifas as $idTarifa => $valores) {
+                $this->repository->updateIvaCasillero(
+                    $idEmpresa,
+                    (int) $idTarifa,
+                    $tipoDocumento,
+                    [
+                        'bruto'    => $valores['bruto'] ?? '',
+                        'neto'     => $valores['neto'] ?? '',
+                        'impuesto' => $valores['impuesto'] ?? '',
+                    ]
+                );
+            }
         }
 
         // Guardar casilleros de retenciones SRI por empresa
@@ -154,6 +155,86 @@ class EmpresaService
                     'cas_ventas'  => $valores['cas_ventas']  ?? '',
                 ]
             );
+        }
+
+        return true;
+    }
+
+    public function cargarCasilleros104Default(int $idEmpresa): bool
+    {
+        $path = MVC_ROOT . '/config/sri_104_defaults.json';
+        if (!file_exists($path)) {
+            throw new \Exception('El archivo de configuración estándar no existe.');
+        }
+
+        $json = file_get_contents($path);
+        $data = json_decode($json, true);
+        if (!$data) {
+            throw new \Exception('Error al leer el archivo de configuración estándar.');
+        }
+
+        $tarifas = (new \App\models\TarifaIva())->getAll();
+        $retenciones = (new \App\models\RetencionSri())->getAll(); // Assuming this model exists or we just use repository
+
+        // Helper map para tarifas: '15' -> ID_TARIFA
+        $mapTarifas = [];
+        foreach ($tarifas as $t) {
+            // El porcentaje_iva a veces viene como "15" o "15.00"
+            $pct = (float)$t['porcentaje_iva'];
+            if ($pct == 0 && strtoupper($t['tarifa']) === 'NO OBJETO DE IVA') {
+                $mapTarifas['NO_OBJETO'] = $t['id'];
+            } elseif ($pct == 0 && strtoupper($t['tarifa']) === 'EXENTO DE IVA') {
+                $mapTarifas['EXENTO'] = $t['id'];
+            } else {
+                // Eliminamos decimales para comparar fácil (ej. 15.00 -> 15)
+                $mapTarifas[(string)round($pct)] = $t['id'];
+            }
+        }
+
+        $this->repository->clearIvaCasilleros($idEmpresa);
+
+        // Guardamos los documentos de IVA
+        $documentosIva = ['factura_venta', 'nota_credito_venta', 'factura_compra', 'nota_venta_compra', 'nota_credito_compra', 'nota_debito_compra', 'liquidacion_compra'];
+        foreach ($documentosIva as $doc) {
+            if (isset($data[$doc])) {
+                foreach ($data[$doc] as $porcentajeKey => $casilleros) {
+                    if (isset($mapTarifas[$porcentajeKey])) {
+                        $this->repository->updateIvaCasillero(
+                            $idEmpresa,
+                            $mapTarifas[$porcentajeKey],
+                            $doc,
+                            [
+                                'bruto'    => $casilleros['bruto'] ?? '',
+                                'neto'     => $casilleros['neto'] ?? '',
+                                'impuesto' => $casilleros['impuesto'] ?? ''
+                            ]
+                        );
+                    }
+                }
+            }
+        }
+
+        // Guardamos las retenciones
+        if (isset($data['retencion_iva'])) {
+            $retencionesList = $this->repository->getRetencionesSriIva();
+            $mapRetenciones = [];
+            foreach ($retencionesList as $r) {
+                $pct = (string)round((float)$r['porcentaje']);
+                $mapRetenciones[$pct] = $r['id'];
+            }
+
+            foreach ($data['retencion_iva'] as $pct => $casilleros) {
+                if (isset($mapRetenciones[$pct])) {
+                    $this->repository->updateRetencionCasillero(
+                        $idEmpresa,
+                        $mapRetenciones[$pct],
+                        [
+                            'cas_compras' => $casilleros['compras'] ?? '',
+                            'cas_ventas'  => $casilleros['ventas'] ?? ''
+                        ]
+                    );
+                }
+            }
         }
 
         return true;

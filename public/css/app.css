@@ -204,13 +204,40 @@ body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) .table th {
   background: #f0f4f8;
 }
 
-/* Header sticky: navbar + menú siempre visibles al hacer scroll */
+/* Header: sticky en móvil, FIXED en pantallas grandes */
 .cmg-sticky-header {
   position: sticky;
   top: 0;
   left: 0;
   right: 0;
   z-index: 5000;
+}
+
+/* ── Pantallas grandes (≥992px): header completamente fijo ─────────────────
+   Garantiza que el navbar superior y el menú de módulos nunca se muevan
+   independientemente del scroll o de cualquier overflow del contenido.    */
+@media (min-width: 992px) {
+  .cmg-sticky-header {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Páginas normales: desplazar el contenido hacia abajo para que no quede
+     debajo del header fijo (position:fixed saca el elemento del flujo).    */
+  .cmg-main-content {
+    padding-top: var(--cmg-sticky-h);
+  }
+
+  /* Páginas con tabla (cmg-has-table): el height ya está calculado como
+     100dvh − cmg-sticky-h. Usar margin-top en lugar de padding-top para no
+     modificar esa altura y que el contenido arranque justo debajo del header. */
+  body.cmg-has-table .cmg-main-content {
+    padding-top: 0 !important;
+    margin-top: var(--cmg-sticky-h) !important;
+  }
 }
 
 /* Navbar dentro del header sticky */

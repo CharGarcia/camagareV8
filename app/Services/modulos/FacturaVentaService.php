@@ -546,11 +546,16 @@ class FacturaVentaService
             // para que un fallo en el asiento nunca revierta la factura ya guardada.
             $this->lastAsientoWarning = null;
             try {
-                $this->procesarAsientoContable($id, $data, $numFactura);
+                if (($data['estado'] ?? 'borrador') === 'autorizado') {
+                    $this->procesarAsientoContable($id, $data, $numFactura);
+                }
             } catch (\Throwable $eAsiento) {
                 error_log("[FacturaVenta] Asiento no generado para factura $id: " . $eAsiento->getMessage());
                 $this->lastAsientoWarning = $eAsiento->getMessage();
             }
+
+            // Sincronizar SRI 104
+            $this->sincronizarCasilleros($id, $data);
 
             return $id;
         } catch (\Throwable $e) {
@@ -870,6 +875,10 @@ class FacturaVentaService
             // 6. Revertir inventario
             $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $id, $idEmpresa, $idUsuario);
 
+            // 6.5 Limpiar casilleros de declaracion 104
+            $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+            $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'facturas de venta', $id);
+
             // 7. Auditoría
             $this->logService->registrar(
                 $idUsuario,
@@ -998,5 +1007,79 @@ class FacturaVentaService
 
         $idAsientoGenerado = $asientoService->guardarAsiento($cabeceraData, $detalles, $idEmpresa, $idUsuario);
         $this->repository->updateAsientoContable($idVenta, $idAsientoGenerado);
+    }
+
+    public function sincronizarCasilleros(int $idVenta, array $data = null): void
+    {
+        $idEmpresa = $data ? (int)$data['id_empresa'] : 0;
+        
+        if (!$data) {
+            $cabecera = $this->repository->getPorId($idVenta);
+            if (!$cabecera) return;
+            $idEmpresa = (int)$cabecera['id_empresa'];
+            $data = $cabecera;
+            
+            // Get details and taxes if we fetched from DB
+            $data['detalles'] = $this->repository->getDetalles($idVenta);
+            foreach ($data['detalles'] as &$d) {
+                $d['impuestos'] = $this->repository->getImpuestosDetalle((int)$d['id']);
+            }
+            unset($d);
+        }
+
+        $fechaEmision = $data['fecha_emision'] ?? date('Y-m-d');
+        
+        $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+        $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'facturas de venta', $idVenta);
+
+        // Obtener configuración de casilleros de la empresa
+        $empresaConfigRepo = new \App\repositories\modulos\EmpresaRepository();
+        $configDec = $empresaConfigRepo->getIvaCasilleros($idEmpresa);
+        if (!$configDec || !isset($configDec['factura_venta'])) return;
+        $confFV = $configDec['factura_venta'];
+
+        $tarifaMap = $decIvaRepo->getMapaTarifasIva();
+        $detalles = $data['detalles'] ?? [];
+
+        foreach ($detalles as $det) {
+            $desc = !empty($det['producto_nombre']) ? $det['producto_nombre'] : (!empty($det['descripcion']) ? $det['descripcion'] : 'Sin concepto');
+            $concepto = substr(trim($desc), 0, 255);
+            $impuestos = $det['impuestos'] ?? [];
+            foreach ($impuestos as $imp) {
+                // Solo IVA (codigo_impuesto = 2)
+                if ((int)$imp['codigo_impuesto'] !== 2) continue;
+
+                $codigoPorcentaje = (string)($imp['codigo_porcentaje'] ?? '');
+                $tarifaKey = $tarifaMap[$codigoPorcentaje] ?? '';
+                if (!$tarifaKey || !isset($confFV[$tarifaKey])) continue;
+
+                $c = $confFV[$tarifaKey];
+                $bruto = $c['bruto'] ?? '';
+                $neto = $c['neto'] ?? '';
+                $impC = $c['impuesto'] ?? '';
+
+                $base = (float)($imp['base_imponible'] ?? 0);
+                $valorImp = (float)($imp['valor'] ?? 0);
+
+                if ($bruto !== '' && $base > 0) {
+                    $decIvaRepo->insertarCasilleroDeclaracion([
+                        'id_empresa' => $idEmpresa, 'origen' => 'facturas de venta', 'id_origen' => $idVenta,
+                        'fecha' => $fechaEmision, 'casillero' => $bruto, 'valor' => $base, 'concepto' => $concepto . ' (Base)'
+                    ]);
+                }
+                if ($neto !== '' && $base > 0) {
+                    $decIvaRepo->insertarCasilleroDeclaracion([
+                        'id_empresa' => $idEmpresa, 'origen' => 'facturas de venta', 'id_origen' => $idVenta,
+                        'fecha' => $fechaEmision, 'casillero' => $neto, 'valor' => $base, 'concepto' => $concepto . ' (Base)'
+                    ]);
+                }
+                if ($impC !== '' && $valorImp > 0) {
+                    $decIvaRepo->insertarCasilleroDeclaracion([
+                        'id_empresa' => $idEmpresa, 'origen' => 'facturas de venta', 'id_origen' => $idVenta,
+                        'fecha' => $fechaEmision, 'casillero' => $impC, 'valor' => $valorImp, 'concepto' => $concepto . ' (IVA)'
+                    ]);
+                }
+            }
+        }
     }
 }

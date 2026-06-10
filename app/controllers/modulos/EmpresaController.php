@@ -266,4 +266,22 @@ class EmpresaController extends BaseModuloController
         readfile($ruta);
         exit;
     }
+
+    public function cargarPredefinidos104(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            $this->requireActualizar();
+            $idEmpresa = (int)($_SESSION['id_empresa'] ?? 0);
+            if ($idEmpresa <= 0) {
+                echo json_encode(['ok' => false, 'error' => 'No hay empresa seleccionada.']);
+                exit;
+            }
+            $res = $this->service->cargarCasilleros104Default($idEmpresa);
+            echo json_encode(['ok' => $res]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
 }

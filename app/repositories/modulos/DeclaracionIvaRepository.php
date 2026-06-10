@@ -21,6 +21,26 @@ class DeclaracionIvaRepository extends BaseRepository
     }
 
     /**
+     * Obtiene los IDs de los documentos de un periodo específico.
+     */
+    public function getDocumentosPeriodo(int $idEmpresa, string $tabla, string $fechaDesde, string $fechaHasta): array
+    {
+        // Parche en caliente para la columna tipo_ambiente y concepto
+        $this->db->exec("ALTER TABLE casilleros_declaracion_sri ADD COLUMN IF NOT EXISTS tipo_ambiente VARCHAR(1) DEFAULT '1'");
+        $this->db->exec("ALTER TABLE casilleros_declaracion_sri ADD COLUMN IF NOT EXISTS concepto VARCHAR(255)");
+
+        $estadoFilter = "AND estado = 'autorizado'";
+        if ($tabla === 'compras_cabecera') {
+            $estadoFilter = "AND COALESCE(deducible, '') = 'declaracion_iva'";
+        } elseif ($tabla === 'retencion_venta_cabecera') {
+            $estadoFilter = ""; // Estas tablas no tienen columna estado, solo nos guiamos por eliminado
+        }
+
+        $sql = "SELECT id FROM {$tabla} WHERE id_empresa = :emp AND fecha_emision BETWEEN :d AND :h {$estadoFilter} AND eliminado = false AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)";
+        return $this->query($sql, [':emp' => $idEmpresa, ':d' => $fechaDesde, ':h' => $fechaHasta])->fetchAll();
+    }
+
+    /**
      * Obtiene facturas autorizadas en un periodo que tienen descuadres 
      * entre lo facturado y lo registrado en casilleros_declaracion_sri.
      */
@@ -98,11 +118,12 @@ class DeclaracionIvaRepository extends BaseRepository
         $sql = "SELECT casillero, SUM(valor) as total
                 FROM casilleros_declaracion_sri
                 WHERE id_empresa = ? AND fecha BETWEEN ? AND ?
+                AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
                 GROUP BY casillero
                 ORDER BY casillero ASC";
                 
         $st = $this->db->prepare($sql);
-        $st->execute([$idEmpresa, $fechaDesde, $fechaHasta]);
+        $st->execute([$idEmpresa, $fechaDesde, $fechaHasta, $idEmpresa]);
         return $st->fetchAll(\PDO::FETCH_ASSOC);
     }
     /**
@@ -124,7 +145,116 @@ class DeclaracionIvaRepository extends BaseRepository
      */
     public function getEstructuraFormulario(): array
     {
-        $sql = "SELECT * FROM sri_casilleros_etiquetas ORDER BY seccion ASC, orden ASC";
+        $sql = "SELECT * FROM sri_casilleros_etiquetas WHERE eliminado = false ORDER BY seccion ASC, orden ASC";
         return $this->query($sql)->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Limpia los casilleros de un documento específico.
+     */
+    public function limpiarCasillerosDocumento(int $idEmpresa, string $origen, int $idOrigen): void
+    {
+        $sql = "DELETE FROM casilleros_declaracion_sri WHERE id_empresa = ? AND origen = ? AND id_origen = ?";
+        $st = $this->db->prepare($sql);
+        $st->execute([$idEmpresa, $origen, $idOrigen]);
+    }
+
+    /**
+     * Limpia los casilleros huérfanos (documentos eliminados o anulados)
+     */
+    public function limpiarCasillerosHuerfanos(int $idEmpresa, string $fechaDesde, string $fechaHasta): void
+    {
+        $sql = "DELETE FROM casilleros_declaracion_sri c
+                WHERE c.id_empresa = ? AND c.fecha BETWEEN ? AND ?
+                AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
+                AND (
+                    (c.origen = 'facturas de venta' AND NOT EXISTS (SELECT 1 FROM ventas_cabecera v WHERE v.id = CAST(c.id_origen AS INTEGER) AND COALESCE(v.eliminado, false) = false AND v.estado = 'autorizado'))
+                    OR
+                    (c.origen = 'compras' AND NOT EXISTS (SELECT 1 FROM compras_cabecera com WHERE com.id = CAST(c.id_origen AS INTEGER) AND COALESCE(com.eliminado, false) = false AND COALESCE(com.deducible, '') = 'declaracion_iva'))
+                    OR
+                    (c.origen = 'liquidaciones_compras' AND NOT EXISTS (SELECT 1 FROM liquidaciones_cabecera l WHERE l.id = CAST(c.id_origen AS INTEGER) AND COALESCE(l.eliminado, false) = false AND l.estado = 'autorizado'))
+                    OR
+                    (c.origen = 'notas_credito' AND NOT EXISTS (SELECT 1 FROM notas_credito_cabecera nc WHERE nc.id = CAST(c.id_origen AS INTEGER) AND COALESCE(nc.eliminado, false) = false AND nc.estado = 'autorizado'))
+                    OR
+                    (c.origen = 'retenciones_compras' AND NOT EXISTS (SELECT 1 FROM retencion_compra_cabecera rc WHERE rc.id = CAST(c.id_origen AS INTEGER) AND COALESCE(rc.eliminado, false) = false AND rc.estado = 'autorizado'))
+                    OR
+                    (c.origen = 'retenciones_ventas' AND NOT EXISTS (SELECT 1 FROM retencion_venta_cabecera rv WHERE rv.id = CAST(c.id_origen AS INTEGER) AND COALESCE(rv.eliminado, false) = false))
+                )";
+        $st = $this->db->prepare($sql);
+        $st->execute([$idEmpresa, $fechaDesde, $fechaHasta, $idEmpresa]);
+    }
+
+    /**
+     * Inserta un valor en la tabla de casilleros de declaración.
+     */
+    public function insertarCasilleroDeclaracion(array $datos): void
+    {
+        $sql = "INSERT INTO casilleros_declaracion_sri (id_empresa, origen, id_origen, fecha, casillero, valor, concepto, tipo_ambiente)
+                VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?))";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            $datos['id_empresa'],
+            $datos['origen'],
+            $datos['id_origen'],
+            $datos['fecha'],
+            $datos['casillero'],
+            $datos['valor'],
+            $datos['concepto'] ?? null,
+            $datos['id_empresa']
+        ]);
+    }
+
+    /**
+     * Obtiene los detalles de los documentos para la pestaña de edición de casilleros.
+     */
+    public function getDetalleDocumentos(int $idEmpresa, string $fechaDesde, string $fechaHasta): array
+    {
+        $sql = "SELECT c.id, c.origen, c.id_origen, c.fecha, c.casillero, c.valor, c.editado_manualmente, c.concepto,
+                       COALESCE(v.establecimiento, com.establecimiento_prov, l.establecimiento, nc.establecimiento, rc.establecimiento, rv.establecimiento) AS establecimiento,
+                       COALESCE(v.punto_emision, com.punto_emision_prov, l.punto_emision, nc.punto_emision, rc.punto_emision, rv.punto_emision) AS punto_emision,
+                       COALESCE(v.secuencial, com.secuencial_prov, l.secuencial, nc.secuencial, rc.secuencial, rv.secuencial) AS secuencial,
+                       COALESCE(cl_v.nombre, pr_com.razon_social, pr_com.nombre_comercial, pr_l.razon_social, pr_l.nombre_comercial, cl_nc.nombre, pr_rc.razon_social, pr_rc.nombre_comercial, cl_rv.nombre) AS entidad
+                FROM casilleros_declaracion_sri c
+                LEFT JOIN ventas_cabecera v ON c.id_origen = v.id AND c.origen = 'facturas de venta'
+                LEFT JOIN clientes cl_v ON v.id_cliente = cl_v.id
+                LEFT JOIN compras_cabecera com ON c.id_origen = com.id AND c.origen = 'compras'
+                LEFT JOIN proveedores pr_com ON com.id_proveedor = pr_com.id
+                LEFT JOIN liquidaciones_cabecera l ON c.id_origen = l.id AND c.origen = 'liquidaciones_compras'
+                LEFT JOIN proveedores pr_l ON l.id_proveedor = pr_l.id
+                LEFT JOIN notas_credito_cabecera nc ON c.id_origen = nc.id AND c.origen = 'notas_credito'
+                LEFT JOIN clientes cl_nc ON nc.id_cliente = cl_nc.id
+                LEFT JOIN retencion_compra_cabecera rc ON c.id_origen = rc.id AND c.origen = 'retenciones_compras'
+                LEFT JOIN proveedores pr_rc ON rc.id_proveedor = pr_rc.id
+                LEFT JOIN retencion_venta_cabecera rv ON c.id_origen = rv.id AND c.origen = 'retenciones_ventas'
+                LEFT JOIN clientes cl_rv ON rv.id_cliente = cl_rv.id
+                WHERE c.id_empresa = ? AND c.fecha BETWEEN ? AND ?
+                AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
+                ORDER BY c.fecha ASC, c.origen ASC, c.id_origen ASC";
+                
+        $st = $this->db->prepare($sql);
+        $st->execute([$idEmpresa, $fechaDesde, $fechaHasta, $idEmpresa]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Actualiza el casillero de una fila específica.
+     */
+    public function actualizarCasilleroManual(int $id, string $nuevoCasillero): void
+    {
+        $sql = "UPDATE casilleros_declaracion_sri SET casillero = ?, editado_manualmente = TRUE WHERE id = ?";
+        $st = $this->db->prepare($sql);
+        $st->execute([$nuevoCasillero, $id]);
+    }
+
+    public function getMapaTarifasIva(): array
+    {
+        $stmt = $this->db->query("SELECT id, codigo FROM tarifa_iva");
+        $mapa = [];
+        if ($stmt) {
+            foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+                $mapa[(string)$row['codigo']] = (string)$row['id'];
+            }
+        }
+        return $mapa;
     }
 }

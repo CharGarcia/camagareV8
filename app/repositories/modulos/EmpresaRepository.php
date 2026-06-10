@@ -498,59 +498,58 @@ class EmpresaRepository extends BaseModel
     public function getIvaCasilleros(int $idEmpresa): array
     {
         $id = (int) $idEmpresa;
-        $sql = "SELECT codigo, casillero_subtotal_ventas, casillero_iva_ventas,
-                       casillero_subtotal_compras, casillero_iva_compras,
-                       COALESCE(casillero_iva_compras, '') AS cas_iva_compras,
-                       COALESCE(casillero_iva_ventas, '')  AS cas_iva_ventas,
-                       COALESCE(tabla, 'iva')              AS tabla
+        $sql = "SELECT codigo, tipo_documento, casillero_bruto, casillero_neto, casillero_impuesto
                 FROM empresa_casilleros_iva_sri
                 WHERE id_empresa = {$id} AND eliminado = false";
         $res = $this->query($sql);
 
         $mapping = [];
         foreach ($res as $row) {
-            $mapping[$row['codigo']] = [
-                'subtotal_ventas'  => $row['casillero_subtotal_ventas'],
-                'iva_ventas'       => $row['casillero_iva_ventas'],
-                'subtotal_compras' => $row['casillero_subtotal_compras'],
-                'iva_compras'      => $row['casillero_iva_compras'],
-                'cas_iva_compras'  => $row['cas_iva_compras'],
-                'cas_iva_ventas'   => $row['cas_iva_ventas'],
-                'tabla'            => $row['tabla'],
+            $td = $row['tipo_documento'];
+            $cod = $row['codigo'];
+            if (!isset($mapping[$td])) {
+                $mapping[$td] = [];
+            }
+            $mapping[$td][$cod] = [
+                'bruto'    => $row['casillero_bruto'],
+                'neto'     => $row['casillero_neto'],
+                'impuesto' => $row['casillero_impuesto'],
             ];
         }
         return $mapping;
     }
 
-    public function updateIvaCasillero(int $idEmpresa, int $idTarifa, array $data): bool
+    public function clearIvaCasilleros(int $idEmpresa): bool
+    {
+        $id = (int) $idEmpresa;
+        $user = (int) ($_SESSION['id_usuario'] ?? 0);
+        return $this->execute("UPDATE empresa_casilleros_iva_sri SET eliminado = true, deleted_at = NOW(), deleted_by = {$user} WHERE id_empresa = {$id} AND eliminado = false");
+    }
+
+    public function updateIvaCasillero(int $idEmpresa, int $codigo, string $tipoDocumento, array $data): bool
     {
         $idEmp  = (int) $idEmpresa;
-        $idTar  = (int) $idTarifa;
-        $sv     = $this->escape($data['subtotal_ventas']  ?? '');
-        $iv     = $this->escape($data['iva_ventas']       ?? '');
-        $sc     = $this->escape($data['subtotal_compras'] ?? '');
-        $ic     = $this->escape($data['iva_compras']      ?? '');
-        $civ_c  = $this->escape($data['cas_iva_compras']  ?? '');
-        $civ_v  = $this->escape($data['cas_iva_ventas']   ?? '');
-        $tabla  = $this->escape($data['tabla']            ?? 'iva');
+        $cod    = (int) $codigo;
+        $td     = $this->escape($tipoDocumento);
+        
+        $bruto  = $this->escape($data['bruto'] ?? '');
+        $neto   = $this->escape($data['neto'] ?? '');
+        $imp    = $this->escape($data['impuesto'] ?? '');
         $user   = (int) ($_SESSION['id_usuario'] ?? 0);
 
-        $check = $this->query("SELECT id FROM empresa_casilleros_iva_sri WHERE id_empresa = {$idEmp} AND codigo = {$idTar} AND eliminado = false");
+        $check = $this->query("SELECT id FROM empresa_casilleros_iva_sri WHERE id_empresa = {$idEmp} AND codigo = {$cod} AND tipo_documento = '{$td}' AND eliminado = false");
         if (!empty($check)) {
             $sql = "UPDATE empresa_casilleros_iva_sri SET
-                    casillero_subtotal_ventas  = '{$sv}',
-                    casillero_iva_ventas       = '{$iv}',
-                    casillero_subtotal_compras = '{$sc}',
-                    casillero_iva_compras      = '{$ic}',
-                    tabla                      = '{$tabla}',
+                    casillero_bruto    = '{$bruto}',
+                    casillero_neto     = '{$neto}',
+                    casillero_impuesto = '{$imp}',
                     updated_at = NOW(), updated_by = {$user}
-                    WHERE id_empresa = {$idEmp} AND codigo = {$idTar}";
+                    WHERE id_empresa = {$idEmp} AND codigo = {$cod} AND tipo_documento = '{$td}'";
 
         } else {
             $sql = "INSERT INTO empresa_casilleros_iva_sri
-                        (id_empresa, codigo, casillero_subtotal_ventas, casillero_iva_ventas,
-                         casillero_subtotal_compras, casillero_iva_compras, tabla, created_by, updated_by)
-                    VALUES ({$idEmp}, {$idTar}, '{$sv}', '{$iv}', '{$sc}', '{$ic}', '{$tabla}', {$user}, {$user})";
+                        (id_empresa, codigo, tipo_documento, casillero_bruto, casillero_neto, casillero_impuesto, created_by, updated_by)
+                    VALUES ({$idEmp}, {$cod}, '{$td}', '{$bruto}', '{$neto}', '{$imp}', {$user}, {$user})";
         }
         return $this->execute($sql);
     }
@@ -567,16 +566,16 @@ class EmpresaRepository extends BaseModel
     public function getRetencionesCasilleros(int $idEmpresa): array
     {
         $id  = (int) $idEmpresa;
-        $sql = "SELECT codigo, casillero_iva_compras, casillero_iva_ventas
+        $sql = "SELECT codigo, casillero_bruto, casillero_neto
                 FROM empresa_casilleros_iva_sri
-                WHERE id_empresa = {$id} AND tabla = 'retenciones' AND eliminado = false";
+                WHERE id_empresa = {$id} AND tipo_documento = 'retencion_iva' AND eliminado = false";
         $res = $this->query($sql);
 
         $map = [];
         foreach ($res as $row) {
             $map[(int)$row['codigo']] = [
-                'casillero_compras' => $row['casillero_iva_compras'],
-                'casillero_ventas'  => $row['casillero_iva_ventas'],
+                'casillero_compras' => $row['casillero_bruto'], // Mapeamos bruto a compras por compatibilidad anterior
+                'casillero_ventas'  => $row['casillero_neto'],  // Mapeamos neto a ventas por compatibilidad anterior
             ];
         }
         return $map;
@@ -590,21 +589,20 @@ class EmpresaRepository extends BaseModel
         $ven   = $this->escape($data['cas_ventas']  ?? '');
         $user  = (int) ($_SESSION['id_usuario'] ?? 0);
 
-        $check = $this->query("SELECT id FROM empresa_casilleros_iva_sri WHERE id_empresa = {$idEmp} AND codigo = {$idRet} AND tabla = 'retenciones' AND eliminado = false");
+        $check = $this->query("SELECT id FROM empresa_casilleros_iva_sri WHERE id_empresa = {$idEmp} AND codigo = {$idRet} AND tipo_documento = 'retencion_iva' AND eliminado = false");
         if (!empty($check)) {
             $sql = "UPDATE empresa_casilleros_iva_sri SET
-                    casillero_iva_compras = '{$comp}',
-                    casillero_iva_ventas  = '{$ven}',
+                    casillero_bruto = '{$comp}',
+                    casillero_neto  = '{$ven}',
                     updated_at = NOW(), updated_by = {$user}
-                    WHERE id_empresa = {$idEmp} AND codigo = {$idRet} AND tabla = 'retenciones'";
+                    WHERE id_empresa = {$idEmp} AND codigo = {$idRet} AND tipo_documento = 'retencion_iva'";
         } else {
             $sql = "INSERT INTO empresa_casilleros_iva_sri
-                        (id_empresa, codigo, tabla,
-                         casillero_subtotal_ventas, casillero_iva_ventas,
-                         casillero_subtotal_compras, casillero_iva_compras,
+                        (id_empresa, codigo, tipo_documento,
+                         casillero_bruto, casillero_neto, casillero_impuesto,
                          created_by, updated_by)
-                    VALUES ({$idEmp}, {$idRet}, 'retenciones',
-                            '', '{$ven}', '', '{$comp}',
+                    VALUES ({$idEmp}, {$idRet}, 'retencion_iva',
+                            '{$comp}', '{$ven}', '',
                             {$user}, {$user})";
         }
         $this->execute($sql);

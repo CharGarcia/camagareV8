@@ -80,6 +80,8 @@ class LiquidacionCompraService
                 $data
             );
 
+            $this->sincronizarCasilleros($id, $data);
+
             $db->commit();
             $this->generarYGuardarXml($id, $data);
             return $id;
@@ -161,6 +163,8 @@ class LiquidacionCompraService
                 $data
             );
 
+            $this->sincronizarCasilleros($id, $data);
+
             $db->commit();
             $this->generarYGuardarXml($id, $data);
             return $id;
@@ -196,6 +200,9 @@ class LiquidacionCompraService
                 ['nuevo_estado' => 'anulado']
             );
 
+            $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+            $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'liquidaciones_compras', $id);
+
             $db->commit();
         } catch (\Throwable $e) {
             $db->rollBack();
@@ -220,6 +227,9 @@ class LiquidacionCompraService
                 'liquidaciones_cabecera',
                 (int) $id
             );
+
+            $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+            $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'liquidaciones_compras', $id);
 
             $db->commit();
             return true;
@@ -270,6 +280,80 @@ class LiquidacionCompraService
             $this->repository->updateDetalleXml($idLiq, $xml);
         } catch (\Throwable $e) {
             error_log('[Liq] Error generando XML para liquidación #' . $idLiq . ': ' . $e->getMessage());
+        }
+    }
+
+    public function sincronizarCasilleros(int $idLiq, array $data = null): void
+    {
+        $idEmpresa = $data ? (int)$data['id_empresa'] : 0;
+        
+        if (!$data) {
+            $cabecera = $this->repository->getPorId($idLiq);
+            if (!$cabecera) return;
+            $idEmpresa = (int)$cabecera['id_empresa'];
+            $data = $cabecera;
+            
+            // Get details and taxes if we fetched from DB
+            $data['detalles'] = $this->repository->getDetalles($idLiq);
+            foreach ($data['detalles'] as &$d) {
+                $d['impuestos'] = $this->repository->getImpuestosDetalle((int)$d['id']);
+            }
+            unset($d);
+        }
+
+        $fechaEmision = $data['fecha_emision'] ?? date('Y-m-d');
+        
+        $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+        $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'liquidaciones_compras', $idLiq);
+
+        // Obtener configuración de casilleros de la empresa
+        $empresaConfigRepo = new \App\repositories\modulos\EmpresaRepository();
+        $configDec = $empresaConfigRepo->getIvaCasilleros($idEmpresa);
+        if (!$configDec || !isset($configDec['liquidacion_compra'])) return;
+        $confLiq = $configDec['liquidacion_compra'];
+
+        $tarifaMap = $decIvaRepo->getMapaTarifasIva();
+        $detalles = $data['detalles'] ?? [];
+
+        foreach ($detalles as $det) {
+            $desc = !empty($det['producto_nombre']) ? $det['producto_nombre'] : (!empty($det['descripcion']) ? $det['descripcion'] : 'Sin concepto');
+            $concepto = substr(trim($desc), 0, 255);
+            $impuestos = $det['impuestos'] ?? [];
+            foreach ($impuestos as $imp) {
+                // Solo IVA (codigo_impuesto = 2)
+                if ((int)$imp['codigo_impuesto'] !== 2) continue;
+
+                $codigoPorcentaje = (string)($imp['codigo_porcentaje'] ?? '');
+                $tarifaKey = $tarifaMap[$codigoPorcentaje] ?? '';
+                if (!$tarifaKey || !isset($confLiq[$tarifaKey])) continue;
+
+                $c = $confLiq[$tarifaKey];
+                $bruto = $c['bruto'] ?? '';
+                $neto = $c['neto'] ?? '';
+                $impC = $c['impuesto'] ?? '';
+
+                $base = (float)($imp['base_imponible'] ?? 0);
+                $valorImp = (float)($imp['valor'] ?? 0);
+
+                if ($bruto !== '' && $base > 0) {
+                    $decIvaRepo->insertarCasilleroDeclaracion([
+                        'id_empresa' => $idEmpresa, 'origen' => 'liquidaciones_compras', 'id_origen' => $idLiq,
+                        'fecha' => $fechaEmision, 'casillero' => $bruto, 'valor' => $base, 'concepto' => $concepto . ' (Base)'
+                    ]);
+                }
+                if ($neto !== '' && $base > 0) {
+                    $decIvaRepo->insertarCasilleroDeclaracion([
+                        'id_empresa' => $idEmpresa, 'origen' => 'liquidaciones_compras', 'id_origen' => $idLiq,
+                        'fecha' => $fechaEmision, 'casillero' => $neto, 'valor' => $base, 'concepto' => $concepto . ' (Base)'
+                    ]);
+                }
+                if ($impC !== '' && $valorImp > 0) {
+                    $decIvaRepo->insertarCasilleroDeclaracion([
+                        'id_empresa' => $idEmpresa, 'origen' => 'liquidaciones_compras', 'id_origen' => $idLiq,
+                        'fecha' => $fechaEmision, 'casillero' => $impC, 'valor' => $valorImp, 'concepto' => $concepto . ' (IVA)'
+                    ]);
+                }
+            }
         }
     }
 }

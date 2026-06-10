@@ -22,6 +22,32 @@ class DeclaracionIvaController extends BaseModuloController
         parent::__construct();
         $this->repository = new DeclaracionIvaRepository();
         $this->service    = new DeclaracionIvaService($this->repository);
+        $this->verificarMigracionCasilleros();
+    }
+
+    private function verificarMigracionCasilleros(): void
+    {
+        $db = \App\core\Database::getConnection();
+        try {
+            $st = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'casilleros_declaracion_sri' AND column_name = 'id'");
+            if ($st->rowCount() === 0) {
+                $db->exec("ALTER TABLE casilleros_declaracion_sri ADD COLUMN id SERIAL PRIMARY KEY");
+                $db->exec("ALTER TABLE casilleros_declaracion_sri ADD COLUMN editado_manualmente BOOLEAN DEFAULT FALSE");
+                $db->exec("ALTER TABLE casilleros_declaracion_sri ADD COLUMN concepto TEXT DEFAULT NULL");
+            } else {
+                $st2 = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'casilleros_declaracion_sri' AND column_name = 'editado_manualmente'");
+                if ($st2->rowCount() === 0) {
+                    $db->exec("ALTER TABLE casilleros_declaracion_sri ADD COLUMN editado_manualmente BOOLEAN DEFAULT FALSE");
+                }
+                $st3 = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'casilleros_declaracion_sri' AND column_name = 'concepto'");
+                if ($st3->rowCount() === 0) {
+                    $db->exec("ALTER TABLE casilleros_declaracion_sri ADD COLUMN concepto TEXT DEFAULT NULL");
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignorar errores de migración si ocurren (por locks u otra causa)
+            error_log("Error migracion casilleros: " . $e->getMessage());
+        }
     }
 
     public function index(): void
@@ -47,19 +73,19 @@ class DeclaracionIvaController extends BaseModuloController
         ]);
     }
 
-    public function auditarAjax(): void
+    public function generarAjax(): void
     {
         $this->requireLeer();
         header('Content-Type: application/json');
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $anio = $_GET['anio'] ?? date('Y');
         $periodo = $_GET['periodo'] ?? date('m');
         $tipo = $_GET['tipo_periodo'] ?? 'mensual';
 
         try {
             if ($tipo === 'semestral') {
-                // Periodo semestral: 1 = Ene-Jun, 2 = Jul-Dic
                 if ($periodo == '1') {
                     $fechaDesde = "{$anio}-01-01";
                     $fechaHasta = "{$anio}-06-30";
@@ -68,38 +94,52 @@ class DeclaracionIvaController extends BaseModuloController
                     $fechaHasta = "{$anio}-12-31";
                 }
             } else {
-                // Periodo mensual
                 $fechaDesde = "{$anio}-{$periodo}-01";
                 $fechaHasta = date("Y-m-t", strtotime($fechaDesde));
             }
 
-            $resultado = $this->service->auditarPeriodo($idEmpresa, (string)$anio, (string)$periodo);
-            $resumen   = $this->repository->getResumenPorCasilleros($idEmpresa, $fechaDesde, $fechaHasta);
-            $estructura = $this->repository->getEstructuraFormulario();
+            $sincronizar = (int)($_GET['sincronizar'] ?? 0) === 1;
+            if ($sincronizar) {
+                if ($tipo === 'semestral') {
+                    for ($m = ($periodo == '1' ? 1 : 7); $m <= ($periodo == '1' ? 6 : 12); $m++) {
+                        $mesStr = str_pad((string)$m, 2, '0', STR_PAD_LEFT);
+                        $this->service->sincronizarPeriodo($idEmpresa, (string)$anio, $mesStr, $idUsuario);
+                    }
+                } else {
+                    $this->service->sincronizarPeriodo($idEmpresa, (string)$anio, (string)$periodo, $idUsuario);
+                }
+            }
             
-            $resultado['resumen'] = $resumen;
-            $resultado['estructura'] = $estructura;
+            $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta);
+            $detalleDocumentos = $this->repository->getDetalleDocumentos($idEmpresa, $fechaDesde, $fechaHasta);
             
-            echo json_encode($resultado);
+            echo json_encode([
+                'ok' => true, 
+                'resumen_completo' => $resumenCompleto,
+                'detalle_documentos' => $detalleDocumentos
+            ]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
     }
 
-    public function sincronizarAjax(): void
+    public function actualizarCasilleroAjax(): void
     {
-        $this->requireActualizar(); // Requiere permiso de modificación para regenerar
+        $this->requireActualizar();
         header('Content-Type: application/json');
 
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idUsuario = (int) $_SESSION['id_usuario'];
-        $anio = $_POST['anio'] ?? date('Y');
-        $mes  = $_POST['mes']  ?? date('m');
+        $id = (int)($_POST['id'] ?? 0);
+        $nuevoCasillero = trim((string)($_POST['casillero'] ?? ''));
+
+        if ($id <= 0 || empty($nuevoCasillero)) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Datos inválidos']);
+            exit;
+        }
 
         try {
-            $resultado = $this->service->sincronizarPeriodo($idEmpresa, (string)$anio, (string)$mes, $idUsuario);
-            echo json_encode($resultado);
+            $this->repository->actualizarCasilleroManual($id, $nuevoCasillero);
+            echo json_encode(['ok' => true, 'mensaje' => 'Casillero actualizado exitosamente']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }

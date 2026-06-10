@@ -95,6 +95,8 @@ class RetencionCompraService
                 null, ['total_retenido' => $data['total_retenido'] ?? 0]
             );
 
+            $this->sincronizarCasilleros($idRetencion, $data);
+
             if ($managed) $db->commit();
             $this->generarYGuardarXml($idRetencion, $data);
             return $idRetencion;
@@ -149,6 +151,8 @@ class RetencionCompraService
                 $cabecera, ['total_retenido' => $data['total_retenido'] ?? 0]
             );
 
+            $this->sincronizarCasilleros($id, $data);
+
             if ($managed) $db->commit();
             $this->generarYGuardarXml($id, $data);
             return $id;
@@ -190,6 +194,9 @@ class RetencionCompraService
                 $cabecera, ['nuevo_estado' => 'anulada']
             );
 
+            $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+            $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'retenciones_compras', $id);
+
             if ($managed) $db->commit();
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();
@@ -223,6 +230,9 @@ class RetencionCompraService
                 'ELIMINAR', 'retencion_compra_cabecera', $id,
                 $cabecera, ['eliminado' => true]
             );
+
+            $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+            $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'retenciones_compras', $id);
 
             if ($managed) $db->commit();
         } catch (\Throwable $e) {
@@ -391,6 +401,62 @@ class RetencionCompraService
             $this->repository->updateDetalleXml($idRetencion, $xml);
         } catch (\Throwable $e) {
             error_log('[Retencion] Error generando XML para retención #' . $idRetencion . ': ' . $e->getMessage());
+        }
+    }
+
+    public function sincronizarCasilleros(int $idRetencion, array $data = null): void
+    {
+        $idEmpresa = $data ? (int)$data['id_empresa'] : 0;
+        
+        if (!$data) {
+            $cabecera = $this->repository->getPorId($idRetencion, $idEmpresa);
+            if (!$cabecera) return;
+            $idEmpresa = (int)$cabecera['id_empresa'];
+            $data = $cabecera;
+            $data['lineas'] = $this->repository->getDetalle($idRetencion);
+        }
+
+        $fechaEmision = $data['fecha_emision'] ?? date('Y-m-d');
+        
+        $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+        $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'retenciones_compras', $idRetencion);
+
+        // Agrupar bases e impuestos por codigo_retencion (solo IVA)
+        $agrupacion = [];
+        $lineas = $data['lineas'] ?? [];
+        foreach ($lineas as $linea) {
+            $codImp = strtoupper((string)($linea['codigo_impuesto'] ?? ''));
+            // 1=Renta, 2=IVA, 6=ISD
+            if ($codImp !== '2' && $codImp !== 'IVA') continue;
+            
+            $codRet = (string)($linea['codigo_retencion'] ?? '');
+            if (!isset($agrupacion[$codRet])) {
+                $agrupacion[$codRet] = 0.0;
+            }
+            $agrupacion[$codRet] += (float)($linea['valor_retenido'] ?? 0);
+        }
+
+        // Obtener configuración de casilleros de la empresa
+        $empresaConfigRepo = new \App\repositories\modulos\EmpresaRepository();
+        $configDec = $empresaConfigRepo->getIvaCasilleros($idEmpresa);
+        if (!$configDec || !isset($configDec['retencion_iva'])) return;
+
+        $confRet = $configDec['retencion_iva'];
+
+        // Mapear y guardar
+        foreach ($agrupacion as $codRet => $valor) {
+            if ($valor <= 0) continue;
+            if (!isset($confRet[$codRet])) continue;
+
+            $c = $confRet[$codRet];
+            $imp = $c['impuesto'] ?? '';
+
+            if ($imp !== '') {
+                $decIvaRepo->insertarCasilleroDeclaracion([
+                    'id_empresa' => $idEmpresa, 'origen' => 'retenciones_compras', 'id_origen' => $idRetencion,
+                    'fecha' => $fechaEmision, 'casillero' => $imp, 'valor' => $valor, 'concepto' => 'Retención IVA (Cód: ' . $codRet . ')'
+                ]);
+            }
         }
     }
 }

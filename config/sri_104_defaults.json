@@ -1,0 +1,66 @@
+{
+    "factura_venta": {
+        "15": { "bruto": "401", "neto": "411", "impuesto": "421" },
+        "8":  { "bruto": "410", "neto": "420", "impuesto": "430" },
+        "5":  { "bruto": "425", "neto": "435", "impuesto": "445" },
+        "0":  { "bruto": "403", "neto": "413", "impuesto": "" },
+        "NO_OBJETO": { "bruto": "431", "neto": "441", "impuesto": "" },
+        "EXENTO":    { "bruto": "431", "neto": "441", "impuesto": "" }
+    },
+    "nota_credito_venta": {
+        "15": { "bruto": "", "neto": "411", "impuesto": "421" },
+        "8":  { "bruto": "", "neto": "420", "impuesto": "430" },
+        "5":  { "bruto": "", "neto": "435", "impuesto": "445" },
+        "0":  { "bruto": "", "neto": "413", "impuesto": "" },
+        "NO_OBJETO": { "bruto": "", "neto": "441", "impuesto": "" },
+        "EXENTO":    { "bruto": "", "neto": "441", "impuesto": "" }
+    },
+    "factura_compra": {
+        "15": { "bruto": "500", "neto": "510", "impuesto": "520" },
+        "8":  { "bruto": "530", "neto": "533", "impuesto": "534" },
+        "5":  { "bruto": "540", "neto": "550", "impuesto": "560" },
+        "0":  { "bruto": "507", "neto": "517", "impuesto": "" },
+        "NO_OBJETO": { "bruto": "531", "neto": "541", "impuesto": "" },
+        "EXENTO":    { "bruto": "532", "neto": "542", "impuesto": "" }
+    },
+    "nota_venta_compra": {
+        "15": { "bruto": "", "neto": "", "impuesto": "" },
+        "8":  { "bruto": "", "neto": "", "impuesto": "" },
+        "5":  { "bruto": "", "neto": "", "impuesto": "" },
+        "0":  { "bruto": "", "neto": "", "impuesto": "" },
+        "NO_OBJETO": { "bruto": "", "neto": "", "impuesto": "" },
+        "EXENTO":    { "bruto": "508", "neto": "518", "impuesto": "" }
+    },
+    "nota_credito_compra": {
+        "15": { "bruto": "", "neto": "510", "impuesto": "520" },
+        "8":  { "bruto": "", "neto": "533", "impuesto": "534" },
+        "5":  { "bruto": "", "neto": "550", "impuesto": "560" },
+        "0":  { "bruto": "", "neto": "517", "impuesto": "" },
+        "NO_OBJETO": { "bruto": "", "neto": "541", "impuesto": "" },
+        "EXENTO":    { "bruto": "", "neto": "542", "impuesto": "" }
+    },
+    "nota_debito_compra": {
+        "15": { "bruto": "", "neto": "", "impuesto": "" },
+        "8":  { "bruto": "", "neto": "", "impuesto": "" },
+        "5":  { "bruto": "", "neto": "", "impuesto": "" },
+        "0":  { "bruto": "", "neto": "", "impuesto": "" },
+        "NO_OBJETO": { "bruto": "", "neto": "", "impuesto": "" },
+        "EXENTO":    { "bruto": "", "neto": "", "impuesto": "" }
+    },
+    "liquidacion_compra": {
+        "15": { "bruto": "500", "neto": "510", "impuesto": "520" },
+        "8":  { "bruto": "", "neto": "", "impuesto": "" },
+        "5":  { "bruto": "", "neto": "", "impuesto": "" },
+        "0":  { "bruto": "507", "neto": "517", "impuesto": "" },
+        "NO_OBJETO": { "bruto": "531", "neto": "541", "impuesto": "" },
+        "EXENTO":    { "bruto": "532", "neto": "542", "impuesto": "" }
+    },
+    "retencion_iva": {
+        "10":  { "ventas": "609", "compras": "721" },
+        "20":  { "ventas": "609", "compras": "723" },
+        "30":  { "ventas": "609", "compras": "725" },
+        "50":  { "ventas": "609", "compras": "727" },
+        "70":  { "ventas": "609", "compras": "729" },
+        "100": { "ventas": "609", "compras": "731" }
+    }
+}

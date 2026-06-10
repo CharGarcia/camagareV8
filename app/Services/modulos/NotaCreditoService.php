@@ -112,6 +112,9 @@ class NotaCreditoService
                 ['secuencial' => $data['secuencial']]
             );
 
+            // Sincronizar con casilleros SRI 104
+            $this->sincronizarCasilleros($idNC, $data);
+
             $db->commit();
             $this->generarYGuardarXml($idNC, $data['empresa_config'] ?? []);
             return $idNC;
@@ -225,6 +228,9 @@ class NotaCreditoService
                 $data
             );
 
+            // Sincronizar con casilleros SRI 104
+            $this->sincronizarCasilleros($id, $data);
+
             $db->commit();
             $this->generarYGuardarXml($id, $data['empresa_config'] ?? []);
             return $id;
@@ -298,6 +304,10 @@ class NotaCreditoService
             );
             $invService->revertirMovimientosPorReferencia('nota_credito', $id, $idEmpresa, $idUsuario);
 
+            // Limpiar casilleros de declaracion 104
+            $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+            $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'notas de credito', $id);
+
             $this->repository->updateEstado($id, 'anulado');
 
             $this->logService->registrar(
@@ -354,6 +364,81 @@ class NotaCreditoService
             $this->repository->updateDetalleXml($idNC, $xml);
         } catch (\Throwable $e) {
             error_log('[NC] Error generando XML para NC #' . $idNC . ': ' . $e->getMessage());
+        }
+    }
+
+    public function sincronizarCasilleros(int $idNC, array $data = null): void
+    {
+        $idEmpresa = $data ? (int)$data['id_empresa'] : 0;
+        
+        if (!$data) {
+            $cabecera = $this->repository->getPorId($idNC);
+            if (!$cabecera) return;
+            $idEmpresa = (int)$cabecera['id_empresa'];
+            $data = $cabecera;
+            
+            // Get details and taxes if we fetched from DB
+            $data['detalles'] = $this->repository->getDetalles($idNC);
+            foreach ($data['detalles'] as &$d) {
+                $d['impuestos'] = $this->repository->getImpuestosDetalle((int)$d['id']);
+            }
+            unset($d);
+        }
+
+        $fechaEmision = $data['fecha_emision'] ?? date('Y-m-d');
+        
+        $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+        $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'notas de credito', $idNC);
+
+        // Obtener configuración de casilleros de la empresa
+        $empresaConfigRepo = new \App\repositories\modulos\EmpresaRepository();
+        $configDec = $empresaConfigRepo->getIvaCasilleros($idEmpresa);
+        if (!$configDec || !isset($configDec['nota_credito'])) return;
+        $confNC = $configDec['nota_credito'];
+
+        $tarifaMap = $decIvaRepo->getMapaTarifasIva();
+        $detalles = $data['detalles'] ?? [];
+
+        foreach ($detalles as $det) {
+            $desc = !empty($det['producto_nombre']) ? $det['producto_nombre'] : (!empty($det['descripcion']) ? $det['descripcion'] : 'Sin concepto');
+            $concepto = substr(trim($desc), 0, 255);
+            $impuestos = $det['impuestos'] ?? [];
+            foreach ($impuestos as $imp) {
+                // Solo IVA (codigo_impuesto = 2)
+                if ((int)$imp['codigo_impuesto'] !== 2) continue;
+
+                $codigoPorcentaje = (string)($imp['codigo_porcentaje'] ?? '');
+                $tarifaKey = $tarifaMap[$codigoPorcentaje] ?? '';
+                if (!$tarifaKey || !isset($confNC[$tarifaKey])) continue;
+
+                $c = $confNC[$tarifaKey];
+                $bruto = $c['bruto'] ?? '';
+                $neto = $c['neto'] ?? '';
+                $impC = $c['impuesto'] ?? '';
+
+                $base = (float)($imp['base_imponible'] ?? 0);
+                $valorImp = (float)($imp['valor'] ?? 0);
+
+                // Guardamos el valor NEGATIVO para que reste en la sumatoria final
+                if ($bruto !== '' && $base > 0) {
+                    $decIvaRepo->insertarCasilleroDeclaracion([
+                        'id_empresa' => $idEmpresa, 'origen' => 'notas de credito', 'id_origen' => $idNC,
+                        'fecha' => $fechaEmision, 'casillero' => $bruto, 'valor' => -1 * $base, 'concepto' => $concepto . ' (Base)'
+                    ]);
+                }
+                if ($neto !== '' && $base > 0) {
+                    $decIvaRepo->insertarCasilleroDeclaracion([
+                        'id_empresa' => $idEmpresa, 'origen' => 'notas de credito', 'id_origen' => $idNC,
+                        'fecha' => $fechaEmision, 'casillero' => $neto, 'valor' => -1 * $base, 'concepto' => $concepto . ' (Base)'
+                    ]);
+                }
+                if ($impC !== '' && $valorImp > 0) {
+                    $decIvaRepo->insertarCasilleroDeclaracion([
+                        'id_empresa' => $idEmpresa, 'origen' => 'notas de credito', 'id_origen' => $idNC,
+                        'fecha' => $fechaEmision, 'casillero' => $impC, 'valor' => -1 * $valorImp, 'concepto' => $concepto . ' (IVA)'
+                    ]);
+                }
+            }
         }
     }
 }

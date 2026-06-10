@@ -79,6 +79,19 @@ class HandlerFactory
                 'acciones' => $accionesDoc,
             ],
 
+            'whatsapp' => [
+                'label'   => 'WhatsApp',
+                'icono'   => 'fa-whatsapp',
+                'acciones' => [
+                    'aviso_mensajes_no_leidos' => [
+                        'label'       => 'Avisar mensajes no leídos',
+                        'descripcion' => 'Envía un aviso (por WhatsApp) a los números configurados cuando hay chats con mensajes sin leer durante más del umbral definido en la configuración de WhatsApp.',
+                        'handler'     => Handlers\WhatsappHandler::class,
+                        'parametros'  => [],
+                    ],
+                ],
+            ],
+
             'suscripciones' => [
                 'label'   => 'Suscripciones',
                 'icono'   => 'fa-repeat',

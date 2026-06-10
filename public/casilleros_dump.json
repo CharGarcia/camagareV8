@@ -1,0 +1,275 @@
+[
+    {
+        "casillero": "401",
+        "descripcion": "Ventas locales (excluye activos fijos) gravadas tarifa diferente de cero",
+        "seccion": "400",
+        "orden": 10,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "411",
+        "descripcion": "Ventas locales (excluye activos fijos) gravadas tarifa diferente de cero (Valor Neto)",
+        "seccion": "400",
+        "orden": 20,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "402",
+        "descripcion": "Ventas locales de activos fijos gravadas tarifa diferente de cero",
+        "seccion": "400",
+        "orden": 30,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "412",
+        "descripcion": "Ventas locales de activos fijos gravadas tarifa diferente de cero (Valor Neto)",
+        "seccion": "400",
+        "orden": 40,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "403",
+        "descripcion": "Ventas locales gravadas tarifa 0% que NO dan derecho a cr\u00e9dito tributario",
+        "seccion": "400",
+        "orden": 50,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "413",
+        "descripcion": "Ventas locales gravadas tarifa 0% que NO dan derecho a cr\u00e9dito tributario (Valor Neto)",
+        "seccion": "400",
+        "orden": 60,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "405",
+        "descripcion": "Ventas locales gravadas tarifa 0% que DAN derecho a cr\u00e9dito tributario",
+        "seccion": "400",
+        "orden": 70,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "415",
+        "descripcion": "Ventas locales gravadas tarifa 0% que DAN derecho a cr\u00e9dito tributario (Valor Neto)",
+        "seccion": "400",
+        "orden": 80,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "407",
+        "descripcion": "Exportaciones de bienes",
+        "seccion": "400",
+        "orden": 90,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "417",
+        "descripcion": "Exportaciones de bienes (Valor Neto)",
+        "seccion": "400",
+        "orden": 100,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "408",
+        "descripcion": "Exportaciones de servicios y\/o derechos",
+        "seccion": "400",
+        "orden": 110,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "418",
+        "descripcion": "Exportaciones de servicios y\/o derechos (Valor Neto)",
+        "seccion": "400",
+        "orden": 120,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "431",
+        "descripcion": "Transferencias no objeto o exentas de IVA",
+        "seccion": "400",
+        "orden": 130,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "441",
+        "descripcion": "Transferencias no objeto o exentas de IVA (Valor Neto)",
+        "seccion": "400",
+        "orden": 140,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "409",
+        "descripcion": "Ventas locales de activos fijos gravadas con tarifa diferente de cero (R\u00e9gimen Simplificado)",
+        "seccion": "400",
+        "orden": 150,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "419",
+        "descripcion": "Ventas locales de activos fijos gravadas con tarifa diferente de cero (Valor Neto)",
+        "seccion": "400",
+        "orden": 160,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "442",
+        "descripcion": "Notas de cr\u00e9dito por compensar el pr\u00f3ximo mes (Bruto)",
+        "seccion": "400",
+        "orden": 170,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "443",
+        "descripcion": "Notas de cr\u00e9dito por compensar el pr\u00f3ximo mes (Impuesto)",
+        "seccion": "400",
+        "orden": 181,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "421",
+        "descripcion": "Impuesto generado (IVA) en ventas tarifa diferente de cero",
+        "seccion": "400",
+        "orden": 190,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "422",
+        "descripcion": "Impuesto generado (IVA) en ventas de activos fijos tarifa diferente de cero",
+        "seccion": "400",
+        "orden": 200,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "423",
+        "descripcion": "Impuesto generado (IVA) en exportaciones de bienes",
+        "seccion": "400",
+        "orden": 210,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "424",
+        "descripcion": "Impuesto generado (IVA) en exportaciones de servicios",
+        "seccion": "400",
+        "orden": 220,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "111",
+        "descripcion": "Total comprobantes de venta emitidos",
+        "seccion": "400_INF",
+        "orden": 110,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "113",
+        "descripcion": "Total comprobantes de venta anulados",
+        "seccion": "400_INF",
+        "orden": 120,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "115",
+        "descripcion": "Total comprobantes de retenci\u00f3n emitidos",
+        "seccion": "400_INF",
+        "orden": 130,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "117",
+        "descripcion": "Total comprobantes de retenci\u00f3n anulados",
+        "seccion": "400_INF",
+        "orden": 140,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "119",
+        "descripcion": "Total notas de cr\u00e9dito emitidas",
+        "seccion": "400_INF",
+        "orden": 150,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "121",
+        "descripcion": "Total notas de cr\u00e9dito anuladas",
+        "seccion": "400_INF",
+        "orden": 160,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "123",
+        "descripcion": "Total notas de d\u00e9bito emitidas",
+        "seccion": "400_INF",
+        "orden": 170,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "125",
+        "descripcion": "Total notas de d\u00e9bito anuladas",
+        "seccion": "400_INF",
+        "orden": 180,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "127",
+        "descripcion": "Total gu\u00edas de remisi\u00f3n emitidas",
+        "seccion": "400_INF",
+        "orden": 190,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "129",
+        "descripcion": "Total gu\u00edas de remisi\u00f3n anuladas",
+        "seccion": "400_INF",
+        "orden": 200,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "480",
+        "descripcion": "Total transferencias gravadas tarifa diferente de cero a contado este mes",
+        "seccion": "400_LIQ",
+        "orden": 10,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "481",
+        "descripcion": "Total transferencias gravadas tarifa diferente de cero a cr\u00e9dito este mes",
+        "seccion": "400_LIQ",
+        "orden": 20,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "429",
+        "descripcion": "Total impuesto generado",
+        "seccion": "400_LIQ",
+        "orden": 30,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "483",
+        "descripcion": "Impuesto a liquidar del mes anterior",
+        "seccion": "400_LIQ",
+        "orden": 40,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "484",
+        "descripcion": "Impuesto a liquidar en este mes",
+        "seccion": "400_LIQ",
+        "orden": 50,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "485",
+        "descripcion": "Impuesto a liquidar en el pr\u00f3ximo mes",
+        "seccion": "400_LIQ",
+        "orden": 60,
+        "tipo": "valor"
+    },
+    {
+        "casillero": "499",
+        "descripcion": "TOTAL IMPUESTO A LIQUIDAR EN ESTE MES",
+        "seccion": "400_LIQ",
+        "orden": 70,
+        "tipo": "valor"
+    }
+]

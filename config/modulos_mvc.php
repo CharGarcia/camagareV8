@@ -232,4 +232,10 @@ return [
         'id_submodulo' => 36,
         'legacy_rutas' => [],
     ],
+
+    // ─── CUENTAS POR PAGAR ────────────────────────────────────────────────────
+    'modulos/cuentas_por_pagar' => [
+        'id_submodulo' => 37,
+        'legacy_rutas' => [],
+    ],
 ];

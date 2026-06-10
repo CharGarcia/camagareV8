@@ -123,7 +123,7 @@ class RetencionVentaRepository extends BaseRepository
 
     // ── Obtener por ID ───────────────────────────────────────────
 
-    public function getPorId(int $id, int $idEmpresa): ?array
+    public function getPorId(int $id, int $idEmpresa = 0): ?array
     {
         $sql = "SELECT
                     r.*,
@@ -140,10 +140,16 @@ class RetencionVentaRepository extends BaseRepository
                 LEFT JOIN clientes  c   ON c.id  = r.id_cliente
                 LEFT JOIN usuarios  uc  ON uc.id = r.created_by
                 LEFT JOIN usuarios  uu  ON uu.id = r.updated_by
-                WHERE r.id = :id AND r.id_empresa = :ie AND r.eliminado = false";
+                WHERE r.id = :id AND r.eliminado = false";
+
+        $params = [':id' => $id];
+        if ($idEmpresa > 0) {
+            $sql .= " AND r.id_empresa = :ie";
+            $params[':ie'] = $idEmpresa;
+        }
 
         $st = $this->db->prepare($sql);
-        $st->execute([':id' => $id, ':ie' => $idEmpresa]);
+        $st->execute($params);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }
