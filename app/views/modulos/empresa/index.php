@@ -57,6 +57,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
+                    <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="secuenciales-tab" data-bs-toggle="tab" data-bs-target="#secuenciales" type="button" role="tab">
+                        Secuenciales
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
                     <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="iva-tab" data-bs-toggle="tab" data-bs-target="#iva" type="button" role="tab">
                         Form 104 IVA
                     </button>
