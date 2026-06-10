@@ -61,18 +61,19 @@ class SriCasillerosEtiquetasController extends Controller
         $this->requireAuth();
         $this->requireNivel(3); // Solo Superadmin
 
-        $ordenCol = trim($_GET['sort'] ?? 'seccion');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? 'asc'));
+        $ordenCol = trim($_GET['sort'] ?? 'orden');
+        $ordenDir = strtoupper(trim($_GET['dir'] ?? 'DESC'));
         $buscar = trim($_GET['b'] ?? $_GET['buscar'] ?? '');
         
         if (!in_array($ordenCol, SriCasilleroEtiqueta::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'seccion';
+            $ordenCol = 'orden';
         }
         if ($ordenDir !== 'ASC' && $ordenDir !== 'DESC') {
-            $ordenDir = 'ASC';
+            $ordenDir = 'DESC';
         }
 
         $rows = $this->model->getAll($ordenCol, $ordenDir, $buscar);
+        $valoresDefecto = $this->model->getValoresPorDefecto();
 
         $this->viewWithLayout('layouts.main', 'config.sriCasillerosEtiquetas.index', [
             'titulo' => 'Estructura Formulario 104',
@@ -80,6 +81,7 @@ class SriCasillerosEtiquetasController extends Controller
             'ordenCol' => $ordenCol,
             'ordenDir' => $ordenDir,
             'buscar' => $buscar,
+            'valoresDefecto' => $valoresDefecto,
         ]);
     }
 

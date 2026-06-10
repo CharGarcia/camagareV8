@@ -173,4 +173,28 @@ class SriCasilleroEtiqueta extends BaseModel
             return false;
         }
     }
+
+    /**
+     * Obtiene los valores por defecto para un nuevo registro
+     */
+    public function getValoresPorDefecto(): array
+    {
+        $sql = "SELECT MAX(orden) as max_orden, 
+                       (SELECT seccion FROM sri_casilleros_etiquetas WHERE eliminado = false ORDER BY id DESC LIMIT 1) as ultima_seccion
+                FROM sri_casilleros_etiquetas WHERE eliminado = false";
+        try {
+            $rows = $this->query($sql);
+            $maxOrden = (int) ($rows[0]['max_orden'] ?? 0);
+            $ultimaSeccion = $rows[0]['ultima_seccion'] ?? '400';
+            return [
+                'siguiente_orden' => $maxOrden + 1,
+                'ultima_seccion' => $ultimaSeccion
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'siguiente_orden' => 1,
+                'ultima_seccion' => '400'
+            ];
+        }
+    }
 }

@@ -4,11 +4,13 @@
 /** @var string $ordenCol */
 /** @var string $ordenDir */
 /** @var string $buscar */
+/** @var array $valoresDefecto */
 $base = BASE_URL;
 $rows = $rows ?? [];
-$ordenCol = $ordenCol ?? 'seccion';
-$ordenDir = $ordenDir ?? 'asc';
+$ordenCol = $ordenCol ?? 'orden';
+$ordenDir = $ordenDir ?? 'desc';
 $buscar = $buscar ?? '';
+$valoresDefecto = $valoresDefecto ?? ['siguiente_orden' => 1, 'ultima_seccion' => '400'];
 $msg = $_SESSION['sri_etiquetas_msg'] ?? null;
 unset($_SESSION['sri_etiquetas_msg']);
 
@@ -53,7 +55,7 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
         <input type="text" name="b" class="form-control" placeholder="Buscar en casillero, sección, descripción..." value="<?= htmlspecialchars($buscar) ?>">
         <button type="submit" class="btn btn-outline-primary">Buscar</button>
         <?php if ($buscar !== ''): ?>
-        <a href="<?= rtrim($base, '/') ?>/config/sri-casilleros-etiquetas?sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-secondary">Limpiar</a>
+        <a href="<?= rtrim($base, '/') ?>/config/sri-casilleros-etiquetas" class="btn btn-outline-secondary">Limpiar</a>
         <?php endif; ?>
     </div>
 </form>
@@ -259,9 +261,9 @@ function abrirModalCrear() {
     document.getElementById('formEtiqueta').action = '<?= BASE_URL ?>/config/sri-casilleros-etiquetas-store';
     
     document.getElementById('row_id').value = '';
-    document.getElementById('seccion').value = '400';
+    document.getElementById('seccion').value = '<?= htmlspecialchars($valoresDefecto['ultima_seccion']) ?>';
     document.getElementById('descripcion').value = '';
-    document.getElementById('orden').value = '10';
+    document.getElementById('orden').value = '<?= (int)$valoresDefecto['siguiente_orden'] ?>';
     document.getElementById('casillero_bruto').value = '';
     document.getElementById('casillero_neto').value = '';
     document.getElementById('casillero_impuesto').value = '';
