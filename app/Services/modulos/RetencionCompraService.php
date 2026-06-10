@@ -421,6 +421,21 @@ class RetencionCompraService
         $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
         $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'retenciones_compras', $idRetencion);
 
+        // Obtener configuración de casilleros de la empresa
+        $empresaConfigRepo = new \App\repositories\modulos\EmpresaRepository();
+        $configDec = $empresaConfigRepo->getIvaCasilleros($idEmpresa);
+        if (!$configDec || !isset($configDec['retencion_iva'])) return;
+
+        $confRet = $configDec['retencion_iva'];
+
+        // Mapa de codigo_ret a ID interno de la base
+        $db = \App\core\Database::getConnection();
+        $st = $db->query("SELECT id, codigo_ret FROM retenciones_sri WHERE impuesto_ret = 'IVA'");
+        $sriMap = [];
+        foreach ($st->fetchAll() as $r) {
+            $sriMap[$r['codigo_ret']] = $r['id'];
+        }
+
         // Agrupar bases e impuestos por codigo_retencion (solo IVA)
         $agrupacion = [];
         $lineas = $data['lineas'] ?? [];
@@ -430,25 +445,24 @@ class RetencionCompraService
             if ($codImp !== '2' && $codImp !== 'IVA') continue;
             
             $codRet = (string)($linea['codigo_retencion'] ?? '');
-            if (!isset($agrupacion[$codRet])) {
-                $agrupacion[$codRet] = 0.0;
+            $sriId = $sriMap[$codRet] ?? null;
+            if (!$sriId) continue;
+
+            if (!isset($agrupacion[$sriId])) {
+                $agrupacion[$sriId] = ['valor' => 0.0, 'codRet' => $codRet];
             }
-            $agrupacion[$codRet] += (float)($linea['valor_retenido'] ?? 0);
+            $agrupacion[$sriId]['valor'] += (float)($linea['valor_retenido'] ?? 0);
         }
 
-        // Obtener configuración de casilleros de la empresa
-        $empresaConfigRepo = new \App\repositories\modulos\EmpresaRepository();
-        $configDec = $empresaConfigRepo->getIvaCasilleros($idEmpresa);
-        if (!$configDec || !isset($configDec['retencion_iva'])) return;
-
-        $confRet = $configDec['retencion_iva'];
-
         // Mapear y guardar
-        foreach ($agrupacion as $codRet => $valor) {
-            if ($valor <= 0) continue;
-            if (!isset($confRet[$codRet])) continue;
+        foreach ($agrupacion as $sriId => $datos) {
+            $valor = $datos['valor'];
+            $codRet = $datos['codRet'];
 
-            $c = $confRet[$codRet];
+            if ($valor <= 0) continue;
+            if (!isset($confRet[$sriId])) continue;
+
+            $c = $confRet[$sriId];
             $casilleroCompras = $c['bruto'] ?? '';
 
             if ($casilleroCompras !== '') {

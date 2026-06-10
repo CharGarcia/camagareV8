@@ -257,6 +257,14 @@ class RetencionVentaService
 
         $confRet = $configDec['retencion_iva'];
 
+        // Mapa de codigo_ret (ej. '9', '10') a ID interno de la base
+        $db = \App\core\Database::getConnection();
+        $st = $db->query("SELECT id, codigo_ret FROM retenciones_sri WHERE impuesto_ret = 'IVA'");
+        $sriMap = [];
+        foreach ($st->fetchAll() as $r) {
+            $sriMap[$r['codigo_ret']] = $r['id'];
+        }
+
         // Agrupar por codigo_retencion (solo IVA)
         $agrupacion = [];
         $lineas = $data['lineas'] ?? [];
@@ -264,19 +272,25 @@ class RetencionVentaService
             $codImp = strtoupper((string)($linea['codigo_impuesto'] ?? ''));
             if ($codImp === '2' || $codImp === 'IVA') {
                 $codRet = (string)($linea['codigo_retencion'] ?? '');
-                if (!isset($agrupacion[$codRet])) {
-                    $agrupacion[$codRet] = 0.0;
+                $sriId = $sriMap[$codRet] ?? null;
+                if (!$sriId) continue;
+
+                if (!isset($agrupacion[$sriId])) {
+                    $agrupacion[$sriId] = ['valor' => 0.0, 'codRet' => $codRet];
                 }
-                $agrupacion[$codRet] += (float)($linea['valor_retenido'] ?? 0);
+                $agrupacion[$sriId]['valor'] += (float)($linea['valor_retenido'] ?? 0);
             }
         }
 
         // Mapear y guardar en el casillero de ventas (neto)
-        foreach ($agrupacion as $codRet => $valor) {
+        foreach ($agrupacion as $sriId => $datos) {
+            $valor = $datos['valor'];
+            $codRet = $datos['codRet'];
+            
             if ($valor <= 0) continue;
-            if (!isset($confRet[$codRet])) continue;
+            if (!isset($confRet[$sriId])) continue;
 
-            $c = $confRet[$codRet];
+            $c = $confRet[$sriId];
             $casilleroVentas = $c['neto'] ?? '';
 
             if ($casilleroVentas !== '') {
