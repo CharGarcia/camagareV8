@@ -50,6 +50,24 @@ class DeclaracionIvaController extends BaseModuloController
             if ($st4->rowCount() === 0) {
                 $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN eliminado BOOLEAN DEFAULT FALSE");
             }
+
+            // Validar tipo_ambiente en casilleros_declaracion_sri
+            $st5 = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'casilleros_declaracion_sri' AND column_name = 'tipo_ambiente'");
+            if ($st5->rowCount() === 0) {
+                $db->exec("ALTER TABLE casilleros_declaracion_sri ADD COLUMN tipo_ambiente VARCHAR(1) DEFAULT '1'");
+            }
+            
+            // Validar casillero_bruto, casillero_neto y casillero_impuesto en sri_casilleros_etiquetas
+            $st6 = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'sri_casilleros_etiquetas' AND column_name = 'casillero_bruto'");
+            if ($st6->rowCount() === 0) {
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas RENAME COLUMN casillero TO casillero_bruto");
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN formula_bruto TEXT DEFAULT ''");
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN casillero_neto VARCHAR(255) DEFAULT ''");
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN formula_neto TEXT DEFAULT ''");
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN casillero_impuesto VARCHAR(255) DEFAULT ''");
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN formula_impuesto TEXT DEFAULT ''");
+            }
+
         } catch (\Throwable $e) {
             // Ignorar errores de migración si ocurren (por locks u otra causa)
             error_log("Error migracion casilleros: " . $e->getMessage());
