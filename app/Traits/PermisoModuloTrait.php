@@ -30,13 +30,16 @@ trait PermisoModuloTrait
             if ($this->esAjaxRequest()) {
                 $this->json(['ok' => false, 'error' => 'No hay empresa activa. Por favor selecciona una empresa.'], 403);
             }
-            $this->redirect(rtrim(BASE_URL, '/') . '/empresa/menu');
+            $this->redirect(rtrim(BASE_URL, '/') . '/home/index');
         }
     }
 
     protected function esAjaxRequest(): bool
     {
-        return ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
+        $isXhr = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
+        $isJson = str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json');
+        $isFetch = str_contains($_SERVER['HTTP_SEC_FETCH_MODE'] ?? '', 'cors');
+        return $isXhr || $isJson || $isFetch;
     }
 
     /**
@@ -107,7 +110,7 @@ trait PermisoModuloTrait
             if ($this->esAjaxRequest()) {
                 $this->json(['ok' => false, 'error' => 'No tiene permiso para esta acción.'], 403);
             }
-            $this->redirect(rtrim(BASE_URL, '/') . '/empresa/menu');
+            $this->redirect(rtrim(BASE_URL, '/') . '/home/index');
         }
     }
 
@@ -126,6 +129,6 @@ trait PermisoModuloTrait
         if ($this->esAjaxRequest()) {
             $this->json(['ok' => false, 'error' => 'No tiene permiso para esta acción.'], 403);
         }
-        $this->redirect(rtrim(BASE_URL, '/') . '/empresa/menu');
+        $this->redirect(rtrim(BASE_URL, '/') . '/home/index');
     }
 }

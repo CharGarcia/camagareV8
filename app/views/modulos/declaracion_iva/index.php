@@ -119,7 +119,9 @@
             formSRI.innerHTML = '<div class="text-center py-5 small text-muted"><div class="spinner-border spinner-border-sm mb-2"></div><br>Sincronizando y generando reporte...</div>';
             document.getElementById('accordionDetalle').innerHTML = '<div class="text-center py-3">Cargando detalles...</div>';
 
-            fetch(`<?= $base ?>/<?= $rutaModulo ?>/generar-ajax?${params}`).then(res => res.json()).then(data => {
+            fetch(`<?= $base ?>/<?= $rutaModulo ?>/generar-ajax?${params}`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            }).then(res => res.json()).then(data => {
                 if (!data.ok) return Swal.fire('Error', data.mensaje, 'error');
                 renderVentas(data.resumen_completo);
                 renderDetalle(data.detalle_documentos);
@@ -314,7 +316,8 @@
 
                     fetch(`<?= $base ?>/<?= $rutaModulo ?>/actualizar-casillero-ajax`, {
                         method: 'POST',
-                        body: fd
+                        body: fd,
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
                     })
                     .then(r => r.json())
                     .then(data => {
