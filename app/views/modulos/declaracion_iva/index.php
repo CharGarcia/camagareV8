@@ -93,12 +93,15 @@
         };
         const semestres = { '1': 'Primer Semestre', '2': 'Segundo Semestre' };
 
+        const mesDefault = '<?= htmlspecialchars((string) $mes) ?>';
+
         function actualizarPeriodos() {
             const tipo = document.querySelector('input[name="tipo_periodo"]:checked').value;
             selPeriodo.innerHTML = '';
             if (tipo === 'mensual') {
                 labelPeriodo.innerText = 'Mes';
                 for (let [v, m] of Object.entries(meses)) selPeriodo.insertAdjacentHTML('beforeend', `<option value="${v}">${m}</option>`);
+                if (meses[mesDefault]) selPeriodo.value = mesDefault;
             } else {
                 labelPeriodo.innerText = 'Semestre';
                 for (let [v, s] of Object.entries(semestres)) selPeriodo.insertAdjacentHTML('beforeend', `<option value="${v}">${s}</option>`);
@@ -113,7 +116,7 @@
         });
 
         function generar() {
-            const params = new URLSearchParams(new FormData(form)).toString();
+            const params = new URLSearchParams(new FormData(form)).toString() + '&sincronizar=1';
             tabsContainer.classList.remove('d-none');
             tabContent.classList.remove('d-none');
             formSRI.innerHTML = '<div class="text-center py-5 small text-muted"><div class="spinner-border spinner-border-sm mb-2"></div><br>Sincronizando y generando reporte...</div>';

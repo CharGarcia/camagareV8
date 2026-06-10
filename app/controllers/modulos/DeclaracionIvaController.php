@@ -85,8 +85,9 @@ class DeclaracionIvaController extends BaseModuloController
         $this->requireLeer();
         
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        $anio = $_GET['anio'] ?? date('Y');
-        $mes  = $_GET['mes']  ?? date('m');
+        // Por defecto se declara el mes anterior al actual
+        $anio = $_GET['anio'] ?? date('Y', strtotime('first day of last month'));
+        $mes  = $_GET['mes']  ?? date('m', strtotime('first day of last month'));
 
         $estructura = $this->repository->getEstructuraFormulario();
         $anios      = $this->repository->getAniosConVentas($idEmpresa);
