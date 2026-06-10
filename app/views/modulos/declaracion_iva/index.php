@@ -159,13 +159,54 @@
         function renderVentas(resumenData) {
             const layout = resumenData.layout;
             const valores = resumenData.valores;
+            const isChecked = document.getElementById('checkSoloValores').checked;
+
+            // Pre-calcular valores
+            layout.forEach(r => {
+                if (r.tipo !== 'titulo') {
+                    const cBruto = r.casillero_bruto || '';
+                    const vBruto = cBruto ? (parseFloat(valores[cBruto]) || 0) : null;
+                    const cNeto = r.casillero_neto || '';
+                    const vNeto = cNeto ? (parseFloat(valores[cNeto]) || 0) : null;
+                    const cImp = r.casillero_impuesto || '';
+                    const vImp = cImp ? (parseFloat(valores[cImp]) || 0) : null;
+                    r.hasValues = (vBruto !== null && vBruto !== 0) || (vNeto !== null && vNeto !== 0) || (vImp !== null && vImp !== 0);
+                } else {
+                    r.hasValues = false;
+                }
+            });
+
+            // Propagar a los títulos
+            for (let i = layout.length - 1; i >= 0; i--) {
+                const r = layout[i];
+                if (r.tipo === 'titulo') {
+                    let j = i + 1;
+                    while (j < layout.length && layout[j].seccion === r.seccion) {
+                        const next = layout[j];
+                        if (next.tipo === 'titulo' && next.indent <= r.indent) break;
+                        if (next.hasValues) {
+                            r.hasValues = true;
+                            break;
+                        }
+                        j++;
+                    }
+                }
+            }
+
+            const seccionHasValues = {};
+            layout.forEach(r => {
+                if (r.hasValues) seccionHasValues[r.seccion] = true;
+            });
 
             let currentSeccion = '';
             let html = '';
 
             layout.forEach(r => {
                 if (r.seccion !== currentSeccion) {
-                    if (currentSeccion !== '') html += '</tbody></table></div>';
+                    if (currentSeccion !== '') html += '</tbody></table></div></div>';
+                    const sHasValues = seccionHasValues[r.seccion] ? '1' : '0';
+                    const dNoneSec = (isChecked && !seccionHasValues[r.seccion]) ? 'd-none' : '';
+                    html += `<div class="sri-section-container sri-row-data ${dNoneSec}" data-has-values="${sHasValues}">`;
                     html += `<div class="sri-section-title mt-3">SECCIÓN: ${r.seccion}</div>`;
                     html += `<div class="table-responsive"><table class="table table-bordered table-sm sri-table align-middle w-100 mb-0" style="font-size: 0.8rem;">`;
                     html += `<thead class="table-light text-center">
@@ -182,9 +223,10 @@
                 const marginLeft = r.indent > 0 ? (r.indent * 15) + 'px' : '0px';
                 const rowClass = r.bold ? 'fw-bold text-dark bg-light' : '';
                 const descFormatted = r.descripcion;
+                const dNoneRow = (isChecked && !r.hasValues) ? 'd-none' : '';
                 
                 if (r.tipo === 'titulo') {
-                    html += `<tr class="${rowClass}"><td colspan="7" class="ps-2 py-2" style="padding-left: calc(0.5rem + ${marginLeft}) !important;">${descFormatted}</td></tr>`;
+                    html += `<tr class="${rowClass} sri-row-data ${dNoneRow}" data-has-values="${r.hasValues ? '1' : '0'}"><td colspan="7" class="ps-2 py-2" style="padding-left: calc(0.5rem + ${marginLeft}) !important;">${descFormatted}</td></tr>`;
                 } else {
                     const cBruto = r.casillero_bruto || '';
                     const vBruto = cBruto ? (parseFloat(valores[cBruto]) || 0) : null;
@@ -198,11 +240,7 @@
                     const dec = esConteo ? 0 : 2;
                     const fmt = v => v.toLocaleString('en-US', {minimumFractionDigits: dec, maximumFractionDigits: dec});
 
-                    const hasValues = (vBruto !== null && vBruto !== 0) || (vNeto !== null && vNeto !== 0) || (vImp !== null && vImp !== 0);
-                    const isChecked = document.getElementById('checkSoloValores').checked;
-                    const dNone = (isChecked && !hasValues) ? 'd-none' : '';
-
-                    html += `<tr class="${rowClass} sri-row-data ${dNone}" data-has-values="${hasValues ? '1' : '0'}">
+                    html += `<tr class="${rowClass} sri-row-data ${dNoneRow}" data-has-values="${r.hasValues ? '1' : '0'}">
                         <td class="ps-2" style="padding-left: calc(0.5rem + ${marginLeft}) !important;">${descFormatted}</td>
                         <td class="text-center text-muted" style="font-size:0.7rem;">${cBruto ? '<b>'+cBruto+'</b>' : ''}</td>
                         <td class="text-end">${vBruto !== null ? fmt(vBruto) : ''}</td>
@@ -213,7 +251,7 @@
                     </tr>`;
                 }
             });
-            if (currentSeccion !== '') html += '</tbody></table></div>';
+            if (currentSeccion !== '') html += '</tbody></table></div></div>';
             formSRI.innerHTML = html;
         }
 
