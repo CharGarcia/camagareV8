@@ -196,4 +196,175 @@ class DeclaracionIvaController extends BaseModuloController
         }
         exit;
     }
+
+    public function exportarExcel(): void
+    {
+        $this->requireLeer();
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $anio = $_GET['anio'] ?? date('Y');
+        $periodo = $_GET['periodo'] ?? date('m');
+        $tipo = $_GET['tipo_periodo'] ?? 'mensual';
+
+        if ($tipo === 'semestral') {
+            if ($periodo == '1') {
+                $fechaDesde = "{$anio}-01-01";
+                $fechaHasta = "{$anio}-06-30";
+                $nombreArchivo = "Declaracion_IVA_{$anio}_Semestre1.xlsx";
+            } else {
+                $fechaDesde = "{$anio}-07-01";
+                $fechaHasta = "{$anio}-12-31";
+                $nombreArchivo = "Declaracion_IVA_{$anio}_Semestre2.xlsx";
+            }
+        } else {
+            $fechaDesde = "{$anio}-{$periodo}-01";
+            $fechaHasta = date("Y-m-t", strtotime($fechaDesde));
+            $nombreArchivo = "Declaracion_IVA_{$anio}_{$periodo}.xlsx";
+        }
+
+        try {
+            $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta);
+            $detalleDocumentos = $this->repository->getDetalleDocumentos($idEmpresa, $fechaDesde, $fechaHasta);
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+
+            // ==========================================
+            // HOJA 1: RESUMEN 104
+            // ==========================================
+            $sheet1 = $spreadsheet->getActiveSheet();
+            $sheet1->setTitle('Resumen 104');
+
+            // Encabezados Hoja 1
+            $sheet1->setCellValue('A1', 'Concepto');
+            $sheet1->setCellValue('B1', 'Cas. Bruto');
+            $sheet1->setCellValue('C1', 'Valor Bruto');
+            $sheet1->setCellValue('D1', 'Cas. Neto');
+            $sheet1->setCellValue('E1', 'Valor Neto');
+            $sheet1->setCellValue('F1', 'Cas. Impuesto');
+            $sheet1->setCellValue('G1', 'Impuesto Gen.');
+
+            // Estilos de encabezado Hoja 1
+            $headerStyle1 = [
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '0D6EFD']],
+                'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]
+            ];
+            $sheet1->getStyle('A1:G1')->applyFromArray($headerStyle1);
+            
+            $sheet1->getColumnDimension('A')->setWidth(60);
+            $sheet1->getColumnDimension('C')->setWidth(15);
+            $sheet1->getColumnDimension('E')->setWidth(15);
+            $sheet1->getColumnDimension('G')->setWidth(15);
+
+            $rowIdx = 2;
+            $currentSeccion = '';
+            
+            $layout = $resumenCompleto['layout'] ?? [];
+            $valores = $resumenCompleto['valores'] ?? [];
+
+            foreach ($layout as $r) {
+                if ($r['seccion'] !== $currentSeccion) {
+                    $sheet1->setCellValue('A' . $rowIdx, 'SECCIÓN: ' . $r['seccion']);
+                    $sheet1->mergeCells("A{$rowIdx}:G{$rowIdx}");
+                    $sheet1->getStyle("A{$rowIdx}")->applyFromArray([
+                        'font' => ['bold' => true],
+                        'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => 'E9ECEF']]
+                    ]);
+                    $rowIdx++;
+                    $currentSeccion = $r['seccion'];
+                }
+
+                $indentStr = str_repeat('    ', (int)($r['indent'] ?? 0));
+                $descFormateada = $indentStr . ($r['descripcion'] ?? '');
+                
+                $sheet1->setCellValue('A' . $rowIdx, $descFormateada);
+
+                if (($r['tipo'] ?? 'valor') === 'titulo') {
+                    $sheet1->mergeCells("A{$rowIdx}:G{$rowIdx}");
+                } else {
+                    $cBruto = $r['casillero_bruto'] ?? '';
+                    $cNeto = $r['casillero_neto'] ?? '';
+                    $cImp = $r['casillero_impuesto'] ?? '';
+
+                    $vBruto = $cBruto ? (float)($valores[$cBruto] ?? 0) : null;
+                    $vNeto = $cNeto ? (float)($valores[$cNeto] ?? 0) : null;
+                    $vImp = $cImp ? (float)($valores[$cImp] ?? 0) : null;
+
+                    if ($cBruto) $sheet1->setCellValueExplicit('B' . $rowIdx, $cBruto, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    if ($vBruto !== null) $sheet1->setCellValue('C' . $rowIdx, $vBruto);
+                    
+                    if ($cNeto) $sheet1->setCellValueExplicit('D' . $rowIdx, $cNeto, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    if ($vNeto !== null) $sheet1->setCellValue('E' . $rowIdx, $vNeto);
+                    
+                    if ($cImp) $sheet1->setCellValueExplicit('F' . $rowIdx, $cImp, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    if ($vImp !== null) $sheet1->setCellValue('G' . $rowIdx, $vImp);
+                    
+                    // Formato de moneda/número
+                    $formato = (($r['fuente_valor'] ?? '') !== 'documentos') ? '#,##0' : '#,##0.00';
+                    $sheet1->getStyle("C{$rowIdx}")->getNumberFormat()->setFormatCode($formato);
+                    $sheet1->getStyle("E{$rowIdx}")->getNumberFormat()->setFormatCode($formato);
+                    $sheet1->getStyle("G{$rowIdx}")->getNumberFormat()->setFormatCode($formato);
+                }
+
+                if (!empty($r['bold'])) {
+                    $sheet1->getStyle("A{$rowIdx}:G{$rowIdx}")->getFont()->setBold(true);
+                }
+
+                $rowIdx++;
+            }
+
+            // ==========================================
+            // HOJA 2: DETALLE DOCUMENTOS
+            // ==========================================
+            $sheet2 = $spreadsheet->createSheet();
+            $sheet2->setTitle('Detalle Documentos');
+
+            $sheet2->setCellValue('A1', 'Origen');
+            $sheet2->setCellValue('B1', 'Documento');
+            $sheet2->setCellValue('C1', 'Fecha');
+            $sheet2->setCellValue('D1', 'Entidad');
+            $sheet2->setCellValue('E1', 'Concepto');
+            $sheet2->setCellValue('F1', 'Casillero');
+            $sheet2->setCellValue('G1', 'Valor');
+            $sheet2->setCellValue('H1', 'Manual');
+
+            $sheet2->getStyle('A1:H1')->applyFromArray($headerStyle1);
+            $sheet2->getColumnDimension('A')->setWidth(20);
+            $sheet2->getColumnDimension('B')->setWidth(20);
+            $sheet2->getColumnDimension('C')->setWidth(15);
+            $sheet2->getColumnDimension('D')->setWidth(40);
+            $sheet2->getColumnDimension('E')->setWidth(30);
+            $sheet2->getColumnDimension('G')->setWidth(15);
+
+            $rowIdx = 2;
+            foreach ($detalleDocumentos as $d) {
+                $docNum = !empty($d['establecimiento']) ? "{$d['establecimiento']}-{$d['punto_emision']}-{$d['secuencial']}" : "ID: {$d['id_origen']}";
+                
+                $sheet2->setCellValue('A' . $rowIdx, str_replace('_', ' ', $d['origen'] ?? ''));
+                $sheet2->setCellValueExplicit('B' . $rowIdx, $docNum, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet2->setCellValue('C' . $rowIdx, $d['fecha'] ?? '');
+                $sheet2->setCellValue('D' . $rowIdx, $d['entidad'] ?? '');
+                $sheet2->setCellValue('E' . $rowIdx, $d['concepto'] ?? 'Sin concepto');
+                $sheet2->setCellValueExplicit('F' . $rowIdx, $d['casillero'] ?? '', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet2->setCellValue('G' . $rowIdx, (float)($d['valor'] ?? 0));
+                $sheet2->setCellValue('H' . $rowIdx, !empty($d['editado_manualmente']) ? 'SÍ' : 'NO');
+                
+                $sheet2->getStyle("G{$rowIdx}")->getNumberFormat()->setFormatCode('#,##0.00');
+                $rowIdx++;
+            }
+
+            // Descarga
+            $spreadsheet->setActiveSheetIndex(0);
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="' . $nombreArchivo . '"');
+            header('Cache-Control: max-age=0');
+            $writer->save('php://output');
+
+        } catch (\Throwable $e) {
+            echo "Error al generar Excel: " . $e->getMessage();
+        }
+        exit;
+    }
 }

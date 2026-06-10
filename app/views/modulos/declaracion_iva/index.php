@@ -17,11 +17,6 @@
                 <h1 class="h5 mb-0 text-dark fw-bold">Declaración de IVA (form 104 SRI)</h1>
                 <p class="text-muted mb-0 small" style="font-size: 0.7rem;">Detalle de la declaración de IVA</p>
             </div>
-            <div class="d-flex gap-2">
-                <button type="button" class="btn btn-secondary btn-xs px-3" style="font-size: 0.65rem;" onclick="window.print()">
-                    <i class="bi bi-printer-fill me-1"></i> IMPRIMIR
-                </button>
-            </div>
         </div>
     </div>
 
@@ -48,8 +43,11 @@
                     <label class="form-label fw-bold small text-uppercase text-muted mb-1" id="labelPeriodo" style="font-size: 0.6rem;">Mes</label>
                     <select name="periodo" class="form-select form-select-sm border-0 bg-light fw-bold" id="periodo"></select>
                 </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold py-1">GENERAR</button>
+                <div class="col-md-3 d-flex gap-2 align-items-end">
+                    <button type="submit" class="btn btn-primary btn-sm flex-grow-1 fw-bold py-1">GENERAR</button>
+                    <button type="button" id="btnExportarExcel" class="btn btn-success btn-sm flex-grow-1 fw-bold py-1 d-none" onclick="exportarExcel()">
+                        <i class="bi bi-file-earmark-excel"></i> EXCEL
+                    </button>
                 </div>
             </form>
         </div>
@@ -130,8 +128,14 @@
                 if (!data.ok) return Swal.fire('Error', data.mensaje, 'error');
                 renderVentas(data.resumen_completo);
                 renderDetalle(data.detalle_documentos);
+                document.getElementById('btnExportarExcel').classList.remove('d-none');
             });
         }
+
+        window.exportarExcel = function() {
+            const params = new URLSearchParams(new FormData(form)).toString();
+            window.open(`<?= $base ?>/<?= $rutaModulo ?>/exportar-excel?${params}`, '_blank');
+        };
 
         function renderVentas(resumenData) {
             const layout = resumenData.layout;
