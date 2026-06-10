@@ -109,6 +109,18 @@ class DeclaracionIvaService
         // 2. Obtener estructura oficial (ahora por filas de 7 columnas)
         $estructura = $this->repository->getEstructuraFormulario();
 
+        // 2b. Casilleros de conteo: filas cuya fuente es un conteo de documentos
+        // del período (configurado en la estructura con fuente_valor)
+        foreach ($estructura as $e) {
+            $fuente = $e['fuente_valor'] ?? 'documentos';
+            if ($fuente !== '' && $fuente !== null && $fuente !== 'documentos') {
+                $casillero = $e['casillero_bruto'] ?: ($e['casillero_neto'] ?: $e['casillero_impuesto']);
+                if ($casillero) {
+                    $sums[$casillero] = (float) $this->repository->getConteoDocumentos($idEmpresa, $fuente, $fechaDesde, $fechaHasta);
+                }
+            }
+        }
+
         // 3. Extraer fórmulas y casilleros de la estructura matricial
         $formulas = [];
         foreach ($estructura as $e) {

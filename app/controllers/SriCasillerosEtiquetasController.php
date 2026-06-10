@@ -44,6 +44,12 @@ class SriCasillerosEtiquetasController extends Controller
                 $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN updated_by INT NULL");
                 $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN deleted_by INT NULL");
             }
+
+            // fuente_valor: indica cómo se llena el casillero (montos sincronizados o conteo de documentos)
+            $st3 = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'sri_casilleros_etiquetas' AND column_name = 'fuente_valor'");
+            if ($st3->rowCount() === 0) {
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN fuente_valor VARCHAR(50) DEFAULT 'documentos'");
+            }
         } catch (\Throwable $e) {
             // Ignorar errores en producción
             error_log("Error migracion etiquetas: " . $e->getMessage());
@@ -99,6 +105,7 @@ class SriCasillerosEtiquetasController extends Controller
         $indent = (int) ($_POST['indent'] ?? 0);
         $bold = !empty($_POST['bold']);
         $tipo = trim($_POST['tipo'] ?? 'valor');
+        $fuenteValor = trim($_POST['fuente_valor'] ?? 'documentos');
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
 
         if ($seccion === '' || $descripcion === '') {
@@ -111,7 +118,7 @@ class SriCasillerosEtiquetasController extends Controller
                 $casilleroBruto, $casilleroNeto, $casilleroImpuesto,
                 $seccion, $descripcion, $orden, $indent, $bold, $tipo,
                 $formulaBruto, $formulaNeto, $formulaImpuesto,
-                $idUsuario
+                $idUsuario, $fuenteValor
             );
             $_SESSION['sri_etiquetas_msg'] = ['success', 'Fila creada correctamente.'];
         } catch (\Throwable $e) {
@@ -149,6 +156,7 @@ class SriCasillerosEtiquetasController extends Controller
         $indent = (int) ($_POST['indent'] ?? 0);
         $bold = !empty($_POST['bold']);
         $tipo = trim($_POST['tipo'] ?? 'valor');
+        $fuenteValor = trim($_POST['fuente_valor'] ?? 'documentos');
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
 
         if ($seccion === '' || $descripcion === '') {
@@ -160,7 +168,7 @@ class SriCasillerosEtiquetasController extends Controller
             $id, $casilleroBruto, $casilleroNeto, $casilleroImpuesto,
             $seccion, $descripcion, $orden, $indent, $bold, $tipo,
             $formulaBruto, $formulaNeto, $formulaImpuesto,
-            $idUsuario
+            $idUsuario, $fuenteValor
         )) {
             $_SESSION['sri_etiquetas_msg'] = ['success', 'Fila actualizada correctamente.'];
         } else {

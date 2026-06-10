@@ -76,6 +76,12 @@ class DeclaracionIvaController extends BaseModuloController
             if ($rowBruto && $rowBruto['is_nullable'] === 'NO') {
                 $db->exec("ALTER TABLE sri_casilleros_etiquetas ALTER COLUMN casillero_bruto DROP NOT NULL");
             }
+
+            // fuente_valor: indica cómo se llena el casillero (montos sincronizados o conteo de documentos)
+            $stFuente = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'sri_casilleros_etiquetas' AND column_name = 'fuente_valor'");
+            if ($stFuente->rowCount() === 0) {
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ADD COLUMN fuente_valor VARCHAR(50) DEFAULT 'documentos'");
+            }
             
             // Validar casillero_bruto, casillero_neto y casillero_impuesto en sri_casilleros_etiquetas
             $st6 = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'sri_casilleros_etiquetas' AND column_name = 'casillero_bruto'");

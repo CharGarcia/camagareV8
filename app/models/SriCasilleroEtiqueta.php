@@ -67,7 +67,8 @@ class SriCasilleroEtiqueta extends BaseModel
         string $formulaBruto,
         string $formulaNeto,
         string $formulaImpuesto,
-        int $idUsuario
+        int $idUsuario,
+        string $fuenteValor = 'documentos'
     ): void {
         $cBruto = $casilleroBruto !== '' ? "'".$this->escape($casilleroBruto)."'" : "NULL";
         $cNeto = $casilleroNeto !== '' ? "'".$this->escape($casilleroNeto)."'" : "NULL";
@@ -85,15 +86,17 @@ class SriCasilleroEtiqueta extends BaseModel
         $tipo = $this->escape($tipo);
         $idUsuario = (int) $idUsuario;
 
+        $fuenteValor = $this->escape($fuenteValor !== '' ? $fuenteValor : 'documentos');
+
         $sql = "INSERT INTO sri_casilleros_etiquetas (
                     casillero_bruto, casillero_neto, casillero_impuesto,
-                    seccion, descripcion, orden, indent, bold, tipo,
+                    seccion, descripcion, orden, indent, bold, tipo, fuente_valor,
                     formula_bruto, formula_neto, formula_impuesto,
                     created_by, updated_by
                 )
                 VALUES (
                     {$cBruto}, {$cNeto}, {$cImp},
-                    '{$seccion}', '{$descripcion}', {$orden}, {$indent}, {$boldVal}, '{$tipo}',
+                    '{$seccion}', '{$descripcion}', {$orden}, {$indent}, {$boldVal}, '{$tipo}', '{$fuenteValor}',
                     {$fBruto}, {$fNeto}, {$fImp},
                     {$idUsuario}, {$idUsuario}
                 )";
@@ -118,7 +121,8 @@ class SriCasilleroEtiqueta extends BaseModel
         string $formulaBruto,
         string $formulaNeto,
         string $formulaImpuesto,
-        int $idUsuario
+        int $idUsuario,
+        string $fuenteValor = 'documentos'
     ): bool {
         $cBruto = $casilleroBruto !== '' ? "'".$this->escape($casilleroBruto)."'" : "NULL";
         $cNeto = $casilleroNeto !== '' ? "'".$this->escape($casilleroNeto)."'" : "NULL";
@@ -136,10 +140,13 @@ class SriCasilleroEtiqueta extends BaseModel
         $tipo = $this->escape($tipo);
         $idUsuario = (int) $idUsuario;
 
+        $fuenteValor = $this->escape($fuenteValor !== '' ? $fuenteValor : 'documentos');
+
         $sql = "UPDATE sri_casilleros_etiquetas
                 SET casillero_bruto = {$cBruto}, casillero_neto = {$cNeto}, casillero_impuesto = {$cImp},
                     seccion = '{$seccion}', descripcion = '{$descripcion}',
                     orden = {$orden}, indent = {$indent}, bold = {$boldVal}, tipo = '{$tipo}',
+                    fuente_valor = '{$fuenteValor}',
                     formula_bruto = {$fBruto}, formula_neto = {$fNeto}, formula_impuesto = {$fImp},
                     updated_by = {$idUsuario}, updated_at = CURRENT_TIMESTAMP
                 WHERE id = {$id}";

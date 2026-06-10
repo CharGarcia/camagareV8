@@ -257,6 +257,50 @@ class DeclaracionIvaRepository extends BaseRepository
         $st->execute([$nuevoCasillero, $id]);
     }
 
+    /**
+     * Cuenta documentos del período según la fuente configurada en la
+     * estructura del formulario (filas con fuente_valor de tipo conteo).
+     */
+    public function getConteoDocumentos(int $idEmpresa, string $fuente, string $fechaDesde, string $fechaHasta): int
+    {
+        $filtroAmbiente = "AND CAST(tipo_ambiente AS VARCHAR) = (SELECT CAST(tipo_ambiente AS VARCHAR) FROM empresas WHERE id = :emp2)";
+
+        $consultas = [
+            'conteo_ventas_emitidas' =>
+                "SELECT COUNT(*) FROM ventas_cabecera
+                 WHERE id_empresa = :emp AND fecha_emision BETWEEN :d AND :h
+                   AND estado = 'autorizado' AND eliminado = false {$filtroAmbiente}",
+            'conteo_ventas_anuladas' =>
+                "SELECT COUNT(*) FROM ventas_cabecera
+                 WHERE id_empresa = :emp AND fecha_emision BETWEEN :d AND :h
+                   AND estado = 'anulado' AND eliminado = false {$filtroAmbiente}",
+            'conteo_compras_recibidas' =>
+                "SELECT COUNT(*) FROM compras_cabecera
+                 WHERE id_empresa = :emp AND fecha_emision BETWEEN :d AND :h
+                   AND COALESCE(tipo_comprobante, '01') <> '02' AND eliminado = false {$filtroAmbiente}",
+            'conteo_notas_venta_recibidas' =>
+                "SELECT COUNT(*) FROM compras_cabecera
+                 WHERE id_empresa = :emp AND fecha_emision BETWEEN :d AND :h
+                   AND tipo_comprobante = '02' AND eliminado = false {$filtroAmbiente}",
+            'conteo_liquidaciones_emitidas' =>
+                "SELECT COUNT(*) FROM liquidaciones_cabecera
+                 WHERE id_empresa = :emp AND fecha_emision BETWEEN :d AND :h
+                   AND estado = 'autorizado' AND eliminado = false {$filtroAmbiente}",
+        ];
+
+        if (!isset($consultas[$fuente])) {
+            return 0;
+        }
+
+        try {
+            $st = $this->db->prepare($consultas[$fuente]);
+            $st->execute([':emp' => $idEmpresa, ':d' => $fechaDesde, ':h' => $fechaHasta, ':emp2' => $idEmpresa]);
+            return (int) $st->fetchColumn();
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
     public function getMapaTarifasIva(): array
     {
         $stmt = $this->db->query("SELECT id, codigo FROM tarifa_iva");

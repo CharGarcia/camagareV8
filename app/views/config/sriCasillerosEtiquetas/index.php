@@ -100,7 +100,8 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                         'orden' => $c_orden,
                         'indent' => $c_indent,
                         'bold' => $c_bold,
-                        'tipo' => $c_tipo
+                        'tipo' => $c_tipo,
+                        'fuente_valor' => htmlspecialchars($r['fuente_valor'] ?? 'documentos')
                     ]), ENT_QUOTES, 'UTF-8');
                     ?>
                     <tr class="sri-row" role="button" tabindex="0" data-json="<?= $rj ?>" onclick="abrirModalEditar(this)">
@@ -177,6 +178,18 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                                 <div class="col-12">
                                     <label class="form-label text-muted small fw-bold mb-1">Descripción del Concepto *</label>
                                     <textarea class="form-control" name="descripcion" id="descripcion" rows="3" required></textarea>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label text-muted small fw-bold mb-1">Fuente del Valor</label>
+                                    <select class="form-select" name="fuente_valor" id="fuente_valor">
+                                        <option value="documentos">Documentos sincronizados (montos)</option>
+                                        <option value="conteo_ventas_emitidas">Conteo: comprobantes de venta emitidos</option>
+                                        <option value="conteo_ventas_anuladas">Conteo: comprobantes de venta anulados</option>
+                                        <option value="conteo_compras_recibidas">Conteo: comprobantes recibidos (excepto notas de venta)</option>
+                                        <option value="conteo_notas_venta_recibidas">Conteo: notas de venta recibidas</option>
+                                        <option value="conteo_liquidaciones_emitidas">Conteo: liquidaciones de compra emitidas</option>
+                                    </select>
+                                    <div class="form-text" style="font-size: 0.7rem;">Los conteos llenan el casillero con la cantidad de documentos del período, no con montos.</div>
                                 </div>
                             </div>
                         </div>
@@ -258,7 +271,8 @@ function abrirModalCrear() {
     document.getElementById('indent').value = '0';
     document.getElementById('bold').checked = false;
     document.getElementById('tipo').value = 'valor';
-    
+    document.getElementById('fuente_valor').value = 'documentos';
+
     const tabEl = document.querySelector('#modalEtiqueta .nav-tabs button[data-bs-target="#tab-info"]');
     if(tabEl) {
         const tab = new bootstrap.Tab(tabEl);
@@ -287,7 +301,8 @@ function abrirModalEditar(tr) {
     document.getElementById('indent').value = data.indent;
     document.getElementById('bold').checked = data.bold;
     document.getElementById('tipo').value = data.tipo;
-    
+    document.getElementById('fuente_valor').value = data.fuente_valor || 'documentos';
+
     const tabEl = document.querySelector('#modalEtiqueta .nav-tabs button[data-bs-target="#tab-info"]');
     if(tabEl) {
         const tab = new bootstrap.Tab(tabEl);

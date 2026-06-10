@@ -1,6 +1,6 @@
 <style>
     .sri-container { background: #fff; border: 1px solid #ccc; padding: 10px; font-family: 'Arial', sans-serif; overflow-y: auto; overflow-x: auto; max-height: 50vh; margin-bottom: 10px; }
-    .sri-section-title { background: #333; color: white; padding: 3px 8px; font-weight: 700; font-size: 0.72rem; text-transform: uppercase; border: 1px solid #000; }
+    .sri-section-title { background: #0d6efd; color: #fff; padding: 3px 8px; font-weight: 700; font-size: 0.72rem; text-transform: uppercase; border: 1px solid #0a58ca; border-radius: 3px; }
     .casillero-tag { background: #eee; color: #000; border: 1px solid #999; padding: 0px 4px; font-weight: 700; font-size: 0.65rem; min-width: 30px; display: inline-block; text-align: center; border-radius: 1px; margin-right: 3px; }
     .val-cell { background: #fff; border: 1px solid #bbb; padding: 1px 4px; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; font-size: 0.78rem; flex-grow: 1; min-height: 22px; }
     .sri-table td { padding: 2px 4px !important; vertical-align: middle; border: 1px solid #ccc; font-size: 0.7rem; }
@@ -168,14 +168,19 @@
                     const cImp = r.casillero_impuesto || '';
                     const vImp = cImp ? (parseFloat(valores[cImp]) || 0) : null;
 
+                    // Las filas de conteo muestran cantidades (enteros), no montos
+                    const esConteo = r.fuente_valor && r.fuente_valor !== 'documentos';
+                    const dec = esConteo ? 0 : 2;
+                    const fmt = v => v.toLocaleString('en-US', {minimumFractionDigits: dec, maximumFractionDigits: dec});
+
                     html += `<tr class="${rowClass}">
                         <td class="ps-2" style="padding-left: calc(0.5rem + ${marginLeft}) !important;">${descFormatted}</td>
                         <td class="text-center text-muted" style="font-size:0.7rem;">${cBruto ? '<b>'+cBruto+'</b>' : ''}</td>
-                        <td class="text-end">${vBruto !== null ? vBruto.toLocaleString('en-US',{minimumFractionDigits:2}) : ''}</td>
+                        <td class="text-end">${vBruto !== null ? fmt(vBruto) : ''}</td>
                         <td class="text-center text-muted" style="font-size:0.7rem;">${cNeto ? '<b>'+cNeto+'</b>' : ''}</td>
-                        <td class="text-end">${vNeto !== null ? vNeto.toLocaleString('en-US',{minimumFractionDigits:2}) : ''}</td>
+                        <td class="text-end">${vNeto !== null ? fmt(vNeto) : ''}</td>
                         <td class="text-center text-muted" style="font-size:0.7rem;">${cImp ? '<b>'+cImp+'</b>' : ''}</td>
-                        <td class="text-end">${vImp !== null ? vImp.toLocaleString('en-US',{minimumFractionDigits:2}) : ''}</td>
+                        <td class="text-end">${vImp !== null ? fmt(vImp) : ''}</td>
                     </tr>`;
                 }
             });
