@@ -11,7 +11,7 @@
 
 CREATE TABLE IF NOT EXISTS sri_casilleros_etiquetas (
     id SERIAL PRIMARY KEY,
-    casillero_bruto VARCHAR(10) NOT NULL,
+    casillero_bruto VARCHAR(10),
     casillero_neto VARCHAR(10),
     casillero_impuesto VARCHAR(10),
     seccion VARCHAR(100) NOT NULL,

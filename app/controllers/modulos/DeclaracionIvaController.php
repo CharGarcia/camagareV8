@@ -62,6 +62,20 @@ class DeclaracionIvaController extends BaseModuloController
             if ($st5->rowCount() === 0) {
                 $db->exec("ALTER TABLE casilleros_declaracion_sri ADD COLUMN tipo_ambiente VARCHAR(1) DEFAULT '1'");
             }
+
+            // id_establecimiento debe permitir NULL (el insert del módulo no lo envía)
+            $stEst = $db->query("SELECT is_nullable FROM information_schema.columns WHERE table_name = 'casilleros_declaracion_sri' AND column_name = 'id_establecimiento'");
+            $rowEst = $stEst->fetch();
+            if ($rowEst && $rowEst['is_nullable'] === 'NO') {
+                $db->exec("ALTER TABLE casilleros_declaracion_sri ALTER COLUMN id_establecimiento DROP NOT NULL");
+            }
+
+            // casillero_bruto debe permitir NULL: una fila puede tener solo neto o impuesto
+            $stBruto = $db->query("SELECT is_nullable FROM information_schema.columns WHERE table_name = 'sri_casilleros_etiquetas' AND column_name = 'casillero_bruto'");
+            $rowBruto = $stBruto->fetch();
+            if ($rowBruto && $rowBruto['is_nullable'] === 'NO') {
+                $db->exec("ALTER TABLE sri_casilleros_etiquetas ALTER COLUMN casillero_bruto DROP NOT NULL");
+            }
             
             // Validar casillero_bruto, casillero_neto y casillero_impuesto en sri_casilleros_etiquetas
             $st6 = $db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'sri_casilleros_etiquetas' AND column_name = 'casillero_bruto'");

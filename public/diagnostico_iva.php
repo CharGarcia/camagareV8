@@ -150,15 +150,15 @@ try {
 // ── PASO 5: documentos del período, filtro por filtro ────────────────────────
 titulo("Paso 5 — Documentos del período (lo que la sincronización seleccionaría)");
 $origenes = [
-    'ventas_cabecera'           => ["estado = 'autorizado'", 'Facturas de venta'],
-    'compras_cabecera'          => ["COALESCE(deducible, '') = 'declaracion_iva'", 'Compras (deducible=declaracion_iva)'],
-    'liquidaciones_cabecera'    => ["estado = 'autorizado'", 'Liquidaciones de compra'],
-    'notas_credito_cabecera'    => ["estado = 'autorizado'", 'Notas de crédito'],
-    'retencion_compra_cabecera' => ["estado = 'autorizado'", 'Retenciones en compras'],
-    'retencion_venta_cabecera'  => ["TRUE", 'Retenciones en ventas (sin filtro de estado)'],
+    'ventas_cabecera'           => ["estado = 'autorizado'", 'Facturas de venta', 'estado'],
+    'compras_cabecera'          => ["COALESCE(deducible, '') = 'declaracion_iva'", 'Compras (deducible=declaracion_iva)', 'deducible'],
+    'liquidaciones_cabecera'    => ["estado = 'autorizado'", 'Liquidaciones de compra', 'estado'],
+    'notas_credito_cabecera'    => ["estado = 'autorizado'", 'Notas de crédito', 'estado'],
+    'retencion_compra_cabecera' => ["estado = 'autorizado'", 'Retenciones en compras', 'estado'],
+    'retencion_venta_cabecera'  => ["TRUE", 'Retenciones en ventas (sin filtro de estado)', null],
 ];
 $docsSeleccionables = 0;
-foreach ($origenes as $tabla => [$filtroEstado, $nombre]) {
+foreach ($origenes as $tabla => [$filtroEstado, $nombre, $colFiltro]) {
     try {
         if (!$existeTabla($tabla)) {
             fila("<b>{$nombre}</b>: la tabla {$tabla} no existe", 'error');
@@ -194,6 +194,22 @@ foreach ($origenes as $tabla => [$filtroEstado, $nombre]) {
             fila("<b>{$nombre}</b>: {$detalle} — los filtros descartan TODO", 'error');
             if ((int) $r['con_estado'] > 0) {
                 $veredicto[] = "{$nombre}: hay {$r['con_estado']} documentos válidos pero su tipo_ambiente no coincide con el de la empresa ({$amb}).";
+            }
+            // Desglose: mostrar exactamente en qué valores se quedan los documentos
+            $colDesglose = $colFiltro !== null && $existeCol($tabla, $colFiltro)
+                ? "COALESCE(CAST({$colFiltro} AS VARCHAR), 'NULL')"
+                : "'-'";
+            $stB = $db->prepare("SELECT {$colDesglose} AS filtro,
+                                        COALESCE(CAST(tipo_ambiente AS VARCHAR), 'NULL') AS ambiente,
+                                        eliminado, COUNT(*) AS n
+                                 FROM {$tabla}
+                                 WHERE id_empresa = ? AND fecha_emision BETWEEN ? AND ?
+                                 GROUP BY 1, 2, 3 ORDER BY n DESC");
+            $stB->execute([$idEmpresa, $desde, $hasta]);
+            foreach ($stB->fetchAll(PDO::FETCH_ASSOC) as $b) {
+                $etiquetaFiltro = $colFiltro !== null ? "{$colFiltro}={$b['filtro']}, " : '';
+                $elim = ($b['eliminado'] === true || $b['eliminado'] === 't' || $b['eliminado'] === '1' || $b['eliminado'] === 1) ? 'sí' : 'no';
+                fila("&nbsp;&nbsp;&nbsp;↳ {$etiquetaFiltro}ambiente={$b['ambiente']}, eliminado={$elim}: <b>{$b['n']}</b> documentos", 'warn');
             }
         } else {
             fila("<b>{$nombre}</b>: {$detalle}", 'ok');
