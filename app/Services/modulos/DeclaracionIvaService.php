@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Services\modulos;
+namespace App\services\modulos;
 
 use App\repositories\modulos\DeclaracionIvaRepository;
 use App\repositories\modulos\FacturaVentaRepository;

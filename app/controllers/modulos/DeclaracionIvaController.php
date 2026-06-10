@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\controllers\modulos;
 
 use App\repositories\modulos\DeclaracionIvaRepository;
-use App\Services\modulos\DeclaracionIvaService;
+use App\services\modulos\DeclaracionIvaService;
 
 class DeclaracionIvaController extends BaseModuloController
 {
