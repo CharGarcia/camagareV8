@@ -86,12 +86,14 @@
         const tabsContainer = document.getElementById('myTab');
         const tabContent = document.getElementById('myTabContent');
 
-        const meses = {
-            '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril',
-            '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto',
-            '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre'
-        };
-        const semestres = { '1': 'Primer Semestre', '2': 'Segundo Semestre' };
+        // Map (no objeto literal): en los objetos JS las claves '10'-'12' se ordenan
+        // numéricamente antes que '01'-'09' y los meses salían desordenados
+        const meses = new Map([
+            ['01', 'Enero'], ['02', 'Febrero'], ['03', 'Marzo'], ['04', 'Abril'],
+            ['05', 'Mayo'], ['06', 'Junio'], ['07', 'Julio'], ['08', 'Agosto'],
+            ['09', 'Septiembre'], ['10', 'Octubre'], ['11', 'Noviembre'], ['12', 'Diciembre']
+        ]);
+        const semestres = new Map([['1', 'Primer Semestre'], ['2', 'Segundo Semestre']]);
 
         const mesDefault = '<?= htmlspecialchars((string) $mes) ?>';
 
@@ -100,11 +102,11 @@
             selPeriodo.innerHTML = '';
             if (tipo === 'mensual') {
                 labelPeriodo.innerText = 'Mes';
-                for (let [v, m] of Object.entries(meses)) selPeriodo.insertAdjacentHTML('beforeend', `<option value="${v}">${m}</option>`);
-                if (meses[mesDefault]) selPeriodo.value = mesDefault;
+                for (const [v, m] of meses) selPeriodo.insertAdjacentHTML('beforeend', `<option value="${v}">${m}</option>`);
+                if (meses.has(mesDefault)) selPeriodo.value = mesDefault;
             } else {
                 labelPeriodo.innerText = 'Semestre';
-                for (let [v, s] of Object.entries(semestres)) selPeriodo.insertAdjacentHTML('beforeend', `<option value="${v}">${s}</option>`);
+                for (const [v, s] of semestres) selPeriodo.insertAdjacentHTML('beforeend', `<option value="${v}">${s}</option>`);
             }
         }
         document.querySelectorAll('input[name="tipo_periodo"]').forEach(el => el.addEventListener('change', actualizarPeriodos));
