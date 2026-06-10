@@ -211,30 +211,48 @@ SOAP;
             throw new \RuntimeException('La extensión cURL no está habilitada en PHP.');
         }
 
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => $body,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER     => [
-                'Content-Type: text/xml; charset=UTF-8',
-                'SOAPAction: "' . $soapAction . '"',
-                'Content-Length: ' . strlen($body),
-            ],
-            CURLOPT_SSL_VERIFYPEER => false, // SRI usa certificados auto-firmados en pruebas
-            CURLOPT_SSL_VERIFYHOST => false,
-            CURLOPT_TIMEOUT        => $this->timeoutSegundos,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_FOLLOWLOCATION => true,
-        ]);
+        $maxIntentos = 2;
+        $intento = 0;
+        $response = false;
+        $error = '';
+        $httpCode = 0;
 
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $error    = curl_error($ch);
-        curl_close($ch);
+        while ($intento < $maxIntentos) {
+            $intento++;
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $body,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER     => [
+                    'Content-Type: text/xml; charset=UTF-8',
+                    'SOAPAction: "' . $soapAction . '"',
+                    'Content-Length: ' . strlen($body),
+                ],
+                CURLOPT_SSL_VERIFYPEER => false, // SRI usa certificados auto-firmados en pruebas
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_TIMEOUT        => $this->timeoutSegundos,
+                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_FOLLOWLOCATION => true,
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error    = curl_error($ch);
+            curl_close($ch);
+
+            if ($response !== false && empty($error)) {
+                break; // Conexión exitosa, salir del bucle
+            }
+
+            if ($intento < $maxIntentos) {
+                sleep(2); // Esperar 2 segundos antes del siguiente intento
+            }
+        }
 
         if ($response === false || !empty($error)) {
-            throw new \RuntimeException("Error de conexión al SRI ($url): $error");
+            $mensajeUsuario = "No fue posible comunicarse con los servidores del SRI tras {$maxIntentos} intentos. Es muy probable que los servicios del SRI se encuentren intermitentes o en mantenimiento. Intente nuevamente en unos minutos. (Detalle técnico: $error)";
+            throw new \RuntimeException($mensajeUsuario);
         }
 
         if ($httpCode >= 500) {
@@ -243,7 +261,7 @@ SOAP;
             if (!empty($response) && str_contains($response, 'Fault')) {
                 return $response;
             }
-            throw new \RuntimeException("El WS del SRI respondió con HTTP $httpCode. Respuesta: " . substr($response, 0, 800));
+            throw new \RuntimeException("Los servicios del SRI reportaron un error interno (HTTP $httpCode). Respuesta: " . substr($response, 0, 800));
         }
 
         return $response;

@@ -50,19 +50,39 @@ class SriService
 
     private function requestViaSoap(string $url, string $claveAcceso): array
     {
-        $client = new SoapClient($url, [
-            'exceptions' => true,
-            'connection_timeout' => 10,
-            'cache_wsdl' => WSDL_CACHE_NONE,
-            'stream_context' => stream_context_create([
-                'ssl' => [
-                    'verify_peer' => false,
-                    'verify_peer_name' => false
-                ]
-            ])
-        ]);
+        $maxIntentos = 2;
+        $intento = 0;
+        $result = null;
+        $lastError = '';
 
-        $result = $client->autorizacionComprobante(['claveAccesoComprobante' => $claveAcceso]);
+        while ($intento < $maxIntentos) {
+            $intento++;
+            try {
+                $client = new SoapClient($url, [
+                    'exceptions' => true,
+                    'connection_timeout' => 10,
+                    'cache_wsdl' => WSDL_CACHE_NONE,
+                    'stream_context' => stream_context_create([
+                        'ssl' => [
+                            'verify_peer' => false,
+                            'verify_peer_name' => false
+                        ]
+                    ])
+                ]);
+
+                $result = $client->autorizacionComprobante(['claveAccesoComprobante' => $claveAcceso]);
+                break; // Conexión exitosa
+            } catch (Exception $e) {
+                $lastError = $e->getMessage();
+                if ($intento < $maxIntentos) {
+                    sleep(2);
+                }
+            }
+        }
+
+        if ($result === null) {
+            throw new Exception("El servicio del SRI no respondió después de {$maxIntentos} intentos. Es muy probable que esté intermitente o en mantenimiento. Detalle: " . $lastError);
+        }
 
         if (isset($result->RespuestaAutorizacionComprobante->autorizaciones->autorizacion)) {
             $aut = $result->RespuestaAutorizacionComprobante->autorizaciones->autorizacion;
@@ -81,23 +101,45 @@ class SriService
     {
         $postUrl = str_replace('?wsdl', '', $url);
         $xmlRequest = $this->buildRawSoapRequest($claveAcceso);
-        $ch = curl_init($postUrl);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $xmlRequest);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: text/xml; charset=utf-8',
-            'SOAPAction: ""'
-        ]);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-        $response = curl_exec($ch);
-        if (curl_errno($ch)) {
-            throw new Exception(curl_error($ch));
+        
+        $maxIntentos = 2;
+        $intento = 0;
+        $response = false;
+        $lastError = '';
+
+        while ($intento < $maxIntentos) {
+            $intento++;
+            $ch = curl_init($postUrl);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $xmlRequest);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: text/xml; charset=utf-8',
+                'SOAPAction: ""'
+            ]);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+            
+            $response = curl_exec($ch);
+            if (!curl_errno($ch)) {
+                curl_close($ch);
+                break; // Conexión exitosa
+            }
+            
+            $lastError = curl_error($ch);
+            curl_close($ch);
+            
+            if ($intento < $maxIntentos) {
+                sleep(2);
+            }
         }
-        curl_close($ch);
+
+        if ($response === false) {
+            throw new Exception("El servicio del SRI no respondió después de {$maxIntentos} intentos. Es muy probable que esté intermitente o en mantenimiento. Detalle: " . $lastError);
+        }
+
         return $this->procesarRawSoapResponse($response);
     }
 
@@ -105,6 +147,11 @@ class SriService
     {
         $postUrl = str_replace('?wsdl', '', $url);
         $xmlRequest = $this->buildRawSoapRequest($claveAcceso);
+        
+        $maxIntentos = 2;
+        $intento = 0;
+        $response = false;
+
         $context = stream_context_create([
             'http' => [
                 'method' => 'POST',
@@ -118,10 +165,24 @@ class SriService
                 'verify_peer_name' => false
             ]
         ]);
-        $response = @file_get_contents($url, false, $context);
-        if ($response === false) {
-            throw new Exception("Error de conexión HTTP.");
+
+        while ($intento < $maxIntentos) {
+            $intento++;
+            $response = @file_get_contents($url, false, $context);
+            
+            if ($response !== false) {
+                break; // Conexión exitosa
+            }
+            
+            if ($intento < $maxIntentos) {
+                sleep(2);
+            }
         }
+
+        if ($response === false) {
+            throw new Exception("El servicio del SRI no respondió después de {$maxIntentos} intentos. Es muy probable que esté intermitente o en mantenimiento. Detalle: Error de conexión HTTP.");
+        }
+
         return $this->procesarRawSoapResponse($response);
     }
 
