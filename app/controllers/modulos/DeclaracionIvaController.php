@@ -234,14 +234,43 @@ class DeclaracionIvaController extends BaseModuloController
             $sheet1 = $spreadsheet->getActiveSheet();
             $sheet1->setTitle('Resumen 104');
 
+            // Consultar empresa
+            $db = \App\core\Database::getConnection();
+            $st = $db->query("SELECT razon_social FROM empresas WHERE id = " . $idEmpresa);
+            $empresaRow = $st->fetch();
+            $nombreEmpresa = $empresaRow['razon_social'] ?? 'Empresa ' . $idEmpresa;
+
+            // Fila 1: Nombre de la empresa
+            $sheet1->setCellValue('A1', mb_strtoupper($nombreEmpresa, 'UTF-8'));
+            $sheet1->mergeCells('A1:G1');
+            $sheet1->getStyle('A1')->applyFromArray([
+                'font' => ['bold' => true, 'size' => 14],
+                'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]
+            ]);
+
+            // Fila 2: Formulario 104 periodo...
+            $textoPeriodo = $tipo === 'semestral' ? 'Semestral' : 'Mensual';
+            $meses = ['01'=>'Enero','02'=>'Febrero','03'=>'Marzo','04'=>'Abril','05'=>'Mayo','06'=>'Junio',
+                      '07'=>'Julio','08'=>'Agosto','09'=>'Septiembre','10'=>'Octubre','11'=>'Noviembre','12'=>'Diciembre'];
+            $textoFecha = $tipo === 'semestral' 
+                ? ($periodo == '1' ? "Primer Semestre - {$anio}" : "Segundo Semestre - {$anio}")
+                : ($meses[$periodo] ?? $periodo) . " - {$anio}";
+            
+            $sheet1->setCellValue('A2', "Formulario 104 periodo {$textoPeriodo}, {$textoFecha}");
+            $sheet1->mergeCells('A2:G2');
+            $sheet1->getStyle('A2')->applyFromArray([
+                'font' => ['bold' => true, 'size' => 12],
+                'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]
+            ]);
+
             // Encabezados Hoja 1
-            $sheet1->setCellValue('A1', 'Concepto');
-            $sheet1->setCellValue('B1', 'Cas. Bruto');
-            $sheet1->setCellValue('C1', 'Valor Bruto');
-            $sheet1->setCellValue('D1', 'Cas. Neto');
-            $sheet1->setCellValue('E1', 'Valor Neto');
-            $sheet1->setCellValue('F1', 'Cas. Impuesto');
-            $sheet1->setCellValue('G1', 'Impuesto Gen.');
+            $sheet1->setCellValue('A4', 'Concepto');
+            $sheet1->setCellValue('B4', 'Cas. Bruto');
+            $sheet1->setCellValue('C4', 'Valor Bruto');
+            $sheet1->setCellValue('D4', 'Cas. Neto');
+            $sheet1->setCellValue('E4', 'Valor Neto');
+            $sheet1->setCellValue('F4', 'Cas. Impuesto');
+            $sheet1->setCellValue('G4', 'Impuesto Gen.');
 
             // Estilos de encabezado Hoja 1
             $headerStyle1 = [
@@ -249,14 +278,14 @@ class DeclaracionIvaController extends BaseModuloController
                 'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '0D6EFD']],
                 'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]
             ];
-            $sheet1->getStyle('A1:G1')->applyFromArray($headerStyle1);
+            $sheet1->getStyle('A4:G4')->applyFromArray($headerStyle1);
             
             $sheet1->getColumnDimension('A')->setWidth(60);
             $sheet1->getColumnDimension('C')->setWidth(15);
             $sheet1->getColumnDimension('E')->setWidth(15);
             $sheet1->getColumnDimension('G')->setWidth(15);
 
-            $rowIdx = 2;
+            $rowIdx = 5;
             $currentSeccion = '';
             
             $layout = $resumenCompleto['layout'] ?? [];
