@@ -181,7 +181,8 @@ class DeclaracionIvaService
      *
      * @return array{empresa:string,periodo:string,anio:int,mes:int,fecha_desde:string,
      *               fecha_hasta:string,iva_ventas:float,credito_tributario:float,
-     *               retenciones:float,a_pagar:float,saldo_favor:float,fecha_limite:string}
+     *               retenciones:float,a_pagar:float,saldo_favor:float,num_facturas_venta:int,
+     *               fecha_limite:string}
      */
     public function getResumenPago(int $idEmpresa, string $anio, string $mes, bool $sincronizar = true, int $idUsuario = 0): array
     {
@@ -217,6 +218,9 @@ class DeclaracionIvaService
 
         $retenciones = $this->repository->getRetencionesIvaPeriodo($idEmpresa, $fechaDesde, $fechaHasta);
 
+        // Conteo de facturas de venta emitidas (autorizadas) en el período.
+        $numVentas = $this->repository->getConteoDocumentos($idEmpresa, 'conteo_ventas_emitidas', $fechaDesde, $fechaHasta);
+
         $neto       = $ivaVentas - $credito - $retenciones;
         $aPagar     = max(0.0, $neto);
         $saldoFavor = max(0.0, -$neto);
@@ -242,6 +246,7 @@ class DeclaracionIvaService
             'retenciones'        => round($retenciones, 2),
             'a_pagar'            => round($aPagar, 2),
             'saldo_favor'        => round($saldoFavor, 2),
+            'num_facturas_venta' => $numVentas,
             'fecha_limite'       => $this->calcularFechaLimitePago($ruc, (int)$anio, (int)$mes),
         ];
     }

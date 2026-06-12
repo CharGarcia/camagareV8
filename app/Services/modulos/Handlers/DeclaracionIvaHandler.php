@@ -67,9 +67,10 @@ class DeclaracionIvaHandler extends BaseHandler
         $asunto = strtr($asuntoTpl, $reemplazos);
         $cuerpo = nl2br(htmlspecialchars(strtr($cuerpoTpl, $reemplazos), ENT_QUOTES, 'UTF-8'));
         $tabla  = $this->construirDesgloseHtml($resumen);
+        $avisos = $this->construirAvisosHtml($resumen);
 
         $html = "<div style='font-family:Arial,sans-serif;line-height:1.5;color:#333;'>
-                    <div>{$cuerpo}</div>{$tabla}
+                    <div>{$cuerpo}</div>{$tabla}{$avisos}
                  </div>";
 
         $mailService = new \App\Services\EnvioDocumentosSRIService();
@@ -129,6 +130,35 @@ class DeclaracionIvaHandler extends BaseHandler
                         </tr>
                     </tfoot>
                 </table>";
+    }
+
+    /**
+     * Bloques informativos que se agregan siempre:
+     *  - Aviso de que los valores son referenciales.
+     *  - Si no hubo facturas de venta emitidas: advertencia de multa por no presentación
+     *    y sugerencia de automatizar una factura de valor mínimo.
+     */
+    private function construirAvisosHtml(array $r): string
+    {
+        $referencial = "<div style='margin-top:14px;padding:10px 12px;border-left:4px solid #0d6efd;background:#e7f1ff;font-size:13px;color:#333;'>
+                            <strong>ℹ️ Importante:</strong> Los valores de este resumen son <strong>referenciales</strong> y se calculan a partir de los documentos registrados en el sistema. Para determinar con exactitud el valor a pagar, realice una revisión contable más completa antes de presentar su declaración.
+                        </div>";
+
+        $sinVentas = '';
+        if ((int)($r['num_facturas_venta'] ?? 0) === 0) {
+            $periodo = htmlspecialchars((string)$r['periodo'], ENT_QUOTES, 'UTF-8');
+            $limite  = htmlspecialchars((string)$r['fecha_limite'], ENT_QUOTES, 'UTF-8');
+            $sinVentas = "<div style='margin-top:12px;padding:10px 12px;border-left:4px solid #dc3545;background:#fde8ea;font-size:13px;color:#333;'>
+                            <strong>⚠️ No se registran facturas de venta emitidas en {$periodo}.</strong>
+                            Aun así, debe presentar la declaración de IVA el próximo mes, <strong>hasta el {$limite}</strong>.
+                            Olvidar presentarla puede ocasionar una <strong>multa por no presentación</strong>, incluso si no hubo ventas.
+                          </div>
+                          <div style='margin-top:8px;padding:10px 12px;border-left:4px solid #ffc107;background:#fff8e1;font-size:13px;color:#333;'>
+                            <strong>💡 Sugerencia:</strong> para evitar este riesgo, puede programar el sistema en el módulo de <strong>Automatizaciones</strong> para emitir automáticamente una factura con un valor mínimo cada mes, de modo que siempre exista movimiento y declaración.
+                          </div>";
+        }
+
+        return $referencial . $sinVentas;
     }
 
     private function money(float $v): string
