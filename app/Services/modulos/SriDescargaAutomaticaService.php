@@ -29,7 +29,7 @@ use Exception;
 class SriDescargaAutomaticaService
 {
     // Timeout por defecto para Puppeteer (3 minutos — tiempo suficiente para captcha + descarga paralela)
-    public const TIMEOUT_DEFAULT_MS = 180000;
+    public const TIMEOUT_DEFAULT_MS = 600000;
 
     // Mapeo codDoc (posición 8-9 de la clave) → tipo interno
     private const TIPOS_CODOC = [
