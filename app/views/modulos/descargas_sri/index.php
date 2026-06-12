@@ -252,7 +252,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                             <select id="exec_ano" class="form-select form-select-sm shadow-none" title="Año de búsqueda">
                                                 <?php
                                                 $anioActual = (int) date('Y');
-                                                for ($a = $anioActual; $a >= $anioActual - 5; $a--) {
+                                                for ($a = $anioActual; $a >= $anioActual - 2; $a--) {
                                                     $sel = $a === $anioActual ? 'selected' : '';
                                                     echo "<option value=\"{$a}\" {$sel}>{$a}</option>";
                                                 }
@@ -262,7 +262,6 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                         <div class="col-4">
                                             <label class="form-label fw-semibold small text-muted mb-1">Mes</label>
                                             <select id="exec_mes" class="form-select form-select-sm shadow-none" title="Mes de búsqueda">
-                                                <option value="0">Todos</option>
                                                 <?php
                                                 $meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
                                                 $mesActual = (int) date('n');

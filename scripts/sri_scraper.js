@@ -511,8 +511,8 @@ process.stdin.on('end', () => {
         process.exit(1);
     }
 
-    config.ano       = config.ano       || new Date().getFullYear();
-    config.mes       = config.mes       || (new Date().getMonth() + 1);
+    config.ano       = config.ano       ?? new Date().getFullYear();
+    config.mes       = config.mes       ?? (new Date().getMonth() + 1);
     config.dia       = config.dia       ?? 0;
     config.tipo      = config.tipo      ?? '0';
     config.timeoutMs = config.timeoutMs ?? 120_000;
