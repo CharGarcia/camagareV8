@@ -77,7 +77,13 @@ class SriDescargaAutomaticaService
         $logMod    = new SriDescargaAutoLog();
 
         $config = $configMod->getPorEmpresa($idEmpresa);
-        if (!$config || $config['estado'] !== 'activo') {
+        $esManual = ($idUsuario > 0 || $anoParam !== null);
+        
+        if (!$config) {
+            return ['ok' => false, 'error' => 'Empresa sin configuración de descargas guardada. Por favor guarde la configuración primero.'];
+        }
+        
+        if (!$esManual && $config['estado'] !== 'activo') {
             return ['ok' => false, 'error' => 'Empresa sin configuración activa de descarga automática.'];
         }
 
@@ -131,14 +137,17 @@ class SriDescargaAutomaticaService
             $clavesExistentes = $this->obtenerClavesExistentes($idEmpresa);
             $this->debugLog[] = 'Claves ya existentes en BD: ' . count($clavesExistentes);
 
-            $xmlsTotales = $this->obtenerXmlsViaPuppeteer(
+            $respuestaPuppeteer = $this->obtenerXmlsViaPuppeteer(
                 $usuario, $clave,
                 $periodoUnico['ano'], $periodoUnico['mes'],
                 $periodoUnico['dia'], $tipoSri,
                 self::TIMEOUT_DEFAULT_MS,
                 $clavesExistentes
             );
-            $detalles[] = "Período {$periodoUnico['ano']}/{$periodoUnico['mes']}: " . count($xmlsTotales) . ' XMLs descargados';
+            $xmlsTotales = $respuestaPuppeteer['xmls'] ?? [];
+            $yaExistentesReportados = $respuestaPuppeteer['ya_existentes'] ?? 0;
+            
+            $detalles[] = "Período {$periodoUnico['ano']}/{$periodoUnico['mes']}: " . count($xmlsTotales) . ' XMLs descargados, ' . $yaExistentesReportados . ' ya existían.';
 
             // Deduplicar por clave de acceso
             $vistos      = [];
@@ -182,7 +191,7 @@ class SriDescargaAutomaticaService
         $registerSvc = new DocumentoAutomatedRegisterService();
 
         $totalNuevos     = 0;
-        $totalExistentes = 0;
+        $totalExistentes = $yaExistentesReportados ?? 0; // Iniciar con los ya existentes reportados por el scraper
         $totalIgnorados  = 0;
         $totalErrores    = 0;
         $detallesClaves  = [];
@@ -220,6 +229,8 @@ class SriDescargaAutomaticaService
         }
 
         $duracion = (int) (microtime(true) - $inicio);
+        $totalEncontrados = count($xmlsTotales) + ($yaExistentesReportados ?? 0);
+        
         $msgFinal = "Descargados: " . count($xmlsTotales) .
                     " | Nuevas: $totalNuevos | Existentes: $totalExistentes" .
                     " | Ignoradas: $totalIgnorados | Errores: $totalErrores";
@@ -238,7 +249,7 @@ class SriDescargaAutomaticaService
             'fecha_desde'       => $fechaDesde,
             'fecha_hasta'       => $fechaHasta,
             'tipos_documento'   => $tipos,
-            'total_encontrados' => count($xmlsTotales),
+            'total_encontrados' => $totalEncontrados,
             'total_nuevos'      => $totalNuevos,
             'total_existentes'  => $totalExistentes,
             'total_ignorados'   => $totalIgnorados,
@@ -252,7 +263,7 @@ class SriDescargaAutomaticaService
 
         return [
             'ok'                => true,
-            'total_encontrados' => count($xmlsTotales),
+            'total_encontrados' => $totalEncontrados,
             'total_nuevos'      => $totalNuevos,
             'total_existentes'  => $totalExistentes,
             'total_ignorados'   => $totalIgnorados,
@@ -260,6 +271,198 @@ class SriDescargaAutomaticaService
             'duracion_seg'      => $duracion,
             'mensaje'           => $msgFinal,
         ];
+    }
+
+    // ─────────────────────────────────────────────
+    // STREAMING (NUEVO)
+    // ─────────────────────────────────────────────
+
+    public function ejecutarParaEmpresaStream(
+        int     $idEmpresa,
+        int     $idUsuario = 0,
+        ?int    $anoParam  = null,
+        ?int    $mesParam  = null,
+        ?int    $diaParam  = null,
+        ?string $tipoParam = null
+    ): void {
+        $inicio    = microtime(true);
+        $configMod = new SriConfigDescarga();
+        $logMod    = new SriDescargaAutoLog();
+
+        $config = $configMod->getPorEmpresa($idEmpresa);
+        if (!$config) {
+            echo json_encode(['type' => 'error', 'error' => 'Empresa sin configuración de descargas guardada.']) . "\n";
+            return;
+        }
+
+        if (!empty($config['login_bloqueado'])) {
+            echo json_encode(['type' => 'error', 'error' => 'Descarga bloqueada: credenciales SRI incorrectas.']) . "\n";
+            return;
+        }
+
+        $clave   = self::desencriptarClave($config['sri_clave']);
+        $usuario = $config['sri_usuario'];
+        $tipos   = $tipoParam ?? $config['tipos_documento'];
+
+        if (empty($clave)) {
+            echo json_encode(['type' => 'error', 'error' => 'No se pudo desencriptar la clave SRI.']) . "\n";
+            return;
+        }
+
+        if ($anoParam !== null) {
+            $periodoUnico = [
+                'ano' => $anoParam,
+                'mes' => $mesParam ?? 0,
+                'dia' => $diaParam ?? 0,
+            ];
+        } else {
+            $hoy = new \DateTime();
+            $periodoUnico = [
+                'ano' => (int) $hoy->format('Y'),
+                'mes' => (int) $hoy->format('n'),
+                'dia' => 0,
+            ];
+        }
+
+        $xmlsTotales = [];
+        $detalles    = [];
+
+        try {
+            $tipoSri = $this->resolverTipoSri($tipos);
+            $clavesExistentes = $this->obtenerClavesExistentes($idEmpresa);
+            $this->debugLog[] = 'Claves ya existentes en BD: ' . count($clavesExistentes);
+
+            $respuestaPuppeteer = $this->obtenerXmlsViaPuppeteerStream(
+                $usuario, $clave,
+                $periodoUnico['ano'], $periodoUnico['mes'],
+                $periodoUnico['dia'], $tipoSri,
+                self::TIMEOUT_DEFAULT_MS,
+                $clavesExistentes
+            );
+            $xmlsTotales = $respuestaPuppeteer['xmls'] ?? [];
+            $yaExistentesReportados = $respuestaPuppeteer['ya_existentes'] ?? 0;
+            
+            $detalles[] = "Período {$periodoUnico['ano']}/{$periodoUnico['mes']}: " . count($xmlsTotales) . ' XMLs descargados, ' . $yaExistentesReportados . ' ya existían.';
+
+            $vistos      = [];
+            $xmlsUnicos  = [];
+            foreach ($xmlsTotales as $item) {
+                $k = $item['clave'] ?? '';
+                if ($k && isset($vistos[$k])) continue;
+                if ($k) $vistos[$k] = true;
+                $xmlsUnicos[] = $item;
+            }
+            $xmlsTotales = $xmlsUnicos;
+
+            if ($tipos !== 'todos' && $this->resolverTipoSri($tipos) === '0') {
+                $tiposArr    = array_map('trim', explode(',', $tipos));
+                $xmlsTotales = array_values(array_filter($xmlsTotales, function ($item) use ($tiposArr): bool {
+                    $clave  = $item['clave'] ?? '';
+                    if (strlen($clave) !== 49) return false;
+                    $codDoc = substr($clave, 8, 2);
+                    $tipo   = self::TIPOS_CODOC[$codDoc] ?? null;
+                    return $tipo !== null && in_array($tipo, $tiposArr, true);
+                }));
+            }
+
+        } catch (Exception $e) {
+            $mensaje = $e->getMessage();
+            if ($e->getCode() === 401) {
+                $configMod->bloquearLogin($idEmpresa, $mensaje);
+                $configMod->actualizarEstadoDescarga($idEmpresa, 'error', $mensaje);
+                $this->insertarLog($logMod, $idEmpresa, $tipos, 'error', $mensaje, [], $inicio, $idUsuario);
+            } else {
+                $configMod->actualizarEstadoDescarga($idEmpresa, 'error', $mensaje);
+                $this->insertarLog($logMod, $idEmpresa, $tipos, 'error', $mensaje, [], $inicio, $idUsuario);
+            }
+            echo json_encode(['type' => 'error', 'error' => $mensaje]) . "\n";
+            return;
+        }
+
+        echo json_encode(['type' => 'progress', 'pct' => 97, 'message' => 'Procesando XMLs descargados en base de datos...']) . "\n";
+        ob_flush(); flush();
+
+        $registerSvc = new DocumentoAutomatedRegisterService();
+
+        $totalNuevos     = 0;
+        $totalExistentes = $yaExistentesReportados ?? 0;
+        $totalIgnorados  = 0;
+        $totalErrores    = 0;
+        $detallesClaves  = [];
+
+        foreach ($xmlsTotales as $item) {
+            $claveAcceso = $item['clave'] ?? 'sin_clave';
+            $xmlContent  = $item['xml']   ?? '';
+
+            if (empty($xmlContent)) {
+                $totalErrores++;
+                $detallesClaves[] = ['clave' => $claveAcceso, 'estado' => 'XML_VACIO', 'msg' => 'XML vacío del scraper'];
+                continue;
+            }
+
+            try {
+                $res       = $registerSvc->procesarYRegistrar($xmlContent, $idEmpresa, $idUsuario);
+                $estadoReg = $res['estado_registro'] ?? 'DESCONOCIDO';
+
+                if ($estadoReg === 'REGISTRADO') {
+                    $totalNuevos++;
+                } elseif (in_array($estadoReg, ['YA_EXISTE', 'EXISTENTE'], true)) {
+                    $totalExistentes++;
+                } elseif ($estadoReg === 'IGNORADO') {
+                    $totalIgnorados++;
+                } else {
+                    $totalErrores++;
+                }
+                $detallesClaves[] = ['clave' => $claveAcceso, 'estado' => $estadoReg, 'msg' => $res['mensaje'] ?? ''];
+            } catch (Exception $e) {
+                $totalErrores++;
+                $detallesClaves[] = ['clave' => $claveAcceso, 'estado' => 'EXCEPCION', 'msg' => $e->getMessage()];
+            }
+        }
+
+        $duracion = (int) (microtime(true) - $inicio);
+        $totalEncontrados = count($xmlsTotales) + ($yaExistentesReportados ?? 0);
+        
+        $msgFinal = "Descargados: " . count($xmlsTotales) .
+                    " | Nuevas: $totalNuevos | Existentes: $totalExistentes" .
+                    " | Ignoradas: $totalIgnorados | Errores: $totalErrores";
+
+        $configMod->actualizarEstadoDescarga($idEmpresa, 'completado', $msgFinal);
+
+        $mesPeriodo  = $periodoUnico['mes'] ?: (int) date('n');
+        $fechaDesde  = sprintf('%04d-%02d-%02d', $periodoUnico['ano'], $mesPeriodo, $periodoUnico['dia'] ?: 1);
+        $fechaHasta  = $periodoUnico['dia']
+            ? $fechaDesde
+            : sprintf('%04d-%02d-%02d', $periodoUnico['ano'], $mesPeriodo, (int) date('t', mktime(0,0,0,$mesPeriodo,1,$periodoUnico['ano'])));
+
+        $logMod->insertar([
+            'id_empresa'        => $idEmpresa,
+            'fecha_desde'       => $fechaDesde,
+            'fecha_hasta'       => $fechaHasta,
+            'tipos_documento'   => $tipos,
+            'total_encontrados' => $totalEncontrados,
+            'total_nuevos'      => $totalNuevos,
+            'total_existentes'  => $totalExistentes,
+            'total_ignorados'   => $totalIgnorados,
+            'total_errores'     => $totalErrores,
+            'estado'            => 'completado',
+            'detalle_json'      => json_encode(['resumen' => $detalles, 'claves' => $detallesClaves, 'debug' => $this->debugLog]),
+            'duracion_seg'      => $duracion,
+            'origen'            => 'manual',
+            'created_by'        => $idUsuario,
+        ]);
+
+        echo json_encode([
+            'type'              => 'resultado',
+            'ok'                => true,
+            'total_encontrados' => $totalEncontrados,
+            'total_nuevos'      => $totalNuevos,
+            'total_existentes'  => $totalExistentes,
+            'total_ignorados'   => $totalIgnorados,
+            'total_errores'     => $totalErrores,
+            'duracion_seg'      => $duracion,
+            'mensaje'           => $msgFinal,
+        ]) . "\n";
     }
 
     // ─────────────────────────────────────────────
@@ -408,8 +611,150 @@ class SriDescargaAutomaticaService
             throw new Exception('Puppeteer error: ' . ($data['error'] ?? 'desconocido'));
         }
 
-        // Retorna array de ['clave' => '049...', 'xml' => '<?xml...>']
-        return $data['xmls'] ?? [];
+        // Retorna todo el array de respuesta
+        return $data;
+    }
+
+    public function obtenerXmlsViaPuppeteerStream(
+        string $usuario,
+        string $clave,
+        int    $ano,
+        int    $mes,
+        int    $dia,
+        string $tipo,
+        int    $timeoutMs = self::TIMEOUT_DEFAULT_MS,
+        array  $clavesExcluir = []
+    ): array {
+        $scriptPath = MVC_ROOT . '/scripts/sri_scraper.js';
+        if (!file_exists($scriptPath)) {
+            throw new Exception('Script Puppeteer no encontrado.');
+        }
+
+        $appCfg         = is_file(MVC_CONFIG . '/app.php') ? require MVC_CONFIG . '/app.php' : [];
+        $apiKey2captcha = getenv('TWOCAPTCHA_API_KEY') ?: ($appCfg['2captcha_api_key'] ?? '');
+
+        $configJson = json_encode([
+            'usuario'         => $usuario,
+            'clave'           => $clave,
+            'ano'             => $ano,
+            'mes'             => $mes,
+            'dia'             => $dia,
+            'tipo'            => $tipo,
+            'timeoutMs'       => $timeoutMs,
+            'apiKey2captcha'  => $apiKey2captcha,
+            'clavesExcluir'   => $clavesExcluir,
+        ]);
+
+        $cmd  = 'node ' . escapeshellarg($scriptPath);
+        $proc = proc_open($cmd, [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'], // stdout (streaming json)
+            2 => ['pipe', 'w'], // stderr (debug)
+        ], $pipes);
+
+        if (!is_resource($proc)) {
+            throw new Exception('No se pudo iniciar Node.js.');
+        }
+
+        fwrite($pipes[0], $configJson);
+        fclose($pipes[0]);
+
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+
+        $finalData = null;
+        $errorMsg = null;
+
+        $finEspera = microtime(true) + ($timeoutMs / 1000) + 15;
+
+        while (true) {
+            $read = [$pipes[1], $pipes[2]];
+            $write = null;
+            $except = null;
+
+            if (connection_aborted()) {
+                proc_terminate($proc);
+                throw new Exception('Descarga cancelada por el usuario.', 499);
+            }
+
+            if (microtime(true) > $finEspera) {
+                proc_terminate($proc);
+                throw new Exception('Timeout general del proceso.', 504);
+            }
+
+            $numChangedStreams = stream_select($read, $write, $except, 1);
+
+            if ($numChangedStreams === false) {
+                break; // Error interrupido
+            } elseif ($numChangedStreams > 0) {
+                foreach ($read as $stream) {
+                    if ($stream === $pipes[1]) {
+                        while (($line = fgets($pipes[1])) !== false) {
+                            $line = trim($line);
+                            if (empty($line)) continue;
+
+                            $json = json_decode($line, true);
+                            if (!$json) {
+                                $this->debugLog[] = "STDOUT no JSON: " . $line;
+                                continue;
+                            }
+
+                            if (isset($json['type']) && $json['type'] === 'progress') {
+                                // Enviar al cliente
+                                echo $line . "\n";
+                                ob_flush(); flush();
+                            } elseif (isset($json['type']) && $json['type'] === 'finish') {
+                                $finalData = $json['data'] ?? [];
+                            }
+                        }
+                    } elseif ($stream === $pipes[2]) {
+                        while (($line = fgets($pipes[2])) !== false) {
+                            $line = trim($line);
+                            if (!empty($line)) {
+                                $this->debugLog[] = "Puppeteer log: " . $line;
+                            }
+                        }
+                    }
+                }
+            }
+
+            $status = proc_get_status($proc);
+            if (!$status['running']) {
+                break;
+            }
+        }
+
+        // Leer restos finales
+        while (($line = fgets($pipes[1])) !== false) {
+            $line = trim($line);
+            if (empty($line)) continue;
+            $json = json_decode($line, true);
+            if ($json && isset($json['type']) && $json['type'] === 'finish') {
+                $finalData = $json['data'] ?? [];
+            }
+        }
+        while (($line = fgets($pipes[2])) !== false) {
+            $line = trim($line);
+            if (!empty($line)) $this->debugLog[] = "Puppeteer log: " . $line;
+        }
+
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        proc_close($proc);
+
+        if (!$finalData) {
+            throw new Exception('El script Puppeteer no retornó un resultado final. Revise los logs.');
+        }
+
+        if (!empty($finalData['credenciales_incorrectas'])) {
+            throw new Exception('Credenciales SRI incorrectas: ' . ($finalData['error'] ?? 'sin detalle'), 401);
+        }
+
+        if (!($finalData['ok'] ?? false)) {
+            throw new Exception('Puppeteer error: ' . ($finalData['error'] ?? 'desconocido'));
+        }
+
+        return $finalData;
     }
 
     // ─────────────────────────────────────────────

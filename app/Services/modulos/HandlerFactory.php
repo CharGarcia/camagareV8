@@ -80,7 +80,7 @@ class HandlerFactory
             ],
 
             'whatsapp' => [
-                'label'   => 'WhatsApp',
+                'label'   => 'Avisos de WhatsApp',
                 'icono'   => 'fa-whatsapp',
                 'acciones' => [
                     'aviso_mensajes_no_leidos' => [
@@ -88,6 +88,56 @@ class HandlerFactory
                         'descripcion' => 'Envía un aviso (por WhatsApp) a los números configurados cuando hay chats con mensajes sin leer durante más del umbral definido en la configuración de WhatsApp.',
                         'handler'     => Handlers\WhatsappHandler::class,
                         'parametros'  => [],
+                    ],
+                ],
+            ],
+
+            'cuentas_por_cobrar' => [
+                'label'   => 'Cuentas por cobrar',
+                'icono'   => 'fa-hand-holding-usd',
+                'acciones' => [
+                    'enviar_estado_correo' => [
+                        'label'       => 'Enviar estado de cuenta (Correo)',
+                        'descripcion' => 'Envía por correo a cada cliente con saldo pendiente su estado de cuenta, en el nivel de detalle elegido (total, por factura o por línea).',
+                        'handler'     => Handlers\CuentasPorCobrarHandler::class,
+                        'parametros'  => [
+                            ['key' => 'nivel_detalle', 'label' => 'Nivel de detalle', 'tipo' => 'select', 'default' => 'por_factura',
+                             'opciones' => [
+                                 'total_vencido' => 'Total por cobrar vencido',
+                                 'total_general' => 'Total por cobrar general',
+                                 'por_factura'   => 'Detallado por cada factura',
+                                 'por_linea'     => 'Detallado por cada línea de factura',
+                             ],
+                             'ayuda' => 'Define qué se incluye en el correo: solo el total, o el detalle por factura / por línea.'],
+                            ['key' => 'solo_vencidas', 'label' => 'Considerar solo facturas vencidas', 'tipo' => 'checkbox', 'default' => true,
+                             'ayuda' => 'Si está activo, solo se toman en cuenta las facturas ya vencidas (no se avisa por facturas dentro del plazo de crédito).'],
+                            ['key' => 'dias_min_vencido', 'label' => 'Mínimo de días vencido', 'tipo' => 'number', 'default' => 0,
+                             'ayuda' => 'Incluir solo facturas con al menos estos días de vencidas. 0 = sin mínimo.'],
+                            ['key' => 'asunto', 'label' => 'Asunto del correo', 'tipo' => 'text', 'default' => 'Estado de cuenta - {empresa}',
+                             'ayuda' => 'Etiquetas: {cliente} {empresa} {total_general} {total_vencido} {num_facturas}.'],
+                            ['key' => 'cuerpo', 'label' => 'Mensaje (antes del detalle)', 'tipo' => 'textarea',
+                             'default' => "Estimado/a {cliente}:\n\nLe compartimos el detalle de su estado de cuenta.\nTotal pendiente: {total_general}\nTotal vencido: {total_vencido}\n\nAgradecemos su pronto pago.\n{empresa}",
+                             'ayuda' => 'Texto que va antes de la tabla de detalle. Etiquetas: {cliente} {empresa} {total_general} {total_vencido} {num_facturas}. El detalle se agrega automáticamente debajo según el nivel elegido.'],
+                        ],
+                    ],
+                    'enviar_estado_whatsapp' => [
+                        'label'       => 'Enviar estado de cuenta (WhatsApp)',
+                        'descripcion' => 'Envía por WhatsApp a cada cliente con saldo pendiente, usando una plantilla aprobada por Meta.',
+                        'handler'     => Handlers\CuentasPorCobrarHandler::class,
+                        'parametros'  => [
+                            ['key' => 'plantilla_whatsapp', 'label' => 'Plantilla de WhatsApp', 'tipo' => 'select_dinamico', 'fuente' => 'whatsapp_plantillas', 'default' => '',
+                             'ayuda' => 'Plantilla aprobada por Meta.'],
+                            ['key' => 'solo_vencidas', 'label' => 'Considerar solo facturas vencidas', 'tipo' => 'checkbox', 'default' => true,
+                             'ayuda' => 'Si está activo, solo se toman en cuenta las facturas ya vencidas.'],
+                            ['key' => 'dias_min_vencido', 'label' => 'Mínimo de días vencido', 'tipo' => 'number', 'default' => 0,
+                             'ayuda' => 'Incluir solo facturas con al menos estos días de vencidas. 0 = sin mínimo.'],
+                            ['key' => 'nivel_detalle_pdf', 'label' => 'Detalle del PDF adjunto', 'tipo' => 'select', 'default' => 'por_factura',
+                             'opciones' => [
+                                 'por_factura' => 'Detallado por cada factura',
+                                 'por_linea'   => 'Detallado por cada línea de factura',
+                             ],
+                             'ayuda' => 'Solo aplica si la plantilla seleccionada lleva un documento (PDF) adjunto. Define el detalle del PDF generado.'],
+                        ],
                     ],
                 ],
             ],
@@ -128,16 +178,27 @@ class HandlerFactory
                     ],
                     'enviar_aviso_vencimiento_whatsapp' => [
                         'label'       => 'Enviar aviso de vencimiento (WhatsApp)',
-                        'descripcion' => 'Envía un WhatsApp a los clientes cuya suscripción vence en exactamente N días, usando una plantilla aprobada por Meta. Requiere WhatsApp configurado y plantilla aprobada.',
+                        'descripcion' => 'Envía un WhatsApp a los clientes cuya suscripción vence en exactamente N días, usando una plantilla aprobada por Meta. El mensaje lo define la plantilla; sus variables se rellenan automáticamente EN ESTE ORDEN: {{1}}=cliente, {{2}}=fecha de vencimiento, {{3}}=días, {{4}}=periodicidad, {{5}}=empresa.',
                         'handler'     => Handlers\SuscripcionesHandler::class,
                         'parametros'  => [
                             ['key' => 'dias_antes', 'label' => 'Avisar con anticipación (días)', 'tipo' => 'number', 'default' => 5,
                              'ayuda' => 'Se avisa cuando falten EXACTAMENTE estos días para el vencimiento. Ejecute la automatización todos los días para no perder avisos.'],
                             ['key' => 'plantilla_whatsapp', 'label' => 'Plantilla de WhatsApp', 'tipo' => 'select_dinamico', 'fuente' => 'whatsapp_plantillas', 'default' => '',
-                             'ayuda' => 'Plantilla aprobada por Meta con la que se enviará el aviso. Configúrelas en el módulo de WhatsApp.'],
-                            ['key' => 'variables_whatsapp', 'label' => 'Valores de las variables de la plantilla', 'tipo' => 'text', 'default' => '',
-                             'ayuda' => 'Valores para las variables {{1}} {{2}}... de la plantilla, EN ORDEN y separados por "|". Etiquetas: {cliente} {empresa} {fecha_vencimiento} {dias} {periodicidad}. Ej: "{cliente} | {fecha_vencimiento} | {dias}". Déjelo vacío si la plantilla no tiene variables.'],
+                             'ayuda' => 'Plantilla aprobada por Meta. El mensaje se define en la plantilla (módulo Plantillas WhatsApp). Las variables {{1}}..{{5}} se rellenan solas en el orden: cliente, fecha de vencimiento, días, periodicidad, empresa.'],
                         ],
+                    ],
+                ],
+            ],
+
+            'descargas_sri' => [
+                'label'   => 'Descargas SRI',
+                'icono'   => 'fa-cloud-download-alt',
+                'acciones' => [
+                    'descarga_automatica' => [
+                        'label'       => 'Descarga automática',
+                        'descripcion' => 'Ejecuta la descarga automática de comprobantes electrónicos desde el SRI.',
+                        'handler'     => Handlers\BaseHandler::class,
+                        'parametros'  => [],
                     ],
                 ],
             ],

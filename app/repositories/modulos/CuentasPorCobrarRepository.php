@@ -384,6 +384,67 @@ class CuentasPorCobrarRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_COLUMN) ?: [(int)date('Y')];
     }
 
+    /**
+     * Facturas con saldo pendiente para el envío de estados de cuenta
+     * (automatizaciones). Una fila por factura, con datos de contacto del cliente.
+     * Si $soloVencidas o $diasMin > 0, limita a facturas vencidas.
+     */
+    public function getFacturasPendientesParaEnvio(int $idEmpresa, bool $soloVencidas, int $diasMin): array
+    {
+        $sql = "
+            WITH cobrado AS (" . $this->getCteCobrado() . ")
+            SELECT
+                v.id,
+                v.id_cliente,
+                c.nombre                AS cliente_nombre,
+                COALESCE(c.email,'')    AS cliente_email,
+                COALESCE(c.telefono,'') AS cliente_telefono,
+                c.identificacion        AS cliente_ruc,
+                v.fecha_emision,
+                CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_factura,
+                (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date     AS fecha_vencimiento,
+                (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido,
+                v.importe_total                                  AS total,
+                COALESCE(cb.total_cobrado, 0)                    AS total_cobrado,
+                (v.importe_total - COALESCE(cb.total_cobrado, 0)) AS saldo
+            FROM ventas_cabecera v
+            JOIN clientes c ON c.id = v.id_cliente
+            LEFT JOIN cobrado cb ON cb.id_venta = v.id
+            WHERE v.id_empresa = :id_empresa
+              AND v.eliminado  = false
+              AND v.estado    IN ('autorizado','autorizada')
+              AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_ta)
+              AND (v.importe_total - COALESCE(cb.total_cobrado, 0)) > 0
+        ";
+
+        $params = [':id_empresa' => $idEmpresa, ':id_empresa_ta' => $idEmpresa];
+
+        if ($soloVencidas || $diasMin > 0) {
+            $sql .= " AND (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) >= :dmin";
+            $params[':dmin'] = max(1, $diasMin);
+        }
+
+        $sql .= " ORDER BY c.nombre ASC, v.fecha_emision ASC";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Líneas (ítems) de una factura, para el detalle "por línea".
+     */
+    public function getLineasFactura(int $idVenta): array
+    {
+        $sql = "SELECT descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto
+                FROM ventas_detalle
+                WHERE id_venta = :id
+                ORDER BY id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $idVenta]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // PRIVADOS
     // ─────────────────────────────────────────────────────────────────────

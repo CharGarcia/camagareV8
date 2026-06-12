@@ -639,36 +639,25 @@ function ejecutarDescargaManual() {
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Descargando...';
         }
 
-        let etapaIdx = 0;
-        const etapas = [
-            '🔐 Iniciando sesión en el portal SRI...',
-            '📋 Aplicando filtros de búsqueda...',
-            '🤖 Resolviendo verificación de seguridad (CAPTCHA)...',
-            '📥 Consultando comprobantes recibidos...',
-            '⚡ Descargando XMLs en paralelo...',
-            '💾 Registrando documentos en el sistema...',
-        ];
+        let abortController = new AbortController();
 
         Swal.fire({
             title: 'Descargando del SRI...',
-            html: `<div id="swal-etapa" class="mb-2 small fw-semibold">${etapas[0]}</div>
-                   <div class="progress" style="height:6px;">
-                       <div id="swal-barra" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width:5%"></div>
+            html: `<div id="swal-etapa" class="mb-2 small fw-semibold">Iniciando proceso en el servidor...</div>
+                   <div class="progress" style="height:8px;">
+                       <div id="swal-barra" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width:0%"></div>
                    </div>
-                   <div class="text-muted mt-2" style="font-size:0.75rem;">El proceso tarda entre 30 y 60 segundos.</div>`,
+                   <div class="mt-3 text-center">
+                       <button id="btnAbortarSri" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle me-1"></i>Abortar proceso</button>
+                   </div>`,
             allowOutsideClick: false,
             showConfirmButton: false,
             didOpen: () => {
-                Swal.showLoading();
-                const intervalo = setInterval(() => {
-                    etapaIdx = (etapaIdx + 1) % etapas.length;
-                    const pct = Math.min(90, 5 + etapaIdx * 17);
-                    const etapaEl = document.getElementById('swal-etapa');
-                    const barraEl = document.getElementById('swal-barra');
-                    if (etapaEl) etapaEl.textContent = etapas[etapaIdx];
-                    if (barraEl) barraEl.style.width = pct + '%';
-                }, 8000);
-                Swal._sriIntervalo = intervalo;
+                document.getElementById('btnAbortarSri').addEventListener('click', () => {
+                    abortController.abort();
+                    document.getElementById('btnAbortarSri').innerHTML = '<span class="spinner-border spinner-border-sm"></span> Abortando...';
+                    document.getElementById('btnAbortarSri').disabled = true;
+                });
             }
         });
 
@@ -681,54 +670,82 @@ function ejecutarDescargaManual() {
         fetch(`${BASE_URL}/modulos/DescargasSri/ejecutarDescargaManualAjax`, {
             method: 'POST',
             body: formData,
+            signal: abortController.signal
         })
-        .then(r => r.json())
-        .then(data => {
-            if (Swal._sriIntervalo) { clearInterval(Swal._sriIntervalo); Swal._sriIntervalo = null; }
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-play-circle me-1"></i> Ejecutar ahora';
-            }
+        .then(async response => {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let buffer = '';
 
-            if (data.ok) {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Descarga completada',
-                    html: `
-                        <div class="text-start small">
-                            <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
-                                <span>Documentos encontrados</span>
-                                <strong>${data.total_encontrados}</strong>
-                            </div>
-                            <div class="d-flex justify-content-between border-bottom pb-2 mb-2 text-success">
-                                <span>Registrados nuevos</span>
-                                <strong>${data.total_nuevos}</strong>
-                            </div>
-                            <div class="d-flex justify-content-between border-bottom pb-2 mb-2 text-muted">
-                                <span>Ya existían</span>
-                                <strong>${data.total_existentes}</strong>
-                            </div>
-                            <div class="d-flex justify-content-between text-danger">
-                                <span>Errores</span>
-                                <strong>${data.total_errores}</strong>
-                            </div>
-                        </div>
-                    `,
-                    confirmButtonText: 'Aceptar'
-                });
-                cargarConfigDescarga();
-            } else {
-                Swal.fire('Error en la descarga', data.error || 'No se pudo completar.', 'error');
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop(); // Última línea incompleta puede llegar cortada
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const data = JSON.parse(line);
+                        
+                        if (data.type === 'progress') {
+                            const etapaEl = document.getElementById('swal-etapa');
+                            const barraEl = document.getElementById('swal-barra');
+                            if (etapaEl) etapaEl.textContent = data.message || 'Procesando...';
+                            if (barraEl) barraEl.style.width = Math.min(100, data.pct || 0) + '%';
+                        } 
+                        else if (data.type === 'resultado') {
+                            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-play-circle me-1"></i> Ejecutar ahora'; }
+                            
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Descarga completada',
+                                html: `
+                                    <div class="text-start small">
+                                        <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
+                                            <span>Documentos encontrados</span>
+                                            <strong>${data.total_encontrados}</strong>
+                                        </div>
+                                        <div class="d-flex justify-content-between border-bottom pb-2 mb-2 text-success">
+                                            <span>Registrados nuevos</span>
+                                            <strong>${data.total_nuevos}</strong>
+                                        </div>
+                                        <div class="d-flex justify-content-between border-bottom pb-2 mb-2 text-muted">
+                                            <span>Ya existían</span>
+                                            <strong>${data.total_existentes}</strong>
+                                        </div>
+                                        <div class="d-flex justify-content-between text-danger">
+                                            <span>Errores</span>
+                                            <strong>${data.total_errores}</strong>
+                                        </div>
+                                    </div>
+                                `,
+                                confirmButtonText: 'Aceptar'
+                            });
+                            cargarConfigDescarga();
+                            return;
+                        } 
+                        else if (data.type === 'error') {
+                            Swal.fire('Error en la descarga', data.error || 'No se pudo completar.', 'error');
+                            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-play-circle me-1"></i> Ejecutar ahora'; }
+                            return;
+                        }
+                    } catch (e) {
+                        console.error('Error parseando JSON stream:', e, line);
+                    }
+                }
             }
         })
         .catch(err => {
-            console.error(err);
-            if (Swal._sriIntervalo) { clearInterval(Swal._sriIntervalo); Swal._sriIntervalo = null; }
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-play-circle me-1"></i> Ejecutar ahora';
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-play-circle me-1"></i> Ejecutar ahora'; }
+            if (err.name === 'AbortError') {
+                Swal.fire('Cancelado', 'La descarga ha sido abortada por el usuario.', 'info');
+            } else {
+                console.error(err);
+                Swal.fire('Error', 'Problema de conexión con el servidor.', 'error');
             }
-            Swal.fire('Error', 'Problema de conexión con el servidor.', 'error');
         });
     });
 }

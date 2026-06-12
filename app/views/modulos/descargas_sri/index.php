@@ -307,15 +307,9 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                             <!-- Info de fechas y cron -->
                             <div class="p-3 bg-info bg-opacity-10 border border-info border-opacity-25 rounded-3 small text-info-emphasis">
                                 <div class="fw-bold mb-2"><i class="bi bi-clock-history me-1"></i>Lógica de descarga automática</div>
-                                <ul class="mb-0 ps-3">
-                                    <li>Descarga comprobantes recibidos del <strong>mes actual</strong> (del 1ro al día de hoy)</li>
-                                    <li>Si hoy es <strong>día 1</strong>, también descarga el <strong>mes anterior completo</strong></li>
-                                    <li>Solo registra documentos <strong>no existentes</strong> en el sistema</li>
-                                    <li>Ejecución automática: <strong>cada noche a las 02:00</strong> (configurar cron)</li>
-                                </ul>
-                                <div class="mt-2 pt-2 border-top border-info border-opacity-25">
-                                    <code class="small">0 2 * * * php .../cron/sri_descarga_automatica.php</code>
-                                </div>
+                                <p class="mb-0 ps-3">
+                                    La descarga automática se la debe configurar en automatizaciones, en la opción descargas SRI.
+                                </p>
                             </div>
 
                         </div>

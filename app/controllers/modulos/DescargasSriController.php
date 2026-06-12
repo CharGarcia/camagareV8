@@ -388,6 +388,7 @@ class DescargasSriController extends Controller
 
     public function ejecutarDescargaManualAjax(): void
     {
+        set_time_limit(0);
         $this->requireAuth();
         header('Content-Type: application/json');
 
@@ -404,17 +405,25 @@ class DescargasSriController extends Controller
         $dia  = isset($_POST['dia'])  ? (int) $_POST['dia']  : null;
         $tipo = isset($_POST['tipo']) ? trim($_POST['tipo']) : null;
 
-        // Limpiar valores "todos los meses" (0) a null para usar lógica automática
         if ($mes  === 0) $mes  = null;
         if ($dia  === 0) $dia  = null;
         if ($tipo === 'todos') $tipo = null;
 
+        // Desactivar buffering para streaming en tiempo real
+        @ini_set('output_buffering', 'off');
+        @ini_set('zlib.output_compression', 'false');
+        @ini_set('implicit_flush', '1');
+        @ob_end_clean();
+        header('Cache-Control: no-cache, must-revalidate');
+        header('X-Accel-Buffering: no');
+        
+        session_write_close(); // Permitir que el usuario navegue en otras pestañas
+
         try {
             $svc = new SriDescargaAutomaticaService();
-            $res = $svc->ejecutarParaEmpresa($idEmpresa, $idUsuario, $ano, $mes, $dia, $tipo);
-            echo json_encode($res);
+            $svc->ejecutarParaEmpresaStream($idEmpresa, $idUsuario, $ano, $mes, $dia, $tipo);
         } catch (Exception $e) {
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+            echo json_encode(['type' => 'error', 'error' => $e->getMessage()]) . "\n";
         }
         exit;
     }

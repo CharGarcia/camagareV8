@@ -201,16 +201,16 @@ class SuscripcionesHandler extends BaseHandler
     {
         $diasAntes   = max(0, (int)($p['dias_antes'] ?? 5));
         $plantilla   = trim($p['plantilla_whatsapp'] ?? '');
-        $variablesTpl = trim($p['variables_whatsapp'] ?? '');
 
         if ($plantilla === '') {
             return ['registros' => 0, 'mensaje' => 'Debe seleccionar la plantilla de WhatsApp en la automatización.'];
         }
 
-        // Resolver el idioma y el texto del BODY de la plantilla
+        // Resolver idioma, texto del BODY y n.º de variables del cuerpo
         $plModel   = new \App\models\WhatsappPlantilla();
         $idioma    = 'es';
         $bodyText  = '';
+        $numVars   = 0;
         $existe    = false;
         foreach ($plModel->getPlantillasAprobadas($idEmpresa) as $pl) {
             if ((string)$pl['nombre'] === $plantilla) {
@@ -219,6 +219,9 @@ class SuscripcionesHandler extends BaseHandler
                 foreach ($comps as $c) {
                     if (strtoupper($c['type'] ?? '') === 'BODY') {
                         $bodyText = (string)($c['text'] ?? '');
+                        if (preg_match_all('/{{(\d+)}}/', $bodyText, $m)) {
+                            $numVars = max($numVars, (int)max($m[1]));
+                        }
                     }
                 }
                 $existe = true;
@@ -245,9 +248,6 @@ class SuscripcionesHandler extends BaseHandler
         $sinTel     = 0;
         $errores    = 0;
 
-        // Partes de la plantilla (las etiquetas se reemplazan por cada suscripción)
-        $partesVars = $variablesTpl === '' ? [] : array_map('trim', explode('|', $variablesTpl));
-
         foreach ($proximas as $susc) {
             $telefono = $this->normalizarTelefono((string)($susc['cliente_telefono'] ?? ''));
             if ($telefono === '') {
@@ -255,20 +255,25 @@ class SuscripcionesHandler extends BaseHandler
                 continue;
             }
 
-            $reemplazos    = $this->construirReemplazosAviso($susc, $empresaNombre, $diasAntes);
             $nombreCliente = trim((string)($susc['cliente_nombre'] ?? 'Cliente'));
 
-            // Valores finales de las variables (etiquetas ya reemplazadas)
-            $valoresFinales = [];
-            foreach ($partesVars as $parte) {
-                $valoresFinales[] = strtr($parte, $reemplazos);
-            }
+            // Variables del cuerpo: se rellenan solas con el contexto, en orden fijo:
+            // {{1}}=cliente, {{2}}=fecha_vencimiento, {{3}}=días, {{4}}=periodicidad, {{5}}=empresa
+            $ctx = [
+                $nombreCliente,
+                $this->formatearFecha((string)($susc['proximo_cobro'] ?? '')),
+                (string)$diasAntes,
+                (string)($susc['periodicidad_nombre'] ?? ''),
+                $empresaNombre,
+            ];
 
-            // Construir parámetros del body de la plantilla
-            $components = [];
-            if (!empty($valoresFinales)) {
+            $valoresFinales = [];
+            $components     = [];
+            if ($numVars > 0) {
                 $params = [];
-                foreach ($valoresFinales as $valor) {
+                for ($i = 0; $i < $numVars; $i++) {
+                    $valor = $ctx[$i] ?? '';
+                    $valoresFinales[] = $valor;
                     $params[] = ['type' => 'text', 'text' => $valor];
                 }
                 $components[] = ['type' => 'body', 'parameters' => $params];
