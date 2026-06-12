@@ -92,6 +92,19 @@ class HandlerFactory
                 ],
             ],
 
+            'descargas_sri' => [
+                'label'   => 'Descargas del SRI',
+                'icono'   => 'fa-cloud-download-alt',
+                'acciones' => [
+                    'ejecutar_descarga' => [
+                        'label'       => 'Sincronizar documentos recibidos',
+                        'descripcion' => 'Ejecuta el robot en segundo plano respetando la configuración del módulo Descargas SRI.',
+                        'handler'     => Handlers\DescargasSriHandler::class,
+                        'parametros'  => [],
+                    ],
+                ],
+            ],
+
             'cuentas_por_cobrar' => [
                 'label'   => 'Cuentas por cobrar',
                 'icono'   => 'fa-hand-holding-usd',
@@ -186,19 +199,6 @@ class HandlerFactory
                             ['key' => 'plantilla_whatsapp', 'label' => 'Plantilla de WhatsApp', 'tipo' => 'select_dinamico', 'fuente' => 'whatsapp_plantillas', 'default' => '',
                              'ayuda' => 'Plantilla aprobada por Meta. El mensaje se define en la plantilla (módulo Plantillas WhatsApp). Las variables {{1}}..{{5}} se rellenan solas en el orden: cliente, fecha de vencimiento, días, periodicidad, empresa.'],
                         ],
-                    ],
-                ],
-            ],
-
-            'descargas_sri' => [
-                'label'   => 'Descargas SRI',
-                'icono'   => 'fa-cloud-download-alt',
-                'acciones' => [
-                    'descarga_automatica' => [
-                        'label'       => 'Descarga automática',
-                        'descripcion' => 'Ejecuta la descarga automática de comprobantes electrónicos desde el SRI.',
-                        'handler'     => Handlers\BaseHandler::class,
-                        'parametros'  => [],
                     ],
                 ],
             ],

@@ -15,20 +15,14 @@ const fs = require('fs');
 const DEBUG_DIR = path.join(__dirname, '..', 'public', 'sri_debug');
 if (!fs.existsSync(DEBUG_DIR)) fs.mkdirSync(DEBUG_DIR, { recursive: true });
 
-try {
-    fs.readdirSync(DEBUG_DIR)
-      .filter(f => f.endsWith('.png') || f.endsWith('.html'))
-      .forEach(f => fs.unlinkSync(path.join(DEBUG_DIR, f)));
-} catch (_) {}
-
 let _screenshotIdx = 0;
+let _currentRuc = 'default';
 
 async function screenshot(pageOrFrame, nombre, ctxFrame = null) {
     try {
         _screenshotIdx++;
         const n    = String(_screenshotIdx).padStart(2, '0');
-        const ts   = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const base = `${n}_${nombre}_${ts}`;
+        const base = `${_currentRuc}_${n}_${nombre}`;
         const file = path.join(DEBUG_DIR, `${base}.png`);
 
         await pageOrFrame.screenshot({ path: file, fullPage: true });
@@ -63,6 +57,17 @@ let _browser = null;
 process.on('exit', () => { if (_browser) _browser.close().catch(() => {}); });
 
 async function main(config) {
+    _currentRuc = config.usuario;
+
+    // Limpiar capturas previas SOLO de esta empresa
+    try {
+        fs.readdirSync(DEBUG_DIR)
+          .filter(f => f.startsWith(_currentRuc) && (f.endsWith('.png') || f.endsWith('.html')))
+          .forEach(f => fs.unlinkSync(path.join(DEBUG_DIR, f)));
+    } catch (_) {}
+
+    debugLog(`Iniciando descarga auto/manual SRI para ${config.usuario} - Periodo: ${config.ano}-${config.mes}-${config.dia}`);
+    
     const { usuario, clave, ano, mes, dia, tipo, apiKey2captcha, clavesExcluir = [] } = config;
     const setExcluir = new Set(clavesExcluir);
     if (!apiKey2captcha) throw new Error('Falta apiKey2captcha en la configuración.');
@@ -208,7 +213,15 @@ async function recolectarTodosLosLinks(page, ctx) {
 
         const validos = filasPagina.filter(f => f.clave && f.xmlId);
 
-        todos.push(...validos);
+        const nuevas = validos.filter(v => !todos.some(t => t.clave === v.clave));
+        
+        if (nuevas.length === 0 && validos.length > 0) {
+            // Si validos tiene elementos pero no hay nuevas, significa que la tabla no avanzó.
+            // Para evitar bucles infinitos en PrimeFaces, salimos del bucle de paginación.
+            break;
+        }
+
+        todos.push(...nuevas);
 
         const hayMas = await avanzarPagina(ctx, page);
         if (!hayMas) break;
@@ -218,15 +231,29 @@ async function recolectarTodosLosLinks(page, ctx) {
 }
 
 async function avanzarPagina(ctx, page) {
-    const hayNext = await ctx.evaluate(() => {
+    const estadoAntes = await ctx.evaluate(() => {
         const btn = document.querySelector('.ui-paginator-next');
-        return btn && !btn.classList.contains('ui-state-disabled');
-    }).catch(() => false);
+        const firstRow = document.querySelector('tr[data-ri]');
+        return {
+            hayNext: btn && !btn.classList.contains('ui-state-disabled'),
+            firstRowText: firstRow ? firstRow.textContent : ''
+        };
+    }).catch(() => ({ hayNext: false, firstRowText: '' }));
 
-    if (!hayNext) return false;
+    if (!estadoAntes.hayNext) return false;
 
     await ctx.evaluate(() => document.querySelector('.ui-paginator-next').click());
-    try { await page.waitForLoadState('networkidle', { timeout: 6000 }); } catch (_) { await pausa(2000); }
+    
+    try {
+        await page.waitForFunction((textoAnterior) => {
+            const firstRow = document.querySelector('tr[data-ri]');
+            const textActual = firstRow ? firstRow.textContent : '';
+            return textActual !== textoAnterior;
+        }, estadoAntes.firstRowText, { timeout: 10000 });
+    } catch (e) {
+        await pausa(2000);
+    }
+    
     return true;
 }
 

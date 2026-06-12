@@ -1,6 +1,6 @@
 <?php
 $empresas = $empresas ?? [];
-$nombre = $nombre ?? '';
+$nombre = $_SESSION['nombre'] ?? ($nombre ?? '');
 $base = BASE_URL;
 $idEmpresaSel = (int) ($_SESSION['id_empresa'] ?? 0);
 $empresaSel = null;

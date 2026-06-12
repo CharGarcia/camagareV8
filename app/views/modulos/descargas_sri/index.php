@@ -165,9 +165,9 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                         <div class="col-lg-5">
 
                             <!-- Tarjeta configuración -->
-                            <div class="card border-0 shadow-sm rounded-3 mb-3">
-                                <div class="card-header bg-white border-bottom py-2 px-3">
-                                    <h6 class="mb-0 fw-bold text-dark small"><i class="bi bi-gear-fill text-primary me-2"></i>Configuración de Descarga</h6>
+                            <div class="card border border-primary border-opacity-25 shadow-sm rounded-3 mb-3">
+                                <div class="card-header bg-primary bg-opacity-10 border-bottom border-primary border-opacity-25 py-2 px-3">
+                                    <h6 class="mb-0 fw-bold text-primary small"><i class="bi bi-gear-fill me-2"></i>Configuración de Descarga</h6>
                                 </div>
                                 <div class="card-body px-3 py-3">
 
@@ -219,7 +219,6 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                     <div class="mb-3">
                                         <label class="form-label fw-semibold small text-muted mb-1">Documentos a descargar (por defecto)</label>
                                         <select id="auto_tipos_documento" class="form-select form-select-sm shadow-none">
-                                            <option value="todos">Todos los tipos</option>
                                             <option value="facturas">Solo Facturas</option>
                                             <option value="retenciones">Solo Retenciones</option>
                                             <option value="notas_credito">Solo Notas de Crédito</option>
@@ -240,9 +239,9 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                             </div>
 
                             <!-- Tarjeta ejecución manual con parámetros -->
-                            <div class="card border-0 shadow-sm rounded-3 mb-3">
-                                <div class="card-header bg-white border-bottom py-2 px-3">
-                                    <h6 class="mb-0 fw-bold text-dark small"><i class="bi bi-play-circle text-success me-2"></i>Ejecutar Descarga Manual</h6>
+                            <div class="card border border-success border-opacity-25 shadow-sm rounded-3 mb-3">
+                                <div class="card-header bg-success bg-opacity-10 border-bottom border-success border-opacity-25 py-2 px-3">
+                                    <h6 class="mb-0 fw-bold text-success small"><i class="bi bi-play-circle me-2"></i>Ejecutar Descarga Manual</h6>
                                 </div>
                                 <div class="card-body px-3 py-3">
 
@@ -265,10 +264,10 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                                 <?php
                                                 $meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
                                                 $mesActual = (int) date('n');
-                                                foreach ($meses as $i => $nombre) {
+                                                foreach ($meses as $i => $nombreMes) {
                                                     $num = $i + 1;
                                                     $sel = $num === $mesActual ? 'selected' : '';
-                                                    echo "<option value=\"{$num}\" {$sel}>{$nombre}</option>";
+                                                    echo "<option value=\"{$num}\" {$sel}>{$nombreMes}</option>";
                                                 }
                                                 ?>
                                             </select>
@@ -285,7 +284,6 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                     <div class="mb-3">
                                         <label class="form-label fw-semibold small text-muted mb-1">Tipo de documento</label>
                                         <select id="exec_tipo" class="form-select form-select-sm shadow-none" title="Tipo de documento a buscar">
-                                            <option value="todos">Todos los tipos</option>
                                             <option value="facturas">Facturas</option>
                                             <option value="retenciones">Retenciones</option>
                                             <option value="notas_credito">Notas de Crédito</option>
