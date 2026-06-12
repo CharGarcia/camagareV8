@@ -147,6 +147,7 @@ async function main(config) {
         const hayResultados = await esperarTablaResultados(ctx);
 
         if (!hayResultados) {
+            await screenshot(page, 'resultado_cero_documentos_encontrados');
             reportarProgreso(100, 'Búsqueda completada sin resultados.');
             emitir({ ok: true, xmls: [], total: 0, mensaje: 'Sin documentos para el período.' });
             return;
