@@ -600,19 +600,27 @@ class SriDescargaAutomaticaService
             throw new Exception('Puppeteer no retornó JSON válido. Output: ' . substr($output, 0, 400));
         }
 
-        $data = json_decode($m[0], true);
-
-        // Credenciales incorrectas → excepción con código 401 para bloquear reintento
-        if (!empty($data['credenciales_incorrectas'])) {
-            throw new Exception('Credenciales SRI incorrectas: ' . ($data['error'] ?? 'sin detalle'), 401);
+        $json = json_decode($m[0], true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new Exception('Puppeteer JSON decoding error: ' . json_last_error_msg() . ' -> ' . substr($m[0], 0, 400));
         }
 
-        if (!($data['ok'] ?? false)) {
-            throw new Exception('Puppeteer error: ' . ($data['error'] ?? 'desconocido'));
+        // Si el JSON viene envuelto en {"type":"finish", "data": {...}}
+        if (isset($json['data']) && is_array($json['data'])) {
+            $json = $json['data'];
+        }
+
+        // Credenciales incorrectas → excepción con código 401 para bloquear reintento
+        if (!empty($json['credenciales_incorrectas'])) {
+            throw new Exception('Credenciales SRI incorrectas: ' . ($json['error'] ?? 'sin detalle'), 401);
+        }
+
+        if (empty($json['ok'])) {
+            throw new Exception('Puppeteer error: ' . ($json['error'] ?? 'desconocido'));
         }
 
         // Retorna todo el array de respuesta
-        return $data;
+        return $json;
     }
 
     public function obtenerXmlsViaPuppeteerStream(
