@@ -193,15 +193,22 @@ async function recolectarTodosLosLinks(page, ctx) {
             return Array.from(tbody.querySelectorAll('tr[data-ri]')).map(row => {
                 const ri = row.getAttribute('data-ri');
                 const textContent = row.textContent || '';
-                const match = textContent.match(/\b\d{49}\b/);
+                const match = textContent.match(/\d{49}/);
                 const clave = match ? match[0] : null;
                 const linkXml = row.querySelector(`a[id*=":lnkXml"]`);
                 const xmlId   = linkXml ? linkXml.id : null;
-                return { ri, clave, xmlId };
-            }).filter(f => f.clave && f.xmlId);
+                return { ri, clave, xmlId, _textDebug: textContent.substring(0, 100) };
+            });
         }).catch(() => []);
 
-        todos.push(...filasPagina);
+        // Debug log temporal
+        if (filasPagina.length > 0) {
+            debugLog(`Fila 0 clave: ${filasPagina[0].clave}, xmlId: ${filasPagina[0].xmlId}`);
+        }
+
+        const validos = filasPagina.filter(f => f.clave && f.xmlId);
+
+        todos.push(...validos);
 
         const hayMas = await avanzarPagina(ctx, page);
         if (!hayMas) break;
