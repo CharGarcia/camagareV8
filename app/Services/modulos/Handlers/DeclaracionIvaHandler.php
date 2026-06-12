@@ -57,7 +57,9 @@ class DeclaracionIvaHandler extends BaseHandler
             '{empresa}'            => $resumen['empresa'],
             '{periodo}'           => $resumen['periodo'],
             '{iva_ventas}'        => '$' . $this->money($resumen['iva_ventas']),
+            '{notas_credito}'     => '$' . $this->money($resumen['notas_credito']),
             '{credito_tributario}'=> '$' . $this->money($resumen['credito_tributario']),
+            '{notas_credito_compra}'=> '$' . $this->money($resumen['notas_credito_compra']),
             '{retenciones}'       => '$' . $this->money($resumen['retenciones']),
             '{iva_a_pagar}'       => '$' . $this->money($resumen['a_pagar']),
             '{saldo_favor}'       => '$' . $this->money($resumen['saldo_favor']),
@@ -108,7 +110,9 @@ class DeclaracionIvaHandler extends BaseHandler
         $resaltado = " style='background:#f1f3f5;font-weight:bold;'";
 
         $rows  = $fila('IVA en ventas (cobrado)', $r['iva_ventas']);
+        $rows .= $fila('(−) Notas de crédito de venta (IVA)', $r['notas_credito']);
         $rows .= $fila('(−) Crédito tributario (IVA en compras)', $r['credito_tributario']);
+        $rows .= $fila('(+) Notas de crédito de compra (IVA)', $r['notas_credito_compra']);
         $rows .= $fila('(−) Retenciones de IVA que le hicieron', $r['retenciones']);
         $rows .= $fila('IVA a pagar', $r['a_pagar'], $resaltado);
         if ($r['saldo_favor'] > 0) {

@@ -302,19 +302,82 @@ class DeclaracionIvaRepository extends BaseRepository
     }
 
     /**
-     * Suma el IVA que le retuvieron a la empresa en sus ventas (retenciones de IVA
-     * que los agentes de retención le efectuaron). Reduce el valor a pagar del período.
+     * Calcula los componentes del IVA a pagar leyendo directamente de cada módulo
+     * (no depende de la sincronización de casilleros). Filtra por el ambiente de la empresa.
+     *
+     *  - iva_ventas:                IVA de facturas de venta AUTORIZADAS (codigo_impuesto = 2)
+     *  - iva_notas_credito:         IVA de notas de crédito de venta AUTORIZADAS (resta del IVA en ventas)
+     *  - iva_compras:               IVA de compras deducible='declaracion_iva', excluyendo notas de crédito ('04')
+     *  - iva_notas_credito_compra:  IVA de notas de crédito de compra ('04') (resta del crédito tributario)
+     *  - retenciones:               IVA que le retuvieron en ventas (retencion_venta_cabecera.total_iva)
+     *  - num_ventas:                cantidad de facturas de venta autorizadas en el período
+     *
+     * @return array{iva_ventas:float,iva_notas_credito:float,iva_compras:float,
+     *               iva_notas_credito_compra:float,retenciones:float,num_ventas:int}
      */
-    public function getRetencionesIvaPeriodo(int $idEmpresa, string $fechaDesde, string $fechaHasta): float
+    public function getResumenPagoDirecto(int $idEmpresa, string $fechaDesde, string $fechaHasta, string $ambiente): array
     {
-        $sql = "SELECT COALESCE(SUM(valor), 0) AS total
-                FROM casilleros_declaracion_sri
-                WHERE id_empresa = ? AND origen = 'retenciones_ventas'
-                  AND fecha BETWEEN ? AND ?
-                  AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)";
-        $st = $this->db->prepare($sql);
-        $st->execute([$idEmpresa, $fechaDesde, $fechaHasta, $idEmpresa]);
-        return (float) $st->fetchColumn();
+        $p = [':emp' => $idEmpresa, ':d' => $fechaDesde, ':h' => $fechaHasta, ':amb' => $ambiente];
+
+        $ivaVentas = (float) $this->query(
+            "SELECT COALESCE(SUM(i.valor), 0)
+             FROM ventas_cabecera v
+             JOIN ventas_detalle d ON d.id_venta = v.id
+             JOIN ventas_detalle_impuestos i ON i.id_venta_detalle = d.id
+             WHERE v.id_empresa = :emp AND v.estado = 'autorizado' AND v.eliminado = false
+               AND v.fecha_emision BETWEEN :d AND :h
+               AND i.codigo_impuesto = '2' AND v.tipo_ambiente = :amb", $p)->fetchColumn();
+
+        $ivaNotasCredito = (float) $this->query(
+            "SELECT COALESCE(SUM(i.valor), 0)
+             FROM notas_credito_cabecera nc
+             JOIN notas_credito_detalle d ON d.id_nota_credito = nc.id
+             JOIN notas_credito_detalle_impuestos i ON i.id_nota_credito_detalle = d.id
+             WHERE nc.id_empresa = :emp AND nc.estado = 'autorizado' AND nc.eliminado = false
+               AND nc.fecha_emision BETWEEN :d AND :h
+               AND i.codigo_impuesto = '2' AND nc.tipo_ambiente = :amb", $p)->fetchColumn();
+
+        $ivaCompras = (float) $this->query(
+            "SELECT COALESCE(SUM(i.valor), 0)
+             FROM compras_cabecera c
+             JOIN compras_detalle d ON d.id_compra = c.id
+             JOIN compras_detalle_impuestos i ON i.id_compra_detalle = d.id
+             WHERE c.id_empresa = :emp AND c.deducible = 'declaracion_iva' AND c.eliminado = false
+               AND c.fecha_emision BETWEEN :d AND :h
+               AND i.codigo_impuesto = '2' AND c.tipo_ambiente = :amb
+               AND COALESCE(c.tipo_comprobante, '01') <> '04'", $p)->fetchColumn();
+
+        // Notas de crédito de compra (tipo_comprobante = '04'): reducen el crédito tributario.
+        $ivaNotasCreditoCompra = (float) $this->query(
+            "SELECT COALESCE(SUM(i.valor), 0)
+             FROM compras_cabecera c
+             JOIN compras_detalle d ON d.id_compra = c.id
+             JOIN compras_detalle_impuestos i ON i.id_compra_detalle = d.id
+             WHERE c.id_empresa = :emp AND c.deducible = 'declaracion_iva' AND c.eliminado = false
+               AND c.fecha_emision BETWEEN :d AND :h
+               AND i.codigo_impuesto = '2' AND c.tipo_ambiente = :amb
+               AND c.tipo_comprobante = '04'", $p)->fetchColumn();
+
+        $retenciones = (float) $this->query(
+            "SELECT COALESCE(SUM(total_iva), 0)
+             FROM retencion_venta_cabecera
+             WHERE id_empresa = :emp AND eliminado = false
+               AND fecha_emision BETWEEN :d AND :h AND tipo_ambiente = :amb", $p)->fetchColumn();
+
+        $numVentas = (int) $this->query(
+            "SELECT COUNT(*)
+             FROM ventas_cabecera v
+             WHERE v.id_empresa = :emp AND v.estado = 'autorizado' AND v.eliminado = false
+               AND v.fecha_emision BETWEEN :d AND :h AND v.tipo_ambiente = :amb", $p)->fetchColumn();
+
+        return [
+            'iva_ventas'               => $ivaVentas,
+            'iva_notas_credito'        => $ivaNotasCredito,
+            'iva_compras'              => $ivaCompras,
+            'iva_notas_credito_compra' => $ivaNotasCreditoCompra,
+            'retenciones'              => $retenciones,
+            'num_ventas'               => $numVentas,
+        ];
     }
 
     public function getMapaTarifasIva(): array

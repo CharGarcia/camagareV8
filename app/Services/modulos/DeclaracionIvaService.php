@@ -172,17 +172,20 @@ class DeclaracionIvaService
     /**
      * Calcula el resumen del IVA a pagar de un período (pensado para avisos/automatizaciones).
      *
-     * El sistema no consolida un casillero único de "valor a pagar", así que el neto se
-     * calcula aquí a partir de los componentes:
-     *   IVA a pagar = max(0, IVA ventas − crédito tributario − retenciones de IVA que le hicieron)
+     * Los valores se obtienen DIRECTAMENTE de cada módulo (no de los casilleros
+     * sincronizados), filtrando por el ambiente de la empresa:
+     *   - IVA en ventas: facturas de venta autorizadas, menos notas de crédito autorizadas.
+     *   - Crédito tributario: IVA de compras con deducible = 'declaracion_iva'.
+     *   - Retenciones: IVA que le retuvieron en ventas.
+     *   IVA a pagar = max(0, IVA ventas − crédito tributario − retenciones)
      *
-     * Los casilleros de IVA se derivan de la estructura (sección 400 = ventas, 500 = compras),
-     * por lo que sigue funcionando si se agregan nuevas tarifas.
+     * El parámetro $sincronizar se mantiene por compatibilidad pero ya no es necesario,
+     * porque el cálculo lee las tablas de origen en tiempo real.
      *
      * @return array{empresa:string,periodo:string,anio:int,mes:int,fecha_desde:string,
-     *               fecha_hasta:string,iva_ventas:float,credito_tributario:float,
-     *               retenciones:float,a_pagar:float,saldo_favor:float,num_facturas_venta:int,
-     *               fecha_limite:string}
+     *               fecha_hasta:string,iva_ventas:float,notas_credito:float,credito_tributario:float,
+     *               notas_credito_compra:float,retenciones:float,a_pagar:float,saldo_favor:float,
+     *               num_facturas_venta:int,fecha_limite:string}
      */
     public function getResumenPago(int $idEmpresa, string $anio, string $mes, bool $sincronizar = true, int $idUsuario = 0): array
     {
@@ -193,41 +196,24 @@ class DeclaracionIvaService
         // Para el mes en curso se corta hasta hoy ("acumulado hasta la fecha").
         $fechaHasta = ($finMes > $hoy && $fechaDesde <= $hoy) ? $hoy : $finMes;
 
-        if ($sincronizar) {
-            $this->sincronizarPeriodo($idEmpresa, (string)$anio, $mes, $idUsuario);
-        }
-
-        $resumen = $this->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta);
-        $valores = $resumen['valores'] ?? [];
-        $layout  = $resumen['layout'] ?? [];
-
-        $ivaVentas = 0.0;
-        $credito   = 0.0;
-        foreach ($layout as $row) {
-            $casImp = $row['casillero_impuesto'] ?? '';
-            if ($casImp === '' || !isset($valores[$casImp])) {
-                continue;
-            }
-            $seccion = (string)($row['seccion'] ?? '');
-            if (str_starts_with($seccion, '400')) {
-                $ivaVentas += (float) $valores[$casImp];
-            } elseif (str_starts_with($seccion, '500')) {
-                $credito += (float) $valores[$casImp];
-            }
-        }
-
-        $retenciones = $this->repository->getRetencionesIvaPeriodo($idEmpresa, $fechaDesde, $fechaHasta);
-
-        // Conteo de facturas de venta emitidas (autorizadas) en el período.
-        $numVentas = $this->repository->getConteoDocumentos($idEmpresa, 'conteo_ventas_emitidas', $fechaDesde, $fechaHasta);
-
-        $neto       = $ivaVentas - $credito - $retenciones;
-        $aPagar     = max(0.0, $neto);
-        $saldoFavor = max(0.0, -$neto);
-
         $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
         $ruc           = (string) ($empresa['ruc'] ?? '');
         $nombreEmpresa = trim((string) ($empresa['nombre_comercial'] ?? $empresa['nombre'] ?? ''));
+        $ambiente      = (string) ($empresa['tipo_ambiente'] ?? '1');
+
+        $comp = $this->repository->getResumenPagoDirecto($idEmpresa, $fechaDesde, $fechaHasta, $ambiente);
+
+        $ivaVentas          = $comp['iva_ventas'];               // IVA facturas de venta autorizadas (bruto)
+        $notasCredito       = $comp['iva_notas_credito'];        // NC de venta (resta del IVA en ventas)
+        $credito            = $comp['iva_compras'];              // crédito tributario (bruto)
+        $notasCreditoCompra = $comp['iva_notas_credito_compra']; // NC de compra (resta del crédito)
+        $retenciones        = $comp['retenciones'];
+        $numVentas          = $comp['num_ventas'];
+
+        // La NC de compra reduce el crédito tributario → aumenta el valor a pagar (entra sumando).
+        $neto       = $ivaVentas - $notasCredito - $credito + $notasCreditoCompra - $retenciones;
+        $aPagar     = max(0.0, $neto);
+        $saldoFavor = max(0.0, -$neto);
 
         $nombresMes = [1 => 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
                        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -241,9 +227,11 @@ class DeclaracionIvaService
             'mes'                => (int) $mes,
             'fecha_desde'        => $fechaDesde,
             'fecha_hasta'        => $fechaHasta,
-            'iva_ventas'         => round($ivaVentas, 2),
-            'credito_tributario' => round($credito, 2),
-            'retenciones'        => round($retenciones, 2),
+            'iva_ventas'           => round($ivaVentas, 2),
+            'notas_credito'        => round($notasCredito, 2),
+            'credito_tributario'   => round($credito, 2),
+            'notas_credito_compra' => round($notasCreditoCompra, 2),
+            'retenciones'          => round($retenciones, 2),
             'a_pagar'            => round($aPagar, 2),
             'saldo_favor'        => round($saldoFavor, 2),
             'num_facturas_venta' => $numVentas,
