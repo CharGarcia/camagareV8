@@ -288,7 +288,7 @@ async function resolverRecaptcha2captcha(apiKey) {
 
     await pausa(8000);
 
-    const fin = Date.now() + 60_000;
+    const fin = Date.now() + 120_000;
     while (Date.now() < fin) {
         const token = await new Promise((resolve, reject) => {
             https.get('https://2captcha.com/res.php?key=' + apiKey + '&action=get&id=' + taskId + '&json=1', res => {
@@ -306,7 +306,7 @@ async function resolverRecaptcha2captcha(apiKey) {
         });
 
         if (token) return token;
-        await pausa(2000);
+        await pausa(5000);
     }
     throw new Error('2captcha: timeout esperando token.');
 }
