@@ -160,6 +160,7 @@ async function main(config) {
         const yaExistentes   = todosLosLinks.length - linksFiltrados.length;
         
         if (linksFiltrados.length === 0) {
+            await screenshot(page, 'cero_links_recolectados');
             reportarProgreso(100, 'Todos los comprobantes ya existen en el sistema.');
             emitir({ ok: true, xmls: [], total: 0, ya_existentes: yaExistentes, mensaje: 'Todos los comprobantes del período ya están registrados.' });
             return;
@@ -191,8 +192,9 @@ async function recolectarTodosLosLinks(page, ctx) {
 
             return Array.from(tbody.querySelectorAll('tr[data-ri]')).map(row => {
                 const ri = row.getAttribute('data-ri');
-                const linkClave = row.querySelector(`a[id*=":j_idt58"]`);
-                const clave = linkClave ? linkClave.textContent.trim() : null;
+                const textContent = row.textContent || '';
+                const match = textContent.match(/\b\d{49}\b/);
+                const clave = match ? match[0] : null;
                 const linkXml = row.querySelector(`a[id*=":lnkXml"]`);
                 const xmlId   = linkXml ? linkXml.id : null;
                 return { ri, clave, xmlId };
