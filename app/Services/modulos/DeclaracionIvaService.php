@@ -170,6 +170,103 @@ class DeclaracionIvaService
     }
 
     /**
+     * Calcula el resumen del IVA a pagar de un período (pensado para avisos/automatizaciones).
+     *
+     * El sistema no consolida un casillero único de "valor a pagar", así que el neto se
+     * calcula aquí a partir de los componentes:
+     *   IVA a pagar = max(0, IVA ventas − crédito tributario − retenciones de IVA que le hicieron)
+     *
+     * Los casilleros de IVA se derivan de la estructura (sección 400 = ventas, 500 = compras),
+     * por lo que sigue funcionando si se agregan nuevas tarifas.
+     *
+     * @return array{empresa:string,periodo:string,anio:int,mes:int,fecha_desde:string,
+     *               fecha_hasta:string,iva_ventas:float,credito_tributario:float,
+     *               retenciones:float,a_pagar:float,saldo_favor:float,fecha_limite:string}
+     */
+    public function getResumenPago(int $idEmpresa, string $anio, string $mes, bool $sincronizar = true, int $idUsuario = 0): array
+    {
+        $mes        = str_pad((string)$mes, 2, '0', STR_PAD_LEFT);
+        $fechaDesde = "{$anio}-{$mes}-01";
+        $finMes     = date('Y-m-t', strtotime($fechaDesde));
+        $hoy        = date('Y-m-d');
+        // Para el mes en curso se corta hasta hoy ("acumulado hasta la fecha").
+        $fechaHasta = ($finMes > $hoy && $fechaDesde <= $hoy) ? $hoy : $finMes;
+
+        if ($sincronizar) {
+            $this->sincronizarPeriodo($idEmpresa, (string)$anio, $mes, $idUsuario);
+        }
+
+        $resumen = $this->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta);
+        $valores = $resumen['valores'] ?? [];
+        $layout  = $resumen['layout'] ?? [];
+
+        $ivaVentas = 0.0;
+        $credito   = 0.0;
+        foreach ($layout as $row) {
+            $casImp = $row['casillero_impuesto'] ?? '';
+            if ($casImp === '' || !isset($valores[$casImp])) {
+                continue;
+            }
+            $seccion = (string)($row['seccion'] ?? '');
+            if (str_starts_with($seccion, '400')) {
+                $ivaVentas += (float) $valores[$casImp];
+            } elseif (str_starts_with($seccion, '500')) {
+                $credito += (float) $valores[$casImp];
+            }
+        }
+
+        $retenciones = $this->repository->getRetencionesIvaPeriodo($idEmpresa, $fechaDesde, $fechaHasta);
+
+        $neto       = $ivaVentas - $credito - $retenciones;
+        $aPagar     = max(0.0, $neto);
+        $saldoFavor = max(0.0, -$neto);
+
+        $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+        $ruc           = (string) ($empresa['ruc'] ?? '');
+        $nombreEmpresa = trim((string) ($empresa['nombre_comercial'] ?? $empresa['nombre'] ?? ''));
+
+        $nombresMes = [1 => 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        $periodoLabel = ($nombresMes[(int)$mes] ?? $mes) . ' ' . $anio;
+
+        return [
+            'id_empresa'         => $idEmpresa,
+            'empresa'            => $nombreEmpresa,
+            'periodo'            => $periodoLabel,
+            'anio'               => (int) $anio,
+            'mes'                => (int) $mes,
+            'fecha_desde'        => $fechaDesde,
+            'fecha_hasta'        => $fechaHasta,
+            'iva_ventas'         => round($ivaVentas, 2),
+            'credito_tributario' => round($credito, 2),
+            'retenciones'        => round($retenciones, 2),
+            'a_pagar'            => round($aPagar, 2),
+            'saldo_favor'        => round($saldoFavor, 2),
+            'fecha_limite'       => $this->calcularFechaLimitePago($ruc, (int)$anio, (int)$mes),
+        ];
+    }
+
+    /**
+     * Calcula la fecha máxima de pago según el noveno dígito del RUC (calendario SRI
+     * para declaraciones mensuales). La fecha cae en el mes siguiente al período.
+     */
+    public function calcularFechaLimitePago(string $ruc, int $anioPeriodo, int $mesPeriodo): string
+    {
+        $diaPorDigito = ['1' => 10, '2' => 12, '3' => 14, '4' => 16, '5' => 18,
+                         '6' => 20, '7' => 22, '8' => 24, '9' => 26, '0' => 28];
+
+        $soloDigitos = preg_replace('/\D/', '', $ruc);
+        $noveno      = (strlen($soloDigitos) >= 9) ? $soloDigitos[8] : '0';
+        $dia         = $diaPorDigito[$noveno] ?? 28;
+
+        $fecha = (new \DateTime(sprintf('%04d-%02d-01', $anioPeriodo, $mesPeriodo)))
+            ->modify('first day of next month');
+        $fecha->setDate((int)$fecha->format('Y'), (int)$fecha->format('n'), $dia);
+
+        return $fecha->format('d-m-Y');
+    }
+
+    /**
      * Evaluador simple y seguro de expresiones matemáticas (+, -, *, /, paréntesis)
      */
     private function evaluarMatematica(string $expr): float

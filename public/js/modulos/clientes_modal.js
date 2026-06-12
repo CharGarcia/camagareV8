@@ -6,7 +6,7 @@
 (function (window, document) {
     'use strict';
 
-    const urlBaseClientes = (window.BASE_URL || '') + '/modulos/clientes';
+    const urlBaseClientes = (typeof BASE_URL !== 'undefined' ? BASE_URL : (typeof B_URL !== 'undefined' ? B_URL : '')) + '/modulos/clientes';
     let modalClienteInst = null;
     let datosCatalogos = null;
     let catalogosCargados = false;

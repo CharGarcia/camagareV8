@@ -301,6 +301,22 @@ class DeclaracionIvaRepository extends BaseRepository
         }
     }
 
+    /**
+     * Suma el IVA que le retuvieron a la empresa en sus ventas (retenciones de IVA
+     * que los agentes de retención le efectuaron). Reduce el valor a pagar del período.
+     */
+    public function getRetencionesIvaPeriodo(int $idEmpresa, string $fechaDesde, string $fechaHasta): float
+    {
+        $sql = "SELECT COALESCE(SUM(valor), 0) AS total
+                FROM casilleros_declaracion_sri
+                WHERE id_empresa = ? AND origen = 'retenciones_ventas'
+                  AND fecha BETWEEN ? AND ?
+                  AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)";
+        $st = $this->db->prepare($sql);
+        $st->execute([$idEmpresa, $fechaDesde, $fechaHasta, $idEmpresa]);
+        return (float) $st->fetchColumn();
+    }
+
     public function getMapaTarifasIva(): array
     {
         $stmt = $this->db->query("SELECT id, codigo FROM tarifa_iva");

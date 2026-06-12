@@ -43,7 +43,7 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
             <form id="formProducto" novalidate onsubmit="return false;">
                 <div class="modal-header bg-light border-bottom-0 py-3">
                     <h5 class="modal-title fw-bold">
-                        <i class="bi bi-box me-2 text-primary"></i> <span id="tituloModal">Nuevo Producto</span>
+                        <i class="bi bi-box me-2 text-primary"></i> <span id="tituloModalProducto">Nuevo Producto</span>
                     </h5>
                     <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
@@ -469,7 +469,7 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                 <div class="modal-footer justify-content-between bg-light border-top p-2">
                     <div>
                         <?php if ($permProd['eliminar']): ?>
-                            <button type="button" id="btnEliminar" class="btn btn-outline-danger btn-sm px-3 d-none" onclick="eliminarProducto()">
+                            <button type="button" id="btnEliminarProducto" class="btn btn-outline-danger btn-sm px-3 d-none" onclick="eliminarProducto()">
                                 <i class="bi bi-trash3 me-1"></i> Eliminar
                             </button>
                         <?php endif; ?>
@@ -478,8 +478,8 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
                             <i class="fa-solid fa-xmark me-1"></i>Cerrar
                         </button>
-                        <button type="button" class="btn btn-primary px-4 btn-sm" id="btnGuardar" onclick="guardarProducto()">
-                            <i class="bi bi-check2-circle me-1"></i> Guardar
+                        <button type="button" class="btn btn-primary px-4 btn-sm" id="btnGuardarProducto" onclick="guardarProducto()">
+                            <i class="bi bi-check-lg"></i> Guardar
                         </button>
                     </div>
                 </div>

@@ -6,7 +6,7 @@
 (function (window, document) {
     'use strict';
 
-    const urlBaseProd = BASE_URL + '/modulos/productos';
+    const urlBaseProd = (typeof BASE_URL !== 'undefined' ? BASE_URL : (typeof B_URL !== 'undefined' ? B_URL : '')) + '/modulos/productos';
     let modalInst = null;
     let catalogosCargados = false;
     let datosCatalogos = null;
@@ -416,16 +416,27 @@
 
     window.abrirModalProductoCrear = async function() {
         if (!catalogosCargados) await cargarCatalogos();
-        const btn = document.getElementById('btnGuardar');
+        const btn = document.getElementById('btnGuardarProducto');
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar'; }
         limpiarAlertas();
         const f = document.getElementById('formProducto');
         if (f) f.reset();
-        document.getElementById('prod_id').value = '';
-        document.getElementById('tituloModal').textContent = 'Nuevo Producto';
-        document.getElementById('btnEliminar').classList.add('d-none');
-        document.getElementById('comp_search').value = '';
-        document.getElementById('comp_id').value = '';
+        
+        const prodId = document.getElementById('prod_id');
+        if (prodId) prodId.value = '';
+        
+        const titulo = document.getElementById('tituloModalProducto');
+        if (titulo) titulo.textContent = 'Nuevo Producto';
+        
+        const btnEliminar = document.getElementById('btnEliminarProducto');
+        if (btnEliminar) btnEliminar.classList.add('d-none');
+        
+        const cSearch = document.getElementById('comp_search');
+        if (cSearch) cSearch.value = '';
+        
+        const cId = document.getElementById('comp_id');
+        if (cId) cId.value = '';
+        
         preciosObj = []; componentesObj = []; variantesObj = [];
         renderListas();
         window.removerImagen();
@@ -447,7 +458,7 @@
 
     window.abrirModalProductoEditar = async function(rowOrData) {
         if (!catalogosCargados) await cargarCatalogos();
-        const btn = document.getElementById('btnGuardar');
+        const btn = document.getElementById('btnGuardarProducto');
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar'; }
         limpiarAlertas();
         const data = (rowOrData instanceof HTMLElement) ? JSON.parse(rowOrData.dataset.row) : rowOrData;
@@ -487,13 +498,22 @@
         document.getElementById('prod_valor_ice').value = parseFloat(data.valor_ice || 0).toFixed(4);
 
         window.toggleInventariableTabs();
-        window.toggleBienesFields();
+        if (typeof window.toggleBienesFields === 'function') window.toggleBienesFields();
         window.calcularPreciosTotales();
         activarTabGeneral();
-        window.removerImagen();
+        if (typeof window.removerImagen === 'function') window.removerImagen();
 
-        document.getElementById('tituloModal').textContent = 'Editar Producto';
-        document.getElementById('btnEliminar').classList.remove('d-none');
+        const titulo = document.getElementById('tituloModalProducto');
+        if (titulo) titulo.textContent = 'Editar Producto';
+        
+        const btnEliminar = document.getElementById('btnEliminarProducto');
+        if (btnEliminar) btnEliminar.classList.remove('d-none');
+        
+        const cSearch = document.getElementById('comp_search');
+        if (cSearch) cSearch.value = '';
+        
+        const cId = document.getElementById('comp_id');
+        if (cId) cId.value = '';
 
         fetchDetalleExtra(data.id);
         getModal()?.show();
@@ -588,7 +608,7 @@
         if (prodImg) prodImg.value = path;
         const preview = document.getElementById('imagePreview');
         if (preview) {
-            const fullUrl = BASE_URL + '/' + path;
+            const fullUrl = (typeof BASE_URL !== 'undefined' ? BASE_URL : (typeof B_URL !== 'undefined' ? B_URL : '')) + '/' + path;
             preview.innerHTML = `<img src="${fullUrl}" class="img-fluid" style="max-height: 100%; object-fit: contain;">`;
         }
         document.getElementById('btnRemoveImage')?.classList.remove('d-none');
@@ -606,7 +626,7 @@
 
     window.guardarProducto = async function() {
         const f   = document.getElementById('formProducto');
-        const btn = document.getElementById('btnGuardar');
+        const btn = document.getElementById('btnGuardarProducto');
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
         try {
             const fd = new FormData(f);

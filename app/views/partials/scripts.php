@@ -1,4 +1,3 @@
-<script>const BASE_URL = '<?= rtrim(BASE_URL ?? '', '/') ?>';</script>
 <script>
 /* ---------------------------------------------------------------
  * Control de sesión activa: polling cada 30 s.

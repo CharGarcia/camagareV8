@@ -105,6 +105,33 @@ class HandlerFactory
                 ],
             ],
 
+            'declaracion_iva' => [
+                'label'   => 'Declaración de IVA',
+                'icono'   => 'fa-file-invoice-dollar',
+                'acciones' => [
+                    'avisar_iva_a_pagar' => [
+                        'label'       => 'Avisar IVA a pagar (Correo)',
+                        'descripcion' => 'Calcula el IVA a pagar del período (por defecto el mes en curso, acumulado hasta la fecha) y envía un correo con el desglose: IVA en ventas, crédito tributario, retenciones y total a pagar. Útil para decidir a tiempo si conviene registrar más compras (crédito) antes del cierre del mes.',
+                        'handler'     => Handlers\DeclaracionIvaHandler::class,
+                        'parametros'  => [
+                            ['key' => 'periodo', 'label' => 'Período a calcular', 'tipo' => 'select', 'default' => 'mes_en_curso',
+                             'opciones' => [
+                                 'mes_en_curso' => 'Mes en curso (aún abierto, hasta hoy)',
+                                 'mes_anterior' => 'Mes anterior (ya cerrado, a declarar)',
+                             ],
+                             'ayuda' => 'Mes en curso: permite actuar antes del cierre para bajar el valor a pagar. Mes anterior: recordatorio del IVA ya causado que toca declarar.'],
+                            ['key' => 'destinatarios', 'label' => 'Correos de destino (opcional)', 'tipo' => 'text', 'default' => '',
+                             'ayuda' => 'Uno o varios correos separados por coma. Si se deja vacío, se usa el correo registrado en la empresa.'],
+                            ['key' => 'asunto', 'label' => 'Asunto del correo', 'tipo' => 'text', 'default' => 'IVA a pagar {periodo}: {iva_a_pagar}',
+                             'ayuda' => 'Etiquetas: {empresa} {periodo} {iva_ventas} {credito_tributario} {retenciones} {iva_a_pagar} {saldo_favor} {fecha_limite}.'],
+                            ['key' => 'cuerpo', 'label' => 'Mensaje (antes del desglose)', 'tipo' => 'textarea',
+                             'default' => "Estimado/a:\n\nHasta hoy, el IVA a pagar de {periodo} es {iva_a_pagar}, con fecha límite {fecha_limite}.\nSi aún está dentro del mes, puede registrar más compras con crédito tributario para reducir este valor.\n\n{empresa}",
+                             'ayuda' => 'Texto antes de la tabla de desglose. Mismas etiquetas: {empresa} {periodo} {iva_ventas} {credito_tributario} {retenciones} {iva_a_pagar} {saldo_favor} {fecha_limite}. El desglose se agrega automáticamente debajo.'],
+                        ],
+                    ],
+                ],
+            ],
+
             'cuentas_por_cobrar' => [
                 'label'   => 'Cuentas por cobrar',
                 'icono'   => 'fa-hand-holding-usd',
