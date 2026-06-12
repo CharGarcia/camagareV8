@@ -67,7 +67,7 @@ public/vendor/
 public/uploads/
 public/storage/
 storage/
-scripts/
+scripts/node_modules/
 descargasri_python/
 
 # Documentos de prueba en raíz
