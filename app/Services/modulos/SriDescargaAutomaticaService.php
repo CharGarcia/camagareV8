@@ -666,7 +666,7 @@ class SriDescargaAutomaticaService
         $errorMsg = null;
 
         $finEspera = microtime(true) + ($timeoutMs / 1000) + 15;
-
+        $stdoutBuffer = '';
         while (true) {
             $read = [$pipes[1], $pipes[2]];
             $write = null;
@@ -689,22 +689,27 @@ class SriDescargaAutomaticaService
             } elseif ($numChangedStreams > 0) {
                 foreach ($read as $stream) {
                     if ($stream === $pipes[1]) {
-                        while (($line = fgets($pipes[1])) !== false) {
-                            $line = trim($line);
-                            if (empty($line)) continue;
+                        $chunk = fread($pipes[1], 8192);
+                        if ($chunk !== false && $chunk !== '') {
+                            $stdoutBuffer .= $chunk;
+                            while (($pos = strpos($stdoutBuffer, "\n")) !== false) {
+                                $line = substr($stdoutBuffer, 0, $pos);
+                                $stdoutBuffer = substr($stdoutBuffer, $pos + 1);
+                                $line = trim($line);
+                                if (empty($line)) continue;
 
-                            $json = json_decode($line, true);
-                            if (!$json) {
-                                $this->debugLog[] = "STDOUT no JSON: " . $line;
-                                continue;
-                            }
+                                $json = json_decode($line, true);
+                                if (!$json) {
+                                    $this->debugLog[] = "STDOUT no JSON: " . $line;
+                                    continue;
+                                }
 
-                            if (isset($json['type']) && $json['type'] === 'progress') {
-                                // Enviar al cliente
-                                echo $line . "\n";
-                                ob_flush(); flush();
-                            } elseif (isset($json['type']) && $json['type'] === 'finish') {
-                                $finalData = $json['data'] ?? [];
+                                if (isset($json['type']) && $json['type'] === 'progress') {
+                                    echo $line . "\n";
+                                    ob_flush(); flush();
+                                } elseif (isset($json['type']) && $json['type'] === 'finish') {
+                                    $finalData = $json['data'] ?? [];
+                                }
                             }
                         }
                     } elseif ($stream === $pipes[2]) {
@@ -725,7 +730,17 @@ class SriDescargaAutomaticaService
         }
 
         // Leer restos finales
-        while (($line = fgets($pipes[1])) !== false) {
+        $chunk = '';
+        while (!feof($pipes[1])) {
+            $c = fread($pipes[1], 8192);
+            if ($c !== false) {
+                $chunk .= $c;
+            }
+        }
+        $stdoutBuffer .= $chunk;
+        
+        $lines = explode("\n", $stdoutBuffer);
+        foreach ($lines as $line) {
             $line = trim($line);
             if (empty($line)) continue;
             $json = json_decode($line, true);
@@ -733,11 +748,14 @@ class SriDescargaAutomaticaService
                 $finalData = $json['data'] ?? [];
             }
         }
-        while (($line = fgets($pipes[2])) !== false) {
-            $line = trim($line);
-            if (!empty($line)) $this->debugLog[] = "Puppeteer log: " . $line;
-        }
 
+        while (!feof($pipes[2])) {
+            $lineErr = fgets($pipes[2]);
+            if ($lineErr !== false) {
+                $lineErr = trim($lineErr);
+                if (!empty($lineErr)) $this->debugLog[] = "Puppeteer log: " . $lineErr;
+            }
+        }
         fclose($pipes[1]);
         fclose($pipes[2]);
         proc_close($proc);
