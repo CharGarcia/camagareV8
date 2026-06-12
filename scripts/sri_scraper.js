@@ -344,7 +344,7 @@ async function esperarTablaResultados(ctx) {
             const tabla = document.querySelector('[id="frmPrincipal:tablaCompRecibidos_data"]') ||
                           document.querySelector('[id*="tablaCompRecibidos"] tbody');
             if (!tabla) return 0;
-            return tabla.querySelectorAll('tr[data-ri], tr.ui-widget-content').length;
+            return tabla.querySelectorAll('tr[data-ri]:not(.ui-datatable-empty-message), tr.ui-widget-content:not(.ui-datatable-empty-message)').length;
         }).catch(() => 0);
 
         if (filas > 0) return true;

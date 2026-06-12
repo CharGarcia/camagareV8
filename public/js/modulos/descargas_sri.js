@@ -834,6 +834,26 @@ function verDetalleLog(idLog) {
                    </div>`
                 : '';
 
+            let fotoHtml = '';
+            const screenshotLog = debug.find(l => l.includes('📸 Screenshot:'));
+            if (screenshotLog) {
+                const filename = screenshotLog.split('📸 Screenshot:')[1].trim();
+                // Determinar el path publico asumiendo estructura estandar
+                const fotoUrl = window.location.href.includes('/public/') 
+                    ? `${BASE_URL}/sri_debug/${filename}` 
+                    : `${window.location.origin}/sri_debug/${filename}`; // o depender de BASE_URL
+
+                fotoHtml = `
+                    <div class="mt-3 border-top pt-3">
+                        <div class="small fw-bold text-primary mb-2"><i class="bi bi-camera text-primary me-1"></i>Evidencia fotográfica del portal SRI</div>
+                        <a href="${BASE_URL}/sri_debug/${filename}" target="_blank" class="d-block border rounded p-1 bg-light text-center" style="text-decoration:none;">
+                            <img src="${BASE_URL}/sri_debug/${filename}" class="img-fluid rounded" style="max-height: 350px; object-fit: contain;" alt="Evidencia">
+                            <div class="small text-primary mt-1"><i class="bi bi-zoom-in me-1"></i>Clic para ampliar foto original</div>
+                        </a>
+                    </div>
+                `;
+            }
+
             const errorHtml = detalle.error
                 ? `<div class="alert alert-danger py-2 small mt-2"><i class="bi bi-exclamation-triangle me-1"></i>${escHtml(detalle.error)}</div>`
                 : '';
@@ -881,6 +901,7 @@ function verDetalleLog(idLog) {
                                 <tbody>${filasClaves}</tbody>
                             </table>
                         </div>
+                        ${fotoHtml}
                         ${debugHtml}
                     </div>`,
                 confirmButtonText: 'Cerrar',
