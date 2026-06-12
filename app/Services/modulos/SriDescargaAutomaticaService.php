@@ -743,7 +743,8 @@ class SriDescargaAutomaticaService
         proc_close($proc);
 
         if (!$finalData) {
-            throw new Exception('El script Puppeteer no retornó un resultado final. Revise los logs.');
+            $logsStr = implode(' | ', array_slice($this->debugLog, -5));
+            throw new Exception('El script de descarga falló o se cerró inesperadamente. Logs: ' . $logsStr);
         }
 
         if (!empty($finalData['credenciales_incorrectas'])) {
