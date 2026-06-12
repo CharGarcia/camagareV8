@@ -1,18 +1,18 @@
 <?php
 namespace App\Services\modulos\Handlers;
 
-use App\Services\modulos\HandlerInterface;
 use App\Services\modulos\SriDescargaAutomaticaService;
 
-class DescargasSriHandler implements HandlerInterface
+class DescargasSriHandler extends BaseHandler
 {
     /**
-     * @param array $parametros Configuración ingresada en la UI
      * @param int $idEmpresa ID de la empresa
+     * @param int|null $idEstablecimiento No aplica
      * @param int $idUsuario ID del usuario que ejecuta (0 si es cron)
+     * @param array $parametros Configuración ingresada en la UI
      * @return array
      */
-    public function ejecutar(array $parametros, int $idEmpresa, int $idUsuario): array
+    public function ejecutar(int $idEmpresa, ?int $idEstablecimiento, int $idUsuario, array $parametros): array
     {
         $hoy = new \DateTime();
         $mesesAEjecutar = [];
