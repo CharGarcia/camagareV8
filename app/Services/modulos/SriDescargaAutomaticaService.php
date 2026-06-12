@@ -235,7 +235,16 @@ class SriDescargaAutomaticaService
                     " | Nuevas: $totalNuevos | Existentes: $totalExistentes" .
                     " | Ignoradas: $totalIgnorados | Errores: $totalErrores";
 
-        $configMod->actualizarEstadoDescarga($idEmpresa, 'completado', $msgFinal);
+        $estadoProceso = 'completado';
+        $finalOk = true;
+
+        if (isset($respuestaPuppeteer['ok']) && $respuestaPuppeteer['ok'] === false) {
+            $msgFinal = 'Descarga parcial finalizada por error: ' . ($respuestaPuppeteer['error'] ?? 'desconocido') . '. ' . $msgFinal;
+            $estadoProceso = 'error';
+            $finalOk = false;
+        }
+
+        $configMod->actualizarEstadoDescarga($idEmpresa, $estadoProceso, $msgFinal);
 
         // Fechas del período real consultado para el log
         $mesPeriodo  = $periodoUnico['mes'] ?: (int) date('n');
@@ -254,7 +263,7 @@ class SriDescargaAutomaticaService
             'total_existentes'  => $totalExistentes,
             'total_ignorados'   => $totalIgnorados,
             'total_errores'     => $totalErrores,
-            'estado'            => 'completado',
+            'estado'            => $estadoProceso,
             'detalle_json'      => json_encode(['resumen' => $detalles, 'claves' => $detallesClaves, 'debug' => $this->debugLog]),
             'duracion_seg'      => $duracion,
             'origen'            => $idUsuario > 0 ? 'manual' : 'cron',
@@ -262,7 +271,7 @@ class SriDescargaAutomaticaService
         ]);
 
         return [
-            'ok'                => true,
+            'ok'                => $finalOk,
             'total_encontrados' => $totalEncontrados,
             'total_nuevos'      => $totalNuevos,
             'total_existentes'  => $totalExistentes,
@@ -595,19 +604,21 @@ class SriDescargaAutomaticaService
             throw new Exception('El script Puppeteer no retornó salida. ¿Node.js instalado? ¿npm install ejecutado en /scripts?');
         }
 
-        preg_match('/\{.*\}/s', $output, $m);
-        if (empty($m[0])) {
-            throw new Exception('Puppeteer no retornó JSON válido. Output: ' . substr($output, 0, 400));
+        $lines = explode("\n", trim($output));
+        $json = null;
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (empty($line)) continue;
+            $data = json_decode($line, true);
+            if ($data && isset($data['type']) && $data['type'] === 'finish') {
+                $json = $data['data'] ?? $data;
+            } elseif ($data && !isset($data['type']) && isset($data['ok'])) {
+                $json = $data;
+            }
         }
 
-        $json = json_decode($m[0], true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new Exception('Puppeteer JSON decoding error: ' . json_last_error_msg() . ' -> ' . substr($m[0], 0, 400));
-        }
-
-        // Si el JSON viene envuelto en {"type":"finish", "data": {...}}
-        if (isset($json['data']) && is_array($json['data'])) {
-            $json = $json['data'];
+        if ($json === null) {
+            throw new Exception('Puppeteer no retornó un JSON de finalización. Output: ' . substr($output, 0, 400));
         }
 
         // Credenciales incorrectas → excepción con código 401 para bloquear reintento
@@ -615,7 +626,7 @@ class SriDescargaAutomaticaService
             throw new Exception('Credenciales SRI incorrectas: ' . ($json['error'] ?? 'sin detalle'), 401);
         }
 
-        if (empty($json['ok'])) {
+        if (empty($json['ok']) && empty($json['xmls'])) {
             throw new Exception('Puppeteer error: ' . ($json['error'] ?? 'desconocido'));
         }
 

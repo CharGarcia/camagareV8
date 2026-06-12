@@ -17,6 +17,7 @@ if (!fs.existsSync(DEBUG_DIR)) fs.mkdirSync(DEBUG_DIR, { recursive: true });
 
 let _screenshotIdx = 0;
 let _currentRuc = 'default';
+let globalResultados = [];
 
 async function screenshot(pageOrFrame, nombre, ctxFrame = null) {
     try {
@@ -258,7 +259,7 @@ async function avanzarPagina(ctx, page) {
 }
 
 async function descargarEnParalelo(page, ctx, links) {
-    const resultados = [];
+    globalResultados = [];
     const basePct = 60;
     const maxPct = 95;
     
@@ -269,10 +270,12 @@ async function descargarEnParalelo(page, ctx, links) {
         reportarProgreso(pct, `Descargando XML ${i + 1}/${links.length}...`);
         
         const xml = await descargarXmlPorClick(page, ctx, item);
-        resultados.push({ clave: item.clave, xml });
+        if (xml) {
+            globalResultados.push({ clave: item.clave, xml });
+        }
         await pausa(200);
     }
-    return resultados;
+    return globalResultados;
 }
 
 async function descargarXmlPorClick(page, ctx, item) {
@@ -555,12 +558,28 @@ process.stdin.on('end', () => {
     config.timeoutMs = config.timeoutMs ?? 120_000;
 
     const tid = setTimeout(() => {
-        emitir({ ok: false, error: `Timeout: el scraper superó ${Math.round(config.timeoutMs / 1000)}s.` });
+        emitir({ 
+            ok: false, 
+            error: `Timeout: el scraper superó ${Math.round(config.timeoutMs / 1000)}s.`,
+            xmls: globalResultados,
+            total: globalResultados.length,
+            partial: true
+        });
         process.exit(1);
     }, config.timeoutMs);
     if (tid.unref) tid.unref();
 
     main(config)
         .then(() => clearTimeout(tid))
-        .catch(err => { clearTimeout(tid); emitir({ ok: false, error: err.message }); process.exit(1); });
+        .catch(err => { 
+            clearTimeout(tid); 
+            emitir({ 
+                ok: false, 
+                error: err.message,
+                xmls: globalResultados,
+                total: globalResultados.length,
+                partial: true
+            }); 
+            process.exit(1); 
+        });
 });
