@@ -726,9 +726,21 @@ function ejecutarDescargaManual() {
                             });
                             cargarConfigDescarga();
                             return;
-                        } 
+                        }
                         else if (data.type === 'error') {
-                            Swal.fire('Error en la descarga', data.error || 'No se pudo completar.', 'error');
+                            let errMsg = data.error || 'Error desconocido.';
+                            
+                            if (errMsg.includes('ERROR_CAPTCHA_UNSOLVABLE') || errMsg.includes('timeout esperando token') || errMsg.includes('CAPCHA')) {
+                                errMsg = 'El sistema de validación de seguridad (Captcha) no pudo ser resuelto a tiempo. Por favor, inténtalo de nuevo.';
+                            } else if (errMsg.includes('Timeout general')) {
+                                errMsg = 'El portal del SRI tardó demasiado en responder. Por favor, inténtalo de nuevo más tarde.';
+                            } else if (errMsg.includes('credenciales_incorrectas') || errMsg.includes('credenciales')) {
+                                errMsg = 'Las credenciales del SRI son incorrectas. Verifica la configuración.';
+                            } else {
+                                errMsg = 'No se ha logrado hacer la descarga debido a un inconveniente técnico. Por favor, inténtalo de nuevo.\n\nDetalle: ' + errMsg;
+                            }
+
+                            Swal.fire('Descarga interrumpida', errMsg, 'warning');
                             if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-play-circle me-1"></i> Ejecutar ahora'; }
                             return;
                         }
