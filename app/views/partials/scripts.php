@@ -237,13 +237,14 @@
         if (!dialog) return;
         var isLg = dialog.classList.contains('modal-lg');
         var isXl = dialog.classList.contains('modal-xl');
-        var aplicar = (isXl && w <= 991) || (isLg && w <= 767);
+        var isDefault = !isLg && !isXl && !dialog.classList.contains('modal-sm');
+        var aplicar = (isXl && w <= 991) || (isLg && w <= 767) || (isDefault && w <= 575);
+        
         if (aplicar) {
-            // Activar scroll nativo de Bootstrap en el body del modal
-            dialog.classList.add('modal-dialog-scrollable');
-            // Ya no bloqueamos el scroll del overlay (.modal) para evitar
-            // que en móviles (ej. Safari iOS) el footer quede oculto
-            // por la barra de navegación y no se pueda hacer scroll.
+            if (!dialog.classList.contains('modal-dialog-scrollable')) {
+                dialog.classList.add('modal-dialog-scrollable');
+                dialog.dataset.cmgScrollable = '1';
+            }
         }
     }
 
