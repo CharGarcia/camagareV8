@@ -23,7 +23,7 @@ class AuthMiddleware
             if ($uri !== '' && strpos($uri, 'login') === false && $uri !== '/' && $uri !== '/sistema/') {
                 $_SESSION['intended_url'] = $uri;
             }
-            header('Location: /sistema/');
+            header('Location: ' . BASE_URL . '/');
             exit;
         }
 
@@ -60,7 +60,7 @@ class AuthMiddleware
         session_destroy();
 
         $msg = urlencode($mensaje);
-        header('Location: /sistema/?sesion_cerrada=1&msg=' . $msg);
+        header('Location: ' . BASE_URL . '/?sesion_cerrada=1&msg=' . $msg);
         exit;
     }
 }

@@ -315,7 +315,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('fexqrQrUrlLabel').textContent = 'URL del formulario público:';
         new bootstrap.Modal(document.getElementById('modalFexqrQr')).show();
 
-        const url = `${baseUrl}/factura-express/${token}`;
+        let url = `${baseUrl}/factura-express/${token}`;
+        if (!url.startsWith('http')) {
+            url = window.location.origin + (url.startsWith('/') ? '' : '/') + url;
+        }
+
         const qr  = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(url)}&size=280x280&margin=10`;
 
         document.getElementById('fexqrQrImg').onload = () => {
