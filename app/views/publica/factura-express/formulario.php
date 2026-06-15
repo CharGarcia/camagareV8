@@ -210,7 +210,7 @@
             <button type="submit" class="btn btn-primary btn-lg shadow-sm" id="btnEnviarFexpr">
                 <i class="bi bi-send me-2"></i>Enviar Solicitud
             </button>
-            <button type="button" class="btn btn-light border btn-lg text-muted shadow-sm" onclick="window.location.reload();">
+            <button type="button" class="btn btn-light border btn-lg text-muted shadow-sm" onclick="cancelarSolicitud();">
                 <i class="bi bi-x-circle me-2"></i>Cancelar
             </button>
         </div>
@@ -383,6 +383,18 @@
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Enviando...';
     });
+
+    window.cancelarSolicitud = function() {
+        const container = document.querySelector('.container');
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <i class="bi bi-x-circle text-muted" style="font-size: 5rem;"></i>
+                <h2 class="mt-4 text-secondary fw-bold">Solicitud Cancelada</h2>
+                <p class="text-muted mt-3" style="font-size: 1.1rem;">La operación ha sido cancelada y los datos han sido descartados.</p>
+                <p class="text-muted mt-2">Puede cerrar esta ventana o volver a escanear el código QR para realizar una nueva solicitud.</p>
+            </div>
+        `;
+    };
 })();
 </script>
 
