@@ -206,9 +206,12 @@
         </div>
         <?php endif; ?>
 
-        <div class="d-grid">
+        <div class="d-grid gap-2">
             <button type="submit" class="btn btn-primary btn-lg shadow-sm" id="btnEnviarFexpr">
                 <i class="bi bi-send me-2"></i>Enviar Solicitud
+            </button>
+            <button type="button" class="btn btn-light border btn-lg text-muted shadow-sm" onclick="window.location.reload();">
+                <i class="bi bi-x-circle me-2"></i>Cancelar
             </button>
         </div>
         <p class="text-center text-muted small mt-2">

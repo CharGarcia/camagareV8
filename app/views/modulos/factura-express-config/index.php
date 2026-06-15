@@ -151,7 +151,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 </td>
                                 <td class="text-center pe-3 text-nowrap">
                                     <button type="button" class="btn btn-outline-warning btn-sm py-1 px-2 me-1 position-relative"
-                                            onclick="event.stopPropagation();fexqrMostrarQrAdmin('<?= rtrim($base, '/') ?>/modulos/factura-express-solicitudes', '<?= htmlspecialchars($r['nombre'], ENT_QUOTES) ?>')"
+                                            onclick="event.stopPropagation();fexqrMostrarQrAdmin('<?= rtrim($base, '/') ?>/modulos/factura-express-solicitudes?empresa=<?= (int)$_SESSION['id_empresa'] ?>', '<?= htmlspecialchars($r['nombre'], ENT_QUOTES) ?>')"
                                             title="QR Solicitudes">
                                         <i class="bi bi-qr-code-scan me-1"></i> QR Solicitudes
                                         <?php if ($pendientes > 0): ?>

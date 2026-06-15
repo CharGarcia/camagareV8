@@ -33,6 +33,40 @@ class FacturaExpressSolicitudesController extends BaseModuloController
     {
         $this->requireLeer();
 
+        // 1. Interceptar parámetro ?empresa= desde el código QR para autoseleccionar empresa
+        $empresaGet = (int) ($_GET['empresa'] ?? 0);
+        if ($empresaGet > 0 && $empresaGet !== (int)($_SESSION['id_empresa'] ?? 0)) {
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $nivel = (int) $_SESSION['nivel'];
+            $tieneAcceso = false;
+
+            if ($nivel >= 3) {
+                $tieneAcceso = true;
+            } else {
+                $model = new \App\models\Empresa();
+                $asignadas = $model->getEmpresasAsignadas($idUsuario);
+                $ids = array_column($asignadas, 'id_empresa');
+                if (in_array($empresaGet, array_map('intval', $ids))) {
+                    $tieneAcceso = true;
+                }
+            }
+
+            if ($tieneAcceso) {
+                $_SESSION['id_empresa'] = $empresaGet;
+                $model = new \App\models\Empresa();
+                $empData = $model->getPorId($empresaGet);
+                if ($empData) {
+                    $_SESSION['ruc_empresa'] = $empData['identificacion'] ?? '';
+                }
+            } else {
+                $_SESSION['navbar_error'] = 'No tienes permiso para acceder a la empresa del código QR.';
+            }
+
+            // Redirigir para limpiar la URL
+            header('Location: ' . BASE_URL . '/' . self::RUTA_MODULO);
+            exit;
+        }
+
         $perm       = $this->getPermisos();
         $idEmpresa  = (int) $_SESSION['id_empresa'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
