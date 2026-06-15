@@ -339,7 +339,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('fexqrQrUrlLabel').textContent = 'URL del panel de solicitudes (requiere login):';
         new bootstrap.Modal(document.getElementById('modalFexqrQr')).show();
 
-        const qr  = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(url)}&size=280x280&margin=10`;
+        let finalUrl = url;
+        if (!finalUrl.startsWith('http')) {
+            finalUrl = window.location.origin + (finalUrl.startsWith('/') ? '' : '/') + finalUrl;
+        }
+
+        const qr  = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(finalUrl)}&size=280x280&margin=10`;
 
         document.getElementById('fexqrQrImg').onload = () => {
             document.getElementById('fexqrQrSpinner').classList.add('d-none');
@@ -349,8 +354,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('fexqrPrintImg').src                 = qr;
         };
         document.getElementById('fexqrQrImg').src         = qr;
-        document.getElementById('fexqrQrUrl').textContent = url;
-        document.getElementById('fexqrQrUrlLink').href    = url;
+        document.getElementById('fexqrQrUrl').textContent = finalUrl;
+        document.getElementById('fexqrQrUrlLink').href    = finalUrl;
     };
 
     window.fexqrCopiarUrl = function() {
