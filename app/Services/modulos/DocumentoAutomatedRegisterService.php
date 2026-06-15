@@ -321,8 +321,8 @@ class DocumentoAutomatedRegisterService
             // 1. Cabecera
             $idVenta = $this->ventaRepo->insertCabecera([
                 'id_empresa' => $idEmpresa,
-                'id_establecimiento' => $this->getEstablecimientoId($idEmpresa, (string)$it->estab),
-                'id_punto_emision' => $this->getPuntoEmisionId($idEmpresa, (string)$it->estab, (string)$it->ptoEmi),
+                'id_establecimiento' => $this->getEstablecimientoId($idEmpresa, (string)$it->estab, $idUsuario),
+                'id_punto_emision' => $this->getPuntoEmisionId($idEmpresa, (string)$it->estab, (string)$it->ptoEmi, $idUsuario),
                 'id_cliente' => $idCliente,
                 'id_usuario' => $idUsuario,
                 'fecha_emision' => $this->formatearFecha((string)$info->fechaEmision),
@@ -358,7 +358,7 @@ class DocumentoAutomatedRegisterService
                 foreach ($xml->detalles->detalle as $d) {
                     $idDetalle = $this->ventaRepo->insertDetalle([
                         'id_venta' => $idVenta,
-                        'id_producto' => 0, // No tenemos mapeo de productos por ahora, guardamos como libre
+                        'id_producto' => $this->getOrCreateProductoId($idEmpresa, $idUsuario, (string)$d->codigoPrincipal, (string)$d->descripcion, (float)$d->precioUnitario, isset($d->impuestos->impuesto) ? (string)$d->impuestos->impuesto[0]->tarifa : '0'),
                         'descripcion' => (string)$d->descripcion,
                         'cantidad' => (float)$d->cantidad,
                         'precio_unitario' => (float)$d->precioUnitario,
@@ -371,7 +371,7 @@ class DocumentoAutomatedRegisterService
                     // 3. Impuestos por detalle
                     if (isset($d->impuestos->impuesto)) {
                         foreach ($d->impuestos->impuesto as $imp) {
-                            $this->ventaRepo->insertImpuestoDetalle([
+                            $this->ventaRepo->insertImpuesto([
                                 'id_venta_detalle' => $idDetalle,
                                 'codigo_impuesto' => (string)$imp->codigo,
                                 'codigo_porcentaje' => (string)$imp->codigoPorcentaje,
@@ -554,25 +554,84 @@ class DocumentoAutomatedRegisterService
         }
     }
 
-    private function getEstablecimientoId(int $idEmpresa, string $cod): ?int
+    private function getEstablecimientoId(int $idEmpresa, string $cod, ?int $idUsuario = null): ?int
     {
         $db = Database::getConnection();
         $st = $db->prepare("SELECT id FROM empresa_establecimiento WHERE id_empresa = ? AND codigo = ? LIMIT 1");
         $st->execute([$idEmpresa, $cod]);
         $res = $st->fetch();
-        return $res ? (int)$res['id'] : null;
+        if ($res) {
+            return (int)$res['id'];
+        }
+
+        if ($idUsuario) {
+            $stIns = $db->prepare("INSERT INTO empresa_establecimiento (id_empresa, nombre, codigo, direccion, tipo, logo_ruta, leyenda_pdf_titulo, leyenda_pdf_mensaje, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+            $stIns->execute([$idEmpresa, "Establecimiento $cod", $cod, '', 'otro', '', '', '', $idUsuario, $idUsuario]);
+            return (int)$stIns->fetchColumn();
+        }
+
+        return null;
     }
 
-    private function getPuntoEmisionId(int $idEmpresa, string $estab, string $pto): ?int
+    private function getPuntoEmisionId(int $idEmpresa, string $estab, string $pto, ?int $idUsuario = null): ?int
     {
-        $idEst = $this->getEstablecimientoId($idEmpresa, $estab);
+        $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
         if (!$idEst) return null;
         
         $db = Database::getConnection();
-        $st = $db->prepare("SELECT id FROM empresa_punto_emision WHERE id_establecimiento = ? AND codigo = ? LIMIT 1");
+        $st = $db->prepare("SELECT id FROM empresa_punto_emision WHERE id_establecimiento = ? AND codigo_punto = ? LIMIT 1");
         $st->execute([$idEst, $pto]);
         $res = $st->fetch();
-        return $res ? (int)$res['id'] : null;
+        if ($res) {
+            return (int)$res['id'];
+        }
+
+        if ($idUsuario) {
+            $stIns = $db->prepare("INSERT INTO empresa_punto_emision (id_empresa, id_establecimiento, nombre, codigo_punto, logo_ruta, estado, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+            $stIns->execute([$idEmpresa, $idEst, "Punto $pto", $pto, '', 'activo', $idUsuario, $idUsuario]);
+            return (int)$stIns->fetchColumn();
+        }
+
+        return null;
+    }
+
+    private function getOrCreateProductoId(int $idEmpresa, int $idUsuario, string $codigoPrincipal, string $descripcion, float $precio, string $tarifaIvaStr): int
+    {
+        $db = Database::getConnection();
+        
+        // Buscar producto por código principal
+        if (!empty($codigoPrincipal)) {
+            $st = $db->prepare("SELECT id FROM productos WHERE id_empresa = ? AND (codigo = ? OR codigo_auxiliar = ?) AND eliminado = false LIMIT 1");
+            $st->execute([$idEmpresa, $codigoPrincipal, $codigoPrincipal]);
+            $res = $st->fetch();
+            if ($res) return (int)$res['id'];
+        }
+        
+        // Crear producto básico para que la venta pueda registrarse
+        $codigo = !empty($codigoPrincipal) ? $codigoPrincipal : 'SRI-' . substr(md5(uniqid()), 0, 8);
+        $nombre = !empty($descripcion) ? $descripcion : 'Producto SRI no mapeado';
+        
+        $tarifa_iva = 0; // 0%
+        if ($tarifaIvaStr == '2' || $tarifaIvaStr == '3' || $tarifaIvaStr == '4') {
+            $tarifa_iva = 2; // 12%, 14%, 15% etc.
+        }
+        
+        // Se inserta como servicio para no afectar kardex estrictamente si no se desea, o como bien genérico.
+        // Se establecen opciones mínimas
+        $sql = "INSERT INTO productos (
+                    id_empresa, id_usuario, created_by, codigo, nombre,
+                    codigo_auxiliar, codigo_barras,
+                    precio_base, tipo_produccion, tarifa_iva, status, inventariable, eliminado, created_at, opciones
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, false, CURRENT_TIMESTAMP, ?) RETURNING id";
+        
+        $stIns = $db->prepare($sql);
+        $stIns->execute([
+            $idEmpresa, $idUsuario, $idUsuario, $codigo, $nombre,
+            '', '', // codigo_auxiliar, codigo_barras
+            $precio, '02', $tarifa_iva, 1, 'false', '{"compra":true,"venta":true}'
+        ]);
+        
+        return (int)$stIns->fetchColumn();
     }
 
     private function formatearFecha(string $fecha): string
@@ -628,8 +687,8 @@ class DocumentoAutomatedRegisterService
         try {
             $idLiq = $this->liquidacionRepo->insertCabecera([
                 'id_empresa' => $idEmpresa,
-                'id_establecimiento' => $this->getEstablecimientoId($idEmpresa, (string)$it->estab),
-                'id_punto_emision' => $this->getPuntoEmisionId($idEmpresa, (string)$it->estab, (string)$it->ptoEmi),
+                'id_establecimiento' => $this->getEstablecimientoId($idEmpresa, (string)$it->estab, $idUsuario),
+                'id_punto_emision' => $this->getPuntoEmisionId($idEmpresa, (string)$it->estab, (string)$it->ptoEmi, $idUsuario),
                 'id_proveedor' => $idProv,
                 'id_usuario' => $idUsuario,
                 'fecha_emision' => $this->formatearFecha((string)$info->fechaEmision),
@@ -806,8 +865,8 @@ class DocumentoAutomatedRegisterService
         try {
             $idNC = $this->ncRepo->insertCabecera([
                 'id_empresa' => $idEmpresa,
-                'id_establecimiento' => $this->getEstablecimientoId($idEmpresa, (string)$it->estab),
-                'id_punto_emision' => $this->getPuntoEmisionId($idEmpresa, (string)$it->estab, (string)$it->ptoEmi),
+                'id_establecimiento' => $this->getEstablecimientoId($idEmpresa, (string)$it->estab, $idUsuario),
+                'id_punto_emision' => $this->getPuntoEmisionId($idEmpresa, (string)$it->estab, (string)$it->ptoEmi, $idUsuario),
                 'id_cliente' => $idCliente,
                 'id_usuario' => $idUsuario,
                 'fecha_emision' => $this->formatearFecha((string)$info->fechaEmision),
@@ -871,8 +930,8 @@ class DocumentoAutomatedRegisterService
         try {
             $idND = $this->ndRepo->insertCabecera([
                 'id_empresa' => $idEmpresa,
-                'id_establecimiento' => $this->getEstablecimientoId($idEmpresa, (string)$it->estab),
-                'id_punto_emision' => $this->getPuntoEmisionId($idEmpresa, (string)$it->estab, (string)$it->ptoEmi),
+                'id_establecimiento' => $this->getEstablecimientoId($idEmpresa, (string)$it->estab, $idUsuario),
+                'id_punto_emision' => $this->getPuntoEmisionId($idEmpresa, (string)$it->estab, (string)$it->ptoEmi, $idUsuario),
                 'id_cliente' => $idCliente,
                 'id_usuario' => $idUsuario,
                 'fecha_emision' => $this->formatearFecha((string)$info->fechaEmision),

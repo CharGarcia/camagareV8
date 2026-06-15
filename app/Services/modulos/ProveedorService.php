@@ -175,8 +175,14 @@ class ProveedorService
             throw new Exception('El proveedor no existe o ya ha sido eliminado.');
         }
 
-        if ($this->repository->estaEnUso($id, $idEmpresa)) {
-            throw new Exception('No se puede eliminar el proveedor porque tiene transacciones registradas (compras o liquidaciones).');
+        // No permitir eliminar un proveedor que ya está siendo usado en módulos operativos
+        $usos = $this->repository->getUsosProveedor($id, $idEmpresa);
+        if (!empty($usos)) {
+            $detalle = [];
+            foreach ($usos as $modulo => $cantidad) {
+                $detalle[] = "{$modulo} ({$cantidad})";
+            }
+            throw new Exception('No se puede eliminar el proveedor porque tiene registros en: ' . implode(', ', $detalle) . '.');
         }
 
         $this->repository->beginTransaction();

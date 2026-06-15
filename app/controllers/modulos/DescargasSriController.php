@@ -141,7 +141,7 @@ class DescargasSriController extends Controller
 
             echo json_encode($res);
 
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -255,7 +255,7 @@ class DescargasSriController extends Controller
                     'ok' => $res['ok'],
                     'xml_base64' => base64_encode($xmlContent)
                 ];
-            } catch (Exception $e) {
+            } catch (Throwable $e) {
                 $resultados[] = ['clave' => $nombre, 'estado' => 'ERROR', 'mensaje' => $e->getMessage()];
             }
         }

@@ -353,7 +353,7 @@ class FacturaVentaRepository extends BaseRepository
         ];
         $params = [
             (int) $data['id_venta'],
-            (int) $data['id_producto'],
+            !empty($data['id_producto']) ? (int)$data['id_producto'] : null,
             !empty($data['id_bodega'])         ? (int) $data['id_bodega']         : null,
             !empty($data['id_unidad_medida'])   ? (int) $data['id_unidad_medida']  : (!empty($data['id_medida']) ? (int)$data['id_medida'] : null),
             $data['codigo_principal'],

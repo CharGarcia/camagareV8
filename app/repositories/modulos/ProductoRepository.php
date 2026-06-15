@@ -569,37 +569,56 @@ class ProductoRepository extends BaseRepository
         $usos = [];
         $amb  = $tipoAmbiente; // '1' pruebas | '2' producción | null = todos
 
-        // Documentos transaccionales con tipo_ambiente
+        // Documentos transaccionales con tipo_ambiente.
+        // 'amb_col' = expresión de la columna tipo_ambiente; el filtro de ambiente
+        // se agrega dinámicamente (con un único parámetro) para evitar errores de
+        // tipo en PostgreSQL al reutilizar el placeholder.
         $checksAmbiente = [
             [
                 'sql'    => "SELECT COUNT(*) FROM ventas_detalle vd
                              JOIN ventas_cabecera vc ON vc.id = vd.id_venta
                                 AND vc.id_empresa = :ide AND vc.eliminado = false
-                                AND (:amb IS NULL OR vc.tipo_ambiente = :amb)
                              WHERE vd.id_producto = :id",
+                'amb_col' => 'vc.tipo_ambiente',
                 'nombre' => 'Facturas de venta',
             ],
             [
                 'sql'    => "SELECT COUNT(*) FROM compras_detalle cd
                              JOIN compras_cabecera cc ON cc.id = cd.id_compra
                                 AND cc.id_empresa = :ide AND cc.eliminado = false
-                                AND (:amb IS NULL OR cc.tipo_ambiente = :amb)
                              WHERE cd.id_producto = :id",
+                'amb_col' => 'cc.tipo_ambiente',
                 'nombre' => 'Compras',
             ],
             [
                 'sql'    => "SELECT COUNT(*) FROM notas_credito_detalle ncd
                              JOIN notas_credito_cabecera ncc ON ncc.id = ncd.id_nota_credito
                                 AND ncc.id_empresa = :ide AND ncc.eliminado = false
-                                AND (:amb IS NULL OR ncc.tipo_ambiente = :amb)
                              WHERE ncd.id_producto = :id",
+                'amb_col' => 'ncc.tipo_ambiente',
                 'nombre' => 'Notas de crédito',
             ],
             [
                 'sql'    => "SELECT COUNT(*) FROM inventario_kardex
-                             WHERE id_producto = :id AND id_empresa = :ide AND eliminado = false
-                               AND (:amb IS NULL OR tipo_ambiente = :amb)",
+                             WHERE id_producto = :id AND id_empresa = :ide AND eliminado = false",
+                'amb_col' => 'tipo_ambiente',
                 'nombre' => 'Movimientos de inventario',
+            ],
+            [
+                'sql'    => "SELECT COUNT(*) FROM guias_remision_detalle grd
+                             JOIN guias_remision_cabecera grc ON grc.id = grd.id_guia_remision
+                                AND grc.id_empresa = :ide AND grc.eliminado = false
+                             WHERE grd.id_producto = :id",
+                'amb_col' => 'grc.tipo_ambiente',
+                'nombre' => 'Guías de remisión',
+            ],
+            [
+                'sql'    => "SELECT COUNT(*) FROM liquidaciones_detalle ld
+                             JOIN liquidaciones_cabecera lc ON lc.id = ld.id_cabecera
+                                AND lc.id_empresa = :ide AND lc.eliminado = false
+                             WHERE ld.id_producto = :id",
+                'amb_col' => 'lc.tipo_ambiente',
+                'nombre' => 'Liquidaciones de compra',
             ],
         ];
 
@@ -627,12 +646,29 @@ class ProductoRepository extends BaseRepository
                              WHERE id_componente = :id AND id_empresa = :ide AND eliminado = false",
                 'nombre' => 'Componente de otros productos',
             ],
+            [
+                'sql'    => "SELECT COUNT(*) FROM factura_express_items
+                             WHERE id_producto = :id AND id_empresa = :ide AND eliminado = false",
+                'nombre' => 'Plantillas Factura Express',
+            ],
+            [
+                'sql'    => "SELECT COUNT(*) FROM firmas_electronicas
+                             WHERE id_producto = :id AND id_empresa = :ide AND eliminado = false",
+                'nombre' => 'Firmas electrónicas',
+            ],
         ];
 
         foreach ($checksAmbiente as $check) {
             try {
-                $st = $this->db->prepare($check['sql']);
-                $st->execute([':id' => $id, ':ide' => $idEmpresa, ':amb' => $amb]);
+                $sql    = $check['sql'];
+                $params = [':id' => $id, ':ide' => $idEmpresa];
+                // Filtrar por ambiente activo solo si se conoce (columnas varchar; comparar como texto)
+                if ($amb !== null && !empty($check['amb_col'])) {
+                    $sql .= " AND CAST({$check['amb_col']} AS VARCHAR) = :amb";
+                    $params[':amb'] = $amb;
+                }
+                $st = $this->db->prepare($sql);
+                $st->execute($params);
                 if ((int)$st->fetchColumn() > 0) {
                     $usos[] = $check['nombre'];
                 }

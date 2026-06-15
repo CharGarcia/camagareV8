@@ -241,8 +241,9 @@
         if (aplicar) {
             // Activar scroll nativo de Bootstrap en el body del modal
             dialog.classList.add('modal-dialog-scrollable');
-            // Bloquear scroll del overlay para que no compita
-            modalEl.style.overflow = 'hidden';
+            // Ya no bloqueamos el scroll del overlay (.modal) para evitar
+            // que en móviles (ej. Safari iOS) el footer quede oculto
+            // por la barra de navegación y no se pueda hacer scroll.
         }
     }
 
@@ -270,7 +271,7 @@
                 dialog.classList.add('modal-dialog-scrollable');
                 dialog.dataset.cmgScrollable = '1';
             }
-            e.target.style.overflow = 'hidden';
+            // Eliminado el bloqueo de overflow para móviles para que pueda escrolearse si es muy alto
         }
     });
 

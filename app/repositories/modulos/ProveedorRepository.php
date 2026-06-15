@@ -442,4 +442,66 @@ class ProveedorRepository extends BaseRepository
 
         return false;
     }
+
+    /**
+     * Revisa todas las tablas que referencian al proveedor y devuelve los módulos
+     * donde está siendo usado (solo registros NO eliminados).
+     *
+     * Respeta la separación de entornos: las tablas con tipo_ambiente solo cuentan
+     * documentos del ambiente activo de la empresa; las que no lo tienen se revisan siempre.
+     *
+     * @return array<string,int> [etiqueta del módulo => cantidad de registros]
+     */
+    public function getUsosProveedor(int $id, int $idEmpresa): array
+    {
+        // Ambiente activo de la empresa ('1' pruebas | '2' producción)
+        $stA = $this->db->prepare("SELECT tipo_ambiente FROM empresas WHERE id = ? LIMIT 1");
+        $stA->execute([$idEmpresa]);
+        $amb = $stA->fetchColumn();
+        $amb = $amb !== false ? (string) $amb : null;
+
+        $usos = [];
+
+        // Documentos transaccionales con tipo_ambiente
+        $conAmbiente = [
+            'compras_cabecera'          => 'Compras',
+            'egresos_cabecera'          => 'Egresos / pagos',
+            'liquidaciones_cabecera'    => 'Liquidaciones de compra',
+            'ordenes_compra'            => 'Órdenes de compra',
+            'retencion_compra_cabecera' => 'Retenciones de compra',
+        ];
+        foreach ($conAmbiente as $tabla => $etiqueta) {
+            $sql    = "SELECT COUNT(*) FROM {$tabla}
+                       WHERE id_proveedor = :id AND id_empresa = :ide AND eliminado = false";
+            $params = [':id' => $id, ':ide' => $idEmpresa];
+            // Filtrar por ambiente activo solo si se conoce (la columna es varchar; comparar como texto)
+            if ($amb !== null) {
+                $sql .= " AND CAST(tipo_ambiente AS VARCHAR) = :amb";
+                $params[':amb'] = $amb;
+            }
+            $st = $this->db->prepare($sql);
+            $st->execute($params);
+            $n = (int) $st->fetchColumn();
+            if ($n > 0) {
+                $usos[$etiqueta] = $n;
+            }
+        }
+
+        // Catálogos sin tipo_ambiente: se revisan siempre
+        $sinAmbiente = [
+            'productos_homologacion' => 'Homologación de productos',
+        ];
+        foreach ($sinAmbiente as $tabla => $etiqueta) {
+            $sql = "SELECT COUNT(*) FROM {$tabla}
+                    WHERE id_proveedor = :id AND id_empresa = :ide AND eliminado = false";
+            $st = $this->db->prepare($sql);
+            $st->execute([':id' => $id, ':ide' => $idEmpresa]);
+            $n = (int) $st->fetchColumn();
+            if ($n > 0) {
+                $usos[$etiqueta] = $n;
+            }
+        }
+
+        return $usos;
+    }
 }

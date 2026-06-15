@@ -125,8 +125,14 @@ class AuthController extends Controller
             $this->redirect(BASE_URL . '/config/empresas-sistema');
         }
 
-        if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['ok' => true, 'redirect' => BASE_URL . '/home/index']); exit; }
-        $this->redirect(BASE_URL . '/home/index');
+        $redirectUrl = BASE_URL . '/home/index';
+        if (!empty($_SESSION['intended_url'])) {
+            $redirectUrl = $_SESSION['intended_url'];
+            unset($_SESSION['intended_url']);
+        }
+
+        if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['ok' => true, 'redirect' => $redirectUrl]); exit; }
+        $this->redirect($redirectUrl);
     }
 
     /**

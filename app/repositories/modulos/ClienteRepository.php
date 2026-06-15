@@ -268,6 +268,46 @@ class ClienteRepository extends BaseRepository
     /**
      * Eliminación lógica con campos de auditoría.
      */
+    /**
+     * Revisa todas las tablas operativas que referencian al cliente y devuelve
+     * los módulos donde está siendo usado (solo registros NO eliminados).
+     *
+     * @return array<string,int> [etiqueta del módulo => cantidad de registros]
+     */
+    public function getUsosCliente(int $id, int $idEmpresa): array
+    {
+        // tabla => [etiqueta, filtra_por_id_empresa]
+        $tablas = [
+            'ventas_cabecera'          => ['Facturas de venta',     true],
+            'notas_credito_cabecera'   => ['Notas de crédito',      true],
+            'retencion_venta_cabecera' => ['Retenciones de venta',  true],
+            'guias_remision_cabecera'  => ['Guías de remisión',     true],
+            'ingresos_cabecera'        => ['Ingresos / cobros',     true],
+            'pedidos_cabecera'         => ['Pedidos',               true],
+            'suscripciones'            => ['Suscripciones',         true],
+            'proyectos'                => ['Proyectos',             true],
+            'citas'                    => ['Citas',                 true],
+            'tareas'                   => ['Tareas',                false],
+        ];
+
+        $usos = [];
+        foreach ($tablas as $tabla => [$etiqueta, $conEmpresa]) {
+            $sql    = "SELECT COUNT(*) FROM {$tabla} WHERE id_cliente = :id AND eliminado = false";
+            $params = [':id' => $id];
+            if ($conEmpresa) {
+                $sql .= " AND id_empresa = :id_empresa";
+                $params[':id_empresa'] = $idEmpresa;
+            }
+            $st = $this->db->prepare($sql);
+            $st->execute($params);
+            $n = (int) $st->fetchColumn();
+            if ($n > 0) {
+                $usos[$etiqueta] = $n;
+            }
+        }
+        return $usos;
+    }
+
     public function delete(int $id, int $idEmpresa, int $idUsuario): bool
     {
         $sql = "UPDATE {$this->table} SET 

@@ -49,23 +49,27 @@ class FacturaExpressSolicitudesController extends BaseModuloController
         $from       = $result['total'] > 0 ? (($page - 1) * $perPage) + 1 : 0;
         $to         = $result['total'] > 0 ? min($page * $perPage, $result['total']) : 0;
 
+        $empresaConfig = $this->service->getEmpresaConfig($idEmpresa);
+
         $this->viewWithLayout('layouts.main', 'modulos.factura-express-solicitudes.index', [
-            'titulo'       => 'Solicitudes Factura Express',
-            'perm'         => $perm,
-            'rutaModulo'   => self::RUTA_MODULO,
-            'rows'         => $result['rows'],
-            'total'        => $result['total'],
-            'page'         => $page,
-            'totalPages'   => $totalPages,
-            'perPage'      => $perPage,
-            'from'         => $from,
-            'to'           => $to,
-            'buscar'       => $buscar,
-            'estadoFiltro' => $estado,
-            'ordenCol'     => $ordenCol,
-            'ordenDir'     => $ordenDir,
-            'vistaConfig'  => $prefsVista,
-            'fullWidth'    => true,
+            'titulo'        => 'Solicitudes Factura Express',
+            'perm'          => $perm,
+            'rutaModulo'    => self::RUTA_MODULO,
+            'rows'          => $result['rows'],
+            'total'         => $result['total'],
+            'page'          => $page,
+            'totalPages'    => $totalPages,
+            'perPage'       => $perPage,
+            'from'          => $from,
+            'to'            => $to,
+            'buscar'        => $buscar,
+            'estadoFiltro'  => $estado,
+            'ordenCol'      => $ordenCol,
+            'ordenDir'      => $ordenDir,
+            'vistaConfig'   => $prefsVista,
+            'tarifasIva'    => $this->service->getTarifasIva(),
+            'decimalesPrec' => (int) ($empresaConfig['decimales_precio'] ?? 2),
+            'fullWidth'     => true,
         ]);
     }
 
@@ -144,11 +148,72 @@ class FacturaExpressSolicitudesController extends BaseModuloController
         exit;
     }
 
+    // ── AJAX: datos de solicitudes en JSON (para el panel móvil) ──────────────
+    public function panelAjax(): void
+    {
+        $this->requireLeer();
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        header('Content-Type: application/json; charset=utf-8');
+
+        try {
+            $idEmpresa   = (int) $_SESSION['id_empresa'];
+            $buscar      = trim($_GET['b'] ?? '');
+            $estado      = trim($_GET['estado'] ?? 'pendiente');
+            $page        = max(1, (int) ($_GET['page'] ?? 1));
+            $perPage     = 20;
+            $idPlantilla = (int) ($_GET['id_plantilla'] ?? 0) ?: null;
+
+            $result = $this->service->getListadoSolicitudes($idEmpresa, $buscar, $estado, $page, $perPage, 'created_at', 'DESC', $idPlantilla);
+            $total  = $result['total'];
+
+            echo json_encode([
+                'ok'    => true,
+                'rows'  => $result['rows'],
+                'total' => $total,
+                'page'  => $page,
+                'pages' => $perPage > 0 ? (int) ceil($total / $perPage) : 1,
+            ], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // ── AJAX: buscador de productos (para editar ítems al aprobar) ────────────
+    public function getProductosAjax(): void
+    {
+        $this->requireLeer();
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        header('Content-Type: application/json; charset=utf-8');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $buscar    = trim($_GET['q'] ?? '');
+
+            $repo   = new \App\repositories\modulos\ProductoRepository();
+            $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, 'venta');
+
+            echo json_encode(['ok' => true, 'data' => $result['rows']]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     // ── Aprobar solicitud y facturar ──────────────────────────────────────────
     public function aprobar(): void
     {
         $this->requireActualizar();
-        header('Content-Type: application/json');
+
+        // Evitar que cualquier warning/notice previo corrompa el JSON de respuesta
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        header('Content-Type: application/json; charset=utf-8');
 
         try {
             $id        = (int) ($_POST['id'] ?? 0);
@@ -158,9 +223,10 @@ class FacturaExpressSolicitudesController extends BaseModuloController
 
             $this->service->aprobarYFacturar($id, $idEmpresa, $idUsuario, ['items' => $items]);
             echo json_encode(['ok' => true, 'mensaje' => 'Solicitud aprobada y factura generada correctamente.']);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
+        exit;
     }
 
     // ── AJAX: contador de solicitudes pendientes (para badge del navbar) ─────
@@ -186,7 +252,11 @@ class FacturaExpressSolicitudesController extends BaseModuloController
     public function rechazar(): void
     {
         $this->requireActualizar();
-        header('Content-Type: application/json');
+
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        header('Content-Type: application/json; charset=utf-8');
 
         try {
             $id        = (int) ($_POST['id'] ?? 0);
@@ -196,8 +266,9 @@ class FacturaExpressSolicitudesController extends BaseModuloController
 
             $this->service->rechazarSolicitud($id, $idEmpresa, $idUsuario, $nota);
             echo json_encode(['ok' => true, 'mensaje' => 'Solicitud rechazada.']);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
+        exit;
     }
 }

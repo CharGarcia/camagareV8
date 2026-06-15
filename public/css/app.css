@@ -734,7 +734,6 @@ th[data-col] {
         padding: 0.3rem 0.55rem !important;
         white-space: nowrap;
     }
-}
 
 /* MÓVIL PEQUEÑO (≤ 575px): modales sin clase de tamaño también se expanden */
 @media (max-width: 575.98px) {

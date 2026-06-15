@@ -150,16 +150,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     <span class="badge bg-<?= $cls ?> bg-opacity-10 text-<?= $cls ?> border border-<?= $cls ?> border-opacity-25"><?= $lbl ?></span>
                                 </td>
                                 <td class="text-center pe-3 text-nowrap">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 me-1"
-                                            onclick="event.stopPropagation();fexqrMostrarQr('<?= $r['token'] ?>','<?= htmlspecialchars($r['nombre'], ENT_QUOTES) ?>','<?= htmlspecialchars($r['descripcion'] ?? '', ENT_QUOTES) ?>')"
-                                            title="Ver código QR">
-                                        <i class="bi bi-qr-code"></i>
+                                    <button type="button" class="btn btn-outline-warning btn-sm py-1 px-2 me-1 position-relative"
+                                            onclick="event.stopPropagation();fexqrMostrarQrAdmin('<?= rtrim($base, '/') ?>/modulos/factura-express-solicitudes', '<?= htmlspecialchars($r['nombre'], ENT_QUOTES) ?>')"
+                                            title="QR Solicitudes">
+                                        <i class="bi bi-qr-code-scan me-1"></i> QR Solicitudes
+                                        <?php if ($pendientes > 0): ?>
+                                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:0.6rem">
+                                                <?= $pendientes ?><span class="visually-hidden">pendientes</span>
+                                            </span>
+                                        <?php endif; ?>
                                     </button>
-                                    <a href="<?= $urlPublica ?>" target="_blank"
-                                       class="btn btn-outline-primary btn-sm py-0 px-2"
-                                       onclick="event.stopPropagation()" title="Abrir formulario público">
-                                        <i class="bi bi-box-arrow-up-right"></i>
-                                    </a>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2"
+                                            onclick="event.stopPropagation();fexqrMostrarQr('<?= $r['token'] ?>','<?= htmlspecialchars($r['nombre'], ENT_QUOTES) ?>','<?= htmlspecialchars($r['descripcion'] ?? '', ENT_QUOTES) ?>')"
+                                            title="QR Clientes">
+                                        <i class="bi bi-qr-code me-1"></i> QR Clientes
+                                    </button>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -307,6 +312,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('fexqrQrImg').src = '';
         document.getElementById('fexqrQrUrl').textContent = '';
         document.getElementById('fexqrQrSpinner').classList.remove('d-none');
+        document.getElementById('fexqrQrUrlLabel').textContent = 'URL del formulario público:';
         new bootstrap.Modal(document.getElementById('modalFexqrQr')).show();
 
         const url = `${baseUrl}/factura-express/${token}`;
@@ -320,6 +326,29 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('fexqrPrintImg').src                 = qr;
         };
         document.getElementById('fexqrQrImg').src     = qr;
+        document.getElementById('fexqrQrUrl').textContent = url;
+        document.getElementById('fexqrQrUrlLink').href    = url;
+    };
+
+    window.fexqrMostrarQrAdmin = function(url, nombre) {
+        document.getElementById('fexqrQrNombre').textContent      = 'Panel de Solicitudes';
+        document.getElementById('fexqrQrDescripcion').textContent = 'Acceso a autorizaciones (Plantilla: ' + nombre + ')';
+        document.getElementById('fexqrQrImg').src = '';
+        document.getElementById('fexqrQrUrl').textContent = '';
+        document.getElementById('fexqrQrSpinner').classList.remove('d-none');
+        document.getElementById('fexqrQrUrlLabel').textContent = 'URL del panel de solicitudes (requiere login):';
+        new bootstrap.Modal(document.getElementById('modalFexqrQr')).show();
+
+        const qr  = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(url)}&size=280x280&margin=10`;
+
+        document.getElementById('fexqrQrImg').onload = () => {
+            document.getElementById('fexqrQrSpinner').classList.add('d-none');
+            // Sincronizar hoja de impresión
+            document.getElementById('fexqrPrintNombre').textContent      = 'Panel de Solicitudes';
+            document.getElementById('fexqrPrintDescripcion').textContent = 'Acceso a autorizaciones (Plantilla: ' + nombre + ')';
+            document.getElementById('fexqrPrintImg').src                 = qr;
+        };
+        document.getElementById('fexqrQrImg').src         = qr;
         document.getElementById('fexqrQrUrl').textContent = url;
         document.getElementById('fexqrQrUrlLink').href    = url;
     };

@@ -226,7 +226,7 @@ class FacturaExpressQrRepository extends BaseRepository
     // SOLICITUDES
     // ═══════════════════════════════════════════════════════
 
-    public function getListadoSolicitudes(int $idEmpresa, string $buscar, string $estadoFiltro, int $page, int $perPage, string $ordenCol, string $ordenDir): array
+    public function getListadoSolicitudes(int $idEmpresa, string $buscar, string $estadoFiltro, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idPlantilla = null): array
     {
         $colsValidas = ['nombre_cliente', 'identificacion', 'estado', 'monto_total', 'created_at'];
         if (!in_array($ordenCol, $colsValidas, true)) $ordenCol = 'created_at';
@@ -235,6 +235,10 @@ class FacturaExpressQrRepository extends BaseRepository
         $where  = 'WHERE s.id_empresa = :id_empresa AND s.eliminado = false';
         $params = [':id_empresa' => $idEmpresa];
 
+        if ($idPlantilla !== null && $idPlantilla > 0) {
+            $where .= ' AND s.id_plantilla = :id_plantilla';
+            $params[':id_plantilla'] = $idPlantilla;
+        }
         if ($estadoFiltro !== '' && $estadoFiltro !== 'todos') {
             $where .= ' AND s.estado = :estado';
             $params[':estado'] = $estadoFiltro;
@@ -282,7 +286,7 @@ class FacturaExpressQrRepository extends BaseRepository
     {
         $st = $this->db->prepare(
             "SELECT s.*, p.nombre AS nombre_plantilla, p.mensaje_gracias,
-                    e.razon_social AS empresa_nombre
+                    e.nombre AS empresa_nombre
              FROM factura_express_solicitudes s
              LEFT JOIN factura_express_plantillas p ON p.id = s.id_plantilla
              LEFT JOIN empresas e ON e.id = s.id_empresa
@@ -358,6 +362,23 @@ class FacturaExpressQrRepository extends BaseRepository
     {
         $this->db->prepare("UPDATE factura_express_solicitudes SET correo_enviado_cliente = true WHERE id = :id")
                  ->execute([':id' => $id]);
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // CATÁLOGOS / CONFIGURACIÓN (para edición de ítems)
+    // ═══════════════════════════════════════════════════════
+
+    public function getTarifasIva(): array
+    {
+        return $this->db->query("SELECT * FROM tarifa_iva WHERE status = 1 ORDER BY porcentaje_iva ASC")
+                        ->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getEmpresaConfig(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT * FROM empresas WHERE id = :id LIMIT 1");
+        $st->execute([':id' => $idEmpresa]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: [];
     }
 
     public function contarSolicitudesPorIp(string $ip, int $idPlantilla, int $ventanaMinutos = 60): int

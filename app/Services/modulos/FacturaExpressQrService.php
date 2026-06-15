@@ -204,9 +204,16 @@ class FacturaExpressQrService
     // SOLICITUDES (gestión con login)
     // ═══════════════════════════════════════════════════════
 
-    public function getListadoSolicitudes(int $idEmpresa, string $buscar, string $estado, int $page, int $perPage, string $ordenCol, string $ordenDir): array
+    public function getListadoSolicitudes(int $idEmpresa, string $buscar, string $estado, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idPlantilla = null): array
     {
-        return $this->repo->getListadoSolicitudes($idEmpresa, $buscar, $estado, $page, $perPage, $ordenCol, $ordenDir);
+        return $this->repo->getListadoSolicitudes($idEmpresa, $buscar, $estado, $page, $perPage, $ordenCol, $ordenDir, $idPlantilla);
+    }
+
+    /** Nombre de una plantilla (para el encabezado del panel móvil). */
+    public function getNombrePlantilla(int $idPlantilla, int $idEmpresa): ?string
+    {
+        $p = $this->repo->findById($idPlantilla, $idEmpresa);
+        return $p['nombre'] ?? null;
     }
 
     public function getSolicitud(int $id, int $idEmpresa): array
@@ -228,8 +235,9 @@ class FacturaExpressQrService
         $plantilla = $this->repo->findById((int)$solicitud['id_plantilla'], $idEmpresa);
 
         $this->repo->beginTransaction();
+        $idFacturaCreada = null;
         try {
-            $this->_facturarSolicitud($idSolicitud, $idEmpresa, $idUsuario, $plantilla ?? [], $datosEditados);
+            $idFacturaCreada = $this->_facturarSolicitud($idSolicitud, $idEmpresa, $idUsuario, $plantilla ?? [], $datosEditados);
             $this->log->registrar($idUsuario, $idEmpresa, 'aprobar_factura_express', 'factura_express_solicitudes', $idSolicitud, $solicitud, []);
             $this->repo->commit();
         } catch (Exception $e) {
@@ -259,7 +267,7 @@ class FacturaExpressQrService
     // FACTURACIÓN INTERNA
     // ═══════════════════════════════════════════════════════
 
-    private function _facturarSolicitud(int $idSolicitud, int $idEmpresa, int $idUsuario, array $plantilla, array $datosEditados = []): void
+    private function _facturarSolicitud(int $idSolicitud, int $idEmpresa, int $idUsuario, array $plantilla, array $datosEditados = []): int
     {
         $solicitud = $this->repo->getSolicitudById($idSolicitud, $idEmpresa);
         if (!$solicitud) throw new Exception('Solicitud no encontrada al facturar.');
@@ -283,39 +291,65 @@ class FacturaExpressQrService
         $idFactura   = $factService->crear($facturaData);
 
         $this->repo->marcarFacturada($idSolicitud, $idFactura, $idClienteSys, $idUsuario);
+
+        return $idFactura;
     }
 
     private function _buscarOCrearCliente(array $solicitud, int $idEmpresa, int $idUsuario): int
     {
         $db = $this->repo->getDb();
 
-        // Buscar cliente existente por identificación y empresa
+        // Buscar cliente existente por identificación y empresa (incluyendo eliminados)
         $st = $db->prepare(
             "SELECT id FROM clientes
-             WHERE identificacion = :ident AND id_empresa = :empresa AND eliminado = false
+             WHERE identificacion = :ident AND id_empresa = :empresa
              LIMIT 1"
         );
         $st->execute([':ident' => $solicitud['identificacion'], ':empresa' => $idEmpresa]);
         $existing = $st->fetchColumn();
-        if ($existing) return (int) $existing;
 
-        // Crear cliente nuevo
-        $st2 = $db->prepare(
-            "INSERT INTO clientes (id_empresa, nombre, identificacion, tipo_identificacion,
-              email, telefono, estado, created_at, created_by)
-             VALUES (:empresa, :nombre, :ident, :tipo, :email, :tel, 'activo', NOW(), :uid)
-             RETURNING id"
-        );
-        $st2->execute([
-            ':empresa' => $idEmpresa,
-            ':nombre'  => $solicitud['nombre_cliente'],
-            ':ident'   => $solicitud['identificacion'],
-            ':tipo'    => $solicitud['tipo_identificacion'],
-            ':email'   => $solicitud['correo_cliente'] ?: null,
-            ':tel'     => $solicitud['telefono_cliente'] ?: null,
-            ':uid'     => $idUsuario,
+        if ($existing) {
+            // Cliente ya registrado (por cédula/RUC): reutilizar y actualizar sus datos
+            // Reactivamos si estaba eliminado y actualizamos con lo recibido
+            $up = $db->prepare(
+                "UPDATE clientes
+                 SET nombre   = :nombre,
+                     email    = COALESCE(NULLIF(:email, ''), email),
+                     telefono = COALESCE(NULLIF(:tel, ''), telefono),
+                     eliminado = false,
+                     updated_at = NOW(), updated_by = :uid
+                 WHERE id = :id"
+            );
+            $up->execute([
+                ':nombre' => $solicitud['nombre_cliente'],
+                ':email'  => trim((string) ($solicitud['correo_cliente'] ?? '')),
+                ':tel'    => trim((string) ($solicitud['telefono_cliente'] ?? '')),
+                ':uid'    => $idUsuario,
+                ':id'     => (int) $existing,
+            ]);
+            return (int) $existing;
+        }
+
+        // Crear cliente nuevo mediante el repositorio canónico
+        $tipoIdMap = ['cedula' => '05', 'ruc' => '04', 'pasaporte' => '06', 'sin_ruc' => '07'];
+        $tipoId    = $tipoIdMap[$solicitud['tipo_identificacion'] ?? 'cedula'] ?? '05';
+
+        $clienteRepo = new \App\repositories\modulos\ClienteRepository();
+        return $clienteRepo->create([
+            'id_empresa'     => $idEmpresa,
+            'id_usuario'     => $idUsuario,
+            'nombre'         => $solicitud['nombre_cliente'],
+            'tipo_id'        => $tipoId,
+            'identificacion' => $solicitud['identificacion'],
+            'telefono'       => $solicitud['telefono_cliente'] ?: null,
+            'email'          => $solicitud['correo_cliente'] ?: null,
+            'direccion'      => $solicitud['direccion_cliente'] ?? null,
+            'provincia'      => null,
+            'ciudad'         => null,
+            'id_vendedor'    => null,
+            'plazo'          => 0,
+            'status'         => 1,
         ]);
-        return (int) $st2->fetchColumn();
     }
 
     private function _construirDataFactura(array $items, int $idCliente, int $idEmpresa, int $idUsuario, array $plantilla): array
@@ -353,8 +387,23 @@ class FacturaExpressQrService
         if (!$empresaConfig) throw new \Exception('No se encontró la empresa.');
 
         $secService = new \App\Services\SecuencialService();
-        $secResult  = $secService->obtenerSiguienteSecuencial((int)$estab['id_punto_emision'], 'factura');
+        $secResult  = $secService->obtenerSiguienteSecuencial((int)$estab['id_punto_emision'], 'Facturas de venta');
         $secuencial = $secResult['formateado'];
+
+        // Pre-cargar códigos de los productos de catálogo referenciados por los ítems
+        $idsProd = array_values(array_unique(array_filter(array_map(
+            fn($i) => (int) ($i['id_producto'] ?? 0),
+            $items
+        ))));
+        $prodInfo = [];
+        if ($idsProd) {
+            $in  = implode(',', array_fill(0, count($idsProd), '?'));
+            $stP = $db->prepare("SELECT id, codigo, codigo_auxiliar, id_medida FROM productos WHERE id IN ($in) AND id_empresa = ? AND eliminado = false");
+            $stP->execute([...$idsProd, $idEmpresa]);
+            foreach ($stP->fetchAll(\PDO::FETCH_ASSOC) as $p) {
+                $prodInfo[(int) $p['id']] = $p;
+            }
+        }
 
         $detalles    = [];
         $totalSinImp = 0.0;
@@ -366,13 +415,24 @@ class FacturaExpressQrService
             $totalSinImp += $base;
             $totalIva    += $iva;
 
+            $idProd  = (int) ($det['id_producto'] ?? 0);
+            $info    = $prodInfo[$idProd] ?? null;
+            // Sin producto de catálogo válido → ítem libre (se creará en el catálogo al facturar)
+            $esLibre = ($idProd <= 0 || $info === null);
+
             $detalles[] = [
-                'id_producto'               => $det['id_producto'] ?: null,
+                'id_producto'               => $esLibre ? null : $idProd,
+                'es_libre'                  => $esLibre ? '1' : '0',
+                'nombre'                    => $det['descripcion'],
+                'codigo_principal'          => $info['codigo'] ?? '000',
+                'codigo_auxiliar'           => $info['codigo_auxiliar'] ?? null,
+                'id_unidad_medida'          => $info['id_medida'] ?? null,
                 'descripcion'               => $det['descripcion'],
                 'cantidad'                  => $det['cantidad'],
                 'precio_unitario'           => $det['precio_unitario'],
                 'descuento'                 => 0,
                 'precio_total_sin_impuesto' => $base,
+                'porcentaje_iva'            => (float) ($det['porcentaje_iva'] ?? 0),
                 'impuestos'                 => $det['porcentaje_iva'] > 0 ? [[
                     'codigo_impuesto'   => '2',
                     'codigo_porcentaje' => \App\Helpers\SriIvaHelper::codigoPorcentaje($det['porcentaje_iva']),
@@ -397,21 +457,28 @@ class FacturaExpressQrService
             'empresa_config'      => $empresaConfig,
             'detalles'            => $detalles,
             'pagos'               => [['forma_pago' => $formaPago, 'total' => round($totalSinImp + $totalIva, 2), 'plazo' => 0]],
-            'info_adicional'      => [
-                ['nombre' => 'Origen', 'valor' => 'Factura Express QR'],
-                ['nombre' => 'Plantilla', 'valor' => $plantilla['nombre'] ?? ''],
-            ],
+            'info_adicional'      => [],
             'total_sin_impuestos' => $totalSinImp,
             'total_descuento'     => 0,
             'importe_total'       => round($totalSinImp + $totalIva, 2),
             'propina'             => 0,
-            'observaciones'       => 'Factura generada por solicitud Express QR.',
+            'observaciones'       => null,
         ];
     }
 
     // ═══════════════════════════════════════════════════════
     // UTILIDADES
     // ═══════════════════════════════════════════════════════
+
+    public function getTarifasIva(): array
+    {
+        return $this->repo->getTarifasIva();
+    }
+
+    public function getEmpresaConfig(int $idEmpresa): array
+    {
+        return $this->repo->getEmpresaConfig($idEmpresa);
+    }
 
     private function extraerItems(array &$data): array
     {

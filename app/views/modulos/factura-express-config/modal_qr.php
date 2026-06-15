@@ -58,7 +58,7 @@
                      onerror="this.parentElement.querySelector('#fexqrQrSpinner').classList.remove('d-none');this.style.display='none'">
 
                 <div class="mt-3 p-2 bg-light rounded-3 border">
-                    <small class="text-muted d-block mb-1">URL del formulario público:</small>
+                    <small class="text-muted d-block mb-1" id="fexqrQrUrlLabel">URL del formulario público:</small>
                     <a id="fexqrQrUrlLink" href="#" target="_blank" class="small text-primary text-break fw-medium">
                         <span id="fexqrQrUrl"></span>
                     </a>

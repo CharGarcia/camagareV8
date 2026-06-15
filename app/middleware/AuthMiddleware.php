@@ -19,6 +19,10 @@ class AuthMiddleware
         }
 
         if (!isset($_SESSION['id_usuario'])) {
+            $uri = $_SERVER['REQUEST_URI'] ?? '';
+            if ($uri !== '' && strpos($uri, 'login') === false && $uri !== '/' && $uri !== '/sistema/') {
+                $_SESSION['intended_url'] = $uri;
+            }
             header('Location: /sistema/');
             exit;
         }

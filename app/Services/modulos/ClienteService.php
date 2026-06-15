@@ -108,6 +108,16 @@ class ClienteService
             throw new Exception('El cliente no existe o ya ha sido eliminado.');
         }
 
+        // No permitir eliminar un cliente que ya está siendo usado en módulos operativos
+        $usos = $this->repository->getUsosCliente($id, $idEmpresa);
+        if (!empty($usos)) {
+            $detalle = [];
+            foreach ($usos as $modulo => $cantidad) {
+                $detalle[] = "{$modulo} ({$cantidad})";
+            }
+            throw new Exception('No se puede eliminar el cliente porque tiene registros en: ' . implode(', ', $detalle) . '.');
+        }
+
         $this->repository->beginTransaction();
         try {
             $this->repository->delete($id, $idEmpresa, $idUsuario);
