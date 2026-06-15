@@ -260,20 +260,7 @@
     }
 
     document.addEventListener('show.bs.modal', function(e) {
-        var w = window.innerWidth;
-        var dialog = e.target.querySelector('.modal-dialog');
-        if (!dialog) return;
-        var isLg = dialog.classList.contains('modal-lg');
-        var isXl = dialog.classList.contains('modal-xl');
-        var aplicar = (isXl && w <= 991) || (isLg && w <= 767);
-        if (aplicar) {
-            // Marcar si ya tenía la clase antes de que la agreguemos
-            if (!dialog.classList.contains('modal-dialog-scrollable')) {
-                dialog.classList.add('modal-dialog-scrollable');
-                dialog.dataset.cmgScrollable = '1';
-            }
-            // Eliminado el bloqueo de overflow para móviles para que pueda escrolearse si es muy alto
-        }
+        fixModalScroll(e.target);
     });
 
     document.addEventListener('hidden.bs.modal', function(e) {
