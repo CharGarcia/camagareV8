@@ -376,7 +376,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                 const nombre  = (p.nombre ?? '').replace(/</g, '&lt;');
                 const precio  = parseFloat(p.precio_unitario ?? p.pvp ?? 0).toFixed(2);
                 const iva     = parseFloat(p.porcentaje_iva_final ?? p.porcentaje_iva ?? p.iva ?? 0).toFixed(2);
-                const enc     = encodeURIComponent(JSON.stringify({id: p.id, n: nombre, p: precio, i: iva}));
+                const enc     = encodeURIComponent(JSON.stringify({id: p.id, n: nombre, p: precio, i: iva, tid: p.tarifa_iva ?? null}));
                 return `<button type="button" class="list-group-item list-group-item-action py-1 px-2 small" onclick='suscAsignarProductoFila("${enc}")'><strong>${nombre}</strong> - $${precio}</button>`;
             }).join('');
             ddProd.classList.remove('d-none');
@@ -393,11 +393,22 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         tr.querySelector('.det-price').value = p.p;
         
         let selectIva = tr.querySelector('.det-iva');
-        let valBuscado = parseFloat(p.i);
-        for (let i = 0; i < selectIva.options.length; i++) {
-            if (parseFloat(selectIva.options[i].dataset.porcentaje) === valBuscado) {
-                selectIva.selectedIndex = i;
-                break;
+        if (p.tid) {
+            // Coincidencia exacta por ID de tarifa_iva (concepto SRI preciso)
+            for (let i = 0; i < selectIva.options.length; i++) {
+                if (parseInt(selectIva.options[i].value) === parseInt(p.tid)) {
+                    selectIva.selectedIndex = i;
+                    break;
+                }
+            }
+        } else {
+            // Fallback: coincidencia por porcentaje
+            let valBuscado = parseFloat(p.i);
+            for (let i = 0; i < selectIva.options.length; i++) {
+                if (parseFloat(selectIva.options[i].dataset.porcentaje) === valBuscado) {
+                    selectIva.selectedIndex = i;
+                    break;
+                }
             }
         }
         const hidPct = tr.querySelector('.det-porcentaje-iva');
