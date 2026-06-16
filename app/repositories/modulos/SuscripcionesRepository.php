@@ -206,9 +206,11 @@ class SuscripcionesRepository extends BaseRepository
 
     public function getDetalle(int $idSuscripcion): array
     {
-        $sql = "SELECT sd.*, p.nombre AS nombre_producto, p.codigo AS codigo_producto
+        $sql = "SELECT sd.*, p.nombre AS nombre_producto, p.codigo AS codigo_producto,
+                       ti.codigo AS codigo_porcentaje
                 FROM suscripciones_detalle sd
                 LEFT JOIN productos p ON p.id = sd.id_producto
+                LEFT JOIN tarifa_iva ti ON ti.id = sd.id_tarifa_iva
                 WHERE sd.id_suscripcion = :id AND sd.eliminado = false
                 ORDER BY sd.orden ASC, sd.id ASC";
         $st = $this->db->prepare($sql);
@@ -220,10 +222,10 @@ class SuscripcionesRepository extends BaseRepository
     {
         $sql = "INSERT INTO suscripciones_detalle
                     (id_suscripcion, id_empresa, id_producto, descripcion, cantidad,
-                     precio_unitario, porcentaje_iva, orden, created_by, created_at, eliminado)
+                     precio_unitario, porcentaje_iva, id_tarifa_iva, orden, created_by, created_at, eliminado)
                 VALUES
                     (:id_suscripcion, :id_empresa, :id_producto, :descripcion, :cantidad,
-                     :precio_unitario, :porcentaje_iva, :orden, :created_by, CURRENT_TIMESTAMP, false)";
+                     :precio_unitario, :porcentaje_iva, :id_tarifa_iva, :orden, :created_by, CURRENT_TIMESTAMP, false)";
         $st = $this->db->prepare($sql);
         $st->execute([
             ':id_suscripcion' => $data['id_suscripcion'],
@@ -233,6 +235,7 @@ class SuscripcionesRepository extends BaseRepository
             ':cantidad'       => $data['cantidad'] ?? 1,
             ':precio_unitario'=> $data['precio_unitario'] ?? 0,
             ':porcentaje_iva' => $data['porcentaje_iva'] ?? 0,
+            ':id_tarifa_iva'  => !empty($data['id_tarifa_iva']) ? (int) $data['id_tarifa_iva'] : null,
             ':orden'          => $data['orden'] ?? 0,
             ':created_by'     => $data['id_usuario'] ?? 0,
         ]);
@@ -481,8 +484,9 @@ class SuscripcionesRepository extends BaseRepository
 
     public function getDetalleParaCobro(int $idSuscripcion): array
     {
-        $sql = "SELECT sd.*
+        $sql = "SELECT sd.*, ti.codigo AS codigo_porcentaje
                 FROM suscripciones_detalle sd
+                LEFT JOIN tarifa_iva ti ON ti.id = sd.id_tarifa_iva
                 WHERE sd.id_suscripcion = :id AND sd.eliminado = false
                 ORDER BY sd.orden ASC, sd.id ASC";
         $st = $this->db->prepare($sql);

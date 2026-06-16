@@ -12,6 +12,9 @@ class LiquidacionCompraRepository extends BaseRepository
     public function __construct()
     {
         parent::__construct('liquidaciones_cabecera');
+        try {
+            $this->db->exec("ALTER TABLE liquidaciones_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
+        } catch (\Throwable $e) {}
     }
 
     public function query(string $sql, array $params = []): \PDOStatement

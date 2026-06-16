@@ -394,13 +394,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         
         let selectIva = tr.querySelector('.det-iva');
         let valBuscado = parseFloat(p.i);
-        for(let i = 0; i < selectIva.options.length; i++) {
-            if(parseFloat(selectIva.options[i].value) === valBuscado) {
+        for (let i = 0; i < selectIva.options.length; i++) {
+            if (parseFloat(selectIva.options[i].dataset.porcentaje) === valBuscado) {
                 selectIva.selectedIndex = i;
                 break;
             }
         }
-        
+        const hidPct = tr.querySelector('.det-porcentaje-iva');
+        if (hidPct) hidPct.value = parseFloat(selectIva.options[selectIva.selectedIndex]?.dataset?.porcentaje ?? 0);
+
         suscRecalcFila(tr.querySelector('.det-qty'));
         ddProd.classList.add('d-none');
     };
@@ -435,8 +437,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                        value="${parseFloat(item.precio_unitario ?? 0).toFixed(2)}" min="0" step="0.01" oninput="suscRecalcFila(this)">
             </td>
             <td class="text-center align-middle">
-                <select class="form-select form-select-sm input-detalle text-center det-iva" name="detalle[${idx}][porcentaje_iva]" onchange="suscRecalcFila(this)">
-                    ${tarifasIva.map(t => `<option value="${t.porcentaje_iva}" ${parseFloat(item.porcentaje_iva ?? 0) === parseFloat(t.porcentaje_iva) ? 'selected' : ''}>${t.tarifa}</option>`).join('')}
+                <input type="hidden" class="det-porcentaje-iva" name="detalle[${idx}][porcentaje_iva]" value="${parseFloat(item.porcentaje_iva ?? 0)}">
+                <select class="form-select form-select-sm input-detalle text-center det-iva" name="detalle[${idx}][id_tarifa_iva]" onchange="suscOnCambiarIva(this)">
+                    ${tarifasIva.map(t => {
+                        const sel = item.id_tarifa_iva
+                            ? parseInt(item.id_tarifa_iva) === parseInt(t.id)
+                            : parseFloat(item.porcentaje_iva ?? 0) === parseFloat(t.porcentaje_iva);
+                        return `<option value="${t.id}" data-porcentaje="${t.porcentaje_iva}" data-codigo="${t.codigo ?? ''}" ${sel ? 'selected' : ''}>${t.tarifa}</option>`;
+                    }).join('')}
                 </select>
             </td>
             <td class="text-end pe-4 align-middle">
@@ -448,8 +456,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                 </button>
             </td>`;
         tbody.appendChild(tr);
+        // Sync hidden porcentaje_iva with the initially selected IVA option
+        const selIvaEl = tr.querySelector('.det-iva');
+        if (selIvaEl && selIvaEl.selectedIndex >= 0) {
+            const hidPct = tr.querySelector('.det-porcentaje-iva');
+            if (hidPct) hidPct.value = parseFloat(selIvaEl.options[selIvaEl.selectedIndex]?.dataset?.porcentaje ?? 0);
+        }
         suscRecalcTotales();
-        
+
         if(!item.id_producto) {
             setTimeout(() => tr.querySelector('.det-desc').focus(), 50);
         }
@@ -472,6 +486,15 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         suscRecalcTotales();
     };
 
+    window.suscOnCambiarIva = function(sel) {
+        const tr  = sel.closest('tr');
+        const opt = sel.options[sel.selectedIndex];
+        const pct = parseFloat(opt?.dataset?.porcentaje ?? 0);
+        const hid = tr.querySelector('.det-porcentaje-iva');
+        if (hid) hid.value = pct;
+        suscRecalcFila(sel);
+    };
+
     function suscRecalcTotales() {
         let subGeneral = 0;
         let totalGeneral = 0;
@@ -481,7 +504,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         document.querySelectorAll('#susc_tbody_detalle tr.row-susc-det').forEach(tr => {
             const qty  = parseFloat(tr.querySelector('.det-qty')?.value)   || 0;
             const prc  = parseFloat(tr.querySelector('.det-price')?.value)  || 0;
-            const ivaP = parseFloat(tr.querySelector('.det-iva')?.value)    || 0;
+            const ivaP = parseFloat(tr.querySelector('.det-porcentaje-iva')?.value) || 0;
             const sub  = qty * prc;
             
             subGeneral += sub;
@@ -582,6 +605,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                     cantidad:        parseFloat(item.cantidad),
                     precio_unitario: parseFloat(item.precio_unitario),
                     porcentaje_iva:  parseFloat(item.porcentaje_iva),
+                    id_tarifa_iva:   item.id_tarifa_iva ?? null,
                 }));
             }
         } catch (e) { console.error(e); }

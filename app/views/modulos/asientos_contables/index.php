@@ -44,6 +44,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
 
+<?php if (!empty($warnings)): ?>
+    <div class="alert alert-warning alert-dismissible fade show shadow-sm mb-3" role="alert">
+        <strong><i class="bi bi-exclamation-triangle-fill me-2"></i> Atención:</strong>
+        <ul class="mb-0 mt-2">
+            <?php foreach ($warnings as $w): ?>
+                <li><?= htmlspecialchars($w) ?></li>
+            <?php endforeach; ?>
+        </ul>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+<?php endif; ?>
+
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i> <?= htmlspecialchars($titulo) ?></h5>
     <?php if ($perm['crear']): ?>

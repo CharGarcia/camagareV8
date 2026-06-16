@@ -58,7 +58,7 @@ class SuscripcionesController extends BaseModuloController
         $periodicidades = $this->service->getPeriodicidades();
 
         $db = \App\core\Database::getConnection();
-        $stmt = $db->query("SELECT id, tarifa, porcentaje_iva FROM tarifa_iva WHERE status = 1 ORDER BY porcentaje_iva ASC");
+        $stmt = $db->query("SELECT id, codigo, tarifa, porcentaje_iva FROM tarifa_iva WHERE status = 1 ORDER BY porcentaje_iva ASC");
         $tarifasIva = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
         $empresaModel = new \App\models\Empresa();
@@ -430,9 +430,15 @@ class SuscripcionesController extends BaseModuloController
 
                     foreach ($detalle as $det) {
                         $base = round((float) $det['cantidad'] * (float) $det['precio_unitario'], 2);
-                        $iva  = round($base * ((float) ($det['porcentaje_iva'] ?? 0) / 100), 2);
+                        $pct  = (float) ($det['porcentaje_iva'] ?? 0);
+                        $iva  = round($base * ($pct / 100), 2);
                         $totalSinImp += $base;
                         $totalIva    += $iva;
+
+                        // codigo_porcentaje viene del JOIN con tarifa_iva.
+                        // Fallback: '0' para 0%, '2' para cualquier otro (comportamiento anterior).
+                        $codigoPorcentaje = $det['codigo_porcentaje']
+                            ?? ($pct > 0 ? '2' : '0');
 
                         $descripcionItem = $det['descripcion'] ?? $det['nombre_producto'];
 
@@ -450,13 +456,16 @@ class SuscripcionesController extends BaseModuloController
                             'precio_unitario'           => $det['precio_unitario'],
                             'descuento'                 => 0,
                             'precio_total_sin_impuesto' => $base,
-                            'impuestos'                 => $det['porcentaje_iva'] > 0 ? [[
+                            // Siempre se incluye el impuesto, independientemente del porcentaje.
+                            // Necesario para: XML SRI (requiere <impuestos> por ítem) y
+                            // sincronizarCasilleros (mapea codigo_porcentaje al casillero correcto).
+                            'impuestos' => [[
                                 'codigo_impuesto'   => '2',
-                                'codigo_porcentaje' => '2',
-                                'tarifa'            => $det['porcentaje_iva'],
+                                'codigo_porcentaje' => $codigoPorcentaje,
+                                'tarifa'            => $pct,
                                 'base_imponible'    => $base,
                                 'valor'             => $iva,
-                            ]] : [],
+                            ]],
                         ];
                     }
 

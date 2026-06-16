@@ -60,9 +60,8 @@ class AsientoBuilderService
         // 5. Armar la distribución de importes Debe/Haber según el módulo específico
         $asientoResult = match ($tipoAsiento) {
             'ventas_factura' => $this->armarDistribucionVentasFactura($reglasBase, $documentData),
-            // Se pueden agregar módulos adicionales aquí:
-            // 'adquisiciones_compras' => $this->armarDistribucionCompras($reglasBase, $documentData),
-            default => $this->armarDistribucionEstandar($reglasBase, $documentData),
+            // Utilizar la distribución dinámica para el resto de módulos por defecto
+            default => $this->armarDistribucionDinamica($reglasBase, $documentData),
         };
 
         usort($asientoResult, function($a, $b) {
@@ -352,27 +351,77 @@ class AsientoBuilderService
     }
 
     /**
-     * Distribución genérica fallback en caso de no estar definido un comportamiento específico para el módulo.
+     * Distribución dinámica para Compras, Liquidaciones, Notas de Crédito, etc.
      */
-    private function armarDistribucionEstandar(array $reglas, array $data): array
+    private function armarDistribucionDinamica(array $reglas, array $data): array
     {
-        $importeTotal = (float)($data['importe_total'] ?? $data['total'] ?? 0);
+        $importeTotal = round((float)($data['importe_total'] ?? $data['total'] ?? 0), 2);
+        $subtotal = round((float)($data['total_sin_impuestos'] ?? $data['subtotal'] ?? 0), 2);
+        $descuento = round((float)($data['total_descuento'] ?? $data['descuento'] ?? 0), 2);
+        $totalIce = round((float)($data['total_ice'] ?? 0), 2);
+        $propina = round((float)($data['propina'] ?? 0), 2);
+        // Intentar calcular IVA
+        $totalIvaTotal = round((float)($data['total_iva'] ?? max(0.0, $importeTotal - $subtotal - $totalIce - $propina)), 2);
+
         $detalles = [];
 
         foreach ($reglas as $r) {
             if (empty($r['id_cuenta'])) continue;
 
-            $debe = $r['debe_haber'] === 'debe' ? $importeTotal : 0.00;
-            $haber = $r['debe_haber'] === 'haber' ? $importeTotal : 0.00;
+            $debe  = 0.00;
+            $haber = 0.00;
+            $valorMapeado = 0.00;
 
-            $detalles[] = [
-                'id_cuenta_contable' => (int)$r['id_cuenta'],
-                'cuenta_codigo' => $r['cuenta_codigo'],
-                'cuenta_nombre' => $r['cuenta_nombre'],
-                'debe' => round($debe, 2),
-                'haber' => round($haber, 2),
-                'referencia_detalle' => $r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '',
-            ];
+            $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']    ?? '');
+            $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto']  ?? $r['referencia'] ?? '');
+
+            if (str_contains($codigo, 'PORPAGAR') || str_contains($concepto, 'pagar') || str_contains($codigo, 'PORCOBRAR') || str_contains($concepto, 'cobrar')) {
+                $valorMapeado = $importeTotal;
+            } elseif (str_contains($codigo, 'SUBTOTAL') || str_contains($concepto, 'subtotal') || str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario')) {
+                $valorMapeado = $subtotal;
+            } elseif (str_contains($codigo, 'DESC') || str_contains($concepto, 'descuento')) {
+                $valorMapeado = $descuento;
+            } elseif (str_contains($codigo, 'ICE') || str_contains($concepto, 'ice')) {
+                $valorMapeado = $totalIce;
+            } elseif (str_contains($codigo, 'PROPINA') || str_contains($concepto, 'propina')) {
+                $valorMapeado = $propina;
+            } elseif (str_contains($codigo, 'IVA') || str_contains($concepto, 'iva')) {
+                $valorMapeado = $totalIvaTotal;
+            } else {
+                $valorMapeado = $importeTotal; // Fallback
+            }
+
+            if ($valorMapeado > 0) {
+                if (($r['debe_haber'] ?? 'debe') === 'debe') {
+                    $debe = $valorMapeado;
+                } else {
+                    $haber = $valorMapeado;
+                }
+
+                $detalles[] = [
+                    'id_cuenta_contable' => (int)$r['id_cuenta'],
+                    'cuenta_codigo'      => $r['cuenta_codigo'],
+                    'cuenta_nombre'      => $r['cuenta_nombre'],
+                    'debe'               => round($debe, 2),
+                    'haber'              => round($haber, 2),
+                    'referencia_detalle' => $r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '',
+                ];
+            }
+        }
+
+        // Validación básica de balance
+        $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
+        $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
+
+        if ($totalDebe === 0.0 && $totalHaber === 0.0) {
+            throw new \Exception("No se ha configurado ninguna cuenta para este asiento o los montos son cero.");
+        }
+        if ($totalDebe !== $totalHaber) {
+            throw new \Exception(
+                "El asiento no cuadra. Debe: $" . number_format($totalDebe, 2) .
+                ", Haber: $" . number_format($totalHaber, 2) .
+                ". Revise la configuración de cuentas."
+            );
         }
 
         return $detalles;

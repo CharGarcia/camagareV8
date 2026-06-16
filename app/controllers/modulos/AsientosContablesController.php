@@ -36,7 +36,13 @@ class AsientosContablesController extends BaseModuloController
 
         $perm      = $this->getPermisos();
         $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
+
+        // Sincronizar asientos pendientes automáticamente
+        $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
+        $sincronizador->sincronizar($idEmpresa, $idUsuario);
+        $warnings = $sincronizador->getWarnings();
 
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
@@ -52,6 +58,7 @@ class AsientosContablesController extends BaseModuloController
         $this->viewWithLayout('layouts.main', 'modulos.asientos_contables.index', [
             'titulo'     => 'Libro Diario / Asientos',
             'perm'       => $perm,
+            'warnings'   => $warnings,
             'rutaModulo' => self::RUTA_MODULO,
             'rows'       => $rows,
             'total'      => $total,

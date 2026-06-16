@@ -99,9 +99,14 @@ unset($_SESSION['permisos_msg']);
         <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <strong><i class="bi bi-person-fill"></i> <?= htmlspecialchars($usuarioSel['nombre'] ?? '') ?> - <i class="bi bi-building"></i> <?= htmlspecialchars($empresaSel['nombre_comercial'] ?? $empresaSel['ruc'] ?? '') ?></strong>
             <?php if ((int)($usuarioSel['nivel'] ?? 0) < 3): ?>
-            <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCopiarPermisos">
-                <i class="bi bi-files"></i> Copiar permisos a otro usuario
-            </button>
+            <div class="d-flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCopiarDesdeEmpresa">
+                    <i class="bi bi-building-gear"></i> Copiar desde otra empresa
+                </button>
+                <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCopiarPermisos">
+                    <i class="bi bi-files"></i> Copiar permisos a otro usuario
+                </button>
+            </div>
             <?php endif; ?>
         </div>
         <div class="card-body">
@@ -109,6 +114,14 @@ unset($_SESSION['permisos_msg']);
                 <input type="hidden" name="action" value="guardar">
                 <input type="hidden" name="id_usuario" value="<?= (int)$idUsuarioSel ?>">
                 <input type="hidden" name="id_empresa" value="<?= (int)$idEmpresaSel ?>">
+                <div class="mb-2 d-flex align-items-center gap-2">
+                    <div class="input-group input-group-sm" style="max-width:350px">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="buscador-submodulo" class="form-control" placeholder="Buscar módulo o submódulo...">
+                        <button type="button" id="btn-limpiar-busqueda" class="btn btn-outline-secondary d-none"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                    <small id="buscador-conteo" class="text-muted"></small>
+                </div>
                 <div class="permisos-tabla-wrap">
                     <table class="table table-sm table-hover mb-0">
                         <thead class="table-light">
@@ -263,6 +276,39 @@ unset($_SESSION['permisos_msg']);
         })();
     </script>
 
+    <script>
+        (function() {
+            var buscador  = document.getElementById('buscador-submodulo');
+            var btnLimpiar = document.getElementById('btn-limpiar-busqueda');
+            var conteo    = document.getElementById('buscador-conteo');
+            if (!buscador) return;
+
+            var allRows = Array.from(document.querySelectorAll('.perm-row'));
+            var total   = allRows.length;
+
+            function filtrar() {
+                var q = buscador.value.toLowerCase().trim();
+                var visibles = 0;
+                allRows.forEach(function(row) {
+                    var modulo    = (row.children[0].textContent || '').toLowerCase();
+                    var submodulo = (row.children[1].textContent || '').toLowerCase();
+                    var visible   = !q || modulo.indexOf(q) !== -1 || submodulo.indexOf(q) !== -1;
+                    row.style.display = visible ? '' : 'none';
+                    if (visible) visibles++;
+                });
+                btnLimpiar.classList.toggle('d-none', !q);
+                conteo.textContent = q ? ('Mostrando ' + visibles + ' de ' + total) : '';
+            }
+
+            buscador.addEventListener('input', filtrar);
+            btnLimpiar.addEventListener('click', function() {
+                buscador.value = '';
+                filtrar();
+                buscador.focus();
+            });
+        })();
+    </script>
+
     <!-- Modal Copiar permisos a otro usuario -->
     <div class="modal fade" id="modalCopiarPermisos" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
@@ -411,6 +457,152 @@ unset($_SESSION['permisos_msg']);
             });
         })();
     </script>
+
+    <!-- Modal Copiar permisos desde otra empresa (mismo usuario, empresa diferente) -->
+    <?php if ((int)($usuarioSel['nivel'] ?? 0) < 3): ?>
+    <div class="modal fade" id="modalCopiarDesdeEmpresa" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-building-gear"></i> Copiar permisos desde otra empresa</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-light border small mb-3">
+                        <i class="bi bi-info-circle"></i> Se copiarán los permisos que tiene
+                        <strong><?= htmlspecialchars($usuarioSel['nombre'] ?? '') ?></strong>
+                        en la empresa seleccionada hacia
+                        <strong><?= htmlspecialchars($empresaSel['nombre_comercial'] ?? $empresaSel['ruc'] ?? '') ?></strong>.
+                        <strong>Se reemplazarán</strong> los permisos actuales de esta empresa para dicho usuario.
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Empresa de origen (de donde se copian los permisos)</label>
+                        <select id="copiaEmp-empresa-origen" class="form-select">
+                            <option value="">Cargando...</option>
+                        </select>
+                    </div>
+                    <div id="copiaEmp-msg" class="small mt-2"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" id="btn-copiar-desde-empresa" class="btn btn-primary" disabled>
+                        <i class="bi bi-building-gear"></i> Copiar permisos
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            var modalEl       = document.getElementById('modalCopiarDesdeEmpresa');
+            if (!modalEl) return;
+
+            var base          = '<?= $base ?>';
+            var idUsuario     = '<?= (int)$idUsuarioSel ?>';
+            var idEmpresaActual = '<?= (int)$idEmpresaSel ?>';
+            var selOrigen     = document.getElementById('copiaEmp-empresa-origen');
+            var btnCopiar     = document.getElementById('btn-copiar-desde-empresa');
+            var msgEl         = document.getElementById('copiaEmp-msg');
+            var tsOrigen      = null;
+
+            function setMsg(tipo, texto) {
+                var c = tipo === 'ok' ? 'text-success' : (tipo === 'err' ? 'text-danger' : 'text-secondary');
+                msgEl.className = c + ' small mt-2';
+                msgEl.innerHTML = texto;
+            }
+
+            if (typeof TomSelect !== 'undefined') {
+                tsOrigen = new TomSelect('#copiaEmp-empresa-origen', {
+                    create: false,
+                    placeholder: 'Seleccione empresa origen...',
+                    maxOptions: 500
+                });
+                tsOrigen.disable();
+                tsOrigen.on('change', function(val) {
+                    btnCopiar.disabled = !val;
+                    setMsg('', '');
+                });
+            } else {
+                selOrigen.addEventListener('change', function() {
+                    btnCopiar.disabled = !this.value;
+                    setMsg('', '');
+                });
+            }
+
+            modalEl.addEventListener('show.bs.modal', function() {
+                setMsg('', '');
+                btnCopiar.disabled = true;
+                if (tsOrigen) { tsOrigen.clear(); tsOrigen.clearOptions(); tsOrigen.disable(); }
+                else { selOrigen.innerHTML = '<option value="">Cargando...</option>'; }
+
+                fetch(base + '/config/permisos-modulos?action=empresasJson&u=' + encodeURIComponent(idUsuario) + '&q=', {
+                    credentials: 'same-origin'
+                })
+                .then(function(r) { return r.ok ? r.json() : []; })
+                .then(function(data) {
+                    var filtered = data.filter(function(o) {
+                        return String(o.value) !== String(idEmpresaActual);
+                    });
+
+                    if (filtered.length === 0) {
+                        if (tsOrigen) tsOrigen.disable();
+                        else selOrigen.innerHTML = '<option value="">Sin otras empresas disponibles</option>';
+                        setMsg('err', 'El usuario no tiene otras empresas asignadas.');
+                        return;
+                    }
+
+                    if (tsOrigen) {
+                        tsOrigen.addOptions(filtered);
+                        tsOrigen.refreshOptions(false);
+                        tsOrigen.enable();
+                    } else {
+                        selOrigen.innerHTML = '<option value="">Seleccione empresa origen...</option>';
+                        filtered.forEach(function(o) {
+                            var op = document.createElement('option');
+                            op.value = o.value;
+                            op.textContent = o.text;
+                            selOrigen.appendChild(op);
+                        });
+                    }
+                })
+                .catch(function() { setMsg('err', 'Error al cargar empresas.'); });
+            });
+
+            btnCopiar.addEventListener('click', function() {
+                var idOrigen = tsOrigen ? tsOrigen.getValue() : selOrigen.value;
+                if (!idOrigen) { setMsg('err', 'Seleccione la empresa origen.'); return; }
+
+                btnCopiar.disabled = true;
+                setMsg('load', '<i class="bi bi-arrow-repeat"></i> Copiando...');
+
+                var fd = new FormData();
+                fd.append('id_usuario_origen',  idUsuario);
+                fd.append('id_empresa_origen',   idOrigen);
+                fd.append('id_usuario_destino',  idUsuario);
+                fd.append('id_empresa_destino',  idEmpresaActual);
+
+                fetch(base + '/config/permisos-modulos?action=copiarPermisos', {
+                    method: 'POST', body: fd, credentials: 'same-origin',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(j) {
+                    if (j.ok) {
+                        setMsg('ok', '<i class="bi bi-check-circle-fill"></i> Permisos copiados correctamente. <a href="javascript:location.reload()">Recargar</a> para ver los cambios.');
+                    } else {
+                        btnCopiar.disabled = false;
+                        setMsg('err', '<i class="bi bi-x-circle-fill"></i> ' + (j.error || 'Error al copiar.'));
+                    }
+                })
+                .catch(function() {
+                    btnCopiar.disabled = false;
+                    setMsg('err', 'Error de conexión.');
+                });
+            });
+        })();
+    </script>
+    <?php endif; ?>
 <?php endif; ?>
 
 <!-- Modal Crear Usuario -->

@@ -287,6 +287,13 @@ class PermisosModulosController extends Controller
             exit;
         }
 
+        // La empresa origen debe ser accesible para el usuario origen y para el gestor
+        $empresasOrigen = $this->modelEmpresa->getEmpresasParaPermisos($idUsuarioOrigen, $idActual, $nivel);
+        if (!$this->buscarEmpresaEnLista($empresasOrigen, $idEmpresaOrigen)) {
+            echo json_encode(['ok' => false, 'error' => 'La empresa origen no está asignada al usuario origen.']);
+            exit;
+        }
+
         // La empresa destino debe estar asignada al usuario destino
         $empresasDestino = $this->modelEmpresa->getEmpresasParaPermisos($idUsuarioDestino, $idActual, $nivel);
         if (!$this->buscarEmpresaEnLista($empresasDestino, $idEmpresaDestino)) {

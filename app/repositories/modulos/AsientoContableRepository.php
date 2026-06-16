@@ -16,6 +16,10 @@ class AsientoContableRepository
     {
         $this->modelCabecera = new AsientoContableCabecera();
         $this->modelDetalle = new AsientoContableDetalle();
+        try {
+            $pdo = \App\core\Database::getConnection();
+            $pdo->exec("ALTER TABLE asientos_contables_cabecera ADD COLUMN IF NOT EXISTS tipo_ambiente VARCHAR(1) DEFAULT '1'");
+        } catch (\Throwable $e) {}
     }
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir): array
@@ -24,7 +28,8 @@ class AsientoContableRepository
         
         $sql = "SELECT id, fecha_asiento, tipo_comprobante, numero_comprobante, concepto, estado, modulo_origen, total_debe, total_haber 
                 FROM asientos_contables_cabecera 
-                WHERE id_empresa = :id_empresa AND eliminado = false AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+                WHERE id_empresa = :id_empresa AND eliminado = false 
+                AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
                 
         $params = [':id_empresa' => $idEmpresa];
 
@@ -79,7 +84,8 @@ class AsientoContableRepository
     {
         $sql = "SELECT a.* 
                 FROM asientos_contables_cabecera a 
-                WHERE a.id = :id AND a.id_empresa = :id_empresa AND a.eliminado = false";
+                WHERE a.id = :id AND a.id_empresa = :id_empresa AND a.eliminado = false
+                AND a.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
         $pdo = \App\core\Database::getConnection();
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':id' => $idAsiento, ':id_empresa' => $idEmpresa]);
@@ -107,6 +113,7 @@ class AsientoContableRepository
         $sql = "SELECT id FROM asientos_contables_cabecera
                 WHERE modulo_origen = :modulo AND id_referencia_origen = :id_ref
                 AND id_empresa = :id_empresa AND eliminado = false AND estado != 'anulado'
+                AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                 ORDER BY id DESC LIMIT 1";
         $pdo = \App\core\Database::getConnection();
         $stmt = $pdo->prepare($sql);
@@ -164,10 +171,11 @@ class AsientoContableRepository
     {
         $sql = "INSERT INTO asientos_contables_cabecera (
             id_empresa, fecha_asiento, tipo_comprobante, numero_comprobante, 
-            concepto, estado, modulo_origen, id_referencia_origen, total_debe, total_haber, observaciones, created_by
+            concepto, estado, modulo_origen, id_referencia_origen, total_debe, total_haber, observaciones, created_by, tipo_ambiente
         ) VALUES (
             :id_empresa, :fecha_asiento, :tipo_comprobante, :numero_comprobante, 
-            :concepto, :estado, :modulo_origen, :id_referencia_origen, :total_debe, :total_haber, :observaciones, :created_by
+            :concepto, :estado, :modulo_origen, :id_referencia_origen, :total_debe, :total_haber, :observaciones, :created_by,
+            (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
         ) RETURNING id";
         
         $pdo = \App\core\Database::getConnection();
@@ -196,7 +204,8 @@ class AsientoContableRepository
             concepto = :concepto, estado = :estado, modulo_origen = :modulo_origen,
             id_referencia_origen = :id_referencia_origen, total_debe = :total_debe,
             total_haber = :total_haber, observaciones = :observaciones,
-            updated_by = :updated_by, updated_at = :updated_at
+            updated_by = :updated_by, updated_at = :updated_at,
+            tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = (SELECT id_empresa FROM asientos_contables_cabecera WHERE id = :id))
             WHERE id = :id";
             
         $pdo = \App\core\Database::getConnection();

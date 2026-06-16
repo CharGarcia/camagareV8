@@ -949,6 +949,14 @@ class FacturaVentaService
         return $builder->generarAsientoSugerido($idEmpresa, 'ventas_factura', $invoiceData);
     }
 
+    public function procesarAsientoContablePorSincronizacion(int $idVenta): void
+    {
+        $cabecera = $this->repository->getPorId($idVenta);
+        if (!$cabecera) return;
+        $numFactura = ($cabecera['establecimiento'] ?? '') . '-' . ($cabecera['punto_emision'] ?? '') . '-' . ($cabecera['secuencial'] ?? '');
+        $this->procesarAsientoContable($idVenta, $cabecera, $numFactura);
+    }
+
     public function procesarAsientoContable(int $idVenta, array $data, string $numFactura): void
     {
         $idEmpresa = (int)$data['id_empresa'];

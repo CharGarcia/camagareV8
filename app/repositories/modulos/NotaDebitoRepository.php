@@ -13,6 +13,9 @@ class NotaDebitoRepository extends BaseRepository
     public function __construct()
     {
         parent::__construct('nota_debito_cabecera');
+        try {
+            $this->db->exec("ALTER TABLE nota_debito_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
+        } catch (\Throwable $e) {}
     }
 
     public function insertCabecera(array $data): int

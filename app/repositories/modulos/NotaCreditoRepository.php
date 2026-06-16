@@ -13,6 +13,9 @@ class NotaCreditoRepository extends BaseRepository
     public function __construct()
     {
         parent::__construct('notas_credito_cabecera');
+        try {
+            $this->db->exec("ALTER TABLE notas_credito_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
+        } catch (\Throwable $e) {}
     }
 
     public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null): array
