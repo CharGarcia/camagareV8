@@ -269,6 +269,23 @@ class PlanCuentasController extends BaseModuloController
         exit;
     }
 
+    public function cargarModeloAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $configurar = filter_var($_POST['configurar'] ?? 'false', FILTER_VALIDATE_BOOLEAN);
+        
+        try {
+            $resp = $this->service->cargarModelo($idEmpresa, $idUsuario, $configurar);
+            echo json_encode(['ok' => true, 'msg' => $resp['message']]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function store(): void
     {
         $this->requireCrear();
@@ -368,23 +385,25 @@ class PlanCuentasController extends BaseModuloController
                 table { width: 100%; border-collapse: collapse; font-family: Arial; font-size: 8pt; }
                 th { background: #f2f2f2; border: 1px solid #ccc; padding: 6px; text-align: left; }
                 td { border: 1px solid #ccc; padding: 6px; }
-                header { text-align: center; margin-bottom: 20px; }
+                page_header { text-align: center; margin-bottom: 20px; }
                 h1 { margin: 0; font-size: 12pt; }
                 h2 { margin: 5px 0; font-size: 10pt; color: #666; text-transform: uppercase; }
             </style>
             <page backtop="10mm" backbottom="10mm" backleft="10mm" backright="10mm">
-                <header>
+                <page_header>
                     <h1><?= htmlspecialchars($nombreEmpresa) ?></h1>
                     <h2>Plan de Cuentas</h2>
-                </header>
+                </page_header>
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 15%">Código</th>
-                            <th style="width: 45%">Nombre</th>
-                            <th style="width: 10%">Nivel</th>
-                            <th style="width: 20%">Centro de Costo</th>
-                            <th style="width: 10%">Estado</th>
+                            <th style="width: 12%">Código</th>
+                            <th style="width: 38%">Nombre</th>
+                            <th style="width: 8%">Nivel</th>
+                            <th style="width: 8%">SRI</th>
+                            <th style="width: 16%">SuperCías (ESF/ERI/ECP)</th>
+                            <th style="width: 10%">Map Asiento</th>
+                            <th style="width: 8%">Estado</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -393,7 +412,9 @@ class PlanCuentasController extends BaseModuloController
                                 <td><?= htmlspecialchars($r['codigo'] ?? '') ?></td>
                                 <td><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
                                 <td><?= htmlspecialchars($r['nivel'] ?? '') ?></td>
-                                <td><?= htmlspecialchars($r['centro_costo_nombre'] ?? '—') ?></td>
+                                <td><?= htmlspecialchars($r['codigo_sri'] ?? '') ?></td>
+                                <td><?= htmlspecialchars(($r['supercias_esf'] ?? '') . ' / ' . ($r['supercias_eri'] ?? '') . ' / ' . ($r['supercias_ecp_codigo'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars($r['map_asiento'] ?? '') ?></td>
                                 <td><?= ($r['status'] === 1 ? 'Activo' : 'Inactivo') ?></td>
                             </tr>
                         <?php endforeach; ?>
@@ -420,19 +441,25 @@ class PlanCuentasController extends BaseModuloController
             $sheet = $spreadsheet->getActiveSheet();
             
             // Cabeceras
-            $headers = ['Código', 'Nombre', 'Código SRI', 'Supercias ESF', 'Supercias ERI'];
+            $headers = ['Código', 'Nombre', 'Código SRI', 'Supercias ESF', 'Supercias ERI', 'Supercias ECP Cod.', 'Supercias ECP Sub.', 'Map Asiento'];
             foreach ($headers as $col => $text) {
                 $sheet->setCellValueByColumnAndRow($col + 1, 1, $text);
             }
             
-            // Ejemplo
-            $data = [
-                ['1', 'ACTIVO', '', '', ''],
-                ['1.1', 'ACTIVO CORRIENTE', '', '', ''],
-                ['1.1.01', 'EFECTIVO Y EQUIVALENTES DE EFECTIVO', '', '', ''],
-                ['1.1.01.01', 'CAJA', '', '', ''],
-                ['1.1.01.01.001', 'Caja General', '10101', '10101', ''],
-            ];
+            $modelo = \App\Services\modulos\PlanCuentaService::getCuentasModeloArray();
+            $data = [];
+            foreach ($modelo as $m) {
+                $data[] = [
+                    (string)($m['codigo'] ?? ''),
+                    (string)($m['nombre'] ?? ''),
+                    (string)($m['codigo_sri'] ?? ''),
+                    (string)($m['supercias_esf'] ?? ''),
+                    (string)($m['supercias_eri'] ?? ''),
+                    (string)($m['supercias_ecp_codigo'] ?? ''),
+                    (string)($m['supercias_ecp_subcodigo'] ?? ''),
+                    (string)($m['map_asiento'] ?? '')
+                ];
+            }
             
             foreach ($data as $rowIdx => $rowData) {
                 foreach ($rowData as $colIdx => $val) {
@@ -517,6 +544,9 @@ class PlanCuentasController extends BaseModuloController
                     'codigo_sri'    => trim((string)($r[2] ?? '')),
                     'supercias_esf' => trim((string)($r[3] ?? '')),
                     'supercias_eri' => trim((string)($r[4] ?? '')),
+                    'supercias_ecp_codigo'    => trim((string)($r[5] ?? '')),
+                    'supercias_ecp_subcodigo' => trim((string)($r[6] ?? '')),
+                    'map_asiento'   => trim((string)($r[7] ?? '')),
                     'id_centro_costos' => null,
                     'id_proyecto'   => null,
                     'status'        => 1,
@@ -553,7 +583,7 @@ class PlanCuentasController extends BaseModuloController
             $empresa = $empresaModel->getPorId($idEmpresa);
             $nombreEmpresa = $empresa['nombre'] ?? '';
 
-            $headers = ['Código', 'Nombre', 'Nivel', 'Cod. SRI', 'Centro Costo', 'Proyecto', 'Estado'];
+            $headers = ['Código', 'Nombre', 'Nivel', 'Cod. SRI', 'SuperCías ESF', 'SuperCías ERI', 'SuperCías ECP Cod.', 'SuperCías ECP Sub.', 'Map Asiento', 'Centro Costo', 'Proyecto', 'Estado'];
             $exportData = [];
             foreach ($rows as $r) {
                 $exportData[] = [
@@ -561,6 +591,11 @@ class PlanCuentasController extends BaseModuloController
                     (string)($r['nombre'] ?? ''),
                     (string)($r['nivel'] ?? ''),
                     (string)($r['codigo_sri'] ?? ''),
+                    (string)($r['supercias_esf'] ?? ''),
+                    (string)($r['supercias_eri'] ?? ''),
+                    (string)($r['supercias_ecp_codigo'] ?? ''),
+                    (string)($r['supercias_ecp_subcodigo'] ?? ''),
+                    (string)($r['map_asiento'] ?? ''),
                     (string)($r['centro_costo_nombre'] ?? '—'),
                     (string)($r['proyecto_nombre'] ?? '—'),
                     (string)($r['status'] === 1 ? 'Activo' : 'Inactivo')

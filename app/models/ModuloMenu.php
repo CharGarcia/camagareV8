@@ -26,7 +26,6 @@ class ModuloMenu extends BaseModel
         'paginas/empresa_set.php' => 'empresa/index',
         'paginas/menu_de_empresas.php' => 'empresa/index',
         'paginas/opciones_de_modulos.php' => 'config/modulo',
-        'modulos/plan_de_cuentas.php' => 'config/plan-cuentas-modelo',
         'modulos/provincia_ciudad.php' => 'config/provincia-ciudad',
         'modulos/provincias.php' => 'config/provincia-ciudad',
         'modulos/ciudades.php' => 'config/provincia-ciudad',

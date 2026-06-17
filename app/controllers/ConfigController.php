@@ -238,26 +238,6 @@ class ConfigController extends Controller
         (new UnidadesMedidaController())->unidadUpdate();
     }
 
-    public function planCuentasModelo(): void
-    {
-        (new PlanCuentasModeloController())->index();
-    }
-
-    public function planCuentasModeloStore(): void
-    {
-        (new PlanCuentasModeloController())->store();
-    }
-
-    public function planCuentasModeloUpdate(): void
-    {
-        (new PlanCuentasModeloController())->update();
-    }
-
-    public function planCuentasModeloDelete(): void
-    {
-        (new PlanCuentasModeloController())->delete();
-    }
-
     public function impuestosVentas(): void
     {
         (new ImpuestosVentasController())->index();
@@ -296,6 +276,11 @@ class ConfigController extends Controller
     public function identificadoresCompradorVendedorDelete(): void
     {
         (new IdentificadoresCompradorVendedorController())->delete();
+    }
+
+    public function supercias(): void
+    {
+        (new SuperciasEstructurasController())->index();
     }
 
     public function salarios(): void

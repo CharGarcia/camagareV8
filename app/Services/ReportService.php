@@ -28,7 +28,7 @@ class ReportService
 
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
-            $sheet->setTitle($sheetTitle);
+            $sheet->setTitle(substr($sheetTitle, 0, 31));
 
             $dataRowStart = 1;
 

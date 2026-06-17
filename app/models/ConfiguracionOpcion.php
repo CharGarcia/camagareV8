@@ -27,7 +27,6 @@ class ConfiguracionOpcion extends BaseModel
             ['nombre' => 'Cambiar contraseña', 'descripcion' => 'Actualizar tu contraseña de acceso', 'icono' => 'key', 'clase_color' => 'warning', 'nivel_minimo' => 1, 'enlace' => ['etiqueta' => 'Cambiar contraseña', 'ruta' => '/auth/cambiar-clave', 'clase_btn' => 'warning']],
             ['nombre' => 'Apariencia', 'descripcion' => 'Colores y tema visual del sistema', 'icono' => 'palette', 'clase_color' => 'primary', 'nivel_minimo' => 1, 'enlace' => ['etiqueta' => 'Colores y tema', 'ruta' => '/config/appearance', 'clase_btn' => 'primary']],
             ['nombre' => 'Unidades de medida', 'descripcion' => 'Tipos y unidades de medida (kg, litro, etc.)', 'icono' => 'rulers', 'clase_color' => 'secondary', 'nivel_minimo' => 2, 'enlace' => ['etiqueta' => 'Unidades de medida', 'ruta' => '/config/unidades-medida', 'clase_btn' => 'secondary']],
-            ['nombre' => 'Plan de cuentas modelo', 'descripcion' => 'Plantilla del plan de cuentas contable', 'icono' => 'journal-bookmark', 'clase_color' => 'info', 'nivel_minimo' => 2, 'enlace' => ['etiqueta' => 'Plan de cuentas modelo', 'ruta' => '/config/plan-cuentas-modelo', 'clase_btn' => 'info']],
             ['nombre' => 'Asientos tipo', 'descripcion' => 'Modelos de asientos contables predefinidos del sistema', 'icono' => 'sliders', 'clase_color' => 'dark', 'nivel_minimo' => 2, 'enlace' => ['etiqueta' => 'Asientos tipo', 'ruta' => '/config/asientos-tipo', 'clase_btn' => 'dark']],
         ];
         foreach ($base as $op) {

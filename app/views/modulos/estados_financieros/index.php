@@ -115,7 +115,22 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
                 <i class="bi bi-file-earmark-pdf text-danger"></i> PDF
             </button>
             <button type="button" class="btn btn-white border px-3" title="Descargar Excel" onclick="exportar('excel')">
-                <i class="bi bi-file-earmark-spreadsheet text-success"></i> Excel
+                <i class="bi bi-file-earmark-excel text-success"></i> Excel
+            </button>
+            <button type="button" class="btn btn-white border px-3" title="Descargar Formato SRI" onclick="exportar('sri')">
+                <i class="bi bi-file-earmark-code text-primary"></i> Renta SRI
+            </button>
+            <button type="button" class="btn btn-white border px-3" title="Descargar Supercias ESF" onclick="exportar('supercias_esf')">
+                <i class="bi bi-bank text-info"></i> Supercias ESF
+            </button>
+            <button type="button" class="btn btn-white border px-3" title="Descargar Supercias ERI" onclick="exportar('supercias_eri')">
+                <i class="bi bi-bank text-info"></i> Supercias ERI
+            </button>
+            <button type="button" class="btn btn-white border px-3" title="Descargar Supercias ECP" onclick="exportar('supercias_ecp')">
+                <i class="bi bi-bank text-info"></i> Supercias ECP
+            </button>
+            <button type="button" class="btn btn-white border px-3" title="Descargar Supercias EFE" onclick="exportar('supercias_efe')">
+                <i class="bi bi-bank text-info"></i> Supercias EFE
             </button>
         </div>
     </div>

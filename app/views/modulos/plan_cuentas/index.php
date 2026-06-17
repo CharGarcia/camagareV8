@@ -44,9 +44,9 @@ $proyectos  = $proyectos ?? [];
 <div class="pc-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div class="d-flex align-items-center">
         <h5 class="mb-0 fw-bold me-3 align-middle"><i class="bi bi-list-nested"></i> <?= htmlspecialchars($titulo) ?></h5>
-        <?php if ($perm['crear'] && $conteoTotal === 0): ?>
-            <button type="button" id="btnInitPlan" class="btn btn-primary shadow-sm btn-sm px-3" onclick="crearPlanInicial()">
-                <i class="bi bi-magic"></i> Crear Plan de Cuentas Inicial
+        <?php if ($perm['crear']): ?>
+            <button type="button" id="btnInitPlan" class="btn btn-primary shadow-sm btn-sm px-3" onclick="cargarPlanModelo()">
+                <i class="bi bi-magic"></i> Cargar Plan de Cuentas Modelo
             </button>
         <?php endif; ?>
     </div>
@@ -186,13 +186,7 @@ $proyectos  = $proyectos ?? [];
                     </div>
                 </div>
                 <div class="modal-footer flex-column align-items-stretch bg-light border-0 px-4 py-3">
-                    <div id="wrapper-auditoria-timeline" class="mb-3 d-none">
-                        <hr class="mt-0 mb-3">
-                        <h6 class="small fw-bold text-muted mb-3"><i class="bi bi-clock-history me-1"></i> HISTORIAL DE CAMBIOS</h6>
-                        <div id="auditoriaTimelinePC" class="position-relative small" style="max-height: 200px; overflow-y: auto;">
-                            <!-- Timeline dinámico -->
-                        </div>
-                    </div>
+
                     <div class="d-flex justify-content-between align-items-center">
                         <div id="wrapper-auditoria-simple" class="small text-muted d-none">
                             <i class="bi bi-info-circle me-1"></i> <span id="info_creado_at" title="Creado"></span>
@@ -411,13 +405,35 @@ $proyectos  = $proyectos ?? [];
             finally { input.value = ''; }
         };
 
-        window.crearPlanInicial = async function() {
-            if (!confirm('Este proceso creará las 6 cuentas raíz fundamentales. ¿Desea continuar?')) return;
+        window.cargarPlanModelo = async function() {
+            const result = await Swal.fire({
+                title: 'Cargar Plan Modelo',
+                text: 'Se cargarán las cuentas faltantes de la estructura contable comercial estándar. ¿Deseas continuar?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, cargar cuentas',
+                cancelButtonText: 'Cancelar'
+            });
+
+            if (!result.isConfirmed) return;
+
             try {
-                const resp = await fetch(`${urlBase}/initPlanAjax`, { method: 'POST' });
+                const formData = new FormData();
+                formData.append('configurar', 'false');
+                
+                const resp = await fetch(`${urlBase}/cargarModeloAjax`, {
+                    method: 'POST',
+                    body: formData
+                });
                 const json = await resp.json();
-                if (json.ok) location.reload(); else alert(json.error);
-            } catch (e) {}
+                if (json.ok) {
+                    Swal.fire('¡Éxito!', json.msg, 'success').then(() => location.reload());
+                } else {
+                    Swal.fire('Error', json.error, 'error');
+                }
+            } catch (e) {
+                Swal.fire('Error', 'Error de conexión', 'error');
+            }
         };
 
         window.abrirModalEditarLocal = function(codigo) {
@@ -448,71 +464,10 @@ $proyectos  = $proyectos ?? [];
             const codigoPadre = parts.length > 1 ? parts.slice(0, -1).join('.') : '';
             renderExistingSiblings(codigoPadre);
 
-            // Auditoría
-            document.getElementById('wrapper-auditoria-timeline').classList.remove('d-none');
-            fetchHistorialPC(item.id);
-
             getModal().show();
         };
 
-        async function fetchHistorialPC(id) {
-            const container = document.getElementById('auditoriaTimelinePC');
-            if (!container || !id) return;
 
-            try {
-                const resp = await fetch(`${urlBase}/getHistorialAjax?id=${id}&tabla=plan_cuentas`);
-                const json = await resp.json();
-
-                if (json.ok && json.data.length > 0) {
-                    let html = '<div class="timeline-border position-absolute h-100 border-start border-2 border-primary border-opacity-10" style="left: 10px; top: 0;"></div>';
-
-                    json.data.forEach(log => {
-                        html += `
-                            <div class="timeline-item position-relative mb-2 ps-4">
-                                <div class="timeline-icon position-absolute rounded-circle bg-white d-flex align-items-center justify-content-center shadow-sm border" 
-                                     style="left: 0; top: 0; width: 18px; height: 18px; z-index: 2;">
-                                    <i class="bi bi-clock-history text-muted" style="font-size: 0.6rem;"></i>
-                                </div>
-                                <div class="timeline-content">
-                                    <div class="d-flex justify-content-between align-items-center mb-0" style="font-size: 0.7rem;">
-                                        <span class="fw-bold">${log.accion}</span>
-                                        <span class="text-muted" style="font-size: 0.6rem;">${log.created_at}</span>
-                                    </div>
-                                    <div class="text-muted" style="font-size: 0.65rem;">
-                                        <i class="bi bi-person me-1"></i> ${log.usuario_nombre || 'SISTEMA'}
-                                    </div>
-                                    <div class="bg-light rounded p-1 border border-light-subtle mt-1" style="font-size: 0.65rem;">
-                                        ${renderDetalleHistorialPC(log.detalles)}
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = '<div class="text-center py-2 text-muted small">No hay historial.</div>';
-                }
-            } catch (e) {
-                container.innerHTML = '<div class="text-center py-2 text-danger small">Error.</div>';
-            }
-        }
-
-        function renderDetalleHistorialPC(detalle) {
-            if (!detalle || detalle.length === 0) return 'Sin detalles';
-            if (typeof detalle === 'string') return detalle;
-            if (Array.isArray(detalle)) {
-                return `<ul class="list-unstyled mb-0">
-                    ${detalle.slice(0, 5).map(d => {
-                        if (typeof d === 'object') {
-                            return `<li><i class="bi bi-dot"></i> <span class="fw-bold">${d.campo}:</span> ${d.despues}</li>`;
-                        }
-                        return `<li><i class="bi bi-dot"></i> ${d}</li>`;
-                    }).join('')}
-                    ${detalle.length > 5 ? '<li>...</li>' : ''}
-                </ul>`;
-            }
-            return 'Acción registrada';
-        }
 
         window.abrirModalCrearHijo = async function(codigoPadre) {
             try {
@@ -525,8 +480,6 @@ $proyectos  = $proyectos ?? [];
                 document.getElementById('tituloModal').textContent = 'Nueva Subcuenta';
                 document.getElementById('pc_codigo_edit').value = json.codigo;
                 document.getElementById('pc_nivel_edit').value = json.nivel;
-                const audTimeline = document.getElementById('wrapper-auditoria-timeline');
-                if (audTimeline) audTimeline.classList.add('d-none');
                 const audSimple = document.getElementById('wrapper-auditoria-simple');
                 if (audSimple) audSimple.classList.add('d-none');
                 document.getElementById('modalAlert').classList.add('d-none');

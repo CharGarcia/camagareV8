@@ -118,12 +118,6 @@ class ImportadorExcelService
                 'col_numericas' => [2], // PORCENTAJE
                 'columnas' => ['CODIGO_RETENCION', 'CONCEPTO', 'PORCENTAJE', 'IMPUESTO', 'CODIGO_ATS', 'DESDE', 'HASTA']
             ],
-            'plan_cuentas_modelo' => [
-                'nombre' => 'Plan de Cuentas Modelo',
-                'global' => true,
-                'col_numericas' => [3], // NIVEL
-                'columnas' => ['CODIGO_CUENTA', 'NOMBRE_CUENTA', 'TIPO_CUENTA', 'NIVEL']
-            ]
         ];
     }
 
@@ -201,7 +195,6 @@ class ImportadorExcelService
             'unidades_medida' => 'unidades_medida',
             'plan_cuentas' => 'plan_cuentas',
             'retenciones_sri' => 'retenciones_sri',
-            'plan_cuentas_modelo' => 'plan_cuentas_modelo',
         ];
         return $mapa[$entidadId] ?? 'desconocida';
     }
@@ -227,8 +220,6 @@ class ImportadorExcelService
                 return $this->insertarPlanCuenta($fila, $numeroFila, $idEmpresa, $idUsuario);
             case 'retenciones_sri':
                 return $this->insertarRetencionSri($fila, $numeroFila, $idUsuario);
-            case 'plan_cuentas_modelo':
-                return $this->insertarPlanCuentasModelo($fila, $numeroFila, $idUsuario);
             default:
                 throw new Exception("Lógica de inserción no definida para {$entidadId}");
         }
@@ -771,28 +762,6 @@ class ImportadorExcelService
         
         $st->execute([
             $codigo, $concepto, $porcentaje, $impuesto, $codigoAts, $desdeVal, $hastaVal
-        ]);
-        return (int) $st->fetchColumn();
-    }
-
-    private function insertarPlanCuentasModelo(array $fila, int $numeroFila, int $idUsuario): int
-    {
-        $codigo = trim((string)($fila[0] ?? ''));
-        $nombre = trim((string)($fila[1] ?? ''));
-        $tipo = trim((string)($fila[2] ?? ''));
-        $nivel = (int)($fila[3] ?? 1);
-        $idPadre = !empty($fila[4]) ? (int)$fila[4] : null;
-
-        if (empty($codigo) || empty($nombre)) {
-            throw new Exception("Fila {$numeroFila}: Código y Nombre son obligatorios.");
-        }
-
-        $sql = "INSERT INTO plan_cuentas_modelo (
-                    codigo, nombre, tipo, nivel, id_padre, activo
-                ) VALUES (?, ?, ?, ?, ?, true) RETURNING id";
-        $st = $this->db->prepare($sql);
-        $st->execute([
-            $codigo, $nombre, $tipo, $nivel, $idPadre
         ]);
         return (int) $st->fetchColumn();
     }

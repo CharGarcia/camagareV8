@@ -217,6 +217,51 @@ class EstadosFinancierosService
         ];
     }
 
+    public function exportarSri(string $tipo, array $datos, string $empresaNombre, string $rangoFechas, string $rucEmpresa = ''): void
+    {
+        $agrupadoSri = [];
+        $sectores = $tipo === 'resultados' ? ['ingresos', 'costos', 'gastos'] : ['activos', 'pasivos', 'patrimonio'];
+        
+        foreach ($sectores as $sec) {
+            if (!isset($datos[$sec])) continue;
+            foreach ($datos[$sec] as $item) {
+                if ((int)$item['nivel'] === 5 && !empty($item['codigo_sri'])) {
+                    $sri = $item['codigo_sri'];
+                    if (!isset($agrupadoSri[$sri])) {
+                        $agrupadoSri[$sri] = 0.0;
+                    }
+                    $agrupadoSri[$sri] += (float)$item['saldo_final'];
+                }
+            }
+        }
+
+        ksort($agrupadoSri);
+
+        $filename = 'reporte_sri_imp_renta_' . ($rucEmpresa ?: 'sin_ruc') . '.xml';
+        
+        // Limpiar el búfer de salida
+        if (ob_get_length()) ob_end_clean();
+        
+        header('Content-Type: application/xml; charset=utf-8');
+        header('Content-Disposition: attachment;filename="' . $filename . '"');
+        header('Cache-Control: max-age=0');
+        
+        echo "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n";
+        echo "<detallesDeclaracion>\n";
+        
+        foreach ($agrupadoSri as $codSri => $valor) {
+            echo "<detalle concepto=\"{$codSri}\">" . number_format($valor, 2, '.', '') . "</detalle>\n";
+        }
+        
+        if (!empty($rucEmpresa)) {
+            echo "<detalle concepto=\"80\">{$rucEmpresa}</detalle>\n";
+        }
+        
+        echo "</detallesDeclaracion>\n";
+        
+        exit;
+    }
+
     public function exportarExcel(string $tipo, array $datos, string $empresaNombre, string $rangoFechas): void
     {
         $headers = ['Código', 'Cuenta', 'Saldo'];

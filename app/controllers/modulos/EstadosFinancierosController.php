@@ -123,7 +123,8 @@ class EstadosFinancierosController extends BaseModuloController
         $idProyecto = !empty($_GET['proyecto']) ? (int)$_GET['proyecto'] : null;
         $nivel = !empty($_GET['nivel']) ? (int)$_GET['nivel'] : 5;
 
-        $empresa = $this->empresaService->obtenerPorId($idEmpresa);
+        $empresaModel = new \App\models\Empresa();
+        $empresa = $empresaModel->getPorId($idEmpresa);
         $empresaNombre = $empresa['nombre_comercial'] ?: $empresa['nombre'];
         $rangoFechas = $fechaInicio . ' al ' . $fechaFin;
 
@@ -135,6 +136,39 @@ class EstadosFinancierosController extends BaseModuloController
 
         if ($formato === 'pdf') {
             $this->service->exportarPdf($tipo, $datos, $empresaNombre, $rangoFechas);
+        } else if ($formato === 'sri') {
+            $ruc = $empresa['ruc'] ?? '';
+            $this->service->exportarSri($tipo, $datos, $empresaNombre, $rangoFechas, $ruc);
+        } else if (str_starts_with($formato, 'supercias_')) {
+            $superciasTipo = strtoupper(substr($formato, 10)); // 'ESF', 'ERI', 'ECP', 'EFE'
+            $anio = (int) substr($fechaFin, 0, 4);
+            
+            $superciasService = new \App\Services\SuperciasEvaluatorService(\App\core\Database::getConnection());
+            $resultados = $superciasService->evaluar($idEmpresa, $anio);
+            $datosTipo = $resultados[$superciasTipo] ?? [];
+
+            header('Content-Type: text/plain; charset=utf-8');
+            header('Content-Disposition: attachment; filename="SUPERCIAS_' . $superciasTipo . '_' . $anio . '.txt"');
+
+            $out = fopen('php://output', 'w');
+            foreach ($datosTipo as $key => $casillero) {
+                $valor = $casillero['valor'];
+                
+                if ($superciasTipo === 'ECP') {
+                    $partes = explode('.', (string)$key);
+                    $codigo = $partes[0];
+                    $subcodigo = $partes[1] ?? '';
+                    if ($subcodigo !== '') {
+                        fwrite($out, $codigo . "\t" . $subcodigo . "\t" . number_format((float)$valor, 2, '.', '') . "\r\n");
+                    } else {
+                        fwrite($out, $codigo . "\t" . number_format((float)$valor, 2, '.', '') . "\r\n");
+                    }
+                } else {
+                    fwrite($out, $key . "\t" . number_format((float)$valor, 2, '.', '') . "\r\n");
+                }
+            }
+            fclose($out);
+            exit;
         } else {
             $this->service->exportarExcel($tipo, $datos, $empresaNombre, $rangoFechas);
         }
