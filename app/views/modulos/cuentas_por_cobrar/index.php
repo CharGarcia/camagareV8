@@ -455,14 +455,9 @@
                     </div>
                     <div class="col-12">
                         <label class="form-label small fw-bold mb-1">Plantilla <span class="text-danger">*</span></label>
-                        <select id="wa-plantilla" class="form-select form-select-sm shadow-none" onchange="CXC_mostrarVarsPlantilla()">
+                        <select id="wa-plantilla" class="form-select form-select-sm shadow-none">
                             <option value="">Seleccione una plantilla aprobada…</option>
                         </select>
-                    </div>
-                    <!-- Variables de la plantilla -->
-                    <div class="col-12" id="wa-vars-container" style="display:none;">
-                        <label class="form-label small fw-bold mb-1">Variables de la plantilla</label>
-                        <div id="wa-vars-lista" class="row g-2"></div>
                     </div>
                 </div>
             </div>

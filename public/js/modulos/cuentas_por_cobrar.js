@@ -570,65 +570,7 @@ function CXC_abrirWA(idVenta, nroFactura, telefono, clienteNombre) {
         sel.appendChild(opt);
     });
 
-    document.getElementById('wa-vars-container').style.display = 'none';
-    document.getElementById('wa-vars-lista').innerHTML = '';
-
     new bootstrap.Modal(document.getElementById('modalWA')).show();
-}
-
-function CXC_mostrarVarsPlantilla() {
-    const sel   = document.getElementById('wa-plantilla');
-    const val   = sel.value;
-    const cont  = document.getElementById('wa-vars-container');
-    const lista = document.getElementById('wa-vars-lista');
-    lista.innerHTML = '';
-    cont.style.display = 'none';
-
-    if (!val) return;
-
-    try {
-        const p = JSON.parse(val);
-        const componentes = typeof p.componentes === 'string' ? JSON.parse(p.componentes) : (p.componentes || []);
-
-        // Buscar variables {{N}} en el body
-        let vars = [];
-        for (const comp of componentes) {
-            if (comp.type === 'BODY' && comp.text) {
-                const matches = [...comp.text.matchAll(/\{\{(\d+)\}\}/g)];
-                matches.forEach(m => {
-                    if (!vars.includes(m[1])) vars.push(m[1]);
-                });
-            }
-        }
-
-        if (!vars.length) {
-            cont.style.display = 'none';
-            return;
-        }
-
-        // Obtener la fila actual para prellenar
-        const idVenta = parseInt(document.getElementById('wa-id-venta').value);
-        const fila    = CXC_datos.find(r => r.id === idVenta);
-        const defaults = {
-            '1': fila?.cliente_nombre  || '',
-            '2': fila?.numero_factura  || '',
-            '3': fila ? '$' + CXC_fmt(fila.saldo) : '',
-            '4': fila ? CXC_fmtFecha(fila.fecha_vencimiento) : '',
-        };
-
-        vars.forEach(v => {
-            lista.innerHTML += `
-                <div class="col-6">
-                    <label class="form-label small mb-1">Variable {{${v}}}</label>
-                    <input type="text" class="form-control form-control-sm shadow-none wa-var"
-                           data-var="${v}" value="${esc(defaults[v] || '')}">
-                </div>`;
-        });
-
-        cont.style.display = '';
-    } catch (e) {
-        console.warn('[WA vars]', e);
-    }
 }
 
 async function CXC_enviarWA() {
@@ -641,26 +583,12 @@ async function CXC_enviarWA() {
 
     const p = JSON.parse(val);
 
-    // Construir components con variables
-    const componentes = typeof p.componentes === 'string' ? JSON.parse(p.componentes) : (p.componentes || []);
-    const vars = {};
-    document.querySelectorAll('.wa-var').forEach(el => { vars[el.dataset.var] = el.value; });
-
-    const bodyComp = componentes.find(c => c.type === 'BODY');
-    let finalComponents = [];
-    if (bodyComp && Object.keys(vars).length) {
-        finalComponents = [{
-            type: 'body',
-            parameters: Object.keys(vars).sort().map(k => ({ type: 'text', text: vars[k] }))
-        }];
-    }
-
     const fd = new FormData();
     fd.append('id_venta',       idVenta);
     fd.append('telefono',       telefono);
     fd.append('template_name',  p.nombre);
     fd.append('idioma',         p.idioma);
-    fd.append('components',     JSON.stringify(finalComponents));
+    fd.append('components',     '[]');
 
     try {
         const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/enviarWhatsappAjax`, {
