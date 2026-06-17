@@ -403,7 +403,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 }
             }
 
-            $stmt = $this->repo->getDb()->prepare("SELECT componentes FROM whatsapp_plantillas WHERE nombre = ? AND id_empresa = ? AND estado = 'APPROVED'");
+            $stmt = $this->repo->getDb()->prepare("SELECT componentes FROM whatsapp_plantillas WHERE nombre = ? AND id_empresa = ? AND estado_meta = 'APPROVED'");
             $stmt->execute([$nombrePlant, $idEmpresa]);
             $rowPlant = $stmt->fetch(\PDO::FETCH_ASSOC);
             
