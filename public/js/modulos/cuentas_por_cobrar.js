@@ -590,12 +590,42 @@ async function CXC_enviarWA() {
 
     const p = JSON.parse(val);
 
+    const componentes = typeof p.componentes === 'string' ? JSON.parse(p.componentes) : (p.componentes || []);
+    let vars = [];
+    for (const comp of componentes) {
+        if (comp.type === 'BODY' && comp.text) {
+            const matches = [...comp.text.matchAll(/\{\{(\d+)\}\}/g)];
+            matches.forEach(m => {
+                if (!vars.includes(m[1])) vars.push(m[1]);
+            });
+        }
+    }
+
+    let finalComponents = [];
+    if (vars.length > 0) {
+        const idVentaNum = parseInt(idVenta);
+        const fila = typeof CXC_datos !== 'undefined' ? CXC_datos.find(r => r.id === idVentaNum) : null;
+        
+        const defaults = {
+            '1': fila?.cliente_nombre || '',
+            '2': fila?.numero_factura || '',
+            '3': fila ? '$' + CXC_fmt(fila.saldo) : '',
+            '4': fila ? CXC_fmtFecha(fila.fecha_vencimiento) : ''
+        };
+
+        const parameters = vars.sort().map(v => ({ type: 'text', text: String(defaults[v] || '') }));
+        finalComponents = [{
+            type: 'body',
+            parameters: parameters
+        }];
+    }
+
     const fd = new FormData();
     fd.append('id_venta',       idVenta);
     fd.append('telefono',       telefono);
     fd.append('template_name',  p.nombre);
     fd.append('idioma',         p.idioma);
-    fd.append('components',     '[]');
+    fd.append('components',     JSON.stringify(finalComponents));
 
     try {
         const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/enviarWhatsappAjax`, {
