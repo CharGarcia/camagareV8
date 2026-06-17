@@ -386,6 +386,59 @@ class CuentasPorCobrarController extends BaseModuloController
             return;
         }
 
+        // --- Guardar en la Base de Datos para el Webhook ---
+        try {
+            $metaMessageId = $result['data']['messages'][0]['id'] ?? null;
+            $repoMsj = new \App\repositories\modulos\WhatsappMensajeRepository();
+            $nombreCliente = $factura['cliente_nombre'] ?? 'Cliente';
+            $idChat = $repoMsj->getOrCreateChat($idEmpresa, $telefono, $nombreCliente, 'Recordatorio de cuenta por cobrar', false);
+
+            $variablesGuardar = [];
+            foreach ($components as $comp) {
+                if (strtolower($comp['type'] ?? '') === 'body') {
+                    foreach ($comp['parameters'] ?? [] as $p) {
+                        $variablesGuardar[] = $p['text'] ?? '';
+                    }
+                    break;
+                }
+            }
+
+            $stmt = $this->repo->getDb()->prepare("SELECT componentes FROM whatsapp_plantillas WHERE nombre = ? AND id_empresa = ? AND estado = 'APPROVED'");
+            $stmt->execute([$nombrePlant, $idEmpresa]);
+            $rowPlant = $stmt->fetch(\PDO::FETCH_ASSOC);
+            
+            $templateTextGuardar = '';
+            if ($rowPlant && !empty($rowPlant['componentes'])) {
+                $componentesPlant = json_decode($rowPlant['componentes'], true) ?? [];
+                foreach ($componentesPlant as $comp) {
+                    if (($comp['type'] ?? '') === 'BODY') {
+                        $templateTextGuardar = $comp['text'] ?? '';
+                        foreach ($variablesGuardar as $idx => $val) {
+                            $templateTextGuardar = str_replace('{{' . ($idx + 1) . '}}', $val, $templateTextGuardar);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            $repoMsj->saveMessage(
+                $idEmpresa,
+                $idChat,
+                'OUT',
+                $telefono,
+                'template',
+                [
+                    'template'      => $nombrePlant,
+                    'variables'     => $variablesGuardar,
+                    'template_text' => $templateTextGuardar,
+                ],
+                $metaMessageId,
+                'sent'
+            );
+        } catch (\Throwable $ex) {
+            error_log("Error guardando mensaje en BD (CXC): " . $ex->getMessage());
+        }
+
         $this->log->registrar(
             (int)$_SESSION['id_usuario'],
             $idEmpresa,
