@@ -6065,7 +6065,10 @@ $perm = $permNCRespaldo;
                     <input type="hidden" name="id_factura" id="waIdFactura">
                     
                     <div class="mb-3">
-                        <label class="form-label small fw-bold">Plantilla de WhatsApp <span class="text-danger">*</span></label>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label small fw-bold mb-0">Plantilla de WhatsApp <span class="text-danger">*</span></label>
+                            <i class="bi bi-star text-muted btn-favorito" role="button" title="Guardar favorito" data-modulo="factura_venta" data-campo="plantilla_whatsapp" data-target="#waSelectPlantilla"></i>
+                        </div>
                         <select name="id_plantilla" id="waSelectPlantilla" class="form-select form-select-sm" required>
                             <option value="">Cargando plantillas...</option>
                         </select>
@@ -6166,9 +6169,22 @@ function FV_abrirModalWhatsapp() {
 
             select.innerHTML = '<option value="">-- Seleccione una plantilla --</option>';
             data.plantillas.forEach(p => {
-                const isSelected = (p.id == data.id_plantilla_default) ? 'selected' : '';
-                select.innerHTML += `<option value="${p.id}" ${isSelected}>${p.nombre} (${p.idioma})</option>`;
+                select.innerHTML += `<option value="${p.id}">${p.nombre} (${p.idioma})</option>`;
             });
+
+            // Seleccionar favorito si existe, o el default
+            if (typeof APP_FAVORITOS !== 'undefined' && APP_FAVORITOS['plantilla_whatsapp']) {
+                select.value = APP_FAVORITOS['plantilla_whatsapp'];
+            } else if (data.id_plantilla_default) {
+                select.value = data.id_plantilla_default;
+            }
+
+            // Actualizar estado visual de la estrella si existe
+            const estrella = document.querySelector('.btn-favorito[data-campo="plantilla_whatsapp"]');
+            if (estrella && typeof marcarEstrella === 'function') {
+                marcarEstrella(estrella, select.value == (APP_FAVORITOS?.plantilla_whatsapp || ''));
+            }
+
             document.getElementById('waTelefonoCliente').value = data.telefono_cliente || '593';
 
             document.getElementById('waIdFactura').value = idFactura;

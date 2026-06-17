@@ -154,17 +154,6 @@
         </div>
     </div>
 
-    <!-- ── Gráfico de Antigüedad ── -->
-    <div class="card border-0 shadow-sm mb-4" id="cxc-chart-card" style="display:none;">
-        <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-            <h6 class="fw-bold mb-0"><i class="bi bi-bar-chart me-2 text-success"></i>Análisis de Antigüedad de Saldo</h6>
-            <small class="text-muted">Distribución de cuentas por cobrar por tramos de vencimiento</small>
-        </div>
-        <div class="card-body">
-            <canvas id="cxcAgingChart" style="max-height:260px;"></canvas>
-        </div>
-    </div>
-
     <!-- ── Tabla Principal ── -->
     <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
         <div class="card-header bg-white py-2 px-3 border-bottom">
@@ -229,6 +218,67 @@
             </div>
         </div>
     </div>
+
+    <!-- ── Gráfico de Antigüedad ── -->
+    <div class="card border-0 shadow-sm mt-4" id="cxc-chart-card" style="display:none;">
+        <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+            <h6 class="fw-bold mb-0"><i class="bi bi-bar-chart me-2 text-success"></i>Análisis de Antigüedad de Saldo</h6>
+            <small class="text-muted">Distribución de cuentas por cobrar por tramos de vencimiento</small>
+        </div>
+        <div class="card-body">
+            <canvas id="cxcAgingChart" style="max-height:260px;"></canvas>
+        </div>
+    </div>
+
+    <!-- ── Saldos Iniciales CXC ── -->
+    <div class="card border-0 shadow-sm mt-4">
+        <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="fw-bold mb-0 text-warning"><i class="bi bi-archive me-2"></i>Saldos Iniciales CXC</h6>
+                <small class="text-muted">Saldos cargados manualmente desde sistemas anteriores — no corresponden a facturas registradas en este sistema</small>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                <small class="text-muted" id="cxc-si-count"></small>
+                <select id="cxc-si-estado" class="form-select form-select-sm shadow-none border" style="width:160px;" onchange="CXC_cargarSaldosIniciales()">
+                    <option value="TODOS">Todos los estados</option>
+                    <option value="PENDIENTE" selected>Pendiente</option>
+                    <option value="PARCIAL">Parcial</option>
+                    <option value="PAGADO">Pagado</option>
+                </select>
+                <button class="btn btn-outline-warning btn-sm" onclick="window.location.href='<?php echo BASE_URL; ?>/modulos/saldos_iniciales'">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>Ir a Saldos Iniciales
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div style="max-height:300px;overflow-y:auto;">
+                <table class="table table-hover table-sm mb-0 align-middle" style="table-layout:fixed;">
+                    <colgroup>
+                        <col style="width:140px;"><col><col style="width:115px;"><col style="width:115px;">
+                        <col style="width:100px;"><col style="width:100px;"><col style="width:100px;"><col style="width:90px;">
+                    </colgroup>
+                    <thead class="table-light" style="position:sticky;top:0;z-index:5;">
+                        <tr>
+                            <th class="ps-3 small fw-semibold">Documento</th>
+                            <th class="small fw-semibold">Cliente / RUC</th>
+                            <th class="text-center small fw-semibold">F.Emisión</th>
+                            <th class="text-center small fw-semibold">F.Vencimiento</th>
+                            <th class="text-end small fw-semibold">Saldo Inicial</th>
+                            <th class="text-end small fw-semibold">Cobrado</th>
+                            <th class="text-end pe-3 small fw-semibold">Pendiente</th>
+                            <th class="text-center small fw-semibold">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cxc-si-tbody">
+                        <tr><td colspan="8" class="text-center py-4 text-muted">
+                            <div class="spinner-border spinner-border-sm text-warning me-2"></div>Cargando saldos iniciales…
+                        </td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════

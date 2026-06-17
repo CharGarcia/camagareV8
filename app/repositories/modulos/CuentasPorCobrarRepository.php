@@ -449,6 +449,38 @@ class CuentasPorCobrarRepository extends BaseRepository
     // PRIVADOS
     // ─────────────────────────────────────────────────────────────────────
 
+    // ─────────────────────────────────────────────────────────────────────
+    // SALDOS INICIALES CXC
+    // ─────────────────────────────────────────────────────────────────────
+
+    public function getSaldosInicialesCxc(int $idEmpresa, array $filtros = []): array
+    {
+        $where  = "id_empresa = :id_empresa AND eliminado = false";
+        $params = [':id_empresa' => $idEmpresa];
+
+        if (!empty($filtros['estado']) && $filtros['estado'] !== 'TODOS') {
+            $where .= " AND estado = :estado";
+            $params[':estado'] = $filtros['estado'];
+        }
+
+        $sql = "SELECT
+                    id, nro_documento, fecha_emision, fecha_vencimiento,
+                    ruc_cliente, nombre_cliente,
+                    CAST(saldo_inicial   AS NUMERIC(16,2)) AS saldo_inicial,
+                    CAST(monto_cobrado   AS NUMERIC(16,2)) AS monto_cobrado,
+                    CAST(saldo_pendiente AS NUMERIC(16,2)) AS saldo_pendiente,
+                    estado, observaciones,
+                    CASE WHEN fecha_vencimiento < CURRENT_DATE AND estado != 'PAGADO'
+                         THEN CURRENT_DATE - fecha_vencimiento ELSE 0 END AS dias_vencido
+                FROM saldos_iniciales_cxc
+                WHERE {$where}
+                ORDER BY fecha_emision ASC, nro_documento ASC";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     private function buildWhere(int $idEmpresa, array $filtros): array
     {
         $where = "v.id_empresa = :id_empresa

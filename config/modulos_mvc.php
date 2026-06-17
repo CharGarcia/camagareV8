@@ -150,7 +150,7 @@ return [
     ],
     'modulos/configuracion-contable' => [
         'id_submodulo' => 0,
-        'legacy_rutas' => ['modulos/plantillas_contables', 'modulos/plantillas-contables'],
+        'legacy_rutas' => ['modulos/configuracion_contable', 'modulos/plantillas_contables', 'modulos/plantillas-contables'],
     ],
     'modulos/empresa' => [
         'legacy_rutas' => ['modulos/empresa.php'],
@@ -236,6 +236,12 @@ return [
     // ─── CUENTAS POR PAGAR ────────────────────────────────────────────────────
     'modulos/cuentas_por_pagar' => [
         'id_submodulo' => 37,
+        'legacy_rutas' => [],
+    ],
+
+    // ─── SALDOS INICIALES ─────────────────────────────────────────────────────
+    'modulos/saldos_iniciales' => [
+        'id_submodulo' => 38,
         'legacy_rutas' => [],
     ],
 ];

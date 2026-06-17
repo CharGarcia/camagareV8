@@ -641,6 +641,42 @@ class CuentasPorPagarRepository extends BaseRepository
         return [$whereExtra, $params];
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // SALDOS INICIALES CXP
+    // ─────────────────────────────────────────────────────────────────────
+
+    public function getSaldosInicialesCxp(int $idEmpresa, array $filtros = []): array
+    {
+        $where  = "id_empresa = :id_empresa AND eliminado = false";
+        $params = [':id_empresa' => $idEmpresa];
+
+        if (!empty($filtros['estado']) && $filtros['estado'] !== 'TODOS') {
+            $where .= " AND estado = :estado";
+            $params[':estado'] = $filtros['estado'];
+        }
+        if (!empty($filtros['tipo_documento'])) {
+            $where .= " AND tipo_documento = :tipo_documento";
+            $params[':tipo_documento'] = $filtros['tipo_documento'];
+        }
+
+        $sql = "SELECT
+                    id, tipo_documento, nro_documento, fecha_emision, fecha_vencimiento,
+                    ruc_proveedor, nombre_proveedor,
+                    CAST(saldo_inicial   AS NUMERIC(16,2)) AS saldo_inicial,
+                    CAST(monto_pagado    AS NUMERIC(16,2)) AS monto_pagado,
+                    CAST(saldo_pendiente AS NUMERIC(16,2)) AS saldo_pendiente,
+                    estado, observaciones,
+                    CASE WHEN fecha_vencimiento < CURRENT_DATE AND estado != 'PAGADO'
+                         THEN CURRENT_DATE - fecha_vencimiento ELSE 0 END AS dias_vencido
+                FROM saldos_iniciales_cxp
+                WHERE {$where}
+                ORDER BY fecha_emision ASC, nro_documento ASC";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getDb(): \PDO
     {
         return $this->db;

@@ -470,4 +470,18 @@ class CuentasPorPagarController extends BaseModuloController
             'tipo_fuente'  => $_REQUEST['tipo_fuente']  ?? '',
         ];
     }
+
+    // ─── SALDOS INICIALES CXP (para mostrar en la vista de CXP) ─────────────
+
+    public function getSaldosInicialesCxpAjax(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = $this->getIdEmpresa();
+        $filtros = [
+            'estado'         => $_GET['estado']         ?? 'TODOS',
+            'tipo_documento' => $_GET['tipo_documento']  ?? '',
+        ];
+        $filas = $this->repo->getSaldosInicialesCxp($idEmpresa, $filtros);
+        $this->jsonOk(['filas' => $filas]);
+    }
 }

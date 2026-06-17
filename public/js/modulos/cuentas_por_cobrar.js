@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     CXC_cargarCatalogos();
     if (CXC_TIENE_WA) CXC_cargarPlantillasWA();
     CXC_initBuscadorClientes();
+    CXC_cargarSaldosIniciales();
 });
 
 /* ════════════════════════════════════════════════════
@@ -568,7 +569,7 @@ function CXC_abrirWA(idVenta, nroFactura, telefono, clienteNombre) {
     sel.innerHTML = '<option value="">Seleccione una plantilla aprobada…</option>';
     CXC_plantillasWA.forEach(p => {
         const opt = document.createElement('option');
-        opt.value = JSON.stringify({ nombre: p.nombre, idioma: p.idioma, componentes: p.componentes });
+        opt.value = p.nombre; // Solo enviamos el nombre
         opt.textContent = `${p.nombre} (${p.idioma})`;
         sel.appendChild(opt);
     });
@@ -577,55 +578,26 @@ function CXC_abrirWA(idVenta, nroFactura, telefono, clienteNombre) {
         window.aplicarFavoritosModal('#modalWA');
     }
 
+    // Preseleccionar favorito
+    if (typeof APP_FAVORITOS !== 'undefined' && APP_FAVORITOS['wa_plantilla_default']) {
+        sel.value = APP_FAVORITOS['wa_plantilla_default'];
+    }
+
     new bootstrap.Modal(document.getElementById('modalWA')).show();
 }
 
 async function CXC_enviarWA() {
     const idVenta  = document.getElementById('wa-id-venta').value;
     const telefono = document.getElementById('wa-telefono').value.replace(/[^0-9]/g,'');
-    const val      = document.getElementById('wa-plantilla').value;
+    const templateName = document.getElementById('wa-plantilla').value;
 
     if (!telefono || telefono.length < 7) { CXC_toast('Ingrese un número válido.', 'warning'); return; }
-    if (!val)                              { CXC_toast('Seleccione una plantilla.', 'warning'); return; }
-
-    const p = JSON.parse(val);
-
-    const componentes = typeof p.componentes === 'string' ? JSON.parse(p.componentes) : (p.componentes || []);
-    let vars = [];
-    for (const comp of componentes) {
-        if (comp.type === 'BODY' && comp.text) {
-            const matches = [...comp.text.matchAll(/\{\{(\d+)\}\}/g)];
-            matches.forEach(m => {
-                if (!vars.includes(m[1])) vars.push(m[1]);
-            });
-        }
-    }
-
-    let finalComponents = [];
-    if (vars.length > 0) {
-        const idVentaNum = parseInt(idVenta);
-        const fila = typeof CXC_datos !== 'undefined' ? CXC_datos.find(r => r.id === idVentaNum) : null;
-        
-        const defaults = {
-            '1': fila?.cliente_nombre || '',
-            '2': fila?.numero_factura || '',
-            '3': fila ? '$' + CXC_fmt(fila.saldo) : '',
-            '4': fila ? CXC_fmtFecha(fila.fecha_vencimiento) : ''
-        };
-
-        const parameters = vars.sort().map(v => ({ type: 'text', text: String(defaults[v] || '') }));
-        finalComponents = [{
-            type: 'body',
-            parameters: parameters
-        }];
-    }
+    if (!templateName)                    { CXC_toast('Seleccione una plantilla.', 'warning'); return; }
 
     const fd = new FormData();
     fd.append('id_venta',       idVenta);
     fd.append('telefono',       telefono);
-    fd.append('template_name',  p.nombre);
-    fd.append('idioma',         p.idioma);
-    fd.append('components',     JSON.stringify(finalComponents));
+    fd.append('template_name',  templateName);
 
     try {
         const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/enviarWhatsappAjax`, {
@@ -828,4 +800,53 @@ function CXC_toast(msg, type = 'info') {
     if (cfg.timer)               opts.timer             = cfg.timer;
     if (!cfg.showConfirmButton)  opts.showConfirmButton = false;
     Swal.fire(opts);
+}
+
+/* ════════════════════════════════
+   SALDOS INICIALES CXC
+════════════════════════════════ */
+async function CXC_cargarSaldosIniciales() {
+    const tbody = document.getElementById('cxc-si-tbody');
+    if (!tbody) return;
+    const estado = document.getElementById('cxc-si-estado')?.value || 'PENDIENTE';
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-3"><div class="spinner-border spinner-border-sm text-warning me-2"></div>Cargando…</td></tr>`;
+    try {
+        const r = await fetch(`${BASE_URL}/modulos/cuentas_por_cobrar/getSaldosInicialesCxcAjax?estado=${estado}`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (!d.ok) { tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-3">${d.error}</td></tr>`; return; }
+        const filas = d.filas || [];
+        document.getElementById('cxc-si-count').textContent = filas.length + ' registros';
+        if (!filas.length) {
+            tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-muted opacity-50">Sin saldos iniciales</td></tr>`;
+            return;
+        }
+        const tipoLabels = { FACTURA_COMPRA:'Factura', LIQUIDACION:'Liquidación', NOTA_CREDITO:'NC', NOTA_DEBITO:'ND' };
+        tbody.innerHTML = filas.map(f => {
+            const dias = parseInt(f.dias_vencido)||0;
+            const stCol = dias>0 ? 'color:#dc3545;' : '';
+            const estadoBadge = f.estado==='PAGADO'
+                ? `<span class="badge bg-secondary bg-opacity-10 text-secondary border" style="font-size:.65rem;">Pagado</span>`
+                : dias>0
+                    ? `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:.65rem;">Vencida</span>`
+                    : f.estado==='PARCIAL'
+                        ? `<span class="badge bg-warning bg-opacity-10 text-warning border" style="font-size:.65rem;">Parcial</span>`
+                        : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:.65rem;">Pendiente</span>`;
+            return `<tr style="${stCol}">
+                <td class="ps-3 font-monospace small fw-semibold">${esc(f.nro_documento)}</td>
+                <td class="small text-truncate">${esc(f.nombre_cliente)}${f.ruc_cliente?`<small class='text-muted d-block'>${esc(f.ruc_cliente)}</small>`:''}</td>
+                <td class="text-center small">${cxcFmtFecha(f.fecha_emision)}</td>
+                <td class="text-center small">${f.fecha_vencimiento?cxcFmtFecha(f.fecha_vencimiento):'—'}</td>
+                <td class="text-end small">$${f.saldo_inicial}</td>
+                <td class="text-end small text-success">$${f.monto_cobrado}</td>
+                <td class="text-end pe-3 fw-bold">$${f.saldo_pendiente}</td>
+                <td class="text-center">${estadoBadge}</td>
+            </tr>`;
+        }).join('');
+    } catch(e) { tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-3">Error de conexión</td></tr>`; }
+}
+
+function cxcFmtFecha(f) {
+    if (!f) return '—';
+    const d = new Date(f + 'T00:00:00');
+    return d.toLocaleDateString('es-EC', { day:'2-digit', month:'2-digit', year:'numeric' });
 }

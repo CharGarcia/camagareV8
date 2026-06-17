@@ -13,17 +13,45 @@
                         <i class="fas fa-info-circle me-1"></i> <strong>Nota:</strong> Las plantillas deben ser aprobadas por Meta. Usa nombres en minúsculas sin espacios.
                     </div>
 
-                    <div class="row mb-4 bg-light p-3 rounded border">
-                        <div class="col-md-12">
-                            <label class="form-label fw-bold text-primary"><i class="fas fa-magic me-1"></i>Plantillas Rápidas (Autocompletar)</label>
-                            <select class="form-select" id="selectPlantillaRapida">
-                                <option value="">-- Empezar desde cero --</option>
-                                <option value="factura">Envío de Factura (PDF)</option>
-                                <option value="recordatorio">Recordatorio de Pago</option>
-                                <option value="bienvenida">Mensaje de Bienvenida</option>
-                            </select>
+                    <div class="row mb-3 bg-light p-3 rounded border mx-0">
+                        <div class="col-md-12 mb-2">
+                            <label class="form-label fw-bold text-primary"><i class="fas fa-magic me-1"></i>Tipo de Plantilla <span class="text-danger">*</span></label>
+                            <div class="d-flex gap-4 mt-1">
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="tipo_creacion" id="tipoRapida" value="rapida" required>
+                                    <label class="form-check-label fw-medium" for="tipoRapida">Plantilla Rápida (Variables Automáticas)</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="tipo_creacion" id="tipoLibre" value="libre" required>
+                                    <label class="form-check-label fw-medium" for="tipoLibre">Plantilla Libre (Solo Texto/Documento)</label>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
+                    <div class="row mb-4 bg-white p-3 rounded border mx-0" id="contenedorPlantillasRapidas" style="display: none; border-left: 4px solid #0d6efd !important;">
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold text-dark"><i class="fas fa-list me-1"></i>Seleccione la Plantilla del Sistema <span class="text-danger">*</span></label>
+                            <select class="form-select border-primary" id="selectPlantillaRapida" name="plantilla_rapida">
+                                <option value="">-- Seleccione --</option>
+                                <option value="aviso_mensajes_pendientes">Aviso de Mensajes Pendientes</option>
+                                <option value="factura_por_cobrar">Factura por Cobrar</option>
+                                <option value="factura_venta">Factura de Venta</option>
+                                <option value="cuenta_por_cobrar">Cuenta por Cobrar</option>
+                                <option value="renovacion_suscripcion">Renovación de Suscripción</option>
+                                <option value="renovacion_firma_electronica">Renovación Firma Electrónica</option>
+                                <option value="retencion_compra">Retención en Compras</option>
+                                <option value="nota_credito">Nota de Crédito</option>
+                                <option value="nota_debito">Nota de Débito</option>
+                                <option value="guia_remision">Guía de Remisión</option>
+                                <option value="rol_pagos">Rol de Pagos</option>
+                                <option value="descuento_empleado">Descuentos a Empleados</option>
+                            </select>
+                            <div class="form-text mt-2" id="helpPlantillaRapida"><i class="fas fa-info-circle me-1"></i> Al seleccionar, se pre-llenará el formulario con el nombre y parámetros permitidos.</div>
+                        </div>
+                    </div>
+
+                    <div id="contenedorRestoFormulario" style="display: none;">
 
                     <div class="row">
                         <div class="col-md-6 mb-3">
@@ -70,9 +98,12 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-medium small text-muted">Cuerpo del Mensaje (Body)</label>
-                        <textarea class="form-control" name="cuerpo" rows="5" placeholder="Hola {{1}}, tu pago por {{2}} ha sido recibido." required></textarea>
-                        <div class="form-text" style="font-size: 0.75rem;">Puedes usar variables usando llaves dobles: {{1}}, {{2}}, etc.</div>
+                        <textarea class="form-control" name="cuerpo" id="cuerpoPlantilla" rows="5" placeholder="" required></textarea>
+                        <div class="mt-2" id="botonesVariablesRapidas"></div>
+                        <div class="form-text" id="helpCuerpoPlantilla" style="font-size: 0.75rem;">Puedes escribir el texto libremente.</div>
                     </div>
+
+                    </div> <!-- FIN contenedorRestoFormulario -->
 
                 </div>
                 <div class="modal-footer bg-light border-top-0">

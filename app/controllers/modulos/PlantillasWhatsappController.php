@@ -484,9 +484,57 @@ class PlantillasWhatsappController extends BaseModuloController
         $idioma = trim($_POST['idioma'] ?? 'es');
         $cuerpo = trim($_POST['cuerpo'] ?? '');
         $tipoCabecera = trim($_POST['tipo_cabecera'] ?? 'NONE');
+        $tipoCreacion = trim($_POST['tipo_creacion'] ?? '');
+        $plantillaRapida = trim($_POST['plantilla_rapida'] ?? '');
 
-        if (empty($nombre) || empty($cuerpo)) {
-            echo json_encode(['ok' => false, 'error' => 'El nombre y el cuerpo del mensaje son obligatorios.']);
+        if (empty($nombre) || empty($cuerpo) || empty($tipoCreacion)) {
+            echo json_encode(['ok' => false, 'error' => 'El tipo de creación, nombre y el cuerpo del mensaje son obligatorios.']);
+            return;
+        }
+
+        // VALIDACIÓN DE PLANTILLAS RAPIDAS Y LIBRES
+        $plantillasRapidasConfig = [
+            'aviso_mensajes_pendientes' => ['{{1}}', '{{2}}'],
+            'factura_por_cobrar' => ['{{1}}', '{{2}}', '{{3}}'],
+            'factura_venta' => ['{{1}}', '{{2}}', '{{3}}'],
+            'cuenta_por_cobrar' => ['{{1}}', '{{2}}'],
+            'renovacion_suscripcion' => ['{{1}}', '{{2}}'],
+            'renovacion_firma_electronica' => ['{{1}}', '{{2}}'],
+            'retencion_compra' => ['{{1}}', '{{2}}', '{{3}}'],
+            'nota_credito' => ['{{1}}', '{{2}}', '{{3}}'],
+            'nota_debito' => ['{{1}}', '{{2}}', '{{3}}'],
+            'guia_remision' => ['{{1}}', '{{2}}', '{{3}}'],
+            'rol_pagos' => ['{{1}}', '{{2}}', '{{3}}'],
+            'descuento_empleado' => ['{{1}}', '{{2}}', '{{3}}']
+        ];
+
+        preg_match_all('/\{\{\d+\}\}/', $cuerpo, $matches);
+        $variablesEnCuerpo = $matches[0] ?? [];
+
+        if ($tipoCreacion === 'libre') {
+            if (!empty($variablesEnCuerpo)) {
+                echo json_encode(['ok' => false, 'error' => 'Las plantillas libres no pueden contener variables automáticas.']);
+                return;
+            }
+        } elseif ($tipoCreacion === 'rapida') {
+            if (!isset($plantillasRapidasConfig[$plantillaRapida])) {
+                echo json_encode(['ok' => false, 'error' => 'Plantilla rápida no válida.']);
+                return;
+            }
+            if ($nombre !== $plantillaRapida) {
+                echo json_encode(['ok' => false, 'error' => 'El nombre de la plantilla rápida no coincide con la seleccionada.']);
+                return;
+            }
+
+            $variablesPermitidas = $plantillasRapidasConfig[$plantillaRapida];
+            foreach ($variablesEnCuerpo as $var) {
+                if (!in_array($var, $variablesPermitidas)) {
+                    echo json_encode(['ok' => false, 'error' => "La variable {$var} no está permitida en esta plantilla rápida."]);
+                    return;
+                }
+            }
+        } else {
+            echo json_encode(['ok' => false, 'error' => 'Tipo de creación inválido.']);
             return;
         }
 

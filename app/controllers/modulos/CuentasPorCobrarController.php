@@ -290,7 +290,30 @@ class CuentasPorCobrarController extends BaseModuloController
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        $this->jsonSuccess(['plantillas' => $this->repo->getPlantillasWA($idEmpresa)]);
+        
+        $todasPlantillas = $this->repo->getPlantillasWA($idEmpresa);
+
+        $todasLasRapidas = [
+            'aviso_mensajes_pendientes', 'factura_por_cobrar', 'factura_venta',
+            'cuenta_por_cobrar', 'renovacion_suscripcion', 'renovacion_firma_electronica',
+            'retencion_compra', 'nota_credito', 'nota_debito', 'guia_remision',
+            'rol_pagos', 'descuento_empleado'
+        ];
+        $rapidasPermitidas = ['factura_por_cobrar', 'cuenta_por_cobrar'];
+
+$plantillasFiltradas = [];
+        foreach ($todasPlantillas as $p) {
+            if (in_array($p['nombre'], $todasLasRapidas)) {
+                if (in_array($p['nombre'], $rapidasPermitidas)) {
+                    $plantillasFiltradas[] = $p;
+                }
+            } else {
+                // Es una plantilla libre
+                $plantillasFiltradas[] = $p;
+            }
+        }
+
+        $this->jsonSuccess(['plantillas' => $plantillasFiltradas]);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -364,11 +387,14 @@ class CuentasPorCobrarController extends BaseModuloController
         $idVenta      = (int)($_POST['id_venta'] ?? 0);
         $telefono     = preg_replace('/[^0-9]/', '', trim($_POST['telefono'] ?? ''));
         $nombrePlant  = trim($_POST['template_name'] ?? '');
-        $idioma       = trim($_POST['idioma'] ?? 'es');
-        $components   = json_decode($_POST['components'] ?? '[]', true) ?? [];
 
         if ($idVenta <= 0 || strlen($telefono) < 7 || !$nombrePlant) {
             $this->jsonError('Datos incompletos.');
+            return;
+        }
+
+        if (str_starts_with($telefono, '593') && strlen($telefono) !== 12) {
+            $this->jsonError('El número de teléfono para Ecuador (593) debe tener exactamente 12 dígitos.');
             return;
         }
 
@@ -378,8 +404,166 @@ class CuentasPorCobrarController extends BaseModuloController
             return;
         }
 
+        // 1. OBTENER PLANTILLA Y VALIDARLA
+        $stmt = $this->repo->getDb()->prepare("SELECT * FROM whatsapp_plantillas WHERE nombre = ? AND id_empresa = ? AND estado_meta = 'APPROVED'");
+        $stmt->execute([$nombrePlant, $idEmpresa]);
+        $plantillaMeta = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$plantillaMeta) {
+            $this->jsonError('Plantilla no válida o no aprobada por Meta.');
+            return;
+        }
+
+        $idioma = $plantillaMeta['idioma'];
+
+        // 2. CÁLCULO PRECISO DEL SALDO PENDIENTE
+        $totalFactura = (float)($factura['importe_total'] ?? 0);
+        
+        // Abonos
+        $stmtAbonos = $this->repo->getDb()->prepare("
+            SELECT COALESCE(SUM(id2.monto_cobrado), 0)
+            FROM ingresos_detalle id2
+            INNER JOIN ingresos_cabecera ic ON ic.id = id2.id_ingreso
+            WHERE id2.tipo_documento = 'FACTURA' 
+              AND id2.id_referencia_documento = ?
+              AND ic.estado != 'anulado'
+              AND ic.eliminado = false
+        ");
+        $stmtAbonos->execute([$idVenta]);
+        $totalAbonos = (float)$stmtAbonos->fetchColumn();
+
+        // Notas de Crédito
+        $stmtNC = $this->repo->getDb()->prepare("
+            SELECT COALESCE(SUM(importe_total), 0)
+            FROM notas_credito_cabecera 
+            WHERE id_factura = ? AND id_empresa = ? AND estado = 'autorizado' AND eliminado = false
+        ");
+        $stmtNC->execute([$idVenta, $idEmpresa]);
+        $totalNC = (float)$stmtNC->fetchColumn();
+
+        // Retenciones
+        $stmtRet = $this->repo->getDb()->prepare("
+            SELECT COALESCE(SUM(importe_total), 0)
+            FROM retencion_venta_cabecera 
+            WHERE id_venta = ? AND id_empresa = ? AND estado = 'autorizado' AND eliminado = false
+        ");
+        $stmtRet->execute([$idVenta, $idEmpresa]);
+        $totalRetenciones = (float)$stmtRet->fetchColumn();
+
+        $saldoReal = $totalFactura - $totalAbonos - $totalNC - $totalRetenciones;
+        $saldoReal = max(0, $saldoReal); // No permitir saldo negativo visualmente
+
+        // 3. GENERAR PDF SI ES NECESARIO
         $waService = new WhatsappService();
-        $result    = $waService->sendTemplateMessage($idEmpresa, $telefono, $nombrePlant, $idioma, $components);
+        $mediaId = null;
+
+        if ($nombrePlant === 'factura_por_cobrar') {
+            $ventasRepo = new \App\repositories\modulos\FacturaVentaRepository();
+            $detalles = $ventasRepo->getDetalles($idVenta);
+            foreach ($detalles as &$d) {
+                $d['impuestos'] = $ventasRepo->getImpuestosDetalle((int)$d['id']);
+            }
+            unset($d);
+            $pagos = $ventasRepo->getPagos($idVenta);
+            $infoAdicional = $ventasRepo->getInfoAdicional($idVenta);
+
+            $empresaModel  = new \App\models\Empresa();
+            $empresa       = $empresaModel->getPorId($idEmpresa) ?? [];
+            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+            if (!empty($establecimientos)) {
+                if (!empty($establecimientos[0]['logo_ruta'])) $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+                if (!empty($establecimientos[0]['direccion'])) $empresa['direccion_establecimiento'] = $establecimientos[0]['direccion'];
+            }
+
+            $renderer  = new \App\Services\PlantillasPdfRendererService();
+            $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');
+
+            if ($plantillaPdf) {
+                $pdfString = $renderer->generar($plantillaPdf, $factura, $detalles, $pagos, $infoAdicional, $empresa, 'S');
+            } else {
+                $pdfService = new \App\Services\modulos\FacturaVentaPdfService();
+                $pdfString = $pdfService->generar($factura, $detalles, $pagos, $infoAdicional, $empresa, 'S');
+            }
+
+            if (empty($pdfString)) {
+                $this->jsonError('No se pudo generar el PDF de la factura.');
+                return;
+            }
+
+            $tmpPdfPath = sys_get_temp_dir() . '/factura_' . $idVenta . '_' . time() . '.pdf';
+            file_put_contents($tmpPdfPath, $pdfString);
+
+            $uploadResult = $waService->uploadMessageMedia($idEmpresa, $tmpPdfPath, 'application/pdf');
+            unlink($tmpPdfPath);
+
+            if (!$uploadResult['success']) {
+                $this->jsonError('Error subiendo PDF a Meta: ' . $uploadResult['message']);
+                return;
+            }
+            $mediaId = $uploadResult['media_id'];
+        }
+
+        // 4. CONSTRUIR COMPONENTES (API COMPONENTS)
+        $componentesDB = json_decode($plantillaMeta['componentes'], true) ?? [];
+        $apiComponents = [];
+
+        $numeroFactura = ($factura['establecimiento'] ?? '') . '-' . ($factura['punto_emision'] ?? '') . '-' . ($factura['secuencial'] ?? '');
+        $nombreCliente = $factura['cliente_nombre'] ?? 'Cliente';
+        $saldoFormateado = number_format($saldoReal, 2);
+
+        foreach ($componentesDB as $comp) {
+            $type = $comp['type'] ?? '';
+
+            if ($type === 'HEADER' && ($comp['format'] ?? '') === 'DOCUMENT' && $mediaId) {
+                $apiComponents[] = [
+                    'type' => 'header',
+                    'parameters' => [
+                        [
+                            'type' => 'document',
+                            'document' => [
+                                'id' => $mediaId,
+                                'filename' => 'Factura_' . $numeroFactura . '.pdf'
+                            ]
+                        ]
+                    ]
+                ];
+            } elseif ($type === 'BODY') {
+                $texto = $comp['text'] ?? '';
+                if (preg_match_all('/{{(\d+)}}/', $texto, $matches)) {
+                    $numVars = max($matches[1]);
+                    $parameters = [];
+                    for ($i = 1; $i <= $numVars; $i++) {
+                        $val = '';
+                        
+                        if ($nombrePlant === 'factura_por_cobrar') {
+                            // 1: Cliente, 2: Saldo, 3: Número
+                            if ($i == 1) $val = $nombreCliente;
+                            elseif ($i == 2) $val = '$' . $saldoFormateado;
+                            elseif ($i == 3) $val = $numeroFactura;
+                        } elseif ($nombrePlant === 'cuenta_por_cobrar') {
+                            // 1: Cliente, 2: Saldo
+                            if ($i == 1) $val = $nombreCliente;
+                            elseif ($i == 2) $val = '$' . $saldoFormateado;
+                        } else {
+                            $val = ' ';
+                        }
+
+                        $parameters[] = [
+                            'type' => 'text',
+                            'text' => (string) $val
+                        ];
+                    }
+
+                    $apiComponents[] = [
+                        'type' => 'body',
+                        'parameters' => $parameters
+                    ];
+                }
+            }
+        }
+
+        // 5. ENVIAR MENSAJE A META
+        $result = $waService->sendTemplateMessage($idEmpresa, $telefono, $nombrePlant, $idioma, $apiComponents);
 
         if (!($result['success'] ?? false)) {
             $this->jsonError('Error al enviar WhatsApp: ' . ($result['message'] ?? 'Desconocido'));
@@ -394,7 +578,7 @@ class CuentasPorCobrarController extends BaseModuloController
             $idChat = $repoMsj->getOrCreateChat($idEmpresa, $telefono, $nombreCliente, 'Recordatorio de cuenta por cobrar', false);
 
             $variablesGuardar = [];
-            foreach ($components as $comp) {
+            foreach ($apiComponents as $comp) {
                 if (strtolower($comp['type'] ?? '') === 'body') {
                     foreach ($comp['parameters'] ?? [] as $p) {
                         $variablesGuardar[] = $p['text'] ?? '';
@@ -403,21 +587,14 @@ class CuentasPorCobrarController extends BaseModuloController
                 }
             }
 
-            $stmt = $this->repo->getDb()->prepare("SELECT componentes FROM whatsapp_plantillas WHERE nombre = ? AND id_empresa = ? AND estado_meta = 'APPROVED'");
-            $stmt->execute([$nombrePlant, $idEmpresa]);
-            $rowPlant = $stmt->fetch(\PDO::FETCH_ASSOC);
-            
             $templateTextGuardar = '';
-            if ($rowPlant && !empty($rowPlant['componentes'])) {
-                $componentesPlant = json_decode($rowPlant['componentes'], true) ?? [];
-                foreach ($componentesPlant as $comp) {
-                    if (($comp['type'] ?? '') === 'BODY') {
-                        $templateTextGuardar = $comp['text'] ?? '';
-                        foreach ($variablesGuardar as $idx => $val) {
-                            $templateTextGuardar = str_replace('{{' . ($idx + 1) . '}}', $val, $templateTextGuardar);
-                        }
-                        break;
+            foreach ($componentesDB as $comp) {
+                if (($comp['type'] ?? '') === 'BODY') {
+                    $templateTextGuardar = $comp['text'] ?? '';
+                    foreach ($variablesGuardar as $idx => $val) {
+                        $templateTextGuardar = str_replace('{{' . ($idx + 1) . '}}', $val, $templateTextGuardar);
                     }
+                    break;
                 }
             }
 
@@ -681,5 +858,18 @@ body{font-family:Arial,sans-serif;font-size:14px;color:#333;}
 <p class="footer">Este es un mensaje automático. Por favor no responda a este correo.</p>
 </body></html>
 HTML;
+    }
+
+    // ─── SALDOS INICIALES CXC (para mostrar en la vista de CXC) ─────────────
+
+    public function getSaldosInicialesCxcAjax(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = $this->getIdEmpresa();
+        $filtros = [
+            'estado' => $_GET['estado'] ?? 'TODOS',
+        ];
+        $filas = $this->repo->getSaldosInicialesCxc($idEmpresa, $filtros);
+        $this->jsonOk(['filas' => $filas]);
     }
 }

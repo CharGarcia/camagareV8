@@ -105,12 +105,41 @@ document.addEventListener('DOMContentLoaded', () => {
         formCrear.addEventListener('submit', (e) => {
             e.preventDefault();
             
+            const formData = new FormData(formCrear);
+            const tipoCreacion = document.querySelector('input[name="tipo_creacion"]:checked')?.value;
+            const cuerpo = formData.get('cuerpo') || '';
+
+            if (!tipoCreacion) {
+                Swal.fire('Advertencia', 'Debe seleccionar el tipo de plantilla (Rápida o Libre).', 'warning');
+                return;
+            }
+
+            if (tipoCreacion === 'libre') {
+                if (/\{\{\d+\}\}/.test(cuerpo)) {
+                    Swal.fire('Error', 'Las plantillas libres no pueden contener variables automáticas ({{1}}, {{2}}, etc.).', 'error');
+                    return;
+                }
+            } else if (tipoCreacion === 'rapida') {
+                const tipoRapida = document.getElementById('selectPlantillaRapida').value;
+                if (!tipoRapida || !PLANTILLAS_RAPIDAS[tipoRapida]) {
+                    Swal.fire('Error', 'Debe seleccionar una plantilla rápida válida.', 'error');
+                    return;
+                }
+                const permitidas = (PLANTILLAS_RAPIDAS[tipoRapida].variables || []).map(v => v.id);
+                const encontradas = cuerpo.match(/\{\{\d+\}\}/g) || [];
+                for (let v of encontradas) {
+                    if (!permitidas.includes(v)) {
+                        Swal.fire('Error', `La variable ${v} no está permitida en esta plantilla rápida. Solo puedes usar: ${permitidas.length ? permitidas.join(', ') : 'Ninguna'}`, 'error');
+                        return;
+                    }
+                }
+                formData.append('plantilla_rapida', tipoRapida);
+            }
+
             const btn = document.getElementById('btnGuardarPlantilla');
             const originalHtml = btn.innerHTML;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Enviando...';
             btn.disabled = true;
-
-            const formData = new FormData(formCrear);
 
             fetch(WA_URL + '/store', {
                 method: 'POST',
@@ -144,37 +173,231 @@ document.addEventListener('DOMContentLoaded', () => {
     // Carga inicial
     fetchSearch(1);
 
-    // Plantillas rápidas
+    // Radio buttons de tipo de creación
+    const radiosTipo = document.querySelectorAll('input[name="tipo_creacion"]');
+    const contenedorRapidas = document.getElementById('contenedorPlantillasRapidas');
+    const contenedorResto = document.getElementById('contenedorRestoFormulario');
     const selectRapida = document.getElementById('selectPlantillaRapida');
+    const cuerpoPlantilla = document.getElementById('cuerpoPlantilla');
+    const helpCuerpo = document.getElementById('helpCuerpoPlantilla');
+    const divBotonesVariables = document.getElementById('botonesVariablesRapidas');
+    
+    // Configuración de plantillas rápidas centralizada
+    const PLANTILLAS_RAPIDAS = {
+        'aviso_mensajes_pendientes': {
+            nombre: 'aviso_mensajes_pendientes',
+            categoria: 'UTILITY',
+            cabecera: 'NONE',
+            descripcion: 'Sirve para avisar a un número de WhatsApp externo sobre los chats que están pendientes de revisar dentro de la bandeja de entrada del sistema.',
+            texto: 'Hola, tienes {{1}} mensajes pendientes desde hace {{2}} minutos.',
+            variables: [
+                { id: '{{1}}', label: 'Número de Mensajes' },
+                { id: '{{2}}', label: 'Tiempo Transcurrido (min)' }
+            ]
+        },
+        'factura_por_cobrar': {
+            nombre: 'factura_por_cobrar',
+            categoria: 'UTILITY',
+            cabecera: 'DOCUMENT',
+            descripcion: 'Sirve para enviar el saldo pendiente de pago de una factura de venta, adjuntando obligatoriamente el documento (PDF).',
+            texto: 'Hola {{1}}, le recordamos que tiene un valor pendiente de pago de {{2}} correspondiente a la factura {{3}}.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Cliente' },
+                { id: '{{2}}', label: 'Valor Pendiente de Pago' },
+                { id: '{{3}}', label: 'Número de Factura' }
+            ]
+        },
+        'factura_venta': {
+            nombre: 'factura_venta',
+            categoria: 'UTILITY',
+            cabecera: 'DOCUMENT',
+            descripcion: 'Sirve para enviar al cliente su factura de venta, requiriendo adjuntar el PDF de la factura original.',
+            texto: 'Hola {{1}}, adjunto enviamos su factura número {{2}} por un valor total de {{3}}.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Cliente' },
+                { id: '{{2}}', label: 'Número de Factura' },
+                { id: '{{3}}', label: 'Valor Total de la Factura' }
+            ]
+        },
+        'cuenta_por_cobrar': {
+            nombre: 'cuenta_por_cobrar',
+            categoria: 'UTILITY',
+            cabecera: 'NONE',
+            descripcion: 'Sirve para enviar a los clientes su saldo pendiente de pago consolidado hasta el momento.',
+            texto: 'Hola {{1}}, le informamos que su saldo pendiente de pago hasta el momento es de {{2}}.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Cliente' },
+                { id: '{{2}}', label: 'Total por Cobrar' }
+            ]
+        },
+        'renovacion_suscripcion': {
+            nombre: 'renovacion_suscripcion',
+            categoria: 'UTILITY',
+            cabecera: 'NONE',
+            descripcion: 'Sirve para enviar avisos a los clientes sobre las próximas renovaciones de sus suscripciones.',
+            texto: 'Hola {{1}}, le recordamos que la fecha de renovación de su suscripción es el {{2}}.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Cliente' },
+                { id: '{{2}}', label: 'Fecha de Renovación' }
+            ]
+        },
+        'renovacion_firma_electronica': {
+            nombre: 'renovacion_firma_electronica',
+            categoria: 'UTILITY',
+            cabecera: 'NONE',
+            descripcion: 'Sirve para avisar a los clientes que han sacado firmas electrónicas sobre la próxima caducidad de su firma.',
+            texto: 'Hola {{1}}, le recordamos que su firma electrónica caduca el {{2}}. Comuníquese con nosotros para renovarla.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Cliente' },
+                { id: '{{2}}', label: 'Fecha de Vencimiento' }
+            ]
+        },
+        'retencion_compra': {
+            nombre: 'retencion_compra',
+            categoria: 'UTILITY',
+            cabecera: 'DOCUMENT',
+            descripcion: 'Sirve para enviar al proveedor el comprobante de retención, adjuntando el PDF.',
+            texto: 'Hola {{1}}, adjunto enviamos su comprobante de retención número {{2}} por un valor de {{3}}.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Proveedor' },
+                { id: '{{2}}', label: 'Número de Retención' },
+                { id: '{{3}}', label: 'Valor Retenido' }
+            ]
+        },
+        'nota_credito': {
+            nombre: 'nota_credito',
+            categoria: 'UTILITY',
+            cabecera: 'DOCUMENT',
+            descripcion: 'Sirve para enviar al cliente su nota de crédito, adjuntando el PDF.',
+            texto: 'Hola {{1}}, adjunto enviamos su nota de crédito número {{2}} por un valor de {{3}}.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Cliente' },
+                { id: '{{2}}', label: 'Número de Nota de Crédito' },
+                { id: '{{3}}', label: 'Valor Total' }
+            ]
+        },
+        'nota_debito': {
+            nombre: 'nota_debito',
+            categoria: 'UTILITY',
+            cabecera: 'DOCUMENT',
+            descripcion: 'Sirve para enviar al cliente su nota de débito, adjuntando el PDF.',
+            texto: 'Hola {{1}}, adjunto enviamos su nota de débito número {{2}} por un valor de {{3}}.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Cliente' },
+                { id: '{{2}}', label: 'Número de Nota de Débito' },
+                { id: '{{3}}', label: 'Valor Total' }
+            ]
+        },
+        'guia_remision': {
+            nombre: 'guia_remision',
+            categoria: 'UTILITY',
+            cabecera: 'DOCUMENT',
+            descripcion: 'Sirve para enviar la guía de remisión, adjuntando el PDF.',
+            texto: 'Hola {{1}}, adjunto enviamos la guía de remisión número {{2}} correspondiente a {{3}}.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Destinatario' },
+                { id: '{{2}}', label: 'Número de Guía' },
+                { id: '{{3}}', label: 'Motivo / Referencia' }
+            ]
+        },
+        'rol_pagos': {
+            nombre: 'rol_pagos',
+            categoria: 'UTILITY',
+            cabecera: 'DOCUMENT',
+            descripcion: 'Sirve para enviar al empleado su rol de pagos, adjuntando el PDF.',
+            texto: 'Hola {{1}}, adjunto enviamos tu rol de pagos correspondiente al periodo {{2}} por un valor a recibir de {{3}}.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Empleado' },
+                { id: '{{2}}', label: 'Periodo / Mes' },
+                { id: '{{3}}', label: 'Valor a Recibir' }
+            ]
+        },
+        'descuento_empleado': {
+            nombre: 'descuento_empleado',
+            categoria: 'UTILITY',
+            cabecera: 'DOCUMENT',
+            descripcion: 'Sirve para notificar al empleado sobre un descuento, adjuntando el soporte en PDF.',
+            texto: 'Hola {{1}}, adjunto enviamos el detalle del descuento por concepto de {{2}} por un valor de {{3}}.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Empleado' },
+                { id: '{{2}}', label: 'Concepto del Descuento' },
+                { id: '{{3}}', label: 'Valor a Descontar' }
+            ]
+        }
+    };
+
+    window.insertarVariable = function(variableStr) {
+        if (!cuerpoPlantilla) return;
+        const startPos = cuerpoPlantilla.selectionStart;
+        const endPos = cuerpoPlantilla.selectionEnd;
+        cuerpoPlantilla.value = cuerpoPlantilla.value.substring(0, startPos)
+            + variableStr
+            + cuerpoPlantilla.value.substring(endPos, cuerpoPlantilla.value.length);
+        cuerpoPlantilla.focus();
+        cuerpoPlantilla.selectionStart = startPos + variableStr.length;
+        cuerpoPlantilla.selectionEnd = startPos + variableStr.length;
+    };
+
+    radiosTipo.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            const form = document.getElementById('formCrearPlantilla');
+            
+            form.nombre.value = '';
+            form.cuerpo.value = '';
+            if (selectRapida) selectRapida.value = '';
+            if (divBotonesVariables) divBotonesVariables.innerHTML = '';
+            
+            if (e.target.value === 'rapida') {
+                contenedorRapidas.style.display = 'block';
+                contenedorResto.style.display = 'none';
+                helpCuerpo.innerHTML = 'Puedes modificar el texto, pero solo usar las variables mostradas arriba.';
+            } else {
+                contenedorRapidas.style.display = 'none';
+                contenedorResto.style.display = 'block';
+                form.nombre.readOnly = false;
+                helpCuerpo.innerHTML = '<span class="text-danger fw-bold"><i class="fas fa-exclamation-triangle"></i> IMPORTANTE:</span> Las plantillas libres no admiten variables del sistema ({{1}}, {{2}}, etc.). Si las incluyes, el sistema rechazará la plantilla.';
+            }
+        });
+    });
+
     if (selectRapida) {
         selectRapida.addEventListener('change', (e) => {
             const val = e.target.value;
             const form = document.getElementById('formCrearPlantilla');
             const selectCabecera = document.getElementById('selectTipoCabecera');
+            const helpPlantillaRapida = document.getElementById('helpPlantillaRapida');
+            divBotonesVariables.innerHTML = '';
             
-            if (val === 'factura') {
-                form.nombre.value = 'envio_factura';
-                form.categoria.value = 'UTILITY';
-                selectCabecera.value = 'DOCUMENT';
-                form.cuerpo.value = 'Hola {{1}}, adjunto encontrarás tu factura número {{2}} por el monto de {{3}}. Gracias por tu preferencia.';
-                // Disparar evento para mostrar el input del PDF
-                selectCabecera.dispatchEvent(new Event('change'));
-            } else if (val === 'recordatorio') {
-                form.nombre.value = 'recordatorio_pago';
-                form.categoria.value = 'UTILITY';
-                selectCabecera.value = 'NONE';
-                form.cuerpo.value = 'Hola {{1}}, te recordamos que tienes un saldo pendiente de {{2}} que vence el {{3}}. Por favor, realiza el pago a la brevedad posible.';
-                selectCabecera.dispatchEvent(new Event('change'));
-            } else if (val === 'bienvenida') {
-                form.nombre.value = 'mensaje_bienvenida';
-                form.categoria.value = 'MARKETING';
-                selectCabecera.value = 'NONE';
-                form.cuerpo.value = '¡Hola {{1}}! Bienvenido a nuestra empresa. Estamos felices de tenerte con nosotros. Si tienes alguna duda, responde este mensaje.';
+            if (PLANTILLAS_RAPIDAS[val]) {
+                const conf = PLANTILLAS_RAPIDAS[val];
+                form.nombre.value = conf.nombre;
+                form.nombre.readOnly = true; 
+                
+                form.categoria.value = conf.categoria;
+                selectCabecera.value = conf.cabecera;
+                form.cuerpo.value = conf.texto;
+                
+                if (conf.descripcion && helpPlantillaRapida) {
+                    helpPlantillaRapida.innerHTML = `<i class="fas fa-info-circle me-1"></i> <strong>Explicación:</strong> ${conf.descripcion}`;
+                }
+
+                contenedorResto.style.display = 'block';
+                
+                if (conf.variables && conf.variables.length > 0) {
+                    let htmlBotones = '<div class="d-flex flex-wrap gap-2 mb-2">';
+                    conf.variables.forEach(v => {
+                        htmlBotones += `<button type="button" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 0.75rem;" onclick="insertarVariable('${v.id}')"><i class="fas fa-plus me-1"></i>${v.id} ${v.label}</button>`;
+                    });
+                    htmlBotones += '</div>';
+                    divBotonesVariables.innerHTML = htmlBotones;
+                }
+
                 selectCabecera.dispatchEvent(new Event('change'));
             } else {
-                form.reset();
-                selectRapida.value = '';
-                selectCabecera.dispatchEvent(new Event('change'));
+                contenedorResto.style.display = 'none';
+                if (helpPlantillaRapida) {
+                    helpPlantillaRapida.innerHTML = '<i class="fas fa-info-circle me-1"></i> Al seleccionar, se pre-llenará el formulario con el nombre y parámetros permitidos.';
+                }
             }
         });
     }

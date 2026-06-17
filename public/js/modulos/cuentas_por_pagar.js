@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     CXP_cargar();
     CXP_cargarCatalogos();
     CXP_initBuscadorProveedores();
+    CXP_cargarSaldosIniciales();
 });
 
 /* ════════════════════════════════════════════════════
@@ -733,4 +734,58 @@ function CXP_toast(mensaje, tipo = 'info') {
         Swal.fire({ toast: true, position: 'top-end', icon: tipo === 'danger' ? 'error' : tipo,
                     title: mensaje, showConfirmButton: false, timer: 3000 });
     }
+}
+
+/* ════════════════════════════════
+   SALDOS INICIALES CXP
+════════════════════════════════ */
+async function CXP_cargarSaldosIniciales() {
+    const tbody = document.getElementById('cxp-si-tbody');
+    if (!tbody) return;
+    const estado = document.getElementById('cxp-si-estado')?.value || 'PENDIENTE';
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-3"><div class="spinner-border spinner-border-sm text-warning me-2"></div>Cargando…</td></tr>`;
+    try {
+        const r = await fetch(`${BASE_URL}/modulos/cuentas_por_pagar/getSaldosInicialesCxpAjax?estado=${estado}`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (!d.ok) { tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger py-3">${d.error}</td></tr>`; return; }
+        const filas = d.filas || [];
+        document.getElementById('cxp-si-count').textContent = filas.length + ' registros';
+        if (!filas.length) {
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-muted opacity-50">Sin saldos iniciales</td></tr>`;
+            return;
+        }
+        const tipoLabels = { FACTURA_COMPRA:'Factura', LIQUIDACION:'Liquidación', NOTA_CREDITO:'NC', NOTA_DEBITO:'ND' };
+        tbody.innerHTML = filas.map(f => {
+            const dias = parseInt(f.dias_vencido)||0;
+            const stCol = dias>0 ? 'color:#dc3545;' : '';
+            const estadoBadge = f.estado==='PAGADO'
+                ? `<span class="badge bg-secondary bg-opacity-10 text-secondary border" style="font-size:.65rem;">Pagado</span>`
+                : dias>0
+                    ? `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:.65rem;">Vencida</span>`
+                    : f.estado==='PARCIAL'
+                        ? `<span class="badge bg-warning bg-opacity-10 text-warning border" style="font-size:.65rem;">Parcial</span>`
+                        : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:.65rem;">Pendiente</span>`;
+            const tipoLbl = tipoLabels[f.tipo_documento] || f.tipo_documento;
+            return `<tr style="${stCol}">
+                <td class="ps-3 small"><span class="badge bg-secondary bg-opacity-10 text-secondary border" style="font-size:.6rem;">${cxpEsc(tipoLbl)}</span></td>
+                <td class="font-monospace small fw-semibold">${cxpEsc(f.nro_documento)}</td>
+                <td class="small text-truncate">${cxpEsc(f.nombre_proveedor)}${f.ruc_proveedor?`<small class='text-muted d-block'>${cxpEsc(f.ruc_proveedor)}</small>`:''}</td>
+                <td class="text-center small">${cxpFmtFecha(f.fecha_emision)}</td>
+                <td class="text-center small">${f.fecha_vencimiento?cxpFmtFecha(f.fecha_vencimiento):'—'}</td>
+                <td class="text-end small">$${f.saldo_inicial}</td>
+                <td class="text-end small text-success">$${f.monto_pagado}</td>
+                <td class="text-end pe-3 fw-bold">$${f.saldo_pendiente}</td>
+                <td class="text-center">${estadoBadge}</td>
+            </tr>`;
+        }).join('');
+    } catch(e) { tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger py-3">Error de conexión</td></tr>`; }
+}
+
+function cxpEsc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function cxpFmtFecha(f) {
+    if (!f) return '—';
+    const d = new Date(f + 'T00:00:00');
+    return d.toLocaleDateString('es-EC', { day:'2-digit', month:'2-digit', year:'numeric' });
 }

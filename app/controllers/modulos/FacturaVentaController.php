@@ -579,7 +579,27 @@ class FacturaVentaController extends BaseModuloController
             }
 
             $modeloPlantilla = new \App\models\WhatsappPlantilla();
-            $plantillas = $modeloPlantilla->getPlantillasAprobadas($idEmpresa);
+            $todasPlantillas = $modeloPlantilla->getPlantillasAprobadas($idEmpresa);
+
+            $todasLasRapidas = [
+                'aviso_mensajes_pendientes', 'factura_por_cobrar', 'factura_venta',
+                'cuenta_por_cobrar', 'renovacion_suscripcion', 'renovacion_firma_electronica',
+                'retencion_compra', 'nota_credito', 'nota_debito', 'guia_remision',
+                'rol_pagos', 'descuento_empleado'
+            ];
+            $rapidasPermitidas = ['factura_por_cobrar', 'factura_venta'];
+
+            $plantillas = [];
+            foreach ($todasPlantillas as $p) {
+                if (in_array($p['nombre'], $todasLasRapidas)) {
+                    if (in_array($p['nombre'], $rapidasPermitidas)) {
+                        $plantillas[] = $p;
+                    }
+                } else {
+                    // Si no está en el listado de todas las rápidas, es una plantilla libre
+                    $plantillas[] = $p;
+                }
+            }
 
             $telefonoCliente = '593';
             if ($idFactura > 0) {
@@ -637,10 +657,15 @@ class FacturaVentaController extends BaseModuloController
         $idEmpresa   = (int) $_SESSION['id_empresa'];
         $idFactura   = (int) ($_POST['id_factura'] ?? 0);
         $idPlantilla = (int) ($_POST['id_plantilla'] ?? 0);
-        $telefono    = trim($_POST['telefono'] ?? '');
+        $telefono    = preg_replace('/[^0-9]/', '', trim($_POST['telefono'] ?? ''));
 
         if ($idFactura <= 0 || $idPlantilla <= 0 || empty($telefono)) {
             echo json_encode(['ok' => false, 'error' => 'Datos incompletos.']);
+            return;
+        }
+
+        if (str_starts_with($telefono, '593') && strlen($telefono) !== 12) {
+            echo json_encode(['ok' => false, 'error' => 'El número de teléfono para Ecuador (593) debe tener exactamente 12 dígitos.']);
             return;
         }
 
@@ -779,14 +804,26 @@ class FacturaVentaController extends BaseModuloController
                         $parameters = [];
                         for ($i = 1; $i <= $numVars; $i++) {
                             $val = '';
-                            if ($i == 1) $val = $nombreCliente;
-                            elseif ($i == 2) $val = $numeroFactura;
-                            elseif ($i == 3) $val = '$' . $total;
-                            else $val = '-'; // Por si hay más variables no mapeadas
+                            
+                            // Mapeo dependiendo de la plantilla rápida elegida
+                            if ($plantillaMeta['nombre'] === 'factura_por_cobrar') {
+                                // 1: Cliente, 2: Valor, 3: Número Factura
+                                if ($i == 1) $val = $nombreCliente;
+                                elseif ($i == 2) $val = '$' . $total;
+                                elseif ($i == 3) $val = $numeroFactura;
+                            } elseif ($plantillaMeta['nombre'] === 'factura_venta') {
+                                // 1: Cliente, 2: Número Factura, 3: Valor
+                                if ($i == 1) $val = $nombreCliente;
+                                elseif ($i == 2) $val = $numeroFactura;
+                                elseif ($i == 3) $val = '$' . $total;
+                            } else {
+                                // Si llegara a haber variables en alguna plantilla (no debería por la validación libre), se dejan vacías para evitar errores de tipo en Meta
+                                $val = ' ';
+                            }
 
                             $parameters[] = [
                                 'type' => 'text',
-                                'text' => $val
+                                'text' => (string) $val
                             ];
                         }
 
