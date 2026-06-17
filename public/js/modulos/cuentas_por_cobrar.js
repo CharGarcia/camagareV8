@@ -558,7 +558,10 @@ function CXC_abrirWA(idVenta, nroFactura, telefono, clienteNombre) {
 
     document.getElementById('wa-id-venta').value         = idVenta;
     document.getElementById('wa-subtitulo').textContent  = `Factura: ${nroFactura} — ${clienteNombre}`;
-    document.getElementById('wa-telefono').value         = (telefono || '').replace(/[^0-9]/g, '');
+    let cleanTel = (telefono || '').replace(/[^0-9]/g, '');
+    if (cleanTel.startsWith('0')) cleanTel = cleanTel.substring(1);
+    if (!cleanTel.startsWith('593')) cleanTel = '593' + cleanTel;
+    document.getElementById('wa-telefono').value = cleanTel;
 
     // Llenar plantillas
     const sel = document.getElementById('wa-plantilla');
@@ -569,6 +572,10 @@ function CXC_abrirWA(idVenta, nroFactura, telefono, clienteNombre) {
         opt.textContent = `${p.nombre} (${p.idioma})`;
         sel.appendChild(opt);
     });
+
+    if (typeof window.aplicarFavoritosModal === 'function') {
+        window.aplicarFavoritosModal('#modalWA');
+    }
 
     new bootstrap.Modal(document.getElementById('modalWA')).show();
 }

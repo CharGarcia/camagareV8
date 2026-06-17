@@ -454,7 +454,10 @@
                         <div class="form-text">Incluya el código de país. Ej: 593 para Ecuador.</div>
                     </div>
                     <div class="col-12">
-                        <label class="form-label small fw-bold mb-1">Plantilla <span class="text-danger">*</span></label>
+                        <label class="form-label small fw-bold mb-1 d-flex justify-content-between align-items-center w-100">
+                            <span>Plantilla <span class="text-danger">*</span></span>
+                            <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('cuentas_por_cobrar', 'wa-plantilla', 'wa_plantilla_default') ?>
+                        </label>
                         <select id="wa-plantilla" class="form-select form-select-sm shadow-none">
                             <option value="">Seleccione una plantilla aprobada…</option>
                         </select>
