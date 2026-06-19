@@ -184,6 +184,8 @@
         const rucEl = $id('pf_clienteRuc');    if (rucEl) rucEl.textContent = '';
         const nomEl = $id('pf_clienteNombre'); if (nomEl) nomEl.textContent = '';
         const emlEl = $id('pf_clienteEmail');  if (emlEl) emlEl.textContent = '';
+        // Quitar fila de correo del cliente en info adicional
+        _actualizarInfoCorreoCliente('');
     }
 
     function _seleccionarCliente(c) {
@@ -243,6 +245,15 @@
         const inp = $id('pf_clienteBuscar');
         const dd  = $id('pf_ddClientes');
         if (!inp || !dd) return;
+
+        // Backspace / Delete con cliente seleccionado → limpiar todo
+        inp.addEventListener('keydown', e => {
+            if ((e.key === 'Backspace' || e.key === 'Delete') && $id('pf_idCliente').value) {
+                e.preventDefault();
+                _limpiarCliente();
+                dd.classList.add('d-none');
+            }
+        });
 
         let timer;
         inp.addEventListener('input', () => {
@@ -400,6 +411,18 @@
             ddProd.style.left  = r.left   + 'px';
             ddProd.style.width = Math.max(r.width, 340) + 'px';
         }
+
+        // Backspace / Delete con producto seleccionado → limpiar la fila
+        inpDesc.addEventListener('keydown', e => {
+            const idProd = tr.querySelector('.input-id-producto');
+            if ((e.key === 'Backspace' || e.key === 'Delete') && idProd && idProd.value) {
+                e.preventDefault();
+                inpDesc.value = '';
+                idProd.value = '';
+                tr.querySelector('.input-codigo').value = '';
+                ddProd.classList.add('d-none');
+            }
+        });
 
         let timer;
         inpDesc.addEventListener('input', () => {
