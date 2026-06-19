@@ -51,6 +51,14 @@ class UsuariosSistemaController extends Controller
         $msg = $_SESSION['usuarios_msg'] ?? null;
         unset($_SESSION['usuarios_msg']);
 
+        // Límite de usuarios para admins
+        $limiteUsuarios = null;
+        $idEmpresaActual = (int) ($_SESSION['id_empresa'] ?? 0);
+        if ($idEmpresaActual > 0) {
+            $modelAsignada = new \App\models\EmpresaAsignada();
+            $limiteUsuarios = $modelAsignada->getLimiteUsuariosEmpresa($idEmpresaActual);
+        }
+
         $this->viewWithLayout('layouts.main', 'usuariosSistema.index', [
             'titulo' => 'Usuarios del sistema',
             'rows' => $rows,
@@ -63,6 +71,7 @@ class UsuariosSistemaController extends Controller
             'ordenCol' => $ordenCol,
             'ordenDir' => $ordenDir,
             'msg' => $msg,
+            'limiteUsuarios' => $limiteUsuarios,
         ]);
     }
 

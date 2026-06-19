@@ -59,6 +59,7 @@ class EmpresaController extends BaseModuloController
             'provincias' => $provincias,
             'ciudades' => $ciudades,
             'formasPagoSri' => $formasPagoSri,
+            'usuarios_empresa' => $data['usuarios_empresa'] ?? [],
             'rutaModulo' => self::RUTA_MODULO,
             'fullWidth' => true
         ]);

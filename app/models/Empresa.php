@@ -63,7 +63,7 @@ class Empresa extends BaseModel
 
         $sql = "SELECT DISTINCT e.id, e.nombre, e.nombre_comercial, e.ruc, e.establecimiento, e.direccion, e.telefono, e.mail,
                 e.cod_prov, e.cod_ciudad, e.estado, e.valor_cobro, e.periodo_vigencia_desde, e.periodo_vigencia_hasta, e.estado_pago,
-                e.obligado_contabilidad,
+                e.obligado_contabilidad, COALESCE(e.max_usuarios, 3) AS max_usuarios,
                 p.nombre AS nombre_provincia, c.nombre AS nombre_ciudad
             FROM {$from} {$joinProv} {$joinCiud} {$where}
             ORDER BY {$col} {$dir}
@@ -186,11 +186,12 @@ class Empresa extends BaseModel
         $estadoPago = !empty($data['estado_pago']) ? "'" . $this->escape($data['estado_pago']) . "'" : "'pendiente'";
         $valCobroSql = $valorCobro !== null ? (string) $valorCobro : 'NULL';
         $estado = (trim($data['estado'] ?? '1') === '0') ? '0' : '1';
+        $maxUsuarios = isset($data['max_usuarios']) && (int) $data['max_usuarios'] > 0 ? (int) $data['max_usuarios'] : 3;
 
         $estEsc = $this->escape($establecimiento);
         $obligadoCont = strtoupper(trim($data['obligado_contabilidad'] ?? 'NO')) === 'SI' ? 'SI' : 'NO';
-        $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, obligado_contabilidad)
-            VALUES ('{$nombre}', '{$nombreComercial}', '{$ruc}', '{$estEsc}', '{$direccion}', '{$telefono}', '{$tipo}', '{$nomRepLegal}', '{$cedRepLegal}', '{$mail}', '{$codProv}', '{$codCiudad}', '{$estado}', NOW(), '{$idUsuario}', '{$nombreContador}', '{$rucContador}', {$valCobroSql}, {$vigenciaDesde}, {$vigenciaHasta}, {$estadoPago}, '{$obligadoCont}')";
+        $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, obligado_contabilidad, max_usuarios)
+            VALUES ('{$nombre}', '{$nombreComercial}', '{$ruc}', '{$estEsc}', '{$direccion}', '{$telefono}', '{$tipo}', '{$nomRepLegal}', '{$cedRepLegal}', '{$mail}', '{$codProv}', '{$codCiudad}', '{$estado}', NOW(), '{$idUsuario}', '{$nombreContador}', '{$rucContador}', {$valCobroSql}, {$vigenciaDesde}, {$vigenciaHasta}, {$estadoPago}, '{$obligadoCont}', {$maxUsuarios})";
         $this->execute($sql);
         $id = $this->lastInsertId('empresas_id_seq');
 
@@ -245,12 +246,15 @@ class Empresa extends BaseModel
         }
 
         $sets = [];
-        $campos = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad'];
+        $campos = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios'];
         foreach ($campos as $c) {
             if (array_key_exists($c, $data)) {
                 if (in_array($c, ['valor_cobro'], true)) {
                     $v = $data[$c];
                     $sets[] = "{$c} = " . ($v === '' || $v === null ? 'NULL' : (float) $v);
+                } elseif ($c === 'max_usuarios') {
+                    $v = (int) ($data[$c] ?? 3);
+                    $sets[] = "{$c} = " . ($v > 0 ? $v : 3);
                 } elseif (in_array($c, ['periodo_vigencia_desde', 'periodo_vigencia_hasta'], true)) {
                     $v = trim($data[$c] ?? '');
                     $sets[] = "{$c} = " . ($v === '' ? 'NULL' : "'" . $this->escape($v) . "'");
@@ -282,7 +286,7 @@ class Empresa extends BaseModel
     public function getPuntosEmision(int $idEstablecimiento): array
     {
         $id = (int) $idEstablecimiento;
-        $sql = "SELECT p.*, e.codigo as cod_establecimiento 
+        $sql = "SELECT p.*, e.codigo as cod_establecimiento, e.direccion as direccion_establecimiento 
                 FROM empresa_punto_emision p
                 JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
                 WHERE p.id_establecimiento = {$id} 

@@ -246,6 +246,20 @@ class EmpresaAsignada extends BaseModel
     }
 
     /**
+     * Retorna [max_usuarios, usuarios_actuales] para una empresa.
+     * Útil para validar límite antes de crear usuarios.
+     */
+    public function getLimiteUsuariosEmpresa(int $idEmpresa): array
+    {
+        $id = (int) $idEmpresa;
+        $r = $this->query("SELECT COALESCE(max_usuarios, 3) AS max_usuarios FROM empresas WHERE id = {$id} AND eliminado = false LIMIT 1");
+        $max = (int) ($r[0]['max_usuarios'] ?? 3);
+        $c = $this->query("SELECT COUNT(*) AS n FROM empresa_asignada WHERE id_empresa = {$id}");
+        $actual = (int) ($c[0]['n'] ?? 0);
+        return ['max' => $max, 'actual' => $actual];
+    }
+
+    /**
      * Asignar empresa a usuario
      */
     public function asignar(int $idEmpresa, int $idUsuarioDestino, int $idAsignador): bool

@@ -99,6 +99,7 @@ class EmpresasSistemaController extends Controller
             'periodo_vigencia_desde' => trim($_POST['periodo_vigencia_desde'] ?? ''),
             'periodo_vigencia_hasta' => trim($_POST['periodo_vigencia_hasta'] ?? ''),
             'estado_pago' => trim($_POST['estado_pago'] ?? 'pendiente'),
+            'max_usuarios' => (int) ($_POST['max_usuarios'] ?? 3),
         ];
 
         $esAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
@@ -114,6 +115,7 @@ class EmpresasSistemaController extends Controller
                 $_SESSION['id_empresa'] = $id;
                 $_SESSION['ruc_empresa'] = $empCreada['ruc'] ?? '';
             }
+            (new \App\Services\EmpresaInicializadorService())->inicializar($id, $idUsuario);
             $_SESSION['empresas_msg'] = ['success', 'Empresa creada correctamente.'];
             if ($esAjax) {
                 $this->json(['ok' => true, 'msg' => 'Empresa creada correctamente.']);
@@ -171,7 +173,7 @@ class EmpresasSistemaController extends Controller
             }
         }
 
-        $allKeys = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad'];
+        $allKeys = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios'];
         $data = [];
         foreach ($allKeys as $k) {
             if (array_key_exists($k, $_POST)) {
@@ -191,6 +193,8 @@ class EmpresasSistemaController extends Controller
 
         try {
             if ($this->model->actualizar($id, $data)) {
+                $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+                (new \App\Services\EmpresaInicializadorService())->inicializar($id, $idUsuario);
                 $_SESSION['empresas_msg'] = ['success', 'Empresa actualizada correctamente.'];
                 if ($esAjax) {
                     $this->json(['ok' => true, 'msg' => 'Empresa actualizada correctamente.']);

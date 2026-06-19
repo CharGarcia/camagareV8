@@ -231,7 +231,7 @@
     </div>
 
     <!-- ── Saldos Iniciales CXC ── -->
-    <div class="card border-0 shadow-sm mt-4">
+    <div class="card border-0 shadow-sm mt-4" id="cxc-si-seccion" style="display:none;">
         <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
             <div>
                 <h6 class="fw-bold mb-0 text-warning"><i class="bi bi-archive me-2"></i>Saldos Iniciales CXC</h6>

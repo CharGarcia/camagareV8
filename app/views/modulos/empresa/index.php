@@ -164,6 +164,77 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                 </select>
                             </div>
 
+                            <!-- Usuarios asignados a la empresa -->
+                            <?php
+                            $usuariosEmpresa = $usuarios_empresa ?? [];
+                            $totalUsuarios   = count($usuariosEmpresa);
+                            $maxUsuarios     = (int)($empresa['max_usuarios'] ?? 3);
+                            $disponibles     = max(0, $maxUsuarios - $totalUsuarios);
+                            $cupoLleno       = $totalUsuarios >= $maxUsuarios;
+                            ?>
+                            <div class="col-12">
+                                <div class="card border-0 mt-3" style="background:#f8fafc;">
+                                    <div class="card-body p-3">
+                                        <div class="d-flex align-items-center justify-content-between mb-2">
+                                            <h6 class="fw-bold small text-primary mb-0">
+                                                <i class="bi bi-people me-2"></i>Usuarios con acceso a esta empresa
+                                            </h6>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span class="badge <?= $cupoLleno ? 'bg-danger bg-opacity-10 text-danger border border-danger' : 'bg-success bg-opacity-10 text-success border border-success' ?> rounded-pill px-3" style="font-size:.72rem;">
+                                                    <i class="bi bi-person-fill me-1"></i>
+                                                    <?= $totalUsuarios ?>/<?= $maxUsuarios ?> asignados
+                                                </span>
+                                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary rounded-pill px-2" style="font-size:.7rem;">
+                                                    <?= $cupoLleno ? '<i class="bi bi-slash-circle me-1"></i>Sin cupos disponibles' : "<i class='bi bi-check-circle me-1'></i>{$disponibles} " . ($disponibles === 1 ? 'disponible' : 'disponibles') ?>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <?php if (empty($usuariosEmpresa)): ?>
+                                            <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>No hay usuarios asignados a esta empresa.</p>
+                                        <?php else: ?>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm mb-0" style="font-size:.78rem;">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th class="py-1 ps-2">Nombre</th>
+                                                            <th class="py-1">Correo</th>
+                                                            <th class="py-1 text-center">Tipo</th>
+                                                            <th class="py-1 text-center pe-2">Estado</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <?php foreach ($usuariosEmpresa as $u):
+                                                            $nivelU  = (int)($u['nivel'] ?? 1);
+                                                            $estadoU = (int)($u['estado'] ?? 1);
+                                                            $nivelLabel = match($nivelU) {
+                                                                3       => ['Super Admin', 'danger'],
+                                                                2       => ['Administrador', 'info'],
+                                                                default => ['Usuario', 'secondary'],
+                                                            };
+                                                        ?>
+                                                        <tr>
+                                                            <td class="py-1 ps-2 align-middle fw-semibold"><?= htmlspecialchars($u['nombre'] ?? '') ?></td>
+                                                            <td class="py-1 align-middle text-muted"><?= htmlspecialchars($u['correo'] ?? '') ?></td>
+                                                            <td class="py-1 text-center align-middle">
+                                                                <span class="badge bg-<?= $nivelLabel[1] ?> bg-opacity-10 text-<?= $nivelLabel[1] ?> border border-<?= $nivelLabel[1] ?> border-opacity-25 rounded-pill" style="font-size:.65rem;">
+                                                                    <?= $nivelLabel[0] ?>
+                                                                </span>
+                                                            </td>
+                                                            <td class="py-1 text-center align-middle pe-2">
+                                                                <span class="badge rounded-pill <?= $estadoU ? 'bg-success bg-opacity-10 text-success border border-success' : 'bg-secondary bg-opacity-10 text-secondary border border-secondary' ?>" style="font-size:.65rem;">
+                                                                    <?= $estadoU ? 'Activo' : 'Inactivo' ?>
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                        <?php endforeach; ?>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Cobro y Vigencia (Solo Lectura) -->
                             <div class="col-12">
                                 <div class="card bg-light border-0 mt-3">
@@ -1203,19 +1274,6 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         }
     }
 
-    function agregarSecuencialPersonalizado() {
-        const container = document.getElementById('secuenciales-fields');
-        const name = prompt('Ingrese el nombre del tipo de documento:');
-        if (name) {
-            const div = document.createElement('div');
-            div.className = 'col-md-6 col-lg-4';
-            div.innerHTML = `
-            <label class="form-label small fw-bold text-muted">${name}</label>
-            <input type="number" name="secuenciales[${name}]" class="form-control form-control-sm border-0 shadow-sm" value="1" min="1">
-        `;
-            container.appendChild(div);
-        }
-    }
 
     function _setBtnSecuencialesEstado(tieneRegistros) {
         const btn = document.getElementById('btn-guardar-sec');
@@ -1289,21 +1347,39 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             container.innerHTML = '';
 
             if (json.ok) {
-                const entries = Object.entries(json.data);
-                if (entries.length === 0) {
+                const data = json.data;
+                if (!data || data.length === 0) {
                     container.innerHTML = '<div class="col-12 text-center py-4 text-muted small"><i class="bi bi-info-circle me-2"></i>Este punto aún no tiene secuenciales registrados. Use el botón para crear los tipos estándar.</div>';
                     _setBtnSecuencialesEstado(false);
                     return;
                 }
 
-                for (const [nombre, valor] of entries) {
+                for (const item of data) {
+                    const secId = item.id;
+                    const rawNombre = item.tipo_documento || '';
+                    const nombre = rawNombre.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                    const valor = item.secuencial_inicial;
                     const div = document.createElement('div');
                     div.className = 'col-md-6 col-lg-4';
                     div.innerHTML = `
-                        <label class="form-label small fw-bold text-muted">${nombre}</label>
+                        <div class="sec-nombre-wrapper d-flex align-items-center gap-1 mb-1">
+                            <span class="sec-nombre-label fw-bold text-muted small flex-grow-1 text-truncate" title="${nombre}" style="cursor:default;min-width:0;">${nombre}</span>
+                            <input type="text" name="secuenciales[${secId}][nombre]"
+                                class="sec-nombre-input form-control form-control-sm border shadow-sm fw-bold text-muted d-none flex-grow-1"
+                                value="${nombre}" placeholder="Nombre del tipo de documento">
+                            <button type="button" class="btn btn-link btn-sm p-0 text-muted sec-btn-editar" title="Editar nombre" onclick="editarNombreSec(this)">
+                                <i class="bi bi-pencil" style="font-size:0.72rem;"></i>
+                            </button>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-success sec-btn-guardar d-none" title="Confirmar" onclick="guardarNombreSec(this)">
+                                <i class="bi bi-check-lg" style="font-size:0.8rem;"></i>
+                            </button>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-secondary sec-btn-cancelar d-none" title="Cancelar" onclick="cancelarNombreSec(this)">
+                                <i class="bi bi-x-lg" style="font-size:0.72rem;"></i>
+                            </button>
+                        </div>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-light border-0 shadow-sm text-muted small">#</span>
-                            <input type="number" name="secuenciales[${nombre}]" class="form-control border-0 shadow-sm" value="${valor}" min="1">
+                            <input type="number" name="secuenciales[${secId}][valor]" class="form-control border-0 shadow-sm" value="${valor}" min="1">
                         </div>
                     `;
                     container.appendChild(div);
@@ -1317,25 +1393,88 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
 
     function agregarSecuencialPersonalizado() {
         const container = document.getElementById('secuenciales-fields');
-        // Si hay un mensaje de "No hay secuenciales", lo quitamos
         if (container.querySelector('.text-muted')) container.innerHTML = '';
 
         const name = prompt('Ingrese el nombre del tipo de documento (Ej: Factura, Nota de Crédito, etc):');
         if (name) {
+            const newKey = 'new_' + Date.now();
+            const safeName = name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
             const div = document.createElement('div');
             div.className = 'col-md-6 col-lg-4';
             div.innerHTML = `
-                <label class="form-label small fw-bold text-muted">${name}</label>
+                <div class="sec-nombre-wrapper d-flex align-items-center gap-1 mb-1">
+                    <span class="sec-nombre-label fw-bold text-muted small flex-grow-1 text-truncate" title="${safeName}" style="cursor:default;min-width:0;">${safeName}</span>
+                    <input type="text" name="secuenciales[${newKey}][nombre]"
+                        class="sec-nombre-input form-control form-control-sm border shadow-sm fw-bold text-muted d-none flex-grow-1"
+                        value="${safeName}" placeholder="Nombre del tipo de documento">
+                    <button type="button" class="btn btn-link btn-sm p-0 text-muted sec-btn-editar" title="Editar nombre" onclick="editarNombreSec(this)">
+                        <i class="bi bi-pencil" style="font-size:0.72rem;"></i>
+                    </button>
+                    <button type="button" class="btn btn-link btn-sm p-0 text-success sec-btn-guardar d-none" title="Confirmar" onclick="guardarNombreSec(this)">
+                        <i class="bi bi-check-lg" style="font-size:0.8rem;"></i>
+                    </button>
+                    <button type="button" class="btn btn-link btn-sm p-0 text-secondary sec-btn-cancelar d-none" title="Cancelar" onclick="cancelarNombreSec(this)">
+                        <i class="bi bi-x-lg" style="font-size:0.72rem;"></i>
+                    </button>
+                </div>
                 <div class="input-group input-group-sm">
                     <span class="input-group-text bg-light border-0 shadow-sm text-muted small">#</span>
-                    <input type="number" name="secuenciales[${name}]" class="form-control border-0 shadow-sm" value="1" min="1">
+                    <input type="number" name="secuenciales[${newKey}][valor]" class="form-control border-0 shadow-sm" value="1" min="1">
                     <button type="button" class="btn btn-outline-danger border-0 bg-white" onclick="this.closest('.col-md-6').remove()">
                         <i class="bi bi-x-lg"></i>
                     </button>
                 </div>
             `;
             container.appendChild(div);
+            _setBtnSecuencialesEstado(true);
         }
+    }
+
+    /* ---------------------------------------------------------
+       Edición inline de nombre de secuencial
+    --------------------------------------------------------- */
+    function editarNombreSec(btn) {
+        const w = btn.closest('.sec-nombre-wrapper');
+        w.querySelector('.sec-nombre-label').classList.add('d-none');
+        const input = w.querySelector('.sec-nombre-input');
+        input.classList.remove('d-none');
+        input.focus();
+        input.select();
+        w.querySelector('.sec-btn-editar').classList.add('d-none');
+        w.querySelector('.sec-btn-guardar').classList.remove('d-none');
+        w.querySelector('.sec-btn-cancelar').classList.remove('d-none');
+
+        input.addEventListener('keydown', function _kd(e) {
+            if (e.key === 'Enter') { e.preventDefault(); guardarNombreSec(w.querySelector('.sec-btn-guardar')); input.removeEventListener('keydown', _kd); }
+            if (e.key === 'Escape') { cancelarNombreSec(w.querySelector('.sec-btn-cancelar')); input.removeEventListener('keydown', _kd); }
+        }, { once: false });
+    }
+
+    function guardarNombreSec(btn) {
+        const w = btn.closest('.sec-nombre-wrapper');
+        const input = w.querySelector('.sec-nombre-input');
+        const newName = input.value.trim();
+        if (!newName) { input.focus(); return; }
+        const label = w.querySelector('.sec-nombre-label');
+        label.textContent = newName;
+        label.title = newName;
+        input.classList.add('d-none');
+        label.classList.remove('d-none');
+        w.querySelector('.sec-btn-editar').classList.remove('d-none');
+        w.querySelector('.sec-btn-guardar').classList.add('d-none');
+        w.querySelector('.sec-btn-cancelar').classList.add('d-none');
+    }
+
+    function cancelarNombreSec(btn) {
+        const w = btn.closest('.sec-nombre-wrapper');
+        const input = w.querySelector('.sec-nombre-input');
+        const label = w.querySelector('.sec-nombre-label');
+        input.value = label.textContent;
+        input.classList.add('d-none');
+        label.classList.remove('d-none');
+        w.querySelector('.sec-btn-editar').classList.remove('d-none');
+        w.querySelector('.sec-btn-guardar').classList.add('d-none');
+        w.querySelector('.sec-btn-cancelar').classList.add('d-none');
     }
 
     /* ---------------------------------------------------------

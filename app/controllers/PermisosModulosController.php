@@ -121,6 +121,12 @@ class PermisosModulosController extends Controller
             return ['value' => (int)($r['id_empresa'] ?? $r['id'] ?? 0), 'text' => $text];
         }, $rowsEmpresas);
 
+        $limiteUsuarios = null;
+        $idEmpresaActual = (int) ($_SESSION['id_empresa'] ?? 0);
+        if ($idEmpresaActual > 0) {
+            $limiteUsuarios = $this->modelEmpresa->getLimiteUsuariosEmpresa($idEmpresaActual);
+        }
+
         $this->viewWithLayout('layouts.main', 'permisosModulos.index', [
             'titulo' => 'Permisos de módulos a usuarios',
             'nivel' => $nivel,
@@ -131,6 +137,7 @@ class PermisosModulosController extends Controller
             'modulos' => $modulos,
             'opcionesUsuarios' => $opcionesUsuarios,
             'opcionesEmpresas' => $opcionesEmpresas,
+            'limiteUsuarios' => $limiteUsuarios,
         ]);
     }
 

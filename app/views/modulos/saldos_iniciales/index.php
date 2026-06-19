@@ -598,9 +598,9 @@ $urlBase = $base . '/' . $rutaModulo;
 
 <script>
     const RUTA_SI           = "<?= $rutaModulo ?>";
-    const SI_PERM_CREAR     = <?= ($perm['crear']     ?? false) ? 'true' : 'false' ?>;
-    const SI_PERM_MODIFICAR = <?= ($perm['modificar'] ?? false) ? 'true' : 'false' ?>;
-    const SI_PERM_ELIMINAR  = <?= ($perm['eliminar']  ?? false) ? 'true' : 'false' ?>;
+    const SI_PERM_CREAR     = <?= ($perm['crear']      ?? false) ? 'true' : 'false' ?>;
+    const SI_PERM_MODIFICAR = <?= ($perm['actualizar'] ?? false) ? 'true' : 'false' ?>;
+    const SI_PERM_ELIMINAR  = <?= ($perm['eliminar']   ?? false) ? 'true' : 'false' ?>;
 
     /* Lazily cargar cada tab la primera vez */
     let SI_tabCxcCargado    = false;

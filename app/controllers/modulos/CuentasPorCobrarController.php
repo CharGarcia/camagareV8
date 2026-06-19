@@ -870,6 +870,6 @@ HTML;
             'estado' => $_GET['estado'] ?? 'TODOS',
         ];
         $filas = $this->repo->getSaldosInicialesCxc($idEmpresa, $filtros);
-        $this->jsonOk(['filas' => $filas]);
+        $this->jsonSuccess(['filas' => $filas]);
     }
 }

@@ -16,6 +16,26 @@ class TransportistaRepository extends BaseRepository
         parent::__construct($this->table);
     }
 
+    public function getTransportistasActivos(int $idEmpresa, ?int $idUsuarioFiltro = null): array
+    {
+        $whereSql = $this->getBaseWhere($idEmpresa, 't', $idUsuarioFiltro);
+        $whereSql .= " AND t.estado = 'activo'";
+        
+        $sql = "SELECT t.id, t.nombre, t.identificacion 
+                FROM {$this->table} t 
+                {$whereSql} 
+                ORDER BY t.nombre ASC";
+                
+        $params = [':id_empresa' => $idEmpresa];
+        if ($idUsuarioFiltro !== null) {
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
     public function getListado(
         int $idEmpresa,
         string $buscar,

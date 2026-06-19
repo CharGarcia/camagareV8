@@ -16,6 +16,29 @@ class VendedorRepository extends BaseRepository
     }
 
     /**
+     * Obtiene solo los vendedores activos permitidos.
+     */
+    public function getVendedoresActivos(int $idEmpresa, ?int $idUsuarioFiltro = null): array
+    {
+        $where = $this->getBaseWhere($idEmpresa, 'v', $idUsuarioFiltro);
+        $where .= " AND v.status = 1"; // Fixed integer = boolean error
+        
+        $sql = "SELECT v.id, v.nombre 
+                FROM {$this->table} v 
+                $where 
+                ORDER BY v.nombre ASC";
+                
+        $params = [':id_empresa' => $idEmpresa];
+        if ($idUsuarioFiltro !== null) {
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Obtiene el listado de vendedores con filtros y paginación.
      */
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array

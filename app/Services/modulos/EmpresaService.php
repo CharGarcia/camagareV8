@@ -43,6 +43,7 @@ class EmpresaService
             'ices'                  => $this->repository->getIces($idEmpresa),
             'retenciones_sri_iva'   => $this->repository->getRetencionesSriIva(),
             'retenciones_casilleros' => $this->repository->getRetencionesCasilleros($idEmpresa),
+            'usuarios_empresa'      => $this->repository->getUsuariosAsignados($idEmpresa),
         ];
     }
     
@@ -465,8 +466,15 @@ class EmpresaService
 
     public function saveSecuenciales(int $idPunto, array $secuenciales, int $idEmpresa): bool
     {
-        foreach ($secuenciales as $tipo => $numero) {
-            $this->repository->updateSecuencial($idPunto, $tipo, (int) $numero, $idEmpresa);
+        foreach ($secuenciales as $key => $data) {
+            $nombre = trim($data['nombre'] ?? '');
+            $valor  = (int) ($data['valor'] ?? 1);
+            if ($nombre === '') continue;
+            if (is_numeric($key) && (int) $key > 0) {
+                $this->repository->updateSecuencialById((int) $key, $nombre, $valor, $idEmpresa);
+            } else {
+                $this->repository->updateSecuencial($idPunto, $nombre, $valor, $idEmpresa);
+            }
         }
         return true;
     }

@@ -170,6 +170,7 @@ function estadoPagoBadge($estado) {
                         data-periodo-vigencia-hasta="<?= htmlspecialchars($r['periodo_vigencia_hasta'] ?? '') ?>"
                         data-estado-pago="<?= htmlspecialchars($r['estado_pago'] ?? 'pendiente') ?>"
                         data-obligado-contabilidad="<?= htmlspecialchars($r['obligado_contabilidad'] ?? 'NO') ?>"
+                        data-max-usuarios="<?= (int)($r['max_usuarios'] ?? 3) ?>"
                         data-usuarios="<?= count($usuarios) ?>">
                         <td><?= htmlspecialchars($r['nombre'] ?? '-') ?></td>
                         <td><?= htmlspecialchars($r['nombre_comercial'] ?? '-') ?></td>
@@ -185,7 +186,16 @@ function estadoPagoBadge($estado) {
                             <span class="badge bg-secondary">Inactivo</span>
                             <?php endif; ?>
                         </td>
-                        <td class="text-center"><span class="badge bg-light text-dark"><?= count($usuarios) ?></span></td>
+                        <?php
+                        $maxUsu  = (int)($r['max_usuarios'] ?? 3);
+                        $cntUsu  = count($usuarios);
+                        $clsUsu  = $cntUsu >= $maxUsu ? 'bg-danger' : 'bg-light text-dark';
+                        ?>
+                        <td class="text-center">
+                            <span class="badge <?= $clsUsu ?>" title="<?= $cntUsu ?> de <?= $maxUsu ?> permitidos">
+                                <?= $cntUsu ?>/<?= $maxUsu ?>
+                            </span>
+                        </td>
                         <?php if ($nivel >= 3): ?>
                         <td class="text-center" onclick="event.stopPropagation()">
                             <button class="btn btn-sm btn-outline-danger" onclick="eliminarEmpresa(<?= $r['id'] ?>)" title="Eliminar empresa"><i class="bi bi-trash"></i></button>
@@ -222,16 +232,20 @@ function estadoPagoBadge($estado) {
                                 <button type="button" id="btn-consultar-ruc" class="btn btn-outline-secondary btn-sm" title="Consultar datos del RUC"><i class="bi bi-search"></i></button>
                             </div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label for="crear-establecimiento" class="form-label">Establecimiento *</label>
                             <input type="text" id="crear-establecimiento" name="establecimiento" class="form-control form-control-sm solo-numero" required placeholder="001" maxlength="3" value="001">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label for="crear-estado" class="form-label">Estado</label>
                             <select id="crear-estado" name="estado" class="form-select form-select-sm">
                                 <option value="1">Activo</option>
                                 <option value="0">Inactivo</option>
                             </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="crear-max-usuarios" class="form-label">Usuarios</label>
+                            <input type="number" id="crear-max-usuarios" name="max_usuarios" class="form-control form-control-sm" min="1" max="9999" value="3" required>
                         </div>
                         <div class="col-12">
                             <label for="crear-nombre" class="form-label">Razón social *</label>
@@ -323,17 +337,21 @@ function estadoPagoBadge($estado) {
                                     <label for="edit-ruc" class="form-label">RUC</label>
                                     <input type="text" id="edit-ruc" name="ruc" class="form-control form-control-sm solo-numero" placeholder="RUC" maxlength="13" pattern="[0-9]{13}" inputmode="numeric" title="13 dígitos numéricos" autocomplete="off">
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <label for="edit-establecimiento" class="form-label">Establecimiento</label>
                                     <input type="text" id="edit-establecimiento" name="establecimiento" class="form-control form-control-sm solo-numero" placeholder="001" maxlength="3" readonly>
                                     <div class="form-text small" style="font-size: 0.6rem;">El establecimiento matriz no es editable.</div>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <label for="edit-estado" class="form-label">Estado</label>
                                     <select id="edit-estado" name="estado" class="form-select form-select-sm">
                                         <option value="1">Activo</option>
                                         <option value="0">Inactivo</option>
                                     </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label for="edit-max-usuarios-gen" class="form-label">Usuarios</label>
+                                    <input type="number" id="edit-max-usuarios-gen" name="max_usuarios" class="form-control form-control-sm" min="1" max="9999" value="3" required>
                                 </div>
                                 <div class="col-12">
                                     <label for="edit-nombre" class="form-label">Razón social</label>
@@ -617,6 +635,7 @@ function estadoPagoBadge($estado) {
             document.getElementById('edit-provincia').value = codProv;
             cargarCiudades(codProv, 'edit-ciudad', codCiudad);
         });
+        document.getElementById('edit-max-usuarios-gen').value = el.dataset.maxUsuarios || '3';
         document.getElementById('edit-valor-cobro').value = el.dataset.valorCobro || '';
         document.getElementById('edit-vigencia-desde').value = el.dataset.periodoVigenciaDesde || '';
         document.getElementById('edit-vigencia-hasta').value = el.dataset.periodoVigenciaHasta || '';

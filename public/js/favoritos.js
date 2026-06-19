@@ -191,7 +191,9 @@ function guardarPreferenciaVista(modulo, key, valor, msg) {
             const res = await resp.json();
             
             if (res.ok) {
-                showToast(msg, 'success');
+                if (msg) {
+                    showToast(msg, 'success');
+                }
             } else {
                 alert("Error al guardar: " + res.error);
             }

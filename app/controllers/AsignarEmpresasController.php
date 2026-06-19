@@ -37,6 +37,12 @@ class AsignarEmpresasController extends Controller
         $data = $this->model->getUsuariosAsignables($idActual, $nivel, $buscar, $page, self::PER_PAGE);
         $totalPages = (int) ceil($data['total'] / self::PER_PAGE);
 
+        $limiteUsuarios = null;
+        $idEmpresaActual = (int) ($_SESSION['id_empresa'] ?? 0);
+        if ($idEmpresaActual > 0) {
+            $limiteUsuarios = $this->model->getLimiteUsuariosEmpresa($idEmpresaActual);
+        }
+
         $this->viewWithLayout('layouts.main', 'asignarEmpresas.index', [
             'titulo' => 'Asignar empresas a usuarios',
             'rows' => $data['rows'],
@@ -45,6 +51,7 @@ class AsignarEmpresasController extends Controller
             'totalPages' => $totalPages,
             'buscar' => $buscar,
             'nivel' => $nivel,
+            'limiteUsuarios' => $limiteUsuarios,
         ]);
     }
 

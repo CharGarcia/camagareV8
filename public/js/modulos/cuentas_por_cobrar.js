@@ -806,43 +806,58 @@ function CXC_toast(msg, type = 'info') {
    SALDOS INICIALES CXC
 ════════════════════════════════ */
 async function CXC_cargarSaldosIniciales() {
-    const tbody = document.getElementById('cxc-si-tbody');
-    if (!tbody) return;
+    const seccion = document.getElementById('cxc-si-seccion');
+    const tbody   = document.getElementById('cxc-si-tbody');
+    if (!tbody || !seccion) return;
+
     const estado = document.getElementById('cxc-si-estado')?.value || 'PENDIENTE';
     tbody.innerHTML = `<tr><td colspan="8" class="text-center py-3"><div class="spinner-border spinner-border-sm text-warning me-2"></div>Cargando…</td></tr>`;
+
     try {
         const r = await fetch(`${BASE_URL}/modulos/cuentas_por_cobrar/getSaldosInicialesCxcAjax?estado=${estado}`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
         const d = await r.json();
-        if (!d.ok) { tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-3">${d.error}</td></tr>`; return; }
-        const filas = d.filas || [];
-        document.getElementById('cxc-si-count').textContent = filas.length + ' registros';
-        if (!filas.length) {
-            tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-muted opacity-50">Sin saldos iniciales</td></tr>`;
+        if (!d.ok) {
+            seccion.style.display = 'none';
             return;
         }
-        const tipoLabels = { FACTURA_COMPRA:'Factura', LIQUIDACION:'Liquidación', NOTA_CREDITO:'NC', NOTA_DEBITO:'ND' };
+        const filas = d.filas || [];
+
+        // Ocultar sección completa si no hay datos
+        if (!filas.length) {
+            seccion.style.display = 'none';
+            return;
+        }
+
+        seccion.style.display = '';
+        const countEl = document.getElementById('cxc-si-count');
+        if (countEl) countEl.textContent = filas.length + ' registros';
+
         tbody.innerHTML = filas.map(f => {
-            const dias = parseInt(f.dias_vencido)||0;
-            const stCol = dias>0 ? 'color:#dc3545;' : '';
-            const estadoBadge = f.estado==='PAGADO'
+            const dias = parseInt(f.dias_vencido) || 0;
+            const stCol = dias > 0 ? 'color:#dc3545;' : '';
+            const estadoBadge = f.estado === 'PAGADO'
                 ? `<span class="badge bg-secondary bg-opacity-10 text-secondary border" style="font-size:.65rem;">Pagado</span>`
-                : dias>0
+                : dias > 0
                     ? `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:.65rem;">Vencida</span>`
-                    : f.estado==='PARCIAL'
+                    : f.estado === 'PARCIAL'
                         ? `<span class="badge bg-warning bg-opacity-10 text-warning border" style="font-size:.65rem;">Parcial</span>`
                         : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:.65rem;">Pendiente</span>`;
             return `<tr style="${stCol}">
                 <td class="ps-3 font-monospace small fw-semibold">${esc(f.nro_documento)}</td>
-                <td class="small text-truncate">${esc(f.nombre_cliente)}${f.ruc_cliente?`<small class='text-muted d-block'>${esc(f.ruc_cliente)}</small>`:''}</td>
+                <td class="small text-truncate">${esc(f.nombre_cliente)}${f.ruc_cliente ? `<small class='text-muted d-block'>${esc(f.ruc_cliente)}</small>` : ''}</td>
                 <td class="text-center small">${cxcFmtFecha(f.fecha_emision)}</td>
-                <td class="text-center small">${f.fecha_vencimiento?cxcFmtFecha(f.fecha_vencimiento):'—'}</td>
+                <td class="text-center small">${f.fecha_vencimiento ? cxcFmtFecha(f.fecha_vencimiento) : '—'}</td>
                 <td class="text-end small">$${f.saldo_inicial}</td>
                 <td class="text-end small text-success">$${f.monto_cobrado}</td>
                 <td class="text-end pe-3 fw-bold">$${f.saldo_pendiente}</td>
                 <td class="text-center">${estadoBadge}</td>
             </tr>`;
         }).join('');
-    } catch(e) { tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-3">Error de conexión</td></tr>`; }
+
+    } catch (e) {
+        // En caso de error de red ocultar silenciosamente — no interrumpir la vista principal
+        seccion.style.display = 'none';
+    }
 }
 
 function cxcFmtFecha(f) {

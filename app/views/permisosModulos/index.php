@@ -14,6 +14,8 @@ $opcionesUsuarios = $opcionesUsuarios ?? [];
 $opcionesEmpresas = $opcionesEmpresas ?? [];
 $msg = $_SESSION['permisos_msg'] ?? null;
 unset($_SESSION['permisos_msg']);
+$limiteUsuarios = $limiteUsuarios ?? null;
+$limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteUsuarios['max'];
 ?>
 <style>
 /* Contenedor scrollable propio (evita el CSS global de cmg-table-card que recortaba filas) */
@@ -40,9 +42,26 @@ unset($_SESSION['permisos_msg']);
             Seleccione usuario, luego empresa, y finalmente Mostrar para asignar permisos.
         </p>
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex align-items-center gap-2">
+        <?php if ($limiteUsuarios !== null): ?>
+            <?php $disponibles = max(0, $limiteUsuarios['max'] - $limiteUsuarios['actual']); ?>
+            <span class="badge <?= $limiteLleno ? 'bg-danger' : 'bg-success bg-opacity-10 text-success border border-success' ?> px-3 py-2"
+                  style="font-size:.8rem;" title="Usuarios de esta empresa">
+                <i class="bi bi-people me-1"></i>
+                <?= $limiteUsuarios['actual'] ?>/<?= $limiteUsuarios['max'] ?> usuarios &nbsp;·&nbsp;
+                <?= $limiteLleno ? '<strong>Sin cupos disponibles</strong>' : "<strong>{$disponibles}</strong> disponible" . ($disponibles !== 1 ? 's' : '') ?>
+            </span>
+        <?php endif; ?>
         <a href="<?= $base ?>/config" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Volver</a>
-        <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario"><i class="bi bi-person-plus"></i> Crear usuario</button>
+        <?php if (!$limiteLleno || $nivel >= 3): ?>
+        <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario">
+            <i class="bi bi-person-plus"></i> Crear usuario
+        </button>
+        <?php else: ?>
+        <button type="button" class="btn btn-secondary btn-sm" disabled title="Límite de usuarios alcanzado para esta empresa">
+            <i class="bi bi-person-plus"></i> Crear usuario
+        </button>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -51,6 +70,19 @@ unset($_SESSION['permisos_msg']);
         <?= htmlspecialchars($msg[1]) ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
+<?php endif; ?>
+
+<?php if ($limiteLleno): ?>
+<div class="alert alert-warning d-flex align-items-center gap-3 py-2 px-3" role="alert">
+    <i class="bi bi-whatsapp text-success fs-4 flex-shrink-0"></i>
+    <div class="small">
+        <strong>Ha alcanzado el límite de usuarios para esta empresa.</strong>
+        Para ampliar el número de usuarios, comuníquese con el administrador por WhatsApp:
+        <a href="https://wa.me/593958924831" target="_blank" class="fw-bold text-success text-decoration-none ms-1">
+            <i class="bi bi-whatsapp"></i> 0958924831
+        </a>
+    </div>
+</div>
 <?php endif; ?>
 
 <div class="card mb-3">

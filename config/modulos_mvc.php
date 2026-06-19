@@ -62,6 +62,11 @@ return [
         ],
     ],
 
+    'modulos/proformas' => [
+        'id_submodulo' => 0, // Actualizar con el id real tras ejecutar la migración 20260619_create_proformas.sql
+        'legacy_rutas' => [],
+    ],
+
     'modulos/notas_credito' => [
         'id_submodulo' => 165,
         'legacy_rutas' => [

@@ -13,7 +13,8 @@ class EmpresaRepository extends BaseModel
                        resolucion_contribuyente, id_tipo_regimen, tipo_ambiente, agente_retencion, tipo_emision,
                        nom_rep_legal, ced_rep_legal, nombre_contador, ruc_contador, cod_prov, cod_ciudad,
                        tipo, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, estado,
-                       cancelar_renovacion, obligado_contabilidad
+                       cancelar_renovacion, obligado_contabilidad,
+                       COALESCE(max_usuarios, 3) AS max_usuarios
                 FROM empresas
                 WHERE id = {$id} AND eliminado = false";
         $res = $this->query($sql);
@@ -441,12 +442,18 @@ class EmpresaRepository extends BaseModel
     {
         $id = (int) $idPunto;
         $idEmp = (int) $idEmpresa;
-        $res = $this->query("SELECT tipo_documento, secuencial_inicial FROM empresa_secuencial WHERE id_punto_emision = {$id} AND id_empresa = {$idEmp} AND eliminado = false");
-        $map = [];
-        foreach ($res as $row) {
-            $map[$row['tipo_documento']] = (int) $row['secuencial_inicial'];
-        }
-        return $map;
+        $res = $this->query("SELECT id, tipo_documento, COALESCE(secuencial_inicial, 1) AS secuencial_inicial FROM empresa_secuencial WHERE id_punto_emision = {$id} AND id_empresa = {$idEmp} AND eliminado = false ORDER BY tipo_documento ASC");
+        return $res ?: [];
+    }
+
+    public function updateSecuencialById(int $id, string $tipo, int $numero, int $idEmpresa): bool
+    {
+        $idEmp = (int) $idEmpresa;
+        $t = $this->escape($tipo);
+        $n = (int) $numero;
+        $user = (int) ($_SESSION['id_usuario'] ?? 0);
+        $sql = "UPDATE empresa_secuencial SET tipo_documento = '{$t}', secuencial_inicial = {$n}, updated_at = NOW(), updated_by = {$user} WHERE id = {$id} AND id_empresa = {$idEmp} AND eliminado = false";
+        return $this->execute($sql);
     }
 
     public function hasSecuenciales(int $idPunto, int $idEmpresa): bool
@@ -493,6 +500,17 @@ class EmpresaRepository extends BaseModel
             if ($this->db->inTransaction()) $this->db->rollBack();
             throw $e;
         }
+    }
+
+    public function getUsuariosAsignados(int $idEmpresa): array
+    {
+        $id = (int) $idEmpresa;
+        $sql = "SELECT u.id, u.nombre, u.estado, u.nivel, u.mail AS correo
+                FROM empresa_asignada ea
+                INNER JOIN usuarios u ON u.id = ea.id_usuario
+                WHERE ea.id_empresa = {$id}
+                ORDER BY u.nombre ASC";
+        return $this->query($sql);
     }
 
     public function getIvaCasilleros(int $idEmpresa): array

@@ -482,6 +482,6 @@ class CuentasPorPagarController extends BaseModuloController
             'tipo_documento' => $_GET['tipo_documento']  ?? '',
         ];
         $filas = $this->repo->getSaldosInicialesCxp($idEmpresa, $filtros);
-        $this->jsonOk(['filas' => $filas]);
+        $this->jsonSuccess(['filas' => $filas]);
     }
 }

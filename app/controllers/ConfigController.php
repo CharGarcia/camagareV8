@@ -714,6 +714,19 @@ class ConfigController extends Controller
                 $this->redirect($targetUrl);
             }
 
+            // Validar límite de usuarios por empresa para admins (nivel < 3)
+            if ($nivel < 3) {
+                $idEmpresaActual = (int) ($_SESSION['id_empresa'] ?? 0);
+                if ($idEmpresaActual > 0) {
+                    $modelAsignada = new \App\models\EmpresaAsignada();
+                    $limite = $modelAsignada->getLimiteUsuariosEmpresa($idEmpresaActual);
+                    if ($limite['actual'] >= $limite['max']) {
+                        $_SESSION[$msgKey] = ['danger', "Ha alcanzado el límite de {$limite['max']} usuario(s) permitidos para esta empresa. Contacte al super administrador para ampliar el límite."];
+                        $this->redirect($targetUrl);
+                    }
+                }
+            }
+
             try {
                 $model = new ModelUsuario();
                 $resultado = $model->crearPorCorreo($nombre, $correo, $idAdmin);
