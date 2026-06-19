@@ -43,6 +43,11 @@ class ProductoService
         $idEmpresa    = (int) $data['id_empresa'];
         $tipoProduccion = !empty($data['tipo_produccion']) ? trim($data['tipo_produccion']) : '01';
 
+        // Un servicio (02) nunca maneja inventario
+        if ($tipoProduccion === '02') {
+            $data['inventariable'] = false;
+        }
+
         // Aplicar medida default para tipo '01' si no viene ninguna
         if ($tipoProduccion === '01' && empty($data['id_medida'])) {
             $default = $this->repository->getMedidaDefaultUnidad($idEmpresa);
@@ -155,6 +160,11 @@ class ProductoService
         }
 
         $tipoProduccion = !empty($data['tipo_produccion']) ? trim($data['tipo_produccion']) : '01';
+
+        // Un servicio (02) nunca maneja inventario
+        if ($tipoProduccion === '02') {
+            $data['inventariable'] = false;
+        }
 
         // Aplicar medida default para tipo '01' si no viene ninguna
         if ($tipoProduccion === '01' && empty($data['id_medida'])) {
