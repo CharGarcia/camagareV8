@@ -720,7 +720,9 @@ class ImportadorExcelService
 
     private function resolverTarifaIva(string $codigoIvaRaw, int $numeroFila): int
     {
-        if (empty($codigoIvaRaw)) {
+        // Nota: no usar empty() porque el código de la tarifa 0% es "0",
+        // y empty("0") devuelve true, lo que provocaría rechazar una tarifa válida.
+        if ($codigoIvaRaw === '') {
             throw new Exception("Fila {$numeroFila}: CODIGO_IVA es obligatorio. Consulte los códigos disponibles en la hoja 'Tarifas_IVA' de la plantilla.");
         }
 
