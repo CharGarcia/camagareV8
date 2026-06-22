@@ -374,7 +374,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
             if (!lista.length) { ddProd.innerHTML = '<div class="list-group-item text-muted small py-1 px-2">Sin resultados</div>'; ddProd.classList.remove('d-none'); return; }
             ddProd.innerHTML = lista.slice(0, 10).map(p => {
                 const nombre  = (p.nombre ?? '').replace(/</g, '&lt;');
-                const precio  = parseFloat(p.precio_unitario ?? p.pvp ?? 0).toFixed(2);
+                const precio  = parseFloat(p.precio_base ?? p.precio_unitario ?? 0).toFixed(2);
                 const iva     = parseFloat(p.porcentaje_iva_final ?? p.porcentaje_iva ?? p.iva ?? 0).toFixed(2);
                 const enc     = encodeURIComponent(JSON.stringify({id: p.id, n: nombre, p: precio, i: iva, tid: p.tarifa_iva ?? null}));
                 return `<button type="button" class="list-group-item list-group-item-action py-1 px-2 small" onclick='suscAsignarProductoFila("${enc}")'><strong>${nombre}</strong> - $${precio}</button>`;
