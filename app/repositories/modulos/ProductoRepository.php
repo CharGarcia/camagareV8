@@ -41,7 +41,7 @@ class ProductoRepository extends BaseRepository
         }
 
         if ($soloActivos) {
-            $whereSql .= " AND p.status = true";
+            $whereSql .= " AND p.status = 1";
         }
 
         if ($soloOpcion !== null) {
