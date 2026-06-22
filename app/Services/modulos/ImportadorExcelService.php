@@ -591,12 +591,15 @@ class ImportadorExcelService
 
         // Tipo producción: '01' = Bien/Producto, '02' = Servicio
         $tipoProduccion = match(true) {
-            in_array($tipoRaw, ['servicio', 'service', '02']) => '02',
+            in_array($tipoRaw, ['servicio', 'servicios', 'service', 'serv', '02', '2']) => '02',
             default => '01',
         };
 
-        // Inventariable
-        $inventariable = in_array($inventariableRaw, ['si', 'sí', 'yes', 's', '1', 'true']);
+        // Inventariable. Un servicio ('02') nunca maneja inventario,
+        // igual que en el módulo de productos (ProductoService::crear).
+        $inventariable = $tipoProduccion === '02'
+            ? false
+            : in_array($inventariableRaw, ['si', 'sí', 'yes', 's', '1', 'true']);
 
         // Opciones aplica a
         $aplicaCompras = in_array($aplicaARaw, ['compras', 'compra', 'ambos', 'ambas', 'both', 'todos', 'all']);
