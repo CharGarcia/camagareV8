@@ -317,7 +317,7 @@ class LiquidacionCompraController extends BaseModuloController
         $buscar = trim($_GET['q'] ?? '');
 
         $repo = new \App\repositories\modulos\ProductoRepository();
-        $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC');
+        $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, null, true);
 
         echo json_encode(['ok' => true, 'data' => $result['rows']]);
         exit;

@@ -229,7 +229,7 @@ class FacturaExpressSolicitudesController extends BaseModuloController
             $buscar    = trim($_GET['q'] ?? '');
 
             $repo   = new \App\repositories\modulos\ProductoRepository();
-            $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, 'venta');
+            $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, 'venta', true);
 
             echo json_encode(['ok' => true, 'data' => $result['rows']]);
         } catch (\Throwable $e) {

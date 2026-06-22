@@ -415,7 +415,7 @@ class ConsignacionesVentasController extends BaseModuloController
         $idConsignacion = (int) ($_GET['id_consignacion'] ?? 0);
 
         $repo = new \App\repositories\modulos\ProductoRepository();
-        $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, null);
+        $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, null, true);
 
         $repoInv = new \App\repositories\modulos\InventarioRepository();
 

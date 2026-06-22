@@ -280,7 +280,7 @@ class ProformasController extends BaseModuloController
         $q         = trim($_GET['q'] ?? '');
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $repo      = new \App\repositories\modulos\ProductoRepository();
-        $result    = $repo->getListado($idEmpresa, $q, 1, 15, 'nombre', 'ASC', null, 'venta');
+        $result    = $repo->getListado($idEmpresa, $q, 1, 15, 'nombre', 'ASC', null, 'venta', true);
 
         $rows = array_map(function ($p) use ($repo, $idEmpresa) {
             $p['precios_lista'] = $repo->getPrecios((int)$p['id'], $idEmpresa);

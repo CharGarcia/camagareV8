@@ -548,7 +548,7 @@ class ComprasController extends BaseModuloController
 
         $repo   = new \App\repositories\modulos\ProductoRepository();
         // Filtrar para mostrar solo productos que permiten 'compra'
-        $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, 'compra');
+        $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, 'compra', true);
         echo json_encode(['ok' => true, 'data' => $result['rows']]);
         exit;
     }

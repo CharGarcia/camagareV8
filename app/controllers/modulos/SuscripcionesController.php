@@ -334,7 +334,7 @@ class SuscripcionesController extends BaseModuloController
         $buscar = trim($_GET['q'] ?? '');
 
         $repo = new \App\repositories\modulos\ProductoRepository();
-        $result = $repo->getListado($idEmpresa, $buscar, 1, 12, 'nombre', 'ASC', null, 'venta');
+        $result = $repo->getListado($idEmpresa, $buscar, 1, 12, 'nombre', 'ASC', null, 'venta', true);
 
         echo json_encode(['ok' => true, 'rows' => $result['rows']]);
         exit;

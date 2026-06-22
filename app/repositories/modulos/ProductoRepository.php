@@ -26,7 +26,8 @@ class ProductoRepository extends BaseRepository
         string $ordenCol,
         string $ordenDir,
         ?int $idUsuarioFiltro = null,
-        ?string $soloOpcion = null
+        ?string $soloOpcion = null,
+        bool $soloActivos = false
     ): array {
         if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
             $ordenCol = 'nombre';
@@ -37,6 +38,10 @@ class ProductoRepository extends BaseRepository
         $params   = [':id_empresa' => $idEmpresa];
         if ($idUsuarioFiltro !== null) {
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+
+        if ($soloActivos) {
+            $whereSql .= " AND p.estado = 'activo'";
         }
 
         if ($soloOpcion !== null) {
