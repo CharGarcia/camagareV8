@@ -125,85 +125,49 @@ class SriDescargaAutomaticaService
             ];
         }
 
-        // xmlsTotales: array de ['clave' => '049...', 'xml' => '<?xml...>']
-        $xmlsTotales = [];
         $detalles    = [];
 
-        try {
-            $tipoSri = $this->resolverTipoSri($tipos);
-
-            // Verificar qué claves ya existen en BD antes de descargar
-            // El scraper recibe la lista y solo descarga las que no existen
-            $clavesExistentes = $this->obtenerClavesExistentes($idEmpresa);
-            $this->debugLog[] = 'Claves ya existentes en BD: ' . count($clavesExistentes);
-
-            $respuestaPuppeteer = $this->obtenerXmlsViaPuppeteer(
-                $usuario, $clave,
-                $periodoUnico['ano'], $periodoUnico['mes'],
-                $periodoUnico['dia'], $tipoSri,
-                self::TIMEOUT_DEFAULT_MS,
-                $clavesExistentes
-            );
-            $xmlsTotales = $respuestaPuppeteer['xmls'] ?? [];
-            $yaExistentesReportados = $respuestaPuppeteer['ya_existentes'] ?? 0;
-            
-            $detalles[] = "Período {$periodoUnico['ano']}/{$periodoUnico['mes']}: " . count($xmlsTotales) . ' XMLs descargados, ' . $yaExistentesReportados . ' ya existían.';
-
-            // Deduplicar por clave de acceso
-            $vistos      = [];
-            $xmlsUnicos  = [];
-            foreach ($xmlsTotales as $item) {
-                $k = $item['clave'] ?? '';
-                if ($k && isset($vistos[$k])) continue;
-                if ($k) $vistos[$k] = true;
-                $xmlsUnicos[] = $item;
-            }
-            $xmlsTotales = $xmlsUnicos;
-
-            // Filtrar por tipo si la config lo requiere y el portal no filtró
-            if ($tipos !== 'todos' && $this->resolverTipoSri($tipos) === '0') {
-                $tiposArr    = array_map('trim', explode(',', $tipos));
-                $xmlsTotales = array_values(array_filter($xmlsTotales, function ($item) use ($tiposArr): bool {
-                    $clave  = $item['clave'] ?? '';
-                    if (strlen($clave) !== 49) return false;
-                    $codDoc = substr($clave, 8, 2);
-                    $tipo   = self::TIPOS_CODOC[$codDoc] ?? null;
-                    return $tipo !== null && in_array($tipo, $tiposArr, true);
-                }));
-            }
-
-        } catch (Exception $e) {
-            $mensaje = $e->getMessage();
-
-            if ($e->getCode() === 401) {
-                $configMod->bloquearLogin($idEmpresa, $mensaje);
-                $configMod->actualizarEstadoDescarga($idEmpresa, 'error', $mensaje);
-                $this->insertarLog($logMod, $idEmpresa, $tipos, 'error', $mensaje, [], $inicio, $idUsuario);
-                return ['ok' => false, 'error' => $mensaje, 'login_bloqueado' => true];
-            }
-
-            $configMod->actualizarEstadoDescarga($idEmpresa, 'error', $mensaje);
-            $this->insertarLog($logMod, $idEmpresa, $tipos, 'error', $mensaje, [], $inicio, $idUsuario);
-            return ['ok' => false, 'error' => $mensaje];
-        }
-
-        // Procesar cada XML directamente (ya no se necesita llamar al SOAP del SRI)
-        $registerSvc = new DocumentoAutomatedRegisterService();
-
+        // Contadores (se actualizan en tiempo real vía $onXml)
         $totalNuevos     = 0;
-        $totalExistentes = $yaExistentesReportados ?? 0; // Iniciar con los ya existentes reportados por el scraper
+        $totalExistentes = 0;
         $totalIgnorados  = 0;
         $totalErrores    = 0;
         $detallesClaves  = [];
+        $vistos          = [];
+        $totalDescargados = 0;
 
-        foreach ($xmlsTotales as $item) {
-            $claveAcceso = $item['clave'] ?? 'sin_clave';
-            $xmlContent  = $item['xml']   ?? '';
+        $registerSvc = new DocumentoAutomatedRegisterService();
+
+        // Filtro por tipo (cuando el portal no filtró)
+        $tiposArrFiltro = null;
+        $tipoSri = $this->resolverTipoSri($tipos);
+        if ($tipos !== 'todos' && $tipoSri === '0') {
+            $tiposArrFiltro = array_map('trim', explode(',', $tipos));
+        }
+
+        // Callback de registro incremental: se invoca por cada XML conforme llega del scraper.
+        // Permite que el CRON también guarde documentos mientras descarga, sin esperar al final.
+        $onXml = function (string $claveAcceso, string $xmlContent) use (
+            $registerSvc, $idEmpresa, $idUsuario, $tiposArrFiltro,
+            &$totalNuevos, &$totalExistentes, &$totalIgnorados, &$totalErrores,
+            &$detallesClaves, &$vistos, &$totalDescargados
+        ): void {
+            if ($claveAcceso === '') $claveAcceso = 'sin_clave';
+            if (isset($vistos[$claveAcceso])) return; // dedup
+            $vistos[$claveAcceso] = true;
+            $totalDescargados++;
+
+            // Filtrar por tipo si aplica
+            if ($tiposArrFiltro !== null && strlen($claveAcceso) === 49) {
+                $codDoc = substr($claveAcceso, 8, 2);
+                $tipo   = self::TIPOS_CODOC[$codDoc] ?? null;
+                if ($tipo === null || !in_array($tipo, $tiposArrFiltro, true)) return;
+            }
 
             if (empty($xmlContent)) {
                 $totalErrores++;
                 $detallesClaves[] = ['clave' => $claveAcceso, 'estado' => 'XML_VACIO', 'msg' => 'XML vacío del scraper'];
-                continue;
+                return;
             }
 
             try {
@@ -221,25 +185,66 @@ class SriDescargaAutomaticaService
                 }
 
                 $detallesClaves[] = ['clave' => $claveAcceso, 'estado' => $estadoReg, 'msg' => $res['mensaje'] ?? ''];
-
             } catch (Exception $e) {
                 $totalErrores++;
                 $detallesClaves[] = ['clave' => $claveAcceso, 'estado' => 'EXCEPCION', 'msg' => $e->getMessage()];
             }
+        };
+
+        $yaExistentesReportados = 0;
+
+        try {
+            // Verificar qué claves ya existen en BD antes de descargar
+            $clavesExistentes = $this->obtenerClavesExistentes($idEmpresa);
+            $this->debugLog[] = 'Claves ya existentes en BD: ' . count($clavesExistentes);
+
+            // Cada XML se registra en BD apenas llega (via $onXml), sin esperar al final.
+            $respuestaPuppeteer = $this->obtenerXmlsViaPuppeteer(
+                $usuario, $clave,
+                $periodoUnico['ano'], $periodoUnico['mes'],
+                $periodoUnico['dia'], $tipoSri,
+                self::TIMEOUT_DEFAULT_MS,
+                $clavesExistentes,
+                $onXml
+            );
+            $yaExistentesReportados = $respuestaPuppeteer['ya_existentes'] ?? 0;
+
+            $detalles[] = "Período {$periodoUnico['ano']}/{$periodoUnico['mes']}: {$totalDescargados} XMLs descargados, {$yaExistentesReportados} ya existían.";
+
+        } catch (Exception $e) {
+            $mensaje = $e->getMessage();
+
+            if ($e->getCode() === 401) {
+                $configMod->bloquearLogin($idEmpresa, $mensaje);
+                $configMod->actualizarEstadoDescarga($idEmpresa, 'error', $mensaje);
+                $this->insertarLog($logMod, $idEmpresa, $tipos, 'error', $mensaje, [], $inicio, $idUsuario);
+                return ['ok' => false, 'error' => $mensaje, 'login_bloqueado' => true];
+            }
+
+            $configMod->actualizarEstadoDescarga($idEmpresa, 'error', $mensaje);
+            $this->insertarLog($logMod, $idEmpresa, $tipos, 'error', $mensaje, [], $inicio, $idUsuario);
+            return ['ok' => false, 'error' => $mensaje];
         }
 
+        // Sumar existentes pre-filtrados (no descargados) al contador
+        $totalExistentes += (int)($yaExistentesReportados ?? 0);
+        $totalEncontrados = $totalDescargados + ($yaExistentesReportados ?? 0);
         $duracion = (int) (microtime(true) - $inicio);
-        $totalEncontrados = count($xmlsTotales) + ($yaExistentesReportados ?? 0);
-        
-        $msgFinal = "Descargados: " . count($xmlsTotales) .
-                    " | Nuevas: $totalNuevos | Existentes: $totalExistentes" .
-                    " | Ignoradas: $totalIgnorados | Errores: $totalErrores";
 
-        $estadoProceso = 'completado';
-        $finalOk = true;
+        $msgFinal = "Descargados: {$totalDescargados}" .
+                    " | Nuevas: {$totalNuevos} | Existentes: {$totalExistentes}" .
+                    " | Ignoradas: {$totalIgnorados} | Errores: {$totalErrores}";
 
-        if (isset($respuestaPuppeteer['ok']) && $respuestaPuppeteer['ok'] === false) {
-            $msgFinal = 'Descarga parcial finalizada por error: ' . ($respuestaPuppeteer['error'] ?? 'desconocido') . '. ' . $msgFinal;
+        $scraperOk = (bool)($respuestaPuppeteer['ok'] ?? true);
+        if ($scraperOk) {
+            $estadoProceso = 'completado';
+            $finalOk = true;
+        } elseif ($totalDescargados > 0 || $yaExistentesReportados > 0) {
+            $msgFinal = 'Descarga parcial (' . ($respuestaPuppeteer['error'] ?? 'interrumpida') . '). ' . $msgFinal;
+            $estadoProceso = 'parcial';
+            $finalOk = false;
+        } else {
+            $msgFinal = 'Sin documentos: ' . ($respuestaPuppeteer['error'] ?? 'desconocido') . '. ' . $msgFinal;
             $estadoProceso = 'error';
             $finalOk = false;
         }
@@ -606,15 +611,23 @@ class SriDescargaAutomaticaService
         return array_values(array_unique($claves));
     }
 
+    /**
+     * Lanza el scraper Node.js y lee su salida línea a línea en tiempo real.
+     * Invoca $onXml($clave, $xml) por cada XML que llega, permitiendo guardado
+     * incremental antes de que el proceso termine o sea interrumpido por timeout.
+     * Si $onXml es null, los XMLs se acumulan en el array de retorno (comportamiento
+     * compatible con el modo CRON).
+     */
     public function obtenerXmlsViaPuppeteer(
-        string $usuario,
-        string $clave,
-        int    $ano,
-        int    $mes,
-        int    $dia,
-        string $tipo,
-        int    $timeoutMs = self::TIMEOUT_DEFAULT_MS,
-        array  $clavesExcluir = []
+        string    $usuario,
+        string    $clave,
+        int       $ano,
+        int       $mes,
+        int       $dia,
+        string    $tipo,
+        int       $timeoutMs = self::TIMEOUT_DEFAULT_MS,
+        array     $clavesExcluir = [],
+        ?callable $onXml = null
     ): array {
         $scriptPath = MVC_ROOT . '/scripts/sri_scraper.js';
         if (!file_exists($scriptPath)) {
@@ -625,19 +638,18 @@ class SriDescargaAutomaticaService
         $apiKey2captcha = getenv('TWOCAPTCHA_API_KEY') ?: ($appCfg['2captcha_api_key'] ?? '');
 
         $configJson = json_encode([
-            'usuario'         => $usuario,
-            'clave'           => $clave,
-            'ano'             => $ano,
-            'mes'             => $mes,
-            'dia'             => $dia,
-            'tipo'            => $tipo,
-            'timeoutMs'       => $timeoutMs,
-            'apiKey2captcha'  => $apiKey2captcha,
-            'clavesExcluir'   => $clavesExcluir,
+            'usuario'        => $usuario,
+            'clave'          => $clave,
+            'ano'            => $ano,
+            'mes'            => $mes,
+            'dia'            => $dia,
+            'tipo'           => $tipo,
+            'timeoutMs'      => $timeoutMs,
+            'apiKey2captcha' => $apiKey2captcha,
+            'clavesExcluir'  => $clavesExcluir,
+            'streamXml'      => true,  // Siempre en modo stream para registro incremental
         ]);
 
-        // En Linux (servidor) el navegador corre en modo headful bajo un display virtual
-        // (xvfb) para conservar un score alto de reCAPTCHA v3. En Windows se lanza directo.
         $nodeCmd = 'node ' . escapeshellarg($scriptPath);
         $cmd  = (PHP_OS_FAMILY === 'Windows') ? $nodeCmd : ('xvfb-run -a ' . $nodeCmd);
         $proc = proc_open($cmd, [
@@ -653,53 +665,134 @@ class SriDescargaAutomaticaService
         fwrite($pipes[0], $configJson);
         fclose($pipes[0]);
 
-        $phpTimeout = (int) ($timeoutMs / 1000 + 30);
-        stream_set_timeout($pipes[1], $phpTimeout);
-        stream_set_timeout($pipes[2], $phpTimeout);
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
 
-        $output    = stream_get_contents($pipes[1]);
-        $errOutput = stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-        proc_close($proc);
+        $finalData      = null;
+        $xmlsAcumulados = [];   // Solo si no se proporcionó $onXml
+        $stdoutBuffer   = '';
+        $finEspera      = microtime(true) + ($timeoutMs / 1000) + 15;
 
-        $this->debugLog[] = "Puppeteer [{$ano}/{$mes}] stdout: " . substr($output ?? '', 0, 300);
-        if ($errOutput) {
-            $this->debugLog[] = "Puppeteer stderr: " . substr($errOutput, 0, 500);
+        while (true) {
+            if (microtime(true) > $finEspera) {
+                proc_terminate($proc);
+                @fclose($pipes[1]); @fclose($pipes[2]); @proc_close($proc);
+                $this->debugLog[] = 'PHP timeout general del proceso.';
+                return [
+                    'ok'       => false,
+                    'error'    => 'Timeout general del proceso.',
+                    'xmls'     => $onXml ? [] : $xmlsAcumulados,
+                    'partial'  => true,
+                ];
+            }
+
+            $read  = [$pipes[1], $pipes[2]];
+            $write = $except = null;
+            $n = stream_select($read, $write, $except, 1);
+
+            if ($n === false) break;
+
+            if ($n > 0) {
+                foreach ($read as $stream) {
+                    if ($stream === $pipes[1]) {
+                        $chunk = fread($pipes[1], 8192);
+                        if ($chunk !== false && $chunk !== '') {
+                            $stdoutBuffer .= $chunk;
+                            while (($pos = strpos($stdoutBuffer, "\n")) !== false) {
+                                $line = substr($stdoutBuffer, 0, $pos);
+                                $stdoutBuffer = substr($stdoutBuffer, $pos + 1);
+                                $line = trim($line);
+                                if (empty($line)) continue;
+
+                                $json = json_decode($line, true);
+                                if (!$json) {
+                                    $this->debugLog[] = "STDOUT no JSON: " . substr($line, 0, 120);
+                                    continue;
+                                }
+
+                                $type = $json['type'] ?? '';
+                                if ($type === 'xml') {
+                                    $d    = $json['data'] ?? [];
+                                    $clv  = (string)($d['clave'] ?? '');
+                                    $xml  = (string)($d['xml']   ?? '');
+                                    if ($onXml) {
+                                        $onXml($clv, $xml);
+                                    } else {
+                                        $xmlsAcumulados[] = ['clave' => $clv, 'xml' => $xml];
+                                    }
+                                } elseif ($type === 'finish') {
+                                    $finalData = $json['data'] ?? [];
+                                }
+                                // Los eventos 'progress' se ignoran en modo no-streaming
+                            }
+                        }
+                    } elseif ($stream === $pipes[2]) {
+                        while (($lineErr = fgets($pipes[2])) !== false) {
+                            $lineErr = trim($lineErr);
+                            if ($lineErr !== '') $this->debugLog[] = "Puppeteer log: " . $lineErr;
+                        }
+                    }
+                }
+            }
+
+            $status = proc_get_status($proc);
+            if (!$status['running']) break;
         }
 
-        if (empty($output)) {
-            throw new Exception('El script Puppeteer no retornó salida. ¿Node.js instalado? ¿npm install ejecutado en /scripts?');
-        }
+        // Leer restos del buffer antes de cerrar los pipes
+        stream_set_blocking($pipes[1], true);
+        $remaining = @stream_get_contents($pipes[1]);
+        if ($remaining) $stdoutBuffer .= $remaining;
 
-        $lines = explode("\n", trim($output));
-        $json = null;
-        foreach ($lines as $line) {
+        foreach (explode("\n", $stdoutBuffer) as $line) {
             $line = trim($line);
             if (empty($line)) continue;
-            $data = json_decode($line, true);
-            if ($data && isset($data['type']) && $data['type'] === 'finish') {
-                $json = $data['data'] ?? $data;
-            } elseif ($data && !isset($data['type']) && isset($data['ok'])) {
-                $json = $data;
+            $json = json_decode($line, true);
+            if (!$json || !isset($json['type'])) continue;
+            if ($json['type'] === 'xml') {
+                $d   = $json['data'] ?? [];
+                $clv = (string)($d['clave'] ?? '');
+                $xml = (string)($d['xml']   ?? '');
+                if ($onXml) { $onXml($clv, $xml); }
+                else        { $xmlsAcumulados[] = ['clave' => $clv, 'xml' => $xml]; }
+            } elseif ($json['type'] === 'finish') {
+                $finalData = $json['data'] ?? [];
             }
         }
 
-        if ($json === null) {
-            throw new Exception('Puppeteer no retornó un JSON de finalización. Output: ' . substr($output, 0, 400));
+        while (!feof($pipes[2])) {
+            $lineErr = fgets($pipes[2]);
+            if ($lineErr !== false && trim($lineErr) !== '') {
+                $this->debugLog[] = "Puppeteer log: " . trim($lineErr);
+            }
+        }
+        @fclose($pipes[1]); @fclose($pipes[2]); proc_close($proc);
+
+        $this->debugLog[] = "Puppeteer [{$ano}/{$mes}]: " .
+            ($onXml ? 'XMLs procesados via callback.' : count($xmlsAcumulados) . ' XMLs acumulados.');
+
+        if (!$finalData) {
+            $logsStr = implode(' | ', array_slice($this->debugLog, -5));
+            return [
+                'ok'      => false,
+                'error'   => 'El script de descarga cerró inesperadamente. Logs: ' . $logsStr,
+                'xmls'    => $onXml ? [] : $xmlsAcumulados,
+                'partial' => true,
+            ];
         }
 
-        // Credenciales incorrectas → excepción con código 401 para bloquear reintento
-        if (!empty($json['credenciales_incorrectas'])) {
-            throw new Exception('Credenciales SRI incorrectas: ' . ($json['error'] ?? 'sin detalle'), 401);
+        if (!empty($finalData['credenciales_incorrectas'])) {
+            throw new Exception('Credenciales SRI incorrectas: ' . ($finalData['error'] ?? 'sin detalle'), 401);
         }
 
-        if (empty($json['ok']) && empty($json['xmls'])) {
-            throw new Exception('Puppeteer error: ' . ($json['error'] ?? 'desconocido'));
+        // Incluir XMLs acumulados en el resultado (cuando no hay callback)
+        if (!$onXml) {
+            $finalData['xmls'] = array_merge($xmlsAcumulados, $finalData['xmls'] ?? []);
+        } else {
+            $finalData['xmls'] = [];
         }
 
-        // Retorna todo el array de respuesta
-        return $json;
+        return $finalData;
     }
 
     /**

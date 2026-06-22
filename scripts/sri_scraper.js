@@ -274,26 +274,16 @@ async function main(config) {
             return;
         }
 
-        reportarProgreso(50, 'Recolectando enlaces de documentos...');
-        const todosLosLinks = await recolectarTodosLosLinks(page, ctx);
-
-        const linksFiltrados = todosLosLinks.filter(l => !setExcluir.has(l.clave));
-        const yaExistentes   = todosLosLinks.length - linksFiltrados.length;
-        
-        if (linksFiltrados.length === 0) {
-            await screenshot(page, 'cero_links_recolectados');
-            reportarProgreso(100, 'Todos los comprobantes ya existen en el sistema.');
-            emitir({ ok: true, xmls: [], total: 0, ya_existentes: yaExistentes, mensaje: 'Todos los comprobantes del período ya están registrados.' });
-            return;
-        }
-
-        reportarProgreso(60, `Preparando descarga de ${linksFiltrados.length} archivos XML...`);
-        const xmlsDescargados = await descargarEnParalelo(page, ctx, linksFiltrados);
+        // Descarga incremental: cada página se procesa (recolecta + descarga) antes de avanzar
+        // a la siguiente. Si el timeout ocurre en la página N, las páginas 1…N-1 ya quedaron
+        // guardadas en la BD. Esto evita el problema de "descarga larga = timeout = 0 guardados".
+        reportarProgreso(50, 'Descargando documentos por página...');
+        const { yaExistentes } = await procesarPorPaginas(page, ctx, setExcluir);
 
         reportarProgreso(95, 'Descarga completada. Registrando en la base de datos...');
         await screenshot(page, 'resultado_descarga_completada');
 
-        const resultado = xmlsDescargados.filter(x => x.xml);
+        const resultado = globalResultados.filter(x => x.xml);
         // En modo streaming los XML ya se emitieron uno a uno; el finish solo lleva conteos.
         emitir({ ok: true, xmls: _streamXml ? [] : resultado, total: resultado.length, ya_existentes: yaExistentes });
 
@@ -334,6 +324,79 @@ async function limpiarCookiesSri(context) {
     }
 }
 
+/**
+ * Descarga incremental página a página: recolecta los enlaces de la página actual,
+ * descarga sus XMLs inmediatamente y luego avanza a la siguiente página.
+ * Así, si el proceso se interrumpe por timeout durante la página N, las páginas
+ * anteriores ya tienen sus documentos guardados en la BD.
+ */
+async function procesarPorPaginas(page, ctx, setExcluir) {
+    globalResultados = [];
+    let yaExistentes = 0;
+    let pagina = 0;
+    const clavesVistas = new Set();
+
+    while (pagina < MAX_PAGINAS) {
+        reportarProgreso(
+            50 + Math.floor((pagina / MAX_PAGINAS) * 43),
+            `Página ${pagina + 1}: recolectando y descargando...`
+        );
+
+        const filasPagina = await ctx.evaluate(() => {
+            const tbody = document.querySelector('#frmPrincipal\\:tablaCompRecibidos_data') ||
+                          document.querySelector('[id*="tablaCompRecibidos_data"]');
+            if (!tbody) return [];
+            return Array.from(tbody.querySelectorAll('tr[data-ri]')).map(row => {
+                const ri = row.getAttribute('data-ri');
+                const textContent = row.textContent || '';
+                const match = textContent.match(/\d{49}/);
+                const clave = match ? match[0] : null;
+                const linkXml = row.querySelector('a[id*=":lnkXml"]');
+                const xmlId   = linkXml ? linkXml.id : null;
+                return { ri, clave, xmlId, _textDebug: textContent.substring(0, 100) };
+            });
+        }).catch(() => []);
+
+        if (filasPagina.length > 0) {
+            debugLog(`Página ${pagina + 1} - Fila 0: clave=${filasPagina[0].clave}, xmlId=${filasPagina[0].xmlId}`);
+        }
+
+        const validos = filasPagina.filter(f => f.clave && f.xmlId);
+
+        // Detectar paginación atascada (mismas claves que ya procesamos)
+        const noVistas = validos.filter(f => !clavesVistas.has(f.clave));
+        if (noVistas.length === 0 && validos.length > 0) {
+            debugLog(`Página ${pagina + 1}: sin claves nuevas, paginación detenida.`);
+            break;
+        }
+        noVistas.forEach(f => clavesVistas.add(f.clave));
+
+        // Separar documentos ya en BD (excluir) de los que hay que descargar
+        const nuevos   = noVistas.filter(f => !setExcluir.has(f.clave));
+        yaExistentes  += noVistas.length - nuevos.length;
+
+        debugLog(`Página ${pagina + 1}: ${nuevos.length} nuevos, ${noVistas.length - nuevos.length} ya existentes.`);
+
+        // Descargar XMLs de esta página antes de avanzar
+        for (let i = 0; i < nuevos.length; i++) {
+            const item = nuevos[i];
+            debugLog(`Descargando ${i + 1}/${nuevos.length} de pág. ${pagina + 1}: ${item.clave}`);
+            const xml = await descargarXmlPorClick(page, ctx, item);
+            if (xml) {
+                globalResultados.push({ clave: item.clave, xml });
+                if (_streamXml) emitirXml(item.clave, xml);
+            }
+            await pausa(200);
+        }
+
+        const hayMas = await avanzarPagina(ctx, page);
+        if (!hayMas) break;
+        pagina++;
+    }
+
+    return { yaExistentes };
+}
+
 async function recolectarTodosLosLinks(page, ctx) {
     const todos  = [];
     let pagina   = 0;
@@ -362,10 +425,8 @@ async function recolectarTodosLosLinks(page, ctx) {
         const validos = filasPagina.filter(f => f.clave && f.xmlId);
 
         const nuevas = validos.filter(v => !todos.some(t => t.clave === v.clave));
-        
+
         if (nuevas.length === 0 && validos.length > 0) {
-            // Si validos tiene elementos pero no hay nuevas, significa que la tabla no avanzó.
-            // Para evitar bucles infinitos en PrimeFaces, salimos del bucle de paginación.
             break;
         }
 

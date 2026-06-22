@@ -1583,6 +1583,20 @@ class DocumentoAutomatedRegisterService
                 return ""; // Sin forma de pago predeterminada, abortamos en silencio
             }
 
+            // Validar que la forma de pago predeterminada siga activa y no eliminada.
+            // El flujo manual solo ofrece formas activas (FormaPagoRepository::getFormasFiltradas),
+            // por lo que el pago automático debe respetar el mismo criterio en lugar de
+            // registrar el egreso sobre una forma de pago inactiva o eliminada.
+            $stFp = $db->prepare("
+                SELECT 1 FROM empresa_formas_pago
+                WHERE id = ? AND id_empresa = ? AND activo = TRUE AND eliminado = FALSE
+                LIMIT 1
+            ");
+            $stFp->execute([(int) $prov['id_forma_pago_predeterminada'], $idEmpresa]);
+            if (!$stFp->fetchColumn()) {
+                return " | Pago automático omitido: La forma de pago predeterminada del proveedor está inactiva o fue eliminada.";
+            }
+
             // NUEVA REGLA: Si el proveedor tiene alguna retención asociada, omitimos el egreso automático
             if (!empty($prov['id_retencion_renta']) || !empty($prov['id_retencion_iva'])) {
                 return " | Pago automático omitido: El proveedor posee retenciones configuradas.";
