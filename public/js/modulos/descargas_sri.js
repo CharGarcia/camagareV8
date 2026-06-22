@@ -535,7 +535,9 @@ function renderUltimoEstado(c) {
 
     const estadoClass = c.ultimo_estado === 'completado'
         ? 'bg-success text-success border-success'
-        : 'bg-danger text-danger border-danger';
+        : c.ultimo_estado === 'parcial'
+            ? 'bg-warning text-warning border-warning'
+            : 'bg-danger text-danger border-danger';
 
     card.innerHTML = `
         <div class="d-flex align-items-center gap-3 flex-wrap">
@@ -698,11 +700,13 @@ function ejecutarDescargaManual() {
                         } 
                         else if (data.type === 'resultado') {
                             if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-play-circle me-1"></i> Ejecutar ahora'; }
-                            
+
+                            const esParcial = data.estado === 'parcial';
                             Swal.fire({
-                                icon: 'success',
-                                title: 'Descarga completada',
+                                icon: esParcial ? 'warning' : 'success',
+                                title: esParcial ? 'Descarga parcial' : 'Descarga completada',
                                 html: `
+                                    ${esParcial ? '<div class="alert alert-warning py-2 small mb-2"><i class="bi bi-exclamation-triangle me-1"></i>El proceso se interrumpió, pero los documentos descargados hasta ese punto ya quedaron registrados.</div>' : ''}
                                     <div class="text-start small">
                                         <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
                                             <span>Documentos encontrados</span>

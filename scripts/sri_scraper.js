@@ -18,6 +18,11 @@ if (!fs.existsSync(DEBUG_DIR)) fs.mkdirSync(DEBUG_DIR, { recursive: true });
 let _screenshotIdx = 0;
 let _currentRuc = 'default';
 let globalResultados = [];
+// Cuando el llamador PHP pide streaming, cada XML se emite apenas se descarga
+// (type:'xml') para que se registre de inmediato en la BD; así, si el proceso se
+// interrumpe en 30/56, esos 30 quedan guardados. En este modo el 'finish' NO
+// reenvía los XML (solo conteos) para no transferir el payload dos veces.
+let _streamXml = false;
 
 async function screenshot(pageOrFrame, nombre, ctxFrame = null) {
     try {
@@ -74,6 +79,7 @@ async function main(config) {
     debugLog(`Iniciando descarga auto/manual SRI para ${config.usuario} - Periodo: ${config.ano}-${config.mes}-${config.dia}`);
     
     const { usuario, clave, ano, mes, dia, tipo, apiKey2captcha, clavesExcluir = [] } = config;
+    _streamXml = config.streamXml === true;
     const setExcluir = new Set(clavesExcluir);
     if (!apiKey2captcha) throw new Error('Falta apiKey2captcha en la configuración.');
 
@@ -288,7 +294,8 @@ async function main(config) {
         await screenshot(page, 'resultado_descarga_completada');
 
         const resultado = xmlsDescargados.filter(x => x.xml);
-        emitir({ ok: true, xmls: resultado, total: resultado.length, ya_existentes: yaExistentes });
+        // En modo streaming los XML ya se emitieron uno a uno; el finish solo lleva conteos.
+        emitir({ ok: true, xmls: _streamXml ? [] : resultado, total: resultado.length, ya_existentes: yaExistentes });
 
     } finally {
         // En contexto persistente, cerrar el contexto libera el perfil y el navegador.
@@ -412,6 +419,8 @@ async function descargarEnParalelo(page, ctx, links) {
         const xml = await descargarXmlPorClick(page, ctx, item);
         if (xml) {
             globalResultados.push({ clave: item.clave, xml });
+            // Emitir el XML apenas se descarga para registro incremental en BD.
+            if (_streamXml) emitirXml(item.clave, xml);
         }
         await pausa(200);
     }
@@ -704,8 +713,13 @@ function emitirCredencialesInvalidas(detalle) {
 }
 
 // Emisión estándar de resultados en JSON line por stdout
-function emitir(obj) { 
-    process.stdout.write(JSON.stringify({ type: 'finish', data: obj }) + '\n'); 
+function emitir(obj) {
+    process.stdout.write(JSON.stringify({ type: 'finish', data: obj }) + '\n');
+}
+
+// Emisión incremental de un XML descargado (modo streaming)
+function emitirXml(clave, xml) {
+    process.stdout.write(JSON.stringify({ type: 'xml', data: { clave, xml } }) + '\n');
 }
 
 // Progreso a stdout en JSON line
@@ -740,10 +754,10 @@ process.stdin.on('end', () => {
     config.timeoutMs = config.timeoutMs ?? 120_000;
 
     const tid = setTimeout(() => {
-        emitir({ 
-            ok: false, 
+        emitir({
+            ok: false,
             error: `Timeout: el scraper superó ${Math.round(config.timeoutMs / 1000)}s.`,
-            xmls: globalResultados,
+            xmls: _streamXml ? [] : globalResultados,
             total: globalResultados.length,
             partial: true
         });
@@ -753,15 +767,15 @@ process.stdin.on('end', () => {
 
     main(config)
         .then(() => clearTimeout(tid))
-        .catch(err => { 
-            clearTimeout(tid); 
-            emitir({ 
-                ok: false, 
+        .catch(err => {
+            clearTimeout(tid);
+            emitir({
+                ok: false,
                 error: err.message,
-                xmls: globalResultados,
+                xmls: _streamXml ? [] : globalResultados,
                 total: globalResultados.length,
                 partial: true
-            }); 
-            process.exit(1); 
+            });
+            process.exit(1);
         });
 });
