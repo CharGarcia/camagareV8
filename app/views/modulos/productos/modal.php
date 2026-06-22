@@ -155,13 +155,13 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                     <input type="text" name="codigo_barras" id="prod_codigo_barras" class="form-control form-control-sm shadow-none border-secondary-subtle" maxlength="50">
                                 </div>
 
-                                <!-- Fila 2: Descripción-->
-                                <div class="col-md-6">
+                                <!-- Fila 2: Descripción (ancho completo)-->
+                                <div class="col-md-12">
                                     <label class="form-label mb-1 small fw-bold text-muted text-primary">Descripción / Nombre *</label>
-                                    <input type="text" name="nombre" id="prod_nombre" class="form-control form-control-sm shadow-none border-secondary-subtle" required maxlength="200" placeholder="Nombre del producto o servicio">
+                                    <textarea name="nombre" id="prod_nombre" class="form-control form-control-sm shadow-none border-secondary-subtle" required maxlength="200" rows="2" placeholder="Nombre del producto o servicio"></textarea>
                                 </div>
 
-                                <!-- Fila 3:  Tipo Medida, Unidad de Medida -->
+                                <!-- Fila 3: Tipo Medida, Unidad de Medida, Concepto ICE, Valor ICE -->
                                 <div class="col-md-3 bienes-field">
                                     <label class="form-label mb-1 small fw-bold text-muted d-flex align-items-center">Tipo medida <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('productos', 'prod_tipo_medida', 'id_tipo_medida') ?></label>
                                     <select name="id_tipo_medida" id="prod_tipo_medida" class="form-select form-select-sm shadow-none border-secondary-subtle" onchange="actualizarUnidadesMedida()"></select>
@@ -172,33 +172,34 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                         <option value="">Seleccione medida</option>
                                     </select>
                                 </div>
-
-                                <!-- Fila 4: Precios y Tributación -->
-                                <div class="col-md-2">
-                                    <label class="form-label mb-1 small fw-bold text-muted">Precio Base</label>
-                                    <div class="input-group input-group-sm">
-                                        <span class="input-group-text">$</span>
-                                        <input type="number" name="precio_base" id="prod_precio_base" class="form-control shadow-none border-secondary-subtle fw-bold" step="0.0001" min="0" value="0.00" oninput="calcularPreciosTotales()">
-                                    </div>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label mb-1 small fw-bold text-muted d-flex align-items-center">Tarifa IVA <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('productos', 'prod_tarifa_iva', 'tarifa_iva') ?></label>
-                                    <select name="tarifa_iva" id="prod_tarifa_iva" class="form-select form-select-sm shadow-none border-secondary-subtle" onchange="calcularPreciosTotales()"></select>
-                                </div>
-                                <div class="col-md-2 bienes-field">
+                                <div class="col-md-3 bienes-field">
                                     <label class="form-label mb-1 small fw-bold text-muted">Concepto ICE</label>
                                     <select name="id_ice" id="prod_id_ice" class="form-select form-select-sm shadow-none border-secondary-subtle" onchange="actualizarValorICE(); calcularPreciosTotales();">
                                         <option value="">Sin ICE</option>
                                     </select>
                                 </div>
-                                <div class="col-md-2 bienes-field">
+                                <div class="col-md-3 bienes-field">
                                     <label class="form-label mb-1 small fw-bold text-muted">Valor ICE (%)</label>
                                     <input type="number" name="valor_ice" id="prod_valor_ice" class="form-control form-control-sm bg-light shadow-none" readonly value="0.00">
                                 </div>
 
-                                <!-- Fila 5: PVP Final -->
-                                <div class="col-md-3">
-                                    <label class="form-label mb-1 small fw-bold text-primary">PVP Final (Inc. Imp.)</label>
+                                <!-- Fila 4: Precios y Tributación -->
+                                <!-- (La fila anterior suma 12 columnas, por lo que estos campos bajan
+                                     solos a una fila limpia. Al ser servicio esos campos colapsan
+                                     y los precios suben justo debajo de la descripción.) -->
+                                <div class="col-md-4">
+                                    <label class="form-label mb-1 small fw-bold text-muted d-flex align-items-center">Precio Base</label>
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text">$</span>
+                                        <input type="number" name="precio_base" id="prod_precio_base" class="form-control shadow-none border-secondary-subtle fw-bold" step="0.0001" min="0" value="0.00" oninput="calcularPreciosTotales()">
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label mb-1 small fw-bold text-muted d-flex align-items-center">Tarifa IVA <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('productos', 'prod_tarifa_iva', 'tarifa_iva') ?></label>
+                                    <select name="tarifa_iva" id="prod_tarifa_iva" class="form-select form-select-sm shadow-none border-secondary-subtle" onchange="calcularPreciosTotales()"></select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label mb-1 small fw-bold text-primary d-flex align-items-center">PVP Final (Inc. Imp.)</label>
                                     <div class="input-group input-group-sm">
                                         <span class="input-group-text bg-primary bg-opacity-10 text-primary border-primary border-opacity-25">$</span>
                                         <input type="number" id="prod_pvp_total" class="form-control shadow-none border-primary border-opacity-25 fw-bold text-primary" step="0.01" min="0" value="0.00" oninput="calcularPrecioInverso()">

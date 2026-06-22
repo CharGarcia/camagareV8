@@ -89,13 +89,16 @@
         const isBien = (val === '01');
 
         document.querySelectorAll('.bienes-field').forEach(el => {
-            el.classList.remove('d-none');
+            // Limpiar el estado anterior (compatibilidad con 'invisible')
+            el.classList.remove('invisible');
             if (isBien) {
-                el.classList.remove('invisible');
+                // Mostrar: el campo vuelve a ocupar su espacio
+                el.classList.remove('d-none');
                 el.style.pointerEvents = 'auto';
                 el.querySelectorAll('input, select, textarea').forEach(input => input.disabled = false);
             } else {
-                el.classList.add('invisible');
+                // Ocultar colapsando (display:none) para que los demás campos suban y no quede hueco
+                el.classList.add('d-none');
                 el.style.pointerEvents = 'none';
                 el.querySelectorAll('input, select, textarea').forEach(input => input.disabled = true);
             }
