@@ -41,8 +41,8 @@ async function screenshot(pageOrFrame, nombre, ctxFrame = null) {
 }
 
 const BASE           = 'https://srienlinea.sri.gob.ec';
-const PORTAL_URL     = BASE + '/sri-en-linea/inicio/NAT';
 const COMP_PATH      = '/comprobantes-electronicos-internet/pages/consultas/recibidos/comprobantesRecibidos.jsf';
+const PORTAL_URL     = BASE + '/sri-en-linea/inicio/NAT';
 const MAX_PAGINAS    = 10;
 
 const RECAPTCHA_SITEKEY = '6LdukTQsAAAAAIcciM4GZq4ibeyplUhmWvlScuQE';
@@ -55,7 +55,11 @@ const TEXTOS_CRED_INVALIDAS = [
 ];
 
 let _browser = null;
-process.on('exit', () => { if (_browser) _browser.close().catch(() => {}); });
+let _context = null;
+process.on('exit', () => {
+    if (_context) _context.close().catch(() => {});
+    if (_browser) _browser.close().catch(() => {});
+});
 
 async function main(config) {
     _currentRuc = config.usuario;
@@ -73,24 +77,61 @@ async function main(config) {
     const setExcluir = new Set(clavesExcluir);
     if (!apiKey2captcha) throw new Error('Falta apiKey2captcha en la configuración.');
 
-    const browser = await chromium.launch({
-        headless: true,
-        args: [
-            '--no-sandbox', '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage', '--disable-gpu',
-            '--disable-blink-features=AutomationControlled'
-        ]
-    });
+    // Headful por defecto: es lo que pasa el captcha del SRI (el headless penaliza el score).
+    //   - Local (Windows, con pantalla): ventana visible.
+    //   - Producción (Linux, sin pantalla): también headful, pero lanzado bajo xvfb-run
+    //     (display virtual) — ver SriDescargaAutomaticaService. xvfb conserva el score real.
+    // Se puede forzar headless pasando config.headless=true (no recomendado: baja el score).
+    const headless = (config.headless === true);
+    debugLog(`Lanzando navegador (headless=${headless})...`);
+
+    const launchArgs = [
+        '--no-sandbox', '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage', '--disable-gpu',
+        '--disable-blink-features=AutomationControlled'
+    ];
+
+    // Perfil persistente: reutiliza cookies/reputación (idealmente con sesión de Google
+    // iniciada) para que reCAPTCHA v3 asigne un score alto. Es lo que diferencia a un
+    // navegador real (que pasa la validación) de uno automatizado vacío (que el SRI
+    // rechaza por score bajo). Se siembra una vez con scripts/sri_seed_profile.js.
+    const profileDir  = config.profileDir || path.join(__dirname, '.sri_profile');
+    const usarPerfil  = config.usarPerfil !== false; // por defecto, usar perfil persistente
+
+    const contextOpts = {
+        acceptDownloads: true,
+        viewport: { width: 1366, height: 768 },
+        extraHTTPHeaders: { 'Accept-Language': 'es-EC,es;q=0.9,en;q=0.8' },
+    };
+
+    // Canal del navegador: en Windows usamos Chrome real (instalado en el equipo);
+    // en Linux (servidor) la Chromium que trae Playwright, ya que ahí no hay Chrome.
+    // Configurable con config.channel (cadena vacía = Chromium empaquetada).
+    let channel;
+    if (typeof config.channel === 'string') channel = config.channel || undefined;
+    else channel = (process.platform === 'win32') ? 'chrome' : undefined;
+
+    const launchOpts = { headless, args: launchArgs };
+    if (channel) launchOpts.channel = channel;
+
+    let browser, context;
+    if (usarPerfil) {
+        debugLog(`Usando perfil persistente: ${profileDir} (channel=${channel || 'chromium'})`);
+        liberarPerfil(profileDir);
+        context = await chromium.launchPersistentContext(profileDir, {
+            ...launchOpts,
+            ...contextOpts,
+        });
+        browser = context.browser();
+    } else {
+        browser = await chromium.launch(launchOpts);
+        context = await browser.newContext(contextOpts);
+    }
     _browser = browser;
+    _context = context;
 
     try {
         reportarProgreso(5, 'Iniciando sesión en el portal SRI...');
-
-        const context = await browser.newContext({
-            acceptDownloads: true,
-            viewport: { width: 1366, height: 768 },
-            extraHTTPHeaders: { 'Accept-Language': 'es-EC,es;q=0.9,en;q=0.8' }
-        });
 
         await context.route('**/*', (route) => {
             const req = route.request();
@@ -101,21 +142,89 @@ async function main(config) {
             route.continue();
         });
 
-        const page = await context.newPage();
+        const page = context.pages()[0] || await context.newPage();
 
-        debugLog('Abriendo portal...');
+        // En perfil persistente, eliminar SOLO las cookies del SRI para forzar un login
+        // fresco con las credenciales de esta empresa (evita contaminación multiempresa).
+        // Se conservan las cookies de Google, que son las que aportan reputación al score.
+        if (usarPerfil) {
+            await limpiarCookiesSri(context);
+        }
+
+        debugLog('Abriendo portal en la página de inicio...');
         await ir(page, PORTAL_URL, 30000);
         await pausa(1000);
 
-        reportarProgreso(10, 'Navegando al módulo de comprobantes...');
-        await navegarMenuComprobantes(page);
+        reportarProgreso(10, 'Analizando estado de sesión en el portal...');
+        let enKeycloak = false;
+        let enHome = false;
 
-        await esperarURLContiene(page, '/auth/realms/', 15000);
+        const finAnalisis = Date.now() + 15000;
+        while (Date.now() < finAnalisis) {
+            const url = page.url();
+            if (url.includes('/auth/realms/')) {
+                enKeycloak = true;
+                break;
+            }
+            const menuPresente = await page.evaluate(() => {
+                return !!document.querySelector('.sri-menu-icon-facturacion-electronica');
+            }).catch(() => false);
+            if (menuPresente) {
+                enHome = true;
+                break;
+            }
+            await pausa(500);
+        }
 
-        reportarProgreso(15, 'Ingresando credenciales...');
-        await loginKeycloak(page, usuario, clave);
+        if (!enKeycloak && !enHome) {
+            await screenshot(page, 'ERROR_estado_inicial_no_reconocido');
+            throw new Error('No se pudo determinar el estado de sesión inicial en el portal.');
+        }
 
-        await esperarURLContiene(page, 'comprobantes-electronicos-internet', 25000);
+        if (enHome) {
+            debugLog('Portal cargado en página de inicio. Navegando al menú...');
+            reportarProgreso(12, 'Navegando al módulo de comprobantes...');
+            await navegarMenuComprobantes(page);
+
+            enKeycloak = false;
+            let enComprobantes = false;
+            const finEsperaMenu = Date.now() + 15000;
+            while (Date.now() < finEsperaMenu) {
+                const url = page.url();
+                if (url.includes('/auth/realms/')) {
+                    enKeycloak = true;
+                    break;
+                }
+                if (url.includes('comprobantes-electronicos-internet')) {
+                    enComprobantes = true;
+                    break;
+                }
+                await pausa(500);
+            }
+        }
+
+        if (enKeycloak) {
+            reportarProgreso(15, 'Ingresando credenciales de acceso...');
+            await loginKeycloak(page, usuario, clave);
+
+            const finRedir = Date.now() + 20000;
+            let redirigido = false;
+            while (Date.now() < finRedir) {
+                const url = page.url();
+                if (url.includes('comprobantes-electronicos-internet') || url.includes('inicio/NAT') || url.includes('/sri-en-linea/')) {
+                    redirigido = true;
+                    break;
+                }
+                await pausa(500);
+            }
+        }
+
+        if (!page.url().includes('comprobantes-electronicos-internet')) {
+            debugLog('Navegando directamente a la URL de comprobantes recibidos...');
+            await ir(page, BASE + COMP_PATH, 30000);
+        }
+
+        await esperarURLContiene(page, 'comprobantes-electronicos-internet', 20000);
 
         reportarProgreso(25, 'Aplicando filtros de búsqueda...');
         const ctx = await resolverContexto(page);
@@ -182,8 +291,39 @@ async function main(config) {
         emitir({ ok: true, xmls: resultado, total: resultado.length, ya_existentes: yaExistentes });
 
     } finally {
-        await browser.close().catch(() => {});
+        // En contexto persistente, cerrar el contexto libera el perfil y el navegador.
+        await context.close().catch(() => {});
+        await browser?.close().catch(() => {});
+        _context = null;
         _browser = null;
+    }
+}
+
+/**
+ * Elimina únicamente las cookies del dominio del SRI, conservando el resto (Google, etc.).
+ * Compatible con cualquier versión de Playwright: lee todas, filtra y reescribe.
+ */
+/**
+ * Elimina los archivos de bloqueo que Chrome deja en el perfil (SingletonLock/Cookie/Socket).
+ * Si quedaron de una corrida anterior que no cerró bien, Chrome reenviaría la orden a una
+ * "sesión existente" (handoff) y Playwright perdería el navegador al instante.
+ * Solo elimina locks; no toca cookies ni datos de sesión (la reputación se conserva).
+ */
+function liberarPerfil(profileDir) {
+    for (const f of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+        try { fs.rmSync(path.join(profileDir, f), { force: true }); } catch (_) {}
+    }
+}
+
+async function limpiarCookiesSri(context) {
+    try {
+        const cookies = await context.cookies();
+        const conservar = cookies.filter(c => !(c.domain || '').includes('sri.gob.ec'));
+        await context.clearCookies();
+        if (conservar.length) await context.addCookies(conservar);
+        debugLog(`Cookies SRI eliminadas (${cookies.length - conservar.length}); conservadas ${conservar.length}.`);
+    } catch (e) {
+        debugLog('limpiarCookiesSri error: ' + e.message);
     }
 }
 
@@ -268,7 +408,7 @@ async function descargarEnParalelo(page, ctx, links) {
         
         const pct = Math.floor(basePct + ((i / links.length) * (maxPct - basePct)));
         reportarProgreso(pct, `Descargando XML ${i + 1}/${links.length}...`);
-        
+
         const xml = await descargarXmlPorClick(page, ctx, item);
         if (xml) {
             globalResultados.push({ clave: item.clave, xml });
@@ -279,8 +419,9 @@ async function descargarEnParalelo(page, ctx, links) {
 }
 
 async function descargarXmlPorClick(page, ctx, item) {
+    let download = null;
     try {
-        const [download] = await Promise.all([
+        [download] = await Promise.all([
             page.waitForEvent('download', { timeout: 15000 }),
             ctx.evaluate((xmlId) => {
                 const el = document.getElementById(xmlId);
@@ -288,11 +429,20 @@ async function descargarXmlPorClick(page, ctx, item) {
             }, item.xmlId)
         ]);
 
-        const filePath = await download.path();
+        // download.path() espera a que la descarga TERMINE y no tiene timeout propio:
+        // si una descarga arranca pero se cuelga, bloquearía todo el proceso. Lo acotamos.
+        const filePath = await Promise.race([
+            download.path(),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('La descarga no finalizó a tiempo')), 20000)),
+        ]);
+
+        if (!filePath) throw new Error('No se obtuvo la ruta del archivo descargado.');
         const xml = fs.readFileSync(filePath, 'utf8');
         return xml;
     } catch (e) {
         debugLog(`Error descargando ${item.clave}: ${e.message}`);
+        // Cancelar la descarga trabada para liberar recursos y poder continuar.
+        if (download) { try { await download.cancel(); } catch (_) {} }
         return null;
     }
 }
@@ -352,28 +502,60 @@ async function resolverRecaptcha2captcha(apiKey) {
 }
 
 async function ejecutarConsultar(ctx, page, apiKey2captcha) {
-    const token = await resolverRecaptcha2captcha(apiKey2captcha);
+    // 1) Preferir el token generado por el propio navegador ya logueado en el SRI.
+    //    Al ser una sesión real (cookies de autenticación + stealth), Google le asigna
+    //    un score más alto que el token de la granja de 2captcha, que el SRI rechazaba
+    //    con "captcha incorrecta".
+    let token  = await obtenerTokenEnSesion(ctx);
+    let origen = 'sesion';
 
+    // 2) Respaldo: si por alguna razón no se pudo generar en sesión, usar 2captcha.
+    if (!token) {
+        debugLog('Token en sesión no disponible; usando 2captcha como respaldo...');
+        token  = await resolverRecaptcha2captcha(apiKey2captcha);
+        origen = '2captcha';
+    }
+    debugLog(`Token reCAPTCHA obtenido vía ${origen}.`);
+
+    // 3) Inyectar el token y disparar la consulta igual que el portal:
+    //    rcBuscar() ejecuta PrimeFaces.ab sobre el form 'frmPrincipal', que serializa
+    //    el textarea g-recaptcha-response; además lo pasamos como parámetro explícito.
     await ctx.evaluate((tk) => {
-        if (!window.grecaptcha) window.grecaptcha = {};
-        if (!window.grecaptcha.enterprise) window.grecaptcha.enterprise = {};
-        window.grecaptcha.enterprise.execute = function() { return Promise.resolve(tk); };
-        window.grecaptcha.enterprise.reset = function() {};
         const textarea = document.querySelector('textarea[name="g-recaptcha-response"]');
         if (textarea) textarea.value = tk;
-    }, token);
-
-    await ctx.evaluate(() => {
-        if (typeof executeRecaptcha === 'function') {
-            executeRecaptcha('consulta_cel_recibidos');
-        } else if (typeof rcBuscar === 'function') {
-            const tk = document.querySelector('textarea[name="g-recaptcha-response"]')?.value || '';
+        if (typeof rcBuscar === 'function') {
             rcBuscar([{ name: 'g-recaptcha-response', value: tk }]);
+        } else if (typeof executeRecaptcha === 'function') {
+            executeRecaptcha('consulta_cel_recibidos', 'NO');
         }
-    });
+    }, token);
 
     try { await page.waitForLoadState('networkidle', { timeout: 15000 }); } catch (_) {}
     await pausa(1500);
+}
+
+/**
+ * Genera un token reCAPTCHA v3 Enterprise usando el grecaptcha real de la página
+ * (sesión ya autenticada). Devuelve null si no está disponible o falla.
+ */
+async function obtenerTokenEnSesion(ctx) {
+    try {
+        return await ctx.evaluate(({ sitekey, action }) => new Promise((resolve) => {
+            try {
+                if (!window.grecaptcha || !window.grecaptcha.enterprise) return resolve(null);
+                // Salvaguarda: si ready/execute nunca responden, no bloquear.
+                const tid = setTimeout(() => resolve(null), 12000);
+                grecaptcha.enterprise.ready(() => {
+                    grecaptcha.enterprise.execute(sitekey, { action })
+                        .then(t => { clearTimeout(tid); resolve(t || null); })
+                        .catch(() => { clearTimeout(tid); resolve(null); });
+                });
+            } catch (e) { resolve(null); }
+        }), { sitekey: RECAPTCHA_SITEKEY, action: RECAPTCHA_ACTION });
+    } catch (e) {
+        debugLog('obtenerTokenEnSesion error: ' + e.message);
+        return null;
+    }
 }
 
 async function esperarTablaResultados(ctx) {
@@ -410,15 +592,15 @@ async function loginKeycloak(page, usuario, clave) {
 
     if (!existe.ruc || !existe.clave || !existe.btn) throw new Error('Formulario incompleto.');
 
-    await page.evaluate(() => { document.querySelector('#usuario').focus(); document.querySelector('#usuario').value = ''; });
-    await page.keyboard.type(usuario, { delay: 40 });
+    await page.locator('#usuario').fill('');
+    await page.locator('#usuario').pressSequentially(usuario, { delay: 40 });
     await pausa(100);
 
-    await page.evaluate(() => { document.querySelector('#password').focus(); document.querySelector('#password').value = ''; });
-    await page.keyboard.type(clave, { delay: 40 });
+    await page.locator('#password').fill('');
+    await page.locator('#password').pressSequentially(clave, { delay: 40 });
     await pausa(100);
 
-    await page.evaluate(() => document.querySelector('#kc-login').click());
+    await page.locator('#kc-login').click();
 
     const finEspera = Date.now() + 20000;
     while (Date.now() < finEspera) {

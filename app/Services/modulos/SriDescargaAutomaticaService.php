@@ -571,7 +571,10 @@ class SriDescargaAutomaticaService
             'clavesExcluir'   => $clavesExcluir,
         ]);
 
-        $cmd  = 'node ' . escapeshellarg($scriptPath);
+        // En Linux (servidor) el navegador corre en modo headful bajo un display virtual
+        // (xvfb) para conservar un score alto de reCAPTCHA v3. En Windows se lanza directo.
+        $nodeCmd = 'node ' . escapeshellarg($scriptPath);
+        $cmd  = (PHP_OS_FAMILY === 'Windows') ? $nodeCmd : ('xvfb-run -a ' . $nodeCmd);
         $proc = proc_open($cmd, [
             0 => ['pipe', 'r'],
             1 => ['pipe', 'w'],
@@ -664,7 +667,10 @@ class SriDescargaAutomaticaService
             'clavesExcluir'   => $clavesExcluir,
         ]);
 
-        $cmd  = 'node ' . escapeshellarg($scriptPath);
+        // En Linux (servidor) el navegador corre en modo headful bajo un display virtual
+        // (xvfb) para conservar un score alto de reCAPTCHA v3. En Windows se lanza directo.
+        $nodeCmd = 'node ' . escapeshellarg($scriptPath);
+        $cmd  = (PHP_OS_FAMILY === 'Windows') ? $nodeCmd : ('xvfb-run -a ' . $nodeCmd);
         $proc = proc_open($cmd, [
             0 => ['pipe', 'r'],
             1 => ['pipe', 'w'], // stdout (streaming json)
