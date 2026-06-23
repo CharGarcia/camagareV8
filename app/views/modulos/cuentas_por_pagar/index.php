@@ -329,17 +329,25 @@
                             <div class="text-muted" style="font-size:.7rem;">Proveedor</div>
                             <div class="fw-semibold text-truncate" id="pago-proveedor" style="font-size:.85rem;"></div>
                         </div>
-                        <div class="col-4 mt-1">
+                        <div class="col-3 mt-1">
                             <div class="text-muted" style="font-size:.7rem;">Total Doc.</div>
                             <div class="fw-semibold">$<span id="pago-total-doc">0.00</span></div>
                         </div>
-                        <div class="col-4 mt-1">
+                        <div class="col-3 mt-1">
                             <div class="text-muted" style="font-size:.7rem;">Ya Pagado</div>
                             <div class="fw-semibold text-success">$<span id="pago-ya-pagado">0.00</span></div>
                         </div>
-                        <div class="col-4 mt-1">
-                            <div class="text-muted" style="font-size:.7rem;">Saldo Pendiente</div>
-                            <div class="fw-bold text-danger fs-5">$<span id="pago-saldo-pend">0.00</span></div>
+                        <div class="col-3 mt-1">
+                            <div class="text-muted" style="font-size:.7rem;">Retención</div>
+                            <div class="fw-semibold text-warning">$<span id="pago-retenido">0.00</span></div>
+                        </div>
+                        <div class="col-3 mt-1">
+                            <div class="text-muted" style="font-size:.7rem;" id="pago-nc-nd-label">NC/ND</div>
+                            <div class="fw-semibold text-info">$<span id="pago-nc-nd">0.00</span></div>
+                        </div>
+                        <div class="col-12 mt-1 text-end border-top pt-1">
+                            <span class="text-muted" style="font-size:.7rem;">Saldo Pendiente: </span>
+                            <span class="fw-bold text-danger fs-5" id="pago-saldo-pend">0.00</span>
                         </div>
                     </div>
                 </div>

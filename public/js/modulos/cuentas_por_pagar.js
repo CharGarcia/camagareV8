@@ -288,11 +288,24 @@ async function CXP_cargarCatalogos() {
 /* ════════════════════════════════════════════════════
    MODAL PAGO — abrir
 ════════════════════════════════════════════════════ */
-function CXP_abrirModalPago(idDoc, tipoFuente) {
-    const fila = CXP_datos.find(r => r.id == idDoc && r.tipo_fuente == tipoFuente);
-    if (!fila) return;
+async function CXP_abrirModalPago(idDoc, tipoFuente) {
+    // Obtener datos en tiempo real del servidor (sin filtro de fecha de corte)
+    let d;
+    try {
+        const resp = await fetch(`${BASE_URL}/${RUTA_MODULO_CXP}/getDocumentoParaPagoInfoAjax?id_doc=${idDoc}&tipo_fuente=${tipoFuente}`);
+        const data = await resp.json();
+        if (!data.success) { alert(data.message || 'Error al cargar el documento.'); return; }
+        d = data.doc;
+    } catch(e) {
+        // Fallback a datos del listado si falla la conexión
+        const fila = CXP_datos.find(r => r.id == idDoc && r.tipo_fuente == tipoFuente);
+        if (!fila) return;
+        d = { numero_documento: fila.numero_documento, proveedor_nombre: fila.proveedor_nombre,
+              importe_total: fila.total, total_pagado: fila.total_pagado, tipo_fuente: tipoFuente,
+              total_retenido: fila.total_retenido || 0, total_nc: 0, total_nd: 0, saldo: fila.saldo };
+    }
 
-    const saldo  = parseFloat(fila.saldo);
+    const saldo  = Math.max(0, parseFloat(d.saldo));
     const pagado = saldo <= 0.001;
 
     // Campos ocultos
@@ -300,11 +313,17 @@ function CXP_abrirModalPago(idDoc, tipoFuente) {
     document.getElementById('pago-tipo-fuente').value = tipoFuente;
 
     // Panel de info del documento
-    document.getElementById('pago-nro-doc').textContent   = fila.numero_documento;
-    document.getElementById('pago-proveedor').textContent = fila.proveedor_nombre || '';
-    document.getElementById('pago-total-doc').textContent = CXP_fmt(fila.total);
-    document.getElementById('pago-ya-pagado').textContent = CXP_fmt(fila.total_pagado);
-    document.getElementById('pago-saldo-pend').textContent= CXP_fmt(saldo > 0 ? saldo : 0);
+    document.getElementById('pago-nro-doc').textContent   = d.numero_documento;
+    document.getElementById('pago-proveedor').textContent = d.proveedor_nombre || '';
+    document.getElementById('pago-total-doc').textContent = CXP_fmt(d.importe_total);
+    document.getElementById('pago-ya-pagado').textContent = CXP_fmt(d.total_pagado);
+    document.getElementById('pago-retenido').textContent  = CXP_fmt(d.total_retenido || 0);
+    // NC/ND: solo aplica para COMPRA; en LIQUIDACION mostrar 0
+    const ncNdVal = parseFloat(d.total_nc || 0) - parseFloat(d.total_nd || 0);
+    const lblNcNd = document.getElementById('pago-nc-nd-label');
+    if (lblNcNd) lblNcNd.textContent = (d.tipo_fuente === 'LIQUIDACION') ? 'NC/ND' : 'NC - ND';
+    document.getElementById('pago-nc-nd').textContent    = CXP_fmt(ncNdVal);
+    document.getElementById('pago-saldo-pend').textContent = CXP_fmt(saldo);
 
     // Mostrar formulario o alerta de pagado
     document.getElementById('pago-form-body').classList.toggle('d-none', pagado);

@@ -214,6 +214,31 @@ class CuentasPorPagarController extends BaseModuloController
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // AJAX – DATOS EN TIEMPO REAL PARA EL MODAL DE PAGO
+    // ─────────────────────────────────────────────────────────────────────
+
+    public function getDocumentoParaPagoInfoAjax(): void
+    {
+        $this->requireLeer();
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $idDoc      = (int) ($_GET['id_doc']       ?? 0);
+        $tipoFuente = trim($_GET['tipo_fuente']    ?? 'COMPRA');
+
+        if ($idDoc <= 0) {
+            $this->jsonError('ID inválido.');
+            return;
+        }
+
+        $doc = $this->repo->getDocumentoParaPago($idDoc, $tipoFuente, $idEmpresa);
+        if (!$doc) {
+            $this->jsonError('Documento no encontrado.');
+            return;
+        }
+
+        $this->jsonSuccess(['doc' => $doc]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // AJAX – HISTORIAL DE PAGOS
     // ─────────────────────────────────────────────────────────────────────
 

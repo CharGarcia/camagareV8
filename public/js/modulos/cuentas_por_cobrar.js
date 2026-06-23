@@ -246,22 +246,39 @@ function CXC_seleccionarTodos(sel) {
 /* ════════════════════════════════════════════════════
    MODAL COBRO
 ════════════════════════════════════════════════════ */
-function CXC_abrirModalCobro(idVenta) {
-    const fila = CXC_datos.find(r => r.id == idVenta);
-    if (!fila) return;
+async function CXC_abrirModalCobro(idVenta) {
+    // Obtener datos en tiempo real del servidor (sin filtro de fecha de corte)
+    let f;
+    try {
+        const resp = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/getFacturaParaCobroInfoAjax?id_venta=${idVenta}`);
+        const data = await resp.json();
+        if (!data.success) { alert(data.message || 'Error al cargar la factura.'); return; }
+        f = data.factura;
+    } catch(e) {
+        // Fallback a datos del listado si falla la conexión
+        const fila = CXC_datos.find(r => r.id == idVenta);
+        if (!fila) return;
+        f = { numero_factura: fila.numero_factura, cliente_nombre: fila.cliente_nombre,
+              importe_total: fila.total, total_cobrado: fila.total_cobrado,
+              total_retenido: fila.total_retenido || 0, total_nc: fila.total_nc || 0, saldo: fila.saldo };
+    }
+
+    const saldo = Math.max(0, parseFloat(f.saldo));
 
     // Info factura
     document.getElementById('cobro-id-venta').value         = idVenta;
-    document.getElementById('cobro-nro-factura').textContent = fila.numero_factura;
-    document.getElementById('cobro-cliente').textContent     = fila.cliente_nombre;
-    document.getElementById('cobro-total-fact').textContent  = CXC_fmt(fila.total);
-    document.getElementById('cobro-ya-cobrado').textContent  = CXC_fmt(fila.total_cobrado);
-    document.getElementById('cobro-saldo-pend').textContent  = CXC_fmt(fila.saldo);
+    document.getElementById('cobro-nro-factura').textContent = f.numero_factura;
+    document.getElementById('cobro-cliente').textContent     = f.cliente_nombre;
+    document.getElementById('cobro-total-fact').textContent  = CXC_fmt(f.importe_total);
+    document.getElementById('cobro-ya-cobrado').textContent  = CXC_fmt(f.total_cobrado);
+    document.getElementById('cobro-retenido').textContent    = CXC_fmt(f.total_retenido || 0);
+    document.getElementById('cobro-nc').textContent          = CXC_fmt(f.total_nc || 0);
+    document.getElementById('cobro-saldo-pend').textContent  = CXC_fmt(saldo);
 
     // Monto y fecha
     const elMonto = document.getElementById('cobro-monto');
-    elMonto.value = parseFloat(fila.saldo).toFixed(2);
-    elMonto.max   = parseFloat(fila.saldo).toFixed(2);
+    elMonto.value = saldo.toFixed(2);
+    elMonto.max   = saldo.toFixed(2);
     document.getElementById('cobro-fecha').value         = new Date().toISOString().slice(0,10);
     document.getElementById('cobro-observaciones').value = '';
 

@@ -303,17 +303,25 @@
                             <div class="text-muted" style="font-size:.7rem;">Cliente</div>
                             <div class="fw-bold" id="cobro-cliente"></div>
                         </div>
-                        <div class="col-4 mt-1">
+                        <div class="col-3 mt-1">
                             <div class="text-muted" style="font-size:.7rem;">Total Factura</div>
                             <div class="fw-semibold">$<span id="cobro-total-fact"></span></div>
                         </div>
-                        <div class="col-4 mt-1">
+                        <div class="col-3 mt-1">
                             <div class="text-muted" style="font-size:.7rem;">Ya Cobrado</div>
                             <div class="fw-semibold text-success">$<span id="cobro-ya-cobrado"></span></div>
                         </div>
-                        <div class="col-4 mt-1">
-                            <div class="text-muted" style="font-size:.7rem;">Saldo Pendiente</div>
-                            <div class="fw-bold text-danger fs-5">$<span id="cobro-saldo-pend"></span></div>
+                        <div class="col-3 mt-1">
+                            <div class="text-muted" style="font-size:.7rem;">Retención</div>
+                            <div class="fw-semibold text-warning">$<span id="cobro-retenido"></span></div>
+                        </div>
+                        <div class="col-3 mt-1">
+                            <div class="text-muted" style="font-size:.7rem;">Nota Crédito</div>
+                            <div class="fw-semibold text-info">$<span id="cobro-nc"></span></div>
+                        </div>
+                        <div class="col-12 mt-1 text-end border-top pt-1">
+                            <span class="text-muted" style="font-size:.7rem;">Saldo Pendiente: </span>
+                            <span class="fw-bold text-danger fs-5" id="cobro-saldo-pend"></span>
                         </div>
                     </div>
                 </div>

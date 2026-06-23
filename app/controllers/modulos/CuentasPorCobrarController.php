@@ -221,6 +221,30 @@ class CuentasPorCobrarController extends BaseModuloController
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // AJAX – DATOS EN TIEMPO REAL PARA EL MODAL DE COBRO
+    // ─────────────────────────────────────────────────────────────────────
+
+    public function getFacturaParaCobroInfoAjax(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idVenta   = (int) ($_GET['id_venta'] ?? 0);
+
+        if ($idVenta <= 0) {
+            $this->jsonError('ID inválido.');
+            return;
+        }
+
+        $factura = $this->repo->getFacturaParaCobro($idVenta, $idEmpresa);
+        if (!$factura) {
+            $this->jsonError('Factura no encontrada.');
+            return;
+        }
+
+        $this->jsonSuccess(['factura' => $factura]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // AJAX – HISTORIAL DE COBROS
     // ─────────────────────────────────────────────────────────────────────
 
