@@ -1101,7 +1101,7 @@ th[data-col] {
     background: white;
     border: 1px solid #ddd;
     border-radius: 0.25rem;
-    max-height: 400px;
+    max-height: 340px; /* ~10 empresas; a partir de la 11 aparece la barra de scroll vertical */
     overflow-y: auto;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }

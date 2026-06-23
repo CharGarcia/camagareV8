@@ -137,27 +137,19 @@
         function filterItems(ignoreQuery) {
             var query = (input.value || '').trim().toLowerCase();
             var q = ignoreQuery ? '' : query;
-            var count = 0;
-            
+
             for (var i = 0; i < items.length; i++) {
                 var item = items[i];
                 var text = (item.getAttribute('data-text') || '').toLowerCase();
                 var ruc = (item.getAttribute('data-ruc') || '').toLowerCase();
-                var isMatch = false;
 
-                if (q === '') {
-                    // Si no hay filtro o se ignora, mostramos los 10 primeros
-                    isMatch = (count < 10);
-                } else {
-                    // Si hay filtro, buscamos en texto o RUC y limitamos a 10
-                    if (text.indexOf(q) !== -1 || ruc.indexOf(q) !== -1) {
-                        isMatch = (count < 10);
-                    }
-                }
+                // Sin filtro: mostrar todas las empresas. Con filtro: todas las que
+                // coincidan en texto o RUC. El alto lo limita el CSS (max-height +
+                // overflow-y), que activa la barra de scroll cuando hay muchas.
+                var isMatch = (q === '') || (text.indexOf(q) !== -1 || ruc.indexOf(q) !== -1);
 
                 if (isMatch) {
                     item.style.setProperty('display', 'block', 'important');
-                    count++;
                 } else {
                     item.style.setProperty('display', 'none', 'important');
                 }
