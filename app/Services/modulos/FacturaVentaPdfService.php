@@ -511,7 +511,10 @@ class FacturaVentaPdfService
         $cW  = $this->contentW;
 
         // ── Calcular totales por concepto de IVA (codigo_porcentaje) ─────────
-        $subtotMap  = []; // codigo_porcentaje => base (SUBTOTAL X%)
+        // Se agrupan y suman las bases imponibles y el IVA por codigo_porcentaje
+        // del SRI, con la MISMA lógica que el XML autorizado (XmlFacturaVentaService)
+        // para que el RIDE muestre exactamente las mismas cifras del comprobante.
+        $subtotMap  = []; // codigo_porcentaje => base imponible (SUBTOTAL X%)
         $ivaMap     = []; // codigo_porcentaje => valor IVA
         $tarifaMap  = []; // codigo_porcentaje => tarifa numérica (para etiquetas)
         $totalIce   = 0.0;
@@ -529,20 +532,28 @@ class FacturaVentaPdfService
                 $tar     = (float)($imp['tarifa'] ?? 0);
                 $val     = (float)($imp['valor'] ?? 0);
                 $base    = (float)($imp['base_imponible'] ?? $d['precio_total_sin_impuesto'] ?? 0);
-                $codPct  = (string)($imp['codigo_porcentaje'] ?? (string)(int)round($tar));
-                if ($cod === '2') {
-                    $subtotMap[$codPct]  = ($subtotMap[$codPct] ?? 0.0) + $base;
-                    $ivaMap[$codPct]     = ($ivaMap[$codPct]    ?? 0.0) + $val;
-                    $tarifaMap[$codPct]  = $tar;
+
+                if ($cod === '2') { // IVA
+                    // codigo_porcentaje canónico: para tarifa > 0 se deriva de la
+                    // tarifa real (igual que el XML, evita códigos desactualizados);
+                    // para tarifa 0 se respeta el guardado, que distingue 0% (0),
+                    // no objeto (6) y exento (7) —todos con tarifa 0—.
+                    $codPct = $tar > 0
+                        ? \App\Helpers\SriIvaHelper::codigoPorcentaje($tar)
+                        : (string)($imp['codigo_porcentaje'] ?? '0');
+
+                    if ($codPct === '6') {            // No objeto de IVA
+                        $noObjIva += $base;
+                    } elseif ($codPct === '7') {      // Exento de IVA
+                        $exentoIva += $base;
+                    } else {                          // 0%, 5%, 12%, 15%, ...
+                        $subtotMap[$codPct] = ($subtotMap[$codPct] ?? 0.0) + $base;
+                        $ivaMap[$codPct]    = ($ivaMap[$codPct]    ?? 0.0) + $val;
+                        $tarifaMap[$codPct] = $tar;
+                    }
                     $tieneImp = true;
-                } elseif ($cod === '3') {
+                } elseif ($cod === '3') { // ICE
                     $totalIce += $val;
-                } elseif ($cod === '6') {
-                    $noObjIva += (float)($d['precio_total_sin_impuesto'] ?? 0);
-                    $tieneImp = true;
-                } elseif ($cod === '7') {
-                    $exentoIva += (float)($d['precio_total_sin_impuesto'] ?? 0);
-                    $tieneImp = true;
                 }
             }
             if (!$tieneImp) {
@@ -552,6 +563,7 @@ class FacturaVentaPdfService
             }
         }
         ksort($subtotMap);
+        ksort($ivaMap);
 
         $subtotalSinImp = array_sum($subtotMap) + $noObjIva + $exentoIva;
         $totalIva       = array_sum($ivaMap);
