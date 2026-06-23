@@ -158,13 +158,13 @@ class PlanCuentaRepository extends BaseRepository
     }
 
     /**
-     * Obtiene las cuentas raíz (nivel 1) que faltan por crear (1 a 6).
+     * Obtiene las cuentas raíz (nivel 1) que faltan por crear.
      */
     public function getFaltantesNivelUno(int $idEmpresa): array
     {
-        $sql = "SELECT codigo FROM {$this->table} 
-                WHERE id_empresa = :id_e AND nivel = '1' AND eliminado = false 
-                AND codigo IN ('1','2','3','4','5','6')";
+        $sql = "SELECT codigo FROM {$this->table}
+                WHERE id_empresa = :id_e AND nivel = '1' AND eliminado = false
+                AND codigo IN ('1','2','3','4','5')";
         $st = $this->db->prepare($sql);
         $st->execute([':id_e' => $idEmpresa]);
         $existencia = $st->fetchAll(PDO::FETCH_COLUMN);
@@ -174,8 +174,7 @@ class PlanCuentaRepository extends BaseRepository
             '2' => 'PASIVOS',
             '3' => 'PATRIMONIO',
             '4' => 'INGRESOS',
-            '5' => 'COSTOS',
-            '6' => 'GASTOS'
+            '5' => 'COSTOS Y GASTOS',
         ];
 
         $faltantes = [];
@@ -208,8 +207,7 @@ class PlanCuentaRepository extends BaseRepository
             ['c' => '2', 'n' => 'PASIVOS'],
             ['c' => '3', 'n' => 'PATRIMONIO'],
             ['c' => '4', 'n' => 'INGRESOS'],
-            ['c' => '5', 'n' => 'COSTOS'],
-            ['c' => '6', 'n' => 'GASTOS']
+            ['c' => '5', 'n' => 'COSTOS Y GASTOS'],
         ];
         
         $sql = "INSERT INTO {$this->table} (
@@ -236,17 +234,17 @@ class PlanCuentaRepository extends BaseRepository
     {
         $nivelPadre = count(explode('.', $codigoPadre));
         $nuevoNivel = $nivelPadre + 1;
-        
-        $sql = "SELECT codigo FROM {$this->table} 
-                WHERE id_empresa = :id_e AND eliminado = false 
+
+        $sql = "SELECT codigo FROM {$this->table}
+                WHERE id_empresa = :id_e AND eliminado = false
                 AND nivel = :nivel
-                AND codigo LIKE :prefijo 
+                AND codigo LIKE :prefijo
                 ORDER BY codigo DESC LIMIT 1";
         $st = $this->db->prepare($sql);
         $st->execute([
-            ':id_e' => $idEmpresa,
-            ':nivel' => $nuevoNivel,
-            ':prefijo' => $codigoPadre . '.%'
+            ':id_e'    => $idEmpresa,
+            ':nivel'   => $nuevoNivel,
+            ':prefijo' => $codigoPadre . '.%',
         ]);
         return $st->fetchColumn() ?: null;
     }
@@ -256,14 +254,14 @@ class PlanCuentaRepository extends BaseRepository
      */
     public function tieneHijos(int $idEmpresa, string $codigo): bool
     {
-        $sql = "SELECT COUNT(*) FROM {$this->table} 
-                WHERE id_empresa = :id_e AND eliminado = false 
+        $sql = "SELECT COUNT(*) FROM {$this->table}
+                WHERE id_empresa = :id_e AND eliminado = false
                 AND codigo LIKE :prefijo AND codigo != :c";
         $st = $this->db->prepare($sql);
         $st->execute([
-            ':id_e' => $idEmpresa,
+            ':id_e'    => $idEmpresa,
             ':prefijo' => $codigo . '.%',
-            ':c' => $codigo
+            ':c'       => $codigo,
         ]);
         return ((int)$st->fetchColumn()) > 0;
     }
