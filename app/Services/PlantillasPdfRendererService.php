@@ -540,7 +540,16 @@ class PlantillasPdfRendererService
         }
 
         $propina    = (float)($cabecera['propina'] ?? 0);
-        $valorTotal = $subtotal0 + $subtotalIva + $totalIva + $totalIce + $propina;
+
+        // total_descuento y valor_total van al XML autorizado y al SRI desde la
+        // cabecera: el RIDE los toma de ahí (no los recalcula) para mostrar las
+        // mismas cifras del comprobante; respaldo al cálculo de detalles.
+        if (isset($cabecera['total_descuento'])) {
+            $totalDcto = (float)$cabecera['total_descuento'];
+        }
+        $valorTotal = isset($cabecera['importe_total'])
+            ? (float)$cabecera['importe_total']
+            : $subtotal0 + $subtotalIva + $totalIva + $totalIce + $propina;
 
         return [
             'subtotal_0'      => $subtotal0,

@@ -565,10 +565,22 @@ class FacturaVentaPdfService
         ksort($subtotMap);
         ksort($ivaMap);
 
-        $subtotalSinImp = array_sum($subtotMap) + $noObjIva + $exentoIva;
         $totalIva       = array_sum($ivaMap);
         $propina        = (float)($cab['propina'] ?? 0);
-        $total          = $subtotalSinImp + $totalIva + $totalIce + $propina;
+
+        // Totales de cabecera: son las cifras que van al XML autorizado y al SRI.
+        // El RIDE las toma de la cabecera (NO las recalcula) para mostrar EXACTAMENTE
+        // los mismos valores del comprobante. Si algún flujo no las trae, se cae al
+        // cálculo desde los detalles como respaldo.
+        $subtotalSinImp = isset($cab['total_sin_impuestos'])
+            ? (float)$cab['total_sin_impuestos']
+            : array_sum($subtotMap) + $noObjIva + $exentoIva;
+        if (isset($cab['total_descuento'])) {
+            $totalDcto = (float)$cab['total_descuento'];
+        }
+        $total          = isset($cab['importe_total'])
+            ? (float)$cab['importe_total']
+            : $subtotalSinImp + $totalIva + $totalIce + $propina;
 
         if ($y > 212) {
             $pdf->AddPage();
