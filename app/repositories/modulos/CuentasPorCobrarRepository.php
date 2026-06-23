@@ -15,10 +15,12 @@ class CuentasPorCobrarRepository extends BaseRepository
     }
 
     /**
-     * CTE que calcula lo cobrado por factura desde ingresos_detalle.
+     * CTE que calcula lo cobrado por factura hasta una fecha de corte opcional.
+     * Si $fechaHasta es null, incluye todos los cobros (comportamiento en tiempo real).
      */
-    private function getCteCobrado(): string
+    private function getCteCobrado(?string $fechaHasta = null): string
     {
+        $filtroFecha = $fechaHasta ? "AND ic2.fecha_emision <= :cobrado_hasta" : '';
         return "
             SELECT id2.id_referencia_documento AS id_venta,
                    SUM(id2.monto_cobrado)       AS total_cobrado
@@ -28,16 +30,18 @@ class CuentasPorCobrarRepository extends BaseRepository
             WHERE id2.tipo_documento = 'FACTURA'
               AND ic2.estado    != 'anulado'
               AND ic2.eliminado  = false
+              {$filtroFecha}
             GROUP BY id2.id_referencia_documento
         ";
     }
 
     /**
-     * CTE que calcula lo retenido por factura desde retencion_venta_cabecera.
+     * CTE que calcula lo retenido por factura hasta una fecha de corte opcional.
      * Cubre dos vías de enlace: id_venta directo y num_doc_sustento en el detalle.
      */
-    private function getCteRetenido(): string
+    private function getCteRetenido(?string $fechaHasta = null): string
     {
+        $filtroFecha = $fechaHasta ? "AND r.fecha_emision <= :retenido_hasta" : '';
         return "
             SELECT tmp.id_venta, SUM(tmp.monto) AS total_retenido
             FROM (
@@ -46,6 +50,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                        r.id AS id_ret
                 FROM retencion_venta_cabecera r
                 WHERE r.eliminado = false AND r.id_venta IS NOT NULL
+                {$filtroFecha}
 
                 UNION
 
@@ -57,24 +62,42 @@ class CuentasPorCobrarRepository extends BaseRepository
                 JOIN ventas_cabecera vc
                      ON rd.num_doc_sustento = CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial)
                 WHERE r.eliminado = false
+                {$filtroFecha}
             ) tmp
             GROUP BY tmp.id_venta
         ";
     }
 
     /**
-     * CTE que calcula el total de notas de crédito aplicadas por número de factura.
+     * CTE que calcula el total de notas de crédito aplicadas hasta una fecha de corte opcional.
      */
-    private function getCteNC(): string
+    private function getCteNC(?string $fechaHasta = null): string
     {
+        $filtroFecha = $fechaHasta ? "AND nc.fecha_emision <= :nc_hasta" : '';
         return "
             SELECT nc.num_doc_modificado,
                    SUM(nc.importe_total) AS total_nc
             FROM notas_credito_cabecera nc
             WHERE nc.estado   != 'anulado'
               AND nc.eliminado = false
+              {$filtroFecha}
             GROUP BY nc.num_doc_modificado
         ";
+    }
+
+    /**
+     * Extrae fecha_hasta del array de filtros y agrega los parámetros de corte
+     * en $params para los CTEs que la necesitan.
+     */
+    private function aplicarFechaCorteCtEs(array $filtros, array &$params): ?string
+    {
+        $fechaHasta = $filtros['fecha_hasta'] ?? null;
+        if ($fechaHasta) {
+            $params[':cobrado_hasta']  = $fechaHasta;
+            $params[':retenido_hasta'] = $fechaHasta;
+            $params[':nc_hasta']       = $fechaHasta;
+        }
+        return $fechaHasta ?: null;
     }
 
     /**
@@ -83,11 +106,12 @@ class CuentasPorCobrarRepository extends BaseRepository
     public function getListado(int $idEmpresa, array $filtros): array
     {
         [$where, $params] = $this->buildWhere($idEmpresa, $filtros);
+        $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
         $sql = "
-            WITH cobrado  AS (" . $this->getCteCobrado() . "),
-                 retenido AS (" . $this->getCteRetenido() . "),
-                 nc_aplic AS (" . $this->getCteNC() . ")
+            WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
+                 retenido AS (" . $this->getCteRetenido($fh) . "),
+                 nc_aplic AS (" . $this->getCteNC($fh) . ")
             SELECT
                 v.id,
                 v.fecha_emision,
@@ -127,11 +151,12 @@ class CuentasPorCobrarRepository extends BaseRepository
         // Para estadísticas, no aplicar filtro de estado pues queremos todos los saldos
         $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
         [$where, $params] = $this->buildWhere($idEmpresa, $filtrosSinEstado);
+        $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
         $sql = "
-            WITH cobrado  AS (" . $this->getCteCobrado() . "),
-                 retenido AS (" . $this->getCteRetenido() . "),
-                 nc_aplic AS (" . $this->getCteNC() . ")
+            WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
+                 retenido AS (" . $this->getCteRetenido($fh) . "),
+                 nc_aplic AS (" . $this->getCteNC($fh) . ")
             SELECT
                 COUNT(v.id) AS total_facturas,
                 SUM(v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) AS total_saldo,
@@ -176,11 +201,12 @@ class CuentasPorCobrarRepository extends BaseRepository
     {
         $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
         [$where, $params] = $this->buildWhere($idEmpresa, $filtrosSinEstado);
+        $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
         $sql = "
-            WITH cobrado  AS (" . $this->getCteCobrado() . "),
-                 retenido AS (" . $this->getCteRetenido() . "),
-                 nc_aplic AS (" . $this->getCteNC() . ")
+            WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
+                 retenido AS (" . $this->getCteRetenido($fh) . "),
+                 nc_aplic AS (" . $this->getCteNC($fh) . ")
             SELECT
                 SUM(CASE WHEN dias_vencido BETWEEN 1 AND 30
                     THEN saldo ELSE 0 END) AS tramo_1_30,
