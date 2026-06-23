@@ -180,16 +180,16 @@ function CXC_renderTabla(filas) {
                        ${selec ? 'checked' : ''}
                        onchange="CXC_toggleSeleccion(${r.id}, this.checked)">
             </td>
-            <td class="ps-2 fw-semibold text-truncate" title="${esc(r.numero_factura)}" style="font-size:.8rem;">${esc(r.numero_factura)}</td>
+            <td class="ps-2 fw-semibold text-truncate" title="${esc(r.numero_factura)}" style="font-size:.8rem;white-space:nowrap;">${esc(r.numero_factura)}</td>
             <td class="text-truncate" title="${esc(r.cliente_nombre)}" style="font-size:.8rem;">${esc(r.cliente_nombre)}</td>
-            <td style="font-size:.78rem;">${fEmision}</td>
-            <td style="font-size:.78rem;">${fVenc}</td>
-            <td class="text-end" style="font-size:.78rem;">$${CXC_fmt(r.total)}</td>
-            <td class="text-end text-success" style="font-size:.78rem;">$${CXC_fmt(r.total_cobrado)}</td>
-            <td class="text-end fw-bold pe-3" style="font-size:.82rem;color:${saldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(saldo)}</td>
-            <td class="text-center">${badgeHtml}</td>
+            <td style="font-size:.78rem;white-space:nowrap;">${fEmision}</td>
+            <td style="font-size:.78rem;white-space:nowrap;">${fVenc}</td>
+            <td class="text-end" style="font-size:.78rem;white-space:nowrap;">$${CXC_fmt(r.total)}</td>
+            <td class="text-end text-success" style="font-size:.78rem;white-space:nowrap;">$${CXC_fmt(r.total_cobrado)}</td>
+            <td class="text-end fw-bold pe-3" style="font-size:.82rem;white-space:nowrap;color:${saldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(saldo)}</td>
+            <td class="text-center" style="overflow:hidden;white-space:nowrap;">${badgeHtml}</td>
             <td class="text-center">
-                <div class="d-flex justify-content-center gap-1 flex-wrap">
+                <div class="d-flex justify-content-center gap-1">
                     ${saldo > 0 ? `
                     <button class="btn btn-success btn-sm py-0 px-2" style="font-size:.72rem;" title="Registrar cobro"
                             onclick="CXC_abrirModalCobro(${r.id})">

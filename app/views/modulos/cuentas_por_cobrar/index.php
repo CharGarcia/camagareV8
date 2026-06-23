@@ -3,8 +3,8 @@
 
 <style>
     .cxc-header { flex-shrink:0; }
-    .cxc-scroll  { max-height:520px; overflow-y:auto; }
-    .cxc-scroll thead th { position:sticky; top:0; z-index:10; background:#f8f9fa; box-shadow:0 1px 0 #dee2e6; }
+    .cxc-scroll  { max-height:520px; overflow-y:auto; overflow-x:auto; }
+    .cxc-scroll thead th { position:sticky; top:0; z-index:10; background:#f8f9fa; box-shadow:0 1px 0 #dee2e6; white-space:nowrap; }
     .badge-vencida  { background:rgba(220,53,69,.12);  color:#dc3545; border:1px solid rgba(220,53,69,.25); }
     .badge-vigente  { background:rgba(25,135,84,.12);  color:#198754; border:1px solid rgba(25,135,84,.25); }
     .badge-proxima  { background:rgba(255,193,7,.15);  color:#856404; border:1px solid rgba(255,193,7,.35); }
@@ -181,18 +181,18 @@
         </div>
         <div class="card-body p-0">
             <div class="cxc-scroll w-100">
-                <table class="table table-hover table-sm mb-0 align-middle" id="tabla-cxc" style="table-layout:fixed;">
+                <table class="table table-hover table-sm mb-0 align-middle" id="tabla-cxc" style="table-layout:fixed;min-width:1120px;">
                     <colgroup>
                         <col style="width:36px;">
-                        <col style="width:130px;">
+                        <col style="width:160px;">
                         <col>
-                        <col style="width:110px;">
-                        <col style="width:115px;">
+                        <col style="width:92px;">
                         <col style="width:100px;">
-                        <col style="width:100px;">
-                        <col style="width:100px;">
-                        <col style="width:90px;">
-                        <col style="width:155px;">
+                        <col style="width:95px;">
+                        <col style="width:95px;">
+                        <col style="width:95px;">
+                        <col style="width:125px;">
+                        <col style="width:162px;">
                     </colgroup>
                     <thead class="table-light">
                         <tr>
