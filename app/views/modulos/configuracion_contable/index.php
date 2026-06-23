@@ -112,12 +112,6 @@ $base = BASE_URL;
             <label for="selectorMetodoPreferencia" class="form-label small fw-bold mb-0 text-muted"><i class="bi bi-diagram-3-fill me-1"></i> Contabilizar Por:</label>
             <select class="form-select form-select-sm fw-medium shadow-sm text-dark bg-white" id="selectorMetodoPreferencia" style="width: 250px;" onchange="ASIENTOPROG_guardarMetodoPreferencia(this.value)">
                 <option value="general">General (Por Defecto)</option>
-                <option value="cliente">Por Clientes</option>
-                <option value="producto">Por Productos</option>
-                <option value="categoria">Por Categorías</option>
-                <option value="marca">Por Marcas</option>
-                <option value="iva">Por Tarifas de IVA</option>
-                <option value="cascada">Jerarquía Completa (Cascada)</option>
             </select>
         </div>
     </div>
@@ -135,7 +129,7 @@ $base = BASE_URL;
                 <div class="accordion-body p-0 border-top bg-white">
                     <div class="table-responsive">
                         <table class="table table-hover table-sm mb-0 align-middle table-interactiva">
-                            <thead class="table-light">
+                            <thead class="table-light" id="theadConfiguracionGeneral">
                                 <tr>
                                     <th class="ps-4 py-2" style="width: 20%">Concepto</th>
                                     <th class="py-2" style="width: 25%">Detalle</th>
@@ -154,7 +148,11 @@ $base = BASE_URL;
             </div>
         </div>
 
-        <!-- ACORDEÓN 2: POR CLIENTES -->
+        <!-- 
+        ========================================================================
+        ACORDEONES DE DIMENSIONES ESPECÍFICAS (DESACTIVADOS TEMPORALMENTE)
+        ========================================================================
+        ACORDEÓN 2: POR CLIENTES
         <div class="accordion-item border-0 border-top">
             <h2 class="accordion-header" id="headingClientes">
                 <button class="accordion-button collapsed fw-bold py-3 px-4 text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseClientes" aria-expanded="false" aria-controls="collapseClientes" onclick="ASIENTOPROG_cargarDim('cliente')">
@@ -177,7 +175,6 @@ $base = BASE_URL;
                         </div>
                         <div class="col-md-12">
                             <div class="row g-3" id="inputsDinamicos_cliente">
-                                <!-- Cargado dinámicamente según la Configuración General -->
                             </div>
                         </div>
                         <div class="col-12 mt-4 text-end">
@@ -203,7 +200,7 @@ $base = BASE_URL;
             </div>
         </div>
 
-        <!-- ACORDEÓN 3: POR PRODUCTOS -->
+        ACORDEÓN 3: POR PRODUCTOS
         <div class="accordion-item border-0 border-top">
             <h2 class="accordion-header" id="headingProductos">
                 <button class="accordion-button collapsed fw-bold py-3 px-4 text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseProductos" aria-expanded="false" aria-controls="collapseProductos" onclick="ASIENTOPROG_cargarDim('producto')">
@@ -226,7 +223,6 @@ $base = BASE_URL;
                         </div>
                         <div class="col-md-12">
                             <div class="row g-3" id="inputsDinamicos_producto">
-                                <!-- Cargado dinámicamente según la Configuración General -->
                             </div>
                         </div>
                         <div class="col-12 mt-4 text-end">
@@ -252,7 +248,7 @@ $base = BASE_URL;
             </div>
         </div>
 
-        <!-- ACORDEÓN 4: POR CATEGORÍAS -->
+        ACORDEÓN 4: POR CATEGORÍAS
         <div class="accordion-item border-0 border-top">
             <h2 class="accordion-header" id="headingCategorias">
                 <button class="accordion-button collapsed fw-bold py-3 px-4 text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCategorias" aria-expanded="false" aria-controls="collapseCategorias" onclick="ASIENTOPROG_cargarDim('categoria')">
@@ -275,7 +271,6 @@ $base = BASE_URL;
                         </div>
                         <div class="col-md-12">
                             <div class="row g-3" id="inputsDinamicos_categoria">
-                                <!-- Cargado dinámicamente según la Configuración General -->
                             </div>
                         </div>
                         <div class="col-12 mt-4 text-end">
@@ -301,7 +296,7 @@ $base = BASE_URL;
             </div>
         </div>
 
-        <!-- ACORDEÓN 5: POR MARCAS -->
+        ACORDEÓN 5: POR MARCAS
         <div class="accordion-item border-0 border-top">
             <h2 class="accordion-header" id="headingMarcas">
                 <button class="accordion-button collapsed fw-bold py-3 px-4 text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseMarcas" aria-expanded="false" aria-controls="collapseMarcas" onclick="ASIENTOPROG_cargarDim('marca')">
@@ -324,7 +319,6 @@ $base = BASE_URL;
                         </div>
                         <div class="col-md-12">
                             <div class="row g-3" id="inputsDinamicos_marca">
-                                <!-- Cargado dinámicamente según la Configuración General -->
                             </div>
                         </div>
                         <div class="col-12 mt-4 text-end">
@@ -350,7 +344,7 @@ $base = BASE_URL;
             </div>
         </div>
 
-        <!-- ACORDEÓN 6: POR TARIFA DE IVA -->
+        ACORDEÓN 6: POR TARIFA DE IVA
         <div class="accordion-item border-0 border-top">
             <h2 class="accordion-header" id="headingIvas">
                 <button class="accordion-button collapsed fw-bold py-3 px-4 text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseIvas" aria-expanded="false" aria-controls="collapseIvas" onclick="ASIENTOPROG_cargarDim('iva')">
@@ -373,7 +367,6 @@ $base = BASE_URL;
                         </div>
                         <div class="col-md-12">
                             <div class="row g-3" id="inputsDinamicos_iva">
-                                <!-- Cargado dinámicamente según la Configuración General -->
                             </div>
                         </div>
                         <div class="col-12 mt-4 text-end">
@@ -398,6 +391,7 @@ $base = BASE_URL;
                 </div>
             </div>
         </div>
+        -->
 
     </div>
 </div>

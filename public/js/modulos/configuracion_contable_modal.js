@@ -32,73 +32,150 @@
                 const tbody = document.getElementById('tbodyConfiguracionGeneral');
                 tbody.innerHTML = '';
 
+                // Actualizar dinámicamente la cabecera thead de la tabla general
+                const thead = document.getElementById('theadConfiguracionGeneral');
+                if (thead) {
+                    if (tipoAsiento === 'retenciones_venta') {
+                        thead.innerHTML = `
+                            <tr>
+                                <th class="ps-4 py-2" style="width: 20%">Concepto</th>
+                                <th class="py-2" style="width: 20%">Detalle</th>
+                                <th class="py-2" style="width: 10%">Tipo Cuenta</th>
+                                <th class="py-2" style="width: 20%">Cuenta Contable Debe</th>
+                                <th class="py-2" style="width: 20%">Cuenta Contable Haber</th>
+                                <th class="text-center py-2" style="width: 10%">Acción</th>
+                            </tr>
+                        `;
+                    } else {
+                        thead.innerHTML = `
+                            <tr>
+                                <th class="ps-4 py-2" style="width: 20%">Concepto</th>
+                                <th class="py-2" style="width: 25%">Detalle</th>
+                                <th class="py-2" style="width: 15%">Tipo Cuenta</th>
+                                <th class="text-center py-2" style="width: 10%">Naturaleza</th>
+                                <th class="py-2" style="width: 20%">Cuenta Contable</th>
+                                <th class="text-center py-2" style="width: 10%">Acción</th>
+                            </tr>
+                        `;
+                    }
+                }
+
                 if (res.data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> No hay reglas predefinidas para este tipo de asiento.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> No hay reglas predefinidas para este tipo de asiento.</td></tr>';
                 } else {
                     res.data.forEach(item => {
                         const tr = document.createElement('tr');
-                        const safeSuffix = item.tipo_referencia === 'iva_ventas_factura' ? `iva_${item.id_referencia}` : `at_${item.id_asiento_tipo}`;
-                        const inputId = `cuenta_search_${safeSuffix}`;
-                        const hiddenId = `cuenta_hidden_${safeSuffix}`;
-                        const sugId = `sug_${safeSuffix}`;
                         
-                        const cuentaVal = item.id_cuenta ? `${item.cuenta_codigo} - ${item.cuenta_nombre}` : '';
-                        const idCuentaVal = item.id_cuenta || '';
+                        if (tipoAsiento === 'retenciones_venta') {
+                            const rvdSuffix = `rvd_${item.id_referencia}`;
+                            const inputDebeId = `cuenta_search_${rvdSuffix}`;
+                            const hiddenDebeId = `cuenta_hidden_${rvdSuffix}`;
+                            const sugDebeId = `sug_${rvdSuffix}`;
 
-                        // Mapeo visual premium de badges para el Tipo de Cuenta
-                        const colorMap = {
-                            activo: 'success',
-                            pasivo: 'danger',
-                            patrimonio: 'dark',
-                            ingreso: 'primary',
-                            costo: 'info',
-                            gasto: 'warning'
-                        };
-                        const parts = (item.tipo_cuenta || '').split(',').map(p => p.trim().toLowerCase());
-                        let badgeHtml = '';
-                        parts.forEach(p => {
-                            if (p) {
-                                const label = p.charAt(0).toUpperCase() + p.slice(1);
-                                badgeHtml += `<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 m-1 small">${label}</span>`;
+                            const rvhSuffix = `rvh_${item.id_referencia}`;
+                            const inputHaberId = `cuenta_search_${rvhSuffix}`;
+                            const hiddenHaberId = `cuenta_hidden_${rvhSuffix}`;
+                            const sugHaberId = `sug_${rvhSuffix}`;
+                            
+                            const cuentaDebeVal = item.id_cuenta ? `${item.cuenta_codigo} - ${item.cuenta_nombre}` : '';
+                            const idCuentaDebeVal = item.id_cuenta || '';
+
+                            const cuentaHaberVal = item.haber_id_cuenta ? `${item.haber_cuenta_codigo} - ${item.haber_cuenta_nombre}` : '';
+                            const idCuentaHaberVal = item.haber_id_cuenta || '';
+
+                            const borderClassDebe = idCuentaDebeVal ? '' : 'is-invalid border-danger';
+                            const borderClassHaber = idCuentaHaberVal ? '' : 'is-invalid border-danger';
+
+                            tr.innerHTML = `
+                                <td class="ps-4 fw-bold text-dark">${item.concepto}</td>
+                                <td class="small text-muted">${item.detalle || 'Sin descripción.'}</td>
+                                <td><span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2 m-1 small">Activo</span></td>
+                                <td class="autocomplete-celda">
+                                    <input type="text" class="form-control form-control-sm ${borderClassDebe}" id="${inputDebeId}" placeholder="Cuenta Debe..." value="${cuentaDebeVal}" autocomplete="off">
+                                    <input type="hidden" id="${hiddenDebeId}" value="${idCuentaDebeVal}">
+                                    <div class="list-group sugerencias-flotantes" id="${sugDebeId}" style="display: none;"></div>
+                                </td>
+                                <td class="autocomplete-celda">
+                                    <input type="text" class="form-control form-control-sm ${borderClassHaber}" id="${inputHaberId}" placeholder="Cuenta Haber..." value="${cuentaHaberVal}" autocomplete="off">
+                                    <input type="hidden" id="${hiddenHaberId}" value="${idCuentaHaberVal}">
+                                    <div class="list-group sugerencias-flotantes" id="${sugHaberId}" style="display: none;"></div>
+                                </td>
+                                <td class="text-center">
+                                    <button type="button" class="btn btn-link text-danger p-0 border-0" onclick="ASIENTOPROG_eliminarAlVuelo(0, '${inputDebeId}', '${hiddenDebeId}', 'retenciones_venta_debe', ${item.id_referencia}); ASIENTOPROG_eliminarAlVuelo(0, '${inputHaberId}', '${hiddenHaberId}', 'retenciones_venta_haber', ${item.id_referencia})" title="Limpiar Cuentas">
+                                        <i class="bi bi-trash fs-5"></i>
+                                    </button>
+                                </td>
+                            `;
+                            tbody.appendChild(tr);
+                            ASIENTOPROG_vincularAutocomplete(0, inputDebeId, hiddenDebeId, sugDebeId, 'activo', 'retenciones_venta_debe', item.id_referencia);
+                            ASIENTOPROG_vincularAutocomplete(0, inputHaberId, hiddenHaberId, sugHaberId, 'activo', 'retenciones_venta_haber', item.id_referencia);
+                        } else {
+                            const safeSuffix = item.tipo_referencia === 'iva_ventas_factura' ? `iva_${item.id_referencia}` : `at_${item.id_asiento_tipo}`;
+                            const inputId = `cuenta_search_${safeSuffix}`;
+                            const hiddenId = `cuenta_hidden_${safeSuffix}`;
+                            const sugId = `sug_${safeSuffix}`;
+                            
+                            const cuentaVal = item.id_cuenta ? `${item.cuenta_codigo} - ${item.cuenta_nombre}` : '';
+                            const idCuentaVal = item.id_cuenta || '';
+
+                            // Mapeo visual premium de badges para el Tipo de Cuenta
+                            const colorMap = {
+                                activo: 'success',
+                                pasivo: 'danger',
+                                patrimonio: 'dark',
+                                ingreso: 'primary',
+                                costo: 'info',
+                                gasto: 'warning'
+                            };
+                            const parts = (item.tipo_cuenta || '').split(',').map(p => p.trim().toLowerCase());
+                            let badgeHtml = '';
+                            parts.forEach(p => {
+                                if (p) {
+                                    const label = p.charAt(0).toUpperCase() + p.slice(1);
+                                    badgeHtml += `<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 m-1 small">${label}</span>`;
+                                }
+                            });
+                            if (!badgeHtml) {
+                                badgeHtml = '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 m-1 small">Todos</span>';
                             }
-                        });
-                        if (!badgeHtml) {
-                            badgeHtml = '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 m-1 small">Todos</span>';
+
+                            const debeHaberBadge = (item.debe_haber || 'debe').toLowerCase() === 'debe'
+                                ? '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 fw-bold small">DEBE</span>'
+                                : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 fw-bold small">HABER</span>';
+
+                            const borderClass = idCuentaVal ? '' : 'is-invalid border-danger';
+
+                            tr.innerHTML = `
+                                <td class="ps-4 fw-bold text-dark">${item.concepto}</td>
+                                <td class="small text-muted">${item.detalle || 'Sin descripción detallada.'}</td>
+                                <td>${badgeHtml}</td>
+                                <td class="text-center">${debeHaberBadge}</td>
+                                <td class="autocomplete-celda">
+                                    <input type="text" class="form-control form-control-sm ${borderClass}" id="${inputId}" placeholder="Escriba código o nombre..." value="${cuentaVal}" autocomplete="off">
+                                    <input type="hidden" id="${hiddenId}" value="${idCuentaVal}">
+                                    <div class="list-group sugerencias-flotantes" id="${sugId}" style="display: none;"></div>
+                                </td>
+                                <td class="text-center">
+                                    <button type="button" class="btn btn-link text-danger p-0 border-0" onclick="ASIENTOPROG_eliminarAlVuelo(item.id_asiento_tipo, '${inputId}', '${hiddenId}', item.tipo_referencia || '', item.id_referencia || 0)" title="Limpiar Cuenta">
+                                        <i class="bi bi-trash fs-5"></i>
+                                    </button>
+                                </td>
+                            `;
+                            tbody.appendChild(tr);
+
+                            // Configurar autocompletado en caliente para este input filtrando por tipo de cuenta
+                            ASIENTOPROG_vincularAutocomplete(item.id_asiento_tipo, inputId, hiddenId, sugId, item.tipo_cuenta || '', item.tipo_referencia || '', item.id_referencia || 0);
                         }
-
-                        const debeHaberBadge = (item.debe_haber || 'debe').toLowerCase() === 'debe'
-                            ? '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 fw-bold small">DEBE</span>'
-                            : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 fw-bold small">HABER</span>';
-
-                        const borderClass = idCuentaVal ? '' : 'is-invalid border-danger';
-
-                        tr.innerHTML = `
-                            <td class="ps-4 fw-bold text-dark">${item.concepto}</td>
-                            <td class="small text-muted">${item.detalle || 'Sin descripción detallada.'}</td>
-                            <td>${badgeHtml}</td>
-                            <td class="text-center">${debeHaberBadge}</td>
-                            <td class="autocomplete-celda">
-                                <input type="text" class="form-control form-control-sm ${borderClass}" id="${inputId}" placeholder="Escriba código o nombre..." value="${cuentaVal}" autocomplete="off">
-                                <input type="hidden" id="${hiddenId}" value="${idCuentaVal}">
-                                <div class="list-group sugerencias-flotantes" id="${sugId}" style="display: none;"></div>
-                            </td>
-                            <td class="text-center">
-                                <button type="button" class="btn btn-link text-danger p-0 border-0" onclick="ASIENTOPROG_eliminarAlVuelo(${item.id_asiento_tipo}, '${inputId}', '${hiddenId}', '${item.tipo_referencia || ''}', ${item.id_referencia || 0})" title="Limpiar Cuenta">
-                                    <i class="bi bi-trash fs-5"></i>
-                                </button>
-                            </td>
-                        `;
-                        tbody.appendChild(tr);
-
-                        // Configurar autocompletado en caliente para este input filtrando por tipo de cuenta
-                        ASIENTOPROG_vincularAutocomplete(item.id_asiento_tipo, inputId, hiddenId, sugId, item.tipo_cuenta || '', item.tipo_referencia || '', item.id_referencia || 0);
                     });
                 }
 
                 // Actualizar método preferido
                 const selectorMetodo = document.getElementById('selectorMetodoPreferencia');
                 if (selectorMetodo) {
-                    selectorMetodo.value = res.metodo || 'general';
+                    selectorMetodo.value = 'general';
+                    if (res.metodo !== 'general') {
+                        ASIENTOPROG_guardarMetodoPreferencia('general');
+                    }
                 }
 
                 // Actualizar título y mostrar panel de acordeones
@@ -194,7 +271,7 @@
      * Registra o actualiza al vuelo una regla general de cuenta contable.
      */
     window.ASIENTOPROG_guardarAlVuelo = async function (idAsientoTipo, idCuenta, inputElement, tipoReferencia = '', idReferencia = 0) {
-        if ((!idAsientoTipo && tipoReferencia !== 'iva_ventas_factura') || !idCuenta) return;
+        if ((!idAsientoTipo && tipoReferencia !== 'iva_ventas_factura' && tipoReferencia !== 'retenciones_venta' && tipoReferencia !== 'retenciones_venta_debe' && tipoReferencia !== 'retenciones_venta_haber') || !idCuenta) return;
 
         // Añadir indicador visual de carga corta
         inputElement.classList.add('is-valid');
@@ -255,7 +332,7 @@
      * Elimina al vuelo de forma dinámica una regla general de cuenta.
      */
     window.ASIENTOPROG_eliminarAlVuelo = async function (idAsientoTipo, inputId, hiddenId, tipoReferencia = '', idReferencia = 0) {
-        if (!idAsientoTipo && tipoReferencia !== 'iva_ventas_factura') return;
+        if (!idAsientoTipo && tipoReferencia !== 'iva_ventas_factura' && tipoReferencia !== 'retenciones_venta' && tipoReferencia !== 'retenciones_venta_debe' && tipoReferencia !== 'retenciones_venta_haber') return;
 
         const input = document.getElementById(inputId);
         const hidden = document.getElementById(hiddenId);

@@ -40,7 +40,22 @@
                         <div class="ms-auto" id="retv_estado_badge"></div>
                     </div>
 
-                    <div class="border-top">
+                    <!-- Pestañas -->
+                    <ul class="nav nav-tabs px-3 pt-2 bg-light border-bottom-0" id="tabsRetencion" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active py-2 small" id="retv-tab-general-btn" data-bs-toggle="tab" href="#retv-tab-general" role="tab" style="white-space:nowrap;">
+                                <i class="fa-solid fa-file-lines me-1"></i>General
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link py-2 small" id="retv-tab-asiento-btn" data-bs-toggle="tab" href="#retv-tab-asiento" role="tab" style="white-space:nowrap;">
+                                <i class="fa-solid fa-calculator me-1"></i>Asiento contable
+                            </a>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content border-top">
+                    <div class="tab-pane fade show active" id="retv-tab-general" role="tabpanel">
 
                         <!-- Datos del comprobante del cliente -->
                         <div class="px-3 py-2 bg-white border-bottom">
@@ -163,7 +178,40 @@
                             </div>
                         </div>
 
-                    </div><!-- /contenido -->
+                    </div><!-- /retv-tab-general -->
+
+                    <!-- ── TAB ASIENTO CONTABLE ───────────────── -->
+                    <div class="tab-pane fade" id="retv-tab-asiento" role="tabpanel">
+                        <div class="px-3 py-3">
+                            <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+                                <div class="table-responsive" style="max-height:350px;">
+                                    <table class="table table-sm table-detalle mb-0 text-nowrap">
+                                        <thead>
+                                            <tr class="table-light border-bottom">
+                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:14%;">Código</th>
+                                                <th class="py-2 small fw-bold text-muted">Cuenta</th>
+                                                <th class="py-2 small fw-bold text-muted text-end" style="width:16%;">Debe</th>
+                                                <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:16%;">Haber</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="retv_asiento_body">
+                                            <tr><td colspan="4" class="text-center py-4 text-muted">Guarde la retención para generar el asiento contable.</td></tr>
+                                        </tbody>
+                                        <tfoot>
+                                            <tr class="table-light border-top fw-bold">
+                                                <td colspan="2" class="text-end pe-2">Totales</td>
+                                                <td class="text-end" id="retv_asiento_total_debe">0.00</td>
+                                                <td class="text-end pe-3" id="retv_asiento_total_haber">0.00</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                                <div class="px-3 py-2 border-top bg-light small" id="retv_asiento_aviso"></div>
+                            </div>
+                        </div>
+                    </div><!-- /retv-tab-asiento -->
+
+                    </div><!-- /tab-content -->
                 </form>
             </div>
 

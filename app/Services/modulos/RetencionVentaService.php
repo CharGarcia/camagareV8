@@ -65,11 +65,19 @@ class RetencionVentaService
             $this->sincronizarCasilleros($idRetencion, $data);
 
             if ($managed) $db->commit();
-            return $idRetencion;
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();
             throw $e;
         }
+
+        // Asiento contable fuera de la transacción: un fallo aquí no revierte la retención.
+        try {
+            $this->procesarAsientoContable($idRetencion, $data);
+        } catch (\Throwable $e) {
+            error_log('[RetencionVenta] Asiento no generado: ' . $e->getMessage());
+        }
+
+        return $idRetencion;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -116,11 +124,19 @@ class RetencionVentaService
             $this->sincronizarCasilleros($id, $data);
 
             if ($managed) $db->commit();
-            return $id;
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();
             throw $e;
         }
+
+        // Asiento contable fuera de la transacción: un fallo aquí no revierte la retención.
+        try {
+            $this->procesarAsientoContable($id, $data);
+        } catch (\Throwable $e) {
+            error_log('[RetencionVenta] Asiento no generado: ' . $e->getMessage());
+        }
+
+        return $id;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -165,6 +181,96 @@ class RetencionVentaService
     {
         $data['origen'] = 'electronico';
         return $this->crear($data);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ASIENTO CONTABLE
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Asiento contable sugerido para una retención (líneas debe/haber, recalculadas). */
+    public function obtenerAsientoSugerido(int $idEmpresa, int $idRetencion): array
+    {
+        return (new AsientoBuilderService())->generarAsientoRetencionVenta($idEmpresa, $idRetencion);
+    }
+
+    /** Devuelve el asiento contable ya REGISTRADO (cabecera + detalles) por su id. */
+    public function getAsientoRegistrado(int $idAsiento, int $idEmpresa): array
+    {
+        return $this->asientoContableService()->getDetalleAsiento($idAsiento, $idEmpresa);
+    }
+
+    private function asientoContableService(): \App\Services\modulos\AsientoContableService
+    {
+        return new \App\Services\modulos\AsientoContableService(
+            new \App\repositories\modulos\AsientoContableRepository(),
+            new \App\Rules\modulos\AsientoContableRules(),
+            $this->logService
+        );
+    }
+
+    /**
+     * Genera (o regenera) y guarda el asiento contable de la retención y enlaza
+     * id_asiento_contable en la cabecera. No hace nada si el asiento queda vacío.
+     */
+    public function procesarAsientoContable(int $idRetencion, array $data): void
+    {
+        $idEmpresa = (int) $data['id_empresa'];
+        $idUsuario = (int) ($data['id_usuario'] ?? 0);
+        $fecha     = $data['fecha_emision'] ?? date('Y-m-d');
+
+        $detallesSugeridos = $this->obtenerAsientoSugerido($idEmpresa, $idRetencion);
+        if (empty($detallesSugeridos)) {
+            return;
+        }
+
+        $num = ($data['establecimiento'] ?? '') . '-' . ($data['punto_emision'] ?? '') . '-' . ($data['secuencial'] ?? '');
+
+        $detalles = [];
+        foreach ($detallesSugeridos as $det) {
+            $detalles[] = [
+                'id_cuenta_contable'   => $det['id_cuenta_contable'],
+                'debe'                 => $det['debe'],
+                'haber'                => $det['haber'],
+                'referencia_detalle'   => $det['referencia_detalle'] ?: "Retención # $num",
+                'documento_referencia' => "Retención # $num",
+                'id_entidad'           => (int) ($data['id_cliente'] ?? 0),
+                'tipo_entidad'         => 'cliente',
+            ];
+        }
+
+        $asientoService = $this->asientoContableService();
+        $asientoPrevio  = $asientoService->getAsientoPorOrigen('retencion_venta', $idRetencion, $idEmpresa);
+        $idAsiento     = $asientoPrevio ? (int) $asientoPrevio['id'] : 0;
+
+        $cabeceraData = [
+            'id'                   => $idAsiento > 0 ? $idAsiento : null,
+            'fecha_asiento'        => $fecha,
+            'tipo_comprobante'     => 'ventas',
+            'numero_comprobante'   => '',
+            'concepto'             => "Retención # $num",
+            'estado'               => 'contabilizado',
+            'modulo_origen'        => 'retencion_venta',
+            'id_referencia_origen' => $idRetencion,
+            'observaciones'        => null,
+        ];
+
+        $idAsientoGenerado = $asientoService->guardarAsiento($cabeceraData, $detalles, $idEmpresa, $idUsuario);
+        $this->repository->updateAsientoContable($idRetencion, $idAsientoGenerado);
+    }
+
+    /**
+     * Genera el asiento de una retención por sincronización masiva (estados financieros).
+     * Toma los datos desde la cabecera guardada. Propaga la excepción si no se puede generar
+     * (descuadre / cuentas faltantes) para que el sincronizador lo contabilice como pendiente.
+     */
+    public function procesarAsientoContablePorSincronizacion(int $idRetencion): void
+    {
+        $cabecera = $this->repository->getPorId($idRetencion);
+        if (!$cabecera) {
+            return;
+        }
+        $cabecera['id_usuario'] = (int) ($cabecera['updated_by'] ?? $cabecera['created_by'] ?? 0);
+        $this->procesarAsientoContable($idRetencion, $cabecera);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

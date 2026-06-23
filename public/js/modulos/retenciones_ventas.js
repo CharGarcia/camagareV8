@@ -162,6 +162,74 @@
 
     // ── MODAL — ABRIR ─────────────────────────────────────────────────────────────
 
+    /* ── Pestaña Asiento Contable ─────────────────────────────── */
+    function escHtmlRetv(s) {
+        return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    async function cargarAsientoContable(id) {
+        const tbody   = document.getElementById('retv_asiento_body');
+        const tdDebe  = document.getElementById('retv_asiento_total_debe');
+        const tdHaber = document.getElementById('retv_asiento_total_haber');
+        const aviso   = document.getElementById('retv_asiento_aviso');
+        if (!tbody) return;
+
+        const setTot = (d, h) => {
+            if (tdDebe)  tdDebe.textContent  = d.toFixed(2);
+            if (tdHaber) tdHaber.textContent = h.toFixed(2);
+        };
+
+        if (!id) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Guarde la retención para generar el asiento contable.</td></tr>';
+            setTot(0, 0);
+            if (aviso) aviso.innerHTML = '';
+            return;
+        }
+
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Cargando asiento...</td></tr>';
+        try {
+            const res  = await fetch(`${BASE}/getAsientoContableAjax?id=${id}`);
+            const resp = await res.json();
+            const dets = (resp.ok && resp.detalles) ? resp.detalles : [];
+
+            if (!dets.length) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Sin asiento. Configure las cuentas contables de retenciones en Configuración Contable.</td></tr>';
+                setTot(0, 0);
+                if (aviso) aviso.innerHTML = '';
+                return;
+            }
+
+            let totDebe = 0, totHaber = 0;
+            tbody.innerHTML = dets.map(d => {
+                const debe  = parseFloat(d.debe  || 0);
+                const haber = parseFloat(d.haber || 0);
+                totDebe += debe; totHaber += haber;
+                return `<tr>
+                    <td class="ps-3 small"><code class="text-secondary">${escHtmlRetv(d.cuenta_codigo || '')}</code></td>
+                    <td class="small">${escHtmlRetv(d.cuenta_nombre || '')}</td>
+                    <td class="small text-end">${debe  > 0 ? debe.toFixed(2)  : ''}</td>
+                    <td class="small text-end pe-3">${haber > 0 ? haber.toFixed(2) : ''}</td>
+                </tr>`;
+            }).join('');
+            setTot(totDebe, totHaber);
+
+            if (aviso) {
+                const descuadre = Math.abs(totDebe - totHaber) > 0.001;
+                if (descuadre) {
+                    aviso.innerHTML = '<span class="text-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>El asiento está descuadrado. Revise la configuración de cuentas contables de retenciones.</span>';
+                } else if (resp.registrado) {
+                    const num = resp.numero ? ` N° ${escHtmlRetv(resp.numero)}` : '';
+                    aviso.innerHTML = `<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i>Asiento registrado en contabilidad${num}.</span>`;
+                } else {
+                    aviso.innerHTML = '<span class="text-warning"><i class="fa-solid fa-circle-info me-1"></i>Asiento sugerido (configure las cuentas para registrarlo).</span>';
+                }
+            }
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">Error al cargar el asiento contable.</td></tr>';
+        }
+    }
+
     window.RETV_abrirModalNuevo = () => {
         initModal();
         retvIdActual = 0;
@@ -182,6 +250,7 @@
         window.RETV_actualizarPeriodoFiscal(hoy);
 
         calcTotales();
+        cargarAsientoContable(0);
         modalRetV && modalRetV.show();
         if (typeof window.aplicarFavoritosModal === 'function') window.aplicarFavoritosModal('#modalRetencionVenta');
     };
@@ -217,6 +286,7 @@
             if (btnXml) btnXml.classList.toggle('d-none', !retvHasXml);
 
             modalRetV && modalRetV.show();
+            cargarAsientoContable(retvIdActual);
             if (typeof window.aplicarFavoritosModal === 'function') window.aplicarFavoritosModal('#modalRetencionVenta');
         } catch (e) {
             console.error(e);

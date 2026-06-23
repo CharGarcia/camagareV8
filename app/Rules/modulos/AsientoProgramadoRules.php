@@ -18,7 +18,7 @@ class AsientoProgramadoRules
         $idAsientoTipo = (int) ($data['id_asiento_tipo'] ?? 0);
         $tipoRef = trim($data['tipo_referencia'] ?? '');
         
-        if ($idAsientoTipo <= 0 && $tipoRef !== 'iva_ventas_factura') {
+        if ($idAsientoTipo <= 0 && $tipoRef !== 'iva_ventas_factura' && $tipoRef !== 'retenciones_venta_debe' && $tipoRef !== 'retenciones_venta_haber') {
             $errores[] = 'El tipo de asiento base es obligatorio.';
         }
 
@@ -34,7 +34,7 @@ class AsientoProgramadoRules
             $allowedTypes = [
                 'cliente', 'proveedor', 'empleado', 'asientos tipo', 'producto', 'categoria', 'marca', 'iva', 'iva_ventas_factura',
                 'ventas_factura', 'ventas_recibo', 'adquisiciones_compras', 'retenciones_venta', 'retenciones_compra',
-                'ingresos_egresos', 'cobros_pagos', 'nomina'
+                'ingresos_egresos', 'cobros_pagos', 'nomina', 'retenciones_venta_debe', 'retenciones_venta_haber'
             ];
             if (!in_array($tipoRef, $allowedTypes, true)) {
                 $errores[] = 'El tipo de referencia de entidad no es válido.';

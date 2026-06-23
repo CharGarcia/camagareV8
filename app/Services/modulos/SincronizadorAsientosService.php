@@ -21,6 +21,7 @@ class SincronizadorAsientosService
             $db->exec("ALTER TABLE liquidaciones_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
             $db->exec("ALTER TABLE notas_credito_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
             $db->exec("ALTER TABLE nota_debito_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
+            $db->exec("ALTER TABLE retencion_venta_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
         } catch (\Throwable $e) {
             // Ignorar errores si no tiene permisos o ya existen
         }
@@ -79,6 +80,21 @@ class SincronizadorAsientosService
                 );
             },
             'Notas de Crédito'
+        );
+
+        // 5. Retenciones en Ventas (no se autorizan en SRI: solo se filtra por asiento faltante)
+        $this->sincronizarModulo(
+            $db,
+            "SELECT id FROM retencion_venta_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL",
+            [$idEmpresa],
+            function() {
+                return new \App\Services\modulos\RetencionVentaService(
+                    new \App\repositories\modulos\RetencionVentaRepository(),
+                    new \App\Rules\modulos\RetencionVentaRules(),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'Retenciones en Ventas'
         );
     }
 

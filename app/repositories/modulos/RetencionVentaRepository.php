@@ -317,6 +317,16 @@ class RetencionVentaRepository extends BaseRepository
         return $st->rowCount() > 0;
     }
 
+    // ── Enlazar el asiento contable generado ─────────────────────
+
+    public function updateAsientoContable(int $id, int $idAsiento): void
+    {
+        $st = $this->db->prepare(
+            "UPDATE retencion_venta_cabecera SET id_asiento_contable = :ia, updated_at = CURRENT_TIMESTAMP WHERE id = :id"
+        );
+        $st->execute([':ia' => $idAsiento, ':id' => $id]);
+    }
+
     // ── Verificar si ya existe por clave de acceso ───────────────
 
     public function existeClaveAcceso(string $clave, int $idEmpresa, ?int $excluirId = null): bool

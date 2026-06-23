@@ -271,12 +271,16 @@ class ConfiguracionContableController extends BaseModuloController
         }
 
         try {
-            $reglas = $this->repository->getReglasGeneralesPorConcepto($idEmpresa, $tipoAsiento);
-            
-            // Aumentar reglas específicas para las tarifas de IVA si estamos en ventas_factura
-            if ($tipoAsiento === 'ventas_factura') {
-                $reglasIva = $this->repository->getReglasIvaVentas($idEmpresa);
-                $reglas = array_merge($reglas, $reglasIva);
+            if ($tipoAsiento === 'retenciones_venta') {
+                $reglas = $this->repository->getReglasRetencionesVenta($idEmpresa);
+            } else {
+                $reglas = $this->repository->getReglasGeneralesPorConcepto($idEmpresa, $tipoAsiento);
+                
+                // Aumentar reglas específicas para las tarifas de IVA si estamos en ventas_factura
+                if ($tipoAsiento === 'ventas_factura') {
+                    $reglasIva = $this->repository->getReglasIvaVentas($idEmpresa);
+                    $reglas = array_merge($reglas, $reglasIva);
+                }
             }
 
             $metodo = $this->repository->getMetodoPreferencia($idEmpresa, $tipoAsiento);
@@ -339,6 +343,39 @@ class ConfiguracionContableController extends BaseModuloController
                     $idProgramado = $this->service->registrar($dataInsert, $idEmpresa, $idUsuario);
                     $msg = 'Configuración contable registrada correctamente.';
                 }
+            } elseif ($tipoReferencia === 'retenciones_venta_debe' || $tipoReferencia === 'retenciones_venta_haber') {
+                if ($idReferencia <= 0) {
+                    echo json_encode(['ok' => false, 'error' => 'ID de referencia de retención SRI inválido.']);
+                    exit;
+                }
+                // Verificar si ya existe una regla para esta retención en venta (según tipo Debe o Haber)
+                $db = Database::getConnection();
+                $stCheck = $db->prepare("SELECT id FROM asientos_programados 
+                                         WHERE id_empresa = ? AND id_referencia = ? AND tipo_referencia = ? AND eliminado = false");
+                $stCheck->execute([$idEmpresa, $idReferencia, $tipoReferencia]);
+                $idProgramado = $stCheck->fetchColumn();
+
+                if ($idProgramado) {
+                    $dataUpdate = [
+                        'id_asiento_tipo' => 0,
+                        'id_cuenta'       => $idCuenta,
+                        'id_referencia'   => $idReferencia,
+                        'tipo_referencia' => $tipoReferencia,
+                        'updated_by'      => $idUsuario
+                    ];
+                    $this->service->actualizar((int)$idProgramado, $dataUpdate, $idEmpresa, $idUsuario);
+                    $idProgramado = (int)$idProgramado;
+                    $msg = 'Configuración contable de retención actualizada.';
+                } else {
+                    $dataInsert = [
+                        'id_asiento_tipo' => 0,
+                        'id_cuenta'       => $idCuenta,
+                        'id_referencia'   => $idReferencia,
+                        'tipo_referencia' => $tipoReferencia
+                    ];
+                    $idProgramado = $this->service->registrar($dataInsert, $idEmpresa, $idUsuario);
+                    $msg = 'Configuración contable de retención registrada.';
+                }
             } else {
                 if ($idAsientoTipo <= 0) {
                     echo json_encode(['ok' => false, 'error' => 'Parámetros incompletos o cuenta contable inválida.']);
@@ -396,6 +433,12 @@ class ConfiguracionContableController extends BaseModuloController
         try {
             if ($tipoReferencia === 'iva_ventas_factura') {
                 $reglaExistente = $this->repository->getReglaGeneralIva($idEmpresa, $idReferencia);
+            } elseif ($tipoReferencia === 'retenciones_venta_debe' || $tipoReferencia === 'retenciones_venta_haber') {
+                $db = Database::getConnection();
+                $stCheck = $db->prepare("SELECT id FROM asientos_programados 
+                                         WHERE id_empresa = ? AND id_referencia = ? AND tipo_referencia = ? AND eliminado = false LIMIT 1");
+                $stCheck->execute([$idEmpresa, $idReferencia, $tipoReferencia]);
+                $reglaExistente = $stCheck->fetch(PDO::FETCH_ASSOC) ?: null;
             } else {
                 if ($idAsientoTipo <= 0) {
                     echo json_encode(['ok' => false, 'error' => 'Parámetro de regla inválido.']);

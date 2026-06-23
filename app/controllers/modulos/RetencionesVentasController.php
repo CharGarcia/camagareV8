@@ -182,6 +182,76 @@ class RetencionesVentasController extends BaseModuloController
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // AJAX — asiento contable de la retención (pestaña Asiento Contable)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function getAsientoContableAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $id        = (int) ($_GET['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+
+            if (!$id) {
+                echo json_encode(['ok' => false, 'mensaje' => 'ID requerido']);
+                exit;
+            }
+
+            $cabecera = $this->repository->getPorId($id, $idEmpresa);
+            if (!$cabecera) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Retención no encontrada']);
+                exit;
+            }
+
+            $idAsiento = (int) ($cabecera['id_asiento_contable'] ?? 0);
+            $asiento   = $idAsiento > 0 ? $this->service->getAsientoRegistrado($idAsiento, $idEmpresa) : [];
+
+            // Si no hay asiento vigente (no existe o está anulado), generarlo y enlazarlo ahora.
+            if (empty($asiento) || ($asiento['estado'] ?? '') === 'anulado') {
+                try {
+                    $dataAsiento = $cabecera;
+                    $dataAsiento['id_usuario'] = (int) $_SESSION['id_usuario'];
+                    $this->service->procesarAsientoContable($id, $dataAsiento);
+
+                    $cabecera  = $this->repository->getPorId($id, $idEmpresa);
+                    $idAsiento = (int) ($cabecera['id_asiento_contable'] ?? 0);
+                    $asiento   = $idAsiento > 0 ? $this->service->getAsientoRegistrado($idAsiento, $idEmpresa) : [];
+                } catch (\Throwable $e) {
+                    error_log('[RetencionVenta] Asiento no generado al consultar: ' . $e->getMessage());
+                }
+            }
+
+            // Mostrar el asiento REGISTRADO (relación por id_asiento_contable).
+            if (!empty($asiento)) {
+                $detalles = array_map(static fn($d) => [
+                    'cuenta_codigo' => $d['codigo_cuenta'] ?? '',
+                    'cuenta_nombre' => $d['nombre_cuenta'] ?? '',
+                    'debe'          => (float) ($d['debe'] ?? 0),
+                    'haber'         => (float) ($d['haber'] ?? 0),
+                ], $asiento['detalles'] ?? []);
+
+                echo json_encode([
+                    'ok'         => true,
+                    'registrado' => true,
+                    'numero'     => $asiento['numero_comprobante'] ?? '',
+                    'estado'     => $asiento['estado'] ?? '',
+                    'detalles'   => $detalles,
+                ]);
+                exit;
+            }
+
+            // No se pudo registrar (faltan cuentas / descuadre): mostrar el sugerido como referencia.
+            $detalles = $this->service->obtenerAsientoSugerido($idEmpresa, $id);
+            echo json_encode(['ok' => true, 'registrado' => false, 'detalles' => $detalles]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // AJAX — descargar XML de la retención
     // ─────────────────────────────────────────────────────────────────────────
 

@@ -197,6 +197,24 @@ class AsientoContableService
                 );
             }
 
+            // Si el asiento pertenece a una retención en ventas, desvincular su id_asiento_contable
+            if (
+                ($asiento['modulo_origen'] ?? '') === 'retencion_venta' &&
+                !empty($asiento['id_referencia_origen'])
+            ) {
+                $this->repository->desvincularAsientoRetencionVenta((int)$asiento['id_referencia_origen']);
+
+                $this->logService->registrar(
+                    idUsuario: $idUsuario,
+                    idEmpresa: $idEmpresa,
+                    accion: 'Desvincular Asiento de Retención Venta',
+                    tabla: 'retencion_venta_cabecera',
+                    idRegistro: (int)$asiento['id_referencia_origen'],
+                    antes: ['id_asiento_contable' => $idAsiento],
+                    despues: ['id_asiento_contable' => null]
+                );
+            }
+
             $this->logService->registrar(
                 idUsuario: $idUsuario,
                 idEmpresa: $idEmpresa,

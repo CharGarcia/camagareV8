@@ -426,4 +426,90 @@ class AsientoBuilderService
 
         return $detalles;
     }
+
+    /**
+     * Arma el asiento contable de una retención recibida en ventas.
+     *   DEBE : cuenta configurada por cada código de retención (retenciones_venta_debe),
+     *          por el valor retenido de ese código.
+     *   HABER: cuenta por cobrar (asientos_tipo.codigo = 'PORCOBRARFACTURAVENTA'),
+     *          por el total retenido.
+     *
+     * Devuelve [] si no hay valores. Las líneas sin cuenta configurada se omiten
+     * (el asiento quedará descuadrado y se avisará al usuario, igual que en facturas).
+     */
+    public function generarAsientoRetencionVenta(int $idEmpresa, int $idRetencion): array
+    {
+        $db = \App\core\Database::getConnection();
+
+        // 1. DEBE: por código de retención → cuenta configurada + valor retenido
+        $sqlDebe = "SELECT d.codigo_retencion,
+                           SUM(d.valor_retenido) AS total,
+                           ap.id_cuenta,
+                           pc.codigo AS cuenta_codigo,
+                           pc.nombre AS cuenta_nombre
+                    FROM retencion_venta_detalle d
+                    LEFT JOIN LATERAL (
+                        SELECT rs.id FROM retenciones_sri rs
+                        WHERE rs.codigo_ret = d.codigo_retencion
+                        ORDER BY rs.id DESC LIMIT 1
+                    ) rsx ON true
+                    LEFT JOIN asientos_programados ap
+                           ON ap.id_referencia = rsx.id
+                          AND (ap.tipo_referencia = 'retenciones_venta_debe' OR ap.tipo_referencia = 'retenciones_venta')
+                          AND ap.id_empresa = :emp
+                          AND ap.eliminado = false
+                    LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                    WHERE d.id_retencion = :id
+                    GROUP BY d.codigo_retencion, ap.id_cuenta, pc.codigo, pc.nombre";
+        $st = $db->prepare($sqlDebe);
+        $st->execute([':emp' => $idEmpresa, ':id' => $idRetencion]);
+
+        $detalles      = [];
+        $totalRetenido = 0.0;
+        while ($l = $st->fetch(\PDO::FETCH_ASSOC)) {
+            $valor = round((float) $l['total'], 2);
+            if ($valor <= 0) continue;
+            $totalRetenido += $valor;
+            if (empty($l['id_cuenta'])) continue; // sin cuenta configurada para ese código
+            $detalles[] = [
+                'id_cuenta_contable' => (int) $l['id_cuenta'],
+                'cuenta_codigo'      => $l['cuenta_codigo'],
+                'cuenta_nombre'      => $l['cuenta_nombre'],
+                'debe'               => $valor,
+                'haber'              => 0.0,
+                'referencia_detalle' => 'Retención ' . $l['codigo_retencion'],
+            ];
+        }
+        $totalRetenido = round($totalRetenido, 2);
+
+        if ($totalRetenido <= 0) {
+            return [];
+        }
+
+        // 2. HABER: contrapartida en cuentas por cobrar
+        $sqlHaber = "SELECT ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                     FROM asientos_programados ap
+                     INNER JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                     INNER JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                     WHERE ap.id_empresa = :emp
+                       AND at.codigo = 'PORCOBRARFACTURAVENTA'
+                       AND ap.eliminado = false
+                     LIMIT 1";
+        $stH = $db->prepare($sqlHaber);
+        $stH->execute([':emp' => $idEmpresa]);
+        $haber = $stH->fetch(\PDO::FETCH_ASSOC);
+
+        if ($haber && !empty($haber['id_cuenta'])) {
+            $detalles[] = [
+                'id_cuenta_contable' => (int) $haber['id_cuenta'],
+                'cuenta_codigo'      => $haber['cuenta_codigo'],
+                'cuenta_nombre'      => $haber['cuenta_nombre'],
+                'debe'               => 0.0,
+                'haber'              => $totalRetenido,
+                'referencia_detalle' => 'Cuentas por cobrar (retención)',
+            ];
+        }
+
+        return $detalles;
+    }
 }

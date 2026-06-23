@@ -392,4 +392,117 @@ class AsientoProgramadoRepository extends BaseRepository
         ]);
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
     }
+
+    /**
+     * Obtiene el listado de retenciones SRI aplicadas en ventas que le hayan hecho a la empresa,
+     * cruzando con su homóloga programada en asientos_programados (Debe) y con la cuenta de cobrar facturas
+     * de venta (Haber - PORCOBRARFACTURAVENTA).
+     */
+    public function getReglasRetencionesVenta(int $idEmpresa): array
+    {
+        // 1. Obtener la cuenta de cuentas por cobrar para ventas (PORCOBRARFACTURAVENTA)
+        $sqlHaber = "SELECT ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                     FROM asientos_programados ap
+                     INNER JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                     INNER JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                     WHERE ap.id_empresa = :id_empresa 
+                       AND at.codigo = 'PORCOBRARFACTURAVENTA'
+                       AND ap.eliminado = false
+                       AND (ap.tipo_referencia = 'asientos tipo' OR ap.tipo_referencia = 'ventas_factura' OR ap.tipo_referencia = at.tipo_asiento)
+                     LIMIT 1";
+        $stHaber = $this->db->prepare($sqlHaber);
+        $stHaber->execute([':id_empresa' => $idEmpresa]);
+        $haberDefecto = $stHaber->fetch(PDO::FETCH_ASSOC) ?: [
+            'id_cuenta' => null,
+            'cuenta_codigo' => '',
+            'cuenta_nombre' => 'No Configurada'
+        ];
+
+        // 2. Obtener los conceptos de retenciones sri que han sido usados en retenciones en venta de esta empresa en su ambiente actual (únicos por código de retención)
+        $sqlConceptos = "SELECT DISTINCT ON (rs.codigo_ret) rs.id, rs.codigo_ret, rs.concepto_ret, rs.impuesto_ret
+                         FROM retencion_venta_detalle d
+                         INNER JOIN retencion_venta_cabecera c ON c.id = d.id_retencion
+                         INNER JOIN retenciones_sri rs ON rs.codigo_ret = d.codigo_retencion
+                         WHERE c.id_empresa = :id_empresa 
+                           AND c.eliminado = false
+                           AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                         ORDER BY rs.codigo_ret ASC, rs.id DESC";
+        $stConceptos = $this->db->prepare($sqlConceptos);
+        $stConceptos->execute([':id_empresa' => $idEmpresa]);
+        $conceptos = $stConceptos->fetchAll(PDO::FETCH_ASSOC);
+
+        $reglas = [];
+        foreach ($conceptos as $c) {
+            // Buscar la cuenta Debe configurada en asientos_programados para esta retención
+            // Buscamos 'retenciones_venta_debe' o 'retenciones_venta' (por retrocompatibilidad)
+            $sqlDebe = "SELECT ap.id AS id_programado, ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                        FROM asientos_programados ap
+                        INNER JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                        WHERE ap.id_empresa = :id_empresa
+                          AND (ap.tipo_referencia = 'retenciones_venta_debe' OR ap.tipo_referencia = 'retenciones_venta')
+                          AND ap.id_referencia = :id_referencia
+                          AND ap.eliminado = false
+                        ORDER BY ap.tipo_referencia DESC, ap.id DESC LIMIT 1";
+            $stDebe = $this->db->prepare($sqlDebe);
+            $stDebe->execute([
+                ':id_empresa' => $idEmpresa,
+                ':id_referencia' => $c['id']
+            ]);
+            $debeRow = $stDebe->fetch(PDO::FETCH_ASSOC) ?: [
+                'id_programado' => null,
+                'id_cuenta' => null,
+                'cuenta_codigo' => '',
+                'cuenta_nombre' => ''
+            ];
+
+            // Buscar la cuenta Haber configurada específicamente para esta retención
+            $sqlHaberEsp = "SELECT ap.id AS id_programado, ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                            FROM asientos_programados ap
+                            INNER JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                            WHERE ap.id_empresa = :id_empresa
+                              AND ap.tipo_referencia = 'retenciones_venta_haber'
+                              AND ap.id_referencia = :id_referencia
+                              AND ap.eliminado = false
+                            LIMIT 1";
+            $stHaberEsp = $this->db->prepare($sqlHaberEsp);
+            $stHaberEsp->execute([
+                ':id_empresa' => $idEmpresa,
+                ':id_referencia' => $c['id']
+            ]);
+            $haberEspRow = $stHaberEsp->fetch(PDO::FETCH_ASSOC);
+
+            // Si hay cuenta Haber específica guardada, la usamos; si no, usamos la de autocompletado por defecto
+            $haberId = $haberEspRow ? $haberEspRow['id_cuenta'] : $haberDefecto['id_cuenta'];
+            $haberCodigo = $haberEspRow ? $haberEspRow['cuenta_codigo'] : $haberDefecto['cuenta_codigo'];
+            $haberNombre = $haberEspRow ? $haberEspRow['cuenta_nombre'] : $haberDefecto['cuenta_nombre'];
+            $haberProgramadoId = $haberEspRow ? $haberEspRow['id_programado'] : null;
+
+            $reglas[] = [
+                'id_asiento_tipo'   => 0,
+                'tipo_asiento'      => 'retenciones_venta',
+                'concepto'          => $c['concepto_ret'],
+                'detalle'           => $c['codigo_ret'] . ' - ' . $c['impuesto_ret'],
+                'codigo'            => $c['codigo_ret'],
+                'tipo_cuenta'       => 'activo',
+                'debe_haber'        => 'debe',
+                
+                // Datos del Debe
+                'id_programado'     => $debeRow['id_programado'],
+                'id_cuenta'         => $debeRow['id_cuenta'],
+                'cuenta_codigo'     => $debeRow['cuenta_codigo'],
+                'cuenta_nombre'     => $debeRow['cuenta_nombre'],
+                'id_referencia'     => $c['id'],
+                'tipo_referencia'   => 'retenciones_venta_debe',
+                
+                // Datos del Haber
+                'haber_id_programado'=> $haberProgramadoId,
+                'haber_id_cuenta'   => $haberId,
+                'haber_cuenta_codigo'=> $haberCodigo,
+                'haber_cuenta_nombre'=> $haberNombre,
+                'haber_is_custom'    => $haberEspRow ? true : false
+            ];
+        }
+
+        return $reglas;
+    }
 }
