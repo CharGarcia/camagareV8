@@ -19,10 +19,11 @@ class CuentasPorPagarRepository extends BaseRepository
     // ─────────────────────────────────────────────────────────────────────
 
     /**
-     * CTE que acumula lo pagado desde egresos_detalle por tipo+documento.
+     * CTE que acumula lo pagado desde egresos_detalle hasta una fecha de corte opcional.
      */
-    private function getCtePagado(): string
+    private function getCtePagado(?string $fechaHasta = null): string
     {
+        $filtroFecha = $fechaHasta ? "AND ec.fecha_emision <= :pagado_hasta" : '';
         return "
             SELECT ed.tipo_documento,
                    ed.id_referencia_documento AS id_doc,
@@ -33,16 +34,17 @@ class CuentasPorPagarRepository extends BaseRepository
               AND ec.estado    != 'anulado'
               AND ec.eliminado  = false
               AND ed.eliminado  = false
+              {$filtroFecha}
             GROUP BY ed.tipo_documento, ed.id_referencia_documento
         ";
     }
 
     /**
-     * CTE que suma NC (tipo '04') y ND (tipo '05') de compras_cabecera
-     * agrupadas por empresa + proveedor + documento_modificado.
+     * CTE que suma NC/ND de compras_cabecera hasta una fecha de corte opcional.
      */
-    private function getCteNcNd(): string
+    private function getCteNcNd(?string $fechaHasta = null): string
     {
+        $filtroFecha = $fechaHasta ? "AND nc.fecha_emision <= :nc_nd_hasta" : '';
         return "
             SELECT nc.id_empresa,
                    nc.id_proveedor,
@@ -52,15 +54,17 @@ class CuentasPorPagarRepository extends BaseRepository
             FROM compras_cabecera nc
             WHERE nc.tipo_comprobante IN ('04','05')
               AND nc.eliminado = false
+              {$filtroFecha}
             GROUP BY nc.id_empresa, nc.id_proveedor, nc.documento_modificado
         ";
     }
 
     /**
-     * CTE que suma retenciones autorizadas por compra y por liquidación.
+     * CTE que suma retenciones autorizadas hasta una fecha de corte opcional.
      */
-    private function getCteRetenciones(): string
+    private function getCteRetenciones(?string $fechaHasta = null): string
     {
+        $filtroFecha = $fechaHasta ? "AND r.fecha_emision <= :ret_hasta" : '';
         return "
             SELECT r.id_compra,
                    r.id_liquidacion,
@@ -68,8 +72,23 @@ class CuentasPorPagarRepository extends BaseRepository
             FROM retencion_compra_cabecera r
             WHERE r.eliminado = false
               AND UPPER(r.estado) NOT IN ('ANULADO','BORRADOR','PENDIENTE')
+              {$filtroFecha}
             GROUP BY r.id_compra, r.id_liquidacion
         ";
+    }
+
+    /**
+     * Agrega los parámetros de fecha de corte para los tres CTEs y devuelve la fecha.
+     */
+    private function aplicarFechaCorteCtEs(array $filtros, array &$params): ?string
+    {
+        $fechaHasta = $filtros['fecha_hasta'] ?? null;
+        if ($fechaHasta) {
+            $params[':pagado_hasta'] = $fechaHasta;
+            $params[':nc_nd_hasta']  = $fechaHasta;
+            $params[':ret_hasta']    = $fechaHasta;
+        }
+        return $fechaHasta ?: null;
     }
 
     /**
@@ -125,15 +144,16 @@ class CuentasPorPagarRepository extends BaseRepository
     public function getListado(int $idEmpresa, array $filtros): array
     {
         [$whereExtra, $params] = $this->buildWhereExtra($idEmpresa, $filtros);
+        $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
         $fvcExpr = $this->exprFechaVencCompra('c');
         $fvlExpr = $this->exprFechaVencLiquid('l');
 
         $sql = "
             WITH
-            pagado AS (" . $this->getCtePagado() . "),
-            nc_nd  AS (" . $this->getCteNcNd() . "),
-            ret    AS (" . $this->getCteRetenciones() . "),
+            pagado AS (" . $this->getCtePagado($fh) . "),
+            nc_nd  AS (" . $this->getCteNcNd($fh) . "),
+            ret    AS (" . $this->getCteRetenciones($fh) . "),
             docs   AS (
                 -- ── FACTURAS DE COMPRA ────────────────────────────────────
                 SELECT
@@ -232,15 +252,16 @@ class CuentasPorPagarRepository extends BaseRepository
     {
         $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
         [$whereExtra, $params] = $this->buildWhereExtra($idEmpresa, $filtrosSinEstado);
+        $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
         $fvcExpr = $this->exprFechaVencCompra('c');
         $fvlExpr = $this->exprFechaVencLiquid('l');
 
         $sql = "
             WITH
-            pagado AS (" . $this->getCtePagado() . "),
-            nc_nd  AS (" . $this->getCteNcNd() . "),
-            ret    AS (" . $this->getCteRetenciones() . "),
+            pagado AS (" . $this->getCtePagado($fh) . "),
+            nc_nd  AS (" . $this->getCteNcNd($fh) . "),
+            ret    AS (" . $this->getCteRetenciones($fh) . "),
             docs   AS (
                 SELECT c.id_proveedor,
                        'COMPRA'::text                                              AS tipo_fuente,
@@ -308,15 +329,16 @@ class CuentasPorPagarRepository extends BaseRepository
     {
         $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
         [$whereExtra, $params] = $this->buildWhereExtra($idEmpresa, $filtrosSinEstado);
+        $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
         $fvcExpr = $this->exprFechaVencCompra('c');
         $fvlExpr = $this->exprFechaVencLiquid('l');
 
         $sql = "
             WITH
-            pagado AS (" . $this->getCtePagado() . "),
-            nc_nd  AS (" . $this->getCteNcNd() . "),
-            ret    AS (" . $this->getCteRetenciones() . "),
+            pagado AS (" . $this->getCtePagado($fh) . "),
+            nc_nd  AS (" . $this->getCteNcNd($fh) . "),
+            ret    AS (" . $this->getCteRetenciones($fh) . "),
             docs   AS (
                 SELECT c.id_proveedor,
                        'COMPRA'::text                                              AS tipo_fuente,
