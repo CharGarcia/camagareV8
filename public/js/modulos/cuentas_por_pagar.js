@@ -294,7 +294,7 @@ async function CXP_abrirModalPago(idDoc, tipoFuente) {
     try {
         const resp = await fetch(`${BASE_URL}/${RUTA_MODULO_CXP}/getDocumentoParaPagoInfoAjax?id_doc=${idDoc}&tipo_fuente=${tipoFuente}`);
         const data = await resp.json();
-        if (!data.success) { alert(data.message || 'Error al cargar el documento.'); return; }
+        if (!data.ok) { alert(data.error || 'Error al cargar el documento.'); return; }
         d = data.doc;
     } catch(e) {
         // Fallback a datos del listado si falla la conexión

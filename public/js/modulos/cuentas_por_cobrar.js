@@ -252,7 +252,7 @@ async function CXC_abrirModalCobro(idVenta) {
     try {
         const resp = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/getFacturaParaCobroInfoAjax?id_venta=${idVenta}`);
         const data = await resp.json();
-        if (!data.success) { alert(data.message || 'Error al cargar la factura.'); return; }
+        if (!data.ok) { alert(data.error || 'Error al cargar la factura.'); return; }
         f = data.factura;
     } catch(e) {
         // Fallback a datos del listado si falla la conexión
