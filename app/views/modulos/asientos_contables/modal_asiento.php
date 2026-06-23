@@ -1,6 +1,6 @@
 <!-- Modal Asiento Contable -->
 <div class="modal fade" id="modalAsientoContable" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-centered" style="max-width: 1400px; width: 95%;">
         <div class="modal-content border-0 shadow-lg">
             <form id="formAsientoContable" onsubmit="event.preventDefault(); window.ASIENTO_guardar();">
                 <div class="modal-header bg-light border-bottom px-4 py-3">
@@ -44,8 +44,8 @@
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <h6 class="fw-bold mb-0">Detalles del Asiento</h6>
                     </div>
-                    <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-                        <div class="table-responsive" style="max-height: 400px; overflow-y:auto;">
+                    <div class="border rounded-3 bg-white shadow-sm">
+                        <div class="table-responsive" style="overflow: visible !important;">
                             <table class="table table-sm table-bordered mb-0 align-middle" id="tablaAsientoDetalles">
                             <thead class="table-light sticky-top">
                                 <tr>
@@ -107,6 +107,6 @@
     <div class="position-relative">
         <input type="text" class="form-control form-control-sm cuenta-search" placeholder="Buscar por código o nombre..." autocomplete="off">
         <input type="hidden" class="cuenta-id">
-        <div class="list-group position-absolute w-100 shadow cuenta-results" style="z-index: 1050; max-height: 200px; overflow-y: auto; display: none;"></div>
+        <div class="list-group position-absolute shadow cuenta-results" style="z-index: 1050; max-height: 250px; min-width: 450px; max-width: 600px; width: max-content; overflow-y: auto; display: none;"></div>
     </div>
 </template>

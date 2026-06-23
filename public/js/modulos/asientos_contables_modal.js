@@ -181,7 +181,7 @@
                 <div class="position-relative">
                     <input type="text" class="form-control form-control-sm cuenta-search" placeholder="Buscar cuenta..." value="${codigoNombre}" autocomplete="off" required>
                     <input type="hidden" class="cuenta-id" value="${idCuenta}">
-                    <div class="list-group position-absolute w-100 shadow cuenta-results" style="z-index: 1050; max-height: 200px; overflow-y: auto; display: none;"></div>
+                    <div class="list-group position-absolute shadow cuenta-results" style="z-index: 1050; max-height: 250px; min-width: 450px; max-width: 600px; width: max-content; overflow-y: auto; display: none;"></div>
                 </div>
             </td>
             <td>

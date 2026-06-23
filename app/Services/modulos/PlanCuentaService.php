@@ -242,10 +242,21 @@ class PlanCuentaService
     }
     public function cargarModelo(int $idEmpresa, int $idUsuario, bool $configurarAsientos): array
     {
-        $cuentasExistentes = $this->repository->getListado($idEmpresa, '', 1, 9999, 'id', 'asc');
-        $mapaExistentes = [];
-        foreach ($cuentasExistentes['rows'] as $row) {
-            $mapaExistentes[$row['codigo']] = $row['id'];
+        $db = \App\core\Database::getConnection();
+        
+        // Obtener todas las cuentas (tanto activas como eliminadas lógicamente) para la empresa
+        $stmtAll = $db->prepare("SELECT id, codigo, eliminado, nombre FROM plan_cuentas WHERE id_empresa = ?");
+        $stmtAll->execute([$idEmpresa]);
+        $todasCuentas = $stmtAll->fetchAll(\PDO::FETCH_ASSOC);
+
+        $mapaExistentes = []; // Guardará ID de cuentas activas
+        $mapaEliminadas = [];  // Guardará datos de cuentas eliminadas
+        foreach ($todasCuentas as $row) {
+            if ((bool)$row['eliminado']) {
+                $mapaEliminadas[$row['codigo']] = $row;
+            } else {
+                $mapaExistentes[$row['codigo']] = $row['id'];
+            }
         }
 
         $cuentas = self::getCuentasModeloArray();
@@ -263,10 +274,17 @@ class PlanCuentaService
                 $ecpSub = $nivel === 5 ? ($c['supercias_ecp_subcodigo'] ?? null) : null;
 
                 $id = null;
-                $db = \App\core\Database::getConnection();
 
                 if (isset($mapaExistentes[$c['codigo']])) {
                     $id = $mapaExistentes[$c['codigo']];
+                    // Si ya existe activa: solo actualizamos referencias técnicas, NUNCA sobreescribimos el nombre
+                    $stmtUpd = $db->prepare("UPDATE plan_cuentas SET codigo_sri = ?, supercias_esf = ?, supercias_eri = ?, supercias_ecp_codigo = ?, supercias_ecp_subcodigo = ? WHERE id = ?");
+                    $stmtUpd->execute([$sriVal, $esfVal, $eriVal, $ecpCod, $ecpSub, $id]);
+                } elseif (isset($mapaEliminadas[$c['codigo']])) {
+                    // Si existe pero está eliminada lógicamente: la restauramos y actualizamos
+                    $id = $mapaEliminadas[$c['codigo']]['id'];
+                    $stmtRestore = $db->prepare("UPDATE plan_cuentas SET eliminado = false, nombre = ?, codigo_sri = ?, supercias_esf = ?, supercias_eri = ?, supercias_ecp_codigo = ?, supercias_ecp_subcodigo = ? WHERE id = ?");
+                    $stmtRestore->execute([$c['nombre'], $sriVal, $esfVal, $eriVal, $ecpCod, $ecpSub, $id]);
                 } elseif ($nivel === 5) {
                     // Buscar versión antigua de dos dígitos (ej. 1.1.1.01.01 para 1.1.1.01.001)
                     $partes = explode('.', $c['codigo']);
@@ -277,30 +295,18 @@ class PlanCuentaService
                             $id = $mapaExistentes[$codigoViejo];
                             // Actualizar el código antiguo al nuevo en la BD
                             $db->prepare("UPDATE plan_cuentas SET codigo = ? WHERE id = ?")->execute([$c['codigo'], $id]);
-                            // Actualizar mapa en memoria
+                            // Solo actualizar referencias técnicas en la cuenta migrada, preservando su nombre
+                            $stmtUpd = $db->prepare("UPDATE plan_cuentas SET codigo_sri = ?, supercias_esf = ?, supercias_eri = ?, supercias_ecp_codigo = ?, supercias_ecp_subcodigo = ? WHERE id = ?");
+                            $stmtUpd->execute([$sriVal, $esfVal, $eriVal, $ecpCod, $ecpSub, $id]);
+                            
                             $mapaExistentes[$c['codigo']] = $id;
                             unset($mapaExistentes[$codigoViejo]);
                         }
                     }
                 }
 
-                if ($id !== null) {
-                    // Verificar si la cuenta ha sido usada en asientos
-                    $stCheck = $db->prepare("SELECT COUNT(*) FROM asientos_contables_detalle WHERE id_cuenta_contable = ?");
-                    $stCheck->execute([$id]);
-                    $usada = (int)$stCheck->fetchColumn() > 0;
-
-                    if ($usada) {
-                        // Solo actualizar referencias técnicas
-                        $stmtUpd = $db->prepare("UPDATE plan_cuentas SET codigo_sri = ?, supercias_esf = ?, supercias_eri = ?, supercias_ecp_codigo = ?, supercias_ecp_subcodigo = ? WHERE id = ?");
-                        $stmtUpd->execute([$sriVal, $esfVal, $eriVal, $ecpCod, $ecpSub, $id]);
-                    } else {
-                        // Actualizar también el nombre
-                        $stmtUpd = $db->prepare("UPDATE plan_cuentas SET nombre = ?, codigo_sri = ?, supercias_esf = ?, supercias_eri = ?, supercias_ecp_codigo = ?, supercias_ecp_subcodigo = ? WHERE id = ?");
-                        $stmtUpd->execute([$c['nombre'], $sriVal, $esfVal, $eriVal, $ecpCod, $ecpSub, $id]);
-                    }
-
-                } else {
+                if ($id === null) {
+                    // No existe en absoluto: la creamos nueva
                     $data = [
                         'id_empresa' => $idEmpresa,
                         'id_usuario' => $idUsuario,
