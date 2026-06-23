@@ -46,7 +46,7 @@
         convertida: 'badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25',
         anulada:    'badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25',
     };
-    const BADGE_LABELS = { borrador:'Borrador', aprobada:'Aprobada', rechazada:'Rechazada', convertida:'Convertida', anulada:'Anulada' };
+    const BADGE_LABELS = { borrador:'Borrador', aprobada:'Aprobada', rechazada:'Rechazada', convertida:'Facturada', anulada:'Anulada' };
 
     function _aplicarEstado(estado) {
         const badge = $id('pf_estadoBadge');
@@ -57,8 +57,10 @@
 
         // Barra de acciones
         const guardada      = !!$id('pf_id').value;
-        const convertible   = perm().crear && ['borrador','aprobada'].includes(estado);
-        show('pf-btn-factura',  convertible);
+        const convertible   = perm().crear && ['borrador','aprobada','convertida'].includes(estado);
+        // La factura solo se genera desde una proforma aprobada (o ya facturada, para reconvertir).
+        const facturable    = perm().crear && ['aprobada','convertida'].includes(estado);
+        show('pf-btn-factura',  facturable);
         show('pf-btn-pedido',   convertible);
         show('pf-btn-recibo',   convertible);
         show('pf-btn-duplicar', perm().crear && guardada);
@@ -111,6 +113,10 @@
         const tbodyAd = $id('pf_tbodyAdicional');
         tbodyAd.innerHTML = '';
         tbodyAd.appendChild(_crearFilaAdicional());
+
+        // Facturas asociadas (se cargan al abrir una proforma existente)
+        const tbodyFac = $id('pf_tbodyFacturas');
+        if (tbodyFac) tbodyFac.innerHTML = '<tr><td colspan="4" class="text-center text-muted small py-3">Sin facturas asociadas</td></tr>';
 
         // Badge estado
         const badge = $id('pf_estadoBadge');
@@ -735,6 +741,48 @@
     }
 
     /* ── Cargar proforma existente ───────────────────────────── */
+    /* ── Pestaña Facturas ────────────────────────────────────── */
+    function _badgeEstadoFactura(estado) {
+        const e = String(estado || '').toLowerCase();
+        const map = {
+            borrador:   'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25',
+            autorizado: 'bg-success bg-opacity-10 text-success border border-success border-opacity-25',
+            enviado:    'bg-success bg-opacity-10 text-success border border-success border-opacity-25',
+            anulado:    'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25',
+        };
+        const cls = map[e] || 'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25';
+        const label = e ? e.charAt(0).toUpperCase() + e.slice(1) : '—';
+        return `<span class="badge ${cls}">${_esc(label)}</span>`;
+    }
+
+    async function _cargarFacturas(id) {
+        const tbody = $id('pf_tbodyFacturas');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted small py-3">Cargando...</td></tr>';
+        try {
+            const data = await (await fetch(`${urlBase()}/getFacturasAjax?id=${id}`)).json();
+            const lista = (data.ok && data.facturas) ? data.facturas : [];
+            if (!lista.length) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted small py-3">Sin facturas asociadas</td></tr>';
+                return;
+            }
+            tbody.innerHTML = lista.map(f => {
+                const num   = `${f.establecimiento || ''}-${f.punto_emision || ''}-${String(f.secuencial || '').padStart(9, '0')}`;
+                const fecha = (f.fecha_emision || '').slice(0, 10).split('-').reverse().join('-');
+                const total = parseFloat(f.importe_total || 0).toFixed(2);
+                return `<tr>
+                    <td class="ps-3 small">${_esc(fecha)}</td>
+                    <td class="small"><code class="text-secondary">${_esc(num)}</code></td>
+                    <td class="small text-end">${total}</td>
+                    <td class="small text-center">${_badgeEstadoFactura(f.estado)}</td>
+                </tr>`;
+            }).join('');
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger small py-3">Error al cargar facturas</td></tr>';
+        }
+    }
+
     async function _cargarProforma(id) {
         try {
             const data = await (await fetch(`${urlBase()}/getProformaAjax?id=${id}`)).json();
@@ -802,6 +850,7 @@
             if (!tbodyAd.children.length) tbodyAd.appendChild(_crearFilaAdicional());
 
             _aplicarEstado(c.estado);
+            _cargarFacturas(id);
         } catch(e) {
             console.error(e);
             toast('Error de conexión', 'error');
@@ -916,12 +965,60 @@
         async convertirAFactura() {
             const id = $id('pf_id').value;
             if (!id) return;
+            await this._convertirEnFactura(id, false);
+        },
+
+        async _convertirEnFactura(id, forzar) {
             try {
-                const data = await (await fetch(`${urlBase()}/convertirAFacturaAjax?id=${id}`)).json();
-                if (!data.ok) { toast(data.error || 'Error', 'error'); return; }
-                sessionStorage.setItem('ventas_prefill_proforma', JSON.stringify({ id_proforma: id, ...data.data }));
-                window.open((window.BASE_URL || '') + '/modulos/factura-venta', '_blank');
-            } catch(e) { console.error(e); toast('Error de conexión', 'error'); }
+                const body = new URLSearchParams();
+                body.append('id', id);
+                if (forzar) body.append('forzar', '1');
+
+                const resp = await fetch(`${urlBase()}/convertirAFacturaAjax`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body
+                });
+                const data = await resp.json();
+
+                // La proforma ya tiene una factura asociada: confirmar antes de crear otra
+                if (data.requiere_confirmacion) {
+                    const r = await Swal.fire({
+                        icon: 'warning',
+                        title: 'Ya existe una factura',
+                        text: data.mensaje || 'Esta proforma ya tiene una factura asociada. ¿Desea continuar y crear otra?',
+                        showCancelButton: true,
+                        confirmButtonText: 'Sí, crear otra',
+                        cancelButtonText: 'Cancelar'
+                    });
+                    if (r.isConfirmed) await this._convertirEnFactura(id, true);
+                    return;
+                }
+
+                if (!data.ok) { toast(data.error || 'No se pudo crear la factura', 'error'); return; }
+
+                // Nos quedamos en el modal de proforma: la proforma queda marcada como
+                // facturada y NO se ocultan los botones (solo se actualiza el badge).
+                const badge = $id('pf_estadoBadge');
+                if (badge) {
+                    badge.className = BADGE_CLASSES.convertida;
+                    badge.textContent = BADGE_LABELS.convertida;
+                    badge.classList.remove('d-none');
+                }
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Factura generada',
+                    text: 'Se ha generado una factura de venta para que sea revisada y autorizada.',
+                    confirmButtonText: 'Aceptar'
+                });
+            } catch (e) {
+                console.error(e);
+                toast('Error de conexión', 'error');
+            }
         },
 
         crearPedido() {

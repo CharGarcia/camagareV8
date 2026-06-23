@@ -432,7 +432,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <!-- Barra de Acciones Superior -->
                     <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap">
                         <button id="m-btn-sri" type="button" class="btn btn-outline-primary btn-sm" onclick="enviarAlSri()"><i class="bi bi-cloud-arrow-up me-1"></i>Enviar al SRI</button>
-                        <button id="m-btn-duplicar" type="button" class="btn btn-outline-secondary btn-sm" onclick="duplicarFactura()"><i class="bi bi-copy me-1"></i>Duplicar</button>
+                        <button id="m-btn-duplicar" type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="duplicarFactura()" title="Duplicar"><i class="bi bi-copy"></i></button>
                         <div class="vr mx-1"></div>
                         <button id="m-btn-pdf" type="button" class="btn btn-outline-danger btn-sm px-2" onclick="exportarPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
                         <button id="m-btn-xml" type="button" class="btn btn-outline-success btn-sm px-2" onclick="exportarXml()" title="Exportar XML"><i class="bi bi-file-earmark-code"></i></button>
@@ -2799,63 +2799,145 @@ $perm = $permOriginal;
     function duplicarFactura() {
         if (!FV_ID_ACTIVO) return;
 
-        // 1. Resetear ID para que sea una nueva factura
-        FV_ID_ACTIVO = 0;
-
-        // 2. Permitir carga de secuencial para la nueva factura
-        FV_BLOQUEAR_SECUENCIAL = false;
-
-        // 3. Cambiar fecha a hoy
-        const fechaInput = document.querySelector('#formFacturaModal [name="fecha_emision"]');
-        if (fechaInput) {
-            const hoy = new Date().toISOString().split('T')[0];
-            fechaInput.value = hoy;
-        }
-
-        // 3. Cambiar título del modal para reflejar duplicación
-        const tituloEl = document.querySelector('#modalNuevaFactura .modal-title');
-        if (tituloEl) {
-            const actual = tituloEl.textContent.split(':').pop().trim();
-            tituloEl.innerHTML = `<i class="bi bi-copy me-2 text-warning"></i>Nueva factura <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 ms-2">Duplicada de ${actual}</span>`;
-        }
-
-        // 4. Cargar nuevo secuencial para el punto de emisión seleccionado
+        // Obtener el número de la factura actual antes de limpiar o resetear
+        const inputSec = document.getElementById('m-input-secuencial');
+        const secuencialActual = inputSec ? inputSec.value : '';
         const selPunto = document.getElementById('m-select-puntos');
-        if (selPunto && selPunto.value) {
-            cargarSecuencial(selPunto.value);
+        let serieActual = '';
+        if (selPunto && selPunto.selectedIndex >= 0) {
+            const opt = selPunto.options[selPunto.selectedIndex];
+            if (opt) {
+                const codEst = opt.dataset.codEst || '';
+                const codPunto = opt.dataset.codPunto || '';
+                if (codEst && codPunto) {
+                    serieActual = `${codEst}-${codPunto}-`;
+                } else {
+                    serieActual = opt.textContent.trim() + '-';
+                }
+            }
         }
+        const numeroFacturaCompleto = (serieActual + secuencialActual) || 'actual';
 
-        // 5. Ocultar botón eliminar y mostrar botón guardar
-        const _btnElim = document.getElementById('btnEliminarFacturaModal');
-        const _btnGuardar = document.getElementById('btnGuardarFacturaModal');
-        if (_btnElim) _btnElim.classList.add('d-none');
-        if (_btnGuardar) _btnGuardar.classList.remove('d-none');
+        const ejecutarDuplicacion = () => {
+            // 1. Resetear ID para que sea una nueva factura
+            FV_ID_ACTIVO = 0;
 
-        // 6. Resetear campos SRI y Trazabilidad Completa
-        const fieldsSri = ['sri-clave-acceso', 'sri-numero-autorizacion', 'sri-fecha-autorizacion'];
-        fieldsSri.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.value = '';
-        });
-        const badgeSri = document.getElementById('sri-badge-estado');
-        if (badgeSri) {
-            badgeSri.className = 'badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2';
-            badgeSri.textContent = 'Sin enviar';
+            // 2. Permitir carga de secuencial para la nueva factura
+            FV_BLOQUEAR_SECUENCIAL = false;
+
+            // 3. Cambiar fecha a hoy
+            const fechaInput = document.querySelector('#formFacturaModal [name="fecha_emision"]');
+            if (fechaInput) {
+                const hoy = new Date().toISOString().split('T')[0];
+                fechaInput.value = hoy;
+            }
+
+            // 4. Cambiar título del modal para reflejar duplicación
+            const tituloEl = document.querySelector('#modalNuevaFactura .modal-title');
+            if (tituloEl) {
+                tituloEl.innerHTML = `<i class="bi bi-copy me-2 text-warning"></i>Nueva factura <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 ms-2">Duplicada de ${numeroFacturaCompleto}</span>`;
+            }
+
+            // 5. Cargar nuevo secuencial para el punto de emisión seleccionado
+            if (selPunto && selPunto.value) {
+                cargarSecuencial(selPunto.value);
+            }
+
+            // 6. Ocultar botón eliminar y mostrar botón guardar
+            const _btnElim = document.getElementById('btnEliminarFacturaModal');
+            const _btnGuardar = document.getElementById('btnGuardarFacturaModal');
+            if (_btnElim) _btnElim.classList.add('d-none');
+            if (_btnGuardar) _btnGuardar.classList.remove('d-none');
+
+            // 7. Resetear campos SRI y Trazabilidad Completa
+            const fieldsSri = ['sri-clave-acceso', 'sri-numero-autorizacion', 'sri-fecha-autorizacion'];
+            fieldsSri.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            const badgeSri = document.getElementById('sri-badge-estado');
+            if (badgeSri) {
+                badgeSri.className = 'badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2';
+                badgeSri.textContent = 'Sin enviar';
+            }
+
+            fvLimpiarTrazabilidad();
+
+            // 8. Forzar cambio a pestaña de detalle
+            const triggerEl = document.querySelector('#tab-fv-venta-btn');
+            if (triggerEl) {
+                bootstrap.Tab.getInstance(triggerEl)?.show() || new bootstrap.Tab(triggerEl).show();
+            }
+
+            // 9. Habilitar todos los campos del formulario como una nueva factura normal
+            const tabDetalle = document.getElementById('m-tab-detalle');
+            if (tabDetalle) {
+                const controles = tabDetalle.querySelectorAll('input:not([type="hidden"]), select, textarea');
+                controles.forEach(el => {
+                    el.disabled = false;
+                });
+
+                // Mostrar botones de agregar y eliminar filas (Productos, Info Adicional, Pagos)
+                const btnAddProd = tabDetalle.querySelector('button[onclick="agregarFila()"]');
+                if (btnAddProd) btnAddProd.classList.remove('d-none');
+
+                const btnAddInfo = tabDetalle.querySelector('button[onclick="agregarInfoAdicional()"]');
+                if (btnAddInfo) btnAddInfo.classList.remove('d-none');
+
+                const btnAddPago = tabDetalle.querySelector('button[onclick="agregarFormaPago()"]');
+                if (btnAddPago) btnAddPago.classList.remove('d-none');
+
+                const trashBtns = tabDetalle.querySelectorAll('button.text-danger, button.btn-outline-danger');
+                trashBtns.forEach(btn => {
+                    if (btn.id !== 'm-btn-pdf') {
+                        btn.classList.remove('d-none');
+                    }
+                });
+
+                const paymentBtns = tabDetalle.querySelectorAll('#m-container-pagos button:not(.text-danger)');
+                paymentBtns.forEach(btn => {
+                    btn.disabled = false;
+                });
+            }
+
+            // 10. Actualizar estado de botones superiores
+            fvActualizarEstadoBotones('nuevo');
+
+            if (window.Swal) {
+                const Toast = Swal.mixin({
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 3000,
+                    timerProgressBar: true
+                });
+                Toast.fire({
+                    icon: 'success',
+                    title: 'Factura lista como nueva duplicación.'
+                });
+            }
+        };
+
+        if (window.Swal) {
+            Swal.fire({
+                title: '¿Duplicar Factura?',
+                text: `Se va a duplicar la información de la factura ${numeroFacturaCompleto} en una nueva factura normal. Los campos se habilitarán para su edición.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Sí, duplicar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    ejecutarDuplicacion();
+                }
+            });
+        } else {
+            if (confirm(`¿Desea duplicar la información de la factura ${numeroFacturaCompleto} en una nueva factura?`)) {
+                ejecutarDuplicacion();
+            }
         }
-
-        fvLimpiarTrazabilidad();
-
-        // 7. Forzar cambio a pestaña de detalle
-        const triggerEl = document.querySelector('#tab-fv-venta-btn');
-        if (triggerEl) {
-            bootstrap.Tab.getInstance(triggerEl)?.show() || new bootstrap.Tab(triggerEl).show();
-        }
-
-        // 8. Actualizar estado de botones (como es "Nueva", se desactivan hasta guardar)
-        fvActualizarEstadoBotones('nuevo');
-
-        // Notificación suave opcional (puedes quitar el alert si prefieres)
-        // alert('Factura lista para ser guardada como una nueva duplicación.');
     }
 
     function exportarPdf() {

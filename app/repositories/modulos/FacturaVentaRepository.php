@@ -155,6 +155,19 @@ class FacturaVentaRepository extends BaseRepository
     }
 
     /**
+     * Devuelve las facturas (no eliminadas) generadas desde una proforma.
+     */
+    public function getPorProforma(int $idProforma, int $idEmpresa): array
+    {
+        $sql = "SELECT id, fecha_emision, establecimiento, punto_emision, secuencial,
+                       importe_total, estado, estado_correo
+                FROM ventas_cabecera
+                WHERE id_proforma = ? AND id_empresa = ? AND eliminado = false
+                ORDER BY fecha_emision DESC, id DESC";
+        return $this->query($sql, [$idProforma, $idEmpresa])->fetchAll();
+    }
+
+    /**
      * Persiste el XML (sin firma o firmado/autorizado) en detalle_xml.
      */
     public function updateDetalleXml(int $id, string $xml): void
@@ -306,6 +319,10 @@ class FacturaVentaRepository extends BaseRepository
         if (in_array('clave_acceso', $colsOpcionales) && !empty($data['clave_acceso'])) {
             $cols[]   = 'clave_acceso';
             $params[] = $data['clave_acceso'];
+        }
+        if (in_array('id_proforma', $colsOpcionales) && !empty($data['id_proforma'])) {
+            $cols[]   = 'id_proforma';
+            $params[] = (int) $data['id_proforma'];
         }
 
         $colSql  = implode(', ', $cols);

@@ -122,10 +122,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                 <i class="bi bi-file-earmark-text me-1"></i>Proforma
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link py-2 small" id="pf-tab-facturas-btn"
+                               data-bs-toggle="tab" data-bs-target="#pf-tab-facturas" href="#pf-tab-facturas" role="tab" style="white-space:nowrap;">
+                                <i class="bi bi-receipt me-1"></i>Facturas
+                            </a>
+                        </li>
                     </ul>
                     <div class="ms-auto pb-1">
                         <?php
-                        echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas([], $vistaConfigPF, 'modulos/proformas');
+                        echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['pf-tab-facturas' => 'Facturas'], $vistaConfigPF, 'modulos/proformas');
                         ?>
                     </div>
                 </div>
@@ -361,6 +367,29 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                         </div>
 
                     </div><!-- /pf-tab-proforma -->
+
+                    <!-- ── TAB FACTURAS ───────────────────────── -->
+                    <div class="tab-pane fade" id="pf-tab-facturas" role="tabpanel">
+                        <div class="p-3">
+                            <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+                                <div class="table-responsive" style="max-height:350px;">
+                                    <table class="table table-sm table-detalle mb-0 text-nowrap">
+                                        <thead>
+                                            <tr class="table-light border-bottom">
+                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:20%;">Fecha</th>
+                                                <th class="py-2 small fw-bold text-muted" style="width:35%;">N° Factura</th>
+                                                <th class="py-2 small fw-bold text-muted text-end" style="width:20%;">Valor Total</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width:25%;">Estado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="pf_tbodyFacturas">
+                                            <tr><td colspan="4" class="text-center text-muted small py-3">Sin facturas asociadas</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div><!-- /pf-tab-facturas -->
                 </div><!-- /tab-content -->
             </div><!-- /modal-body -->
 
