@@ -510,9 +510,10 @@ class FacturaVentaPdfService
         $mL  = $this->marginL;
         $cW  = $this->contentW;
 
-        // ── Calcular totales por tarifa ───────────────────────────────────────
-        $subtotMap  = []; // tarifa_int => base (SUBTOTAL X%)
-        $ivaMap     = []; // tarifa_int => valor IVA
+        // ── Calcular totales por concepto de IVA (codigo_porcentaje) ─────────
+        $subtotMap  = []; // codigo_porcentaje => base (SUBTOTAL X%)
+        $ivaMap     = []; // codigo_porcentaje => valor IVA
+        $tarifaMap  = []; // codigo_porcentaje => tarifa numérica (para etiquetas)
         $totalIce   = 0.0;
         $totalDcto  = 0.0;
         $noObjIva   = 0.0;
@@ -524,14 +525,15 @@ class FacturaVentaPdfService
             $totalSubsidio += (float)($d['subsidio'] ?? 0) * (float)($d['cantidad'] ?? 0);
             $tieneImp   = false;
             foreach ($d['impuestos'] ?? [] as $imp) {
-                $cod  = (string)($imp['codigo_impuesto'] ?? '');
-                $tar  = (float)($imp['tarifa'] ?? 0);
-                $val  = (float)($imp['valor'] ?? 0);
-                $base = (float)($imp['base_imponible'] ?? $d['precio_total_sin_impuesto'] ?? 0);
+                $cod     = (string)($imp['codigo_impuesto'] ?? '');
+                $tar     = (float)($imp['tarifa'] ?? 0);
+                $val     = (float)($imp['valor'] ?? 0);
+                $base    = (float)($imp['base_imponible'] ?? $d['precio_total_sin_impuesto'] ?? 0);
+                $codPct  = (string)($imp['codigo_porcentaje'] ?? (string)(int)round($tar));
                 if ($cod === '2') {
-                    $k = (int)round($tar);
-                    $subtotMap[$k] = ($subtotMap[$k] ?? 0.0) + $base;
-                    $ivaMap[$k]    = ($ivaMap[$k]    ?? 0.0) + $val;
+                    $subtotMap[$codPct]  = ($subtotMap[$codPct] ?? 0.0) + $base;
+                    $ivaMap[$codPct]     = ($ivaMap[$codPct]    ?? 0.0) + $val;
+                    $tarifaMap[$codPct]  = $tar;
                     $tieneImp = true;
                 } elseif ($cod === '3') {
                     $totalIce += $val;
@@ -544,8 +546,9 @@ class FacturaVentaPdfService
                 }
             }
             if (!$tieneImp) {
-                $subtotMap[0] = ($subtotMap[0] ?? 0.0) + (float)($d['precio_total_sin_impuesto'] ?? 0);
-                $ivaMap[0]    = ($ivaMap[0]    ?? 0.0);
+                $subtotMap['0']  = ($subtotMap['0'] ?? 0.0) + (float)($d['precio_total_sin_impuesto'] ?? 0);
+                $ivaMap['0']     = ($ivaMap['0']    ?? 0.0);
+                $tarifaMap['0']  = 0.0;
             }
         }
         ksort($subtotMap);
@@ -573,9 +576,11 @@ class FacturaVentaPdfService
         $lblW = 54; // ancho etiqueta
         $valW = $totW - $lblW;
 
-        // Subtotales por tarifa IVA
-        foreach ($subtotMap as $tar => $base) {
-            $lbl = $tar === 0 ? 'SUBTOTAL 0%' : "SUBTOTAL {$tar}%";
+        // Subtotales por concepto de IVA (codigo_porcentaje)
+        foreach ($subtotMap as $codPct => $base) {
+            $tarPct   = $tarifaMap[$codPct] ?? 0.0;
+            $tarLabel = $tarPct == (int)$tarPct ? (string)(int)$tarPct : number_format($tarPct, 2);
+            $lbl = "SUBTOTAL {$tarLabel}%";
             $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, $lbl, $base);
             $yTot += $lh;
         }
@@ -591,9 +596,11 @@ class FacturaVentaPdfService
         $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, 'ICE', $totalIce);
         $yTot += $lh;
 
-        // IVA por tarifa
-        foreach ($ivaMap as $tar => $ivaVal) {
-            $lbl = $tar === 0 ? 'IVA 0%' : "IVA {$tar}%";
+        // IVA por concepto (codigo_porcentaje)
+        foreach ($ivaMap as $codPct => $ivaVal) {
+            $tarPct   = $tarifaMap[$codPct] ?? 0.0;
+            $tarLabel = $tarPct == (int)$tarPct ? (string)(int)$tarPct : number_format($tarPct, 2);
+            $lbl = "IVA {$tarLabel}%";
             $this->filaTotales($pdf, $totX, $yTot, $lblW, $valW, $lh, $lbl, $ivaVal);
             $yTot += $lh;
         }

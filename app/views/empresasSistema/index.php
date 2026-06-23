@@ -83,16 +83,15 @@ function estadoPagoBadge($estado) {
 <?php endif; ?>
 
 <div class="d-flex justify-content-between align-items-center gap-2 mb-2 flex-wrap">
-    <form method="POST" action="<?= $urlBaseEmpresas ?>" class="d-flex align-items-center gap-2">
+    <form id="form-buscar-empresas" method="POST" action="<?= $urlBaseEmpresas ?>" class="d-flex align-items-center gap-2">
         <input type="hidden" name="page" value="1">
         <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
         <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
         <div class="input-group input-group-sm" style="max-width: 320px;">
             <span class="input-group-text"><i class="bi bi-search"></i></span>
-            <input type="text" name="b" class="form-control" placeholder="Buscar por razón social, RUC, establecimiento..." value="<?= htmlspecialchars($buscar) ?>">
-            <button type="submit" class="btn btn-outline-primary">Buscar</button>
+            <input type="text" id="input-buscar-empresas" name="b" class="form-control" placeholder="Buscar por razón social, RUC, establecimiento..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
             <?php if ($buscar !== '' || $page > 1): ?>
-            <a href="<?= $urlBaseEmpresas ?>" class="btn btn-outline-secondary" title="Volver a página 1 sin filtros">Limpiar</a>
+            <a href="<?= $urlBaseEmpresas ?>" class="btn btn-outline-secondary" title="Limpiar búsqueda"><i class="bi bi-x"></i></a>
             <?php endif; ?>
         </div>
     </form>
@@ -1003,6 +1002,20 @@ function estadoPagoBadge($estado) {
             ocultarMsgForm('editar-cobro-msg');
         });
     }
+
+    // Búsqueda inmediata con debounce
+    (function() {
+        var inputBuscar = document.getElementById('input-buscar-empresas');
+        var formBuscar  = document.getElementById('form-buscar-empresas');
+        if (!inputBuscar || !formBuscar) return;
+        var timer = null;
+        inputBuscar.addEventListener('input', function() {
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                formBuscar.submit();
+            }, 400);
+        });
+    })();
 
     window.eliminarEmpresa = function(id) {
         if (!confirm('¿Está seguro de eliminar esta empresa? Esta acción no se puede deshacer y solo se permite si la empresa no tiene registros vinculados.')) return;

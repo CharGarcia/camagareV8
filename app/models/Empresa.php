@@ -55,7 +55,7 @@ class Empresa extends BaseModel
 
         if ($buscar !== '') {
             $b = $this->escape($buscar);
-            $where .= " AND (e.nombre LIKE '%{$b}%' OR e.nombre_comercial LIKE '%{$b}%' OR e.ruc LIKE '%{$b}%' OR e.establecimiento LIKE '%{$b}%')";
+            $where .= " AND (e.nombre ILIKE '%{$b}%' OR e.nombre_comercial ILIKE '%{$b}%' OR e.ruc ILIKE '%{$b}%' OR e.establecimiento ILIKE '%{$b}%')";
         }
 
         $countSql = "SELECT COUNT(DISTINCT e.id) AS total FROM {$from} {$where}";
