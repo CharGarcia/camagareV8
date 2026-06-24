@@ -419,7 +419,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                     </div>
                     <span class="small text-muted" id="asis_etapa" style="min-width:42%;">Iniciando…</span>
                 </div>
-                <div class="border rounded bg-dark flex-grow-1" style="overflow:hidden;min-height:0;">
+                <div class="border rounded bg-dark mx-auto" style="width:100%;max-width:1024px;height:74vh;overflow:hidden;">
                     <iframe id="asis_visor" src="about:blank" title="Visor SRI" style="border:0;width:100%;height:100%;" allow="clipboard-read; clipboard-write"></iframe>
                 </div>
             </div>
