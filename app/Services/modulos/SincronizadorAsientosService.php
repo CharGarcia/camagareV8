@@ -134,9 +134,16 @@ class SincronizadorAsientosService
 
     private function sincronizarModulo(\PDO $db, string $sql, array $params, callable $serviceFactory, string $nombreModulo, string $dondeConfigurar = 'Asientos Programados'): void
     {
-        $st = $db->prepare($sql);
-        $st->execute($params);
-        $ids = $st->fetchAll(\PDO::FETCH_COLUMN);
+        try {
+            $st = $db->prepare($sql);
+            $st->execute($params);
+            $ids = $st->fetchAll(\PDO::FETCH_COLUMN);
+        } catch (\Throwable $e) {
+            // Tabla o columna inexistente (p. ej. migración pendiente en producción):
+            // se omite el módulo sin romper la carga de Estados Financieros / Asientos.
+            $this->warnings[] = "No se pudo verificar asientos pendientes en $nombreModulo (revise la migración de la base de datos).";
+            return;
+        }
 
         if (empty($ids)) {
             return;
