@@ -1,0 +1,38 @@
+==============================================================
+  AGENTE DE DESCARGAS SRI
+  (descarga los comprobantes desde TU PC)
+==============================================================
+
+¿PARA QUÉ SIRVE?
+  El SRI rechaza la descarga automática desde el servidor (lo detecta como robot).
+  Este agente abre el navegador en TU computadora — con tu conexión de internet —
+  así el SRI ve a una persona real y deja consultar. Luego el sistema descarga y
+  registra los comprobantes solo.
+
+REQUISITOS
+  - Google Chrome instalado (o Microsoft Edge: en config.json pon "navegador": "msedge").
+  - Conexión a internet.
+
+PRIMERA VEZ (configuración, se hace una sola vez)
+  1) Entra al sistema:  Descargas SRI  ->  pestaña "Descarga Automática"
+     ->  abre "Contraseña SRI"  ->  botón "Token del agente"  ->  copia el token.
+  2) Junto a este archivo hay "config.example.json". Haz una copia llamada
+     "config.json" y ábrela con el Bloc de notas.
+  3) Pega el token en "agenteToken" y verifica que "servidorUrl" sea la dirección
+     de tu sistema (por ejemplo https://erp.camagare.com.ec). Guarda.
+
+CADA VEZ QUE QUIERAS DESCARGAR
+  1) Doble clic en "sri_agente.exe".
+  2) Te preguntará el año, mes, día y tipo. Presiona ENTER para usar lo sugerido
+     (mes actual, todos).
+  3) Se abrirá una ventana del navegador en el portal del SRI. ESPERA a que cargue
+     y HAZ CLIC EN EL BOTÓN "CONSULTAR".
+  4) El agente recoge la lista y la envía al sistema, que descarga y registra todo.
+     Al terminar verás un resumen (nuevos, ya existían, errores).
+
+NOTAS
+  - Si sale "token inválido": vuelve a generar el token en el sistema y actualiza
+    config.json.
+  - Si la ventana del navegador no abre: cierra todas las ventanas de Chrome y
+    vuelve a intentar.
+  - El token es como una llave: no lo compartas.

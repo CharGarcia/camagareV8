@@ -70,6 +70,13 @@ storage/
 scripts/node_modules/
 scripts/.sri_profile/
 scripts/.sri_profile_asistido/
+scripts/sri_agente/config.json
+scripts/sri_agente/node_modules/
+scripts/sri_agente/dist/
+scripts/sri_agente/.perfil_agente/
+*.exe
+# El LEEME del agente sí se versiona (excepción al *.txt de arriba)
+!scripts/sri_agente/LEEME.txt
 descargasri_python/
 
 # Documentos de prueba en raíz

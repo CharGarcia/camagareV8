@@ -225,6 +225,18 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                         <button type="button" class="btn btn-primary btn-sm px-4" onclick="guardarConfigDescarga()">
                                             <i class="bi bi-floppy me-1"></i> Guardar
                                         </button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="generarAgenteToken()" title="Token para el agente de escritorio (descarga desde tu PC)">
+                                            <i class="bi bi-key me-1"></i> Token del agente
+                                        </button>
+                                    </div>
+
+                                    <div id="agente_token_box" class="mt-3 d-none">
+                                        <label class="form-label fw-semibold small text-muted mb-1">Token del agente <span class="text-muted">(péguelo en el <code>config.json</code> del agente)</span></label>
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" id="agente_token_val" class="form-control form-control-sm font-monospace" readonly>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copiarAgenteToken()" title="Copiar"><i class="bi bi-clipboard"></i></button>
+                                        </div>
+                                        <div class="form-text text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Cópielo ahora. Si genera otro, el anterior deja de funcionar.</div>
                                     </div>
                                   </div>
                                 </div>

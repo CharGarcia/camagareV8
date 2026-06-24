@@ -9,6 +9,7 @@ use App\Services\SriService;
 use App\Services\modulos\DocumentoAutomatedRegisterService;
 use App\Services\modulos\SriDescargaAutomaticaService;
 use App\Services\modulos\SriVisorRemotoService;
+use App\models\SriConfigDescarga;
 use App\repositories\modulos\DocumentoIgnoradoRepository;
 use App\repositories\modulos\SriConfigDescargaRepository;
 use Exception;
@@ -568,6 +569,114 @@ class DescargasSriController extends Controller
         $ok    = (new SriVisorRemotoService())->validarToken((string) $token);
         http_response_code($ok ? 200 : 403);
         echo $ok ? 'OK' : 'FORBIDDEN';
+        exit;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // AGENTE DE ESCRITORIO — el navegador corre en la PC del operador (IP residencial)
+    // Endpoints autenticados por token (sin sesión web).
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Genera (o regenera) el token del agente para la empresa activa. Requiere sesión. */
+    public function generarAgenteTokenAjax(): void
+    {
+        $this->requireAuth();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $model     = new SriConfigDescarga();
+
+        if (!$model->getPorEmpresa($idEmpresa)) {
+            echo json_encode(['ok' => false, 'error' => 'Primero guarda la configuración (usuario y clave SRI).']);
+            exit;
+        }
+
+        $token = bin2hex(random_bytes(32));
+        $ok    = $model->setAgenteToken($idEmpresa, $token);
+        echo json_encode($ok
+            ? ['ok' => true, 'token' => $token]
+            : ['ok' => false, 'error' => 'No se pudo generar el token.']);
+        exit;
+    }
+
+    /**
+     * El agente pide las credenciales SRI (descifradas) de la empresa dueña del token.
+     * Autenticado por token; va siempre sobre HTTPS.
+     */
+    public function agenteConfigAjax(): void
+    {
+        header('Content-Type: application/json');
+
+        $token  = trim($_POST['agente_token'] ?? $_GET['agente_token'] ?? '');
+        $config = (new SriConfigDescarga())->getPorAgenteToken($token);
+
+        if (!$config) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Token de agente inválido.']);
+            exit;
+        }
+        if (!empty($config['login_bloqueado'])) {
+            echo json_encode(['ok' => false, 'error' => 'Descarga bloqueada: credenciales SRI incorrectas. Actualiza la clave.']);
+            exit;
+        }
+
+        $clave = SriDescargaAutomaticaService::desencriptarClave($config['sri_clave'] ?? '');
+        if ($clave === '') {
+            echo json_encode(['ok' => false, 'error' => 'No hay clave SRI guardada o no se pudo descifrar.']);
+            exit;
+        }
+
+        echo json_encode([
+            'ok'         => true,
+            'id_empresa' => (int) $config['id_empresa'],
+            'usuario'    => $config['sri_usuario'],
+            'clave'      => $clave,
+        ]);
+        exit;
+    }
+
+    /**
+     * El agente envía las claves recolectadas en la PC del operador. El servidor baja los XML
+     * por el webservice oficial (sin captcha) y los registra. Autenticado por token.
+     */
+    public function agenteRegistrarClavesAjax(): void
+    {
+        header('Content-Type: application/json');
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido.']);
+            exit;
+        }
+
+        $token  = trim($_POST['agente_token'] ?? '');
+        $config = (new SriConfigDescarga())->getPorAgenteToken($token);
+        if (!$config) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Token de agente inválido.']);
+            exit;
+        }
+        $idEmpresa = (int) $config['id_empresa'];
+
+        // Las claves pueden llegar como JSON, como array de POST o como texto separado.
+        $raw = $_POST['claves'] ?? '';
+        if (is_array($raw)) {
+            $claves = $raw;
+        } else {
+            $dec    = json_decode((string) $raw, true);
+            $claves = is_array($dec) ? $dec : preg_split('/[\s,]+/', (string) $raw);
+        }
+        $claves = array_values(array_filter(
+            array_map('trim', $claves),
+            fn($c) => strlen($c) === 49 && ctype_digit($c)
+        ));
+
+        if (empty($claves)) {
+            echo json_encode(['ok' => false, 'error' => 'No se recibieron claves de acceso válidas.']);
+            exit;
+        }
+
+        set_time_limit(0);
+        $res = (new SriDescargaAutomaticaService())->registrarClaves($claves, $idEmpresa, 0, 'agente');
+        echo json_encode($res);
         exit;
     }
 }

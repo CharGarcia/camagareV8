@@ -27,6 +27,30 @@ class SriConfigDescarga
         return $row ?: null;
     }
 
+    /** Resuelve la configuración (y por tanto la empresa) a partir del token del agente. */
+    public function getPorAgenteToken(string $token): ?array
+    {
+        if ($token === '') return null;
+        $st = $this->db->prepare(
+            "SELECT * FROM sri_config_descarga_auto
+             WHERE agente_token = ? AND eliminado = FALSE LIMIT 1"
+        );
+        $st->execute([$token]);
+        $row = $st->fetch();
+        return $row ?: null;
+    }
+
+    /** Guarda (o regenera) el token del agente de escritorio para una empresa. */
+    public function setAgenteToken(int $idEmpresa, string $token): bool
+    {
+        $st = $this->db->prepare(
+            "UPDATE sri_config_descarga_auto
+                SET agente_token = :t, updated_at = CURRENT_TIMESTAMP
+             WHERE id_empresa = :ie AND eliminado = FALSE"
+        );
+        return $st->execute([':t' => $token, ':ie' => $idEmpresa]);
+    }
+
     public function upsert(array $data): bool
     {
         $existente = $this->getPorEmpresa((int) $data['id_empresa']);

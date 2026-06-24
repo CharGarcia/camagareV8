@@ -1317,6 +1317,107 @@ class SriDescargaAutomaticaService
         return $claves;
     }
 
+    /**
+     * Dado un conjunto de CLAVES de acceso (recolectadas por el agente de escritorio o por el
+     * visor asistido), descarga cada XML por el webservice oficial (sin captcha) y lo registra.
+     * Deduplica contra lo ya existente en BD, registra el log y devuelve el resumen.
+     * Reutiliza SriService + DocumentoAutomatedRegisterService.
+     */
+    public function registrarClaves(
+        array     $claves,
+        int       $idEmpresa,
+        int       $idUsuario = 0,
+        string    $origen = 'agente',
+        ?callable $onProgress = null
+    ): array {
+        $inicio    = microtime(true);
+        $configMod = new SriConfigDescarga();
+        $logMod    = new SriDescargaAutoLog();
+
+        // Separar las nuevas de las que ya existen en BD (dedup)
+        $setExist     = array_flip($this->obtenerClavesExistentes($idEmpresa));
+        $nuevasClaves = [];
+        $yaExistentes = 0;
+        foreach (array_values(array_unique($claves)) as $c) {
+            $c = trim((string) $c);
+            if (strlen($c) !== 49) continue;
+            if (isset($setExist[$c])) { $yaExistentes++; continue; }
+            $nuevasClaves[] = $c;
+        }
+
+        $sriService  = new SriService();
+        $registerSvc = new DocumentoAutomatedRegisterService();
+
+        $totalNuevos     = 0;
+        $totalExistentes = $yaExistentes;
+        $totalIgnorados  = 0;
+        $totalErrores    = 0;
+        $detallesClaves  = [];
+
+        $n = count($nuevasClaves);
+        foreach ($nuevasClaves as $i => $c) {
+            if ($onProgress) $onProgress($i + 1, $n, $c);
+            try {
+                $resp = $sriService->obtenerComprobanteXml($c);
+                if (empty($resp['ok']) || empty($resp['xml'])) {
+                    $totalErrores++;
+                    $detallesClaves[] = ['clave' => $c, 'estado' => 'ERROR', 'msg' => $resp['mensaje'] ?? 'Sin XML/no autorizado'];
+                    continue;
+                }
+                $res       = $registerSvc->procesarYRegistrar($resp['xml'], $idEmpresa, $idUsuario);
+                $estadoReg = $res['estado_registro'] ?? 'DESCONOCIDO';
+                if ($estadoReg === 'REGISTRADO') {
+                    $totalNuevos++;
+                } elseif (in_array($estadoReg, ['YA_EXISTE', 'EXISTENTE'], true)) {
+                    $totalExistentes++;
+                } elseif ($estadoReg === 'IGNORADO') {
+                    $totalIgnorados++;
+                } else {
+                    $totalErrores++;
+                }
+                $detallesClaves[] = ['clave' => $c, 'estado' => $estadoReg, 'msg' => $res['mensaje'] ?? ''];
+            } catch (Exception $e) {
+                $totalErrores++;
+                $detallesClaves[] = ['clave' => $c, 'estado' => 'EXCEPCION', 'msg' => $e->getMessage()];
+            }
+        }
+
+        $totalListado = $n + $yaExistentes;
+        $duracion     = (int) (microtime(true) - $inicio);
+        $msgFinal = "Listado: {$totalListado} | Nuevas: {$totalNuevos} | Existentes: {$totalExistentes}" .
+                    " | Ignoradas: {$totalIgnorados} | Errores: {$totalErrores}";
+
+        $hoy = new \DateTime();
+        $logMod->insertar([
+            'id_empresa'        => $idEmpresa,
+            'fecha_desde'       => $hoy->format('Y-m-01'),
+            'fecha_hasta'       => $hoy->format('Y-m-d'),
+            'tipos_documento'   => 'todos',
+            'total_encontrados' => $totalListado,
+            'total_nuevos'      => $totalNuevos,
+            'total_existentes'  => $totalExistentes,
+            'total_ignorados'   => $totalIgnorados,
+            'total_errores'     => $totalErrores,
+            'estado'            => 'completado',
+            'detalle_json'      => json_encode(['claves' => $detallesClaves]),
+            'duracion_seg'      => $duracion,
+            'origen'            => $origen,
+            'created_by'        => $idUsuario,
+        ]);
+        $configMod->actualizarEstadoDescarga($idEmpresa, 'completado', $msgFinal);
+
+        return [
+            'ok'                => true,
+            'total_encontrados' => $totalListado,
+            'total_nuevos'      => $totalNuevos,
+            'total_existentes'  => $totalExistentes,
+            'total_ignorados'   => $totalIgnorados,
+            'total_errores'     => $totalErrores,
+            'duracion_seg'      => $duracion,
+            'mensaje'           => $msgFinal,
+        ];
+    }
+
     // ─────────────────────────────────────────────
     // VALIDACIÓN DE CLAVE DE ACCESO
     // ─────────────────────────────────────────────
