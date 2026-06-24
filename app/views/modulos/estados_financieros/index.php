@@ -458,7 +458,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
                     
                     html += `<tr>
                         <td class="text-center">${item.fecha_asiento}</td>
-                        <td class="text-center"><a href="${urlBase.replace('estados-financieros', 'asientos-contables')}/ver/${item.id_asiento}" target="_blank" class="text-decoration-none">${item.numero_comprobante || 'S/N'}</a></td>
+                        <td class="text-center"><a href="#" onclick="event.preventDefault(); ASIENTO_abrirModal(${item.id_asiento});" class="text-decoration-none fw-bold" title="Ver asiento contable">${item.numero_comprobante || 'S/N'}</a></td>
                         <td>${item.documento_referencia || ''}</td>
                         <td><small>${item.referencia_detalle || item.concepto || ''}</small></td>
                         <td class="text-end ${de > 0 ? 'text-dark' : 'text-muted'}">${formatMoney(de)}</td>
@@ -476,4 +476,24 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
             tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error de red o servidor.</td></tr>';
         }
     }
+</script>
+
+<!-- Modal del Asiento Contable reutilizado para ver/editar el asiento desde el Mayor -->
+<script>window.BASE_URL = '<?= $base ?>';</script>
+<?php include __DIR__ . '/../asientos_contables/modal_asiento.php'; ?>
+<script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= time() ?>"></script>
+<script>
+    // Apilar el modal del Asiento por encima del modal del Mayor (z-index correcto).
+    document.addEventListener('show.bs.modal', function (e) {
+        const abiertos = document.querySelectorAll('.modal.show').length;
+        if (abiertos > 0) {
+            const z = 1056 + abiertos * 20;
+            e.target.style.zIndex = z;
+            setTimeout(() => {
+                const backs = document.querySelectorAll('.modal-backdrop:not(.modal-stack-fixed)');
+                const last = backs[backs.length - 1];
+                if (last) { last.style.zIndex = z - 1; last.classList.add('modal-stack-fixed'); }
+            }, 0);
+        }
+    });
 </script>
