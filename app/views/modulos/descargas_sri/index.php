@@ -403,7 +403,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
 
 <!-- Modal: Visor remoto de la descarga asistida -->
 <div class="modal fade" id="modalVisorSri" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header py-2 px-3">
                 <h6 class="modal-title fw-bold"><i class="bi bi-person-video3 text-primary me-2"></i>Descarga semiautomática del SRI</h6>
@@ -419,7 +419,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                     </div>
                     <span class="small text-muted" id="asis_etapa" style="min-width:42%;">Iniciando…</span>
                 </div>
-                <div class="border rounded bg-dark" style="height:60vh;overflow:hidden;">
+                <div class="border rounded bg-dark" style="height:45vh;overflow:hidden;">
                     <iframe id="asis_visor" src="about:blank" title="Visor SRI" style="border:0;width:100%;height:100%;" allow="clipboard-read; clipboard-write"></iframe>
                 </div>
             </div>
