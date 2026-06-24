@@ -75,8 +75,9 @@ scripts/sri_agente/node_modules/
 scripts/sri_agente/dist/
 scripts/sri_agente/.perfil_agente/
 *.exe
-# El LEEME del agente sí se versiona (excepción al *.txt de arriba)
+# Los LEEME del agente y de la extensión sí se versionan (excepción al *.txt de arriba)
 !scripts/sri_agente/LEEME.txt
+!extension/LEEME.txt
 descargasri_python/
 
 # Documentos de prueba en raíz

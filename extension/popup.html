@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; width: 300px; padding: 14px; font-size: 13px; color: #222; }
+    h1 { font-size: 15px; margin: 0 0 10px; color: #0d6efd; }
+    label { display: block; font-weight: bold; margin: 8px 0 3px; }
+    input { width: 100%; box-sizing: border-box; padding: 7px; border: 1px solid #ccc; border-radius: 5px; font-size: 12px; }
+    button { margin-top: 12px; width: 100%; padding: 9px; background: #0d6efd; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; }
+    .estado { margin-top: 10px; font-size: 12px; min-height: 16px; }
+    .ok { color: #198754; } .err { color: #dc3545; }
+    .ayuda { margin-top: 12px; font-size: 11px; color: #666; line-height: 1.4; border-top: 1px solid #eee; padding-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Descarga SRI &rarr; CaMaGaRe</h1>
+
+  <label for="servidor">Dirección del sistema</label>
+  <input id="servidor" type="text" placeholder="https://erp.camagare.com.ec">
+
+  <label for="token">Token del agente</label>
+  <input id="token" type="text" placeholder="Pega aquí tu token">
+
+  <button id="guardar">Guardar</button>
+  <div id="estado" class="estado"></div>
+
+  <div class="ayuda">
+    El token lo generas en el sistema:<br>
+    <b>Descargas SRI &rarr; Descarga Automática &rarr; Contraseña SRI &rarr; Token del agente</b>.<br><br>
+    Después entra al portal del SRI, consulta tus comprobantes recibidos y pulsa el botón azul
+    <b>"Enviar comprobantes al sistema"</b>.
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+==============================================================
+  EXTENSIÓN "Descarga SRI -> CaMaGaRe" (para Google Chrome)
+==============================================================
+
+¿QUÉ HACE?
+  Cuando consultas tus comprobantes recibidos en el portal del SRI, agrega un
+  botón azul "Enviar comprobantes al sistema". Con un clic, manda la lista a
+  CaMaGaRe, que descarga y registra todos los comprobantes por ti.
+  Como la consulta la haces TÚ en tu navegador, el SRI no la bloquea.
+
+INSTALAR (una sola vez)
+  1) Guarda la carpeta "extension" en tu computadora (no la borres).
+  2) Abre Chrome y entra a:  chrome://extensions
+  3) Arriba a la derecha, activa "Modo de desarrollador".
+  4) Pulsa "Cargar descomprimida" y selecciona la carpeta "extension".
+  5) Aparecerá la extensión "Descarga SRI -> CaMaGaRe".
+
+CONFIGURAR EL TOKEN (una sola vez)
+  1) En el sistema CaMaGaRe entra a:
+       Descargas SRI  ->  pestaña "Descarga Automática"
+       ->  abre "Contraseña SRI"  ->  botón "Token del agente"  ->  copia el token.
+  2) En Chrome, haz clic en el icono de la extensión (arriba a la derecha, en el
+     rompecabezas). Pega el token y pulsa "Guardar".
+
+USAR (cada vez que quieras descargar)
+  1) Entra al portal del SRI e inicia sesión como siempre.
+  2) Ve a "Comprobantes electrónicos recibidos", elige el período y CONSULTA
+     (resuelve el captcha como de costumbre).
+  3) Abajo a la derecha aparece el botón azul "Enviar comprobantes al sistema".
+     Haz clic. Listo: verás cuántos se registraron.
+
+NOTAS
+  - Si el botón dice que falta el token, configúralo (paso anterior).
+  - Si el token deja de funcionar, genera uno nuevo en el sistema y vuelve a
+    pegarlo en la extensión.
+  - El token es como una llave: no lo compartas.

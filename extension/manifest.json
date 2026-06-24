@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "CaMaGaRe — Descarga SRI",
+  "version": "1.0.0",
+  "description": "Envía tus comprobantes recibidos del portal del SRI al sistema CaMaGaRe con un clic.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://srienlinea.sri.gob.ec/*",
+    "https://erp.camagare.com.ec/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Descarga SRI → CaMaGaRe"
+  }
+}
