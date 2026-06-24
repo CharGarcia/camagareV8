@@ -130,6 +130,45 @@ class SincronizadorAsientosService
             'Egresos',
             'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)'
         );
+
+        // 8. Verificación proactiva: conceptos y formas SIN cuenta contable configurada
+        //    (avisa aunque todavía no existan documentos pendientes).
+        $this->verificarConfiguracionCuentas($db, $idEmpresa);
+    }
+
+    /**
+     * Revisa la configuración contable de Ingresos/Egresos y Cobros/Pagos y genera un aviso
+     * si hay conceptos (opciones) o formas activas sin cuenta contable asignada.
+     */
+    private function verificarConfiguracionCuentas(\PDO $db, int $idEmpresa): void
+    {
+        // Conceptos (opciones de Ingreso/Egreso) activos sin cuenta contable
+        try {
+            $st = $db->prepare("SELECT COUNT(*) FROM empresa_opciones_ingreso_egreso
+                                WHERE id_empresa = ? AND eliminado = false
+                                  AND UPPER(estado) = 'ACTIVO' AND id_cuenta_contable IS NULL");
+            $st->execute([$idEmpresa]);
+            $n = (int) $st->fetchColumn();
+            if ($n > 0) {
+                $this->warnings[] = "Hay {$n} concepto(s) de Ingresos/Egresos sin cuenta contable asignada. Configúrelos en Configuración Contable (tipo de asiento «Ingresos y Egresos»).";
+            }
+        } catch (\Throwable $e) {
+            // Tabla inexistente (migración pendiente): omitir sin romper.
+        }
+
+        // Formas de Cobro/Pago activas sin cuenta contable
+        try {
+            $st = $db->prepare("SELECT COUNT(*) FROM empresa_formas_pago
+                                WHERE id_empresa = ? AND eliminado = false
+                                  AND activo = true AND id_cuenta_contable IS NULL");
+            $st->execute([$idEmpresa]);
+            $n = (int) $st->fetchColumn();
+            if ($n > 0) {
+                $this->warnings[] = "Hay {$n} forma(s) de Cobro/Pago sin cuenta contable asignada. Configúrelas en Configuración Contable (tipo de asiento «Cobros y Pagos»).";
+            }
+        } catch (\Throwable $e) {
+            // Tabla inexistente (migración pendiente): omitir sin romper.
+        }
     }
 
     private function sincronizarModulo(\PDO $db, string $sql, array $params, callable $serviceFactory, string $nombreModulo, string $dondeConfigurar = 'Asientos Programados'): void
