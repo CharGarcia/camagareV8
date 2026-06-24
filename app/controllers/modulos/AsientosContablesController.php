@@ -212,11 +212,39 @@ class AsientosContablesController extends BaseModuloController
         $idUsuario = (int) $_SESSION['id_usuario'];
 
         try {
-            if (empty($data['cabecera']['id'])) {
+            $idAsiento = (int) ($data['cabecera']['id'] ?? 0);
+            if ($idAsiento <= 0) {
                 throw new \Exception('ID de asiento inválido.');
             }
+
+            // Regla: un asiento anulado solo se puede modificar si es de tipo Diario.
+            $existente = $this->service->getDetalleAsiento($idAsiento, $idEmpresa);
+            if ($existente
+                && ($existente['estado'] ?? '') === 'anulado'
+                && strtolower(trim($existente['tipo_comprobante'] ?? '')) !== 'diario') {
+                throw new \Exception('No se puede modificar un asiento anulado. Solo los de tipo Diario son editables.');
+            }
+
             $id = $this->service->guardarAsiento($data['cabecera'], $data['detalles'], $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Asiento actualizado correctamente.', 'id' => $id]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function restablecer(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $id = (int)($_POST['id'] ?? 0);
+        $idEmpresa = (int)$_SESSION['id_empresa'];
+        $idUsuario = (int)$_SESSION['id_usuario'];
+
+        try {
+            $this->service->restablecer($id, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'msg' => 'Asiento restablecido a contabilizado.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

@@ -291,4 +291,20 @@ class AsientoContableRepository
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':id' => $idRetencion]);
     }
+
+    public function desvincularAsientoIngreso(int $idIngreso): void
+    {
+        $sql = "UPDATE ingresos_cabecera SET id_asiento_contable = NULL WHERE id = :id";
+        $pdo = \App\core\Database::getConnection();
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':id' => $idIngreso]);
+    }
+
+    public function desvincularAsientoEgreso(int $idEgreso): void
+    {
+        $sql = "UPDATE egresos_cabecera SET id_asiento_contable = NULL WHERE id = :id";
+        $pdo = \App\core\Database::getConnection();
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':id' => $idEgreso]);
+    }
 }

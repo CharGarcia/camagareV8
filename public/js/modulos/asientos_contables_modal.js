@@ -66,6 +66,9 @@
         document.getElementById('asiento_id_referencia_origen').value = '';
         document.getElementById('tbodyAsientoDetalles').innerHTML = '';
         document.getElementById('btnAnularAsiento').classList.add('d-none');
+        document.getElementById('btnRestablecerAsiento').classList.add('d-none');
+        document.getElementById('btnGuardarAsiento').classList.remove('d-none');
+        aplicarModoLecturaAsiento(false);
         document.getElementById('asientoModalTitle').textContent = id > 0 ? 'Editar Asiento' : 'Nuevo Asiento';
         document.getElementById('asiento_fecha').value = getCurrentLocalDate();
         document.getElementById('asiento_tipo').value         = 'diario';
@@ -113,6 +116,9 @@
         document.getElementById('asiento_id_referencia_origen').value = idRef;
         document.getElementById('tbodyAsientoDetalles').innerHTML = '';
         document.getElementById('btnAnularAsiento').classList.add('d-none');
+        document.getElementById('btnRestablecerAsiento').classList.add('d-none');
+        document.getElementById('btnGuardarAsiento').classList.remove('d-none');
+        aplicarModoLecturaAsiento(false);
         document.getElementById('asiento_fecha').value = getCurrentLocalDate();
 
         await cargarDatosAuxiliares();
@@ -153,15 +159,37 @@
         if (data.modulo_origen) document.getElementById('asiento_modulo_origen').value = data.modulo_origen;
         if (data.id_referencia_origen) document.getElementById('asiento_id_referencia_origen').value = data.id_referencia_origen;
 
-        if (data.estado !== 'anulado') {
-            document.getElementById('btnAnularAsiento').classList.remove('d-none');
-        }
+        const esAnulado = estadoVal === 'anulado';
+        const esDiario  = tipoVal === 'diario';
+        // Un asiento anulado solo es editable si es de tipo Diario; los demás quedan en solo lectura.
+        const soloLectura = esAnulado && !esDiario;
+
+        document.getElementById('btnAnularAsiento').classList.toggle('d-none', esAnulado);
+        document.getElementById('btnRestablecerAsiento').classList.toggle('d-none', !(esAnulado && esDiario));
+        document.getElementById('btnGuardarAsiento').classList.toggle('d-none', soloLectura);
 
         if (data.detalles && data.detalles.length > 0) {
             data.detalles.forEach(d => window.ASIENTO_agregarFila(d));
         } else {
             window.ASIENTO_agregarFila();
         }
+
+        aplicarModoLecturaAsiento(soloLectura);
+    }
+
+    function aplicarModoLecturaAsiento(soloLectura) {
+        const fecha = document.getElementById('asiento_fecha');
+        const concepto = document.getElementById('asiento_concepto');
+        if (fecha) fecha.disabled = soloLectura;
+        if (concepto) concepto.disabled = soloLectura;
+
+        document.querySelectorAll('#tbodyAsientoDetalles input, #tbodyAsientoDetalles select')
+            .forEach(el => { el.disabled = soloLectura; });
+        document.querySelectorAll('#tbodyAsientoDetalles button')
+            .forEach(el => { el.style.display = soloLectura ? 'none' : ''; });
+
+        const btnAgregar = document.getElementById('btnAgregarLineaAsiento');
+        if (btnAgregar) btnAgregar.style.display = soloLectura ? 'none' : '';
     }
 
     window.ASIENTO_agregarFila = function (datos = null) {
@@ -397,6 +425,42 @@
                 await swalExito(res.msg || 'Asiento anulado correctamente.');
             } else {
                 await swalError(res.error || 'Error al anular el asiento.');
+            }
+        } catch (e) {
+            console.error(e);
+            await swalError('Error de red. Verifique su conexión e intente nuevamente.');
+        }
+    };
+
+    window.ASIENTO_restablecer = async function() {
+        const id = document.getElementById('asiento_id').value;
+        if (!id) return;
+
+        const confirmacion = await Swal.fire({
+            title: '¿Restablecer asiento?',
+            text: 'El asiento volverá al estado Contabilizado.',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#198754',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: '<i class="bi bi-arrow-counterclockwise me-1"></i> Sí, restablecer',
+            cancelButtonText: 'Cancelar',
+        });
+
+        if (!confirmacion.isConfirmed) return;
+
+        const fd = new FormData();
+        fd.append('id', id);
+
+        try {
+            const resp = await fetch(`${API_ASIENTOS}/restablecer`, { method: 'POST', body: fd });
+            const res = await resp.json();
+            if (res.ok) {
+                if (window.cambiarPaginaAjax) window.cambiarPaginaAjax(window.currentPage || 1);
+                if (modalInstance) modalInstance.hide();
+                await swalExito(res.msg || 'Asiento restablecido correctamente.');
+            } else {
+                await swalError(res.error || 'Error al restablecer el asiento.');
             }
         } catch (e) {
             console.error(e);

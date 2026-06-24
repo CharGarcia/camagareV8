@@ -77,7 +77,7 @@
                         </table>
                         </div>
                         <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center">
-                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="window.ASIENTO_agregarFila()">
+                            <button type="button" id="btnAgregarLineaAsiento" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="window.ASIENTO_agregarFila()">
                                 <i class="bi bi-plus-circle me-1"></i> Agregar línea
                             </button>
                             <div class="small fw-bold text-muted pe-3">
@@ -87,8 +87,9 @@
                     </div>
                 </div>
                 <div class="modal-footer bg-light border-top px-4 py-3 d-flex justify-content-between">
-                    <div>
+                    <div class="d-flex gap-2">
                         <button type="button" class="btn btn-outline-danger btn-sm d-none" id="btnAnularAsiento" onclick="window.ASIENTO_anular()"><i class="bi bi-x-circle me-1"></i> Anular</button>
+                        <button type="button" class="btn btn-outline-success btn-sm d-none" id="btnRestablecerAsiento" onclick="window.ASIENTO_restablecer()"><i class="bi bi-arrow-counterclockwise me-1"></i> Restablecer a contabilizado</button>
                     </div>
                     <div class="d-flex gap-2">
                         <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>

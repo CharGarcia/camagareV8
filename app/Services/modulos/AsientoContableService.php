@@ -215,6 +215,27 @@ class AsientoContableService
                 );
             }
 
+            // Si el asiento pertenece a un ingreso o egreso, desvincular su id_asiento_contable.
+            // Así, si el documento sigue activo, el control de Estados Financieros lo regenerará.
+            $origenDoc = $asiento['modulo_origen'] ?? '';
+            if (in_array($origenDoc, ['ingreso', 'egreso'], true) && !empty($asiento['id_referencia_origen'])) {
+                if ($origenDoc === 'ingreso') {
+                    $this->repository->desvincularAsientoIngreso((int)$asiento['id_referencia_origen']);
+                } else {
+                    $this->repository->desvincularAsientoEgreso((int)$asiento['id_referencia_origen']);
+                }
+
+                $this->logService->registrar(
+                    idUsuario: $idUsuario,
+                    idEmpresa: $idEmpresa,
+                    accion: 'Desvincular Asiento de ' . ucfirst($origenDoc),
+                    tabla: $origenDoc === 'ingreso' ? 'ingresos_cabecera' : 'egresos_cabecera',
+                    idRegistro: (int)$asiento['id_referencia_origen'],
+                    antes: ['id_asiento_contable' => $idAsiento],
+                    despues: ['id_asiento_contable' => null]
+                );
+            }
+
             $this->logService->registrar(
                 idUsuario: $idUsuario,
                 idEmpresa: $idEmpresa,
@@ -223,6 +244,46 @@ class AsientoContableService
                 idRegistro: $idAsiento,
                 antes: ['estado' => $asiento['estado']],
                 despues: $update
+            );
+
+            if ($managedTransaction) $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($managedTransaction && $pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Restablece un asiento anulado a 'contabilizado'. Solo permitido para asientos de
+     * tipo Diario (los demás se regeneran desde su documento de origen, no se reactivan a mano).
+     */
+    public function restablecer(int $idAsiento, int $idEmpresa, int $idUsuario): void
+    {
+        $asiento = $this->repository->getDetalleAsiento($idAsiento, $idEmpresa);
+        if (!$asiento) {
+            throw new \Exception('Asiento no encontrado.');
+        }
+        if (($asiento['estado'] ?? '') !== 'anulado') {
+            throw new \Exception('Solo se puede restablecer un asiento que esté anulado.');
+        }
+        if (strtolower(trim($asiento['tipo_comprobante'] ?? '')) !== 'diario') {
+            throw new \Exception('Solo los asientos de tipo Diario se pueden restablecer a contabilizado.');
+        }
+
+        $pdo = \App\core\Database::getConnection();
+        $managedTransaction = !$pdo->inTransaction();
+        if ($managedTransaction) $pdo->beginTransaction();
+        try {
+            $this->repository->updateEstado($idAsiento, 'contabilizado', $idUsuario);
+
+            $this->logService->registrar(
+                idUsuario: $idUsuario,
+                idEmpresa: $idEmpresa,
+                accion: 'Restablecer Asiento',
+                tabla: 'asientos_contables_cabecera',
+                idRegistro: $idAsiento,
+                antes: ['estado' => 'anulado'],
+                despues: ['estado' => 'contabilizado']
             );
 
             if ($managedTransaction) $pdo->commit();
