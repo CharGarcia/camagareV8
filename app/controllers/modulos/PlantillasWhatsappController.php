@@ -88,15 +88,17 @@ class PlantillasWhatsappController extends BaseModuloController
 
                 $btnEliminar = '';
                 if ($permisos['eliminar']) {
-                    $btnEliminar = '<button class="btn btn-sm btn-outline-danger" title="Eliminar" onclick="WA_eliminarPlantilla(' . $r['id'] . ')"><i class="bi bi-trash"></i></button>';
+                    $btnEliminar = '<button class="btn btn-sm btn-outline-danger" title="Eliminar" onclick="event.stopPropagation(); WA_eliminarPlantilla(' . $r['id'] . ')"><i class="bi bi-trash"></i></button>';
                 }
 
                 $btnEditar = '';
                 if ($permisos['actualizar']) {
-                    $btnEditar = '<button class="btn btn-sm btn-outline-warning me-1" title="Editar" onclick="WA_abrirModalEditar(' . $r['id'] . ')"><i class="bi bi-pencil"></i></button>';
+                    $btnEditar = '<button class="btn btn-sm btn-outline-warning me-1" title="Editar" onclick="event.stopPropagation(); WA_abrirModalEditar(' . $r['id'] . ')"><i class="bi bi-pencil"></i></button>';
                 }
 
-                echo '<tr class="plantilla-row" role="button" tabindex="0">
+                $clickAction = $permisos['actualizar'] ? 'WA_abrirModalEditar(' . $r['id'] . ')' : 'WA_verDetalles(' . $r['id'] . ')';
+
+                echo '<tr class="plantilla-row" role="button" tabindex="0" onclick="if(!event.target.closest(\'button\')) ' . $clickAction . '">
                         <td class="ps-3" data-col="nombre">' . htmlspecialchars($r['nombre'] ?? '') . '</td>
                         <td data-col="categoria">' . htmlspecialchars($r['categoria'] ?? '') . '</td>
                         <td data-col="idioma">' . htmlspecialchars($r['idioma'] ?? '') . '</td>
@@ -104,8 +106,8 @@ class PlantillasWhatsappController extends BaseModuloController
                             <span class="badge ' . $badgeClass . ' bg-opacity-10 border border-opacity-25">' . $estado . '</span>
                         </td>
                         <td class="text-center pe-3">
-                            <button class="btn btn-sm btn-outline-secondary me-1" title="Ver detalles" onclick="WA_verDetalles(' . $r['id'] . ')"><i class="bi bi-eye"></i></button>
-                            <button class="btn btn-sm btn-outline-primary me-1" title="Probar Envío" onclick="WA_abrirModalProbar(' . $r['id'] . ')"><i class="bi bi-send"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary me-1" title="Ver detalles" onclick="event.stopPropagation(); WA_verDetalles(' . $r['id'] . ')"><i class="bi bi-eye"></i></button>
+                            <button class="btn btn-sm btn-outline-primary me-1" title="Probar Envío" onclick="event.stopPropagation(); WA_abrirModalProbar(' . $r['id'] . ')"><i class="bi bi-send"></i></button>
                             ' . $btnEditar . $btnEliminar . '
                         </td>
                       </tr>';
@@ -128,8 +130,8 @@ class PlantillasWhatsappController extends BaseModuloController
             'pagination' => $paginationHtml,
             'info'      => "$from-$to/$total",
             'total'     => $total,
-            'pdf_url'   => '#',
-            'excel_url' => '#'
+            'pdf_url'   => BASE_URL . '/modulos/plantillas-whatsapp/export-pdf?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
+            'excel_url' => BASE_URL . '/modulos/plantillas-whatsapp/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir"
         ]);
         exit;
     }
@@ -492,6 +494,24 @@ class PlantillasWhatsappController extends BaseModuloController
             return;
         }
 
+        preg_match_all('/\{\{(\d+)\}\}/', $cuerpo, $matchesVars);
+        $numsEncontrados = $matchesVars[1] ?? [];
+        $variablesEnCuerpo = [];
+        foreach ($numsEncontrados as $num) {
+            $variablesEnCuerpo[] = '{{' . $num . '}}';
+        }
+
+        // 1. Validar consecutividad de variables para cualquier tipo de creación
+        if (!empty($numsEncontrados)) {
+            $nums = array_unique(array_map('intval', $numsEncontrados));
+            sort($nums);
+            $esperados = range(1, count($nums));
+            if ($nums !== $esperados) {
+                echo json_encode(['ok' => false, 'error' => 'Las variables del cuerpo deben ser números consecutivos empezando desde 1 (ej: {{1}}, {{2}}...).']);
+                return;
+            }
+        }
+
         // VALIDACIÓN DE PLANTILLAS RAPIDAS Y LIBRES
         $plantillasRapidasConfig = [
             'aviso_mensajes_pendientes' => ['{{1}}', '{{2}}'],
@@ -508,14 +528,8 @@ class PlantillasWhatsappController extends BaseModuloController
             'descuento_empleado' => ['{{1}}', '{{2}}', '{{3}}']
         ];
 
-        preg_match_all('/\{\{\d+\}\}/', $cuerpo, $matches);
-        $variablesEnCuerpo = $matches[0] ?? [];
-
         if ($tipoCreacion === 'libre') {
-            if (!empty($variablesEnCuerpo)) {
-                echo json_encode(['ok' => false, 'error' => 'Las plantillas libres no pueden contener variables automáticas.']);
-                return;
-            }
+            // Permitir variables en libres
         } elseif ($tipoCreacion === 'rapida') {
             if (!isset($plantillasRapidasConfig[$plantillaRapida])) {
                 echo json_encode(['ok' => false, 'error' => 'Plantilla rápida no válida.']);
@@ -705,6 +719,51 @@ class PlantillasWhatsappController extends BaseModuloController
             return;
         }
 
+        preg_match_all('/\{\{(\d+)\}\}/', $nuevoCuerpo, $matchesVars);
+        $numsEncontrados = $matchesVars[1] ?? [];
+        $variablesEnCuerpo = [];
+        foreach ($numsEncontrados as $num) {
+            $variablesEnCuerpo[] = '{{' . $num . '}}';
+        }
+
+        // 1. Validar consecutividad de variables
+        if (!empty($numsEncontrados)) {
+            $nums = array_unique(array_map('intval', $numsEncontrados));
+            sort($nums);
+            $esperados = range(1, count($nums));
+            if ($nums !== $esperados) {
+                echo json_encode(['ok' => false, 'error' => 'Las variables del cuerpo deben ser números consecutivos empezando desde 1 (ej: {{1}}, {{2}}...).']);
+                return;
+            }
+        }
+
+        // 2. Si es rápida, validar permitidas
+        $plantillasRapidasConfig = [
+            'aviso_mensajes_pendientes' => ['{{1}}', '{{2}}'],
+            'factura_por_cobrar' => ['{{1}}', '{{2}}', '{{3}}'],
+            'factura_venta' => ['{{1}}', '{{2}}', '{{3}}'],
+            'cuenta_por_cobrar' => ['{{1}}', '{{2}}'],
+            'renovacion_suscripcion' => ['{{1}}', '{{2}}'],
+            'renovacion_firma_electronica' => ['{{1}}', '{{2}}'],
+            'retencion_compra' => ['{{1}}', '{{2}}', '{{3}}'],
+            'nota_credito' => ['{{1}}', '{{2}}', '{{3}}'],
+            'nota_debito' => ['{{1}}', '{{2}}', '{{3}}'],
+            'guia_remision' => ['{{1}}', '{{2}}', '{{3}}'],
+            'rol_pagos' => ['{{1}}', '{{2}}', '{{3}}'],
+            'descuento_empleado' => ['{{1}}', '{{2}}', '{{3}}']
+        ];
+
+        $nombrePlantilla = $plantilla['nombre'];
+        if (isset($plantillasRapidasConfig[$nombrePlantilla])) {
+            $variablesPermitidas = $plantillasRapidasConfig[$nombrePlantilla];
+            foreach ($variablesEnCuerpo as $var) {
+                if (!in_array($var, $variablesPermitidas)) {
+                    echo json_encode(['ok' => false, 'error' => "La variable {$var} no está permitida en esta plantilla rápida."]);
+                    return;
+                }
+            }
+        }
+
         // ── Partir de los componentes actuales almacenados en la BD ───────────
         // Meta exige recibir TODOS los componentes existentes (HEADER, BODY,
         // FOOTER, BUTTONS). Sólo modificamos el BODY con el nuevo texto.
@@ -763,11 +822,23 @@ class PlantillasWhatsappController extends BaseModuloController
 
             } elseif ($type === 'BODY') {
                 // Reemplazar el texto con el nuevo cuerpo
-                // NO incluir 'example' en actualizaciones (Meta lo rechaza en algunos casos)
-                $updatedComponents[] = [
+                // Meta exige ejemplos para cada variable en el body
+                preg_match_all('/{{(\d+)}}/', $nuevoCuerpo, $matches);
+                $bodyComp = [
                     'type' => 'BODY',
                     'text' => $nuevoCuerpo,
                 ];
+                if (!empty($matches[1])) {
+                    $numVars = max($matches[1]);
+                    $ejemplos = [];
+                    for ($i = 1; $i <= $numVars; $i++) {
+                        $ejemplos[] = "ejemplo_$i";
+                    }
+                    $bodyComp['example'] = [
+                        'body_text' => [$ejemplos]
+                    ];
+                }
+                $updatedComponents[] = $bodyComp;
 
             } elseif ($type === 'FOOTER') {
                 $updatedComponents[] = [
@@ -812,6 +883,155 @@ class PlantillasWhatsappController extends BaseModuloController
 
         echo json_encode(['ok' => true, 'mensaje' => 'Plantilla actualizada correctamente. Estado: PENDING (en revisión por Meta).']);
         exit;
+    }
+
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
+        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
+
+        $model = new \App\models\WhatsappPlantilla();
+        $data = $model->getFiltradas($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir);
+        $rows = $data['rows'];
+
+        try {
+            $empresaModel = new \App\models\Empresa();
+            $empresa = $empresaModel->getPorId($idEmpresa);
+            $nombreEmpresa = $empresa['nombre'] ?? 'REPORTE DE PLANTILLAS';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            ob_start();
+?>
+            <style>
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-family: Arial, sans-serif;
+                    font-size: 8pt;
+                    table-layout: fixed;
+                }
+
+                th {
+                    background: #f2f2f2;
+                    border: 1px solid #ccc;
+                    padding: 4px;
+                    text-align: left;
+                }
+
+                td {
+                    border: 1px solid #ccc;
+                    padding: 4px;
+                    overflow: hidden;
+                    word-wrap: break-word;
+                }
+
+                .header {
+                    text-align: center;
+                    margin-bottom: 15px;
+                    width: 100%;
+                }
+
+                h1 {
+                    margin: 0;
+                    font-size: 14pt;
+                    color: #333;
+                }
+
+                h2 {
+                    margin: 3px 0 0 0;
+                    color: #666;
+                    font-size: 10pt;
+                    text-transform: uppercase;
+                }
+            </style>
+            <page backtop="10mm" backbottom="10mm" backleft="10mm" backright="10mm">
+                <div class="header">
+                    <h1><?= htmlspecialchars($nombreEmpresa) ?></h1>
+                    <h2>Listado de Plantillas WhatsApp</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 35%">Nombre</th>
+                            <th style="width: 25%">Categoría</th>
+                            <th style="width: 15%">Idioma</th>
+                            <th style="width: 25%">Estado (Meta)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rows as $r): ?>
+                            <tr>
+                                <td><?= htmlspecialchars((string)($r['nombre'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string)($r['categoria'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string)($r['idioma'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string)($r['estado_meta'] ?? 'APPROVED')) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </page>
+<?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Plantillas_WhatsApp_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo "Error al generar PDF: " . $e->getMessage();
+            exit;
+        }
+    }
+
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
+        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
+
+        $model = new \App\models\WhatsappPlantilla();
+        $data = $model->getFiltradas($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir);
+        $rows = $data['rows'];
+
+        try {
+            $empresaModel = new \App\models\Empresa();
+            $empresa = $empresaModel->getPorId($idEmpresa);
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $headers = ['Nombre', 'Categoría', 'Idioma', 'Estado (Meta)'];
+            $exportData = [];
+            foreach ($rows as $r) {
+                $exportData[] = [
+                    (string)($r['nombre'] ?? ''),
+                    (string)($r['categoria'] ?? ''),
+                    (string)($r['idioma'] ?? ''),
+                    (string)($r['estado_meta'] ?? 'APPROVED')
+                ];
+            }
+
+            $reportService = new \App\Services\ReportService();
+            $reportService->exportToExcel('Plantillas_WhatsApp', $headers, $exportData, 'Listado Plantillas WhatsApp', $nombreEmpresa);
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo "Error al generar Excel: " . $e->getMessage();
+            exit;
+        }
     }
 }
 

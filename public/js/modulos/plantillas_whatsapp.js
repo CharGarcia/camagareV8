@@ -35,6 +35,11 @@ window.fetchSearch = async (page = 1) => {
             document.getElementById('tbodyPlantillas').innerHTML = data.rows;
             document.getElementById('paginationContainer').innerHTML = data.pagination;
             document.getElementById('paginationInfo').innerText = data.info;
+            
+            const btnPdf = document.getElementById('btnExportPdf');
+            const btnExcel = document.getElementById('btnExportExcel');
+            if (btnPdf && data.pdf_url) btnPdf.href = data.pdf_url;
+            if (btnExcel && data.excel_url) btnExcel.href = data.excel_url;
         } else {
             console.error(data.error);
         }
@@ -114,11 +119,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            if (tipoCreacion === 'libre') {
-                if (/\{\{\d+\}\}/.test(cuerpo)) {
-                    Swal.fire('Error', 'Las plantillas libres no pueden contener variables automáticas ({{1}}, {{2}}, etc.).', 'error');
+            // Validar consecutividad de variables para cualquier tipo de creación
+            const encontradas = cuerpo.match(/\{\{(\d+)\}\}/g) || [];
+            if (encontradas.length > 0) {
+                const nums = encontradas.map(v => parseInt(v.replace(/\{\{|\}\}/g, ''))).sort((a, b) => a - b);
+                const unicos = [...new Set(nums)];
+                const esperados = Array.from({length: unicos.length}, (_, i) => i + 1);
+                const esConsecutivo = unicos.every((v, i) => v === esperados[i]);
+                if (!esConsecutivo) {
+                    Swal.fire('Error', 'Las variables del cuerpo deben ser números consecutivos empezando desde 1 (ej: {{1}}, {{2}}...).', 'error');
                     return;
                 }
+            }
+
+            if (tipoCreacion === 'libre') {
+                // Permitir variables en libres
             } else if (tipoCreacion === 'rapida') {
                 const tipoRapida = document.getElementById('selectPlantillaRapida').value;
                 if (!tipoRapida || !PLANTILLAS_RAPIDAS[tipoRapida]) {
@@ -126,7 +141,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 const permitidas = (PLANTILLAS_RAPIDAS[tipoRapida].variables || []).map(v => v.id);
-                const encontradas = cuerpo.match(/\{\{\d+\}\}/g) || [];
                 for (let v of encontradas) {
                     if (!permitidas.includes(v)) {
                         Swal.fire('Error', `La variable ${v} no está permitida en esta plantilla rápida. Solo puedes usar: ${permitidas.length ? permitidas.join(', ') : 'Ninguna'}`, 'error');
@@ -355,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 contenedorRapidas.style.display = 'none';
                 contenedorResto.style.display = 'block';
                 form.nombre.readOnly = false;
-                helpCuerpo.innerHTML = '<span class="text-danger fw-bold"><i class="fas fa-exclamation-triangle"></i> IMPORTANTE:</span> Las plantillas libres no admiten variables del sistema ({{1}}, {{2}}, etc.). Si las incluyes, el sistema rechazará la plantilla.';
+                helpCuerpo.innerHTML = '<i class="fas fa-info-circle text-primary me-1"></i> Puedes usar variables numéricas consecutivas que empiecen desde 1 (ej: {{1}}, {{2}}...).';
             }
         });
     });
@@ -518,12 +532,39 @@ document.addEventListener('DOMContentLoaded', () => {
     if (formEditar) {
         formEditar.addEventListener('submit', (e) => {
             e.preventDefault();
+
+            const formData = new FormData(formEditar);
+            const cuerpo = formData.get('cuerpo') || '';
+            const nombre = document.getElementById('editarNombre').value;
+
+            // 1. Validar consecutividad de variables
+            const encontradas = cuerpo.match(/\{\{(\d+)\}\}/g) || [];
+            if (encontradas.length > 0) {
+                const nums = encontradas.map(v => parseInt(v.replace(/\{\{|\}\}/g, ''))).sort((a, b) => a - b);
+                const unicos = [...new Set(nums)];
+                const esperados = Array.from({length: unicos.length}, (_, i) => i + 1);
+                const esConsecutivo = unicos.every((v, i) => v === esperados[i]);
+                if (!esConsecutivo) {
+                    Swal.fire('Error', 'Las variables del cuerpo deben ser números consecutivos empezando desde 1 (ej: {{1}}, {{2}}...).', 'error');
+                    return;
+                }
+            }
+
+            // 2. Si es rápida, validar permitidas
+            if (PLANTILLAS_RAPIDAS[nombre]) {
+                const permitidas = (PLANTILLAS_RAPIDAS[nombre].variables || []).map(v => v.id);
+                for (let v of encontradas) {
+                    if (!permitidas.includes(v)) {
+                        Swal.fire('Error', `La variable ${v} no está permitida en esta plantilla rápida. Solo puedes usar: ${permitidas.length ? permitidas.join(', ') : 'Ninguna'}`, 'error');
+                        return;
+                    }
+                }
+            }
+
             const btn = document.getElementById('btnActualizarPlantilla');
             const originalHtml = btn.innerHTML;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Enviando...';
             btn.disabled = true;
-
-            const formData = new FormData(formEditar);
 
             fetch(WA_URL + '/update', {
                 method: 'POST',

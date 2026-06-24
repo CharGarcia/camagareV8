@@ -131,9 +131,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         <!-- Buscador y Exportación -->
         <div class="d-flex align-items-center gap-2">
             <!-- Si deseas filtros avanzados, aquí puedes usar FiltrosBusqueda. Por ahora, un buscador simple. -->
-            <div id="fbBuscadorWA" style="width: 480px;">
-                <input type="text" id="buscarPlantilla" class="form-control form-control-sm w-100" placeholder="Buscar plantilla..." value="<?= htmlspecialchars($buscar) ?>">
-            </div>
+            <form id="formBuscarPlantilla" method="POST" action="#" onsubmit="event.preventDefault(); fetchSearch(1);" style="width: 480px;">
+                <div id="fbBuscadorWA">
+                    <input type="text" id="buscarPlantilla" class="form-control form-control-sm w-100" placeholder="Buscar plantilla..." value="<?= htmlspecialchars($buscar) ?>">
+                </div>
+            </form>
 
             <div class="btn-group btn-group-sm">
                 <?php
@@ -146,10 +148,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], 'modulos/plantillas-whatsapp') ?>
 
-                <a id="btnExportPdf" href="#" class="btn btn-outline-danger" title="Descargar PDF">
+                <a id="btnExportPdf" href="<?= $urlModulo ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="Descargar PDF">
                     <i class="bi bi-file-earmark-pdf"></i> PDF
                 </a>
-                <a id="btnExportExcel" href="#" class="btn btn-outline-success" title="Descargar Excel">
+                <a id="btnExportExcel" href="<?= $urlModulo ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                 </a>
             </div>
@@ -197,7 +199,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
-                            <tr class="plantilla-row" role="button" tabindex="0">
+                            <?php 
+                            $clickAction = in_array('actualizar', $permisos) ? 'WA_abrirModalEditar(' . $r['id'] . ')' : 'WA_verDetalles(' . $r['id'] . ')';
+                            ?>
+                            <tr class="plantilla-row" role="button" tabindex="0" onclick="if(!event.target.closest('button')) <?= $clickAction ?>">
                                 <td class="ps-3" data-col="nombre"><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
                                 <td data-col="categoria"><?= htmlspecialchars($r['categoria'] ?? '') ?></td>
                                 <td data-col="idioma"><?= htmlspecialchars($r['idioma'] ?? '') ?></td>
@@ -205,8 +210,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><?= htmlspecialchars($r['estado'] ?? 'APPROVED') ?></span>
                                 </td>
                                 <td class="text-center pe-3">
-                                    <button class="btn btn-sm btn-outline-secondary me-1" title="Ver detalles" onclick="WA_verDetalles(<?= $r['id'] ?>)"><i class="bi bi-eye"></i></button>
-                                    <button class="btn btn-sm btn-outline-primary" title="Probar Envío" onclick="WA_abrirModalProbar(<?= $r['id'] ?>)"><i class="bi bi-send"></i></button>
+                                    <button class="btn btn-sm btn-outline-secondary me-1" title="Ver detalles" onclick="event.stopPropagation(); WA_verDetalles(<?= $r['id'] ?>)"><i class="bi bi-eye"></i></button>
+                                    <?php if (in_array('actualizar', $permisos)): ?>
+                                        <button class="btn btn-sm btn-outline-warning me-1" title="Editar" onclick="event.stopPropagation(); WA_abrirModalEditar(<?= $r['id'] ?>)"><i class="bi bi-pencil"></i></button>
+                                    <?php endif; ?>
+                                    <button class="btn btn-sm btn-outline-primary me-1" title="Probar Envío" onclick="event.stopPropagation(); WA_abrirModalProbar(<?= $r['id'] ?>)"><i class="bi bi-send"></i></button>
+                                    <?php if (in_array('eliminar', $permisos)): ?>
+                                        <button class="btn btn-sm btn-outline-danger" title="Eliminar" onclick="event.stopPropagation(); WA_eliminarPlantilla(<?= $r['id'] ?>)"><i class="bi bi-trash"></i></button>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>

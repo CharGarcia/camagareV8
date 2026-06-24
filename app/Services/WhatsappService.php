@@ -146,6 +146,18 @@ class WhatsappService
         
         $response = $this->makeRequest('POST', $url, $config['access_token'], $data);
 
+        // Log de depuración
+        $logPath = MVC_ROOT . '/storage/logs/whatsapp_api_debug.log';
+        $logData = [
+            'timestamp' => date('Y-m-d H:i:s'),
+            'action' => 'createTemplate',
+            'id_empresa' => $idEmpresa,
+            'url' => $url,
+            'payload' => $data,
+            'response' => $response
+        ];
+        file_put_contents($logPath, json_encode($logData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n---\n", FILE_APPEND);
+
         if (isset($response['error'])) {
             return ['success' => false, 'message' => 'Error al crear plantilla en Meta: ' . ($response['error']['message'] ?? 'Desconocido'), 'data' => $response];
         }
@@ -167,6 +179,18 @@ class WhatsappService
         $url = self::BASE_URL . $metaTemplateId;
         
         $response = $this->makeRequest('POST', $url, $config['access_token'], $data);
+
+        // Log de depuración
+        $logPath = MVC_ROOT . '/storage/logs/whatsapp_api_debug.log';
+        $logData = [
+            'timestamp' => date('Y-m-d H:i:s'),
+            'action' => 'updateTemplate',
+            'id_empresa' => $idEmpresa,
+            'url' => $url,
+            'payload' => $data,
+            'response' => $response
+        ];
+        file_put_contents($logPath, json_encode($logData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n---\n", FILE_APPEND);
 
         if (isset($response['error'])) {
             $err  = $response['error'];
