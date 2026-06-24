@@ -243,77 +243,20 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                               </div>
                             </div>
 
-                            <!-- Tarjeta descarga semiautomática directa (tú resuelves el captcha) -->
-                            <div class="card border border-success border-opacity-25 shadow-sm rounded-3 mb-3">
-                                <div class="card-header bg-success bg-opacity-10 border-bottom border-success border-opacity-25 py-2 px-3">
-                                    <h6 class="mb-0 fw-bold text-success small"><i class="bi bi-person-video3 me-2"></i>Descarga semiautomática directa</h6>
+                            <!-- Descarga con la extensión de Chrome -->
+                            <div class="card border border-primary border-opacity-25 shadow-sm rounded-3 mb-3">
+                                <div class="card-header bg-primary bg-opacity-10 border-bottom border-primary border-opacity-25 py-2 px-3">
+                                    <h6 class="mb-0 fw-bold text-primary small"><i class="bi bi-puzzle me-2"></i>Descarga con la extensión de Chrome</h6>
                                 </div>
-                                <div class="card-body px-3 py-3">
-
-                                    <div class="row g-2 mb-3">
-                                        <div class="col-4">
-                                            <label class="form-label fw-semibold small text-muted mb-1">Año</label>
-                                            <select id="exec_ano" class="form-select form-select-sm shadow-none" title="Año de búsqueda">
-                                                <?php
-                                                $anioActual = (int) date('Y');
-                                                for ($a = $anioActual; $a >= $anioActual - 2; $a--) {
-                                                    $sel = $a === $anioActual ? 'selected' : '';
-                                                    echo "<option value=\"{$a}\" {$sel}>{$a}</option>";
-                                                }
-                                                ?>
-                                            </select>
-                                        </div>
-                                        <div class="col-4">
-                                            <label class="form-label fw-semibold small text-muted mb-1">Mes</label>
-                                            <select id="exec_mes" class="form-select form-select-sm shadow-none" title="Mes de búsqueda">
-                                                <?php
-                                                $meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-                                                $mesActual = (int) date('n');
-                                                foreach ($meses as $i => $nombreMes) {
-                                                    $num = $i + 1;
-                                                    $sel = $num === $mesActual ? 'selected' : '';
-                                                    echo "<option value=\"{$num}\" {$sel}>{$nombreMes}</option>";
-                                                }
-                                                ?>
-                                            </select>
-                                        </div>
-                                        <div class="col-4">
-                                            <label class="form-label fw-semibold small text-muted mb-1">Día</label>
-                                            <select id="exec_dia" class="form-select form-select-sm shadow-none" title="Día de búsqueda (0 = todos)">
-                                                <option value="0" selected>Todos</option>
-                                                <?php for ($d = 1; $d <= 31; $d++) echo "<option value=\"{$d}\">{$d}</option>"; ?>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label class="form-label fw-semibold small text-muted mb-1">Tipo de documento</label>
-                                        <select id="exec_tipo" class="form-select form-select-sm shadow-none" title="Tipo de documento a buscar">
-                                            <option value="todos" selected>Todos los tipos</option>
-                                            <option value="facturas">Facturas</option>
-                                            <option value="retenciones">Retenciones</option>
-                                            <option value="notas_credito">Notas de Crédito</option>
-                                            <option value="notas_debito">Notas de Débito</option>
-                                            <option value="liquidaciones">Liquidaciones de Compra</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="d-flex gap-2 mt-2">
-                                        <button type="button" class="btn btn-success btn-sm px-4" id="btnEjecutarManual" onclick="iniciarDescargaAsistida()">
-                                            <i class="bi bi-person-video3 me-1"></i> Iniciar descarga
-                                        </button>
-                                    </div>
+                                <div class="card-body px-3 py-3 small text-muted">
+                                    <p class="mb-2">La descarga se hace desde <strong>tu propio navegador</strong> con la extensión, así el SRI no la bloquea:</p>
+                                    <ol class="ps-3 mb-2">
+                                        <li>Genera el <strong>Token del agente</strong> (arriba) y pégalo en la extensión.</li>
+                                        <li>Entra al portal del SRI y consulta tus <strong>comprobantes recibidos</strong> (resuelve el captcha como siempre).</li>
+                                        <li>Pulsa el botón <strong>«Enviar comprobantes al sistema»</strong> que aparece en el portal. El resultado se verá en el historial de aquí.</li>
+                                    </ol>
+                                    <div class="text-muted">La descarga automática por cron queda suspendida para evitar bloqueos del SRI.</div>
                                 </div>
-                            </div>
-
-                            <!-- Cómo funciona la descarga semiautomática -->
-                            <div class="p-3 bg-info bg-opacity-10 border border-info border-opacity-25 rounded-3 small text-info-emphasis">
-                                <div class="fw-bold mb-2"><i class="bi bi-info-circle me-1"></i>¿Cómo funciona la descarga semiautomática?</div>
-                                <ol class="ps-3 mb-0">
-                                    <li>El sistema inicia sesión solo en el portal del SRI y aplica los filtros.</li>
-                                    <li>Verás el portal real en una ventana. <strong>Haz clic en el botón CONSULTAR</strong> del propio portal: así el SRI detecta que hay un humano.</li>
-                                    <li>El sistema lee el listado y descarga cada comprobante por el servicio oficial y lo registra.</li>
-                                </ol>
                             </div>
 
                         </div>
@@ -408,35 +351,6 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                         </tr>
                     </tbody>
                 </table>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modal: Visor remoto de la descarga asistida -->
-<div class="modal fade" id="modalVisorSri" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
-    <div class="modal-dialog modal-fullscreen">
-        <div class="modal-content">
-            <div class="modal-header py-2 px-3">
-                <h6 class="modal-title fw-bold"><i class="bi bi-person-video3 text-primary me-2"></i>Descarga semiautomática del SRI</h6>
-                <button type="button" class="btn-close" aria-label="Cerrar" onclick="cerrarVisorSri()"></button>
-            </div>
-            <div class="modal-body p-2 d-flex flex-column">
-                <div class="alert alert-warning py-2 px-3 small mb-2 d-none" id="asis_instruccion">
-                    <i class="bi bi-hand-index-thumb me-1"></i><strong>Cuando veas el portal, haz clic en el botón CONSULTAR del SRI</strong> para continuar.
-                </div>
-                <div class="d-flex align-items-center gap-2 mb-2">
-                    <div class="progress flex-grow-1" style="height:8px;">
-                        <div id="asis_barra" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width:0%"></div>
-                    </div>
-                    <span class="small text-muted" id="asis_etapa" style="min-width:42%;">Iniciando…</span>
-                </div>
-                <div class="border rounded bg-dark mx-auto" style="width:100%;max-width:1024px;height:74vh;overflow:hidden;">
-                    <iframe id="asis_visor" src="about:blank" title="Visor SRI" style="border:0;width:100%;height:100%;" allow="clipboard-read; clipboard-write"></iframe>
-                </div>
-            </div>
-            <div class="modal-footer py-2 px-3">
-                <button type="button" class="btn btn-outline-danger btn-sm" onclick="cerrarVisorSri()"><i class="bi bi-x-circle me-1"></i>Cancelar / Cerrar</button>
             </div>
         </div>
     </div>
