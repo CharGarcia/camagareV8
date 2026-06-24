@@ -69,6 +69,7 @@ public/storage/
 storage/
 scripts/node_modules/
 scripts/.sri_profile/
+scripts/.sri_profile_asistido/
 descargasri_python/
 
 # Documentos de prueba en raíz

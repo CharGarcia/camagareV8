@@ -164,12 +164,17 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                         <!-- Columna izquierda: Configuración -->
                         <div class="col-lg-5">
 
-                            <!-- Tarjeta configuración -->
-                            <div class="card border border-primary border-opacity-25 shadow-sm rounded-3 mb-3">
-                                <div class="card-header bg-primary bg-opacity-10 border-bottom border-primary border-opacity-25 py-2 px-3">
-                                    <h6 class="mb-0 fw-bold text-primary small"><i class="bi bi-gear-fill me-2"></i>Configuración de Descarga</h6>
-                                </div>
-                                <div class="card-body px-3 py-3">
+                            <!-- Acordeón configuración (colapsado por defecto) -->
+                            <div class="accordion shadow-sm mb-3" id="accordionConfigSri">
+                              <div class="accordion-item border border-secondary border-opacity-25 rounded-3 overflow-hidden">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button collapsed bg-secondary bg-opacity-10 text-secondary fw-bold small py-2 px-3" type="button" data-bs-toggle="collapse" data-bs-target="#collapseConfigSri" aria-expanded="false" aria-controls="collapseConfigSri">
+                                        <i class="bi bi-key-fill me-2"></i>Contraseña SRI
+                                        <span id="auto_estado_badge" class="badge ms-2 bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:0.7rem;">Inactivo</span>
+                                    </button>
+                                </h2>
+                                <div id="collapseConfigSri" class="accordion-collapse collapse" data-bs-parent="#accordionConfigSri">
+                                  <div class="accordion-body px-3 py-3">
 
                                     <div class="mb-3">
                                         <label class="form-label fw-semibold small text-muted mb-1">Usuario SRI en Línea</label>
@@ -202,13 +207,13 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                         <label class="form-label fw-semibold small text-muted mb-1">Estado</label>
                                         <div class="d-flex gap-3">
                                             <div class="form-check">
-                                                <input class="form-check-input" type="radio" name="auto_estado" id="auto_estado_activo" value="activo">
+                                                <input class="form-check-input" type="radio" name="auto_estado" id="auto_estado_activo" value="activo" onchange="actualizarBadgeEstado('activo')">
                                                 <label class="form-check-label small" for="auto_estado_activo">
                                                     <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Activo</span>
                                                 </label>
                                             </div>
                                             <div class="form-check">
-                                                <input class="form-check-input" type="radio" name="auto_estado" id="auto_estado_inactivo" value="inactivo" checked>
+                                                <input class="form-check-input" type="radio" name="auto_estado" id="auto_estado_inactivo" value="inactivo" checked onchange="actualizarBadgeEstado('inactivo')">
                                                 <label class="form-check-label small" for="auto_estado_inactivo">
                                                     <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Inactivo</span>
                                                 </label>
@@ -216,32 +221,20 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                         </div>
                                     </div>
 
-                                    <div class="mb-3">
-                                        <label class="form-label fw-semibold small text-muted mb-1">Documentos a descargar (por defecto)</label>
-                                        <select id="auto_tipos_documento" class="form-select form-select-sm shadow-none">
-                                            <option value="facturas">Solo Facturas</option>
-                                            <option value="retenciones">Solo Retenciones</option>
-                                            <option value="notas_credito">Solo Notas de Crédito</option>
-                                            <option value="notas_debito">Solo Notas de Débito</option>
-                                            <option value="liquidaciones">Solo Liquidaciones de Compra</option>
-                                            <option value="facturas,retenciones">Facturas + Retenciones</option>
-                                            <option value="facturas,retenciones,notas_credito">Facturas + Retenciones + Notas de Crédito</option>
-                                            <option value="facturas,notas_credito,notas_debito">Facturas + Notas de Crédito/Débito</option>
-                                        </select>
-                                    </div>
-
                                     <div class="d-flex gap-2 mt-3">
                                         <button type="button" class="btn btn-primary btn-sm px-4" onclick="guardarConfigDescarga()">
                                             <i class="bi bi-floppy me-1"></i> Guardar
                                         </button>
                                     </div>
+                                  </div>
                                 </div>
+                              </div>
                             </div>
 
-                            <!-- Tarjeta ejecución manual con parámetros -->
+                            <!-- Tarjeta descarga semiautomática directa (tú resuelves el captcha) -->
                             <div class="card border border-success border-opacity-25 shadow-sm rounded-3 mb-3">
                                 <div class="card-header bg-success bg-opacity-10 border-bottom border-success border-opacity-25 py-2 px-3">
-                                    <h6 class="mb-0 fw-bold text-success small"><i class="bi bi-play-circle me-2"></i>Ejecutar Descarga Manual</h6>
+                                    <h6 class="mb-0 fw-bold text-success small"><i class="bi bi-person-video3 me-2"></i>Descarga semiautomática directa</h6>
                                 </div>
                                 <div class="card-body px-3 py-3">
 
@@ -284,29 +277,31 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                     <div class="mb-3">
                                         <label class="form-label fw-semibold small text-muted mb-1">Tipo de documento</label>
                                         <select id="exec_tipo" class="form-select form-select-sm shadow-none" title="Tipo de documento a buscar">
+                                            <option value="todos" selected>Todos los tipos</option>
                                             <option value="facturas">Facturas</option>
                                             <option value="retenciones">Retenciones</option>
                                             <option value="notas_credito">Notas de Crédito</option>
                                             <option value="notas_debito">Notas de Débito</option>
                                             <option value="liquidaciones">Liquidaciones de Compra</option>
                                         </select>
-                                        <div class="form-text">Anula el tipo configurado arriba solo para esta ejecución.</div>
                                     </div>
 
                                     <div class="d-flex gap-2 mt-2">
-                                        <button type="button" class="btn btn-success btn-sm px-4" id="btnEjecutarManual" onclick="ejecutarDescargaManual()">
-                                            <i class="bi bi-play-circle me-1"></i> Ejecutar ahora
+                                        <button type="button" class="btn btn-success btn-sm px-4" id="btnEjecutarManual" onclick="iniciarDescargaAsistida()">
+                                            <i class="bi bi-person-video3 me-1"></i> Iniciar descarga
                                         </button>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Info de fechas y cron -->
+                            <!-- Cómo funciona la descarga semiautomática -->
                             <div class="p-3 bg-info bg-opacity-10 border border-info border-opacity-25 rounded-3 small text-info-emphasis">
-                                <div class="fw-bold mb-2"><i class="bi bi-clock-history me-1"></i>Lógica de descarga automática</div>
-                                <p class="mb-0 ps-3">
-                                    La descarga automática se la debe configurar en automatizaciones, en la opción descargas SRI.
-                                </p>
+                                <div class="fw-bold mb-2"><i class="bi bi-info-circle me-1"></i>¿Cómo funciona la descarga semiautomática?</div>
+                                <ol class="ps-3 mb-0">
+                                    <li>El sistema inicia sesión solo en el portal del SRI y aplica los filtros.</li>
+                                    <li>Verás el portal real en una ventana. <strong>Haz clic en el botón CONSULTAR</strong> del propio portal: así el SRI detecta que hay un humano.</li>
+                                    <li>El sistema lee el listado y descarga cada comprobante por el servicio oficial y lo registra.</li>
+                                </ol>
                             </div>
 
                         </div>
@@ -401,6 +396,35 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                         </tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Visor remoto de la descarga asistida -->
+<div class="modal fade" id="modalVisorSri" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2 px-3">
+                <h6 class="modal-title fw-bold"><i class="bi bi-person-video3 text-primary me-2"></i>Descarga semiautomática del SRI</h6>
+                <button type="button" class="btn-close" aria-label="Cerrar" onclick="cerrarVisorSri()"></button>
+            </div>
+            <div class="modal-body p-2">
+                <div class="alert alert-warning py-2 px-3 small mb-2 d-none" id="asis_instruccion">
+                    <i class="bi bi-hand-index-thumb me-1"></i><strong>Cuando veas el portal, haz clic en el botón CONSULTAR del SRI</strong> para continuar.
+                </div>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <div class="progress flex-grow-1" style="height:8px;">
+                        <div id="asis_barra" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width:0%"></div>
+                    </div>
+                    <span class="small text-muted" id="asis_etapa" style="min-width:42%;">Iniciando…</span>
+                </div>
+                <div class="border rounded bg-dark" style="height:60vh;overflow:hidden;">
+                    <iframe id="asis_visor" src="about:blank" title="Visor SRI" style="border:0;width:100%;height:100%;" allow="clipboard-read; clipboard-write"></iframe>
+                </div>
+            </div>
+            <div class="modal-footer py-2 px-3">
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="cerrarVisorSri()"><i class="bi bi-x-circle me-1"></i>Cancelar / Cerrar</button>
             </div>
         </div>
     </div>

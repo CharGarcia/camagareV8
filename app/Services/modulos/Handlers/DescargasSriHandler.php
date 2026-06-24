@@ -14,6 +14,18 @@ class DescargasSriHandler extends BaseHandler
      */
     public function ejecutar(int $idEmpresa, ?int $idEstablecimiento, int $idUsuario, array $parametros): array
     {
+        // Suspensión reversible del modo automático (evita bloqueos del usuario en el SRI).
+        // Se reemplaza por la "descarga asistida" (visor remoto + humano). Palanca en config/app.php.
+        $appCfg = is_file(MVC_CONFIG . '/app.php') ? require MVC_CONFIG . '/app.php' : [];
+        if (!empty($appCfg['sri_descarga_auto_suspendida'])) {
+            return [
+                'ok'        => true, // queda registrado como ejecutado, sin error y sin descargar
+                'mensaje'   => 'Descarga automática SUSPENDIDA. Use la descarga asistida (visor remoto) desde el módulo Descargas SRI.',
+                'detalles'  => 'Modo automático desactivado por configuración (sri_descarga_auto_suspendida).',
+                'registros' => 0,
+            ];
+        }
+
         $hoy = new \DateTime();
         $mesesAEjecutar = [];
         

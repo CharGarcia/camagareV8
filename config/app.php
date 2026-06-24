@@ -28,4 +28,10 @@ return [
     ],
     // API key de 2captcha para resolver reCAPTCHA v3 Enterprise del portal SRI
     '2captcha_api_key' => 'f40ccb9455dfd2bdb8bd2d3e7ccce8fa',
+
+    // Suspende el modo AUTOMÁTICO de descargas SRI (cron directo y automatizaciones).
+    // Se reemplaza por la "descarga asistida" (visor remoto + humano en el loop) para
+    // no resolver el captcha de forma automática y evitar bloqueos del usuario en el SRI.
+    // Palanca reversible: poner en false para reactivar el modo automático.
+    'sri_descarga_auto_suspendida' => true,
 ];

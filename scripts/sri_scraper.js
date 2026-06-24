@@ -81,7 +81,15 @@ async function main(config) {
     const { usuario, clave, ano, mes, dia, tipo, apiKey2captcha, clavesExcluir = [] } = config;
     _streamXml = config.streamXml === true;
     const setExcluir = new Set(clavesExcluir);
-    if (!apiKey2captcha) throw new Error('Falta apiKey2captcha en la configuración.');
+
+    // Modo ASISTIDO: el sistema loguea y aplica filtros, pero NO resuelve el captcha.
+    // El humano hace clic en "Consultar" sobre el portal real (visto por pantalla remota/noVNC),
+    // y el scraper solo recolecta las claves de acceso del listado (los XML los baja PHP por
+    // webservice, sin captcha). Es lo que sube el score de reCAPTCHA: interacción humana real.
+    const modoAsistido = config.modoAsistido === true;
+
+    // 2captcha solo se usa en el modo automático (resolución sintética del captcha).
+    if (!modoAsistido && !apiKey2captcha) throw new Error('Falta apiKey2captcha en la configuración.');
 
     // Headful por defecto: es lo que pasa el captcha del SRI (el headless penaliza el score).
     //   - Local (Windows, con pantalla): ventana visible.
@@ -139,14 +147,18 @@ async function main(config) {
     try {
         reportarProgreso(5, 'Iniciando sesión en el portal SRI...');
 
-        await context.route('**/*', (route) => {
-            const req = route.request();
-            const tipoRes = req.resourceType();
-            const url = req.url();
-            if (tipoRes === 'image' && !url.includes('srienlinea.sri.gob.ec')) { route.abort(); return; }
-            if (tipoRes === 'media') { route.abort(); return; }
-            route.continue();
-        });
+        // En modo asistido NO se bloquea ningún recurso: el portal debe verse completo para el
+        // humano y el reCAPTCHA debe comportarse de forma natural (mejor score).
+        if (!modoAsistido) {
+            await context.route('**/*', (route) => {
+                const req = route.request();
+                const tipoRes = req.resourceType();
+                const url = req.url();
+                if (tipoRes === 'image' && !url.includes('srienlinea.sri.gob.ec')) { route.abort(); return; }
+                if (tipoRes === 'media') { route.abort(); return; }
+                route.continue();
+            });
+        }
 
         const page = context.pages()[0] || await context.newPage();
 
@@ -261,6 +273,40 @@ async function main(config) {
             if (selectorTipo) { await seleccionarOpcion(ctx, selectorTipo, String(tipo)); await pausa(200); }
         }
 
+        // ── MODO ASISTIDO ────────────────────────────────────────────────────────
+        // No se resuelve el captcha automáticamente. El humano hace clic en "Consultar"
+        // sobre el portal real (vía pantalla remota). El scraper solo recolecta las claves.
+        if (modoAsistido) {
+            reportarProgreso(40, 'Portal listo. Esperando que hagas clic en CONSULTAR...');
+            emitirEsperandoHumano('Cuando veas el portal del SRI, haz clic en el botón CONSULTAR para continuar.');
+
+            const timeoutHumano = (config.timeoutHumanoMs ?? 240000); // 4 min para que el humano consulte
+            const estado = await esperarConsultaAsistida(ctx, timeoutHumano);
+
+            if (estado === 'timeout') {
+                await screenshot(page, 'ASISTIDO_timeout_sin_consulta');
+                throw new Error('No se detectó la consulta. ¿Hiciste clic en CONSULTAR? Intenta de nuevo.');
+            }
+
+            if (estado === 'vacio') {
+                await screenshot(page, 'ASISTIDO_cero_documentos');
+                reportarProgreso(100, 'Consulta realizada: sin documentos para el período.');
+                emitirClaves([]);
+                emitir({ ok: true, modo: 'asistido', total: 0, mensaje: 'Sin documentos para el período.' });
+                return;
+            }
+
+            reportarProgreso(80, 'Consulta detectada. Recolectando claves de acceso...');
+            const links  = await recolectarTodosLosLinks(page, ctx);
+            const claves = [...new Set(links.map(l => l.clave).filter(c => c && c.length === 49))];
+
+            await screenshot(page, 'ASISTIDO_listado_recolectado');
+            emitirClaves(claves);
+            reportarProgreso(100, `Listado obtenido: ${claves.length} comprobantes.`);
+            emitir({ ok: true, modo: 'asistido', total: claves.length });
+            return;
+        }
+
         reportarProgreso(35, 'Resolviendo verificación de seguridad (CAPTCHA)...');
         await ejecutarConsultar(ctx, page, apiKey2captcha);
 
@@ -307,6 +353,24 @@ async function main(config) {
  * Solo elimina locks; no toca cookies ni datos de sesión (la reputación se conserva).
  */
 function liberarPerfil(profileDir) {
+    // En Windows, un Chrome real previo que use ESTE perfil provoca el "handoff"
+    // ("Se está abriendo en una sesión de navegador existente"): el nuevo Chrome cede el
+    // control al viejo y termina, y Playwright pierde el navegador. Matar esas instancias
+    // huérfanas del perfil SRI antes de lanzar. NO afecta al Chrome personal del usuario
+    // (que usa otro user-data-dir): se filtra por la ruta del perfil en la línea de comandos.
+    if (process.platform === 'win32') {
+        try {
+            const { execSync } = require('child_process');
+            const marcador = path.basename(profileDir); // p.ej. ".sri_profile"
+            execSync(
+                'powershell -NoProfile -Command "Get-CimInstance Win32_Process | ' +
+                "Where-Object { $_.Name -eq 'chrome.exe' -and $_.CommandLine -like '*" + marcador + "*' } | " +
+                'ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"',
+                { stdio: 'ignore', timeout: 8000 }
+            );
+        } catch (_) {}
+    }
+
     for (const f of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
         try { fs.rmSync(path.join(profileDir, f), { force: true }); } catch (_) {}
     }
@@ -349,8 +413,18 @@ async function procesarPorPaginas(page, ctx, setExcluir) {
             return Array.from(tbody.querySelectorAll('tr[data-ri]')).map(row => {
                 const ri = row.getAttribute('data-ri');
                 const textContent = row.textContent || '';
-                const match = textContent.match(/\d{49}/);
-                const clave = match ? match[0] : null;
+                // La clave de acceso vive en su propia celda (49 dígitos). Buscar la <td> cuyos
+                // dígitos sumen exactamente 49 evita pegar dígitos de otras columnas (p. ej. el
+                // número de comprobante), que produciría una clave corrupta y un falso RECHAZADA.
+                let clave = null;
+                for (const td of row.querySelectorAll('td')) {
+                    const soloDig = (td.textContent || '').replace(/\D/g, '');
+                    if (soloDig.length === 49) { clave = soloDig; break; }
+                }
+                if (!clave) {
+                    const m = textContent.match(/(?<!\d)\d{49}(?!\d)/); // 49 dígitos no rodeados de más dígitos
+                    if (m) clave = m[0];
+                }
                 const linkXml = row.querySelector('a[id*=":lnkXml"]');
                 const xmlId   = linkXml ? linkXml.id : null;
                 return { ri, clave, xmlId, _textDebug: textContent.substring(0, 100) };
@@ -409,8 +483,18 @@ async function recolectarTodosLosLinks(page, ctx) {
             return Array.from(tbody.querySelectorAll('tr[data-ri]')).map(row => {
                 const ri = row.getAttribute('data-ri');
                 const textContent = row.textContent || '';
-                const match = textContent.match(/\d{49}/);
-                const clave = match ? match[0] : null;
+                // La clave de acceso vive en su propia celda (49 dígitos). Buscar la <td> cuyos
+                // dígitos sumen exactamente 49 evita pegar dígitos de otras columnas (p. ej. el
+                // número de comprobante), que produciría una clave corrupta y un falso RECHAZADA.
+                let clave = null;
+                for (const td of row.querySelectorAll('td')) {
+                    const soloDig = (td.textContent || '').replace(/\D/g, '');
+                    if (soloDig.length === 49) { clave = soloDig; break; }
+                }
+                if (!clave) {
+                    const m = textContent.match(/(?<!\d)\d{49}(?!\d)/); // 49 dígitos no rodeados de más dígitos
+                    if (m) clave = m[0];
+                }
                 const linkXml = row.querySelector(`a[id*=":lnkXml"]`);
                 const xmlId   = linkXml ? linkXml.id : null;
                 return { ri, clave, xmlId, _textDebug: textContent.substring(0, 100) };
@@ -651,6 +735,33 @@ async function esperarTablaResultados(ctx) {
     return false;
 }
 
+/**
+ * Modo asistido: espera a que el HUMANO haga clic en "Consultar" en el portal real.
+ * Devuelve 'resultados' (aparecieron filas con clave), 'vacio' (mensaje de sin registros)
+ * o 'timeout' (no consultó dentro del tiempo). Solo cuenta como consulta una fila con clave
+ * de 49 dígitos o el mensaje vacío de PrimeFaces, para no detectar la consulta antes de tiempo.
+ */
+async function esperarConsultaAsistida(ctx, timeoutMs) {
+    const fin = Date.now() + timeoutMs;
+    while (Date.now() < fin) {
+        const estado = await ctx.evaluate(() => {
+            const tbody = document.querySelector('#frmPrincipal\\:tablaCompRecibidos_data') ||
+                          document.querySelector('[id*="tablaCompRecibidos_data"]');
+            if (tbody) {
+                const filas = Array.from(tbody.querySelectorAll('tr[data-ri]'));
+                if (filas.some(r => /\d{49}/.test(r.textContent || ''))) return 'resultados';
+            }
+            const vacio = document.querySelector('.ui-datatable-empty-message');
+            if (vacio && vacio.textContent.trim()) return 'vacio';
+            return null;
+        }).catch(() => null);
+
+        if (estado) return estado;
+        await pausa(1000);
+    }
+    return 'timeout';
+}
+
 async function loginKeycloak(page, usuario, clave) {
     await page.waitForSelector('#usuario', { timeout: 15000, state: 'visible' }).catch(() => {});
 
@@ -781,6 +892,17 @@ function emitir(obj) {
 // Emisión incremental de un XML descargado (modo streaming)
 function emitirXml(clave, xml) {
     process.stdout.write(JSON.stringify({ type: 'xml', data: { clave, xml } }) + '\n');
+}
+
+// Modo asistido: avisa que el scraper está esperando el clic humano en "Consultar".
+function emitirEsperandoHumano(mensaje) {
+    process.stdout.write(JSON.stringify({ type: 'esperando_humano', message: mensaje }) + '\n');
+}
+
+// Modo asistido: emite la lista de claves de acceso recolectadas del listado.
+// PHP las descarga una a una por el webservice (sin captcha) y las registra.
+function emitirClaves(claves) {
+    process.stdout.write(JSON.stringify({ type: 'claves', data: claves }) + '\n');
 }
 
 // Progreso a stdout en JSON line

@@ -507,9 +507,8 @@ function cargarConfigDescarga() {
                 radioInactivo.checked = c.estado !== 'activo';
             }
 
-            // Tipos documento
-            const selTipos = document.getElementById('auto_tipos_documento');
-            if (selTipos) selTipos.value = c.tipos_documento || 'todos';
+            // Badge de estado junto al título del acordeón de configuración
+            actualizarBadgeEstado(c.estado);
 
             // Badge clave guardada
             const badge = document.getElementById('auto_clave_guardada_badge');
@@ -522,6 +521,17 @@ function cargarConfigDescarga() {
             cargarHistorialDescargas();
         })
         .catch(err => console.error('Error cargando config descarga:', err));
+}
+
+function actualizarBadgeEstado(estado) {
+    const badge = document.getElementById('auto_estado_badge');
+    if (!badge) return;
+    const activo = estado === 'activo';
+    badge.textContent = activo ? 'Activo' : 'Inactivo';
+    badge.className = 'badge ms-2 ' + (activo
+        ? 'bg-success bg-opacity-10 text-success border border-success border-opacity-25'
+        : 'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25');
+    badge.style.fontSize = '0.7rem';
 }
 
 function renderUltimoEstado(c) {
@@ -559,7 +569,6 @@ function guardarConfigDescarga() {
     const usuario = document.getElementById('auto_sri_usuario').value.trim();
     const clave   = document.getElementById('auto_sri_clave').value;
     const estado  = document.querySelector('input[name="auto_estado"]:checked')?.value || 'inactivo';
-    const tipos   = document.getElementById('auto_tipos_documento').value;
 
     if (!usuario) {
         Swal.fire('Atención', 'Debe ingresar el usuario SRI en Línea.', 'warning');
@@ -570,7 +579,8 @@ function guardarConfigDescarga() {
     formData.append('sri_usuario', usuario);
     formData.append('sri_clave', clave);
     formData.append('estado', estado);
-    formData.append('tipos_documento', tipos);
+    // El tipo de documento ya no se configura aquí; se elige por ejecución en la descarga semiautomática.
+    formData.append('tipos_documento', 'todos');
 
     fetch(`${BASE_URL}/modulos/DescargasSri/guardarConfigDescargaAjax`, {
         method: 'POST',
@@ -603,168 +613,6 @@ function toggleVerClave() {
         input.type = 'password';
         icono.className = 'bi bi-eye';
     }
-}
-
-function ejecutarDescargaManual() {
-    const ano  = document.getElementById('exec_ano')?.value  || 0;
-    const mes  = document.getElementById('exec_mes')?.value  || 0;
-    const dia  = document.getElementById('exec_dia')?.value  || 0;
-    const tipo = document.getElementById('exec_tipo')?.value || 'todos';
-
-    const mesesNombres = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-    const mesLabel = parseInt(mes) === 0 ? 'Todos los meses' : mesesNombres[parseInt(mes)];
-    const diaLabel = parseInt(dia) === 0 ? 'Todos los días' : `Día ${dia}`;
-    const tipoLabel = {
-        todos: 'Todos los tipos', facturas: 'Facturas', retenciones: 'Retenciones',
-        notas_credito: 'Notas de Crédito', notas_debito: 'Notas de Débito', liquidaciones: 'Liquidaciones'
-    }[tipo] || tipo;
-
-    Swal.fire({
-        title: 'Ejecutar descarga ahora',
-        html: `Se conectará al portal SRI en Línea con los siguientes parámetros:<br>
-            <div class="mt-2 text-start small border rounded p-2 bg-light">
-                <div class="d-flex justify-content-between mb-1"><span class="text-muted">Año:</span> <strong>${ano}</strong></div>
-                <div class="d-flex justify-content-between mb-1"><span class="text-muted">Mes:</span> <strong>${mesLabel}</strong></div>
-                <div class="d-flex justify-content-between mb-1"><span class="text-muted">Día:</span> <strong>${diaLabel}</strong></div>
-                <div class="d-flex justify-content-between"><span class="text-muted">Tipo:</span> <strong>${tipoLabel}</strong></div>
-            </div>`,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Sí, ejecutar',
-        cancelButtonText: 'Cancelar',
-    }).then(result => {
-        if (!result.isConfirmed) return;
-
-        const btn = document.getElementById('btnEjecutarManual');
-        if (btn) {
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Descargando...';
-        }
-
-        let abortController = new AbortController();
-
-        Swal.fire({
-            title: 'Descargando del SRI...',
-            html: `<div id="swal-etapa" class="mb-2 small fw-semibold">Iniciando proceso en el servidor...</div>
-                   <div class="progress" style="height:8px;">
-                       <div id="swal-barra" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width:0%"></div>
-                   </div>
-                   <div class="mt-3 text-center">
-                       <button id="btnAbortarSri" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle me-1"></i>Abortar proceso</button>
-                   </div>`,
-            allowOutsideClick: false,
-            showConfirmButton: false,
-            didOpen: () => {
-                document.getElementById('btnAbortarSri').addEventListener('click', () => {
-                    abortController.abort();
-                    document.getElementById('btnAbortarSri').innerHTML = '<span class="spinner-border spinner-border-sm"></span> Abortando...';
-                    document.getElementById('btnAbortarSri').disabled = true;
-                });
-            }
-        });
-
-        const formData = new FormData();
-        formData.append('ano',  ano);
-        formData.append('mes',  mes);
-        formData.append('dia',  dia);
-        formData.append('tipo', tipo);
-
-        fetch(`${BASE_URL}/modulos/DescargasSri/ejecutarDescargaManualAjax`, {
-            method: 'POST',
-            body: formData,
-            signal: abortController.signal
-        })
-        .then(async response => {
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder("utf-8");
-            let buffer = '';
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split("\n");
-                buffer = lines.pop(); // Última línea incompleta puede llegar cortada
-
-                for (const line of lines) {
-                    if (!line.trim()) continue;
-                    try {
-                        const data = JSON.parse(line);
-                        
-                        if (data.type === 'progress') {
-                            const etapaEl = document.getElementById('swal-etapa');
-                            const barraEl = document.getElementById('swal-barra');
-                            if (etapaEl) etapaEl.textContent = data.message || 'Procesando...';
-                            if (barraEl) barraEl.style.width = Math.min(100, data.pct || 0) + '%';
-                        } 
-                        else if (data.type === 'resultado') {
-                            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-play-circle me-1"></i> Ejecutar ahora'; }
-
-                            const esParcial = data.estado === 'parcial';
-                            Swal.fire({
-                                icon: esParcial ? 'warning' : 'success',
-                                title: esParcial ? 'Descarga parcial' : 'Descarga completada',
-                                html: `
-                                    ${esParcial ? '<div class="alert alert-warning py-2 small mb-2"><i class="bi bi-exclamation-triangle me-1"></i>El proceso se interrumpió, pero los documentos descargados hasta ese punto ya quedaron registrados.</div>' : ''}
-                                    <div class="text-start small">
-                                        <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
-                                            <span>Documentos encontrados</span>
-                                            <strong>${data.total_encontrados}</strong>
-                                        </div>
-                                        <div class="d-flex justify-content-between border-bottom pb-2 mb-2 text-success">
-                                            <span>Registrados nuevos</span>
-                                            <strong>${data.total_nuevos}</strong>
-                                        </div>
-                                        <div class="d-flex justify-content-between border-bottom pb-2 mb-2 text-muted">
-                                            <span>Ya existían</span>
-                                            <strong>${data.total_existentes}</strong>
-                                        </div>
-                                        <div class="d-flex justify-content-between text-danger">
-                                            <span>Errores</span>
-                                            <strong>${data.total_errores}</strong>
-                                        </div>
-                                    </div>
-                                `,
-                                confirmButtonText: 'Aceptar'
-                            });
-                            cargarConfigDescarga();
-                            return;
-                        }
-                        else if (data.type === 'error') {
-                            let errMsg = data.error || 'Error desconocido.';
-
-                            if (errMsg.includes('ERROR_CAPTCHA_UNSOLVABLE') || errMsg.includes('timeout esperando token') || errMsg.includes('CAPCHA')) {
-                                errMsg = 'El sistema de validación de seguridad (Captcha) no pudo ser resuelto a tiempo. Por favor, inténtalo de nuevo.';
-                            } else if (errMsg.includes('Timeout general') || errMsg.includes('superó') || errMsg.includes('timeout')) {
-                                errMsg = 'El proceso superó el tiempo máximo. Los documentos descargados antes del corte ya fueron registrados en la base de datos. Puedes ejecutar la descarga nuevamente para continuar con los restantes.';
-                            } else if (errMsg.includes('credenciales_incorrectas') || errMsg.includes('credenciales')) {
-                                errMsg = 'Las credenciales del SRI son incorrectas. Verifica la configuración.';
-                            } else {
-                                errMsg = 'No se ha logrado hacer la descarga debido a un inconveniente técnico. Por favor, inténtalo de nuevo.\n\nDetalle: ' + errMsg;
-                            }
-
-                            Swal.fire('Descarga interrumpida', errMsg, 'warning');
-                            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-play-circle me-1"></i> Ejecutar ahora'; }
-                            cargarHistorialDescargas();
-                            return;
-                        }
-                    } catch (e) {
-                        console.error('Error parseando JSON stream:', e, line);
-                    }
-                }
-            }
-        })
-        .catch(err => {
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-play-circle me-1"></i> Ejecutar ahora'; }
-            if (err.name === 'AbortError') {
-                Swal.fire('Cancelado', 'La descarga ha sido abortada por el usuario.', 'info');
-            } else {
-                console.error(err);
-                Swal.fire('Error', 'Problema de conexión con el servidor.', 'error');
-            }
-        });
-    });
 }
 
 function cargarHistorialDescargas() {
@@ -930,4 +778,164 @@ function verDetalleLog(idLog) {
 
 function escHtml(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+
+// =============================================================================
+// DESCARGA ASISTIDA (visor remoto + humano resuelve el captcha en el portal)
+// =============================================================================
+
+let asisAbort = null;
+
+function setAsisEtapa(t) { const el = document.getElementById('asis_etapa'); if (el) el.textContent = t; }
+function setAsisBarra(p) { const el = document.getElementById('asis_barra'); if (el) el.style.width = Math.min(100, p || 0) + '%'; }
+
+function iniciarDescargaAsistida() {
+    const ano  = document.getElementById('exec_ano')?.value  || 0;
+    const mes  = document.getElementById('exec_mes')?.value  || 0;
+    const dia  = document.getElementById('exec_dia')?.value  || 0;
+    const tipo = document.getElementById('exec_tipo')?.value || 'todos';
+
+    // Reset de la UI del modal
+    const visor = document.getElementById('asis_visor');
+    if (visor) visor.src = 'about:blank';
+    setAsisEtapa('Iniciando sesión en el SRI…');
+    setAsisBarra(0);
+    document.getElementById('asis_instruccion')?.classList.add('d-none');
+
+    const modalEl = document.getElementById('modalVisorSri');
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+
+    const btn = document.getElementById('btnEjecutarManual');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> En curso…'; }
+
+    asisAbort = new AbortController();
+
+    const formData = new FormData();
+    formData.append('ano',  ano);
+    formData.append('mes',  mes);
+    formData.append('dia',  dia);
+    formData.append('tipo', tipo);
+
+    fetch(`${BASE_URL}/modulos/DescargasSri/iniciarSesionAsistidaAjax`, {
+        method: 'POST',
+        body: formData,
+        signal: asisAbort.signal
+    })
+    .then(async response => {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                let data;
+                try { data = JSON.parse(line); } catch (e) { continue; }
+                manejarEventoAsistido(data);
+            }
+        }
+    })
+    .catch(err => {
+        restaurarBotonAsistida();
+        if (err.name === 'AbortError') return;
+        console.error(err);
+        setAsisEtapa('Error de conexión con el servidor.');
+        Swal.fire('Error', 'Problema de conexión con el servidor.', 'error');
+    });
+}
+
+function manejarEventoAsistido(data) {
+    if (data.type === 'visor') {
+        montarVisorNoVnc(data.token, data.ws_path);
+    } else if (data.type === 'visor_local') {
+        mostrarAvisoVisorLocal();
+    } else if (data.type === 'progress') {
+        setAsisEtapa(data.message || 'Procesando…');
+        setAsisBarra(data.pct || 0);
+    } else if (data.type === 'esperando_humano') {
+        const instr = document.getElementById('asis_instruccion');
+        if (instr) instr.classList.remove('d-none');
+        setAsisEtapa(data.message || 'Esperando tu clic en CONSULTAR…');
+    } else if (data.type === 'resultado') {
+        setAsisBarra(100);
+        setAsisEtapa('Descarga completada.');
+        document.getElementById('asis_instruccion')?.classList.add('d-none');
+        restaurarBotonAsistida();
+        Swal.fire({
+            icon: 'success',
+            title: 'Descarga asistida completada',
+            html: `
+                <div class="text-start small">
+                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2"><span>En el listado</span><strong>${data.total_encontrados}</strong></div>
+                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2 text-success"><span>Registrados nuevos</span><strong>${data.total_nuevos}</strong></div>
+                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2 text-muted"><span>Ya existían</span><strong>${data.total_existentes}</strong></div>
+                    <div class="d-flex justify-content-between text-danger"><span>Errores</span><strong>${data.total_errores}</strong></div>
+                </div>`,
+            confirmButtonText: 'Aceptar'
+        });
+        cerrarVisorSri(false); // no reabortar: el stream ya terminó
+        if (typeof cargarHistorialDescargas === 'function') cargarHistorialDescargas();
+    } else if (data.type === 'error') {
+        document.getElementById('asis_instruccion')?.classList.add('d-none');
+        restaurarBotonAsistida();
+        let msg = data.error || 'Error desconocido.';
+        if (/captcha|CONSULTAR/i.test(msg)) {
+            msg = 'No se detectó la consulta. Recuerda hacer clic en el botón CONSULTAR del portal del SRI. ' + msg;
+        }
+        Swal.fire('Descarga interrumpida', msg, 'warning');
+        cerrarVisorSri(false);
+        if (typeof cargarHistorialDescargas === 'function') cargarHistorialDescargas();
+    }
+}
+
+function montarVisorNoVnc(token, wsPath) {
+    const path = (wsPath || '/sri-visor-ws/').replace(/^\//, '') + '?token=' + token;
+    const url = `${BASE_URL}/novnc/vnc_lite.html?autoconnect=1&reconnect=0&resize=scale&path=${encodeURIComponent(path)}`;
+    const visor = document.getElementById('asis_visor');
+    if (visor) visor.src = url;
+    setAsisEtapa('Cargando el portal… cuando lo veas, haz clic en CONSULTAR.');
+}
+
+// Local (Windows): no hay pantalla remota; el navegador se abre en el escritorio del usuario.
+function mostrarAvisoVisorLocal() {
+    const visor = document.getElementById('asis_visor');
+    if (visor) {
+        visor.removeAttribute('src');
+        visor.srcdoc = `<div style="display:flex;height:100%;align-items:center;justify-content:center;background:#111;color:#eee;font-family:sans-serif;text-align:center;padding:1.5rem;">
+            <div>
+                <div style="font-size:2rem;margin-bottom:.5rem;">🖥️</div>
+                <div style="font-size:1rem;line-height:1.5;">Se abrió una <b>ventana del navegador</b> en tu pantalla.<br>
+                Ve a esa ventana y haz clic en el botón <b>CONSULTAR</b> del portal del SRI.<br>
+                El sistema continuará solo cuando aparezcan los resultados.</div>
+            </div>
+        </div>`;
+    }
+    setAsisEtapa('Se abrió una ventana de Chrome. Haz clic en CONSULTAR ahí.');
+}
+
+function restaurarBotonAsistida() {
+    const btn = document.getElementById('btnEjecutarManual');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-person-video3 me-1"></i> Iniciar descarga'; }
+}
+
+function cerrarVisorSri(abortar = true) {
+    if (abortar && asisAbort) { try { asisAbort.abort(); } catch (e) {} }
+    asisAbort = null;
+
+    // Avisar al servidor para liberar la sesión del visor
+    try { fetch(`${BASE_URL}/modulos/DescargasSri/cerrarSesionAsistidaAjax`, { method: 'POST' }); } catch (e) {}
+
+    const visor = document.getElementById('asis_visor');
+    if (visor) visor.src = 'about:blank';
+    restaurarBotonAsistida();
+
+    const modalEl = document.getElementById('modalVisorSri');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
 }

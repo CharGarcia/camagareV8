@@ -1,0 +1,14 @@
+[Unit]
+Description=Xvfb display :99 para la descarga asistida SRI
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+# Display virtual fijo :99 (compartido por x11vnc). -ac permite conexiones locales sin XAUTHORITY.
+ExecStart=/usr/bin/Xvfb :99 -screen 0 1366x768x24 -ac
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

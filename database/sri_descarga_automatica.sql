@@ -58,4 +58,4 @@ COMMENT ON COLUMN sri_config_descarga_auto.sri_clave IS 'Contraseña del portal 
 COMMENT ON COLUMN sri_config_descarga_auto.tipos_documento IS 'todos | facturas,retenciones,notas_credito,notas_debito,liquidaciones';
 COMMENT ON COLUMN sri_config_descarga_auto.login_bloqueado IS 'TRUE cuando el scraper reportó credenciales incorrectas. Se desbloquea al guardar nueva clave.';
 COMMENT ON COLUMN sri_config_descarga_auto.login_bloqueado_motivo IS 'Mensaje del error de credenciales que causó el bloqueo.';
-COMMENT ON COLUMN sri_descarga_auto_log.origen IS 'cron = automático nocturno | manual = lanzado desde la interfaz';
+COMMENT ON COLUMN sri_descarga_auto_log.origen IS 'cron = automático nocturno | manual = lanzado desde la interfaz | asistido = visor remoto con humano';

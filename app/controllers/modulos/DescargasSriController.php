@@ -8,6 +8,7 @@ use App\core\Controller;
 use App\Services\SriService;
 use App\Services\modulos\DocumentoAutomatedRegisterService;
 use App\Services\modulos\SriDescargaAutomaticaService;
+use App\Services\modulos\SriVisorRemotoService;
 use App\repositories\modulos\DocumentoIgnoradoRepository;
 use App\repositories\modulos\SriConfigDescargaRepository;
 use Exception;
@@ -461,6 +462,112 @@ class DescargasSriController extends Controller
         $detalle = json_decode($fila['detalle_json'] ?? '{}', true) ?: [];
 
         echo json_encode(['ok' => true, 'log' => $fila, 'detalle' => $detalle]);
+        exit;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // DESCARGA ASISTIDA — visor remoto (humano resuelve el captcha en el portal)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Inicia la descarga asistida: crea la sesión del visor (token), emite los datos para
+     * montar el visor noVNC en el cliente y luego lanza el scraper en modo asistido,
+     * retransmitiendo el progreso (incluido 'esperando_humano') en streaming JSON-line.
+     */
+    public function iniciarSesionAsistidaAjax(): void
+    {
+        set_time_limit(0);
+        $this->requireAuth();
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['type' => 'error', 'error' => 'Método no permitido.']) . "\n";
+            return;
+        }
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        $ano  = isset($_POST['ano'])  ? (int) $_POST['ano']  : null;
+        $mes  = isset($_POST['mes'])  ? (int) $_POST['mes']  : null;
+        $dia  = isset($_POST['dia'])  ? (int) $_POST['dia']  : null;
+        $tipo = isset($_POST['tipo']) ? trim($_POST['tipo']) : null;
+        if ($mes  === 0) $mes  = null;
+        if ($dia  === 0) $dia  = null;
+        if ($tipo === 'todos') $tipo = null;
+
+        // Streaming en tiempo real
+        @ini_set('output_buffering', 'off');
+        @ini_set('zlib.output_compression', 'false');
+        @ini_set('implicit_flush', '1');
+        @ob_end_clean();
+        header('Cache-Control: no-cache, must-revalidate');
+        header('X-Accel-Buffering: no');
+
+        $visor = new SriVisorRemotoService();
+
+        // En el servidor (Linux) el navegador es headless y se ve por pantalla remota (noVNC).
+        // En local (Windows) el scraper abre una ventana de Chrome real en el propio escritorio:
+        // no hay noVNC, así que se avisa al cliente que mire esa ventana.
+        $esRemoto = (PHP_OS_FAMILY !== 'Windows');
+
+        if ($esRemoto) {
+            // La infraestructura del visor (Xvfb :99, websockify) debe estar levantada.
+            $infra = $visor->verificarInfra();
+            if (!$infra['ok']) {
+                echo json_encode(['type' => 'error', 'error' => $infra['detalle']]) . "\n";
+                exit;
+            }
+
+            // Crear sesión/token del visor (lock de 1 sesión concurrente)
+            $ses = $visor->iniciarSesion($idEmpresa, $idUsuario);
+            if (!$ses['ok']) {
+                echo json_encode(['type' => 'error', 'error' => $ses['error']]) . "\n";
+                exit;
+            }
+
+            // Primer evento: datos para que el cliente monte el visor noVNC.
+            echo json_encode(['type' => 'visor', 'token' => $ses['token'], 'ws_path' => $ses['ws_path']]) . "\n";
+        } else {
+            // Local: el navegador se abre en la pantalla del usuario; no se monta noVNC.
+            echo json_encode(['type' => 'visor_local']) . "\n";
+        }
+        @ob_flush(); @flush();
+
+        session_write_close(); // permitir navegar en otras pestañas
+
+        try {
+            $svc = new SriDescargaAutomaticaService();
+            $svc->iniciarSesionAsistidaStream($idEmpresa, $idUsuario, $ano, $mes, $dia, $tipo);
+        } catch (Exception $e) {
+            echo json_encode(['type' => 'error', 'error' => $e->getMessage()]) . "\n";
+        } finally {
+            $visor->cerrarSesion();
+        }
+        exit;
+    }
+
+    /** Cierra la sesión del visor (cancelación del usuario o limpieza). */
+    public function cerrarSesionAsistidaAjax(): void
+    {
+        $this->requireAuth();
+        header('Content-Type: application/json');
+        (new SriVisorRemotoService())->cerrarSesion();
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    /**
+     * Validación del token del visor para el `auth_request` de nginx (subrequest interno
+     * antes de abrir el WebSocket). NO requiere sesión de usuario: solo valida el token
+     * efímero. Responde 200 si es válido, 403 si no.
+     */
+    public function validarVisorTokenAjax(): void
+    {
+        $token = $_GET['token'] ?? $_SERVER['HTTP_X_VISOR_TOKEN'] ?? '';
+        $ok    = (new SriVisorRemotoService())->validarToken((string) $token);
+        http_response_code($ok ? 200 : 403);
+        echo $ok ? 'OK' : 'FORBIDDEN';
         exit;
     }
 }

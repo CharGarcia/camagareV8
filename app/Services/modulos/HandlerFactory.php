@@ -92,6 +92,7 @@ class HandlerFactory
                 ],
             ],
 
+/*
             'descargas_sri' => [
                 'label'   => 'Descargas del SRI',
                 'icono'   => 'fa-cloud-download-alt',
@@ -104,6 +105,7 @@ class HandlerFactory
                     ],
                 ],
             ],
+            */
 
             'declaracion_iva' => [
                 'label'   => 'Declaración de IVA',

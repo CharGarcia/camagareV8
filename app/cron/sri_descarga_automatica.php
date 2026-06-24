@@ -50,6 +50,15 @@ $log = function (string $nivel, string $msg) use ($debug): void {
 $log('INFO', '=== SRI Descarga Automática iniciada ===');
 $log('INFO', 'Fecha: ' . date('d-m-Y') . ' | Hora: ' . date('H:i:s'));
 
+// Suspensión reversible del modo automático (evita bloqueos del usuario en el SRI).
+// Se reemplaza por la "descarga asistida" (visor remoto + humano). Palanca en config/app.php.
+$appCfg = is_file(MVC_CONFIG . '/app.php') ? require MVC_CONFIG . '/app.php' : [];
+if (!empty($appCfg['sri_descarga_auto_suspendida'])) {
+    $log('INFO', 'Modo automático SUSPENDIDO (sri_descarga_auto_suspendida=true). '
+        . 'No se ejecuta ninguna descarga. Usar la descarga asistida desde el módulo. Fin.');
+    exit(0);
+}
+
 // Obtener empresas activas
 $configModel = new SriConfigDescarga();
 $empresas    = $configModel->getActivas();

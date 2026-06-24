@@ -7,6 +7,7 @@ namespace App\Services\modulos;
 use App\models\SriConfigDescarga;
 use App\models\SriDescargaAutoLog;
 use App\Services\modulos\DocumentoAutomatedRegisterService;
+use App\Services\SriService;
 use Exception;
 
 /**
@@ -518,7 +519,8 @@ class SriDescargaAutomaticaService
         int    $totalExistentes,
         int    $totalIgnorados,
         int    $totalErrores,
-        array  $detalleJson
+        array  $detalleJson,
+        string $origen = 'manual'
     ): void {
         $mesPeriodo = $periodoUnico['mes'] ?: (int) date('n');
         $fechaDesde = sprintf('%04d-%02d-%02d', $periodoUnico['ano'], $mesPeriodo, $periodoUnico['dia'] ?: 1);
@@ -539,7 +541,7 @@ class SriDescargaAutomaticaService
             'estado'            => $estado,
             'detalle_json'      => json_encode($detalleJson),
             'duracion_seg'      => (int) (microtime(true) - $inicio),
-            'origen'            => 'manual',
+            'origen'            => $origen,
             'created_by'        => $idUsuario,
         ]);
     }
@@ -980,6 +982,336 @@ class SriDescargaAutomaticaService
         // Para cualquier otro error NO se lanza excepción: se retorna la data (ok=false)
         // y el llamador finaliza con lo que ya se registró incrementalmente.
         return $finalData;
+    }
+
+    // ─────────────────────────────────────────────
+    // DESCARGA ASISTIDA (visor remoto + humano en el loop)
+    // ─────────────────────────────────────────────
+
+    /**
+     * Descarga ASISTIDA con streaming. El scraper (modo asistido) loguea y aplica filtros;
+     * el HUMANO hace clic en "Consultar" sobre el portal real (visto por pantalla remota),
+     * con lo que el reCAPTCHA del SRI lo evalúa como humano. El scraper devuelve solo las
+     * CLAVES de acceso del listado; luego cada XML se descarga por el webservice oficial
+     * (SriService, sin captcha) y se registra con DocumentoAutomatedRegisterService.
+     *
+     * Emite por stdout (JSON-line) los eventos: progress, esperando_humano, resultado, error.
+     */
+    public function iniciarSesionAsistidaStream(
+        int     $idEmpresa,
+        int     $idUsuario = 0,
+        ?int    $anoParam  = null,
+        ?int    $mesParam  = null,
+        ?int    $diaParam  = null,
+        ?string $tipoParam = null
+    ): void {
+        $inicio    = microtime(true);
+        $configMod = new SriConfigDescarga();
+        $logMod    = new SriDescargaAutoLog();
+
+        $config = $configMod->getPorEmpresa($idEmpresa);
+        if (!$config) {
+            echo json_encode(['type' => 'error', 'error' => 'Empresa sin configuración de descargas guardada.']) . "\n";
+            return;
+        }
+        if (!empty($config['login_bloqueado'])) {
+            echo json_encode(['type' => 'error', 'error' => 'Descarga bloqueada: credenciales SRI incorrectas. Actualice la clave.']) . "\n";
+            return;
+        }
+
+        $clave   = self::desencriptarClave($config['sri_clave']);
+        $usuario = $config['sri_usuario'];
+        $tipos   = $tipoParam ?? $config['tipos_documento'];
+        if (empty($clave)) {
+            echo json_encode(['type' => 'error', 'error' => 'No se pudo desencriptar la clave SRI. Reingrese la clave.']) . "\n";
+            return;
+        }
+
+        if ($anoParam !== null) {
+            $periodoUnico = ['ano' => $anoParam, 'mes' => $mesParam ?? 0, 'dia' => $diaParam ?? 0];
+        } else {
+            $hoy = new \DateTime();
+            $periodoUnico = ['ano' => (int) $hoy->format('Y'), 'mes' => (int) $hoy->format('n'), 'dia' => 0];
+        }
+
+        $tipoSri = $this->resolverTipoSri($tipos);
+
+        // 1) Lanzar scraper asistido → retransmite progress/esperando_humano y devuelve las claves.
+        try {
+            $claves = $this->lanzarScraperAsistido(
+                $usuario, $clave,
+                $periodoUnico['ano'], $periodoUnico['mes'], $periodoUnico['dia'], $tipoSri,
+                self::TIMEOUT_DEFAULT_MS
+            );
+        } catch (Exception $e) {
+            $mensaje = $e->getMessage();
+            if ($e->getCode() === 401) {
+                $configMod->bloquearLogin($idEmpresa, $mensaje);
+            }
+            $configMod->actualizarEstadoDescarga($idEmpresa, 'error', $mensaje);
+            $this->insertarLog($logMod, $idEmpresa, $tipos, 'error', $mensaje, [], $inicio, $idUsuario);
+            echo json_encode(['type' => 'error', 'error' => $mensaje]) . "\n";
+            return;
+        }
+
+        // 2) Filtrar por tipo (si la config pide tipos específicos y el portal no filtró)
+        $tiposArrFiltro = ($tipos !== 'todos' && $tipoSri === '0')
+            ? array_map('trim', explode(',', $tipos)) : null;
+
+        if ($tiposArrFiltro !== null) {
+            $claves = array_values(array_filter($claves, function (string $c) use ($tiposArrFiltro): bool {
+                if (strlen($c) !== 49) return false;
+                $codDoc = substr($c, 8, 2);
+                $tipo   = self::TIPOS_CODOC[$codDoc] ?? null;
+                return $tipo !== null && in_array($tipo, $tiposArrFiltro, true);
+            }));
+        }
+
+        // 3) Separar las que ya existen en BD de las nuevas
+        $setExist     = array_flip($this->obtenerClavesExistentes($idEmpresa));
+        $nuevasClaves = [];
+        $yaExistentes = 0;
+        foreach (array_values(array_unique($claves)) as $c) {
+            if ($c === '' || strlen($c) !== 49) continue;
+            if (isset($setExist[$c])) { $yaExistentes++; continue; }
+            $nuevasClaves[] = $c;
+        }
+
+        $totalListado = count($claves);
+        $n = count($nuevasClaves);
+        echo json_encode(['type' => 'progress', 'pct' => 82,
+            'message' => "Listado: {$totalListado} comprobantes. Descargando {$n} nuevos por webservice..."]) . "\n";
+        @ob_flush(); @flush();
+
+        // 4) Descargar cada XML nuevo por el webservice oficial (sin captcha) y registrar
+        $sriService  = new SriService();
+        $registerSvc = new DocumentoAutomatedRegisterService();
+
+        $totalNuevos    = 0;
+        $totalExistentes = $yaExistentes;
+        $totalIgnorados = 0;
+        $totalErrores   = 0;
+        $detallesClaves = [];
+
+        foreach ($nuevasClaves as $i => $c) {
+            if (connection_aborted()) break;
+            $pct = 82 + (int) floor((($i + 1) / max(1, $n)) * 16); // 82..98
+            echo json_encode(['type' => 'progress', 'pct' => $pct, 'message' => 'Descargando ' . ($i + 1) . "/{$n}..."]) . "\n";
+            @ob_flush(); @flush();
+
+            try {
+                $resp = $sriService->obtenerComprobanteXml($c);
+                if (empty($resp['ok']) || empty($resp['xml'])) {
+                    $totalErrores++;
+                    $detallesClaves[] = ['clave' => $c, 'estado' => 'ERROR', 'msg' => $resp['mensaje'] ?? 'Sin XML/no autorizado'];
+                    continue;
+                }
+                $res       = $registerSvc->procesarYRegistrar($resp['xml'], $idEmpresa, $idUsuario);
+                $estadoReg = $res['estado_registro'] ?? 'DESCONOCIDO';
+                if ($estadoReg === 'REGISTRADO') {
+                    $totalNuevos++;
+                } elseif (in_array($estadoReg, ['YA_EXISTE', 'EXISTENTE'], true)) {
+                    $totalExistentes++;
+                } elseif ($estadoReg === 'IGNORADO') {
+                    $totalIgnorados++;
+                } else {
+                    $totalErrores++;
+                }
+                $detallesClaves[] = ['clave' => $c, 'estado' => $estadoReg, 'msg' => $res['mensaje'] ?? ''];
+            } catch (Exception $e) {
+                $totalErrores++;
+                $detallesClaves[] = ['clave' => $c, 'estado' => 'EXCEPCION', 'msg' => $e->getMessage()];
+            }
+        }
+
+        // 5) Resultado final + log
+        $estadoProceso    = 'completado';
+        $totalEncontrados = $totalListado;
+        $duracion         = (int) (microtime(true) - $inicio);
+        $msgFinal = "Listado: {$totalListado} | Nuevas: {$totalNuevos} | Existentes: {$totalExistentes}" .
+                    " | Ignoradas: {$totalIgnorados} | Errores: {$totalErrores}";
+
+        $configMod->actualizarEstadoDescarga($idEmpresa, $estadoProceso, $msgFinal);
+        $this->registrarLogStream(
+            $logMod, $idEmpresa, $periodoUnico, $tipos, $estadoProceso, $idUsuario, $inicio,
+            $totalEncontrados, $totalNuevos, $totalExistentes, $totalIgnorados, $totalErrores,
+            ['resumen' => ["Asistido {$periodoUnico['ano']}/{$periodoUnico['mes']}: {$totalListado} en listado, {$n} nuevos"],
+             'claves' => $detallesClaves, 'debug' => $this->debugLog],
+            'asistido'
+        );
+
+        echo json_encode([
+            'type'              => 'resultado',
+            'ok'                => true,
+            'estado'            => $estadoProceso,
+            'total_encontrados' => $totalEncontrados,
+            'total_nuevos'      => $totalNuevos,
+            'total_existentes'  => $totalExistentes,
+            'total_ignorados'   => $totalIgnorados,
+            'total_errores'     => $totalErrores,
+            'duracion_seg'      => $duracion,
+            'mensaje'           => $msgFinal,
+        ]) . "\n";
+    }
+
+    /**
+     * Lanza el scraper en modo ASISTIDO sobre el display fijo :99 (compartido por VNC).
+     * NO usa xvfb-run (que crea un display efímero que el VNC no vería). Retransmite los
+     * eventos progress/esperando_humano al cliente y devuelve el array de claves recolectadas.
+     * Lanza Exception(401) si las credenciales son inválidas.
+     *
+     * @return string[] claves de acceso
+     */
+    private function lanzarScraperAsistido(
+        string $usuario,
+        string $clave,
+        int    $ano,
+        int    $mes,
+        int    $dia,
+        string $tipo,
+        int    $timeoutMs = self::TIMEOUT_DEFAULT_MS
+    ): array {
+        $scriptPath = MVC_ROOT . '/scripts/sri_scraper.js';
+        if (!file_exists($scriptPath)) {
+            throw new Exception('Script Puppeteer no encontrado. Ejecute: cd scripts && npm install');
+        }
+
+        $appCfg         = is_file(MVC_CONFIG . '/app.php') ? require MVC_CONFIG . '/app.php' : [];
+        $apiKey2captcha = getenv('TWOCAPTCHA_API_KEY') ?: ($appCfg['2captcha_api_key'] ?? '');
+
+        $configJson = json_encode([
+            'usuario'        => $usuario,
+            'clave'          => $clave,
+            'ano'            => $ano,
+            'mes'            => $mes,
+            'dia'            => $dia,
+            'tipo'           => $tipo,
+            'timeoutMs'      => $timeoutMs,
+            'apiKey2captcha' => $apiKey2captcha,
+            'modoAsistido'   => true,
+            // Usar la Chromium de Playwright (channel vacío), NO el Chrome real: en Windows,
+            // Chrome real hace "handoff" del perfil con el navegador personal del usuario y
+            // Playwright pierde la sesión. La Chromium empaquetada no comparte ese mecanismo.
+            // Perfil dedicado y exclusivo del modo asistido (el captcha lo resuelve el humano,
+            // así que no necesita el perfil sembrado con Google del modo automático).
+            'channel'        => '',
+            'profileDir'     => MVC_ROOT . '/scripts/.sri_profile_asistido',
+        ]);
+
+        // Display fijo :99 (compartido por VNC). Configurable con SRI_VISOR_DISPLAY.
+        $display = getenv('SRI_VISOR_DISPLAY') ?: ':99';
+        $nodeCmd = 'node ' . escapeshellarg($scriptPath);
+        $cmd     = (PHP_OS_FAMILY === 'Windows')
+            ? $nodeCmd
+            : ('DISPLAY=' . escapeshellarg($display) . ' ' . $nodeCmd);
+
+        $proc = proc_open($cmd, [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ], $pipes);
+
+        if (!is_resource($proc)) {
+            throw new Exception('No se pudo iniciar Node.js.');
+        }
+
+        fwrite($pipes[0], $configJson);
+        fclose($pipes[0]);
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+
+        $claves       = null;
+        $finalData    = null;
+        $stdoutBuffer = '';
+        $finEspera    = microtime(true) + ($timeoutMs / 1000) + 20;
+
+        while (true) {
+            if (connection_aborted()) {
+                proc_terminate($proc);
+                @fclose($pipes[1]); @fclose($pipes[2]); @proc_close($proc);
+                throw new Exception('Sesión asistida cancelada por el usuario.', 499);
+            }
+            if (microtime(true) > $finEspera) {
+                proc_terminate($proc);
+                @fclose($pipes[1]); @fclose($pipes[2]); @proc_close($proc);
+                throw new Exception('Tiempo de espera agotado en la sesión asistida.');
+            }
+
+            $read = [$pipes[1], $pipes[2]];
+            $w = $e = null;
+            $nsel = stream_select($read, $w, $e, 1);
+            if ($nsel === false) break;
+
+            if ($nsel > 0) {
+                foreach ($read as $stream) {
+                    if ($stream === $pipes[1]) {
+                        $chunk = fread($pipes[1], 8192);
+                        if ($chunk !== false && $chunk !== '') {
+                            $stdoutBuffer .= $chunk;
+                            while (($pos = strpos($stdoutBuffer, "\n")) !== false) {
+                                $line = trim(substr($stdoutBuffer, 0, $pos));
+                                $stdoutBuffer = substr($stdoutBuffer, $pos + 1);
+                                if ($line === '') continue;
+
+                                $json = json_decode($line, true);
+                                if (!$json || !isset($json['type'])) {
+                                    $this->debugLog[] = 'STDOUT no JSON: ' . substr($line, 0, 120);
+                                    continue;
+                                }
+                                $t = $json['type'];
+                                if ($t === 'progress' || $t === 'esperando_humano') {
+                                    echo $line . "\n"; @ob_flush(); @flush();
+                                } elseif ($t === 'claves') {
+                                    $claves = is_array($json['data'] ?? null) ? $json['data'] : [];
+                                } elseif ($t === 'finish') {
+                                    $finalData = $json['data'] ?? [];
+                                }
+                            }
+                        }
+                    } elseif ($stream === $pipes[2]) {
+                        while (($l = fgets($pipes[2])) !== false) {
+                            $l = trim($l);
+                            if ($l !== '') $this->debugLog[] = 'Puppeteer log: ' . $l;
+                        }
+                    }
+                }
+            }
+
+            $status = proc_get_status($proc);
+            if (!$status['running']) break;
+        }
+
+        // Restos del buffer
+        stream_set_blocking($pipes[1], true);
+        $rem = @stream_get_contents($pipes[1]);
+        if ($rem) $stdoutBuffer .= $rem;
+        foreach (explode("\n", $stdoutBuffer) as $line) {
+            $line = trim($line);
+            if ($line === '') continue;
+            $json = json_decode($line, true);
+            if (!$json || !isset($json['type'])) continue;
+            if ($json['type'] === 'claves') {
+                $claves = is_array($json['data'] ?? null) ? $json['data'] : [];
+            } elseif ($json['type'] === 'finish') {
+                $finalData = $json['data'] ?? [];
+            }
+        }
+        while (!feof($pipes[2])) {
+            $l = fgets($pipes[2]);
+            if ($l !== false && trim($l) !== '') $this->debugLog[] = 'Puppeteer log: ' . trim($l);
+        }
+        @fclose($pipes[1]); @fclose($pipes[2]); proc_close($proc);
+
+        if ($finalData && !empty($finalData['credenciales_incorrectas'])) {
+            throw new Exception('Credenciales SRI incorrectas: ' . ($finalData['error'] ?? 'sin detalle'), 401);
+        }
+
+        if ($claves === null) {
+            $err = $finalData['error'] ?? 'No se obtuvo el listado del SRI. ¿Hiciste clic en CONSULTAR?';
+            throw new Exception($err);
+        }
+
+        return $claves;
     }
 
     // ─────────────────────────────────────────────
