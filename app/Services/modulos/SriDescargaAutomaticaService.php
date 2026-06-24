@@ -1192,10 +1192,13 @@ class SriDescargaAutomaticaService
             // Usar la Chromium de Playwright (channel vacío), NO el Chrome real: en Windows,
             // Chrome real hace "handoff" del perfil con el navegador personal del usuario y
             // Playwright pierde la sesión. La Chromium empaquetada no comparte ese mecanismo.
-            // Perfil dedicado y exclusivo del modo asistido (el captcha lo resuelve el humano,
-            // así que no necesita el perfil sembrado con Google del modo automático).
             'channel'        => '',
-            'profileDir'     => MVC_ROOT . '/scripts/.sri_profile_asistido',
+            // Perfil del navegador: en el servidor (Linux) reutilizar el perfil SEMBRADO con
+            // sesión de Google (.sri_profile) — su reputación es la que sube el score de
+            // reCAPTCHA v3 y hace que el SRI acepte la consulta. En Windows usar un perfil
+            // dedicado para evitar el handoff con el Chrome personal (allí solo se prueba).
+            'profileDir'     => MVC_ROOT . '/scripts/' .
+                (PHP_OS_FAMILY === 'Windows' ? '.sri_profile_asistido' : '.sri_profile'),
         ]);
 
         // Display fijo :99 (compartido por VNC). Configurable con SRI_VISOR_DISPLAY.
