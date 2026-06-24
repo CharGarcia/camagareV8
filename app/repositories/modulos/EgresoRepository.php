@@ -285,6 +285,15 @@ class EgresoRepository extends BaseRepository
         $st->execute([':id' => $id, ':emp' => $idEmpresa, ':usr' => $idUsuario]);
         return $st->rowCount() > 0;
     }
+
+    /** Enlaza (o desvincula con null) el asiento contable generado al egreso. */
+    public function updateAsientoContable(int $idEgreso, ?int $idAsiento): void
+    {
+        $this->query(
+            "UPDATE egresos_cabecera SET id_asiento_contable = ? WHERE id = ?",
+            [$idAsiento !== null && $idAsiento > 0 ? $idAsiento : null, $idEgreso]
+        );
+    }
     
     public function existeSecuencial(int $idEmpresa, int $idEstablecimiento, int $idPunto, string $secuencial): bool
     {

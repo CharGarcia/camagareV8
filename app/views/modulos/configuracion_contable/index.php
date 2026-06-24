@@ -394,6 +394,148 @@ $base = BASE_URL;
         -->
 
     </div>
+
+    <!--
+    ========================================================================
+    ACORDEONES EXCLUSIVOS DE INGRESOS Y EGRESOS
+    Se arman desde el módulo "Opciones de Ingreso/Egreso". Solo visibles cuando
+    el tipo de asiento seleccionado es "Ingresos y Egresos".
+    ========================================================================
+    -->
+    <div id="acordeonIngresoEgreso" class="accordion shadow-sm rounded-3 overflow-hidden" style="display: none;">
+
+        <!-- ACORDEÓN: INGRESOS -->
+        <div class="accordion-item border-0">
+            <h2 class="accordion-header" id="headingOpcIngresos">
+                <button class="accordion-button collapsed fw-bold py-3 px-4 text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOpcIngresos" aria-expanded="false" aria-controls="collapseOpcIngresos">
+                    <i class="bi bi-arrow-down-left-circle me-2 text-success"></i> Ingresos
+                </button>
+            </h2>
+            <div id="collapseOpcIngresos" class="accordion-collapse collapse" aria-labelledby="headingOpcIngresos" data-bs-parent="#acordeonIngresoEgreso">
+                <div class="accordion-body p-0 border-top bg-white">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm mb-0 align-middle table-interactiva">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4 py-2" style="width: 20%">Concepto</th>
+                                    <th class="py-2" style="width: 25%">Detalle</th>
+                                    <th class="py-2" style="width: 20%">Tipo Cuenta</th>
+                                    <th class="text-center py-2" style="width: 10%">Naturaleza</th>
+                                    <th class="py-2" style="width: 20%">Cuenta Contable</th>
+                                    <th class="text-center py-2" style="width: 5%">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodyOpcIngresos">
+                                <!-- Filas dinámicas cargadas por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACORDEÓN: EGRESOS -->
+        <div class="accordion-item border-0 border-top">
+            <h2 class="accordion-header" id="headingOpcEgresos">
+                <button class="accordion-button collapsed fw-bold py-3 px-4 text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOpcEgresos" aria-expanded="false" aria-controls="collapseOpcEgresos">
+                    <i class="bi bi-arrow-up-right-circle me-2 text-danger"></i> Egresos
+                </button>
+            </h2>
+            <div id="collapseOpcEgresos" class="accordion-collapse collapse" aria-labelledby="headingOpcEgresos" data-bs-parent="#acordeonIngresoEgreso">
+                <div class="accordion-body p-0 border-top bg-white">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm mb-0 align-middle table-interactiva">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4 py-2" style="width: 20%">Concepto</th>
+                                    <th class="py-2" style="width: 25%">Detalle</th>
+                                    <th class="py-2" style="width: 20%">Tipo Cuenta</th>
+                                    <th class="text-center py-2" style="width: 10%">Naturaleza</th>
+                                    <th class="py-2" style="width: 20%">Cuenta Contable</th>
+                                    <th class="text-center py-2" style="width: 5%">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodyOpcEgresos">
+                                <!-- Filas dinámicas cargadas por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!--
+    ========================================================================
+    ACORDEONES EXCLUSIVOS DE COBROS Y PAGOS
+    Se arman desde el módulo "Formas de Cobros y Pagos". Solo visibles cuando
+    el tipo de asiento seleccionado es "Cobros y Pagos".
+    ========================================================================
+    -->
+    <div id="acordeonCobroPago" class="accordion shadow-sm rounded-3 overflow-hidden" style="display: none;">
+
+        <!-- ACORDEÓN: COBROS -->
+        <div class="accordion-item border-0">
+            <h2 class="accordion-header" id="headingFormaCobros">
+                <button class="accordion-button collapsed fw-bold py-3 px-4 text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFormaCobros" aria-expanded="false" aria-controls="collapseFormaCobros">
+                    <i class="bi bi-cash-coin me-2 text-success"></i> Cobros
+                </button>
+            </h2>
+            <div id="collapseFormaCobros" class="accordion-collapse collapse" aria-labelledby="headingFormaCobros" data-bs-parent="#acordeonCobroPago">
+                <div class="accordion-body p-0 border-top bg-white">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm mb-0 align-middle table-interactiva">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4 py-2" style="width: 20%">Concepto</th>
+                                    <th class="py-2" style="width: 25%">Detalle</th>
+                                    <th class="py-2" style="width: 20%">Tipo Cuenta</th>
+                                    <th class="text-center py-2" style="width: 10%">Naturaleza</th>
+                                    <th class="py-2" style="width: 20%">Cuenta Contable</th>
+                                    <th class="text-center py-2" style="width: 5%">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodyFormaCobros">
+                                <!-- Filas dinámicas cargadas por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACORDEÓN: PAGOS -->
+        <div class="accordion-item border-0 border-top">
+            <h2 class="accordion-header" id="headingFormaPagos">
+                <button class="accordion-button collapsed fw-bold py-3 px-4 text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFormaPagos" aria-expanded="false" aria-controls="collapseFormaPagos">
+                    <i class="bi bi-credit-card-2-back me-2 text-danger"></i> Pagos
+                </button>
+            </h2>
+            <div id="collapseFormaPagos" class="accordion-collapse collapse" aria-labelledby="headingFormaPagos" data-bs-parent="#acordeonCobroPago">
+                <div class="accordion-body p-0 border-top bg-white">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm mb-0 align-middle table-interactiva">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4 py-2" style="width: 20%">Concepto</th>
+                                    <th class="py-2" style="width: 25%">Detalle</th>
+                                    <th class="py-2" style="width: 20%">Tipo Cuenta</th>
+                                    <th class="text-center py-2" style="width: 10%">Naturaleza</th>
+                                    <th class="py-2" style="width: 20%">Cuenta Contable</th>
+                                    <th class="text-center py-2" style="width: 5%">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodyFormaPagos">
+                                <!-- Filas dinámicas cargadas por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
 </div>
 
 <script>

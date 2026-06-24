@@ -258,6 +258,107 @@ class AsientoProgramadoRepository extends BaseRepository
     }
 
     /**
+     * Obtiene las opciones de Ingresos/Egresos (módulo empresa_opciones_ingreso_egreso) activas
+     * que aplican a la naturaleza indicada, cruzadas con su cuenta contable programada.
+     * La cuenta se toma del asiento programado si existe; en su defecto, de la cuenta asignada
+     * en el propio módulo de opciones (id_cuenta_contable).
+     *
+     * @param string $naturaleza 'ingreso' | 'egreso'
+     */
+    public function getReglasOpcionesIngresoEgreso(int $idEmpresa, string $naturaleza): array
+    {
+        $col     = $naturaleza === 'ingreso' ? 'aplica_ingresos' : 'aplica_egresos';
+        $tipoRef = $naturaleza === 'ingreso' ? 'opcion_ingreso'  : 'opcion_egreso';
+
+        $sql = "SELECT o.id AS id_opcion,
+                       o.nombre AS concepto,
+                       o.comportamiento,
+                       ap.id AS id_programado,
+                       COALESCE(ap.id_cuenta, o.id_cuenta_contable) AS id_cuenta,
+                       pc.codigo AS cuenta_codigo,
+                       pc.nombre AS cuenta_nombre
+                FROM empresa_opciones_ingreso_egreso o
+                LEFT JOIN {$this->table} ap ON ap.id_referencia = o.id
+                                           AND ap.tipo_referencia = :tipo_ref
+                                           AND ap.id_empresa = :id_empresa_ap
+                                           AND ap.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap.id_cuenta, o.id_cuenta_contable)
+                WHERE o.id_empresa = :id_empresa
+                  AND o.{$col} = TRUE
+                  AND UPPER(o.estado) = 'ACTIVO'
+                  AND o.eliminado = FALSE
+                ORDER BY o.nombre ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_empresa'    => $idEmpresa,
+            ':id_empresa_ap' => $idEmpresa,
+            ':tipo_ref'      => $tipoRef
+        ]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Obtiene las formas de cobro/pago (módulo empresa_formas_pago) activas que aplican al flujo
+     * indicado, cruzadas con su cuenta contable programada. La cuenta se toma del asiento
+     * programado si existe; en su defecto, de la cuenta asignada en el propio módulo de formas.
+     *
+     * @param string $flujo 'cobro' | 'pago'
+     */
+    public function getReglasFormasCobrosPagos(int $idEmpresa, string $flujo): array
+    {
+        $aplica  = $flujo === 'cobro' ? 'INGRESO'     : 'EGRESO';
+        $tipoRef = $flujo === 'cobro' ? 'forma_cobro' : 'forma_pago';
+
+        $sql = "SELECT f.id AS id_forma,
+                       f.nombre AS concepto,
+                       f.aplica_en,
+                       ap.id AS id_programado,
+                       COALESCE(ap.id_cuenta, f.id_cuenta_contable) AS id_cuenta,
+                       pc.codigo AS cuenta_codigo,
+                       pc.nombre AS cuenta_nombre
+                FROM empresa_formas_pago f
+                LEFT JOIN {$this->table} ap ON ap.id_referencia = f.id
+                                           AND ap.tipo_referencia = :tipo_ref
+                                           AND ap.id_empresa = :id_empresa_ap
+                                           AND ap.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap.id_cuenta, f.id_cuenta_contable)
+                WHERE f.id_empresa = :id_empresa
+                  AND f.activo = TRUE
+                  AND f.eliminado = FALSE
+                  AND (f.aplica_en = 'AMBAS' OR f.aplica_en = :aplica)
+                ORDER BY f.nombre ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_empresa'    => $idEmpresa,
+            ':id_empresa_ap' => $idEmpresa,
+            ':tipo_ref'      => $tipoRef,
+            ':aplica'        => $aplica
+        ]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Obtiene la regla (asiento programado) asociada a una referencia concreta
+     * (opción de Ingreso/Egreso, forma de cobro/pago, etc.) por su tipo de referencia.
+     */
+    public function getReglaPorReferencia(int $idEmpresa, int $idReferencia, string $tipoReferencia): ?array
+    {
+        $sql = "SELECT * FROM {$this->table}
+                WHERE id_empresa = :id_empresa
+                  AND id_referencia = :id_referencia
+                  AND tipo_referencia = :tipo_referencia
+                  AND eliminado = false
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_empresa'      => $idEmpresa,
+            ':id_referencia'   => $idReferencia,
+            ':tipo_referencia' => $tipoReferencia
+        ]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
      * Obtiene una regla general específica por empresa y asiento tipo.
      */
     public function getReglaGeneralPorAsientoTipo(int $idEmpresa, int $idAsientoTipo): ?array

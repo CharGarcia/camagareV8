@@ -28,6 +28,24 @@
             const res = await resp.json();
 
             if (res.ok) {
+                // Modos especiales con dos acordeones (referencias de otros módulos)
+                if (res.modo === 'ingresos_egresos') {
+                    ASIENTOPROG_renderModoIngresoEgreso(res, selector);
+                    return;
+                }
+                if (res.modo === 'cobros_pagos') {
+                    ASIENTOPROG_renderModoCobroPago(res, selector);
+                    return;
+                }
+
+                // Resto de tipos: acordeón general estándar (asegurar visibilidad)
+                const accGeneral = document.getElementById('acordeonConfiguracion');
+                if (accGeneral) accGeneral.style.display = '';
+                ['acordeonIngresoEgreso', 'acordeonCobroPago'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.style.display = 'none';
+                });
+
                 window.CONCEPTOS_CONFIGURADOS = res.data || [];
                 const tbody = document.getElementById('tbodyConfiguracionGeneral');
                 tbody.innerHTML = '';
@@ -381,6 +399,316 @@
             console.error(e);
         }
     };
+
+    /* ============================================================
+       MODOS ESPECIALES (referencias de otros módulos)
+       Render genérico de dos acordeones con asignación de cuenta al vuelo.
+       Usado por: Ingresos y Egresos (Opciones) y Cobros y Pagos (Formas).
+       ============================================================ */
+
+    /**
+     * Escapa texto para insertarlo de forma segura en HTML.
+     */
+    function ASIENTOPROG_esc(str) {
+        return String(str == null ? '' : str).replace(/[&<>"']/g, s => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[s]));
+    }
+
+    /**
+     * Toast breve de SweetAlert (si está disponible).
+     */
+    function ASIENTOPROG_toast(icon, title) {
+        if (!window.Swal) return;
+        Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000, timerProgressBar: true })
+            .fire({ icon, title });
+    }
+
+    // Tipos de cuenta para los badges informativos (quemados)
+    const ASIENTOPROG_TIPOS_TODOS = [
+        ['Activo', 'success'], ['Pasivo', 'danger'], ['Patrimonio', 'dark'],
+        ['Ingresos', 'primary'], ['Costos', 'info'], ['Gastos', 'warning']
+    ];
+    const ASIENTOPROG_TIPOS_ACTIVO = [['Activo', 'success']];
+
+    /**
+     * Construye los badges informativos de tipo de cuenta.
+     */
+    function ASIENTOPROG_badgesTipoCuenta(tipos) {
+        return tipos.map(([label, color]) =>
+            `<span class="badge bg-${color} bg-opacity-10 text-${color} border border-${color} border-opacity-25 py-1 px-1 me-1 mb-1 small">${label}</span>`
+        ).join('');
+    }
+
+    /**
+     * Badge de naturaleza contable ('debe' | 'haber').
+     */
+    function ASIENTOPROG_naturalezaBadge(naturaleza) {
+        return naturaleza === 'haber'
+            ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2 fw-bold small">HABER</span>'
+            : '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 py-1 px-2 fw-bold small">DEBE</span>';
+    }
+
+    /**
+     * Prepara la vista para un modo especial: oculta el acordeón general y los demás
+     * contenedores especiales, muestra el solicitado, fija título y despliega el panel.
+     */
+    function ASIENTOPROG_prepararModoEspecial(idContenedor, selector) {
+        window.CONCEPTOS_CONFIGURADOS = [];
+
+        const accGeneral = document.getElementById('acordeonConfiguracion');
+        if (accGeneral) accGeneral.style.display = 'none';
+
+        ['acordeonIngresoEgreso', 'acordeonCobroPago'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = (id === idContenedor) ? 'block' : 'none';
+        });
+
+        const selectorMetodo = document.getElementById('selectorMetodoPreferencia');
+        if (selectorMetodo) selectorMetodo.value = 'general';
+
+        const selectedText = selector.options[selector.selectedIndex].text;
+        document.getElementById('conceptoSeleccionadoTitulo').innerHTML =
+            `<i class="bi bi-gear-fill text-primary me-1"></i> Configuración para: <span class="text-primary fw-bold">${selectedText}</span>`;
+
+        const seccion = document.getElementById('seccionAcordeones');
+        seccion.style.display = 'block';
+        seccion.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    /**
+     * Modo Ingresos y Egresos (desde Opciones de Ingreso/Egreso).
+     */
+    function ASIENTOPROG_renderModoIngresoEgreso(res, selector) {
+        ASIENTOPROG_prepararModoEspecial('acordeonIngresoEgreso', selector);
+
+        const base = {
+            idKey: 'id_opcion', refParam: 'id_opcion', selectorParam: 'naturaleza',
+            detalle: 'Configurado en Opciones de Ingresos y Egresos',
+            badgesHtml: ASIENTOPROG_badgesTipoCuenta(ASIENTOPROG_TIPOS_TODOS),
+            tipoCuentaFiltro: '',
+            endpointGuardar: 'guardarReglaOpcionAjax', endpointEliminar: 'eliminarReglaOpcionAjax'
+        };
+
+        ASIENTOPROG_renderReferencias(res.ingresos || [], 'tbodyOpcIngresos', Object.assign({}, base, {
+            prefijo: 'opc_ingreso', selectorValor: 'ingreso',
+            naturalezaBadge: ASIENTOPROG_naturalezaBadge('haber'),
+            vacioMsg: 'No hay opciones de ingreso activas. Créelas en el módulo "Opciones de Ingresos y Egresos".'
+        }));
+        ASIENTOPROG_renderReferencias(res.egresos || [], 'tbodyOpcEgresos', Object.assign({}, base, {
+            prefijo: 'opc_egreso', selectorValor: 'egreso',
+            naturalezaBadge: ASIENTOPROG_naturalezaBadge('debe'),
+            vacioMsg: 'No hay opciones de egreso activas. Créelas en el módulo "Opciones de Ingresos y Egresos".'
+        }));
+    }
+
+    /**
+     * Modo Cobros y Pagos (desde Formas de Cobros/Pagos).
+     */
+    function ASIENTOPROG_renderModoCobroPago(res, selector) {
+        ASIENTOPROG_prepararModoEspecial('acordeonCobroPago', selector);
+
+        const base = {
+            idKey: 'id_forma', refParam: 'id_forma', selectorParam: 'flujo',
+            detalle: 'Configurado en Formas de Cobros y Pagos',
+            badgesHtml: ASIENTOPROG_badgesTipoCuenta(ASIENTOPROG_TIPOS_ACTIVO),
+            tipoCuentaFiltro: 'activo',
+            endpointGuardar: 'guardarReglaFormaAjax', endpointEliminar: 'eliminarReglaFormaAjax'
+        };
+
+        ASIENTOPROG_renderReferencias(res.cobros || [], 'tbodyFormaCobros', Object.assign({}, base, {
+            prefijo: 'forma_cobro', selectorValor: 'cobro',
+            naturalezaBadge: ASIENTOPROG_naturalezaBadge('debe'),
+            vacioMsg: 'No hay formas de cobro activas. Créelas en el módulo "Formas de Cobros y Pagos".'
+        }));
+        ASIENTOPROG_renderReferencias(res.pagos || [], 'tbodyFormaPagos', Object.assign({}, base, {
+            prefijo: 'forma_pago', selectorValor: 'pago',
+            naturalezaBadge: ASIENTOPROG_naturalezaBadge('haber'),
+            vacioMsg: 'No hay formas de pago activas. Créelas en el módulo "Formas de Cobros y Pagos".'
+        }));
+    }
+
+    /**
+     * Render genérico de filas de referencias (opciones o formas) en una tabla.
+     * Cada fila permite asignar una cuenta contable con autocompletado al vuelo.
+     */
+    function ASIENTOPROG_renderReferencias(lista, tbodyId, cfg) {
+        const tbody = document.getElementById(tbodyId);
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        if (!lista || lista.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> ${cfg.vacioMsg}</td></tr>`;
+            return;
+        }
+
+        lista.forEach(item => {
+            const idRef = item[cfg.idKey];
+            const suffix = `${cfg.prefijo}_${idRef}`;
+            const inputId = `cuenta_search_${suffix}`;
+            const hiddenId = `cuenta_hidden_${suffix}`;
+            const sugId = `sug_${suffix}`;
+
+            const idCuentaVal = item.id_cuenta || '';
+            const cuentaVal = item.id_cuenta ? `${item.cuenta_codigo} - ${item.cuenta_nombre}` : '';
+            const borderClass = idCuentaVal ? '' : 'is-invalid border-danger';
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="ps-4 fw-bold text-dark">${ASIENTOPROG_esc(item.concepto)}</td>
+                <td class="small text-muted">${cfg.detalle}</td>
+                <td>${cfg.badgesHtml}</td>
+                <td class="text-center">${cfg.naturalezaBadge}</td>
+                <td class="autocomplete-celda">
+                    <input type="text" class="form-control form-control-sm ${borderClass}" id="${inputId}" placeholder="Escriba código o nombre..." value="${ASIENTOPROG_esc(cuentaVal)}" autocomplete="off">
+                    <input type="hidden" id="${hiddenId}" value="${idCuentaVal}">
+                    <div class="list-group sugerencias-flotantes" id="${sugId}" style="display: none;"></div>
+                </td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-link text-danger p-0 border-0 btn-eliminar-ref" title="Quitar cuenta">
+                        <i class="bi bi-trash fs-5"></i>
+                    </button>
+                </td>
+            `;
+            const btnDel = tr.querySelector('.btn-eliminar-ref');
+            if (btnDel) btnDel.addEventListener('click', () => ASIENTOPROG_eliminarRefAlVuelo(idRef, inputId, hiddenId, cfg));
+            tbody.appendChild(tr);
+
+            ASIENTOPROG_vincularAutoRef(idRef, inputId, hiddenId, sugId, cfg);
+        });
+    }
+
+    /**
+     * Autocompletado de cuenta contable para una referencia, filtrado por tipo según cfg.
+     */
+    function ASIENTOPROG_vincularAutoRef(idRef, inputId, hiddenId, sugId, cfg) {
+        const input = document.getElementById(inputId);
+        const hidden = document.getElementById(hiddenId);
+        const sug = document.getElementById(sugId);
+        if (!input) return;
+
+        input.addEventListener('input', function () {
+            const q = input.value.trim();
+
+            if (q === '') {
+                hidden.value = '';
+                sug.style.display = 'none';
+                ASIENTOPROG_eliminarRefAlVuelo(idRef, inputId, hiddenId, cfg);
+                return;
+            }
+            if (q.length < 2) {
+                sug.style.display = 'none';
+                return;
+            }
+
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(async () => {
+                try {
+                    const r = await fetch(`${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas?q=${encodeURIComponent(q)}&tipo=${encodeURIComponent(cfg.tipoCuentaFiltro)}`);
+                    const res = await r.json();
+
+                    if (res.ok && res.data && res.data.length > 0) {
+                        sug.innerHTML = '';
+                        res.data.forEach(c => {
+                            const btn = document.createElement('button');
+                            btn.type = 'button';
+                            btn.className = 'list-group-item list-group-item-action py-1 px-2 border-0 small';
+                            btn.textContent = `${c.codigo} - ${c.nombre}`;
+                            btn.addEventListener('click', () => {
+                                input.value = `${c.codigo} - ${c.nombre}`;
+                                hidden.value = c.id;
+                                sug.style.display = 'none';
+                                ASIENTOPROG_guardarRefAlVuelo(idRef, c.id, input, cfg);
+                            });
+                            sug.appendChild(btn);
+                        });
+                        sug.style.display = 'block';
+                        activeDropdown = sug;
+                    } else {
+                        sug.style.display = 'none';
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            }, 300);
+        });
+    }
+
+    /**
+     * Guarda al vuelo la cuenta contable asignada a una referencia.
+     */
+    async function ASIENTOPROG_guardarRefAlVuelo(idRef, idCuenta, inputElement, cfg) {
+        if (!idRef || !idCuenta) return;
+
+        inputElement.classList.add('is-valid');
+        const origBg = inputElement.style.backgroundColor;
+        inputElement.style.backgroundColor = 'rgba(25, 135, 84, 0.08)';
+
+        const fd = new FormData();
+        fd.append(cfg.refParam, idRef.toString());
+        fd.append('id_cuenta', idCuenta.toString());
+        fd.append(cfg.selectorParam, cfg.selectorValor);
+
+        try {
+            const resp = await fetch(`${API_PROG}/${cfg.endpointGuardar}`, { method: 'POST', body: fd });
+            const res = await resp.json();
+
+            if (res.ok) {
+                inputElement.classList.remove('is-invalid', 'border-danger');
+                ASIENTOPROG_toast('success', res.msg);
+            } else {
+                inputElement.classList.remove('is-valid');
+                inputElement.classList.add('is-invalid', 'border-danger');
+                if (window.Swal) Swal.fire('Error', res.error || 'Error al guardar', 'error');
+            }
+        } catch (e) {
+            console.error(e);
+            inputElement.classList.remove('is-valid');
+            inputElement.classList.add('is-invalid', 'border-danger');
+        } finally {
+            setTimeout(() => {
+                inputElement.classList.remove('is-valid');
+                if (inputElement.value !== '') {
+                    inputElement.classList.remove('is-invalid', 'border-danger');
+                }
+                inputElement.style.backgroundColor = origBg;
+            }, 2000);
+        }
+    }
+
+    /**
+     * Quita al vuelo la cuenta contable de una referencia.
+     */
+    async function ASIENTOPROG_eliminarRefAlVuelo(idRef, inputId, hiddenId, cfg) {
+        const input = document.getElementById(inputId);
+        const hidden = document.getElementById(hiddenId);
+
+        if (hidden && hidden.value === '') {
+            return;
+        }
+
+        const fd = new FormData();
+        fd.append(cfg.refParam, idRef.toString());
+        fd.append(cfg.selectorParam, cfg.selectorValor);
+
+        try {
+            const resp = await fetch(`${API_PROG}/${cfg.endpointEliminar}`, { method: 'POST', body: fd });
+            const res = await resp.json();
+
+            if (res.ok) {
+                if (input) {
+                    input.value = '';
+                    input.classList.add('is-invalid', 'border-danger');
+                }
+                if (hidden) hidden.value = '';
+                ASIENTOPROG_toast('info', res.msg || 'Cuenta desvinculada correctamente.');
+            } else {
+                if (window.Swal) Swal.fire('Error', res.error || 'Error al desvincular', 'error');
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
 
     /**
      * Guarda la preferencia del método de contabilización seleccionado.

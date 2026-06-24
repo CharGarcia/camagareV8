@@ -278,6 +278,21 @@ class EgresosController extends BaseModuloController
         exit;
     }
 
+    public function getAsientoContableAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $id        = (int) ($_GET['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $asiento   = $this->service->getAsientoContable($id, $idEmpresa);
+            echo json_encode(['ok' => true, 'asiento' => $asiento]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function actualizarPagosAjax(): void
     {
         $this->requireActualizar();

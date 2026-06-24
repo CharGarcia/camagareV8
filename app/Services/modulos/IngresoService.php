@@ -11,6 +11,8 @@ use App\core\Database;
 use App\Services\modulos\PeriodosContablesService;
 use App\repositories\modulos\PeriodosContablesRepository;
 use App\Rules\modulos\PeriodosContablesRules;
+use App\repositories\modulos\AsientoContableRepository;
+use App\Rules\modulos\AsientoContableRules;
 
 class IngresoService
 {
@@ -119,14 +121,19 @@ class IngresoService
             if ($managedTransaction) {
                 $db->commit();
             }
-
-            return $idIngreso;
         } catch (\Throwable $e) {
             if ($managedTransaction && $db->inTransaction()) {
                 $db->rollBack();
             }
             throw $e;
         }
+
+        // Asiento contable fuera de la transacción: un fallo aquí no revierte el ingreso.
+        if ($managedTransaction) {
+            $this->generarAsientoContableSeguro($idIngreso, $data);
+        }
+
+        return $idIngreso;
     }
 
     public function actualizar(int $id, array $data): void
@@ -211,6 +218,11 @@ class IngresoService
             }
             throw $e;
         }
+
+        // Regenerar el asiento contable fuera de la transacción.
+        if ($managedTransaction) {
+            $this->generarAsientoContableSeguro($id, $data);
+        }
     }
 
     public function anular(int $id, int $idEmpresa, int $idUsuario): void
@@ -273,6 +285,9 @@ class IngresoService
             }
             throw $e;
         }
+
+        // Anular el asiento contable asociado (fuera de la transacción).
+        $this->anularAsientoContable($id, $idEmpresa, $idUsuario);
     }
 
     public function eliminar(int $id, int $idEmpresa, int $idUsuario): void
@@ -320,6 +335,9 @@ class IngresoService
             }
             throw $e;
         }
+
+        // Anular el asiento contable asociado (fuera de la transacción).
+        $this->anularAsientoContable($id, $idEmpresa, $idUsuario);
     }
 
     public function getFormasCobro(int $idEmpresa): array
@@ -374,6 +392,126 @@ class IngresoService
 
         if ($fecha && $idEmpresa) {
             $this->periodosService->validarFechaPermitida($fecha, $idEmpresa, $mensaje);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ASIENTO CONTABLE
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private function asientoContableService(): AsientoContableService
+    {
+        return new AsientoContableService(
+            new AsientoContableRepository(),
+            new AsientoContableRules(),
+            $this->logService
+        );
+    }
+
+    /** Devuelve el asiento contable (cabecera + detalles) generado para el ingreso, o null. */
+    public function getAsientoContable(int $idIngreso, int $idEmpresa): ?array
+    {
+        $asientoService = $this->asientoContableService();
+        $previo = $asientoService->getAsientoPorOrigen('ingreso', $idIngreso, $idEmpresa);
+        if (!$previo) {
+            return null;
+        }
+        $detalle = $asientoService->getDetalleAsiento((int) $previo['id'], $idEmpresa);
+        return $detalle ?: null;
+    }
+
+    /** Genera el asiento sin propagar errores (lo contable no bloquea lo operativo). */
+    private function generarAsientoContableSeguro(int $idIngreso, array $data): void
+    {
+        try {
+            $this->procesarAsientoContable($idIngreso, $data);
+        } catch (\Throwable $e) {
+            error_log('[Ingreso] Asiento no generado para ingreso #' . $idIngreso . ': ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Genera (o regenera) y enlaza el asiento contable del ingreso.
+     * Contrapartida: cuenta de la opción (concepto directo) o cuenta por cobrar (cartera);
+     * pata banco/caja: cuentas de las formas de cobro. No hace nada si el asiento queda vacío.
+     */
+    public function procesarAsientoContable(int $idIngreso, array $data): void
+    {
+        $idEmpresa = (int) $data['id_empresa'];
+        $idUsuario = (int) ($data['id_usuario'] ?? 0);
+
+        $ingreso = $this->repository->getPorId($idIngreso, $idEmpresa);
+        if (!$ingreso) {
+            return;
+        }
+
+        $detalles = (new AsientoBuilderService())->generarAsientoIngreso($idEmpresa, $idIngreso);
+        if (empty($detalles)) {
+            return;
+        }
+
+        $num = $ingreso['numero_ingreso'] ?? (string) $idIngreso;
+        foreach ($detalles as &$d) {
+            $d['documento_referencia'] = 'Ingreso ' . $num;
+            if (!empty($ingreso['id_cliente'])) {
+                $d['id_entidad']   = (int) $ingreso['id_cliente'];
+                $d['tipo_entidad'] = 'cliente';
+            }
+        }
+        unset($d);
+
+        $asientoService = $this->asientoContableService();
+        $previo    = $asientoService->getAsientoPorOrigen('ingreso', $idIngreso, $idEmpresa);
+        $idAsiento = $previo ? (int) $previo['id'] : 0;
+
+        $cabecera = [
+            'id'                   => $idAsiento > 0 ? $idAsiento : null,
+            'fecha_asiento'        => $ingreso['fecha_emision'],
+            'tipo_comprobante'     => 'ingresos',
+            'numero_comprobante'   => '',
+            'concepto'             => 'Ingreso ' . $num,
+            'estado'               => 'contabilizado',
+            'modulo_origen'        => 'ingreso',
+            'id_referencia_origen' => $idIngreso,
+            'observaciones'        => $ingreso['observaciones'] ?? null,
+        ];
+
+        $idGenerado = $asientoService->guardarAsiento($cabecera, $detalles, $idEmpresa, $idUsuario);
+        $this->repository->updateAsientoContable($idIngreso, $idGenerado);
+    }
+
+    /**
+     * Genera el asiento de un ingreso por sincronización masiva (control de asientos en
+     * Estados Financieros). Toma empresa/usuario de la propia cabecera y PROPAGA la excepción
+     * si no se puede generar (descuadre / cuentas faltantes) para contabilizarlo como pendiente.
+     */
+    public function procesarAsientoContablePorSincronizacion(int $idIngreso): void
+    {
+        $db = Database::getConnection();
+        $st = $db->prepare("SELECT id_empresa, id_usuario FROM ingresos_cabecera WHERE id = ? AND eliminado = false");
+        $st->execute([$idIngreso]);
+        $row = $st->fetch(\PDO::FETCH_ASSOC);
+        if (!$row) {
+            return;
+        }
+        $this->procesarAsientoContable($idIngreso, [
+            'id_empresa' => (int) $row['id_empresa'],
+            'id_usuario' => (int) ($row['id_usuario'] ?? 0),
+        ]);
+    }
+
+    /** Anula el asiento contable asociado al ingreso, si existe y no está ya anulado. */
+    private function anularAsientoContable(int $idIngreso, int $idEmpresa, int $idUsuario): void
+    {
+        try {
+            $asientoService = $this->asientoContableService();
+            $previo = $asientoService->getAsientoPorOrigen('ingreso', $idIngreso, $idEmpresa);
+            if ($previo && ($previo['estado'] ?? '') !== 'anulado') {
+                $asientoService->anular((int) $previo['id'], $idEmpresa, $idUsuario);
+                $this->repository->updateAsientoContable($idIngreso, null);
+            }
+        } catch (\Throwable $e) {
+            error_log('[Ingreso] No se pudo anular el asiento del ingreso #' . $idIngreso . ': ' . $e->getMessage());
         }
     }
 }

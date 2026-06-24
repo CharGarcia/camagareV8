@@ -1091,6 +1091,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('formEgresoModal').reset();
         document.getElementById('eg-input-id').value = '';
         document.getElementById('eg-input-id-sujeto').value = '';
+
+        // Reset pestaña Asiento contable (placeholder para registros nuevos)
+        const egTbAsientoReset = document.getElementById('eg-tbody-asiento');
+        if (egTbAsientoReset) egTbAsientoReset.innerHTML = '<tr><td colspan="3" class="text-center py-5 text-muted">Visualización activa solo para registros guardados.</td></tr>';
         
         esEgresoAnulado = false;
         const btnG = document.getElementById('btnGuardarEgreso');
@@ -1359,7 +1363,43 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             recalcEgresoTot();
 
             if(e.estado !== 'anulado') document.getElementById('eg-footer-ver-extra').classList.remove('d-none');
+
+            // Cargar el asiento contable generado para este egreso
+            cargarAsientoContableEgreso(e.id);
         });
+    }
+
+    function cargarAsientoContableEgreso(id) {
+        const tbody = document.getElementById('eg-tbody-asiento');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Cargando asiento…</td></tr>';
+        fetch(`${EGR_URL}/getAsientoContableAjax?id=${id}`)
+            .then(r => r.json())
+            .then(res => {
+                if (!res.ok || !res.asiento || !(res.asiento.detalles || []).length) {
+                    tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-muted"><i class="bi bi-exclamation-circle me-1"></i> Aún no se ha generado el asiento contable. Verifique que el concepto y las formas de pago tengan cuenta contable configurada.</td></tr>';
+                    return;
+                }
+                const a = res.asiento;
+                let html = '';
+                (a.detalles || []).forEach(d => {
+                    const debe = parseFloat(d.debe || 0), haber = parseFloat(d.haber || 0);
+                    html += `<tr>
+                        <td class="ps-3"><code class="text-primary">${d.codigo_cuenta || ''}</code> ${d.nombre_cuenta || ''}</td>
+                        <td class="text-end pe-3">${debe > 0 ? debe.toFixed(2) : ''}</td>
+                        <td class="text-end pe-3">${haber > 0 ? haber.toFixed(2) : ''}</td>
+                    </tr>`;
+                });
+                html += `<tr class="table-light fw-bold">
+                    <td class="ps-3 text-end">TOTALES</td>
+                    <td class="text-end pe-3">${parseFloat(a.total_debe || 0).toFixed(2)}</td>
+                    <td class="text-end pe-3">${parseFloat(a.total_haber || 0).toFixed(2)}</td>
+                </tr>`;
+                tbody.innerHTML = html;
+            })
+            .catch(() => {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-4">Error al cargar el asiento contable.</td></tr>';
+            });
     }
 
     function setControlesGeneralesHabilitados(hab) {

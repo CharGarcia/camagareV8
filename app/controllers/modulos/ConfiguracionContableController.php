@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\controllers\modulos;
 
 use App\repositories\modulos\AsientoProgramadoRepository;
+use App\repositories\modulos\OpcionIngresoEgresoRepository;
+use App\repositories\modulos\FormaPagoRepository;
 use App\Services\modulos\AsientoProgramadoService;
 use App\Services\modulos\AsientosTipoService;
 use App\core\Database;
@@ -271,6 +273,38 @@ class ConfiguracionContableController extends BaseModuloController
         }
 
         try {
+            // Caso especial: Ingresos y Egresos se arma desde el módulo Opciones de Ingreso/Egreso,
+            // separado en dos bloques (ingresos = Haber, egresos = Debe).
+            if ($tipoAsiento === 'ingresos_egresos') {
+                $ingresos = $this->repository->getReglasOpcionesIngresoEgreso($idEmpresa, 'ingreso');
+                $egresos  = $this->repository->getReglasOpcionesIngresoEgreso($idEmpresa, 'egreso');
+                $metodo   = $this->repository->getMetodoPreferencia($idEmpresa, $tipoAsiento);
+                echo json_encode([
+                    'ok'       => true,
+                    'modo'     => 'ingresos_egresos',
+                    'ingresos' => $ingresos,
+                    'egresos'  => $egresos,
+                    'metodo'   => $metodo
+                ]);
+                exit;
+            }
+
+            // Caso especial: Cobros y Pagos se arma desde el módulo Formas de Cobros/Pagos,
+            // separado en dos bloques (cobros = Debe, pagos = Haber).
+            if ($tipoAsiento === 'cobros_pagos') {
+                $cobros = $this->repository->getReglasFormasCobrosPagos($idEmpresa, 'cobro');
+                $pagos  = $this->repository->getReglasFormasCobrosPagos($idEmpresa, 'pago');
+                $metodo = $this->repository->getMetodoPreferencia($idEmpresa, $tipoAsiento);
+                echo json_encode([
+                    'ok'     => true,
+                    'modo'   => 'cobros_pagos',
+                    'cobros' => $cobros,
+                    'pagos'  => $pagos,
+                    'metodo' => $metodo
+                ]);
+                exit;
+            }
+
             if ($tipoAsiento === 'retenciones_venta') {
                 $reglas = $this->repository->getReglasRetencionesVenta($idEmpresa);
             } else {
@@ -453,6 +487,190 @@ class ConfiguracionContableController extends BaseModuloController
             } else {
                 echo json_encode(['ok' => true, 'msg' => 'No había ninguna cuenta configurada para esta regla.']);
             }
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Asigna al vuelo la cuenta contable a una opción de Ingreso/Egreso.
+     * Se guarda en dos lugares: el módulo de Opciones (id_cuenta_contable) y en asientos_programados.
+     */
+    public function guardarReglaOpcionAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $idOpcion   = (int) ($_POST['id_opcion'] ?? 0);
+        $idCuenta   = (int) ($_POST['id_cuenta'] ?? 0);
+        $naturaleza = trim($_POST['naturaleza'] ?? '');
+
+        if ($idOpcion <= 0 || $idCuenta <= 0 || !in_array($naturaleza, ['ingreso', 'egreso'], true)) {
+            echo json_encode(['ok' => false, 'error' => 'Parámetros incompletos o inválidos.']);
+            exit;
+        }
+
+        $tipoReferencia = $naturaleza === 'ingreso' ? 'opcion_ingreso' : 'opcion_egreso';
+
+        try {
+            // 1. Sincronizar la cuenta en el módulo de Opciones de Ingreso/Egreso
+            $opcRepo = new OpcionIngresoEgresoRepository();
+            $opcRepo->updateCuentaContable($idOpcion, $idEmpresa, $idCuenta, $idUsuario);
+
+            // 2. Crear o actualizar el asiento programado asociado
+            $reglaExistente = $this->repository->getReglaPorReferencia($idEmpresa, $idOpcion, $tipoReferencia);
+            $dataRule = [
+                'id_asiento_tipo' => 0,
+                'id_cuenta'       => $idCuenta,
+                'id_referencia'   => $idOpcion,
+                'tipo_referencia' => $tipoReferencia
+            ];
+
+            if ($reglaExistente) {
+                $dataRule['updated_by'] = $idUsuario;
+                $this->service->actualizar((int) $reglaExistente['id'], $dataRule, $idEmpresa, $idUsuario);
+                $msg = 'Cuenta contable actualizada correctamente.';
+            } else {
+                $this->service->registrar($dataRule, $idEmpresa, $idUsuario);
+                $msg = 'Cuenta contable asignada correctamente.';
+            }
+
+            echo json_encode(['ok' => true, 'msg' => $msg]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Quita la cuenta contable de una opción de Ingreso/Egreso (en ambos lugares).
+     */
+    public function eliminarReglaOpcionAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $idOpcion   = (int) ($_POST['id_opcion'] ?? 0);
+        $naturaleza = trim($_POST['naturaleza'] ?? '');
+
+        if ($idOpcion <= 0 || !in_array($naturaleza, ['ingreso', 'egreso'], true)) {
+            echo json_encode(['ok' => false, 'error' => 'Parámetros incompletos o inválidos.']);
+            exit;
+        }
+
+        $tipoReferencia = $naturaleza === 'ingreso' ? 'opcion_ingreso' : 'opcion_egreso';
+
+        try {
+            // 1. Limpiar la cuenta en el módulo de Opciones
+            $opcRepo = new OpcionIngresoEgresoRepository();
+            $opcRepo->updateCuentaContable($idOpcion, $idEmpresa, null, $idUsuario);
+
+            // 2. Eliminar lógicamente el asiento programado asociado, si existe
+            $reglaExistente = $this->repository->getReglaPorReferencia($idEmpresa, $idOpcion, $tipoReferencia);
+            if ($reglaExistente) {
+                $this->service->eliminar((int) $reglaExistente['id'], $idEmpresa, $idUsuario);
+            }
+
+            echo json_encode(['ok' => true, 'msg' => 'Cuenta contable desvinculada correctamente.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Asigna al vuelo la cuenta contable a una forma de Cobro/Pago.
+     * Se guarda en dos lugares: el módulo de Formas (id_cuenta_contable) y en asientos_programados.
+     */
+    public function guardarReglaFormaAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $idForma  = (int) ($_POST['id_forma'] ?? 0);
+        $idCuenta = (int) ($_POST['id_cuenta'] ?? 0);
+        $flujo    = trim($_POST['flujo'] ?? '');
+
+        if ($idForma <= 0 || $idCuenta <= 0 || !in_array($flujo, ['cobro', 'pago'], true)) {
+            echo json_encode(['ok' => false, 'error' => 'Parámetros incompletos o inválidos.']);
+            exit;
+        }
+
+        $tipoReferencia = $flujo === 'cobro' ? 'forma_cobro' : 'forma_pago';
+
+        try {
+            // 1. Sincronizar la cuenta en el módulo de Formas de Cobros/Pagos
+            $formaRepo = new FormaPagoRepository();
+            $formaRepo->updateCuentaContable($idForma, $idEmpresa, $idCuenta, $idUsuario);
+
+            // 2. Crear o actualizar el asiento programado asociado
+            $reglaExistente = $this->repository->getReglaPorReferencia($idEmpresa, $idForma, $tipoReferencia);
+            $dataRule = [
+                'id_asiento_tipo' => 0,
+                'id_cuenta'       => $idCuenta,
+                'id_referencia'   => $idForma,
+                'tipo_referencia' => $tipoReferencia
+            ];
+
+            if ($reglaExistente) {
+                $dataRule['updated_by'] = $idUsuario;
+                $this->service->actualizar((int) $reglaExistente['id'], $dataRule, $idEmpresa, $idUsuario);
+                $msg = 'Cuenta contable actualizada correctamente.';
+            } else {
+                $this->service->registrar($dataRule, $idEmpresa, $idUsuario);
+                $msg = 'Cuenta contable asignada correctamente.';
+            }
+
+            echo json_encode(['ok' => true, 'msg' => $msg]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Quita la cuenta contable de una forma de Cobro/Pago (en ambos lugares).
+     */
+    public function eliminarReglaFormaAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $idForma = (int) ($_POST['id_forma'] ?? 0);
+        $flujo   = trim($_POST['flujo'] ?? '');
+
+        if ($idForma <= 0 || !in_array($flujo, ['cobro', 'pago'], true)) {
+            echo json_encode(['ok' => false, 'error' => 'Parámetros incompletos o inválidos.']);
+            exit;
+        }
+
+        $tipoReferencia = $flujo === 'cobro' ? 'forma_cobro' : 'forma_pago';
+
+        try {
+            // 1. Limpiar la cuenta en el módulo de Formas
+            $formaRepo = new FormaPagoRepository();
+            $formaRepo->updateCuentaContable($idForma, $idEmpresa, null, $idUsuario);
+
+            // 2. Eliminar lógicamente el asiento programado asociado, si existe
+            $reglaExistente = $this->repository->getReglaPorReferencia($idEmpresa, $idForma, $tipoReferencia);
+            if ($reglaExistente) {
+                $this->service->eliminar((int) $reglaExistente['id'], $idEmpresa, $idUsuario);
+            }
+
+            echo json_encode(['ok' => true, 'msg' => 'Cuenta contable desvinculada correctamente.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

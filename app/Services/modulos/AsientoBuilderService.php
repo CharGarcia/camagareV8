@@ -512,4 +512,161 @@ class AsientoBuilderService
 
         return $detalles;
     }
+
+    /**
+     * Arma el asiento contable de un INGRESO usando solo la configuración contable propia
+     * (Tipo de asiento → Ingresos/Egresos y Cobros/Pagos), sin depender de asientos tipo:
+     *   DEBE : cuenta de cada forma de cobro (config Cobros/Pagos), por su monto.
+     *   HABER: cuenta del concepto del ingreso (config Ingresos/Egresos), por el total cobrado.
+     *
+     * Devuelve [] si no hay valores. Las líneas sin cuenta configurada se omiten;
+     * el asiento quedará descuadrado y no se generará (se avisa).
+     */
+    public function generarAsientoIngreso(int $idEmpresa, int $idIngreso): array
+    {
+        $db = \App\core\Database::getConnection();
+
+        $sqlCab = "SELECT i.id,
+                          o.id_cuenta_contable AS concepto_id_cuenta,
+                          o.nombre             AS concepto_nombre
+                   FROM ingresos_cabecera i
+                   LEFT JOIN empresa_opciones_ingreso_egreso o ON o.id = i.id_ingreso_concepto
+                   WHERE i.id = :id AND i.id_empresa = :emp AND i.eliminado = false";
+        $stCab = $db->prepare($sqlCab);
+        $stCab->execute([':id' => $idIngreso, ':emp' => $idEmpresa]);
+        $ingreso = $stCab->fetch(\PDO::FETCH_ASSOC);
+        if (!$ingreso) {
+            return [];
+        }
+
+        // ── DEBE: formas de cobro (banco/caja) → config Cobros/Pagos ──
+        [$detalles, $totalMovido] = $this->lineasFormas($idEmpresa, $idIngreso, 'ingreso');
+        if ($totalMovido <= 0) {
+            return [];
+        }
+
+        // ── HABER: cuenta del concepto del ingreso → config Ingresos/Egresos ──
+        if (!empty($ingreso['concepto_id_cuenta'])) {
+            $detalles[] = [
+                'id_cuenta_contable' => (int) $ingreso['concepto_id_cuenta'],
+                'debe'               => 0.0,
+                'haber'              => $totalMovido,
+                'referencia_detalle' => $ingreso['concepto_nombre'] ?? 'Ingreso',
+            ];
+        }
+
+        return $detalles;
+    }
+
+    /**
+     * Arma el asiento contable de un EGRESO usando solo la configuración contable propia
+     * (Tipo de asiento → Ingresos/Egresos y Cobros/Pagos), sin depender de asientos tipo:
+     *   HABER: cuenta de cada forma de pago (config Cobros/Pagos), por su monto.
+     *   DEBE : cuenta del concepto del egreso (config Ingresos/Egresos), por el total pagado.
+     */
+    public function generarAsientoEgreso(int $idEmpresa, int $idEgreso): array
+    {
+        $db = \App\core\Database::getConnection();
+
+        $sqlCab = "SELECT e.id,
+                          o.id_cuenta_contable AS concepto_id_cuenta,
+                          o.nombre             AS concepto_nombre
+                   FROM egresos_cabecera e
+                   LEFT JOIN empresa_opciones_ingreso_egreso o ON o.id = e.id_egreso_concepto
+                   WHERE e.id = :id AND e.id_empresa = :emp AND e.eliminado = false";
+        $stCab = $db->prepare($sqlCab);
+        $stCab->execute([':id' => $idEgreso, ':emp' => $idEmpresa]);
+        $egreso = $stCab->fetch(\PDO::FETCH_ASSOC);
+        if (!$egreso) {
+            return [];
+        }
+
+        // ── HABER: formas de pago (banco/caja) → config Cobros/Pagos ──
+        [$detalles, $totalMovido] = $this->lineasFormas($idEmpresa, $idEgreso, 'egreso');
+        if ($totalMovido <= 0) {
+            return [];
+        }
+
+        // ── DEBE: cuenta del concepto del egreso → config Ingresos/Egresos ──
+        if (!empty($egreso['concepto_id_cuenta'])) {
+            $detalles[] = [
+                'id_cuenta_contable' => (int) $egreso['concepto_id_cuenta'],
+                'debe'               => $totalMovido,
+                'haber'              => 0.0,
+                'referencia_detalle' => $egreso['concepto_nombre'] ?? 'Egreso',
+            ];
+        }
+
+        return $detalles;
+    }
+
+    /**
+     * Construye las líneas de la pata "banco/caja" (formas de cobro/pago) de un ingreso o egreso.
+     * Para ingresos van al Debe; para egresos van al Haber. Devuelve [lineas, totalMovido].
+     * El total contempla TODAS las formas (con o sin cuenta) para que, si falta alguna cuenta,
+     * el asiento quede descuadrado y no se genere.
+     *
+     * @param string $flujo 'ingreso' | 'egreso'
+     * @return array{0: array, 1: float}
+     */
+    private function lineasFormas(int $idEmpresa, int $idDocumento, string $flujo): array
+    {
+        $db = \App\core\Database::getConnection();
+
+        if ($flujo === 'ingreso') {
+            $tabla = 'ingresos_pagos';
+            $colDoc = 'id_ingreso';
+            $colForma = 'id_forma_cobro';
+            $tipoRef = 'forma_cobro';
+            $esDebe = true;
+        } else {
+            $tabla = 'egresos_pagos';
+            $colDoc = 'id_egreso';
+            $colForma = 'id_forma_pago';
+            $tipoRef = 'forma_pago';
+            $esDebe = false;
+        }
+
+        // Las tablas de pagos de egresos tienen columna 'eliminado'; las de ingresos no.
+        $filtroElim = $flujo === 'egreso' ? ' AND p.eliminado = FALSE' : '';
+
+        $sql = "SELECT p.{$colForma} AS id_forma, p.monto,
+                       f.nombre AS forma_nombre,
+                       COALESCE(ap.id_cuenta, f.id_cuenta_contable) AS id_cuenta,
+                       pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                FROM {$tabla} p
+                INNER JOIN empresa_formas_pago f ON f.id = p.{$colForma}
+                LEFT JOIN asientos_programados ap ON ap.id_referencia = f.id
+                                                 AND ap.tipo_referencia = :tipo_ref
+                                                 AND ap.id_empresa = :emp_ap
+                                                 AND ap.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap.id_cuenta, f.id_cuenta_contable)
+                WHERE p.{$colDoc} = :id{$filtroElim}
+                ORDER BY p.id ASC";
+        $st = $db->prepare($sql);
+        $st->execute([':id' => $idDocumento, ':emp_ap' => $idEmpresa, ':tipo_ref' => $tipoRef]);
+
+        $detalles = [];
+        $total    = 0.0;
+        while ($p = $st->fetch(\PDO::FETCH_ASSOC)) {
+            $monto = round((float) $p['monto'], 2);
+            if ($monto <= 0) {
+                continue;
+            }
+            $total += $monto;
+            if (empty($p['id_cuenta'])) {
+                continue; // forma sin cuenta configurada → se omite (descuadra)
+            }
+            $detalles[] = [
+                'id_cuenta_contable' => (int) $p['id_cuenta'],
+                'cuenta_codigo'      => $p['cuenta_codigo'],
+                'cuenta_nombre'      => $p['cuenta_nombre'],
+                'debe'               => $esDebe ? $monto : 0.0,
+                'haber'              => $esDebe ? 0.0 : $monto,
+                'referencia_detalle' => ($esDebe ? 'Cobro: ' : 'Pago: ') . ($p['forma_nombre'] ?? ''),
+            ];
+        }
+
+        return [$detalles, round($total, 2)];
+    }
 }

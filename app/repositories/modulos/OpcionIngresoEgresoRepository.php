@@ -161,6 +161,26 @@ class OpcionIngresoEgresoRepository extends BaseRepository
         ]);
     }
 
+    /**
+     * Actualiza únicamente la cuenta contable asignada a una opción.
+     * Usado desde Configuración Contable para sincronizar la cuenta de la opción.
+     */
+    public function updateCuentaContable(int $id, int $idEmpresa, ?int $idCuenta, int $idUsuario): bool
+    {
+        $sql = "UPDATE empresa_opciones_ingreso_egreso SET
+                    id_cuenta_contable = :id_cuenta,
+                    updated_by = :usr,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = FALSE";
+        $st = $this->db->prepare($sql);
+        return $st->execute([
+            ':id_cuenta'  => $idCuenta !== null && $idCuenta > 0 ? $idCuenta : null,
+            ':usr'        => $idUsuario,
+            ':id'         => $id,
+            ':id_empresa' => $idEmpresa
+        ]);
+    }
+
     public function logicalDelete(int $id, int $idEmpresa, int $idUsuario): bool
     {
         $sql = "UPDATE empresa_opciones_ingreso_egreso SET

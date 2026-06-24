@@ -22,6 +22,8 @@ class SincronizadorAsientosService
             $db->exec("ALTER TABLE notas_credito_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
             $db->exec("ALTER TABLE nota_debito_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
             $db->exec("ALTER TABLE retencion_venta_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
+            $db->exec("ALTER TABLE ingresos_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
+            $db->exec("ALTER TABLE egresos_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
         } catch (\Throwable $e) {
             // Ignorar errores si no tiene permisos o ya existen
         }
@@ -96,9 +98,41 @@ class SincronizadorAsientosService
             },
             'Retenciones en Ventas'
         );
+
+        // 6. Ingresos (cobros): contrapartida del concepto + formas de cobro
+        $this->sincronizarModulo(
+            $db,
+            "SELECT id FROM ingresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'anulado'",
+            [$idEmpresa],
+            function() {
+                return new \App\Services\modulos\IngresoService(
+                    new \App\repositories\modulos\IngresoRepository(),
+                    new \App\Rules\modulos\IngresoRules(),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'Ingresos',
+            'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)'
+        );
+
+        // 7. Egresos (pagos): contrapartida del concepto + formas de pago
+        $this->sincronizarModulo(
+            $db,
+            "SELECT id FROM egresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'anulado'",
+            [$idEmpresa],
+            function() {
+                return new \App\Services\modulos\EgresoService(
+                    new \App\repositories\modulos\EgresoRepository(),
+                    new \App\Rules\modulos\EgresoRules(),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'Egresos',
+            'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)'
+        );
     }
 
-    private function sincronizarModulo(\PDO $db, string $sql, array $params, callable $serviceFactory, string $nombreModulo): void
+    private function sincronizarModulo(\PDO $db, string $sql, array $params, callable $serviceFactory, string $nombreModulo, string $dondeConfigurar = 'Asientos Programados'): void
     {
         $st = $db->prepare($sql);
         $st->execute($params);
@@ -125,7 +159,7 @@ class SincronizadorAsientosService
         }
 
         if ($errorCount > 0) {
-            $this->warnings[] = "Faltan $errorCount asientos contables por generar en $nombreModulo. Configure las cuentas correspondientes en Asientos Programados.";
+            $this->warnings[] = "Faltan $errorCount asientos contables por generar en $nombreModulo. Configure las cuentas correspondientes en $dondeConfigurar.";
         }
     }
 

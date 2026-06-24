@@ -378,6 +378,15 @@ class IngresoRepository extends BaseRepository
         $this->query("DELETE FROM ingresos_detalle WHERE id_ingreso = ?", [$idIngreso]);
     }
 
+    /** Enlaza (o desvincula con null) el asiento contable generado al ingreso. */
+    public function updateAsientoContable(int $idIngreso, ?int $idAsiento): void
+    {
+        $this->query(
+            "UPDATE ingresos_cabecera SET id_asiento_contable = ? WHERE id = ?",
+            [$idAsiento !== null && $idAsiento > 0 ? $idAsiento : null, $idIngreso]
+        );
+    }
+
     public function deletePagos(int $idIngreso): void
     {
         $this->query("DELETE FROM ingresos_pagos WHERE id_ingreso = ?", [$idIngreso]);
