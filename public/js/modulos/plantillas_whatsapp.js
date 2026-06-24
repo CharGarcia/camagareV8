@@ -203,7 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categoria: 'UTILITY',
             cabecera: 'NONE',
             descripcion: 'Sirve para avisar a un número de WhatsApp externo sobre los chats que están pendientes de revisar dentro de la bandeja de entrada del sistema.',
-            texto: 'Hola, tienes {{1}} mensajes pendientes desde hace {{2}} minutos.',
+            texto: 'Aviso del sistema: tienes {{1}} mensajes pendientes desde hace {{2}} minutos en la bandeja.',
             variables: [
                 { id: '{{1}}', label: 'Número de Mensajes' },
                 { id: '{{2}}', label: 'Tiempo Transcurrido (min)' }
@@ -214,7 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categoria: 'UTILITY',
             cabecera: 'DOCUMENT',
             descripcion: 'Sirve para enviar el saldo pendiente de pago de una factura de venta, adjuntando obligatoriamente el documento (PDF).',
-            texto: 'Hola {{1}}, le recordamos que tiene un valor pendiente de pago de {{2}} correspondiente a la factura {{3}}.',
+            texto: 'Estimado(a) {{1}}, le recordamos que tiene un valor pendiente de pago de {{2}} correspondiente a la factura {{3}}. Agradecemos su puntual pago.',
             variables: [
                 { id: '{{1}}', label: 'Nombre del Cliente' },
                 { id: '{{2}}', label: 'Valor Pendiente de Pago' },
@@ -226,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categoria: 'UTILITY',
             cabecera: 'DOCUMENT',
             descripcion: 'Sirve para enviar al cliente su factura de venta, requiriendo adjuntar el PDF de la factura original.',
-            texto: 'Hola {{1}}, adjunto enviamos su factura número {{2}} por un valor total de {{3}}.',
+            texto: 'Estimado(a) {{1}}, adjunto enviamos su factura número {{2}} por un valor total de {{3}}. Agradecemos su preferencia.',
             variables: [
                 { id: '{{1}}', label: 'Nombre del Cliente' },
                 { id: '{{2}}', label: 'Número de Factura' },
@@ -238,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categoria: 'UTILITY',
             cabecera: 'NONE',
             descripcion: 'Sirve para enviar a los clientes su saldo pendiente de pago consolidado hasta el momento.',
-            texto: 'Hola {{1}}, le informamos que su saldo pendiente de pago hasta el momento es de {{2}}.',
+            texto: 'Estimado(a) {{1}}, le informamos que su saldo pendiente de pago hasta el momento es de {{2}}. Si tiene dudas, contáctenos.',
             variables: [
                 { id: '{{1}}', label: 'Nombre del Cliente' },
                 { id: '{{2}}', label: 'Total por Cobrar' }
@@ -249,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categoria: 'UTILITY',
             cabecera: 'NONE',
             descripcion: 'Sirve para enviar avisos a los clientes sobre las próximas renovaciones de sus suscripciones.',
-            texto: 'Hola {{1}}, le recordamos que la fecha de renovación de su suscripción es el {{2}}.',
+            texto: 'Estimado(a) {{1}}, le recordamos que la fecha de renovación de su suscripción es el {{2}}. Agradecemos su confianza.',
             variables: [
                 { id: '{{1}}', label: 'Nombre del Cliente' },
                 { id: '{{2}}', label: 'Fecha de Renovación' }
@@ -260,7 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categoria: 'UTILITY',
             cabecera: 'NONE',
             descripcion: 'Sirve para avisar a los clientes que han sacado firmas electrónicas sobre la próxima caducidad de su firma.',
-            texto: 'Hola {{1}}, le recordamos que su firma electrónica caduca el {{2}}. Comuníquese con nosotros para renovarla.',
+            texto: 'Estimado(a) {{1}}, le recordamos que su firma electrónica caduca el {{2}}. Comuníquese con nosotros para renovarla.',
             variables: [
                 { id: '{{1}}', label: 'Nombre del Cliente' },
                 { id: '{{2}}', label: 'Fecha de Vencimiento' }
@@ -271,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categoria: 'UTILITY',
             cabecera: 'DOCUMENT',
             descripcion: 'Sirve para enviar al proveedor el comprobante de retención, adjuntando el PDF.',
-            texto: 'Hola {{1}}, adjunto enviamos su comprobante de retención número {{2}} por un valor de {{3}}.',
+            texto: 'Estimado proveedor {{1}}, adjunto enviamos su comprobante de retención número {{2}} por un valor de {{3}}. Gracias por su atención.',
             variables: [
                 { id: '{{1}}', label: 'Nombre del Proveedor' },
                 { id: '{{2}}', label: 'Número de Retención' },
@@ -283,7 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categoria: 'UTILITY',
             cabecera: 'DOCUMENT',
             descripcion: 'Sirve para enviar al cliente su nota de crédito, adjuntando el PDF.',
-            texto: 'Hola {{1}}, adjunto enviamos su nota de crédito número {{2}} por un valor de {{3}}.',
+            texto: 'Estimado(a) {{1}}, adjunto enviamos su nota de crédito número {{2}} por un valor de {{3}}. Saludos cordiales.',
             variables: [
                 { id: '{{1}}', label: 'Nombre del Cliente' },
                 { id: '{{2}}', label: 'Número de Nota de Crédito' },
@@ -295,7 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categoria: 'UTILITY',
             cabecera: 'DOCUMENT',
             descripcion: 'Sirve para enviar al cliente su nota de débito, adjuntando el PDF.',
-            texto: 'Hola {{1}}, adjunto enviamos su nota de débito número {{2}} por un valor de {{3}}.',
+            texto: 'Estimado(a) {{1}}, adjunto enviamos su nota de débito número {{2}} por un valor de {{3}}. Saludos cordiales.',
             variables: [
                 { id: '{{1}}', label: 'Nombre del Cliente' },
                 { id: '{{2}}', label: 'Número de Nota de Débito' },
@@ -307,7 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categoria: 'UTILITY',
             cabecera: 'DOCUMENT',
             descripcion: 'Sirve para enviar la guía de remisión, adjuntando el PDF.',
-            texto: 'Hola {{1}}, adjunto enviamos la guía de remisión número {{2}} correspondiente a {{3}}.',
+            texto: 'Estimado(a) {{1}}, adjunto enviamos la guía de remisión número {{2}} correspondiente a {{3}}. Buen viaje.',
             variables: [
                 { id: '{{1}}', label: 'Nombre del Destinatario' },
                 { id: '{{2}}', label: 'Número de Guía' },
@@ -319,7 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categoria: 'UTILITY',
             cabecera: 'DOCUMENT',
             descripcion: 'Sirve para enviar al empleado su rol de pagos, adjuntando el PDF.',
-            texto: 'Hola {{1}}, adjunto enviamos tu rol de pagos correspondiente al periodo {{2}} por un valor a recibir de {{3}}.',
+            texto: 'Hola {{1}}, adjunto enviamos tu rol de pagos correspondiente al periodo {{2}} por un valor a recibir de {{3}}. Saludos.',
             variables: [
                 { id: '{{1}}', label: 'Nombre del Empleado' },
                 { id: '{{2}}', label: 'Periodo / Mes' },
@@ -331,7 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
             categoria: 'UTILITY',
             cabecera: 'DOCUMENT',
             descripcion: 'Sirve para notificar al empleado sobre un descuento, adjuntando el soporte en PDF.',
-            texto: 'Hola {{1}}, adjunto enviamos el detalle del descuento por concepto de {{2}} por un valor de {{3}}.',
+            texto: 'Hola {{1}}, adjunto enviamos el detalle del descuento por concepto de {{2}} por un valor de {{3}}. Saludos.',
             variables: [
                 { id: '{{1}}', label: 'Nombre del Empleado' },
                 { id: '{{2}}', label: 'Concepto del Descuento' },

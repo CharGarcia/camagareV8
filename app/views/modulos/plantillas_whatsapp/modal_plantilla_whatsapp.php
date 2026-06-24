@@ -10,7 +10,12 @@
             <form id="formCrearPlantilla">
                 <div class="modal-body p-4">
                     <div class="alert alert-info bg-info bg-opacity-10 border-info border-opacity-25 small mb-4">
-                        <i class="fas fa-info-circle me-1"></i> <strong>Nota:</strong> Las plantillas deben ser aprobadas por Meta. Usa nombres en minúsculas sin espacios.
+                        <i class="fas fa-info-circle me-1"></i> <strong>Instrucciones Importantes para Meta:</strong>
+                        <ul class="mb-0 mt-1 ps-3">
+                            <li>El nombre debe ser único, en minúsculas, sin espacios (ej: <code>notificacion_pago</code>).</li>
+                            <li><strong>Regla de Variables (Meta):</strong> No se permite colocar variables (como <code>{{1}}</code>, <code>{{2}}</code>...) directamente al inicio o al final del texto. Siempre debe haber palabras o texto estático antes y después de cada variable.</li>
+                            <li>Las variables en plantillas libres deben ser números consecutivos empezando desde 1 (ej: <code>{{1}}</code>, <code>{{2}}</code>...).</li>
+                        </ul>
                     </div>
 
                     <div class="row mb-3 bg-light p-3 rounded border mx-0">
@@ -131,7 +136,11 @@
                     <input type="hidden" name="id_plantilla" id="editarIdPlantilla">
                     
                     <div class="alert alert-warning bg-warning bg-opacity-10 border-warning border-opacity-25 small mb-4">
-                        <i class="fas fa-exclamation-triangle me-1"></i> <strong>Aviso:</strong> Los cambios enviarán la plantilla a revisión en Meta nuevamente.
+                        <i class="fas fa-exclamation-triangle me-1"></i> <strong>Aviso de Edición:</strong> Los cambios enviarán la plantilla a revisión en Meta nuevamente.
+                        <ul class="mb-0 mt-1 ps-3 text-dark">
+                            <li><strong>Regla de Variables (Meta):</strong> No se permite que el texto empiece o termine con variables (como <code>{{1}}</code>, <code>{{2}}</code>). Recuerda poner palabras estáticas antes y después de cada variable.</li>
+                            <li>Las variables deben ser números consecutivos empezando desde 1 (ej: <code>{{1}}</code>, <code>{{2}}</code>...).</li>
+                        </ul>
                     </div>
 
                     <div class="row">
