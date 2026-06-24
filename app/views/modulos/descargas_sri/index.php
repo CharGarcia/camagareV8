@@ -403,13 +403,13 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
 
 <!-- Modal: Visor remoto de la descarga asistida -->
 <div class="modal fade" id="modalVisorSri" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-dialog modal-fullscreen">
         <div class="modal-content">
             <div class="modal-header py-2 px-3">
                 <h6 class="modal-title fw-bold"><i class="bi bi-person-video3 text-primary me-2"></i>Descarga semiautomática del SRI</h6>
                 <button type="button" class="btn-close" aria-label="Cerrar" onclick="cerrarVisorSri()"></button>
             </div>
-            <div class="modal-body p-2">
+            <div class="modal-body p-2 d-flex flex-column">
                 <div class="alert alert-warning py-2 px-3 small mb-2 d-none" id="asis_instruccion">
                     <i class="bi bi-hand-index-thumb me-1"></i><strong>Cuando veas el portal, haz clic en el botón CONSULTAR del SRI</strong> para continuar.
                 </div>
@@ -419,7 +419,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                     </div>
                     <span class="small text-muted" id="asis_etapa" style="min-width:42%;">Iniciando…</span>
                 </div>
-                <div class="border rounded bg-dark mx-auto" style="height:40vh;max-width:620px;overflow:hidden;">
+                <div class="border rounded bg-dark flex-grow-1" style="overflow:hidden;min-height:0;">
                     <iframe id="asis_visor" src="about:blank" title="Visor SRI" style="border:0;width:100%;height:100%;" allow="clipboard-read; clipboard-write"></iframe>
                 </div>
             </div>
