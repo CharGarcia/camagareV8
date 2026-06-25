@@ -9,7 +9,6 @@ use App\Services\SriService;
 use App\Services\modulos\DocumentoAutomatedRegisterService;
 use App\Services\modulos\SriDescargaAutomaticaService;
 use App\Services\modulos\SriVisorRemotoService;
-use App\models\SriConfigDescarga;
 use App\models\Usuario;
 use App\models\EmpresaAsignada;
 use App\repositories\modulos\DocumentoIgnoradoRepository;
