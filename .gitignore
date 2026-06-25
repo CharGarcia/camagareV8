@@ -86,3 +86,7 @@ Factura.xml
 # Scripts de migración expuestos en carpeta pública
 public/migrar_*.php
 public/check.php
+
+# Paquete generado de la extensión para la Chrome Web Store (artefacto, no se versiona)
+extension-store.zip
+_pkg/

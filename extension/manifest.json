@@ -1,8 +1,13 @@
 {
   "manifest_version": 3,
   "name": "CaMaGaRe — Descarga SRI",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "Envía tus comprobantes recibidos del portal del SRI al sistema CaMaGaRe con un clic.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": ["storage", "cookies"],
   "host_permissions": [
     "https://*.sri.gob.ec/*",
@@ -33,6 +38,11 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Descarga SRI → CaMaGaRe"
+    "default_title": "Descarga SRI → CaMaGaRe",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   }
 }
