@@ -234,15 +234,15 @@ class SriService
             throw new Exception("El servidor del SRI rechazó la solicitud (SOAP Fault): " . htmlspecialchars((string)$faultStr));
         }
 
-        // Buscar el nodo autorizacion
-        $nodes = $xpath->query('//autorizacion');
+        // Buscar el nodo autorizacion (robusto a namespaces: el SRI puede devolver ns2:autorizacion)
+        $nodes = $xpath->query('//*[local-name()="autorizacion"]');
         if ($nodes && $nodes->length > 0) {
             $node = $nodes->item(0);
-            
-            $estado = $xpath->evaluate('string(estado)', $node);
-            $fechaAut = $xpath->evaluate('string(fechaAutorizacion)', $node);
-            $numAut = $xpath->evaluate('string(numeroAutorizacion)', $node);
-            $comprobante = $xpath->evaluate('string(comprobante)', $node);
+
+            $estado = trim($xpath->evaluate('string(./*[local-name()="estado"])', $node));
+            $fechaAut = $xpath->evaluate('string(./*[local-name()="fechaAutorizacion"])', $node);
+            $numAut = $xpath->evaluate('string(./*[local-name()="numeroAutorizacion"])', $node);
+            $comprobante = $xpath->evaluate('string(./*[local-name()="comprobante"])', $node);
 
             if ($estado === 'AUTORIZADO') {
                 return [
@@ -264,7 +264,7 @@ class SriService
         return [
             'ok' => false,
             'estado' => 'NO AUTORIZADO',
-            'mensaje' => 'No se encontró la información de autorización en la respuesta del SRI.'
+            'mensaje' => 'No se encontró la información de autorización en la respuesta del SRI. Respuesta: ' . substr(preg_replace('/\s+/', ' ', $responseXml), 0, 300)
         ];
     }
 
