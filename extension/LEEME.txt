@@ -3,34 +3,48 @@
 ==============================================================
 
 ¿QUÉ HACE?
-  Cuando consultas tus comprobantes recibidos en el portal del SRI, agrega un
-  botón azul "Enviar comprobantes al sistema". Con un clic, manda la lista a
-  CaMaGaRe, que descarga y registra todos los comprobantes por ti.
-  Como la consulta la haces TÚ en tu navegador, el SRI no la bloquea.
+  1) Desde el sistema CaMaGaRe pulsas "Generar descarga del SRI".
+  2) La extensión abre el portal del SRI, escribe sola tu RUC y tu clave, entra,
+     y te lleva directo a "Comprobantes electrónicos recibidos".
+  3) Tú eliges los filtros y CONSULTAS (resuelves el captcha como siempre).
+  4) Aparece el botón azul "Enviar comprobantes al sistema": un clic y CaMaGaRe
+     descarga y registra todos los comprobantes.
+  El SRI no lo bloquea porque la consulta la haces TÚ, en tu navegador.
 
-INSTALAR (una sola vez)
-  1) Guarda la carpeta "extension" en tu computadora (no la borres).
-  2) Abre Chrome y entra a:  chrome://extensions
-  3) Arriba a la derecha, activa "Modo de desarrollador".
-  4) Pulsa "Cargar descomprimida" y selecciona la carpeta "extension".
-  5) Aparecerá la extensión "Descarga SRI -> CaMaGaRe".
+--------------------------------------------------------------
+INSTALACIÓN (una sola vez)
+--------------------------------------------------------------
+PASO 1 — Coloca la carpeta en un lugar FIJO
+  Copia la carpeta "extension" a una ubicación estable donde NO la borres por
+  error (no la dejes en Descargas). Recomendado:
+        C:\CaMaGaRe\extension
+  (Si mueves o borras esa carpeta después, la extensión deja de funcionar.)
 
-CONFIGURAR EL TOKEN (una sola vez)
-  1) En el sistema CaMaGaRe entra a:
-       Descargas SRI  ->  pestaña "Descarga Automática"
-       ->  abre "Contraseña SRI"  ->  botón "Token del agente"  ->  copia el token.
-  2) En Chrome, haz clic en el icono de la extensión (arriba a la derecha, en el
-     rompecabezas). Pega el token y pulsa "Guardar".
+PASO 2 — Cárgala en Chrome
+  1) Abre Chrome y entra a:   chrome://extensions
+  2) Arriba a la derecha, activa "Modo de desarrollador".
+  3) Pulsa "Cargar descomprimida" y selecciona la carpeta C:\CaMaGaRe\extension
+  4) Aparece "CaMaGaRe — Descarga SRI". (Opcional: fíjala con el icono del pin.)
 
-USAR (cada vez que quieras descargar)
-  1) Entra al portal del SRI e inicia sesión como siempre.
-  2) Ve a "Comprobantes electrónicos recibidos", elige el período y CONSULTA
-     (resuelve el captcha como de costumbre).
-  3) Abajo a la derecha aparece el botón azul "Enviar comprobantes al sistema".
-     Haz clic. Listo: verás cuántos se registraron.
+PASO 3 — Pega tu token (una sola vez; sirve para TODAS tus empresas)
+  1) En el sistema:  Descargas SRI -> Descarga Automática -> "Contraseña SRI"
+     -> botón "Token del agente" -> copia el token.
+  2) En Chrome, clic en el icono de la extensión -> pega el token -> Guardar.
+  El token es PERSONAL: no se cambia al cambiar de empresa.
 
+--------------------------------------------------------------
+USO DIARIO
+--------------------------------------------------------------
+  1) En el sistema elige la empresa y pulsa "Generar descarga del SRI".
+  2) Espera: la extensión entra sola y abre Comprobantes recibidos.
+  3) Filtra, CONSULTA (resuelve el captcha) y pulsa "Enviar comprobantes al sistema".
+  Para otra empresa: cambia la empresa en el sistema y repite. No tocas el token.
+
+--------------------------------------------------------------
 NOTAS
-  - Si el botón dice que falta el token, configúralo (paso anterior).
-  - Si el token deja de funcionar, genera uno nuevo en el sistema y vuelve a
-    pegarlo en la extensión.
-  - El token es como una llave: no lo compartas.
+--------------------------------------------------------------
+  - Requiere Google Chrome (o Edge) y la clave del SRI guardada en el sistema.
+  - Si sale una barra roja arriba en el SRI, te dice qué corregir (token / recargar).
+  - Cuando se publique en la Chrome Web Store, se instalará con un clic y se
+    actualizará sola, sin esta carpeta. Por ahora se usa el modo de arriba.
+  - Tu token es como una llave: no lo compartas.
