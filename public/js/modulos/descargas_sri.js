@@ -831,7 +831,7 @@ function generarDescargaSri() {
                 Swal.fire('Atención', data.error || 'No se pudo iniciar la descarga.', 'warning');
                 return;
             }
-            window.open('https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT', '_blank');
+            window.open('https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/pages/consultas/recibidos/comprobantesRecibidos.jsf', '_blank');
         })
         .catch(err => {
             if (btn) btn.disabled = false;
