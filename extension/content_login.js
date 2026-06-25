@@ -75,11 +75,25 @@
 
     async function irAComprobantes() {
         const { cmg_ir } = await chrome.storage.local.get('cmg_ir');
-        // ANTIBUCLE: borrar la marca SIEMPRE antes de decidir/navegar. Así nunca se repite.
+        // ANTIBUCLE: borrar la marca SIEMPRE antes de actuar. Así nunca se repite.
         chrome.storage.local.remove('cmg_ir');
         if (!cmg_ir || (Date.now() - cmg_ir > 120000)) return;
         banner('CaMaGaRe: abriendo Comprobantes recibidos…', '#0d6efd');
-        location.href = COMP_URL;
+        // El acceso directo a la URL rebota al perfil; hay que entrar POR EL MENÚ:
+        // expandir "Facturación Electrónica" y pulsar "Comprobantes recibidos" (redireccion=57).
+        let intentos = 0;
+        let expandido = false;
+        const iv = setInterval(() => {
+            intentos++;
+            const link = document.querySelector('a[href*="redireccion=57"]');
+            if (link) { clearInterval(iv); link.click(); return; }
+            if (!expandido) {
+                const icono = document.querySelector('.sri-menu-icon-facturacion-electronica');
+                const header = icono && icono.closest('a.ui-panelmenu-header-link');
+                if (header) { header.click(); expandido = true; }
+            }
+            if (intentos > 40) clearInterval(iv); // ~12s sin menú: parar (sin bucle)
+        }, 300);
     }
 
     if (urlEsLogin) {
