@@ -15,7 +15,7 @@
     const enComprobantes = url.includes('comprobantes-electronicos-internet');
     const urlEsLogin = /\/auth\/|\/realms\/|\/openid|\/protocol\//i.test(url);
 
-    try { console.log('[CaMaGaRe v' + chrome.runtime.getManifest().version + '] content_login:', { url, urlEsLogin }); } catch (e) {}
+    try { console.log('[CaMaGaRe v' + chrome.runtime.getManifest().version + '] url=' + url + ' | esLogin=' + urlEsLogin + ' | enComprobantes=' + enComprobantes); } catch (e) {}
 
     if (enComprobantes) { chrome.storage.local.remove('sri_ir_comprobantes'); return; }
 
