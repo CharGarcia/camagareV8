@@ -105,6 +105,22 @@ class Usuario extends BaseModel
         return (int) $id;
     }
 
+    /** Lee la empresa marcada SIN limpiarla (persiste desde el botón hasta el registro). */
+    public function getLoginPendiente(int $idUsuario): ?int
+    {
+        $st = $this->db->prepare("SELECT login_pendiente_empresa FROM usuarios WHERE id = ?");
+        $st->execute([$idUsuario]);
+        $id = $st->fetchColumn();
+        return ($id === false || $id === null) ? null : (int) $id;
+    }
+
+    /** Limpia la marca de empresa pendiente (tras registrar las claves). */
+    public function limpiarLoginPendiente(int $idUsuario): void
+    {
+        $up = $this->db->prepare("UPDATE usuarios SET login_pendiente_empresa = NULL WHERE id = ?");
+        $up->execute([$idUsuario]);
+    }
+
     /**
      * Valida contraseña actual (MD5 o bcrypt) y actualiza a nueva contraseña en bcrypt.
      * Si la actual está en MD5 y es correcta, migra transparentemente.

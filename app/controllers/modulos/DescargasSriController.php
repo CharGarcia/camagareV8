@@ -534,7 +534,7 @@ class DescargasSriController extends Controller
             exit;
         }
 
-        $idEmpresa = $model->tomarLoginPendiente((int) $usuario['id']);
+        $idEmpresa = $model->getLoginPendiente((int) $usuario['id']);
         if (!$idEmpresa) {
             echo json_encode(['ok' => false, 'error' => 'No hay una descarga pendiente. Pulsa "Generar descarga del SRI" en el sistema.']);
             exit;
@@ -599,24 +599,25 @@ class DescargasSriController extends Controller
         set_time_limit(0);
 
         try {
-            $mapa = $this->empresasDelUsuario($idUsuario);
-            if (empty($mapa)) {
-                echo json_encode(['ok' => false, 'error' => 'Tu usuario no tiene empresas asignadas.']);
-                exit;
-            }
+            // La empresa es la ACTIVA cuando el usuario pulsó "Generar descarga del SRI".
+            $idEmpresa = (new Usuario())->getLoginPendiente($idUsuario);
 
-            $debug = [];
-            $idEmpresa = $this->resolverEmpresaPorClaves($claves, $mapa, $debug);
+            // Respaldo: si no hay empresa marcada (p.ej. entró manual), identificar por el receptor del XML.
             if (!$idEmpresa) {
-                $det = 'Tus empresas (RUC): ' . implode(', ', $debug['rucs_empresa'] ?? [])
-                     . ' | comprobantes leídos: ' . ($debug['xml_ok'] ?? 0)
-                     . ' | receptor del comprobante: ' . ($debug['receptor'] ?? '?')
-                     . (isset($debug['ultimo_error']) ? ' | ' . $debug['ultimo_error'] : '');
-                echo json_encode(['ok' => false, 'error' => 'No se pudo identificar la empresa. ' . $det]);
-                exit;
+                $mapa = $this->empresasDelUsuario($idUsuario);
+                if (empty($mapa)) {
+                    echo json_encode(['ok' => false, 'error' => 'Tu usuario no tiene empresas asignadas.']);
+                    exit;
+                }
+                $idEmpresa = $this->resolverEmpresaPorClaves($claves, $mapa);
+                if (!$idEmpresa) {
+                    echo json_encode(['ok' => false, 'error' => 'No se pudo identificar la empresa. Pulsa "Generar descarga del SRI" antes de consultar en el SRI.']);
+                    exit;
+                }
             }
 
             $res = (new SriDescargaAutomaticaService())->registrarClaves($claves, $idEmpresa, $idUsuario, 'agente');
+            (new Usuario())->limpiarLoginPendiente($idUsuario); // consumir la marca tras registrar
             echo json_encode($res);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => 'Error del servidor: ' . $e->getMessage()]);
