@@ -35,9 +35,9 @@ async function pedirLoginPendiente() {
         });
         const data = await resp.json().catch(() => null);
         if (data && data.ok) return { ok: true, ruc: data.ruc, clave: data.clave };
-        return { ok: false };
+        return { ok: false, error: (data && data.error) || ('Respuesta del servidor HTTP ' + resp.status) };
     } catch (e) {
-        return { ok: false };
+        return { ok: false, error: 'No se pudo contactar al servidor: ' + e.message };
     }
 }
 

@@ -33,13 +33,20 @@
         b.textContent = texto;
     }
 
-    // Escribe en el input como si se tecleara (el SRI bloquea pegar, no escribir por JS).
+    // Escribe tecleando carácter por carácter (el SRI bloquea pegar; algunos campos validan el tecleo).
     function escribir(input, valor) {
-        input.focus();
         const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-        setter.call(input, valor);
-        input.dispatchEvent(new Event('input',  { bubbles: true }));
+        input.focus();
+        setter.call(input, '');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        for (const ch of String(valor)) {
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: ch, bubbles: true }));
+            setter.call(input, input.value + ch);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new KeyboardEvent('keyup', { key: ch, bubbles: true }));
+        }
         input.dispatchEvent(new Event('change', { bubbles: true }));
+        input.blur();
     }
 
     function hacerLlenado(u, p) {
@@ -50,7 +57,7 @@
                 return;
             }
             if (!resp || !resp.ok) {
-                banner('CaMaGaRe: no hay datos para autocompletar. Verifica el token y pulsa "Generar descarga del SRI".', '#dc3545');
+                banner('CaMaGaRe: ' + ((resp && resp.error) || 'no se pudo autocompletar') + '  ·  (revisa el token o pulsa "Generar descarga del SRI")', '#dc3545');
                 return;
             }
             escribir(u, resp.ruc);
