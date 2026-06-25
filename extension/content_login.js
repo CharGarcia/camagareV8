@@ -15,6 +15,8 @@
     const enComprobantes = url.includes('comprobantes-electronicos-internet');
     const urlEsLogin = /\/auth\/|\/realms\/|\/openid|\/protocol\//i.test(url);
 
+    console.log('[CaMaGaRe] content_login cargado:', { url, enComprobantes, urlEsLogin });
+
     if (enComprobantes) { chrome.storage.local.remove('sri_ir_comprobantes'); return; }
 
     function banner(texto, color) {
@@ -94,8 +96,10 @@
         location.href = COMP_URL;
     }
 
+    // Aviso incondicional: si ves esta franja, el script SÍ corre en esta página.
+    banner('CaMaGaRe activo: detectando el formulario de ingreso…', '#6c757d');
+
     if (urlEsLogin || document.querySelector('#usuario')) {
-        banner('CaMaGaRe activo: detectando el formulario de ingreso…', '#6c757d');
         esperarYLlenar();
     } else {
         // Quizá es inicio (post-login) o un login que aún no renderiza. Dar margen y decidir.
