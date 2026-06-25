@@ -12,8 +12,11 @@
 (function () {
     const COMP_URL = 'https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/pages/consultas/recibidos/comprobantesRecibidos.jsf';
     const url = location.href;
-    const enComprobantes = url.includes('comprobantes-electronicos-internet');
-    const urlEsLogin = /\/auth\/|\/realms\/|\/openid|\/protocol\//i.test(url);
+    // Usar solo la RUTA (no los parámetros): la URL del login lleva el destino "comprobantes…"
+    // dentro del redirect_uri, y eso daba un falso positivo de "ya estoy en comprobantes".
+    const path = location.pathname;
+    const enComprobantes = path.includes('comprobantes-electronicos-internet');
+    const urlEsLogin = /\/auth\/|\/realms\/|\/openid|\/protocol\//i.test(path);
 
     try { console.log('[CaMaGaRe v' + chrome.runtime.getManifest().version + '] url=' + url + ' | esLogin=' + urlEsLogin + ' | enComprobantes=' + enComprobantes); } catch (e) {}
 
