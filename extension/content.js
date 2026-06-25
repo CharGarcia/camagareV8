@@ -63,14 +63,28 @@
     // ── UI flotante ───────────────────────────────────────────────────────────
     function crearBoton() {
         if (document.getElementById('cmg-sri-btn')) return;
+        // Estilos con animación de pulso para que el botón resalte (se inyecta una sola vez).
+        if (!document.getElementById('cmg-sri-style')) {
+            const st = document.createElement('style');
+            st.id = 'cmg-sri-style';
+            st.textContent =
+                '@keyframes cmgPulse {' +
+                '  0%   { box-shadow: 0 8px 22px rgba(0,0,0,.35), 0 0 0 0 rgba(13,110,253,.55); }' +
+                '  70%  { box-shadow: 0 8px 22px rgba(0,0,0,.35), 0 0 0 20px rgba(13,110,253,0); }' +
+                '  100% { box-shadow: 0 8px 22px rgba(0,0,0,.35), 0 0 0 0 rgba(13,110,253,0); }' +
+                '}' +
+                '#cmg-sri-btn:hover { background:#0b5ed7 !important; transform:scale(1.04); }';
+            (document.head || document.documentElement).appendChild(st);
+        }
         const btn = document.createElement('button');
         btn.id = 'cmg-sri-btn';
         btn.textContent = '⬇ Enviar comprobantes al sistema';
         Object.assign(btn.style, {
-            position: 'fixed', bottom: '20px', right: '20px', zIndex: 2147483647,
-            background: '#0d6efd', color: '#fff', border: 'none', borderRadius: '8px',
-            padding: '12px 18px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0,0,0,.3)', fontFamily: 'Arial, sans-serif',
+            position: 'fixed', bottom: '26px', right: '26px', zIndex: 2147483647,
+            background: '#0d6efd', color: '#fff', border: '3px solid #fff', borderRadius: '14px',
+            padding: '20px 34px', fontSize: '21px', fontWeight: 'bold', cursor: 'pointer',
+            fontFamily: 'Arial, sans-serif', letterSpacing: '.3px',
+            animation: 'cmgPulse 1.8s infinite', transition: 'transform .15s ease',
         });
         btn.addEventListener('click', enviar);
         document.body.appendChild(btn);
@@ -86,9 +100,9 @@
             n = document.createElement('div');
             n.id = 'cmg-sri-aviso';
             Object.assign(n.style, {
-                position: 'fixed', bottom: '76px', right: '20px', zIndex: 2147483647,
-                color: '#fff', borderRadius: '8px', padding: '12px 18px', fontSize: '14px',
-                maxWidth: '340px', boxShadow: '0 4px 12px rgba(0,0,0,.3)',
+                position: 'fixed', bottom: '112px', right: '26px', zIndex: 2147483647,
+                color: '#fff', borderRadius: '10px', padding: '14px 20px', fontSize: '15px',
+                maxWidth: '360px', boxShadow: '0 6px 16px rgba(0,0,0,.3)',
                 fontFamily: 'Arial, sans-serif', lineHeight: '1.4',
             });
             document.body.appendChild(n);
