@@ -63,6 +63,29 @@ class Usuario extends BaseModel
     }
 
     /**
+     * Resuelve el usuario a partir de su token de agente (extensión/agente de escritorio).
+     * El token es personal: un solo token sirve para todas las empresas del usuario.
+     */
+    public function getPorAgenteToken(string $token): ?array
+    {
+        if ($token === '') return null;
+        $st = $this->db->prepare(
+            "SELECT id, nombre, nivel FROM usuarios
+             WHERE agente_token = ? AND estado = 1 AND eliminado = false LIMIT 1"
+        );
+        $st->execute([$token]);
+        $r = $st->fetch(\PDO::FETCH_ASSOC);
+        return $r ?: null;
+    }
+
+    /** Guarda (o regenera) el token del agente para un usuario. */
+    public function setAgenteToken(int $idUsuario, string $token): bool
+    {
+        $st = $this->db->prepare("UPDATE usuarios SET agente_token = ? WHERE id = ?");
+        return $st->execute([$token, $idUsuario]);
+    }
+
+    /**
      * Valida contraseña actual (MD5 o bcrypt) y actualiza a nueva contraseña en bcrypt.
      * Si la actual está en MD5 y es correcta, migra transparentemente.
      *

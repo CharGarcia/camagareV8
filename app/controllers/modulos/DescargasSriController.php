@@ -10,6 +10,8 @@ use App\Services\modulos\DocumentoAutomatedRegisterService;
 use App\Services\modulos\SriDescargaAutomaticaService;
 use App\Services\modulos\SriVisorRemotoService;
 use App\models\SriConfigDescarga;
+use App\models\Usuario;
+use App\models\EmpresaAsignada;
 use App\repositories\modulos\DocumentoIgnoradoRepository;
 use App\repositories\modulos\SriConfigDescargaRepository;
 use Exception;
@@ -577,22 +579,23 @@ class DescargasSriController extends Controller
     // Endpoints autenticados por token (sin sesión web).
     // ─────────────────────────────────────────────────────────────────────────
 
-    /** Genera (o regenera) el token del agente para la empresa activa. Requiere sesión. */
+    /**
+     * Genera (o regenera) el token del agente para el USUARIO logueado. Requiere sesión.
+     * Un solo token sirve para todas las empresas que el usuario maneja.
+     */
     public function generarAgenteTokenAjax(): void
     {
         $this->requireAuth();
         header('Content-Type: application/json');
 
-        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
-        $model     = new SriConfigDescarga();
-
-        if (!$model->getPorEmpresa($idEmpresa)) {
-            echo json_encode(['ok' => false, 'error' => 'Primero guarda la configuración (usuario y clave SRI).']);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        if ($idUsuario <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Sesión inválida.']);
             exit;
         }
 
         $token = bin2hex(random_bytes(32));
-        $ok    = $model->setAgenteToken($idEmpresa, $token);
+        $ok    = (new Usuario())->setAgenteToken($idUsuario, $token);
         echo json_encode($ok
             ? ['ok' => true, 'token' => $token]
             : ['ok' => false, 'error' => 'No se pudo generar el token.']);
@@ -600,44 +603,10 @@ class DescargasSriController extends Controller
     }
 
     /**
-     * El agente pide las credenciales SRI (descifradas) de la empresa dueña del token.
-     * Autenticado por token; va siempre sobre HTTPS.
-     */
-    public function agenteConfigAjax(): void
-    {
-        header('Content-Type: application/json');
-
-        $token  = trim($_POST['agente_token'] ?? $_GET['agente_token'] ?? '');
-        $config = (new SriConfigDescarga())->getPorAgenteToken($token);
-
-        if (!$config) {
-            http_response_code(403);
-            echo json_encode(['ok' => false, 'error' => 'Token de agente inválido.']);
-            exit;
-        }
-        if (!empty($config['login_bloqueado'])) {
-            echo json_encode(['ok' => false, 'error' => 'Descarga bloqueada: credenciales SRI incorrectas. Actualiza la clave.']);
-            exit;
-        }
-
-        $clave = SriDescargaAutomaticaService::desencriptarClave($config['sri_clave'] ?? '');
-        if ($clave === '') {
-            echo json_encode(['ok' => false, 'error' => 'No hay clave SRI guardada o no se pudo descifrar.']);
-            exit;
-        }
-
-        echo json_encode([
-            'ok'         => true,
-            'id_empresa' => (int) $config['id_empresa'],
-            'usuario'    => $config['sri_usuario'],
-            'clave'      => $clave,
-        ]);
-        exit;
-    }
-
-    /**
-     * El agente envía las claves recolectadas en la PC del operador. El servidor baja los XML
-     * por el webservice oficial (sin captcha) y los registra. Autenticado por token.
+     * La extensión/agente envía las claves recolectadas en la PC del operador. El servidor
+     * identifica la empresa por el RUC del receptor del comprobante (cuál de las empresas del
+     * usuario aparece en el XML), baja los XML por el webservice oficial y los registra.
+     * Autenticado por el token PERSONAL del usuario.
      */
     public function agenteRegistrarClavesAjax(): void
     {
@@ -647,14 +616,15 @@ class DescargasSriController extends Controller
             exit;
         }
 
-        $token  = trim($_POST['agente_token'] ?? '');
-        $config = (new SriConfigDescarga())->getPorAgenteToken($token);
-        if (!$config) {
+        $token   = trim($_POST['agente_token'] ?? '');
+        $usuario = (new Usuario())->getPorAgenteToken($token);
+        if (!$usuario) {
             http_response_code(403);
-            echo json_encode(['ok' => false, 'error' => 'Token de agente inválido.']);
+            echo json_encode(['ok' => false, 'error' => 'Token inválido. Genera tu token en el sistema y pégalo en la extensión.']);
             exit;
         }
-        $idEmpresa = (int) $config['id_empresa'];
+        $idUsuario = (int) $usuario['id'];
+        $nivel     = (int) $usuario['nivel'];
 
         // Las claves pueden llegar como JSON, como array de POST o como texto separado.
         $raw = $_POST['claves'] ?? '';
@@ -668,15 +638,70 @@ class DescargasSriController extends Controller
             array_map('trim', $claves),
             fn($c) => strlen($c) === 49 && ctype_digit($c)
         ));
-
         if (empty($claves)) {
             echo json_encode(['ok' => false, 'error' => 'No se recibieron claves de acceso válidas.']);
             exit;
         }
 
+        $mapa = $this->empresasDelUsuario($idUsuario, $nivel);
+        if (empty($mapa)) {
+            echo json_encode(['ok' => false, 'error' => 'Tu usuario no tiene empresas asignadas.']);
+            exit;
+        }
+
         set_time_limit(0);
-        $res = (new SriDescargaAutomaticaService())->registrarClaves($claves, $idEmpresa, 0, 'agente');
+
+        $idEmpresa = $this->resolverEmpresaPorClaves($claves, $mapa);
+        if (!$idEmpresa) {
+            echo json_encode(['ok' => false, 'error' => 'No se pudo identificar la empresa de estos comprobantes. Verifica que la empresa (RUC del receptor) esté registrada y asignada a tu usuario.']);
+            exit;
+        }
+
+        $res = (new SriDescargaAutomaticaService())->registrarClaves($claves, $idEmpresa, $idUsuario, 'agente');
         echo json_encode($res);
         exit;
+    }
+
+    /** Mapa ruc => id_empresa de las empresas que el usuario puede gestionar. */
+    private function empresasDelUsuario(int $idUsuario, int $nivel): array
+    {
+        $mapa = [];
+        if ($nivel >= 3) {
+            $db = \App\core\Database::getConnection();
+            $st = $db->query("SELECT id, ruc FROM empresas WHERE estado = '1' AND eliminado = false AND ruc IS NOT NULL");
+            foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $e) {
+                $ruc = trim((string) $e['ruc']);
+                if ($ruc !== '') $mapa[$ruc] = (int) $e['id'];
+            }
+        } else {
+            foreach ((new EmpresaAsignada())->getEmpresasDeUsuario($idUsuario) as $e) {
+                $ruc = trim((string) ($e['ruc'] ?? ''));
+                if ($ruc !== '') $mapa[$ruc] = (int) $e['id_empresa'];
+            }
+        }
+        return $mapa;
+    }
+
+    /**
+     * Descarga el primer XML disponible y devuelve el id_empresa cuyo RUC (receptor) aparece
+     * en él. El emisor es externo, así que el RUC de UNA de las empresas del usuario que figure
+     * en el comprobante es el receptor. Prueba unas pocas claves por si el webservice falla.
+     */
+    private function resolverEmpresaPorClaves(array $claves, array $mapaRucEmpresa): ?int
+    {
+        $sri = new SriService();
+        $intentos = 0;
+        foreach ($claves as $c) {
+            if ($intentos >= 5) break;
+            $intentos++;
+            $resp = $sri->obtenerComprobanteXml($c);
+            if (empty($resp['ok']) || empty($resp['xml'])) continue;
+            foreach ($mapaRucEmpresa as $ruc => $idEmpresa) {
+                if ($ruc !== '' && strpos($resp['xml'], $ruc) !== false) {
+                    return $idEmpresa;
+                }
+            }
+        }
+        return null;
     }
 }

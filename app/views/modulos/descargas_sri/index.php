@@ -231,7 +231,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                     </div>
 
                                     <div id="agente_token_box" class="mt-3 d-none">
-                                        <label class="form-label fw-semibold small text-muted mb-1">Token del agente <span class="text-muted">(péguelo en el <code>config.json</code> del agente)</span></label>
+                                        <label class="form-label fw-semibold small text-muted mb-1">Tu token personal <span class="text-muted">(pégalo en la extensión de Chrome — sirve para todas tus empresas)</span></label>
                                         <div class="input-group input-group-sm">
                                             <input type="text" id="agente_token_val" class="form-control form-control-sm font-monospace" readonly>
                                             <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copiarAgenteToken()" title="Copiar"><i class="bi bi-clipboard"></i></button>
@@ -251,9 +251,9 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                 <div class="card-body px-3 py-3 small text-muted">
                                     <p class="mb-2">La descarga se hace desde <strong>tu propio navegador</strong> con la extensión, así el SRI no la bloquea:</p>
                                     <ol class="ps-3 mb-2">
-                                        <li>Genera el <strong>Token del agente</strong> (arriba) y pégalo en la extensión.</li>
-                                        <li>Entra al portal del SRI y consulta tus <strong>comprobantes recibidos</strong> (resuelve el captcha como siempre).</li>
-                                        <li>Pulsa el botón <strong>«Enviar comprobantes al sistema»</strong> que aparece en el portal. El resultado se verá en el historial de aquí.</li>
+                                        <li>Genera tu <strong>Token</strong> (botón de arriba) y pégalo en la extensión <em>una sola vez</em>; sirve para todas tus empresas.</li>
+                                        <li>Entra al portal del SRI con el RUC de la empresa que quieras y consulta tus <strong>comprobantes recibidos</strong> (resuelve el captcha como siempre).</li>
+                                        <li>Pulsa el botón <strong>«Enviar comprobantes al sistema»</strong> que aparece en el portal. El sistema reconoce solo a qué empresa va. El resultado se verá en el historial de aquí.</li>
                                     </ol>
                                     <div class="text-muted">La descarga automática por cron queda suspendida para evitar bloqueos del SRI.</div>
                                 </div>
