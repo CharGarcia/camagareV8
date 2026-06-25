@@ -648,6 +648,7 @@ class DescargasSriController extends Controller
             $resp = $sri->obtenerComprobanteXml($c);
             if (empty($resp['ok']) || empty($resp['xml'])) continue;
             foreach ($mapaRucEmpresa as $ruc => $idEmpresa) {
+                $ruc = (string) $ruc; // PHP convierte la clave de array numérica a int
                 if ($ruc !== '' && strpos($resp['xml'], $ruc) !== false) {
                     return $idEmpresa;
                 }
