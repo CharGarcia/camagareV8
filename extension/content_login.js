@@ -77,7 +77,10 @@
             const u = document.querySelector('#usuario');
             const p = document.querySelector('#password');
             if (u && p) { clearInterval(iv); hacerLlenado(u, p); return; }
-            if (++intentos > 40) clearInterval(iv);
+            if (++intentos > 40) {
+                clearInterval(iv);
+                banner('CaMaGaRe: no encontré los campos de usuario/clave en esta página.', '#dc3545');
+            }
         }, 300);
     }
 
@@ -92,6 +95,7 @@
     }
 
     if (urlEsLogin || document.querySelector('#usuario')) {
+        banner('CaMaGaRe activo: detectando el formulario de ingreso…', '#6c757d');
         esperarYLlenar();
     } else {
         // Quizá es inicio (post-login) o un login que aún no renderiza. Dar margen y decidir.
