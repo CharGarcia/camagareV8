@@ -64,11 +64,14 @@
             }
             escribir(u, resp.ruc);
             escribir(p, resp.clave);
-            chrome.storage.local.set({ sri_ir_comprobantes: Date.now() }); // tras el login, ir a comprobantes
-            banner('CaMaGaRe: ingresando…', '#198754');
-            const btn = document.querySelector('#kc-login');
-            if (btn) btn.click();
-            else { const f = u.closest('form'); if (f) f.submit(); }
+            // Persistir la marca ANTES de enviar el login: si no, la navegación corta el guardado
+            // y luego la extensión no sabe que debe ir a Comprobantes recibidos.
+            chrome.storage.local.set({ sri_ir_comprobantes: Date.now() }, () => {
+                banner('CaMaGaRe: ingresando…', '#198754');
+                const btn = document.querySelector('#kc-login');
+                if (btn) btn.click();
+                else { const f = u.closest('form'); if (f) f.submit(); }
+            });
         });
     }
 
