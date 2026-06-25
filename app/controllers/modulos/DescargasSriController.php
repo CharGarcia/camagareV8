@@ -617,7 +617,11 @@ class DescargasSriController extends Controller
             }
 
             $res = (new SriDescargaAutomaticaService())->registrarClaves($claves, $idEmpresa, $idUsuario, 'agente');
-            (new Usuario())->limpiarLoginPendiente($idUsuario); // consumir la marca tras registrar
+            // Limpiar la marca solo si el webservice respondió (registró o ya existían). Si falló
+            // (0 y solo errores), dejarla para poder reintentar sin volver a pulsar el botón.
+            if ((int) ($res['total_nuevos'] ?? 0) > 0 || (int) ($res['total_existentes'] ?? 0) > 0) {
+                (new Usuario())->limpiarLoginPendiente($idUsuario);
+            }
             echo json_encode($res);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => 'Error del servidor: ' . $e->getMessage()]);
