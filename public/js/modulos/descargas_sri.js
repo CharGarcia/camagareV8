@@ -781,43 +781,6 @@ function escHtml(str) {
 }
 
 
-// =============================================================================
-// TOKEN DEL AGENTE DE ESCRITORIO
-// =============================================================================
-
-function generarAgenteToken() {
-    Swal.fire({
-        title: '¿Generar token del agente?',
-        text: 'Se generará un token nuevo. Si ya tenías uno configurado en un agente, dejará de funcionar y tendrás que actualizarlo.',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Sí, generar',
-        cancelButtonText: 'Cancelar'
-    }).then(result => {
-        if (!result.isConfirmed) return;
-        fetch(`${BASE_URL}/modulos/DescargasSri/generarAgenteTokenAjax`, { method: 'POST' })
-            .then(r => r.json())
-            .then(data => {
-                if (data.ok) {
-                    document.getElementById('agente_token_val').value = data.token;
-                    document.getElementById('agente_token_box').classList.remove('d-none');
-                } else {
-                    Swal.fire('Atención', data.error || 'No se pudo generar el token.', 'warning');
-                }
-            })
-            .catch(err => { console.error(err); Swal.fire('Error', 'Problema de conexión.', 'error'); });
-    });
-}
-
-function copiarAgenteToken() {
-    const inp = document.getElementById('agente_token_val');
-    if (!inp) return;
-    inp.select();
-    if (navigator.clipboard) navigator.clipboard.writeText(inp.value);
-    else document.execCommand('copy');
-    Swal.fire({ icon: 'success', title: 'Copiado', timer: 1200, showConfirmButton: false });
-}
-
 // Marca la empresa activa como "pendiente de login" y abre el portal del SRI.
 // La extensión detecta el login, escribe RUC+clave y navega a Comprobantes recibidos.
 function generarDescargaSri() {

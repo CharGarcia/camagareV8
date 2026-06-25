@@ -225,18 +225,6 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                         <button type="button" class="btn btn-primary btn-sm px-4" onclick="guardarConfigDescarga()">
                                             <i class="bi bi-floppy me-1"></i> Guardar
                                         </button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="generarAgenteToken()" title="Token para el agente de escritorio (descarga desde tu PC)">
-                                            <i class="bi bi-key me-1"></i> Token del agente
-                                        </button>
-                                    </div>
-
-                                    <div id="agente_token_box" class="mt-3 d-none">
-                                        <label class="form-label fw-semibold small text-muted mb-1">Tu token personal <span class="text-muted">(pégalo en la extensión de Chrome — sirve para todas tus empresas)</span></label>
-                                        <div class="input-group input-group-sm">
-                                            <input type="text" id="agente_token_val" class="form-control form-control-sm font-monospace" readonly>
-                                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copiarAgenteToken()" title="Copiar"><i class="bi bi-clipboard"></i></button>
-                                        </div>
-                                        <div class="form-text text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Cópielo ahora. Si genera otro, el anterior deja de funcionar.</div>
                                     </div>
                                   </div>
                                 </div>
@@ -254,12 +242,13 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                     </button>
                                     <div class="small text-muted mt-3">
                                         <div class="fw-semibold mb-1">¿Qué hace este botón?</div>
-                                        <ol class="ps-3 mb-2">
-                                            <li>Abre el portal del SRI <strong>ya logueado</strong> con la empresa activa (la extensión escribe el RUC y la clave por ti).</li>
-                                            <li>Aplica los <strong>filtros</strong> y consulta tus comprobantes recibidos (resuelve el captcha como siempre).</li>
-                                            <li>Pulsa <strong>«Enviar comprobantes al sistema»</strong> en el portal. El resultado aparece en el historial de aquí.</li>
-                                        </ol>
-                                        <div class="text-muted">Requiere la <strong>extensión de Chrome</strong> instalada y tu <strong>token</strong> configurado (botón de arriba). La descarga automática por cron queda suspendida.</div>
+                                        <p class="mb-2">Abre el portal del SRI con el RUC y clave del SRI actual, y automáticamente se ubica en <strong>descargas de documentos recibidos</strong> para que el usuario seleccione <strong>año, mes, día y tipo de documento</strong> y dé clic en <strong>Consultar</strong>.</p>
+                                        <p class="mb-2">Luego pulsa <strong>«Enviar comprobantes al sistema»</strong> en el portal.</p>
+                                        <div class="border-top pt-2 mt-2">
+                                            <span class="fw-semibold"><i class="bi bi-puzzle me-1"></i>Requiere la extensión de Chrome instalada.</span><br>
+                                            <!-- TODO: reemplazar el href por el enlace directo de la extensión cuando esté publicada en la Chrome Web Store -->
+                                            Para instalarla, abre la <a href="https://chromewebstore.google.com/" target="_blank" rel="noopener" class="fw-semibold">Chrome Web Store</a>, busca <strong>«CaMaGaRe — Descarga SRI»</strong>, pulsa <strong>«Añadir a Chrome»</strong> y confirma con <strong>«Agregar extensión»</strong>. Es gratis; al terminar, recarga esta página.
+                                        </div>
                                     </div>
                                 </div>
                             </div>
