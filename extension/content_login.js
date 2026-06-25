@@ -75,26 +75,31 @@
         });
     }
 
-    // Espera a que aparezca el formulario de login y lo llena. NUNCA navega.
+    // Espera el formulario de login y lo llena. Si no aparece en ~6s, probablemente ya hay
+    // sesión activa (login sin formulario): entonces intenta seguir a Comprobantes recibidos.
     function esperarYLlenar() {
         let intentos = 0;
         const iv = setInterval(() => {
             const u = document.querySelector('#usuario');
             const p = document.querySelector('#password');
             if (u && p) { clearInterval(iv); hacerLlenado(u, p); return; }
-            if (++intentos > 40) {
-                clearInterval(iv);
-                banner('CaMaGaRe: no encontré los campos de usuario/clave en esta página.', '#dc3545');
-            }
+            if (++intentos > 20) { clearInterval(iv); navegarSiPendiente(); }
         }, 300);
     }
 
-    // Ya logueado, fuera de comprobantes: si venimos del flujo (marca local tras el login), ir.
+    // Ir a Comprobantes recibidos si hay marca local (tras el login) o si el servidor confirma
+    // que el usuario pulsó "Generar descarga del SRI" (caso de sesión ya activa, sin pasar el login).
     async function navegarSiPendiente() {
         const { sri_ir_comprobantes } = await chrome.storage.local.get('sri_ir_comprobantes');
-        if (!sri_ir_comprobantes) return;
-        if (Date.now() - sri_ir_comprobantes > 300000) { chrome.storage.local.remove('sri_ir_comprobantes'); return; }
+        let ir = sri_ir_comprobantes && (Date.now() - sri_ir_comprobantes < 300000);
+        if (!ir) {
+            const resp = await new Promise((r) => {
+                try { chrome.runtime.sendMessage({ tipo: 'login_pendiente' }, r); } catch (e) { r(null); }
+            });
+            ir = !!(resp && resp.ok);
+        }
         chrome.storage.local.remove('sri_ir_comprobantes');
+        if (!ir) return;
         banner('CaMaGaRe: abriendo Comprobantes recibidos…', '#0d6efd');
         location.href = COMP_URL;
     }
