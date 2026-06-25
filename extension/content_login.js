@@ -2,17 +2,19 @@
 
 /**
  * CaMaGaRe — Login automático + navegación en el portal del SRI.
- * Corre en todo srienlinea.sri.gob.ec.
- *  - Si está la pantalla de login y hay una "descarga pendiente", escribe RUC+clave y entra.
- *  - Tras el login (ya logueado, fuera de comprobantes), navega solo a "Comprobantes recibidos".
+ *  - En la pantalla de LOGIN (URL de Keycloak /auth/realms o con campos #usuario/#password):
+ *    si hay una "descarga pendiente", escribe RUC+clave y entra. Aquí NUNCA navega.
+ *  - En otra página ya logueado (no login, no comprobantes): si venimos del flujo, va solo a
+ *    "Comprobantes recibidos".
  * El captcha lo sigue resolviendo el humano. Muestra un aviso visible del estado.
  */
 
 (function () {
     const COMP_URL = 'https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/pages/consultas/recibidos/comprobantesRecibidos.jsf';
-    const enComprobantes = location.href.includes('comprobantes-electronicos-internet');
+    const url = location.href;
+    const enComprobantes = url.includes('comprobantes-electronicos-internet');
+    const urlEsLogin = /\/auth\/|\/realms\/|\/openid|\/protocol\//i.test(url);
 
-    // Ya estamos en comprobantes: nada que hacer (limpiar la marca).
     if (enComprobantes) { chrome.storage.local.remove('sri_ir_comprobantes'); return; }
 
     function banner(texto, color) {
@@ -40,7 +42,7 @@
         input.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    function llenarLogin(u, p) {
+    function hacerLlenado(u, p) {
         banner('CaMaGaRe: autocompletando el ingreso al SRI…', '#0d6efd');
         chrome.runtime.sendMessage({ tipo: 'login_pendiente' }, (resp) => {
             if (chrome.runtime.lastError) {
@@ -53,8 +55,7 @@
             }
             escribir(u, resp.ruc);
             escribir(p, resp.clave);
-            // Marca para, tras el login, ir solo a Comprobantes recibidos.
-            chrome.storage.local.set({ sri_ir_comprobantes: Date.now() });
+            chrome.storage.local.set({ sri_ir_comprobantes: Date.now() }); // tras el login, ir a comprobantes
             banner('CaMaGaRe: ingresando…', '#198754');
             const btn = document.querySelector('#kc-login');
             if (btn) btn.click();
@@ -62,25 +63,35 @@
         });
     }
 
-    // Flujo principal: detectar login y llenarlo, o (si ya logueado y venimos del flujo) navegar.
-    chrome.storage.local.get('sri_ir_comprobantes', ({ sri_ir_comprobantes }) => {
-        const hayPendiente = sri_ir_comprobantes && (Date.now() - sri_ir_comprobantes < 300000);
+    // Espera a que aparezca el formulario de login y lo llena. NUNCA navega.
+    function esperarYLlenar() {
         let intentos = 0;
         const iv = setInterval(() => {
             const u = document.querySelector('#usuario');
             const p = document.querySelector('#password');
-            if (u && p) { clearInterval(iv); llenarLogin(u, p); return; }
-
-            intentos++;
-            // No es la pantalla de login y veníamos del flujo (ya logueados) → ir a comprobantes.
-            if (hayPendiente && intentos >= 3) {
-                clearInterval(iv);
-                chrome.storage.local.remove('sri_ir_comprobantes');
-                banner('CaMaGaRe: abriendo Comprobantes recibidos…', '#0d6efd');
-                location.href = COMP_URL;
-                return;
-            }
-            if (intentos > 40) clearInterval(iv); // ~12s: ni login ni pendiente, no hacer nada
+            if (u && p) { clearInterval(iv); hacerLlenado(u, p); return; }
+            if (++intentos > 40) clearInterval(iv);
         }, 300);
-    });
+    }
+
+    // Ya logueado, fuera de comprobantes: si venimos del flujo, ir a comprobantes.
+    async function navegarSiPendiente() {
+        const { sri_ir_comprobantes } = await chrome.storage.local.get('sri_ir_comprobantes');
+        if (!sri_ir_comprobantes) return;
+        if (Date.now() - sri_ir_comprobantes > 300000) { chrome.storage.local.remove('sri_ir_comprobantes'); return; }
+        chrome.storage.local.remove('sri_ir_comprobantes');
+        banner('CaMaGaRe: abriendo Comprobantes recibidos…', '#0d6efd');
+        location.href = COMP_URL;
+    }
+
+    if (urlEsLogin || document.querySelector('#usuario')) {
+        esperarYLlenar();
+    } else {
+        // Quizá es inicio (post-login) o un login que aún no renderiza. Dar margen y decidir.
+        let intentos = 0;
+        const iv = setInterval(() => {
+            if (document.querySelector('#usuario')) { clearInterval(iv); esperarYLlenar(); return; }
+            if (++intentos >= 6) { clearInterval(iv); navegarSiPendiente(); } // ~1.8s sin form → no es login
+        }, 300);
+    }
 })();
