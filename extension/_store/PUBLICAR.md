@@ -63,13 +63,12 @@ Conectar el portal del SRI (Ecuador) con el sistema contable CaMaGaRe del usuari
 > sin ellos.
 
 ## 6. Política de privacidad (OBLIGATORIA)
-Google exige una **URL pública** con la política. Sube el contenido de `PRIVACIDAD.md` a una página
-de tu sitio, por ejemplo:
+Ya está publicada en tu sistema (archivo `public/privacidad-extension.html`). Tras hacer `git pull`
+en el servidor, pega esta URL en el campo "Política de privacidad" del formulario:
 ```
-https://erp.camagare.com.ec/privacidad-extension
+https://erp.camagare.com.ec/privacidad-extension.html
 ```
-y pega esa URL en el campo "Política de privacidad" del formulario. (Si quieres, te armo esa página
-dentro del sistema para que quede publicada con esa URL.)
+(Ábrela primero en el navegador para confirmar que carga.)
 
 ## 7. Capturas de pantalla (necesitas subir al menos 1)
 Tamaño: **1280×800** o **640×400** px. Sugeridas (las tomas tú, de tu pantalla):

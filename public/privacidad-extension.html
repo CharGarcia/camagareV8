@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="index, follow">
+  <title>Política de privacidad — CaMaGaRe — Descarga SRI</title>
+  <style>
+    :root { --azul: #0d6efd; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #222;
+           max-width: 760px; margin: 0 auto; padding: 28px 20px 60px; line-height: 1.6; }
+    header { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #eee;
+             padding-bottom: 16px; margin-bottom: 22px; }
+    .logo { width: 52px; height: 52px; border-radius: 12px; background: var(--azul); flex: none;
+            display: flex; align-items: center; justify-content: center; }
+    .logo svg { width: 34px; height: 34px; }
+    h1 { font-size: 22px; margin: 0; }
+    .sub { color: #666; font-size: 14px; margin-top: 2px; }
+    h2 { font-size: 17px; color: var(--azul); margin-top: 28px; }
+    code { background: #f4f6fa; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+    .nota { background: #f4f8ff; border-left: 4px solid var(--azul); padding: 12px 16px;
+            border-radius: 6px; margin: 18px 0; }
+    footer { margin-top: 40px; border-top: 1px solid #eee; padding-top: 14px; color: #888; font-size: 13px; }
+    a { color: var(--azul); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+        <path d="M64 26 V70" stroke="#fff" stroke-width="10" stroke-linecap="round"/>
+        <path d="M46 54 L64 72 L82 54" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <rect x="40" y="88" width="48" height="10" rx="5" fill="#fff"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Política de privacidad</h1>
+      <div class="sub">Extensión de Chrome «CaMaGaRe — Descarga SRI»</div>
+    </div>
+  </header>
+
+  <p><em>Última actualización: 25 de junio de 2026.</em></p>
+
+  <p>Esta política describe cómo la extensión <strong>«CaMaGaRe — Descarga SRI»</strong> trata la
+  información. La extensión es una herramienta de trabajo que conecta el portal del SRI (Servicio de
+  Rentas Internas del Ecuador) con el sistema contable <strong>CaMaGaRe</strong> del propio usuario.</p>
+
+  <h2>Qué datos se tratan y para qué</h2>
+  <p>La extensión solo trata datos cuando el usuario inicia una descarga desde su sistema CaMaGaRe:</p>
+  <ul>
+    <li><strong>Token de acceso del usuario:</strong> un identificador que el sistema CaMaGaRe entrega
+        a la extensión para autenticar las peticiones. Se guarda <strong>localmente</strong> en el
+        navegador (<code>chrome.storage.local</code>).</li>
+    <li><strong>Credenciales del SRI (RUC y clave):</strong> la extensión las recibe de tu propio
+        servidor CaMaGaRe únicamente para escribirlas en el formulario de inicio de sesión del portal
+        del SRI. <strong>No se almacenan</strong>: se usan en el momento y se descartan.</li>
+    <li><strong>Claves de acceso de los comprobantes:</strong> la extensión lee las claves de acceso
+        (49 dígitos) que muestra la página de «Comprobantes electrónicos recibidos» del SRI y las
+        envía a tu servidor CaMaGaRe para su registro.</li>
+    <li><strong>Cookies del SRI:</strong> al pulsar «Cerrar sesión SRI», la extensión elimina las
+        cookies del dominio del SRI en tu navegador para cerrar la sesión. No las lee ni las transmite.</li>
+  </ul>
+
+  <h2>Con quién se comparten</h2>
+  <div class="nota"><strong>Con nadie más que tu propio sistema CaMaGaRe.</strong> Los datos viajan
+  únicamente entre tu navegador, el portal del SRI y el servidor de CaMaGaRe que tú indicas. No se
+  envían a terceros, ni se usan para publicidad, analítica o perfilamiento.</div>
+
+  <h2>Almacenamiento</h2>
+  <p>Lo único que se guarda de forma persistente es el <strong>token</strong> y la <strong>URL de tu
+  servidor</strong>, en el almacenamiento local del navegador. Puedes borrarlos quitando la extensión.</p>
+
+  <h2>Permisos</h2>
+  <ul>
+    <li><code>storage</code>: guardar el token y la URL del servidor.</li>
+    <li><code>cookies</code>: cerrar sesión en el SRI eliminando sus cookies.</li>
+    <li>Acceso a <code>*.sri.gob.ec</code>: operar dentro del portal del SRI (login y lectura de comprobantes).</li>
+    <li>Acceso al dominio de tu sistema CaMaGaRe: recibir el token y enviar las claves.</li>
+  </ul>
+
+  <h2>Contacto</h2>
+  <p>Para cualquier consulta sobre privacidad: <a href="mailto:soporte@camagare.com.ec">soporte@camagare.com.ec</a>.</p>
+
+  <footer>CaMaGaRe — Descarga SRI · Política de privacidad</footer>
+</body>
+</html>

@@ -3,33 +3,50 @@
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: Arial, sans-serif; width: 300px; padding: 14px; font-size: 13px; color: #222; }
-    h1 { font-size: 15px; margin: 0 0 10px; color: #0d6efd; }
-    label { display: block; font-weight: bold; margin: 8px 0 3px; }
-    input { width: 100%; box-sizing: border-box; padding: 7px; border: 1px solid #ccc; border-radius: 5px; font-size: 12px; }
-    button { margin-top: 12px; width: 100%; padding: 9px; background: #0d6efd; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; }
-    .estado { margin-top: 10px; font-size: 12px; min-height: 16px; }
-    .ok { color: #198754; } .err { color: #dc3545; }
-    .ayuda { margin-top: 12px; font-size: 11px; color: #666; line-height: 1.4; border-top: 1px solid #eee; padding-top: 8px; }
+    body { font-family: Arial, sans-serif; width: 300px; padding: 16px; font-size: 13px; color: #222; }
+    .head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .logo { width: 34px; height: 34px; border-radius: 8px; background: #0d6efd; flex: none;
+            display: flex; align-items: center; justify-content: center; }
+    .logo svg { width: 22px; height: 22px; }
+    h1 { font-size: 14px; margin: 0; color: #0d6efd; }
+    .estado { border-radius: 8px; padding: 12px; font-size: 13px; font-weight: bold; }
+    .ok   { background: #e8f6ee; color: #15693c; border: 1px solid #b7e3c7; }
+    .pend { background: #fff7e6; color: #8a6100; border: 1px solid #ffe2a8; }
+    .ayuda { margin-top: 12px; font-size: 11.5px; color: #555; line-height: 1.5; }
+    .mini { color: #888; font-size: 11px; margin-top: 6px; word-break: break-all; }
+    .adv-link { display: inline-block; margin-top: 14px; font-size: 11px; color: #999;
+                cursor: pointer; text-decoration: underline; }
+    .adv { display: none; margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px; }
+    label { display: block; font-weight: bold; margin: 8px 0 3px; font-size: 11px; }
+    input { width: 100%; box-sizing: border-box; padding: 7px; border: 1px solid #ccc;
+            border-radius: 5px; font-size: 12px; }
+    button { margin-top: 10px; width: 100%; padding: 8px; background: #0d6efd; color: #fff;
+             border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; }
   </style>
 </head>
 <body>
-  <h1>Descarga SRI &rarr; CaMaGaRe</h1>
+  <div class="head">
+    <div class="logo">
+      <svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+        <path d="M64 26 V70" stroke="#fff" stroke-width="10" stroke-linecap="round"/>
+        <path d="M46 54 L64 72 L82 54" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <rect x="40" y="88" width="48" height="10" rx="5" fill="#fff"/>
+      </svg>
+    </div>
+    <h1>CaMaGaRe — Descarga SRI</h1>
+  </div>
 
-  <label for="servidor">Dirección del sistema</label>
-  <input id="servidor" type="text" placeholder="https://erp.camagare.com.ec">
+  <div id="estado" class="estado pend">Cargando…</div>
+  <div class="ayuda" id="ayuda"></div>
 
-  <label for="token">Token del agente</label>
-  <input id="token" type="text" placeholder="Pega aquí tu token">
-
-  <button id="guardar">Guardar</button>
-  <div id="estado" class="estado"></div>
-
-  <div class="ayuda">
-    El token lo generas en el sistema:<br>
-    <b>Descargas SRI &rarr; Descarga Automática &rarr; Contraseña SRI &rarr; Token del agente</b>.<br><br>
-    Después entra al portal del SRI, consulta tus comprobantes recibidos y pulsa el botón azul
-    <b>"Enviar comprobantes al sistema"</b>.
+  <span id="advLink" class="adv-link">Configuración avanzada</span>
+  <div id="adv" class="adv">
+    <label for="servidor">Dirección del sistema</label>
+    <input id="servidor" type="text" placeholder="https://erp.camagare.com.ec">
+    <label for="token">Token</label>
+    <input id="token" type="text" placeholder="(normalmente se configura solo)">
+    <button id="guardar">Guardar</button>
+    <div id="msg" class="mini"></div>
   </div>
 
   <script src="popup.js"></script>
