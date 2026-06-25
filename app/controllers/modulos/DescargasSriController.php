@@ -610,7 +610,7 @@ class DescargasSriController extends Controller
             if (!$idEmpresa) {
                 $det = 'Tus empresas (RUC): ' . implode(', ', $debug['rucs_empresa'] ?? [])
                      . ' | comprobantes leídos: ' . ($debug['xml_ok'] ?? 0)
-                     . ' | RUC en el comprobante: ' . implode(', ', $debug['rucs_en_xml'] ?? [])
+                     . ' | receptor del comprobante: ' . ($debug['receptor'] ?? '?')
                      . (isset($debug['ultimo_error']) ? ' | ' . $debug['ultimo_error'] : '');
                 echo json_encode(['ok' => false, 'error' => 'No se pudo identificar la empresa. ' . $det]);
                 exit;
@@ -659,14 +659,27 @@ class DescargasSriController extends Controller
             }
             $debug['xml_ok']++;
             $xml = $resp['xml'];
-            foreach ($mapaRucEmpresa as $ruc => $idEmpresa) {
-                $ruc = (string) $ruc; // PHP convierte la clave de array numérica a int
-                if ($ruc !== '' && strpos($xml, $ruc) !== false) {
-                    return (int) $idEmpresa;
+
+            // Identificación del RECEPTOR (a quién le emitieron): comprador o sujeto retenido.
+            $idReceptor = null;
+            foreach (['identificacionComprador', 'identificacionSujetoRetenido', 'identificacionReceptor'] as $campo) {
+                if (preg_match('#<' . $campo . '>\s*([0-9]+)\s*</' . $campo . '>#i', $xml, $m)) {
+                    $idReceptor = $m[1];
+                    break;
                 }
             }
-            if (empty($debug['rucs_en_xml']) && preg_match_all('/\d{13}/', $xml, $m)) {
-                $debug['rucs_en_xml'] = array_values(array_unique($m[0]));
+            if ($idReceptor !== null && empty($debug['receptor'])) $debug['receptor'] = $idReceptor;
+
+            foreach ($mapaRucEmpresa as $ruc => $idEmpresa) {
+                $ruc = (string) $ruc; // PHP convierte la clave de array numérica a int
+                if ($ruc === '') continue;
+                // Coincide por identificación del receptor (RUC completo o cédula de 10 dígitos)...
+                if ($idReceptor !== null) {
+                    if ($ruc === $idReceptor) return (int) $idEmpresa;
+                    if (strlen($idReceptor) >= 10 && substr($ruc, 0, 10) === substr($idReceptor, 0, 10)) return (int) $idEmpresa;
+                }
+                // ...o como respaldo, si el RUC aparece textualmente en el XML.
+                if (strpos($xml, $ruc) !== false) return (int) $idEmpresa;
             }
         }
         return null;
