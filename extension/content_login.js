@@ -2,11 +2,11 @@
 
 /**
  * CaMaGaRe — Login automático + navegación en el portal del SRI.
- *  - En la pantalla de LOGIN (URL de Keycloak /auth/realms o con campos #usuario/#password):
- *    si hay una "descarga pendiente", escribe RUC+clave y entra. Aquí NUNCA navega.
- *  - En otra página ya logueado (no login, no comprobantes): si venimos del flujo, va solo a
- *    "Comprobantes recibidos".
- * El captcha lo sigue resolviendo el humano. Muestra un aviso visible del estado.
+ * Solo actúa si el usuario pulsó "Generar descarga del SRI" (hay una descarga marcada en el
+ * servidor). Si no hay nada marcado, no interfiere con el uso normal del portal.
+ *  - En el LOGIN con formulario: escribe RUC+clave y entra.
+ *  - Tras el login (o si ya había sesión): navega solo a "Comprobantes recibidos".
+ * El captcha lo sigue resolviendo el humano.
  */
 
 (function () {
@@ -14,8 +14,6 @@
     const url = location.href;
     const enComprobantes = url.includes('comprobantes-electronicos-internet');
     const urlEsLogin = /\/auth\/|\/realms\/|\/openid|\/protocol\//i.test(url);
-
-    console.log('[CaMaGaRe] content_login cargado:', { url, enComprobantes, urlEsLogin });
 
     if (enComprobantes) { chrome.storage.local.remove('sri_ir_comprobantes'); return; }
 
@@ -26,8 +24,8 @@
             b.id = 'cmg-login-banner';
             Object.assign(b.style, {
                 position: 'fixed', top: '0', left: '0', right: '0', zIndex: '2147483647',
-                background: color || '#0d6efd', color: '#fff', padding: '8px 14px',
-                fontFamily: 'Arial, sans-serif', fontSize: '14px', textAlign: 'center',
+                background: color || '#0d6efd', color: '#fff', padding: '10px 14px',
+                fontFamily: 'Arial, sans-serif', fontSize: '15px', fontWeight: 'bold', textAlign: 'center',
             });
             (document.body || document.documentElement).appendChild(b);
         }
@@ -51,23 +49,23 @@
         input.blur();
     }
 
+    // Hay formulario de login: pedir credenciales al servidor. Solo escribe si hay descarga marcada.
     function hacerLlenado(u, p) {
-        banner('CaMaGaRe: autocompletando el ingreso al SRI…', '#0d6efd');
         chrome.runtime.sendMessage({ tipo: 'login_pendiente' }, (resp) => {
-            if (chrome.runtime.lastError) {
-                banner('CaMaGaRe: recarga la extensión e intenta de nuevo.', '#dc3545');
-                return;
-            }
+            if (chrome.runtime.lastError) return;
             if (!resp || !resp.ok) {
-                banner('CaMaGaRe: ' + ((resp && resp.error) || 'no se pudo autocompletar') + '  ·  (revisa el token o pulsa "Generar descarga del SRI")', '#dc3545');
+                // Sin descarga marcada = uso normal del SRI, no interferir. Otros errores (token,
+                // credenciales) sí los avisamos para que el usuario los corrija.
+                if (resp && resp.error && !/pendiente/i.test(resp.error)) {
+                    banner('CaMaGaRe: ' + resp.error, '#dc3545');
+                }
                 return;
             }
+            banner('CaMaGaRe: ingresando al SRI…', '#198754');
             escribir(u, resp.ruc);
             escribir(p, resp.clave);
-            // Persistir la marca ANTES de enviar el login: si no, la navegación corta el guardado
-            // y luego la extensión no sabe que debe ir a Comprobantes recibidos.
+            // Persistir la marca ANTES de enviar el login (si no, la navegación corta el guardado).
             chrome.storage.local.set({ sri_ir_comprobantes: Date.now() }, () => {
-                banner('CaMaGaRe: ingresando…', '#198754');
                 const btn = document.querySelector('#kc-login');
                 if (btn) btn.click();
                 else { const f = u.closest('form'); if (f) f.submit(); }
@@ -75,8 +73,7 @@
         });
     }
 
-    // Espera el formulario de login y lo llena. Si no aparece en ~6s, probablemente ya hay
-    // sesión activa (login sin formulario): entonces intenta seguir a Comprobantes recibidos.
+    // Espera el formulario de login. Si aparece, lo llena; si no en ~6s (ya hay sesión), navega.
     function esperarYLlenar() {
         let intentos = 0;
         const iv = setInterval(() => {
@@ -87,8 +84,8 @@
         }, 300);
     }
 
-    // Ir a Comprobantes recibidos si hay marca local (tras el login) o si el servidor confirma
-    // que el usuario pulsó "Generar descarga del SRI" (caso de sesión ya activa, sin pasar el login).
+    // Ir a Comprobantes recibidos SOLO si hay marca local (tras el login) o el servidor confirma
+    // que el usuario pulsó "Generar descarga del SRI". Si no, no hace nada (uso normal).
     async function navegarSiPendiente() {
         const { sri_ir_comprobantes } = await chrome.storage.local.get('sri_ir_comprobantes');
         let ir = sri_ir_comprobantes && (Date.now() - sri_ir_comprobantes < 300000);
@@ -104,9 +101,6 @@
         location.href = COMP_URL;
     }
 
-    // Aviso incondicional: si ves esta franja, el script SÍ corre en esta página.
-    banner('CaMaGaRe activo: detectando el formulario de ingreso…', '#6c757d');
-
     if (urlEsLogin || document.querySelector('#usuario')) {
         esperarYLlenar();
     } else {
@@ -114,7 +108,7 @@
         let intentos = 0;
         const iv = setInterval(() => {
             if (document.querySelector('#usuario')) { clearInterval(iv); esperarYLlenar(); return; }
-            if (++intentos >= 6) { clearInterval(iv); navegarSiPendiente(); } // ~1.8s sin form → no es login
+            if (++intentos >= 6) { clearInterval(iv); navegarSiPendiente(); }
         }, 300);
     }
 })();
