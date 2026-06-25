@@ -3,8 +3,8 @@
 /**
  * CaMaGaRe — Descarga SRI (content script)
  * Corre dentro del portal de "Comprobantes electrónicos recibidos" del SRI.
- * Cuando hay resultados, muestra un botón flotante; al pulsarlo recolecta las
- * claves de acceso de TODAS las páginas y las envía al sistema (vía background).
+ * Muestra, apilados abajo a la derecha: el aviso de resultado, el botón "Enviar comprobantes"
+ * (cuando hay resultados) y el botón "Cerrar sesión SRI". Al pulsar "Consultar" se limpia el aviso.
  */
 
 (function () {
@@ -60,55 +60,105 @@
         return [...set];
     }
 
-    // ── UI flotante ───────────────────────────────────────────────────────────
+    // ── UI flotante (contenedor apilado abajo a la derecha) ─────────────────────
+    function contenedor() {
+        let c = document.getElementById('cmg-sri-cont');
+        if (!c) {
+            c = document.createElement('div');
+            c.id = 'cmg-sri-cont';
+            Object.assign(c.style, {
+                position: 'fixed', bottom: '24px', right: '24px', zIndex: 2147483647,
+                display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-end',
+                fontFamily: 'Arial, sans-serif',
+            });
+            (document.body || document.documentElement).appendChild(c);
+        }
+        return c;
+    }
+
+    function estilos() {
+        if (document.getElementById('cmg-sri-style')) return;
+        const st = document.createElement('style');
+        st.id = 'cmg-sri-style';
+        st.textContent =
+            '@keyframes cmgPulse {' +
+            '  0%   { box-shadow: 0 8px 22px rgba(0,0,0,.35), 0 0 0 0 rgba(13,110,253,.55); }' +
+            '  70%  { box-shadow: 0 8px 22px rgba(0,0,0,.35), 0 0 0 20px rgba(13,110,253,0); }' +
+            '  100% { box-shadow: 0 8px 22px rgba(0,0,0,.35), 0 0 0 0 rgba(13,110,253,0); }' +
+            '}' +
+            '#cmg-sri-btn:hover { background:#0b5ed7 !important; transform:scale(1.04); }' +
+            '#cmg-sri-salir:hover { background:#bb2d3b !important; }';
+        (document.head || document.documentElement).appendChild(st);
+    }
+
+    // Botón principal: enviar comprobantes (order 2 = en medio).
     function crearBoton() {
         if (document.getElementById('cmg-sri-btn')) return;
-        // Estilos con animación de pulso para que el botón resalte (se inyecta una sola vez).
-        if (!document.getElementById('cmg-sri-style')) {
-            const st = document.createElement('style');
-            st.id = 'cmg-sri-style';
-            st.textContent =
-                '@keyframes cmgPulse {' +
-                '  0%   { box-shadow: 0 8px 22px rgba(0,0,0,.35), 0 0 0 0 rgba(13,110,253,.55); }' +
-                '  70%  { box-shadow: 0 8px 22px rgba(0,0,0,.35), 0 0 0 20px rgba(13,110,253,0); }' +
-                '  100% { box-shadow: 0 8px 22px rgba(0,0,0,.35), 0 0 0 0 rgba(13,110,253,0); }' +
-                '}' +
-                '#cmg-sri-btn:hover { background:#0b5ed7 !important; transform:scale(1.04); }';
-            (document.head || document.documentElement).appendChild(st);
-        }
+        estilos();
         const btn = document.createElement('button');
         btn.id = 'cmg-sri-btn';
         btn.textContent = '⬇ Enviar comprobantes al sistema';
         Object.assign(btn.style, {
-            position: 'fixed', bottom: '26px', right: '26px', zIndex: 2147483647,
+            order: '2',
             background: '#0d6efd', color: '#fff', border: '3px solid #fff', borderRadius: '14px',
             padding: '20px 34px', fontSize: '21px', fontWeight: 'bold', cursor: 'pointer',
             fontFamily: 'Arial, sans-serif', letterSpacing: '.3px',
             animation: 'cmgPulse 1.8s infinite', transition: 'transform .15s ease',
         });
         btn.addEventListener('click', enviar);
-        document.body.appendChild(btn);
+        contenedor().appendChild(btn);
     }
 
     function quitarBoton() {
         document.getElementById('cmg-sri-btn')?.remove();
     }
 
+    // Botón de cerrar sesión del SRI (order 3 = debajo del de enviar), en rojo.
+    function crearBotonSalir() {
+        if (document.getElementById('cmg-sri-salir')) return;
+        estilos();
+        const btn = document.createElement('button');
+        btn.id = 'cmg-sri-salir';
+        btn.textContent = '✕ Cerrar sesión SRI';
+        Object.assign(btn.style, {
+            order: '3',
+            background: '#dc3545', color: '#fff', border: '3px solid #fff', borderRadius: '14px',
+            padding: '14px 24px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer',
+            fontFamily: 'Arial, sans-serif',
+        });
+        btn.addEventListener('click', salirSri);
+        contenedor().appendChild(btn);
+    }
+
+    function salirSri() {
+        const sels = ['a[href*="logout"]', 'a[href*="cerrarSesion"]', 'a[href*="cerrar-sesion"]', 'a[href*="signoff"]'];
+        for (const sel of sels) { const el = document.querySelector(sel); if (el) { el.click(); return; } }
+        const els = [...document.querySelectorAll('a, button, span, li')];
+        const salir = els.find(e => /cerrar sesi[oó]n|salir del sistema/i.test((e.textContent || '').trim()) && (e.textContent || '').length < 40);
+        if (salir) { salir.click(); return; }
+        location.href = 'https://srienlinea.sri.gob.ec/auth/realms/Internet/protocol/openid-connect/logout';
+    }
+
+    // Aviso de estado/resultado (order 1 = arriba del todo).
     function aviso(html, color) {
         let n = document.getElementById('cmg-sri-aviso');
         if (!n) {
             n = document.createElement('div');
             n.id = 'cmg-sri-aviso';
             Object.assign(n.style, {
-                position: 'fixed', bottom: '112px', right: '26px', zIndex: 2147483647,
+                order: '1',
                 color: '#fff', borderRadius: '10px', padding: '14px 20px', fontSize: '15px',
                 maxWidth: '360px', boxShadow: '0 6px 16px rgba(0,0,0,.3)',
                 fontFamily: 'Arial, sans-serif', lineHeight: '1.4',
             });
-            document.body.appendChild(n);
+            contenedor().appendChild(n);
         }
         n.style.background = color || '#333';
         n.innerHTML = html;
+    }
+
+    function quitarAviso() {
+        document.getElementById('cmg-sri-aviso')?.remove();
     }
 
     function resetBoton(btn) {
@@ -163,34 +213,13 @@
         });
     }
 
-    // Botón para cerrar sesión del SRI (necesario para cambiar de empresa). Siempre visible.
-    function crearBotonSalir() {
-        if (document.getElementById('cmg-sri-salir')) return;
-        const btn = document.createElement('button');
-        btn.id = 'cmg-sri-salir';
-        btn.textContent = '✕ Cerrar sesión SRI';
-        Object.assign(btn.style, {
-            position: 'fixed', bottom: '26px', left: '26px', zIndex: 2147483647,
-            background: '#6c757d', color: '#fff', border: '2px solid #fff', borderRadius: '12px',
-            padding: '14px 22px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer',
-            fontFamily: 'Arial, sans-serif',
-        });
-        btn.addEventListener('click', salirSri);
-        document.body.appendChild(btn);
-    }
+    // Al pulsar "Consultar" en el SRI, limpiar el aviso de la descarga anterior.
+    document.addEventListener('click', (e) => {
+        const t = e.target.closest('button, a, input[type=submit], input[type=button]');
+        if (t && /consultar/i.test((t.textContent || t.value || ''))) quitarAviso();
+    }, true);
 
-    function salirSri() {
-        // Buscar el enlace/botón de cerrar sesión del portal del SRI.
-        const sels = ['a[href*="logout"]', 'a[href*="cerrarSesion"]', 'a[href*="cerrar-sesion"]', 'a[href*="signoff"]'];
-        for (const sel of sels) { const el = document.querySelector(sel); if (el) { el.click(); return; } }
-        const els = [...document.querySelectorAll('a, button, span, li')];
-        const salir = els.find(e => /cerrar sesi[oó]n|salir del sistema/i.test((e.textContent || '').trim()) && (e.textContent || '').length < 40);
-        if (salir) { salir.click(); return; }
-        // Último recurso: logout de Keycloak del SRI.
-        location.href = 'https://srienlinea.sri.gob.ec/auth/realms/Internet/protocol/openid-connect/logout';
-    }
-
-    // Mostrar/ocultar el botón de enviar según haya resultados; el de salir siempre.
+    // Botón de salir siempre; el de enviar solo cuando hay resultados en la tabla.
     setInterval(() => {
         crearBotonSalir();
         hayResultados() ? crearBoton() : quitarBoton();
