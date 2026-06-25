@@ -19,6 +19,11 @@
 
     if (enComprobantes) { chrome.storage.local.remove('sri_ir_comprobantes'); return; }
 
+    // DIAGNÓSTICO TEMPORAL: popup imposible de ignorar para confirmar que el script se inyecta.
+    if (window.top === window.self) {
+        try { alert('CaMaGaRe: extensión ACTIVA en ' + (urlEsLogin ? 'el LOGIN' : 'esta página') + ' del SRI'); } catch (e) {}
+    }
+
     function banner(texto, color) {
         let b = document.getElementById('cmg-login-banner');
         if (!b) {
