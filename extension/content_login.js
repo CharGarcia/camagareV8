@@ -19,11 +19,6 @@
 
     if (enComprobantes) { chrome.storage.local.remove('sri_ir_comprobantes'); return; }
 
-    // DIAGNÓSTICO TEMPORAL: popup imposible de ignorar para confirmar que el script se inyecta.
-    if (window.top === window.self) {
-        try { alert('CaMaGaRe: extensión ACTIVA en ' + (urlEsLogin ? 'el LOGIN' : 'esta página') + ' del SRI'); } catch (e) {}
-    }
-
     function banner(texto, color) {
         let b = document.getElementById('cmg-login-banner');
         if (!b) {
@@ -94,9 +89,17 @@
     // Ya logueado, fuera de comprobantes: si venimos del flujo, ir a comprobantes.
     async function navegarSiPendiente() {
         const { sri_ir_comprobantes } = await chrome.storage.local.get('sri_ir_comprobantes');
-        if (!sri_ir_comprobantes) return;
-        if (Date.now() - sri_ir_comprobantes > 300000) { chrome.storage.local.remove('sri_ir_comprobantes'); return; }
+        let ir = sri_ir_comprobantes && (Date.now() - sri_ir_comprobantes < 300000);
+        if (!ir) {
+            // Caso "ya había sesión en el SRI" (no se pasó por el login): preguntar al servidor
+            // si el usuario marcó una descarga pendiente con el botón.
+            const resp = await new Promise((r) => {
+                try { chrome.runtime.sendMessage({ tipo: 'login_pendiente' }, r); } catch (e) { r(null); }
+            });
+            ir = !!(resp && resp.ok);
+        }
         chrome.storage.local.remove('sri_ir_comprobantes');
+        if (!ir) return;
         banner('CaMaGaRe: abriendo Comprobantes recibidos…', '#0d6efd');
         location.href = COMP_URL;
     }
