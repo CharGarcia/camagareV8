@@ -596,22 +596,26 @@ class DescargasSriController extends Controller
             exit;
         }
 
-        $mapa = $this->empresasDelUsuario($idUsuario);
-        if (empty($mapa)) {
-            echo json_encode(['ok' => false, 'error' => 'Tu usuario no tiene empresas asignadas.']);
-            exit;
-        }
-
         set_time_limit(0);
 
-        $idEmpresa = $this->resolverEmpresaPorClaves($claves, $mapa);
-        if (!$idEmpresa) {
-            echo json_encode(['ok' => false, 'error' => 'No se pudo identificar la empresa de estos comprobantes. Verifica que la empresa (RUC del receptor) esté registrada y asignada a tu usuario.']);
-            exit;
-        }
+        try {
+            $mapa = $this->empresasDelUsuario($idUsuario);
+            if (empty($mapa)) {
+                echo json_encode(['ok' => false, 'error' => 'Tu usuario no tiene empresas asignadas.']);
+                exit;
+            }
 
-        $res = (new SriDescargaAutomaticaService())->registrarClaves($claves, $idEmpresa, $idUsuario, 'agente');
-        echo json_encode($res);
+            $idEmpresa = $this->resolverEmpresaPorClaves($claves, $mapa);
+            if (!$idEmpresa) {
+                echo json_encode(['ok' => false, 'error' => 'No se pudo identificar la empresa de estos comprobantes. Verifica que la empresa (RUC del receptor) esté registrada y asignada a tu usuario.']);
+                exit;
+            }
+
+            $res = (new SriDescargaAutomaticaService())->registrarClaves($claves, $idEmpresa, $idUsuario, 'agente');
+            echo json_encode($res);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => 'Error del servidor: ' . $e->getMessage()]);
+        }
         exit;
     }
 
