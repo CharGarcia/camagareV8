@@ -623,7 +623,6 @@ class DescargasSriController extends Controller
             exit;
         }
         $idUsuario = (int) $usuario['id'];
-        $nivel     = (int) $usuario['nivel'];
 
         // Las claves pueden llegar como JSON, como array de POST o como texto separado.
         $raw = $_POST['claves'] ?? '';
@@ -642,7 +641,7 @@ class DescargasSriController extends Controller
             exit;
         }
 
-        $mapa = $this->empresasDelUsuario($idUsuario, $nivel);
+        $mapa = $this->empresasDelUsuario($idUsuario);
         if (empty($mapa)) {
             echo json_encode(['ok' => false, 'error' => 'Tu usuario no tiene empresas asignadas.']);
             exit;
@@ -661,22 +660,16 @@ class DescargasSriController extends Controller
         exit;
     }
 
-    /** Mapa ruc => id_empresa de las empresas que el usuario puede gestionar. */
-    private function empresasDelUsuario(int $idUsuario, int $nivel): array
+    /**
+     * Mapa ruc => id_empresa de las empresas ASIGNADAS al usuario actual.
+     * Igual para todos los niveles: el agente registra solo en las empresas del usuario.
+     */
+    private function empresasDelUsuario(int $idUsuario): array
     {
         $mapa = [];
-        if ($nivel >= 3) {
-            $db = \App\core\Database::getConnection();
-            $st = $db->query("SELECT id, ruc FROM empresas WHERE estado = '1' AND eliminado = false AND ruc IS NOT NULL");
-            foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $e) {
-                $ruc = trim((string) $e['ruc']);
-                if ($ruc !== '') $mapa[$ruc] = (int) $e['id'];
-            }
-        } else {
-            foreach ((new EmpresaAsignada())->getEmpresasDeUsuario($idUsuario) as $e) {
-                $ruc = trim((string) ($e['ruc'] ?? ''));
-                if ($ruc !== '') $mapa[$ruc] = (int) $e['id_empresa'];
-            }
+        foreach ((new EmpresaAsignada())->getEmpresasDeUsuario($idUsuario) as $e) {
+            $ruc = trim((string) ($e['ruc'] ?? ''));
+            if ($ruc !== '') $mapa[$ruc] = (int) $e['id_empresa'];
         }
         return $mapa;
     }
