@@ -243,19 +243,24 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                               </div>
                             </div>
 
-                            <!-- Descarga con la extensión de Chrome -->
+                            <!-- Descarga del SRI con la extensión -->
                             <div class="card border border-primary border-opacity-25 shadow-sm rounded-3 mb-3">
                                 <div class="card-header bg-primary bg-opacity-10 border-bottom border-primary border-opacity-25 py-2 px-3">
-                                    <h6 class="mb-0 fw-bold text-primary small"><i class="bi bi-puzzle me-2"></i>Descarga con la extensión de Chrome</h6>
+                                    <h6 class="mb-0 fw-bold text-primary small"><i class="bi bi-cloud-arrow-down me-2"></i>Descarga del SRI</h6>
                                 </div>
-                                <div class="card-body px-3 py-3 small text-muted">
-                                    <p class="mb-2">La descarga se hace desde <strong>tu propio navegador</strong> con la extensión, así el SRI no la bloquea:</p>
-                                    <ol class="ps-3 mb-2">
-                                        <li>Genera tu <strong>Token</strong> (botón de arriba) y pégalo en la extensión <em>una sola vez</em>; sirve para todas tus empresas.</li>
-                                        <li>Entra al portal del SRI con el RUC de la empresa que quieras y consulta tus <strong>comprobantes recibidos</strong> (resuelve el captcha como siempre).</li>
-                                        <li>Pulsa el botón <strong>«Enviar comprobantes al sistema»</strong> que aparece en el portal. El sistema reconoce solo a qué empresa va. El resultado se verá en el historial de aquí.</li>
-                                    </ol>
-                                    <div class="text-muted">La descarga automática por cron queda suspendida para evitar bloqueos del SRI.</div>
+                                <div class="card-body px-3 py-3">
+                                    <button type="button" class="btn btn-primary px-4" id="btnGenerarDescargaSri" onclick="generarDescargaSri()">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i> Generar descarga del SRI
+                                    </button>
+                                    <div class="small text-muted mt-3">
+                                        <div class="fw-semibold mb-1">¿Qué hace este botón?</div>
+                                        <ol class="ps-3 mb-2">
+                                            <li>Abre el portal del SRI <strong>ya logueado</strong> con la empresa activa (la extensión escribe el RUC y la clave por ti).</li>
+                                            <li>Aplica los <strong>filtros</strong> y consulta tus comprobantes recibidos (resuelve el captcha como siempre).</li>
+                                            <li>Pulsa <strong>«Enviar comprobantes al sistema»</strong> en el portal. El resultado aparece en el historial de aquí.</li>
+                                        </ol>
+                                        <div class="text-muted">Requiere la <strong>extensión de Chrome</strong> instalada y tu <strong>token</strong> configurado (botón de arriba). La descarga automática por cron queda suspendida.</div>
+                                    </div>
                                 </div>
                             </div>
 

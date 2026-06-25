@@ -782,166 +782,6 @@ function escHtml(str) {
 
 
 // =============================================================================
-// DESCARGA ASISTIDA (visor remoto + humano resuelve el captcha en el portal)
-// =============================================================================
-
-let asisAbort = null;
-
-function setAsisEtapa(t) { const el = document.getElementById('asis_etapa'); if (el) el.textContent = t; }
-function setAsisBarra(p) { const el = document.getElementById('asis_barra'); if (el) el.style.width = Math.min(100, p || 0) + '%'; }
-
-function iniciarDescargaAsistida() {
-    const ano  = document.getElementById('exec_ano')?.value  || 0;
-    const mes  = document.getElementById('exec_mes')?.value  || 0;
-    const dia  = document.getElementById('exec_dia')?.value  || 0;
-    const tipo = document.getElementById('exec_tipo')?.value || 'todos';
-
-    // Reset de la UI del modal
-    const visor = document.getElementById('asis_visor');
-    if (visor) visor.src = 'about:blank';
-    setAsisEtapa('Iniciando sesión en el SRI…');
-    setAsisBarra(0);
-    document.getElementById('asis_instruccion')?.classList.add('d-none');
-
-    const modalEl = document.getElementById('modalVisorSri');
-    const modal = new bootstrap.Modal(modalEl);
-    modal.show();
-
-    const btn = document.getElementById('btnEjecutarManual');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> En curso…'; }
-
-    asisAbort = new AbortController();
-
-    const formData = new FormData();
-    formData.append('ano',  ano);
-    formData.append('mes',  mes);
-    formData.append('dia',  dia);
-    formData.append('tipo', tipo);
-
-    fetch(`${BASE_URL}/modulos/DescargasSri/iniciarSesionAsistidaAjax`, {
-        method: 'POST',
-        body: formData,
-        signal: asisAbort.signal
-    })
-    .then(async response => {
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-        let buffer = '';
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop();
-            for (const line of lines) {
-                if (!line.trim()) continue;
-                let data;
-                try { data = JSON.parse(line); } catch (e) { continue; }
-                manejarEventoAsistido(data);
-            }
-        }
-    })
-    .catch(err => {
-        restaurarBotonAsistida();
-        if (err.name === 'AbortError') return;
-        console.error(err);
-        setAsisEtapa('Error de conexión con el servidor.');
-        Swal.fire('Error', 'Problema de conexión con el servidor.', 'error');
-    });
-}
-
-function manejarEventoAsistido(data) {
-    if (data.type === 'visor') {
-        montarVisorNoVnc(data.token, data.ws_path);
-    } else if (data.type === 'visor_local') {
-        mostrarAvisoVisorLocal();
-    } else if (data.type === 'progress') {
-        setAsisEtapa(data.message || 'Procesando…');
-        setAsisBarra(data.pct || 0);
-    } else if (data.type === 'esperando_humano') {
-        const instr = document.getElementById('asis_instruccion');
-        if (instr) instr.classList.remove('d-none');
-        setAsisEtapa(data.message || 'Esperando tu clic en CONSULTAR…');
-    } else if (data.type === 'resultado') {
-        setAsisBarra(100);
-        setAsisEtapa('Descarga completada.');
-        document.getElementById('asis_instruccion')?.classList.add('d-none');
-        restaurarBotonAsistida();
-        Swal.fire({
-            icon: 'success',
-            title: 'Descarga asistida completada',
-            html: `
-                <div class="text-start small">
-                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2"><span>En el listado</span><strong>${data.total_encontrados}</strong></div>
-                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2 text-success"><span>Registrados nuevos</span><strong>${data.total_nuevos}</strong></div>
-                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2 text-muted"><span>Ya existían</span><strong>${data.total_existentes}</strong></div>
-                    <div class="d-flex justify-content-between text-danger"><span>Errores</span><strong>${data.total_errores}</strong></div>
-                </div>`,
-            confirmButtonText: 'Aceptar'
-        });
-        cerrarVisorSri(false); // no reabortar: el stream ya terminó
-        if (typeof cargarHistorialDescargas === 'function') cargarHistorialDescargas();
-    } else if (data.type === 'error') {
-        document.getElementById('asis_instruccion')?.classList.add('d-none');
-        restaurarBotonAsistida();
-        let msg = data.error || 'Error desconocido.';
-        if (/captcha|CONSULTAR/i.test(msg)) {
-            msg = 'No se detectó la consulta. Recuerda hacer clic en el botón CONSULTAR del portal del SRI. ' + msg;
-        }
-        Swal.fire('Descarga interrumpida', msg, 'warning');
-        cerrarVisorSri(false);
-        if (typeof cargarHistorialDescargas === 'function') cargarHistorialDescargas();
-    }
-}
-
-function montarVisorNoVnc(token, wsPath) {
-    const path = (wsPath || '/sri-visor-ws/').replace(/^\//, '') + '?token=' + token;
-    const url = `${BASE_URL}/novnc/vnc_lite.html?autoconnect=1&reconnect=0&resize=scale&path=${encodeURIComponent(path)}`;
-    const visor = document.getElementById('asis_visor');
-    if (visor) visor.src = url;
-    setAsisEtapa('Cargando el portal… cuando lo veas, haz clic en CONSULTAR.');
-}
-
-// Local (Windows): no hay pantalla remota; el navegador se abre en el escritorio del usuario.
-function mostrarAvisoVisorLocal() {
-    const visor = document.getElementById('asis_visor');
-    if (visor) {
-        visor.removeAttribute('src');
-        visor.srcdoc = `<div style="display:flex;height:100%;align-items:center;justify-content:center;background:#111;color:#eee;font-family:sans-serif;text-align:center;padding:1.5rem;">
-            <div>
-                <div style="font-size:2rem;margin-bottom:.5rem;">🖥️</div>
-                <div style="font-size:1rem;line-height:1.5;">Se abrió una <b>ventana del navegador</b> en tu pantalla.<br>
-                Ve a esa ventana y haz clic en el botón <b>CONSULTAR</b> del portal del SRI.<br>
-                El sistema continuará solo cuando aparezcan los resultados.</div>
-            </div>
-        </div>`;
-    }
-    setAsisEtapa('Se abrió una ventana de Chrome. Haz clic en CONSULTAR ahí.');
-}
-
-function restaurarBotonAsistida() {
-    const btn = document.getElementById('btnEjecutarManual');
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-person-video3 me-1"></i> Iniciar descarga'; }
-}
-
-function cerrarVisorSri(abortar = true) {
-    if (abortar && asisAbort) { try { asisAbort.abort(); } catch (e) {} }
-    asisAbort = null;
-
-    // Avisar al servidor para liberar la sesión del visor
-    try { fetch(`${BASE_URL}/modulos/DescargasSri/cerrarSesionAsistidaAjax`, { method: 'POST' }); } catch (e) {}
-
-    const visor = document.getElementById('asis_visor');
-    if (visor) visor.src = 'about:blank';
-    restaurarBotonAsistida();
-
-    const modalEl = document.getElementById('modalVisorSri');
-    const modal = bootstrap.Modal.getInstance(modalEl);
-    if (modal) modal.hide();
-}
-
-
-// =============================================================================
 // TOKEN DEL AGENTE DE ESCRITORIO
 // =============================================================================
 
@@ -976,4 +816,26 @@ function copiarAgenteToken() {
     if (navigator.clipboard) navigator.clipboard.writeText(inp.value);
     else document.execCommand('copy');
     Swal.fire({ icon: 'success', title: 'Copiado', timer: 1200, showConfirmButton: false });
+}
+
+// Marca la empresa activa como "pendiente de login" y abre el portal del SRI.
+// La extensión detecta el login, escribe RUC+clave y navega a Comprobantes recibidos.
+function generarDescargaSri() {
+    const btn = document.getElementById('btnGenerarDescargaSri');
+    if (btn) btn.disabled = true;
+    fetch(`${BASE_URL}/modulos/DescargasSri/marcarLoginPendienteAjax`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (btn) btn.disabled = false;
+            if (!data.ok) {
+                Swal.fire('Atención', data.error || 'No se pudo iniciar la descarga.', 'warning');
+                return;
+            }
+            window.open('https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT', '_blank');
+        })
+        .catch(err => {
+            if (btn) btn.disabled = false;
+            console.error(err);
+            Swal.fire('Error', 'Problema de conexión con el sistema.', 'error');
+        });
 }

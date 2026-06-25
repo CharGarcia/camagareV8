@@ -8,9 +8,9 @@ use App\core\Controller;
 use App\Services\SriService;
 use App\Services\modulos\DocumentoAutomatedRegisterService;
 use App\Services\modulos\SriDescargaAutomaticaService;
-use App\Services\modulos\SriVisorRemotoService;
 use App\models\Usuario;
 use App\models\EmpresaAsignada;
+use App\models\SriConfigDescarga;
 use App\repositories\modulos\DocumentoIgnoradoRepository;
 use App\repositories\modulos\SriConfigDescargaRepository;
 use Exception;
@@ -468,114 +468,8 @@ class DescargasSriController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // DESCARGA ASISTIDA — visor remoto (humano resuelve el captcha en el portal)
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Inicia la descarga asistida: crea la sesión del visor (token), emite los datos para
-     * montar el visor noVNC en el cliente y luego lanza el scraper en modo asistido,
-     * retransmitiendo el progreso (incluido 'esperando_humano') en streaming JSON-line.
-     */
-    public function iniciarSesionAsistidaAjax(): void
-    {
-        set_time_limit(0);
-        $this->requireAuth();
-        header('Content-Type: application/json');
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            echo json_encode(['type' => 'error', 'error' => 'Método no permitido.']) . "\n";
-            return;
-        }
-
-        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
-        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
-
-        $ano  = isset($_POST['ano'])  ? (int) $_POST['ano']  : null;
-        $mes  = isset($_POST['mes'])  ? (int) $_POST['mes']  : null;
-        $dia  = isset($_POST['dia'])  ? (int) $_POST['dia']  : null;
-        $tipo = isset($_POST['tipo']) ? trim($_POST['tipo']) : null;
-        if ($mes  === 0) $mes  = null;
-        if ($dia  === 0) $dia  = null;
-        if ($tipo === 'todos') $tipo = null;
-
-        // Streaming en tiempo real
-        @ini_set('output_buffering', 'off');
-        @ini_set('zlib.output_compression', 'false');
-        @ini_set('implicit_flush', '1');
-        @ob_end_clean();
-        header('Cache-Control: no-cache, must-revalidate');
-        header('X-Accel-Buffering: no');
-
-        $visor = new SriVisorRemotoService();
-
-        // En el servidor (Linux) el navegador es headless y se ve por pantalla remota (noVNC).
-        // En local (Windows) el scraper abre una ventana de Chrome real en el propio escritorio:
-        // no hay noVNC, así que se avisa al cliente que mire esa ventana.
-        $esRemoto = (PHP_OS_FAMILY !== 'Windows');
-
-        if ($esRemoto) {
-            // La infraestructura del visor (Xvfb :99, websockify) debe estar levantada.
-            $infra = $visor->verificarInfra();
-            if (!$infra['ok']) {
-                echo json_encode(['type' => 'error', 'error' => $infra['detalle']]) . "\n";
-                exit;
-            }
-
-            // Crear sesión/token del visor (lock de 1 sesión concurrente)
-            $ses = $visor->iniciarSesion($idEmpresa, $idUsuario);
-            if (!$ses['ok']) {
-                echo json_encode(['type' => 'error', 'error' => $ses['error']]) . "\n";
-                exit;
-            }
-
-            // Primer evento: datos para que el cliente monte el visor noVNC.
-            echo json_encode(['type' => 'visor', 'token' => $ses['token'], 'ws_path' => $ses['ws_path']]) . "\n";
-        } else {
-            // Local: el navegador se abre en la pantalla del usuario; no se monta noVNC.
-            echo json_encode(['type' => 'visor_local']) . "\n";
-        }
-        @ob_flush(); @flush();
-
-        session_write_close(); // permitir navegar en otras pestañas
-
-        try {
-            $svc = new SriDescargaAutomaticaService();
-            $svc->iniciarSesionAsistidaStream($idEmpresa, $idUsuario, $ano, $mes, $dia, $tipo);
-        } catch (Exception $e) {
-            echo json_encode(['type' => 'error', 'error' => $e->getMessage()]) . "\n";
-        } finally {
-            $visor->cerrarSesion();
-        }
-        exit;
-    }
-
-    /** Cierra la sesión del visor (cancelación del usuario o limpieza). */
-    public function cerrarSesionAsistidaAjax(): void
-    {
-        $this->requireAuth();
-        header('Content-Type: application/json');
-        (new SriVisorRemotoService())->cerrarSesion();
-        echo json_encode(['ok' => true]);
-        exit;
-    }
-
-    /**
-     * Validación del token del visor para el `auth_request` de nginx (subrequest interno
-     * antes de abrir el WebSocket). NO requiere sesión de usuario: solo valida el token
-     * efímero. Responde 200 si es válido, 403 si no.
-     */
-    public function validarVisorTokenAjax(): void
-    {
-        $token = $_GET['token'] ?? $_SERVER['HTTP_X_VISOR_TOKEN'] ?? '';
-        $ok    = (new SriVisorRemotoService())->validarToken((string) $token);
-        http_response_code($ok ? 200 : 403);
-        echo $ok ? 'OK' : 'FORBIDDEN';
-        exit;
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // AGENTE DE ESCRITORIO — el navegador corre en la PC del operador (IP residencial)
-    // Endpoints autenticados por token (sin sesión web).
+    // EXTENSIÓN / DESCARGA SRI — el cliente consulta en su navegador (su IP)
+    // Endpoints autenticados por token de usuario o por sesión.
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
@@ -598,6 +492,67 @@ class DescargasSriController extends Controller
         echo json_encode($ok
             ? ['ok' => true, 'token' => $token]
             : ['ok' => false, 'error' => 'No se pudo generar el token.']);
+        exit;
+    }
+
+    /**
+     * El usuario pulsó "Generar descarga del SRI": marca la empresa ACTIVA como pendiente de
+     * login. La extensión la leerá para entrar al SRI con sus credenciales. Requiere sesión.
+     */
+    public function marcarLoginPendienteAjax(): void
+    {
+        $this->requireAuth();
+        header('Content-Type: application/json');
+
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        if ($idUsuario <= 0 || $idEmpresa <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Sesión inválida o sin empresa activa.']);
+            exit;
+        }
+
+        (new Usuario())->setLoginPendiente($idUsuario, $idEmpresa);
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    /**
+     * La extensión, al cargar la pantalla de login del SRI, pide las credenciales de la empresa
+     * que el usuario marcó (login pendiente). Autenticado por el token personal del usuario.
+     * Devuelve RUC + clave descifrada y limpia la marca (uso único).
+     */
+    public function agenteLoginPendienteAjax(): void
+    {
+        header('Content-Type: application/json');
+
+        $token   = trim($_POST['agente_token'] ?? $_GET['agente_token'] ?? '');
+        $model   = new Usuario();
+        $usuario = $model->getPorAgenteToken($token);
+        if (!$usuario) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Token inválido.']);
+            exit;
+        }
+
+        $idEmpresa = $model->tomarLoginPendiente((int) $usuario['id']);
+        if (!$idEmpresa) {
+            echo json_encode(['ok' => false, 'error' => 'No hay una descarga pendiente. Pulsa "Generar descarga del SRI" en el sistema.']);
+            exit;
+        }
+
+        $config = (new SriConfigDescarga())->getPorEmpresa($idEmpresa);
+        if (!$config || empty($config['sri_usuario'])) {
+            echo json_encode(['ok' => false, 'error' => 'La empresa no tiene credenciales del SRI configuradas.']);
+            exit;
+        }
+
+        $clave = SriDescargaAutomaticaService::desencriptarClave($config['sri_clave'] ?? '');
+        if ($clave === '') {
+            echo json_encode(['ok' => false, 'error' => 'No se pudo obtener la clave del SRI de la empresa.']);
+            exit;
+        }
+
+        echo json_encode(['ok' => true, 'ruc' => $config['sri_usuario'], 'clave' => $clave]);
         exit;
     }
 

@@ -16,6 +16,11 @@
       "matches": ["https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://srienlinea.sri.gob.ec/*"],
+      "js": ["content_login.js"],
+      "run_at": "document_idle"
     }
   ],
   "action": {

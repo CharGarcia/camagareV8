@@ -85,6 +85,26 @@ class Usuario extends BaseModel
         return $st->execute([$token, $idUsuario]);
     }
 
+    /** Marca la empresa que el usuario quiere loguear en el SRI (al pulsar el botón). */
+    public function setLoginPendiente(int $idUsuario, int $idEmpresa): bool
+    {
+        $st = $this->db->prepare("UPDATE usuarios SET login_pendiente_empresa = ? WHERE id = ?");
+        return $st->execute([$idEmpresa, $idUsuario]);
+    }
+
+    /** Lee la empresa pendiente de login y la limpia (uso único). Devuelve null si no hay. */
+    public function tomarLoginPendiente(int $idUsuario): ?int
+    {
+        $st = $this->db->prepare("SELECT login_pendiente_empresa FROM usuarios WHERE id = ?");
+        $st->execute([$idUsuario]);
+        $id = $st->fetchColumn();
+        if ($id === false || $id === null) return null;
+
+        $up = $this->db->prepare("UPDATE usuarios SET login_pendiente_empresa = NULL WHERE id = ?");
+        $up->execute([$idUsuario]);
+        return (int) $id;
+    }
+
     /**
      * Valida contraseña actual (MD5 o bcrypt) y actualiza a nueva contraseña en bcrypt.
      * Si la actual está en MD5 y es correcta, migra transparentemente.

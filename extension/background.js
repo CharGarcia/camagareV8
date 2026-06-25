@@ -12,7 +12,34 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         registrar(msg.claves).then(sendResponse);
         return true; // respuesta asíncrona
     }
+    if (msg && msg.tipo === 'login_pendiente') {
+        pedirLoginPendiente().then(sendResponse);
+        return true;
+    }
 });
+
+// Pide al sistema las credenciales de la empresa marcada como "descarga pendiente".
+async function pedirLoginPendiente() {
+    try {
+        const cfg = await chrome.storage.local.get(['servidorUrl', 'agenteToken']);
+        if (!cfg.agenteToken) return { ok: false };
+        const base = (cfg.servidorUrl || 'https://erp.camagare.com.ec').replace(/\/+$/, '');
+
+        const body = new URLSearchParams();
+        body.set('agente_token', cfg.agenteToken);
+
+        const resp = await fetch(`${base}/modulos/DescargasSri/agenteLoginPendienteAjax`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+        });
+        const data = await resp.json().catch(() => null);
+        if (data && data.ok) return { ok: true, ruc: data.ruc, clave: data.clave };
+        return { ok: false };
+    } catch (e) {
+        return { ok: false };
+    }
+}
 
 async function registrar(claves) {
     try {
