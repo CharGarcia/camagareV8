@@ -20,7 +20,7 @@
 
     try { console.log('[CaMaGaRe v' + chrome.runtime.getManifest().version + '] url=' + url + ' | esLogin=' + urlEsLogin + ' | enComprobantes=' + enComprobantes); } catch (e) {}
 
-    if (enComprobantes) { chrome.storage.local.remove('sri_ir_comprobantes'); return; }
+    if (enComprobantes) { chrome.storage.local.remove(['sri_ir_comprobantes', 'sri_cred']); return; }
 
     function banner(texto, color) {
         let b = document.getElementById('cmg-login-banner');
@@ -54,27 +54,39 @@
         input.blur();
     }
 
-    // Hay formulario de login: pedir credenciales al servidor. Solo escribe si hay descarga marcada.
+    // Escribe credenciales y envía el login, persistiendo antes la marca de navegación.
+    function entrar(u, p, ruc, clave) {
+        banner('CaMaGaRe: ingresando al SRI…', '#198754');
+        escribir(u, ruc);
+        escribir(p, clave);
+        chrome.storage.local.set({ sri_ir_comprobantes: Date.now() }, () => {
+            const btn = document.querySelector('#kc-login');
+            if (btn) btn.click();
+            else { const f = u.closest('form'); if (f) f.submit(); }
+        });
+    }
+
+    // Hay formulario de login: usa la descarga marcada o, si el SRI pide un SEGUNDO login en el
+    // mismo flujo, las credenciales guardadas. Si no hay nada activo, no interfiere.
     function hacerLlenado(u, p) {
-        chrome.runtime.sendMessage({ tipo: 'login_pendiente' }, (resp) => {
+        chrome.runtime.sendMessage({ tipo: 'login_pendiente' }, async (resp) => {
             if (chrome.runtime.lastError) return;
-            if (!resp || !resp.ok) {
-                // Sin descarga marcada = uso normal del SRI, no interferir. Otros errores (token,
-                // credenciales) sí los avisamos para que el usuario los corrija.
-                if (resp && resp.error && !/pendiente/i.test(resp.error)) {
-                    banner('CaMaGaRe: ' + resp.error, '#dc3545');
-                }
+            if (resp && resp.ok) {
+                // Guardar para reusar en un segundo login del mismo flujo (doble auth del SRI).
+                chrome.storage.local.set({ sri_cred: { ruc: resp.ruc, clave: resp.clave, ts: Date.now() } });
+                entrar(u, p, resp.ruc, resp.clave);
                 return;
             }
-            banner('CaMaGaRe: ingresando al SRI…', '#198754');
-            escribir(u, resp.ruc);
-            escribir(p, resp.clave);
-            // Persistir la marca ANTES de enviar el login (si no, la navegación corta el guardado).
-            chrome.storage.local.set({ sri_ir_comprobantes: Date.now() }, () => {
-                const btn = document.querySelector('#kc-login');
-                if (btn) btn.click();
-                else { const f = u.closest('form'); if (f) f.submit(); }
-            });
+            // Sin marca nueva: ¿hay credenciales guardadas de este flujo? (segundo login del SRI)
+            const { sri_cred } = await chrome.storage.local.get('sri_cred');
+            if (sri_cred && sri_cred.ruc && (Date.now() - sri_cred.ts < 300000)) {
+                entrar(u, p, sri_cred.ruc, sri_cred.clave);
+                return;
+            }
+            // Nada activo = uso normal del SRI, no interferir. Solo avisar errores reales.
+            if (resp && resp.error && !/pendiente/i.test(resp.error)) {
+                banner('CaMaGaRe: ' + resp.error, '#dc3545');
+            }
         });
     }
 
