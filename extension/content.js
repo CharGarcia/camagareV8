@@ -131,12 +131,14 @@
     }
 
     function salirSri() {
-        const sels = ['a[href*="logout"]', 'a[href*="cerrarSesion"]', 'a[href*="cerrar-sesion"]', 'a[href*="signoff"]'];
-        for (const sel of sels) { const el = document.querySelector(sel); if (el) { el.click(); return; } }
-        const els = [...document.querySelectorAll('a, button, span, li')];
-        const salir = els.find(e => /cerrar sesi[oó]n|salir del sistema/i.test((e.textContent || '').trim()) && (e.textContent || '').length < 40);
-        if (salir) { salir.click(); return; }
-        location.href = 'https://srienlinea.sri.gob.ec/auth/realms/Internet/protocol/openid-connect/logout';
+        const btn = document.getElementById('cmg-sri-salir');
+        if (btn) { btn.textContent = 'Cerrando sesión…'; btn.disabled = true; }
+        // Cierra sesión limpiando las cookies del SRI (vía background) y cierra la pestaña.
+        chrome.runtime.sendMessage({ tipo: 'cerrar_sesion' }, () => {
+            window.close();
+            // Si el navegador no permite cerrar la pestaña, volver al inicio (pedirá login).
+            setTimeout(() => { try { location.href = 'https://srienlinea.sri.gob.ec/'; } catch (e) {} }, 500);
+        });
     }
 
     // Aviso de estado/resultado (order 1 = arriba del todo).

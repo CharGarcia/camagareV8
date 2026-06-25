@@ -16,7 +16,26 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         pedirLoginPendiente().then(sendResponse);
         return true;
     }
+    if (msg && msg.tipo === 'cerrar_sesion') {
+        cerrarSesion().then(sendResponse);
+        return true;
+    }
 });
+
+// Cierra la sesión del SRI eliminando sus cookies (igual que el scraper forzaba un login limpio).
+async function cerrarSesion() {
+    try {
+        const cookies = await chrome.cookies.getAll({ domain: 'sri.gob.ec' });
+        for (const c of cookies) {
+            const host = c.domain.startsWith('.') ? c.domain.slice(1) : c.domain;
+            const url = (c.secure ? 'https://' : 'http://') + host + (c.path || '/');
+            try { await chrome.cookies.remove({ url, name: c.name }); } catch (e) {}
+        }
+        return { ok: true };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+}
 
 // Pide al sistema las credenciales de la empresa marcada como "descarga pendiente".
 async function pedirLoginPendiente() {
