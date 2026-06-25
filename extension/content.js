@@ -163,6 +163,36 @@
         });
     }
 
-    // Mostrar/ocultar el botón según haya resultados en la tabla.
-    setInterval(() => { hayResultados() ? crearBoton() : quitarBoton(); }, 1500);
+    // Botón para cerrar sesión del SRI (necesario para cambiar de empresa). Siempre visible.
+    function crearBotonSalir() {
+        if (document.getElementById('cmg-sri-salir')) return;
+        const btn = document.createElement('button');
+        btn.id = 'cmg-sri-salir';
+        btn.textContent = '✕ Cerrar sesión SRI';
+        Object.assign(btn.style, {
+            position: 'fixed', bottom: '26px', left: '26px', zIndex: 2147483647,
+            background: '#6c757d', color: '#fff', border: '2px solid #fff', borderRadius: '12px',
+            padding: '14px 22px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer',
+            fontFamily: 'Arial, sans-serif',
+        });
+        btn.addEventListener('click', salirSri);
+        document.body.appendChild(btn);
+    }
+
+    function salirSri() {
+        // Buscar el enlace/botón de cerrar sesión del portal del SRI.
+        const sels = ['a[href*="logout"]', 'a[href*="cerrarSesion"]', 'a[href*="cerrar-sesion"]', 'a[href*="signoff"]'];
+        for (const sel of sels) { const el = document.querySelector(sel); if (el) { el.click(); return; } }
+        const els = [...document.querySelectorAll('a, button, span, li')];
+        const salir = els.find(e => /cerrar sesi[oó]n|salir del sistema/i.test((e.textContent || '').trim()) && (e.textContent || '').length < 40);
+        if (salir) { salir.click(); return; }
+        // Último recurso: logout de Keycloak del SRI.
+        location.href = 'https://srienlinea.sri.gob.ec/auth/realms/Internet/protocol/openid-connect/logout';
+    }
+
+    // Mostrar/ocultar el botón de enviar según haya resultados; el de salir siempre.
+    setInterval(() => {
+        crearBotonSalir();
+        hayResultados() ? crearBoton() : quitarBoton();
+    }, 1500);
 })();
