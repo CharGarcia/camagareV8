@@ -361,4 +361,16 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
     </div>
 </div>
 
+<script>
+// Entrega el token del agente a la extensión CaMaGaRe (si está instalada), para que el usuario
+// NO tenga que configurarlo a mano. Es same-origin: solo lo recibe el content script de la extensión.
+(function () {
+    var t = <?= json_encode($agenteToken ?? '') ?>;
+    if (!t) return;
+    try {
+        window.postMessage({ source: 'cmg-sistema', token: t, servidorUrl: window.location.origin }, window.location.origin);
+    } catch (e) {}
+})();
+</script>
+
 <script src="<?= BASE_URL ?>/js/modulos/descargas_sri.js?v=<?= time() ?>"></script>

@@ -24,9 +24,12 @@ class DescargasSriController extends Controller
         // Descomentar cuando el módulo sea registrado en la base de datos
         // $this->requirePermiso('descargas_sri', 'ver');
 
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
         $this->viewWithLayout('layouts.main', 'modulos.descargas_sri.index', [
             'titulo'      => 'Descargas SRI',
             'rucEmpresa'  => $_SESSION['ruc_empresa'] ?? '',
+            // Token del agente (autogenerado): la vista lo entrega a la extensión sin que el usuario lo configure.
+            'agenteToken' => $idUsuario > 0 ? (new Usuario())->asegurarAgenteToken($idUsuario) : '',
             // 'perm' => $this->getPermisos('descargas_sri')
         ]);
     }

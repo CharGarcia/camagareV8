@@ -85,6 +85,18 @@ class Usuario extends BaseModel
         return $st->execute([$token, $idUsuario]);
     }
 
+    /** Devuelve el token del agente del usuario, generándolo si aún no tiene (idempotente). */
+    public function asegurarAgenteToken(int $idUsuario): string
+    {
+        $st = $this->db->prepare("SELECT agente_token FROM usuarios WHERE id = ?");
+        $st->execute([$idUsuario]);
+        $tok = $st->fetchColumn();
+        if (is_string($tok) && $tok !== '') return $tok;
+        $tok = bin2hex(random_bytes(32));
+        $this->setAgenteToken($idUsuario, $tok);
+        return $tok;
+    }
+
     /** Marca la empresa que el usuario quiere loguear en el SRI (al pulsar el botón). */
     public function setLoginPendiente(int $idUsuario, int $idEmpresa): bool
     {
