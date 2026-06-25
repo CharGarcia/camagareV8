@@ -605,9 +605,14 @@ class DescargasSriController extends Controller
                 exit;
             }
 
-            $idEmpresa = $this->resolverEmpresaPorClaves($claves, $mapa);
+            $debug = [];
+            $idEmpresa = $this->resolverEmpresaPorClaves($claves, $mapa, $debug);
             if (!$idEmpresa) {
-                echo json_encode(['ok' => false, 'error' => 'No se pudo identificar la empresa de estos comprobantes. Verifica que la empresa (RUC del receptor) esté registrada y asignada a tu usuario.']);
+                $det = 'Tus empresas (RUC): ' . implode(', ', $debug['rucs_empresa'] ?? [])
+                     . ' | comprobantes leídos: ' . ($debug['xml_ok'] ?? 0)
+                     . ' | RUC en el comprobante: ' . implode(', ', $debug['rucs_en_xml'] ?? [])
+                     . (isset($debug['ultimo_error']) ? ' | ' . $debug['ultimo_error'] : '');
+                echo json_encode(['ok' => false, 'error' => 'No se pudo identificar la empresa. ' . $det]);
                 exit;
             }
 
@@ -638,20 +643,30 @@ class DescargasSriController extends Controller
      * en él. El emisor es externo, así que el RUC de UNA de las empresas del usuario que figure
      * en el comprobante es el receptor. Prueba unas pocas claves por si el webservice falla.
      */
-    private function resolverEmpresaPorClaves(array $claves, array $mapaRucEmpresa): ?int
+    private function resolverEmpresaPorClaves(array $claves, array $mapaRucEmpresa, array &$debug = []): ?int
     {
         $sri = new SriService();
+        $debug['rucs_empresa'] = array_map('strval', array_keys($mapaRucEmpresa));
+        $debug['xml_ok'] = 0;
         $intentos = 0;
         foreach ($claves as $c) {
             if ($intentos >= 5) break;
             $intentos++;
             $resp = $sri->obtenerComprobanteXml($c);
-            if (empty($resp['ok']) || empty($resp['xml'])) continue;
+            if (empty($resp['ok']) || empty($resp['xml'])) {
+                $debug['ultimo_error'] = $resp['mensaje'] ?? $resp['estado'] ?? 'sin xml';
+                continue;
+            }
+            $debug['xml_ok']++;
+            $xml = $resp['xml'];
             foreach ($mapaRucEmpresa as $ruc => $idEmpresa) {
                 $ruc = (string) $ruc; // PHP convierte la clave de array numérica a int
-                if ($ruc !== '' && strpos($resp['xml'], $ruc) !== false) {
-                    return $idEmpresa;
+                if ($ruc !== '' && strpos($xml, $ruc) !== false) {
+                    return (int) $idEmpresa;
                 }
+            }
+            if (empty($debug['rucs_en_xml']) && preg_match_all('/\d{13}/', $xml, $m)) {
+                $debug['rucs_en_xml'] = array_values(array_unique($m[0]));
             }
         }
         return null;
