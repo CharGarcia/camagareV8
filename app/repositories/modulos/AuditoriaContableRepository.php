@@ -181,7 +181,8 @@ class AuditoriaContableRepository extends BaseRepository
                 WHERE d.id_empresa = :id_empresa
                   AND d.eliminado = false
                   AND CAST(d.tipo_ambiente AS VARCHAR(1)) = {$amb}
-                  AND {$cfg['estado_filtro']}";
+                  AND {$cfg['estado_filtro']}
+                  AND COALESCE({$total}, 0) > 0";
 
         $rows = $this->ejecutar($sql, [':id_empresa' => $idEmpresa]);
 
