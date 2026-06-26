@@ -49,7 +49,8 @@ class AtsRepository extends BaseRepository
     }
 
     /**
-     * Compras del período (por fecha de registro contable).
+     * Compras del período, filtradas por FECHA DE EMISIÓN del comprobante.
+     * fechaRegistro del ATS se reporta igual a la fecha de emisión.
      * Las bases IVA/ICE se agregan desde compras_detalle_impuestos.
      */
     public function getCompras(int $idEmpresa, string $desde, string $hasta): array
@@ -62,7 +63,7 @@ class AtsRepository extends BaseRepository
                        c.punto_emision_prov,
                        c.secuencial_prov,
                        c.fecha_emision,
-                       COALESCE(c.fecha_registro, c.fecha_emision) AS fecha_registro,
+                       c.fecha_emision AS fecha_registro,
                        c.importe_total,
                        c.parte_relacionada,
                        c.documento_modificado,
@@ -91,8 +92,8 @@ class AtsRepository extends BaseRepository
                 ) imp ON true
                 WHERE c.id_empresa = :id_empresa
                   AND c.eliminado = false
-                  AND COALESCE(c.fecha_registro, c.fecha_emision) BETWEEN :desde AND :hasta
-                ORDER BY COALESCE(c.fecha_registro, c.fecha_emision), c.id";
+                  AND c.fecha_emision BETWEEN :desde AND :hasta
+                ORDER BY c.fecha_emision, c.id";
         return $this->query($sql, [
             ':id_empresa' => $idEmpresa,
             ':desde'      => $desde,
