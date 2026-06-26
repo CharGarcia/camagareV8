@@ -596,6 +596,34 @@ class AsientoBuilderService
         if ($totalDebe === 0.0 && $totalHaber === 0.0) {
             throw new \Exception("No se ha configurado ninguna cuenta para este asiento o los montos son cero.");
         }
+
+        // Ajuste de redondeo: la cuenta por cobrar (Debe) = total del documento es la
+        // fuente de verdad; Base + IVA del Haber pueden diferir por ±centavos al
+        // redondear por separado. Si la diferencia es de centavos, se absorbe en la
+        // línea de mayor Haber (Ventas). Un descuadre mayor = error real de configuración.
+        $diff = round($totalDebe - $totalHaber, 2);
+        if ($diff !== 0.0) {
+            $tolerancia = max(0.02, count($detalles) * 0.01);
+            if (abs($diff) > $tolerancia) {
+                throw new \Exception(
+                    "El asiento no cuadra. Debe: $" . number_format($totalDebe, 2) .
+                    ", Haber: $" . number_format($totalHaber, 2) .
+                    ". Revise la configuración de cuentas contables para ventas."
+                );
+            }
+            $idxAjuste = null;
+            $maxHaber  = -1.0;
+            foreach ($detalles as $i => $d) {
+                if (($d['haber'] ?? 0) > $maxHaber) { $maxHaber = (float) $d['haber']; $idxAjuste = $i; }
+            }
+            if ($idxAjuste !== null && round($detalles[$idxAjuste]['haber'] + $diff, 2) >= 0) {
+                $detalles[$idxAjuste]['haber'] = round($detalles[$idxAjuste]['haber'] + $diff, 2);
+                $detalles[$idxAjuste]['referencia_detalle'] =
+                    trim(($detalles[$idxAjuste]['referencia_detalle'] ?? '') . ' (ajuste redondeo)');
+                $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
+            }
+        }
+
         if ($totalDebe !== $totalHaber) {
             throw new \Exception(
                 "El asiento no cuadra. Debe: $" . number_format($totalDebe, 2) .
@@ -1036,6 +1064,25 @@ class AsientoBuilderService
         if ($totalDebe === 0.0 && $totalHaber === 0.0) {
             throw new \Exception("No se ha configurado ninguna cuenta para este asiento o los montos son cero.");
         }
+
+        // Ajuste de redondeo: diferencias de centavos por redondeo línea a línea se
+        // absorben en la línea de mayor monto del lado corto. Un descuadre mayor = error real.
+        $diff = round($totalDebe - $totalHaber, 2);
+        if ($diff !== 0.0 && abs($diff) <= max(0.02, count($detalles) * 0.01)) {
+            $lado = $diff > 0 ? 'haber' : 'debe';
+            $idxAjuste = null; $maxLado = -1.0;
+            foreach ($detalles as $i => $d) {
+                if ((float) ($d[$lado] ?? 0) > $maxLado) { $maxLado = (float) $d[$lado]; $idxAjuste = $i; }
+            }
+            if ($idxAjuste !== null) {
+                $detalles[$idxAjuste][$lado] = round($detalles[$idxAjuste][$lado] + abs($diff), 2);
+                $detalles[$idxAjuste]['referencia_detalle'] =
+                    trim(($detalles[$idxAjuste]['referencia_detalle'] ?? '') . ' (ajuste redondeo)');
+                $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
+                $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
+            }
+        }
+
         if ($totalDebe !== $totalHaber) {
             throw new \Exception(
                 "El asiento no cuadra. Debe: $" . number_format($totalDebe, 2) .
@@ -1182,6 +1229,25 @@ class AsientoBuilderService
         if ($totalDebe === 0.0 && $totalHaber === 0.0) {
             throw new \Exception("No hay cuentas configuradas para la nota de crédito de venta o los montos son cero.");
         }
+
+        // Ajuste de redondeo: diferencias de centavos por redondeo línea a línea se
+        // absorben en la línea de mayor monto del lado corto. Un descuadre mayor = error real.
+        $diff = round($totalDebe - $totalHaber, 2);
+        if ($diff !== 0.0 && abs($diff) <= max(0.02, count($detalles) * 0.01)) {
+            $lado = $diff > 0 ? 'haber' : 'debe';
+            $idxAjuste = null; $maxLado = -1.0;
+            foreach ($detalles as $i => $d) {
+                if ((float) ($d[$lado] ?? 0) > $maxLado) { $maxLado = (float) $d[$lado]; $idxAjuste = $i; }
+            }
+            if ($idxAjuste !== null) {
+                $detalles[$idxAjuste][$lado] = round($detalles[$idxAjuste][$lado] + abs($diff), 2);
+                $detalles[$idxAjuste]['referencia_detalle'] =
+                    trim(($detalles[$idxAjuste]['referencia_detalle'] ?? '') . ' (ajuste redondeo)');
+                $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
+                $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
+            }
+        }
+
         if ($totalDebe !== $totalHaber) {
             throw new \Exception(
                 "El asiento de la nota de crédito no cuadra. Debe: $" . number_format($totalDebe, 2) .
