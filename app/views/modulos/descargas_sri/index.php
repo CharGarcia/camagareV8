@@ -354,15 +354,16 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
     </div>
 </div>
 
-<!-- Token del agente para la extensión CaMaGaRe: la extensión lo LEE de este elemento al cargar
-     (robusto, no depende del momento exacto) y también lo recibe por postMessage. Same-origin. -->
-<div id="cmg-config" data-token="<?= htmlspecialchars($agenteToken ?? '', ENT_QUOTES) ?>" hidden></div>
+<!-- Token del agente para la extensión CaMaGaRe: la extensión lo LEE de este elemento (robusto) y
+     también lo recibe por postMessage. servidorUrl = origen + BASE_URL (cubre el subdirectorio en local). -->
+<div id="cmg-config" data-token="<?= htmlspecialchars($agenteToken ?? '', ENT_QUOTES) ?>" data-base="<?= htmlspecialchars(rtrim(BASE_URL, '/'), ENT_QUOTES) ?>" hidden></div>
 <script>
 (function () {
     var t = <?= json_encode($agenteToken ?? '') ?>;
     if (!t) return;
+    var servidor = window.location.origin + <?= json_encode(rtrim(BASE_URL, '/')) ?>;
     try {
-        window.postMessage({ source: 'cmg-sistema', token: t, servidorUrl: window.location.origin }, window.location.origin);
+        window.postMessage({ source: 'cmg-sistema', token: t, servidorUrl: servidor }, window.location.origin);
     } catch (e) {}
 })();
 </script>

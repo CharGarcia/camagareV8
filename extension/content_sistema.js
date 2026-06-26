@@ -20,7 +20,8 @@
     const iv = setInterval(() => {
         const el = document.getElementById('cmg-config');
         if (el && el.dataset && el.dataset.token) {
-            guardar(el.dataset.token, location.origin);
+            // servidorUrl = origen + base del sistema (en local el sistema vive en /sistema/public).
+            guardar(el.dataset.token, location.origin + (el.dataset.base || ''));
             clearInterval(iv);
             return;
         }
