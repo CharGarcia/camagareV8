@@ -429,13 +429,18 @@ class AtsService
         return $ts ? date('d/m/Y', $ts) : '';
     }
 
-    /** Quita acentos y caracteres extraños no admitidos por el SRI en razón social. */
+    /**
+     * Normaliza razón social / denominación para el SRI: solo letras, números y
+     * espacios (la ficha pide "letras y números, sin caracteres ni símbolos
+     * extraños"). Se quitan acentos, puntos, comas, guiones, &, etc.
+     * Ej.: "CMG BUSINESS ADMINISTRATION S.A.S." → "CMG BUSINESS ADMINISTRATION SAS".
+     */
     private function limpiar(string $s): string
     {
         $s = strtr($s, [
             'Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U', 'Ñ' => 'N', 'Ü' => 'U',
         ]);
-        $s = preg_replace('/[^A-Z0-9 \.\,\-&]/', ' ', $s) ?? $s;
+        $s = preg_replace('/[^A-Z0-9 ]/', ' ', $s) ?? $s;
         return trim(preg_replace('/\s+/', ' ', $s) ?? $s);
     }
 

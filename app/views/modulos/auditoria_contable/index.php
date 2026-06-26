@@ -189,7 +189,8 @@ $totalIncidencias = array_sum($resumen);
                                 data-doc="<?= (int) ($r['id_documento'] ?? 0) ?>" data-asiento="<?= (int) ($r['id_asiento'] ?? 0) ?>">
                                 <td data-col="tipo"><span class="badge <?= $tipoClase[$tipo] ?? 'bg-secondary' ?> border"><?= htmlspecialchars($tipoLabels[$tipo] ?? $tipo) ?></span></td>
                                 <td data-col="origen"><?= htmlspecialchars($origenLabels[$origen] ?? $origen) ?></td>
-                                <td data-col="documento" class="text-center"><?= $r['id_documento'] !== null ? '#' . (int) $r['id_documento'] : '—' ?></td>
+                                <?php $numDoc = trim((string) ($r['documento_numero'] ?? '')); ?>
+                                <td data-col="documento" class="text-center"><?= $numDoc !== '' ? htmlspecialchars($numDoc) : ($r['id_documento'] !== null ? '#' . (int) $r['id_documento'] : '—') ?></td>
                                 <td data-col="asiento" class="text-center"><?= $r['id_asiento'] !== null ? '#' . (int) $r['id_asiento'] : '—' ?></td>
                                 <td data-col="monto_documento" class="text-end"><?= $r['monto_documento'] !== null ? number_format((float) $r['monto_documento'], 2) : '—' ?></td>
                                 <td data-col="monto_asiento" class="text-end"><?= $r['monto_asiento'] !== null ? number_format((float) $r['monto_asiento'], 2) : '—' ?></td>

@@ -611,9 +611,29 @@ class AuditoriaContableRepository extends BaseRepository
         }
         $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
 
-        $sql = "SELECT i.*, u.nombre AS revisado_por_nombre
+        // Número completo del documento (serie-secuencial) resuelto por origen.
+        // compras usa columnas *_prov; el resto establecimiento/punto_emision/secuencial.
+        $numeroCase = "CASE i.modulo_origen
+                        WHEN 'factura_venta'      THEN CONCAT(o_fv.establecimiento,'-',o_fv.punto_emision,'-',o_fv.secuencial)
+                        WHEN 'compra'             THEN CONCAT(o_co.establecimiento_prov,'-',o_co.punto_emision_prov,'-',o_co.secuencial_prov)
+                        WHEN 'liquidacion_compra' THEN CONCAT(o_lq.establecimiento,'-',o_lq.punto_emision,'-',o_lq.secuencial)
+                        WHEN 'nota_credito'       THEN CONCAT(o_nc.establecimiento,'-',o_nc.punto_emision,'-',o_nc.secuencial)
+                        WHEN 'retencion_venta'    THEN CONCAT(o_rv.establecimiento,'-',o_rv.punto_emision,'-',o_rv.secuencial)
+                        WHEN 'ingreso'            THEN CONCAT(o_in.establecimiento,'-',o_in.punto_emision,'-',o_in.secuencial)
+                        WHEN 'egreso'             THEN CONCAT(o_eg.establecimiento,'-',o_eg.punto_emision,'-',o_eg.secuencial)
+                       END";
+
+        $sql = "SELECT i.*, u.nombre AS revisado_por_nombre,
+                       NULLIF(REPLACE($numeroCase, '--', ''), '') AS documento_numero
                 FROM auditoria_contable_incidencias i
                 LEFT JOIN usuarios u ON i.revisado_por = u.id
+                LEFT JOIN ventas_cabecera          o_fv ON i.modulo_origen = 'factura_venta'      AND o_fv.id = i.id_documento
+                LEFT JOIN compras_cabecera         o_co ON i.modulo_origen = 'compra'             AND o_co.id = i.id_documento
+                LEFT JOIN liquidaciones_cabecera   o_lq ON i.modulo_origen = 'liquidacion_compra' AND o_lq.id = i.id_documento
+                LEFT JOIN notas_credito_cabecera   o_nc ON i.modulo_origen = 'nota_credito'       AND o_nc.id = i.id_documento
+                LEFT JOIN retencion_venta_cabecera o_rv ON i.modulo_origen = 'retencion_venta'    AND o_rv.id = i.id_documento
+                LEFT JOIN ingresos_cabecera        o_in ON i.modulo_origen = 'ingreso'            AND o_in.id = i.id_documento
+                LEFT JOIN egresos_cabecera         o_eg ON i.modulo_origen = 'egreso'             AND o_eg.id = i.id_documento
                 $where
                 ORDER BY i.$ordenCol $ordenDir
                 LIMIT $perPage OFFSET $offset";

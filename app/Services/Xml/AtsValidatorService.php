@@ -70,6 +70,8 @@ class AtsValidatorService
         $rs = $this->texto($iva, 'razonSocial');
         if (mb_strlen($rs) < 5) {
             $err[] = 'Informante: razonSocial es obligatoria (mínimo 5 caracteres).';
+        } elseif (!preg_match('/^[A-Z0-9 ]+$/', $rs)) {
+            $err[] = "Informante: razonSocial contiene caracteres no permitidos (solo letras, números y espacios): '{$rs}'.";
         }
 
         if (!preg_match('/^\d{4}$/', $this->texto($iva, 'Anio'))) {

@@ -189,7 +189,10 @@ class AuditoriaContableController extends BaseModuloController
             . ' border">' . htmlspecialchars(self::REVISION_LABEL[$rev] ?? $rev) . '</span>';
         $origenLabel = htmlspecialchars(self::ORIGEN_LABEL[$origen] ?? $origen);
 
-        $doc     = $r['id_documento'] !== null ? '#' . (int) $r['id_documento'] : '—';
+        $numeroDoc = trim((string) ($r['documento_numero'] ?? ''));
+        $doc = $numeroDoc !== ''
+            ? htmlspecialchars($numeroDoc)
+            : ($r['id_documento'] !== null ? '#' . (int) $r['id_documento'] : '—');
         $asiento = $r['id_asiento'] !== null ? '#' . (int) $r['id_asiento'] : '—';
         $mDoc    = $r['monto_documento'] !== null ? number_format((float) $r['monto_documento'], 2) : '—';
         $mAsi    = $r['monto_asiento'] !== null ? number_format((float) $r['monto_asiento'], 2) : '—';
