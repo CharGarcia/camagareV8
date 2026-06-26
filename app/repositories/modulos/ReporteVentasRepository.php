@@ -246,6 +246,34 @@ class ReporteVentasRepository extends BaseRepository
     }
 
     /**
+     * Reporte agrupado por mes (año-mes).
+     */
+    public function getReporteAgrupadoMes(int $idEmpresa, array $filtros): array
+    {
+        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
+
+        $sql = "
+            WITH bases AS (" . $this->getCteBasesImpuestos() . ")
+            SELECT
+                TO_CHAR(v.fecha_emision, 'YYYY-MM') as mes,
+                COUNT(v.id) as cantidad_facturas,
+                SUM(COALESCE(b.base_0, 0)) as base_0,
+                SUM(COALESCE(b.base_iva, 0)) as base_iva,
+                SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
+                SUM(v.importe_total) as total
+            FROM ventas_cabecera v
+            LEFT JOIN bases b ON b.id_venta = v.id
+            WHERE {$where}
+            GROUP BY TO_CHAR(v.fecha_emision, 'YYYY-MM')
+            ORDER BY mes DESC
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Obtiene estadísticas globales para el rango de fechas.
      */
     public function getEstadisticas(int $idEmpresa, array $filtros): array

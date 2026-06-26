@@ -132,6 +132,24 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('rc-anio').addEventListener('change', window.RC_cambiarMesAnio);
 });
 
+// Maneja el cambio de "Agrupar Por": al elegir "Por Mes" se fuerza el filtro Mes a "Todos".
+window.RC_onAgruparChange = function () {
+    const agruparPor = document.getElementById('rc_agrupar_por').value;
+    const mesEl = document.getElementById('rc-mes');
+
+    if (agruparPor === 'MES') {
+        mesEl.disabled = true;
+        if (mesEl.value !== 'TODOS') {
+            mesEl.value = 'TODOS';
+            window.RC_cambiarMesAnio(); // recalcula el rango de fechas y genera el reporte
+            return;
+        }
+    } else {
+        mesEl.disabled = false;
+    }
+    window.RC_generarReporte();
+};
+
 // ── Mes / Año ────────────────────────────────────────────────────────────────
 window.RC_cambiarMesAnio = function () {
     const mes  = document.getElementById('rc-mes').value;
@@ -245,6 +263,15 @@ function RC_dibujarCabecera(agruparPor) {
             <th class="text-end">Total IVA</th>
             <th class="text-end pe-4">Gran Total</th>
         `;
+    } else if (agruparPor === 'MES') {
+        th += `
+            <th class="ps-4">Mes</th>
+            <th class="text-center">Nro Comp.</th>
+            <th class="text-end">Base 0% / Exento</th>
+            <th class="text-end">Base IVA</th>
+            <th class="text-end">Total IVA</th>
+            <th class="text-end pe-4">Gran Total</th>
+        `;
     } else {
         // NINGUNO / DETALLADO — 12 columnas
         th += `
@@ -276,6 +303,13 @@ window.RC_cambiarTipoGrafico = function () {
     if (window.rc_last_raw_data) RC_dibujarGrafico(window.rc_last_raw_data, window.rc_last_agrupacion);
 };
 
+function RC_formatearMes(mes) {
+    if (!mes || mes.indexOf('-') === -1) return mes || '';
+    const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const [anio, num] = mes.split('-');
+    return (meses[parseInt(num, 10) - 1] || num) + ' ' + anio;
+}
+
 function RC_generarColores(n) {
     const paleta = [
         'rgba(220,53,69,.7)', 'rgba(255,193,7,.7)', 'rgba(13,110,253,.7)',
@@ -304,6 +338,11 @@ function RC_dibujarGrafico(rawData, agrupacion) {
     } else if (agrupacion === 'FECHA') {
         const sorted = [...rawData].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
         labels      = sorted.map(r => r.fecha);
+        dataTotales  = sorted.map(r => parseFloat(r.total));
+        defaultType  = 'line';
+    } else if (agrupacion === 'MES') {
+        const sorted = [...rawData].sort((a, b) => (a.mes > b.mes ? 1 : -1));
+        labels      = sorted.map(r => RC_formatearMes(r.mes));
         dataTotales  = sorted.map(r => parseFloat(r.total));
         defaultType  = 'line';
     } else {

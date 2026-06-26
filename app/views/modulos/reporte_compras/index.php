@@ -59,11 +59,12 @@
                                 <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rc_agrupar_por', 'agrupar_por') ?>
                             </label>
                             <select name="agrupar_por" id="rc_agrupar_por" class="form-select form-select-sm shadow-none border"
-                                    onchange="window.RC_generarReporte()">
+                                    onchange="window.RC_onAgruparChange()">
                                 <option value="NINGUNO" selected>Detallado (Ninguno)</option>
                                 <option value="PROVEEDOR">Por Proveedor</option>
                                 <option value="PRODUCTO">Por Producto</option>
                                 <option value="FECHA">Por Fecha</option>
+                                <option value="MES">Por Mes</option>
                             </select>
                         </div>
 

@@ -163,6 +163,24 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('rv-anio').addEventListener('change', window.RV_cambiarMesAnio);
 });
 
+// Maneja el cambio de "Agrupar Por": al elegir "Por Mes" se fuerza el filtro Mes a "Todos".
+window.RV_onAgruparChange = function() {
+    const agruparPor = document.getElementById('rv_agrupar_por').value;
+    const mesEl = document.getElementById('rv-mes');
+
+    if (agruparPor === 'MES') {
+        mesEl.disabled = true;
+        if (mesEl.value !== 'TODOS') {
+            mesEl.value = 'TODOS';
+            window.RV_cambiarMesAnio(); // recalcula el rango de fechas y genera el reporte
+            return;
+        }
+    } else {
+        mesEl.disabled = false;
+    }
+    window.RV_generarReporte();
+};
+
 window.RV_cambiarMesAnio = function() {
     const mes = document.getElementById('rv-mes').value;
     const anio = document.getElementById('rv-anio').value;
@@ -271,6 +289,13 @@ window.RV_cambiarTipoGrafico = function() {
     }
 };
 
+function RV_formatearMes(mes) {
+    if (!mes || mes.indexOf('-') === -1) return mes || '';
+    const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const [anio, num] = mes.split('-');
+    return (meses[parseInt(num, 10) - 1] || num) + ' ' + anio;
+}
+
 function RV_generarColores(cantidad) {
     const paleta = [
         'rgba(54, 162, 235, 0.7)', 'rgba(255, 99, 132, 0.7)', 'rgba(75, 192, 192, 0.7)',
@@ -310,7 +335,12 @@ function RV_dibujarGrafico(rawData, agrupacion) {
         let sortedData = [...rawData].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
         labels = sortedData.map(r => r.fecha);
         dataTotales = sortedData.map(r => parseFloat(r.total));
-        defaultType = 'line'; 
+        defaultType = 'line';
+    } else if (agrupacion === 'MES') {
+        let sortedData = [...rawData].sort((a, b) => (a.mes > b.mes ? 1 : -1));
+        labels = sortedData.map(r => RV_formatearMes(r.mes));
+        dataTotales = sortedData.map(r => parseFloat(r.total));
+        defaultType = 'line';
     } else {
         let limitData = rawData.slice(0, 30).reverse();
         labels = limitData.map(r => r.numero_factura);
@@ -389,6 +419,15 @@ function RV_dibujarCabecera(agruparPor) {
     } else if (agruparPor === 'FECHA') {
         theadHtml += `
             <th class="ps-4">Fecha</th>
+            <th class="text-center">Nro Facturas</th>
+            <th class="text-end">Base 0% / Exento</th>
+            <th class="text-end">Base IVA</th>
+            <th class="text-end">Total IVA</th>
+            <th class="text-end pe-4">Gran Total</th>
+        `;
+    } else if (agruparPor === 'MES') {
+        theadHtml += `
+            <th class="ps-4">Mes</th>
             <th class="text-center">Nro Facturas</th>
             <th class="text-end">Base 0% / Exento</th>
             <th class="text-end">Base IVA</th>

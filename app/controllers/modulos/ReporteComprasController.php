@@ -71,6 +71,8 @@ class ReporteComprasController extends BaseModuloController
                 $rows = $this->repository->getReporteAgrupadoProducto($idEmpresa, $filtros);
             } elseif ($filtros['agrupar_por'] === 'FECHA') {
                 $rows = $this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros);
+            } elseif ($filtros['agrupar_por'] === 'MES') {
+                $rows = $this->repository->getReporteAgrupadoMes($idEmpresa, $filtros);
             } else {
                 $rows = $this->repository->getReporteDetallado($idEmpresa, $filtros);
             }
@@ -143,6 +145,13 @@ class ReporteComprasController extends BaseModuloController
             $html .= "<td class='text-end'>$baseIva</td>";
             $html .= "<td class='text-end'>$iva</td>";
             $html .= "<td class='text-end fw-bold text-danger'>$total</td>";
+        } elseif ($agruparPor === 'MES') {
+            $html .= "<td><span class='fw-bold'>" . self::formatearMes($r['mes'] ?? '') . "</span></td>";
+            $html .= "<td class='text-center'>" . (int)($r['cantidad_comprobantes'] ?? 0) . "</td>";
+            $html .= "<td class='text-end'>$base0</td>";
+            $html .= "<td class='text-end'>$baseIva</td>";
+            $html .= "<td class='text-end'>$iva</td>";
+            $html .= "<td class='text-end fw-bold text-danger'>$total</td>";
         } else {
             // DETALLADO / NINGUNO
             $retenciones = number_format((float)($r['retenciones'] ?? 0), 2);
@@ -165,6 +174,24 @@ class ReporteComprasController extends BaseModuloController
 
         $html .= '</tr>';
         return $html;
+    }
+
+    /**
+     * Convierte 'YYYY-MM' a un nombre legible: 'Enero 2026'.
+     */
+    private static function formatearMes(string $mes): string
+    {
+        if ($mes === '' || strpos($mes, '-') === false) {
+            return htmlspecialchars($mes);
+        }
+        [$anio, $num] = explode('-', $mes);
+        $nombres = [
+            '01' => 'Enero', '02' => 'Febrero', '03' => 'Marzo', '04' => 'Abril',
+            '05' => 'Mayo', '06' => 'Junio', '07' => 'Julio', '08' => 'Agosto',
+            '09' => 'Septiembre', '10' => 'Octubre', '11' => 'Noviembre', '12' => 'Diciembre',
+        ];
+        $nombre = $nombres[str_pad($num, 2, '0', STR_PAD_LEFT)] ?? $num;
+        return $nombre . ' ' . $anio;
     }
 
     public function getProveedoresAjax(): void
@@ -217,6 +244,8 @@ class ReporteComprasController extends BaseModuloController
             $rows = $this->repository->getReporteAgrupadoProducto($idEmpresa, $filtros);
         } elseif ($filtros['agrupar_por'] === 'FECHA') {
             $rows = $this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros);
+        } elseif ($filtros['agrupar_por'] === 'MES') {
+            $rows = $this->repository->getReporteAgrupadoMes($idEmpresa, $filtros);
         } else {
             $rows = $this->repository->getReporteDetallado($idEmpresa, $filtros);
         }
@@ -260,6 +289,19 @@ class ReporteComprasController extends BaseModuloController
                 foreach ($rows as $r) {
                     $exportData[] = [
                         date('d/m/Y', strtotime($r['fecha'])),
+                        $r['cantidad_comprobantes'],
+                        (float)$r['base_0'],
+                        (float)$r['base_iva'],
+                        (float)$r['valor_iva'],
+                        (float)$r['total'],
+                    ];
+                }
+            } elseif ($filtros['agrupar_por'] === 'MES') {
+                $headers = ['Mes', 'Nro Comprobantes', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+                $exportData = [];
+                foreach ($rows as $r) {
+                    $exportData[] = [
+                        self::formatearMes($r['mes'] ?? ''),
                         $r['cantidad_comprobantes'],
                         (float)$r['base_0'],
                         (float)$r['base_iva'],
@@ -311,6 +353,8 @@ class ReporteComprasController extends BaseModuloController
             $rows = $this->repository->getReporteAgrupadoProducto($idEmpresa, $filtros);
         } elseif ($filtros['agrupar_por'] === 'FECHA') {
             $rows = $this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros);
+        } elseif ($filtros['agrupar_por'] === 'MES') {
+            $rows = $this->repository->getReporteAgrupadoMes($idEmpresa, $filtros);
         } else {
             $rows = $this->repository->getReporteDetallado($idEmpresa, $filtros);
         }
@@ -347,6 +391,8 @@ class ReporteComprasController extends BaseModuloController
                         <tr><th>Producto</th><th>Cant.</th><th>T. IVA</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
                     <?php elseif ($filtros['agrupar_por'] === 'FECHA'): ?>
                         <tr><th>Fecha</th><th>Nro Comp.</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
+                    <?php elseif ($filtros['agrupar_por'] === 'MES'): ?>
+                        <tr><th>Mes</th><th>Nro Comp.</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
                     <?php else: ?>
                         <tr><th>F. Emisión</th><th>Nro Documento</th><th>Proveedor</th><th>Tipo</th><th>Usuario</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th><th>Retenciones</th></tr>
                     <?php endif; ?>
@@ -376,6 +422,13 @@ class ReporteComprasController extends BaseModuloController
                                 <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
                                 <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
                                 <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
+                            <?php elseif ($filtros['agrupar_por'] === 'MES'): ?>
+                                <td class="text-center"><?= self::formatearMes($r['mes'] ?? '') ?></td>
+                                <td class="text-center"><?= $r['cantidad_comprobantes'] ?></td>
+                                <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
+                                <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
+                                <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
+                                <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
                             <?php else: ?>
                                 <td class="text-center"><?= date('d/m/Y', strtotime($r['fecha_emision'])) ?></td>
                                 <td><?= htmlspecialchars($r['numero_documento']) ?></td>
@@ -393,7 +446,7 @@ class ReporteComprasController extends BaseModuloController
                 </tbody>
                 <tfoot>
                     <tr style="background-color: #e9ecef;">
-                        <?php if ($filtros['agrupar_por'] === 'PROVEEDOR' || $filtros['agrupar_por'] === 'FECHA'): ?>
+                        <?php if ($filtros['agrupar_por'] === 'PROVEEDOR' || $filtros['agrupar_por'] === 'FECHA' || $filtros['agrupar_por'] === 'MES'): ?>
                             <th colspan="2" class="text-center" style="font-size: 10pt;">TOTALES:</th>
                         <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
                             <th colspan="3" class="text-center" style="font-size: 10pt;">TOTALES:</th>
