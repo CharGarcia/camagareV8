@@ -62,7 +62,7 @@ class AtsRepository extends BaseRepository
                        c.punto_emision_prov,
                        c.secuencial_prov,
                        c.fecha_emision,
-                       c.fecha_registro,
+                       COALESCE(c.fecha_registro, c.fecha_emision) AS fecha_registro,
                        c.importe_total,
                        c.parte_relacionada,
                        c.documento_modificado,
@@ -91,8 +91,8 @@ class AtsRepository extends BaseRepository
                 ) imp ON true
                 WHERE c.id_empresa = :id_empresa
                   AND c.eliminado = false
-                  AND c.fecha_registro BETWEEN :desde AND :hasta
-                ORDER BY c.fecha_registro, c.id";
+                  AND COALESCE(c.fecha_registro, c.fecha_emision) BETWEEN :desde AND :hasta
+                ORDER BY COALESCE(c.fecha_registro, c.fecha_emision), c.id";
         return $this->query($sql, [
             ':id_empresa' => $idEmpresa,
             ':desde'      => $desde,

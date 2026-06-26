@@ -279,7 +279,8 @@ class AtsExcelService
     {
         $c = 1;
         foreach ($cols as $titulo) {
-            $h->setCellValueByColumnAndRow($c, 1, $titulo);
+            $letra = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c);
+            $h->setCellValue($letra . '1', $titulo);
             $c++;
         }
         $ultima = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($cols));
@@ -295,7 +296,8 @@ class AtsExcelService
     private function autosize(Worksheet $h, array $cols): void
     {
         for ($i = 1, $n = count($cols); $i <= $n; $i++) {
-            $h->getColumnDimensionByColumn($i)->setAutoSize(true);
+            $letra = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i);
+            $h->getColumnDimension($letra)->setAutoSize(true);
         }
     }
 
