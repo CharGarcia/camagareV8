@@ -794,8 +794,6 @@ function generarDescargaSri() {
                 Swal.fire('Atención', data.error || 'No se pudo iniciar la descarga.', 'warning');
                 return;
             }
-            // Avisa a la extensión que ESTE flujo está activo, para que solo entonces actúe en el login del SRI.
-            window.postMessage({ source: 'cmg-sistema', accion: 'iniciar-descarga' }, window.location.origin);
             window.open('https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/pages/consultas/recibidos/comprobantesRecibidos.jsf', '_blank');
         })
         .catch(err => {

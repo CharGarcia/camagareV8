@@ -54,13 +54,9 @@
         yaLleno = true;
         chrome.runtime.sendMessage({ tipo: 'login_pendiente' }, (resp) => {
             if (chrome.runtime.lastError) return;
-            if (!resp || !resp.ok) {
-                // Sin descarga marcada = uso normal del SRI, no interferir. Otros errores sí se avisan.
-                if (resp && resp.error && !/pendiente/i.test(resp.error)) {
-                    banner('CaMaGaRe: ' + resp.error, '#dc3545');
-                }
-                return;
-            }
+            // Solo escribe si hay una descarga marcada. Si no (o si hay cualquier error), NO interfiere
+            // con el uso normal del SRI: no muestra ningún aviso.
+            if (!resp || !resp.ok) return;
             banner('CaMaGaRe: ingresando al SRI…', '#198754');
             escribir(u, resp.ruc);
             escribir(p, resp.clave);
@@ -97,18 +93,14 @@
     }
 
     if (urlEsLogin) {
-        // Solo actuar en el login si el usuario inició el flujo ("Generar descarga del SRI") hace poco.
-        // Si entró al SRI por su cuenta, NO interferir (ni llenar ni mostrar avisos).
-        chrome.storage.local.get('cmg_flujo_activo', ({ cmg_flujo_activo }) => {
-            if (!cmg_flujo_activo || (Date.now() - cmg_flujo_activo > 1800000)) return; // 30 min
-            let intentos = 0;
-            const iv = setInterval(() => {
-                const u = document.querySelector('#usuario');
-                const p = document.querySelector('#password');
-                if (u && p) { clearInterval(iv); hacerLlenado(u, p); return; }
-                if (++intentos > 20) clearInterval(iv);
-            }, 300);
-        });
+        // Pantalla de login: esperar el formulario (~6s) y llenarlo una vez (solo si hay descarga marcada).
+        let intentos = 0;
+        const iv = setInterval(() => {
+            const u = document.querySelector('#usuario');
+            const p = document.querySelector('#password');
+            if (u && p) { clearInterval(iv); hacerLlenado(u, p); return; }
+            if (++intentos > 20) clearInterval(iv);
+        }, 300);
     } else {
         // Página logueada que no es login ni comprobantes (p.ej. el perfil): saltar a comprobantes UNA vez.
         irAComprobantes();
