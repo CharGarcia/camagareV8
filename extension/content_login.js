@@ -97,14 +97,18 @@
     }
 
     if (urlEsLogin) {
-        // Pantalla de login: esperar el formulario (~6s) y llenarlo una vez.
-        let intentos = 0;
-        const iv = setInterval(() => {
-            const u = document.querySelector('#usuario');
-            const p = document.querySelector('#password');
-            if (u && p) { clearInterval(iv); hacerLlenado(u, p); return; }
-            if (++intentos > 20) clearInterval(iv);
-        }, 300);
+        // Solo actuar en el login si el usuario inició el flujo ("Generar descarga del SRI") hace poco.
+        // Si entró al SRI por su cuenta, NO interferir (ni llenar ni mostrar avisos).
+        chrome.storage.local.get('cmg_flujo_activo', ({ cmg_flujo_activo }) => {
+            if (!cmg_flujo_activo || (Date.now() - cmg_flujo_activo > 1800000)) return; // 30 min
+            let intentos = 0;
+            const iv = setInterval(() => {
+                const u = document.querySelector('#usuario');
+                const p = document.querySelector('#password');
+                if (u && p) { clearInterval(iv); hacerLlenado(u, p); return; }
+                if (++intentos > 20) clearInterval(iv);
+            }, 300);
+        });
     } else {
         // Página logueada que no es login ni comprobantes (p.ej. el perfil): saltar a comprobantes UNA vez.
         irAComprobantes();
