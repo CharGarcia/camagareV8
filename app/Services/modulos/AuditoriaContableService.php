@@ -293,6 +293,69 @@ class AuditoriaContableService
         ];
     }
 
+    /**
+     * Regenera el asiento de UN solo documento (corrección de un clic para
+     * monto_no_coincide, descuadrado y cab_vs_detalle): anula los asientos vivos
+     * de ese documento y lo vuelve a generar con la configuración actual.
+     * Aborta si algún asiento del documento cae en un período cerrado.
+     */
+    public function regenerarDocumento(int $idIncidencia, int $idEmpresa, int $idUsuario): array
+    {
+        $inc = $this->repo->getIncidenciaPorId($idIncidencia, $idEmpresa);
+        if ($inc === null) {
+            throw new \Exception('Incidencia no encontrada.');
+        }
+        $origen = (string) $inc['modulo_origen'];
+        $this->rules->validarOrigen($origen, $this->repo->getOrigenes());
+
+        $idDoc = (int) ($inc['id_documento'] ?? 0);
+        if ($idDoc <= 0) {
+            throw new \Exception('La incidencia no tiene documento asociado para regenerar.');
+        }
+
+        $asientos = $this->repo->getAsientosDeDocumento($idEmpresa, $origen, $idDoc);
+
+        // Salvaguarda: no tocar nada si algún asiento del documento está en período cerrado.
+        foreach ($asientos as $a) {
+            $fecha = substr((string) $a['fecha_asiento'], 0, 10);
+            if ($fecha !== '' && $this->repo->fechaEnPeriodoCerrado($idEmpresa, $fecha)) {
+                throw new \Exception('El asiento pertenece a un período contable cerrado; no se puede regenerar.');
+            }
+        }
+
+        // Fase 1: anular + desvincular (atómica)
+        $anulados = 0;
+        $this->repo->beginTransaction();
+        try {
+            foreach ($asientos as $a) {
+                $this->repo->anularAsiento((int) $a['id'], $idEmpresa, $idUsuario);
+                $anulados++;
+            }
+            $this->repo->desvincularDocumento($origen, $idDoc, $idEmpresa);
+            $this->repo->commit();
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+
+        // Fase 2: regenerar el documento
+        try {
+            $this->serviceParaOrigen($origen)->procesarAsientoContablePorSincronizacion($idDoc);
+        } catch (\Throwable $e) {
+            $this->log->registrar($idUsuario, $idEmpresa, 'auditoria_regenerar_documento_error',
+                $origen, $idDoc, null, ['anulados' => $anulados, 'error' => $e->getMessage()]);
+            throw new \Exception('Se anuló el asiento anterior pero falló la regeneración: ' . $e->getMessage()
+                . ' Revise la configuración de cuentas del origen.');
+        }
+
+        $this->log->registrar($idUsuario, $idEmpresa, 'auditoria_regenerar_documento',
+            $origen, $idDoc, null, ['anulados' => $anulados]);
+
+        $this->ejecutarAuditoria($idEmpresa, $idUsuario, $origen);
+
+        return ['anulados' => $anulados, 'regenerado' => true];
+    }
+
     // ==================================================================
     //  LECTURA PARA LA VISTA (delegación)
     // ==================================================================

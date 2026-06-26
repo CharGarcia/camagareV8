@@ -207,6 +207,9 @@ $totalIncidencias = array_sum($resumen);
                                     <?php if ($tipo === 'ambiente_incoherente' && !empty($perm['actualizar'])): ?>
                                         <button class="btn btn-sm btn-outline-info js-aud-ambiente" title="Corregir ambiente"><i class="bi bi-arrow-repeat"></i></button>
                                     <?php endif; ?>
+                                    <?php if (in_array($tipo, ['monto_no_coincide','descuadrado','cab_vs_detalle'], true) && !empty($perm['eliminar'])): ?>
+                                        <button class="btn btn-sm btn-outline-danger js-aud-regen-doc" title="Regenerar este asiento"><i class="bi bi-arrow-clockwise"></i></button>
+                                    <?php endif; ?>
                                     <?php if (!empty($perm['actualizar'])): ?>
                                         <button class="btn btn-sm btn-outline-primary js-aud-revisar" title="Marcar revisión"><i class="bi bi-check2-square"></i></button>
                                     <?php endif; ?>

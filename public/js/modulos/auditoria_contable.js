@@ -107,6 +107,18 @@
             .then((res) => { if (res.ok) { toast('success', res.mensaje); fetchSearch(); } else err(res.error); });
     }
 
+    function regenerarDocumento(tr) {
+        Swal.fire({
+            title: 'Regenerar este asiento',
+            html: 'Se <strong>anulará</strong> el asiento actual del documento y se <strong>volverá a generar</strong> con la configuración vigente.',
+            icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Regenerar',
+        }).then((r) => {
+            if (!r.isConfirmed) return;
+            postForm('regenerarDocumentoAjax', { id: tr.dataset.id })
+                .then((res) => { if (res.ok) { toast('success', res.mensaje); fetchSearch(); } else err(res.error); });
+        });
+    }
+
     function abrirRevision(tr) {
         document.getElementById('revIncidenciaId').value = tr.dataset.id;
         document.getElementById('revEstado').value = 'revisada';
@@ -253,6 +265,7 @@
             const tr = getFila(btn);
             if (btn.classList.contains('js-aud-generar')) generarFaltante(tr);
             else if (btn.classList.contains('js-aud-ambiente')) corregirAmbiente(tr);
+            else if (btn.classList.contains('js-aud-regen-doc')) regenerarDocumento(tr);
             else if (btn.classList.contains('js-aud-revisar')) abrirRevision(tr);
             else if (btn.classList.contains('js-aud-duplicado')) abrirDuplicados(tr);
         });

@@ -742,6 +742,7 @@ class AuditoriaContableRepository extends BaseRepository
                 FROM asientos_contables_cabecera
                 WHERE id_empresa = :id_empresa
                   AND eliminado = false
+                  AND estado <> 'anulado'
                   AND modulo_origen = '{$origen}'
                   AND id_referencia_origen = :iddoc
                   AND CAST(tipo_ambiente AS VARCHAR(1)) = {$amb}

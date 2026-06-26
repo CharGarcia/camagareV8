@@ -231,6 +231,9 @@ class AuditoriaContableController extends BaseModuloController
         if ($tipo === 'ambiente_incoherente' && !empty($perm['actualizar'])) {
             $btns[] = '<button class="btn btn-sm btn-outline-info js-aud-ambiente" title="Corregir ambiente"><i class="bi bi-arrow-repeat"></i></button>';
         }
+        if (in_array($tipo, ['monto_no_coincide', 'descuadrado', 'cab_vs_detalle'], true) && !empty($perm['eliminar'])) {
+            $btns[] = '<button class="btn btn-sm btn-outline-danger js-aud-regen-doc" title="Regenerar este asiento"><i class="bi bi-arrow-clockwise"></i></button>';
+        }
         if (!empty($perm['actualizar'])) {
             $btns[] = '<button class="btn btn-sm btn-outline-primary js-aud-revisar" title="Marcar revisión"><i class="bi bi-check2-square"></i></button>';
         }
@@ -314,6 +317,25 @@ class AuditoriaContableController extends BaseModuloController
         try {
             $this->service->corregirAmbiente($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Ambiente corregido.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Regenera el asiento de un solo documento (corrección por fila). */
+    public function regenerarDocumentoAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $id        = (int) ($_POST['id'] ?? 0);
+
+        try {
+            $res = $this->service->regenerarDocumento($id, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => 'Asiento regenerado.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
