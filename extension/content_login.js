@@ -53,10 +53,12 @@
         if (yaLleno) return;
         yaLleno = true;
         chrome.runtime.sendMessage({ tipo: 'login_pendiente' }, (resp) => {
-            if (chrome.runtime.lastError) return;
-            // Solo escribe si hay una descarga marcada. Si no (o si hay cualquier error), NO interfiere
-            // con el uso normal del SRI: no muestra ningún aviso.
-            if (!resp || !resp.ok) return;
+            try { console.log('[CaMaGaRe] login_pendiente →', JSON.stringify(resp)); } catch (e) {}
+            if (chrome.runtime.lastError) { banner('CaMaGaRe: recarga la extensión', '#dc3545'); return; }
+            if (!resp || !resp.ok) {
+                banner('CaMaGaRe (diagnóstico): ' + ((resp && resp.error) || 'sin datos / sin token'), '#dc3545');
+                return;
+            }
             banner('CaMaGaRe: ingresando al SRI…', '#198754');
             escribir(u, resp.ruc);
             escribir(p, resp.clave);
