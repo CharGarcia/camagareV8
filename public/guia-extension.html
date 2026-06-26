@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cómo descargar tus comprobantes del SRI — CaMaGaRe</title>
+  <style>
+    :root { --azul:#0d6efd; --verde:#198754; }
+    * { box-sizing: border-box; }
+    body { font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; color:#222; max-width:780px;
+           margin:0 auto; padding:28px 20px 60px; line-height:1.6; }
+    header { display:flex; align-items:center; gap:14px; border-bottom:2px solid #eee; padding-bottom:16px; margin-bottom:8px; }
+    .logo { width:54px; height:54px; border-radius:13px; background:var(--azul); flex:none; display:flex; align-items:center; justify-content:center; }
+    .logo svg { width:36px; height:36px; }
+    h1 { font-size:23px; margin:0; }
+    .sub { color:#666; font-size:14px; }
+    .paso { display:flex; gap:16px; margin:22px 0; }
+    .num { width:34px; height:34px; flex:none; border-radius:50%; background:var(--azul); color:#fff;
+           font-weight:bold; display:flex; align-items:center; justify-content:center; font-size:16px; }
+    .paso h3 { margin:2px 0 4px; font-size:17px; }
+    .paso p { margin:4px 0; }
+    .btn { display:inline-block; background:var(--verde); color:#fff; text-decoration:none; font-weight:bold;
+           padding:11px 20px; border-radius:8px; margin:6px 0; }
+    .azul { color:var(--azul); font-weight:bold; }
+    .nota { background:#f4f8ff; border-left:4px solid var(--azul); padding:12px 16px; border-radius:6px; margin:14px 0; font-size:14px; }
+    kbd { background:#eef1f6; border:1px solid #d6dbe5; border-radius:4px; padding:1px 6px; font-weight:bold; font-size:13px; }
+    footer { margin-top:42px; border-top:1px solid #eee; padding-top:14px; color:#888; font-size:13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo"><svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg"><path d="M64 26 V70" stroke="#fff" stroke-width="10" stroke-linecap="round"/><path d="M46 54 L64 72 L82 54" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/><rect x="40" y="88" width="48" height="10" rx="5" fill="#fff"/></svg></div>
+    <div>
+      <h1>Descargar tus comprobantes del SRI</h1>
+      <div class="sub">Guía rápida · Extensión «CaMaGaRe — Descarga SRI» para Google Chrome</div>
+    </div>
+  </header>
+
+  <p>Con esta extensión descargas tus comprobantes <strong>recibidos</strong> del SRI hacia tu sistema
+  CaMaGaRe en pocos clics. Solo se instala <strong>una vez</strong>.</p>
+
+  <div class="paso">
+    <div class="num">1</div>
+    <div>
+      <h3>Instala la extensión</h3>
+      <p>Desde <strong>Google Chrome</strong>, abre la tienda y agrégala:</p>
+      <a class="btn" href="https://chromewebstore.google.com/detail/efbhpocfaimlpakbhnoakafeflghejin" target="_blank" rel="noopener">Instalar la extensión</a>
+      <p>Pulsa <kbd>Añadir a Chrome</kbd> y confirma con <kbd>Agregar extensión</kbd>.</p>
+    </div>
+  </div>
+
+  <div class="paso">
+    <div class="num">2</div>
+    <div>
+      <h3>Entra a tu sistema CaMaGaRe</h3>
+      <p>Inicia sesión y ve a <span class="azul">Descargas SRI</span>. La extensión se <strong>conecta sola</strong>
+      con tu cuenta: no tienes que configurar nada.</p>
+    </div>
+  </div>
+
+  <div class="paso">
+    <div class="num">3</div>
+    <div>
+      <h3>Pulsa «Generar descarga del SRI»</h3>
+      <p>Elige primero la <strong>empresa</strong> con la que quieres trabajar. Al pulsar el botón, se abre el
+      portal del SRI, entra solo con tu RUC y clave, y te lleva a <strong>Comprobantes recibidos</strong>.</p>
+    </div>
+  </div>
+
+  <div class="paso">
+    <div class="num">4</div>
+    <div>
+      <h3>Consulta en el SRI</h3>
+      <p>Selecciona <strong>año, mes, día y tipo de documento</strong> y pulsa <kbd>Consultar</kbd>
+      (resuelve el captcha como siempre). Puedes consultar los períodos que necesites.</p>
+    </div>
+  </div>
+
+  <div class="paso">
+    <div class="num">5</div>
+    <div>
+      <h3>Pulsa «Enviar comprobantes al sistema»</h3>
+      <p>Es el botón azul que aparece abajo a la derecha. Tu sistema descarga y registra los comprobantes,
+      y verás un resumen: <strong>Nuevos · Ya existían · Errores</strong>. Repite el paso 4 y 5 para otros períodos.</p>
+    </div>
+  </div>
+
+  <div class="paso">
+    <div class="num">6</div>
+    <div>
+      <h3>¿Cambiar de empresa?</h3>
+      <p>Pulsa el botón rojo <strong>«✕ Cerrar sesión SRI»</strong>, vuelve a tu sistema, cambia de empresa y
+      repite desde el paso 3.</p>
+    </div>
+  </div>
+
+  <div class="nota"><strong>Importante:</strong> el captcha del SRI lo resuelves tú, como siempre. La extensión
+  solo te ahorra escribir el RUC y la clave y te lleva directo al listado.</div>
+
+  <footer>¿Dudas? Escríbenos a soporte@camagare.com.ec</footer>
+</body>
+</html>

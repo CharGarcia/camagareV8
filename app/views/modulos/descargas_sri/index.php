@@ -245,9 +245,13 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                         <p class="mb-2">Abre el portal del SRI con el RUC y clave del SRI actual, y automáticamente se ubica en <strong>descargas de documentos recibidos</strong> para que el usuario seleccione <strong>año, mes, día y tipo de documento</strong> y dé clic en <strong>Consultar</strong>.</p>
                                         <p class="mb-2">Luego pulsa <strong>«Enviar comprobantes al sistema»</strong> en el portal.</p>
                                         <div class="border-top pt-2 mt-2">
-                                            <span class="fw-semibold"><i class="bi bi-puzzle me-1"></i>Requiere la extensión de Chrome instalada.</span><br>
-                                            <!-- TODO: reemplazar el href por el enlace directo de la extensión cuando esté publicada en la Chrome Web Store -->
-                                            Para instalarla, abre la <a href="https://chromewebstore.google.com/" target="_blank" rel="noopener" class="fw-semibold">Chrome Web Store</a>, busca <strong>«CaMaGaRe — Descarga SRI»</strong>, pulsa <strong>«Añadir a Chrome»</strong> y confirma con <strong>«Agregar extensión»</strong>. Es gratis; al terminar, recarga esta página.
+                                            <span class="fw-semibold"><i class="bi bi-puzzle me-1"></i>Requiere la extensión de Chrome instalada (una sola vez).</span>
+                                            <div class="mt-2">
+                                                <a href="https://chromewebstore.google.com/detail/efbhpocfaimlpakbhnoakafeflghejin" target="_blank" rel="noopener" class="btn btn-success btn-sm">
+                                                    <i class="bi bi-download me-1"></i> Instalar la extensión
+                                                </a>
+                                            </div>
+                                            <div class="mt-2">Pulsa el botón, luego <strong>«Añadir a Chrome»</strong> y confirma con <strong>«Agregar extensión»</strong>. Al terminar, <strong>recarga esta página</strong> y ya puedes usar "Generar descarga del SRI".</div>
                                         </div>
                                     </div>
                                 </div>
