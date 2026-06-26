@@ -316,6 +316,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
     }
     let CONS_BLOQUEAR_SECUENCIAL = false;
 
+    // Clave de borrador local por empresa + usuario (igual que en Facturas de Venta).
+    const CONS_STORAGE_KEY = 'cons_borrador_<?= (int)($_SESSION['id_empresa'] ?? 0) ?>_<?= (int)($_SESSION['id_usuario'] ?? 0) ?>';
+
     function debounce(func, wait) {
         let timeout;
         return function executedFunction(...args) {
@@ -329,6 +332,20 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
     }
 
     function abrirModalConsignacionNueva() {
+        // ── Borrador local: si hay una consignación sin guardar, avisar antes de abrir ──
+        if (!window._CONS_SKIP_BORRADOR) {
+            let borrador = null;
+            try {
+                const raw = localStorage.getItem(CONS_STORAGE_KEY);
+                if (raw) borrador = JSON.parse(raw);
+            } catch (e) {}
+            if (borrador && (borrador.id_cliente || (borrador.detalles && borrador.detalles.length))) {
+                consMostrarAvisoBorrador(borrador);
+                return;
+            }
+        }
+        window._CONS_SKIP_BORRADOR = false;
+
         CONS_BLOQUEAR_SECUENCIAL = false;
         document.getElementById('formConsignacion').reset();
         document.getElementById('cons_id').value = '';
@@ -381,7 +398,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         const modal = new bootstrap.Modal(modalEl);
         
         modalEl.addEventListener('shown.bs.modal', function onModalShown() {
-            document.getElementById('cons_cliente_busqueda').focus();
+            if (window._CONS_BORRADOR_PENDIENTE) {
+                const b = window._CONS_BORRADOR_PENDIENTE;
+                window._CONS_BORRADOR_PENDIENTE = null;
+                consRestaurar(b);
+            } else {
+                document.getElementById('cons_cliente_busqueda').focus();
+            }
             modalEl.removeEventListener('shown.bs.modal', onModalShown);
         });
         
@@ -1276,6 +1299,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             });
             const data = await res.json();
             if(data.ok) {
+                consLimpiarBorrador();
                 Swal.fire('Éxito', data.msg, 'success');
                 bootstrap.Modal.getInstance(document.getElementById('modalConsignacion')).hide();
                 cargarGrid();
@@ -1888,6 +1912,219 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             });
         }
     }
+
+    // =====================================================================
+    // BORRADOR LOCAL - Auto-guardado de consignación sin guardar
+    // (mismo patrón que Facturas de Venta: 100% localStorage del navegador)
+    // =====================================================================
+
+    /** Serializa el estado actual del modal a un objeto plano (sin secuencial). */
+    function consCapturarEstado() {
+        const e = {};
+        e.fecha_emision           = document.getElementById('cons_fecha_emision')?.value || '';
+        e.id_punto_emision        = document.getElementById('cons_id_punto_emision')?.value || '';
+        e.id_bodega               = document.getElementById('cons_id_bodega')?.value || '';
+        e.id_vendedor             = document.getElementById('cons_id_vendedor')?.value || '';
+        e.id_responsable_traslado = document.getElementById('cons_id_responsable_traslado')?.value || '';
+        e.id_cliente              = document.getElementById('cons_id_cliente')?.value || '';
+        e.cliente_busqueda        = document.getElementById('cons_cliente_busqueda')?.value || '';
+        e.punto_partida           = document.getElementById('cons_punto_partida')?.value || '';
+        e.punto_llegada           = document.getElementById('cons_punto_llegada')?.value || '';
+        e.fecha_entrega           = document.getElementById('cons_fecha_entrega')?.value || '';
+        e.hora_entrega_desde      = document.getElementById('cons_hora_entrega_desde')?.value || '';
+        e.hora_entrega_hasta      = document.getElementById('cons_hora_entrega_hasta')?.value || '';
+        e.observaciones           = document.getElementById('cons_observaciones')?.value || '';
+
+        e.detalles = [];
+        document.querySelectorAll('#cons_detalles_body tr.row-detalle-cons').forEach(tr => {
+            const idProd = tr.querySelector('.input-id-producto')?.value || '';
+            const nombre = tr.querySelector('.input-descripcion')?.value || '';
+            if (!idProd && !nombre.trim()) return; // ignorar filas vacías
+            const fLote = tr.querySelector('.input-lote');
+            const fCad  = tr.querySelector('.input-caducidad');
+            const fNup  = tr.querySelector('.input-nup');
+            e.detalles.push({
+                id_producto:      idProd,
+                codigo:           tr.querySelector('.input-codigo')?.value || '',
+                nombre:           nombre,
+                cantidad:         tr.querySelector('.input-cantidad')?.value || '',
+                precio:           tr.querySelector('.input-precio')?.value || '',
+                precio_base:      tr.querySelector('.input-precio-base-original')?.value || '0',
+                id_pedido_detalle: tr.querySelector('.input-id-pedido-detalle')?.value || '',
+                id_bodega:        tr.dataset.idBodega || '',
+                inventariable:    tr.dataset.inventariable || '',
+                tipo_produccion:  tr.dataset.tipoProduccion || '01',
+                lote:             (fLote && !fLote.classList.contains('d-none')) ? fLote.value : '',
+                fecha_caducidad:  (fCad  && !fCad.classList.contains('d-none'))  ? fCad.value  : '',
+                nup:              (fNup  && !fNup.classList.contains('d-none'))  ? fNup.value  : ''
+            });
+        });
+        return e;
+    }
+
+    /** Guarda el estado actual en localStorage (solo al crear, no al editar). */
+    function consAutoGuardar() {
+        try {
+            // Solo cuando se está creando una NUEVA (sin id) y el modal está abierto.
+            if (document.getElementById('cons_id')?.value) return;
+            const modalEl = document.getElementById('modalConsignacion');
+            if (!modalEl || !modalEl.classList.contains('show')) return;
+
+            const estado = consCapturarEstado();
+            if (!estado.id_cliente && !estado.detalles.length) {
+                localStorage.removeItem(CONS_STORAGE_KEY);
+                return;
+            }
+            localStorage.setItem(CONS_STORAGE_KEY, JSON.stringify(estado));
+        } catch (e) {
+            /* localStorage puede estar lleno o deshabilitado */
+        }
+    }
+
+    /** Elimina el borrador guardado. */
+    function consLimpiarBorrador() {
+        try { localStorage.removeItem(CONS_STORAGE_KEY); } catch (e) {}
+    }
+
+    /** Aviso (overlay) cuando hay una consignación sin guardar. */
+    function consMostrarAvisoBorrador(borrador) {
+        const previo = document.getElementById('cons-borrador-aviso');
+        if (previo) previo.remove();
+
+        const divAviso = document.createElement('div');
+        divAviso.id = 'cons-borrador-aviso';
+        divAviso.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;';
+        const clienteName = borrador.cliente_busqueda || 'desconocido';
+        divAviso.innerHTML = `
+            <div class="bg-white rounded-3 shadow-lg p-4" style="max-width:420px;width:90%;">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <i class="bi bi-exclamation-triangle-fill text-warning fs-4"></i>
+                    <h6 class="fw-bold mb-0">Consignación sin guardar</h6>
+                </div>
+                <p class="small text-muted mb-4">Hay una consignación en borrador del cliente <strong>${clienteName}</strong> que no fue guardada. ¿Qué desea hacer?</p>
+                <div class="d-flex gap-2 justify-content-end">
+                    <button class="btn btn-sm btn-outline-secondary" id="cons-aviso-nueva">
+                        <i class="bi bi-file-earmark-plus me-1"></i> Nueva consignación
+                    </button>
+                    <button class="btn btn-sm btn-primary" id="cons-aviso-restaurar">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i> Cargar borrador
+                    </button>
+                </div>
+            </div>`;
+        document.body.appendChild(divAviso);
+
+        document.getElementById('cons-aviso-restaurar').onclick = () => {
+            divAviso.remove();
+            window._CONS_SKIP_BORRADOR = true;
+            window._CONS_BORRADOR_PENDIENTE = borrador;
+            abrirModalConsignacionNueva();
+        };
+        document.getElementById('cons-aviso-nueva').onclick = () => {
+            consLimpiarBorrador();
+            divAviso.remove();
+            window._CONS_SKIP_BORRADOR = true;
+            abrirModalConsignacionNueva();
+        };
+    }
+
+    /** Restaura el estado guardado en el modal (se llama tras shown.bs.modal). */
+    async function consRestaurar(b) {
+        // Esperar a que el catálogo de puntos de emisión termine de cargarse (carga asíncrona).
+        const selPunto = document.getElementById('cons_id_punto_emision');
+        for (let i = 0; i < 40 && selPunto.options.length <= 1; i++) {
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        // Cabecera (la bodega debe fijarse antes de reconstruir los detalles para cargar lotes correctos)
+        if (b.fecha_emision)           document.getElementById('cons_fecha_emision').value = b.fecha_emision;
+        if (b.id_bodega)               document.getElementById('cons_id_bodega').value = b.id_bodega;
+        if (b.id_vendedor)             document.getElementById('cons_id_vendedor').value = b.id_vendedor;
+        if (b.id_responsable_traslado) document.getElementById('cons_id_responsable_traslado').value = b.id_responsable_traslado;
+        if (b.fecha_entrega)           document.getElementById('cons_fecha_entrega').value = b.fecha_entrega;
+        if (b.hora_entrega_desde)      document.getElementById('cons_hora_entrega_desde').value = b.hora_entrega_desde;
+        if (b.hora_entrega_hasta)      document.getElementById('cons_hora_entrega_hasta').value = b.hora_entrega_hasta;
+        document.getElementById('cons_observaciones').value = b.observaciones || '';
+
+        // Serie / punto de emisión → recalcula un secuencial FRESCO (no se guarda el viejo)
+        if (b.id_punto_emision && selPunto.querySelector(`option[value="${b.id_punto_emision}"]`)) {
+            selPunto.value = b.id_punto_emision;
+            await syncSerieConsignacion(b.id_punto_emision);
+        }
+
+        // Puntos de partida/llegada: fijar DESPUÉS del sync (que puede sobreescribir partida)
+        document.getElementById('cons_punto_partida').value = b.punto_partida || '';
+        document.getElementById('cons_punto_llegada').value = b.punto_llegada || '';
+
+        // Cliente
+        if (b.id_cliente) {
+            document.getElementById('cons_id_cliente').value = b.id_cliente;
+            document.getElementById('cons_cliente_busqueda').value = b.cliente_busqueda || '';
+        }
+
+        // Detalles
+        const tbody = document.getElementById('cons_detalles_body');
+        tbody.innerHTML = '';
+        for (const d of (b.detalles || [])) {
+            const tr = agregarFilaConsignacion();
+            tr.querySelector('.input-id-producto').value = d.id_producto || '';
+            tr.querySelector('.input-codigo').value = d.codigo || '';
+            tr.querySelector('.input-descripcion').value = d.nombre || '';
+            const inpPedDet = tr.querySelector('.input-id-pedido-detalle');
+            if (inpPedDet) inpPedDet.value = d.id_pedido_detalle || '';
+
+            tr.dataset.idProducto     = d.id_producto || '';
+            tr.dataset.inventariable  = d.inventariable;
+            tr.dataset.tipoProduccion = d.tipo_produccion || '01';
+            tr.dataset.idBodega       = d.id_bodega || document.getElementById('cons_id_bodega').value || '';
+
+            const pBase = parseFloat(d.precio_base) || 0;
+            tr.querySelector('.input-precio-base-original').value = pBase;
+            tr.querySelector('.input-cantidad').value = d.cantidad || 1;
+            const precioGuardado = parseFloat(d.precio) || 0;
+            tr.querySelector('.input-precio').value = precioGuardado.toFixed(2);
+
+            const selLista = tr.querySelector('.input-lista-precios');
+            selLista.innerHTML = `<option value="${pBase}">P. Base ($${pBase.toFixed(2)})</option>`;
+            if (Math.abs(precioGuardado - pBase) > 0.001) {
+                selLista.innerHTML = `<option value="${precioGuardado}" selected>Precio Guardado ($${precioGuardado.toFixed(2)})</option>` + selLista.innerHTML;
+            }
+            selLista.onchange = () => {
+                tr.querySelector('.input-precio').value = parseFloat(selLista.value).toFixed(2);
+                consCalcFila(selLista);
+            };
+
+            const esInv = (d.inventariable == true || d.inventariable == 'true' || d.inventariable == 1) && d.tipo_produccion !== '02';
+            if (esInv && typeof EMPRESA_CONFIG !== 'undefined' && EMPRESA_CONFIG.facturacion_inventario) {
+                await consCargarLotesFila(tr);
+                const fLote = tr.querySelector('.input-lote');
+                const fCad  = tr.querySelector('.input-caducidad');
+                const fNup  = tr.querySelector('.input-nup');
+                if (fLote && d.lote) {
+                    if (!Array.from(fLote.options).some(o => o.value === d.lote)) fLote.appendChild(new Option(d.lote, d.lote));
+                    fLote.value = d.lote;
+                }
+                if (fCad && d.fecha_caducidad) {
+                    if (!Array.from(fCad.options).some(o => o.value === d.fecha_caducidad)) fCad.appendChild(new Option(d.fecha_caducidad, d.fecha_caducidad));
+                    fCad.value = d.fecha_caducidad;
+                }
+                if (fNup) fNup.value = d.nup || '';
+            }
+
+            consCalcFila(tr.querySelector('.input-cantidad'));
+        }
+        if (!(b.detalles && b.detalles.length)) agregarFilaConsignacion();
+        consCalcTotales();
+    }
+
+    // Registrar el auto-guardado del borrador sobre el formulario de consignación.
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = document.getElementById('formConsignacion');
+        if (form) {
+            const debouncedGuardar = debounce(consAutoGuardar, 800);
+            form.addEventListener('input', debouncedGuardar);
+            form.addEventListener('change', debouncedGuardar);
+        }
+    });
 </script>
 
 <!-- Modal Crear Responsable de Traslado -->

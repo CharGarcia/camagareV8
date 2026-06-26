@@ -862,14 +862,224 @@
         return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
+    /* ════════════════════════════════════════════════════════════
+     * BORRADOR EN LOCALSTORAGE — auto-guardado de proforma sin guardar
+     * Réplica del mecanismo de factura de venta. Solo aplica a
+     * proformas NUEVAS (pf_id vacío); editar una existente no toca el
+     * borrador. Clave por empresa+usuario (PF_CONFIG.storageKey).
+     * ════════════════════════════════════════════════════════════ */
+    const _storageKey = () => CFG().storageKey || 'pf_borrador_0_0';
+
+    /** Serializa el estado actual del modal (sin secuencial ni id). */
+    function _capturarBorrador() {
+        const estado = {};
+
+        // Cliente
+        estado.id_cliente      = $id('pf_idCliente')?.value     || '';
+        estado.cliente_buscar  = $id('pf_clienteBuscar')?.value  || '';
+        estado.cliente_ruc     = $id('pf_clienteRuc')?.textContent    || '';
+        estado.cliente_nombre  = $id('pf_clienteNombre')?.textContent || '';
+        estado.cliente_email   = $id('pf_clienteEmail')?.textContent  || '';
+
+        // Cabecera
+        estado.id_punto_emision = $id('pf_punto')?.value          || '';
+        estado.fecha            = $id('pf_fecha')?.value          || '';
+        estado.dias_vigencia    = $id('pf_diasVigencia')?.value   || '';
+        estado.vigencia_unidad  = $id('pf_vigenciaUnidad')?.value || '';
+        estado.id_vendedor      = $id('pf_vendedor')?.value       || '';
+        estado.observaciones    = $id('pf_observaciones')?.value  || '';
+
+        // Detalles
+        estado.detalles = [];
+        document.querySelectorAll('#pf_tbodyDetalle .row-detalle').forEach(tr => {
+            const fila = {
+                id_producto: tr.querySelector('.input-id-producto')?.value || '',
+                codigo:      tr.querySelector('.input-codigo')?.value      || '',
+                descripcion: tr.querySelector('.input-descripcion')?.value || '',
+                adicional:   tr.querySelector('.input-adicional')?.value   || '',
+                cantidad:    tr.querySelector('.input-cantidad')?.value    || '',
+                precio:      tr.querySelector('.input-precio')?.value      || '',
+                precio_iva:  tr.querySelector('.input-precio-iva')?.value  || '',
+                descuento:   tr.querySelector('.input-desc')?.value        || '',
+                iva_id:      tr.querySelector('.input-iva')?.selectedOptions[0]?.dataset.id || '',
+            };
+            if (fila.id_producto || fila.descripcion.trim()) estado.detalles.push(fila);
+        });
+
+        // Info adicional (solo filas libres, no la fija de correo del cliente)
+        estado.info_adicional = [];
+        document.querySelectorAll('#pf_tbodyAdicional tr:not([data-tipo])').forEach(tr => {
+            const n = tr.querySelector('.inp-ad-nombre')?.value || '';
+            const v = tr.querySelector('.inp-ad-valor')?.value  || '';
+            if (n || v) estado.info_adicional.push({ nombre: n, valor: v });
+        });
+
+        return estado;
+    }
+
+    /** Guarda el estado actual en localStorage (solo si hay algo relevante). */
+    function _autoGuardarBorrador() {
+        // Solo proformas nuevas: si ya tiene id, no tocar el borrador.
+        if ($id('pf_id')?.value) return;
+        try {
+            const estado = _capturarBorrador();
+            if (!estado.id_cliente && !estado.detalles.length) {
+                localStorage.removeItem(_storageKey());
+                return;
+            }
+            localStorage.setItem(_storageKey(), JSON.stringify(estado));
+        } catch (e) { /* localStorage lleno o deshabilitado */ }
+    }
+
+    /** Elimina el borrador guardado. */
+    function _limpiarBorrador() {
+        try { localStorage.removeItem(_storageKey()); } catch (e) {}
+    }
+
+    /** Lee el borrador guardado (o null). */
+    function _leerBorrador() {
+        try {
+            const raw = localStorage.getItem(_storageKey());
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) { return null; }
+    }
+
+    /** Restaura un borrador en el modal (ya reseteado). */
+    function _restaurarBorrador(estado) {
+        // Cliente
+        if (estado.id_cliente) {
+            $id('pf_idCliente').value     = estado.id_cliente;
+            $id('pf_clienteBuscar').value = estado.cliente_buscar || '';
+            const infoDiv = $id('pf_infoCliente');
+            if (infoDiv) infoDiv.classList.remove('d-none');
+            const rucEl = $id('pf_clienteRuc');    if (rucEl) rucEl.textContent = estado.cliente_ruc    || '';
+            const nomEl = $id('pf_clienteNombre'); if (nomEl) nomEl.textContent = estado.cliente_nombre || '';
+            const emlEl = $id('pf_clienteEmail');  if (emlEl) emlEl.textContent = estado.cliente_email  || '';
+        }
+
+        // Cabecera
+        if (estado.fecha)          $id('pf_fecha').value         = estado.fecha;
+        if (estado.dias_vigencia)  $id('pf_diasVigencia').value  = estado.dias_vigencia;
+        if (estado.vigencia_unidad && $id('pf_vigenciaUnidad')) $id('pf_vigenciaUnidad').value = estado.vigencia_unidad;
+        if (estado.id_vendedor)    $id('pf_vendedor').value      = estado.id_vendedor;
+        if (estado.observaciones)  $id('pf_observaciones').value = estado.observaciones;
+
+        // Detalles
+        const tbody = $id('pf_tbodyDetalle');
+        tbody.innerHTML = '';
+        if (estado.detalles && estado.detalles.length) {
+            estado.detalles.forEach(fila => {
+                const tr = _crearFila();
+                tbody.appendChild(tr);
+                const set = (sel, val) => { const el = tr.querySelector(sel); if (el && val !== undefined) el.value = val; };
+                set('.input-id-producto', fila.id_producto);
+                set('.input-codigo',      fila.codigo);
+                set('.input-descripcion', fila.descripcion);
+                set('.input-adicional',   fila.adicional);
+                set('.input-cantidad',    fila.cantidad);
+                set('.input-precio',      fila.precio);
+                set('.input-precio-iva',  fila.precio_iva);
+                set('.input-desc',        fila.descuento);
+                // IVA por id de tarifa
+                if (fila.iva_id) {
+                    const selIva = tr.querySelector('.input-iva');
+                    const opt = selIva && Array.from(selIva.options).find(o => o.dataset.id == fila.iva_id);
+                    if (opt) selIva.selectedIndex = opt.index;
+                }
+                _recalcFila(tr);
+            });
+        } else {
+            tbody.appendChild(_crearFila());
+        }
+
+        // Info adicional libre (manteniendo la fila fija de correo si la hay)
+        if (estado.info_adicional && estado.info_adicional.length) {
+            const tbodyAd = $id('pf_tbodyAdicional');
+            estado.info_adicional.forEach(item => {
+                tbodyAd.appendChild(_crearFilaAdicional(item.nombre, item.valor));
+            });
+        }
+
+        _calcularTotales();
+    }
+
+    /** Engancha listeners de auto-guardado sobre el modal (una sola vez). */
+    let _borradorListenersOk = false;
+    function _registrarAutoGuardado() {
+        if (_borradorListenersOk) return;
+        const modal = $id('modalProforma');
+        if (!modal) return;
+        let timer;
+        const debounced = () => { clearTimeout(timer); timer = setTimeout(_autoGuardarBorrador, 800); };
+        modal.addEventListener('input', debounced);
+        modal.addEventListener('change', debounced);
+        _borradorListenersOk = true;
+    }
+
+    /** Muestra el overlay "Proforma sin guardar" con opciones nueva/restaurar. */
+    function _avisarBorrador(borrador) {
+        const aviso = document.createElement('div');
+        aviso.id = 'pf-borrador-aviso';
+        aviso.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;';
+        const clienteName = _esc(borrador.cliente_buscar || borrador.cliente_nombre || 'desconocido');
+        aviso.innerHTML = `
+            <div class="bg-white rounded-3 shadow-lg p-4" style="max-width:420px;width:90%;">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <i class="bi bi-exclamation-triangle-fill text-warning fs-4"></i>
+                    <h6 class="fw-bold mb-0">Proforma sin guardar</h6>
+                </div>
+                <p class="small text-muted mb-4">Hay una proforma en borrador del cliente <strong>${clienteName}</strong> que no fue guardada. ¿Qué desea hacer?</p>
+                <div class="d-flex gap-2 justify-content-end">
+                    <button class="btn btn-sm btn-outline-secondary" id="pf-aviso-nueva">
+                        <i class="bi bi-file-earmark-plus me-1"></i> Nueva proforma
+                    </button>
+                    <button class="btn btn-sm btn-primary" id="pf-aviso-restaurar">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i> Cargar borrador
+                    </button>
+                </div>
+            </div>`;
+        document.body.appendChild(aviso);
+
+        $id('pf-aviso-restaurar').onclick = () => {
+            aviso.remove();
+            _reset();
+            _initClienteBuscar();
+            const modalEl = $id('modalProforma');
+            modalEl.addEventListener('shown.bs.modal', function onShown() {
+                _restaurarBorrador(borrador);
+                this.removeEventListener('shown.bs.modal', onShown);
+            });
+            getModal().show();
+        };
+        $id('pf-aviso-nueva').onclick = () => {
+            _limpiarBorrador();
+            aviso.remove();
+            _reset();
+            _initClienteBuscar();
+            getModal().show();
+        };
+    }
+
     /* ── API pública ─────────────────────────────────────────── */
     const PF = {
 
         nueva() {
+            _registrarAutoGuardado();
+
+            // ¿Hay una proforma en borrador sin guardar?
+            const borrador = _leerBorrador();
+            if (borrador && (borrador.id_cliente || (borrador.detalles && borrador.detalles.length))) {
+                _avisarBorrador(borrador);
+                return;
+            }
+
             _reset();
             _initClienteBuscar();
             getModal().show();
         },
+
+        /** Limpia el borrador guardado (uso externo/manual si hiciera falta). */
+        limpiarBorrador() { _limpiarBorrador(); },
 
         async verDetalle(id) {
             _reset();
@@ -899,6 +1109,7 @@
 
                 if (!data.ok) { toast(data.error || 'Error al guardar', 'error'); return; }
 
+                _limpiarBorrador();
                 toast(data.msg || 'Guardado correctamente');
                 getModal().hide();
                 if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);

@@ -135,6 +135,13 @@ return [
         'id_submodulo' => 0, // Actualizar con el id real después de ejecutar create_retenciones_ventas.sql
         'legacy_rutas' => [],
     ],
+    'modulos/anexo-ats' => [
+        'id_submodulo' => 27, // submodulos_menu.id donde ruta='modulos/anexo-ats' (Anexo ATS)
+        'legacy_rutas' => [
+            'modulos/anexo_ats.php',
+            'sistema/modulos/anexo_ats.php',
+        ],
+    ],
 
     // ─── NÓMINA (id_modulo = 313) ────────────────────────────────────────────
     // 'modulos/empleados' => ['id_submodulo' => 169, 'legacy_rutas' => [...]],
@@ -156,6 +163,10 @@ return [
     'modulos/configuracion-contable' => [
         'id_submodulo' => 0,
         'legacy_rutas' => ['modulos/configuracion_contable', 'modulos/plantillas_contables', 'modulos/plantillas-contables'],
+    ],
+    'modulos/auditoria_contable' => [
+        'id_submodulo' => 188,
+        'legacy_rutas' => [],
     ],
     'modulos/empresa' => [
         'legacy_rutas' => ['modulos/empresa.php'],

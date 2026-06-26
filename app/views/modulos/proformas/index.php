@@ -184,6 +184,7 @@ window.BASE_URL   = '<?= $base ?>';
 window.PF_CONFIG  = {
     urlBase:    '<?= $urlBase ?>',
     tarifasIva: <?= json_encode(array_values($tarifasIva ?? [])) ?>,
+    storageKey: 'pf_borrador_<?= (int)($_SESSION['id_empresa'] ?? 0) ?>_<?= (int)($_SESSION['id_usuario'] ?? 0) ?>',
     perm: {
         ver:        <?= json_encode(!empty($perm['ver'])) ?>,
         crear:      <?= json_encode(!empty($perm['crear'])) ?>,
