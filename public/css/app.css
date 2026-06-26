@@ -125,14 +125,14 @@ body.cmg-has-table .cmg-main-content > .container-fluid > div:has(> h5) {
    (≥768px); en móvil se conserva el scroll natural del resto del CSS.
    ============================================================ */
 @media (min-width: 768px) {
-  .cmg-main-content:has(.cmg-table-card) {
+  body:not(.cmg-no-app-shell) .cmg-main-content:has(.cmg-table-card) {
     height: calc(100dvh - var(--cmg-sticky-h));
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
-  .cmg-main-content:has(.cmg-table-card) > .container,
-  .cmg-main-content:has(.cmg-table-card) > .container-fluid {
+  body:not(.cmg-no-app-shell) .cmg-main-content:has(.cmg-table-card) > .container,
+  body:not(.cmg-no-app-shell) .cmg-main-content:has(.cmg-table-card) > .container-fluid {
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
@@ -145,7 +145,7 @@ body.cmg-has-table .cmg-main-content > .container-fluid > div:has(> h5) {
     padding-bottom: 0 !important;
     padding-top: 0.5rem !important;
   }
-  .cmg-main-content:has(.cmg-table-card) .cmg-table-card {
+  body:not(.cmg-no-app-shell) .cmg-main-content:has(.cmg-table-card) .cmg-table-card {
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
@@ -153,34 +153,34 @@ body.cmg-has-table .cmg-main-content > .container-fluid > div:has(> h5) {
     min-height: 0;
     border-radius: 0 !important;
   }
-  .cmg-main-content:has(.cmg-table-card) .cmg-table-card > .card-header {
+  body:not(.cmg-no-app-shell) .cmg-main-content:has(.cmg-table-card) .cmg-table-card > .card-header {
     flex-shrink: 0;
   }
-  .cmg-main-content:has(.cmg-table-card) .cmg-table-card > .card-body {
+  body:not(.cmg-no-app-shell) .cmg-main-content:has(.cmg-table-card) .cmg-table-card > .card-body {
     flex: 1 1 auto;
     overflow: hidden;
     min-height: 0;
     padding: 0;
   }
-  .cmg-main-content:has(.cmg-table-card) [class*="-scroll"]:not([class*="cmg-"]) {
+  body:not(.cmg-no-app-shell) .cmg-main-content:has(.cmg-table-card) [class*="-scroll"]:not([class*="cmg-"]) {
     height: 100% !important;
     max-height: none !important;
     overflow-x: auto !important;   /* barra horizontal si las columnas no caben */
     overflow-y: auto !important;
   }
-  .cmg-main-content:has(.cmg-table-card) [class*="-scroll"]:not([class*="cmg-"]) .table {
+  body:not(.cmg-no-app-shell) .cmg-main-content:has(.cmg-table-card) [class*="-scroll"]:not([class*="cmg-"]) .table {
     width: auto !important;
     min-width: 100% !important;
     table-layout: auto;
   }
-  .cmg-main-content:has(.cmg-table-card) [class*="-scroll"]:not([class*="cmg-"]) .table td,
-  .cmg-main-content:has(.cmg-table-card) [class*="-scroll"]:not([class*="cmg-"]) .table th {
+  body:not(.cmg-no-app-shell) .cmg-main-content:has(.cmg-table-card) [class*="-scroll"]:not([class*="cmg-"]) .table td,
+  body:not(.cmg-no-app-shell) .cmg-main-content:has(.cmg-table-card) [class*="-scroll"]:not([class*="cmg-"]) .table th {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .cmg-main-content:has(.cmg-table-card) > .container > div:has(> h5),
-  .cmg-main-content:has(.cmg-table-card) > .container-fluid > div:has(> h5) {
+  body:not(.cmg-no-app-shell) .cmg-main-content:has(.cmg-table-card) > .container > div:has(> h5),
+  body:not(.cmg-no-app-shell) .cmg-main-content:has(.cmg-table-card) > .container-fluid > div:has(> h5) {
     padding-left: 0.75rem;
     padding-right: 0.75rem;
   }
@@ -324,7 +324,7 @@ body.cmg-has-table .cmg-main-content > .container-fluid > div:has(> h5) {
      100dvh − cmg-sticky-h. Usar margin-top en lugar de padding-top para no
      modificar esa altura y que el contenido arranque justo debajo del header. */
   body.cmg-has-table .cmg-main-content,
-  .cmg-main-content:has(.cmg-table-card) {
+  body:not(.cmg-no-app-shell) .cmg-main-content:has(.cmg-table-card) {
     padding-top: 0 !important;
     margin-top: var(--cmg-sticky-h) !important;
   }
