@@ -170,8 +170,8 @@
     }
 
     function wrapScrollContainers() {
-        document.querySelectorAll('[class*="-scroll"]:not([class*="cmg-"]):not(.cmg-scroll-wrapped)').forEach(function(el) {
-            el.classList.add('cmg-scroll-wrapped');
+        document.querySelectorAll('[class*="-scroll"]:not([class*="cmg-"]):not(.js-scroll-wrapped)').forEach(function(el) {
+            el.classList.add('js-scroll-wrapped');
             // En móvil NO creamos el wrapper horizontal: sin arrastre lateral
         });
     }

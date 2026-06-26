@@ -59,6 +59,7 @@ class BodegasController extends BaseModuloController
 
         $this->viewWithLayout('layouts.main', 'modulos.bodegas.index', [
             'titulo'     => 'Bodegas',
+            'fullWidth'  => true,
             'perm'       => $perm,
             'rutaModulo' => self::RUTA_MODULO,
             'rows'       => $rows,

@@ -27,6 +27,7 @@ class DescargasSriController extends Controller
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
         $this->viewWithLayout('layouts.main', 'modulos.descargas_sri.index', [
             'titulo'      => 'Descargas SRI',
+            'fullWidth'   => true,
             'rucEmpresa'  => $_SESSION['ruc_empresa'] ?? '',
             // Token del agente (autogenerado): la vista lo entrega a la extensión sin que el usuario lo configure.
             'agenteToken' => $idUsuario > 0 ? (new Usuario())->asegurarAgenteToken($idUsuario) : '',

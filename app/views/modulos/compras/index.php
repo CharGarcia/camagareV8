@@ -44,12 +44,12 @@ $tiposComprobanteMap = [
 ];
 ?>
 <style>
-    .cmg-scroll {
+    .compras-scroll {
         max-height: calc(100dvh - 240px);
         overflow-y: auto;
     }
 
-    .cmg-scroll thead th {
+    .compras-scroll thead th {
         position: sticky;
         top: 0;
         z-index: 1;
@@ -192,7 +192,7 @@ $tiposComprobanteMap = [
     </div>
 
     <div class="card-body p-0">
-        <div class="cmg-scroll w-100">
+        <div class="compras-scroll w-100">
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>

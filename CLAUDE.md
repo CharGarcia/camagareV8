@@ -140,7 +140,18 @@ eliminado (boolean), deleted_at, deleted_by
 **Tablas y vistas (listados principales)**
 - Deben incluir: **ordenamiento, buscador, paginación, exportación a PDF y Excel**, y opción de **filtrar/mostrar columnas por usuario**.
 - **Redimensionamiento de columnas**: los `<th>` usan `data-col`; el ancho se persiste por usuario con la clave `__columnas_anchos__` en preferencias.
-- **Formato**: `table-layout: fixed`, `text-overflow: ellipsis`, `white-space: nowrap` para celdas personalizadas.
+- **Formato de celdas personalizadas**: `text-overflow: ellipsis`, `white-space: nowrap` cuando la celda tenga un ancho acotado (`max-width`/`data-col`).
+
+**Layout a pantalla completa (borde a borde) — obligatorio en todo listado con tabla**
+- El listado ocupa **todo el ancho y alto disponibles**: la tarjeta de la tabla pega contra los filos izquierdo, derecho y el borde inferior de la ventana (justo sobre la barra de tareas). El título y el buscador/paginación quedan fijos; **solo hace scroll la tabla**.
+- Es **automático**: lo aplica el *app-shell* en `public/css/app.css`. Se activa en cualquier página que contenga una tarjeta con la clase **`cmg-table-card`** (vía la clase JS `body.cmg-has-table` y, como respaldo en CSS puro, `.cmg-main-content:has(.cmg-table-card)`). **El controlador NO necesita `fullWidth`** para esto.
+- **Estructura requerida en la vista**:
+  - Tarjeta del listado con la clase **`cmg-table-card`**.
+  - Fila de título con un **`<h5>`** (así recibe la sangría horizontal correcta al ir borde a borde).
+  - `card-body` con `p-0`, y dentro el **contenedor de scroll**.
+- **Nombre del contenedor de scroll (regla crítica)**: debe llamarse **`{modulo}-scroll`** (p. ej. `compras-scroll`, `clientes-scroll`). Debe **contener `-scroll`** y **NO** debe contener el prefijo **`cmg-`**. El prefijo `cmg-` está reservado para clases del framework y queda **excluido** del app-shell (`:not([class*="cmg-"])`); usar `cmg-scroll` rompe el layout (la tabla no se estira ni recorta bien). El marcador interno que agrega el JS es `js-scroll-wrapped` (sin `cmg-`, a propósito): **no** marcar contenedores de scroll con clases `cmg-…`.
+- **Comportamiento de columnas**: las columnas conservan su **ancho natural**. Si no caben, la tabla se ensancha y aparece **scroll horizontal** (las columnas NO se recortan). La tabla usa `table-layout: auto` con `min-width: 100%` (llena el ancho cuando sobra espacio).
+- **Barras de scroll**: 14px de grosor (vertical y horizontal), definidas globalmente en `app.css` para `[class*="-scroll"]:not([class*="cmg-"])`. No redefinir por módulo.
 
 **Búsqueda (buscador de listados)**
 - El buscador usa el helper `App\Helpers\FiltrosBusqueda` (texto libre + filtros `clave:valor`). **Nunca** concatenar la entrada del usuario en el SQL: siempre pasa por este helper con PDO preparadas.

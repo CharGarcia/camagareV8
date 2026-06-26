@@ -59,6 +59,7 @@ class PeriodosContablesController extends BaseModuloController
 
         $this->viewWithLayout('layouts.main', 'modulos.periodos_contables.index', [
             'titulo'     => 'Periodos Contables',
+            'fullWidth'  => true,
             'perm'       => $perm,
             'rutaModulo' => self::RUTA_MODULO,
             'rows'       => $rows,

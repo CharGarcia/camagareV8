@@ -114,6 +114,7 @@ class DeclaracionIvaController extends BaseModuloController
 
         $this->viewWithLayout('layouts.main', 'modulos/declaracion_iva/index', [
             'titulo' => 'Declaración de IVA (form 104 SRI)',
+            'fullWidth' => true,
             'perm' => $this->getPermisos(),
             'anio' => (int) $anio,
             'mes' => $mes,

@@ -43,7 +43,13 @@ body.cmg-has-table .cmg-main-content > .container-fluid {
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
-  padding-bottom: 0.5rem;
+  /* Borde a borde: sin margen lateral ni inferior; solo un respiro arriba */
+  max-width: 100% !important;
+  width: 100% !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-bottom: 0 !important;
+  padding-top: 0.5rem !important;
 }
 
 /* Título del módulo + botón Nuevo: no hace scroll, siempre visible */
@@ -77,24 +83,107 @@ body.cmg-has-table .cmg-main-content .cmg-table-card > .card-body {
 body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) {
   height: 100% !important;
   max-height: none !important;
-  overflow-x: hidden !important;
+  overflow-x: auto !important;   /* barra horizontal si las columnas no caben */
   overflow-y: auto !important;
   overscroll-behavior-y: contain;
-  touch-action: pan-y;   /* dedo solo mueve filas arriba/abajo */
+  touch-action: pan-x pan-y;
   -webkit-overflow-scrolling: touch;
 }
 
-/* Tabla: columnas se adaptan al ancho disponible sin desbordarse */
+/* Tabla: ancho natural. Llena el contenedor (min-width:100%) y, si las
+   columnas no caben, la tabla se ensancha y aparece scroll horizontal. */
 body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) .table {
-  width: 100% !important;
-  min-width: 0 !important;
-  table-layout: fixed;
+  width: auto !important;
+  min-width: 100% !important;
+  table-layout: auto;
 }
 body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) .table td,
 body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) .table th {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Tarjeta de tabla pegada a los filos: esquinas rectas (sin redondeo) */
+body.cmg-has-table .cmg-main-content .cmg-table-card {
+  border-radius: 0 !important;
+}
+
+/* El título del módulo (fila con el <h5>) recupera una pequeña sangría
+   horizontal para no quedar pegado al borde izquierdo de la pantalla. */
+body.cmg-has-table .cmg-main-content > .container > div:has(> h5),
+body.cmg-has-table .cmg-main-content > .container-fluid > div:has(> h5) {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+/* ============================================================
+   REFUERZO sin depender de la clase JS `cmg-has-table`.
+   Usa :has() (soportado en navegadores modernos) para que CUALQUIER
+   página con tabla quede a pantalla completa y borde a borde, aunque
+   por algún motivo el JS no haya marcado el body. Solo desktop/tablet
+   (≥768px); en móvil se conserva el scroll natural del resto del CSS.
+   ============================================================ */
+@media (min-width: 768px) {
+  .cmg-main-content:has(.cmg-table-card) {
+    height: calc(100dvh - var(--cmg-sticky-h));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .cmg-main-content:has(.cmg-table-card) > .container,
+  .cmg-main-content:has(.cmg-table-card) > .container-fluid {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+    max-width: 100% !important;
+    width: 100% !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-bottom: 0 !important;
+    padding-top: 0.5rem !important;
+  }
+  .cmg-main-content:has(.cmg-table-card) .cmg-table-card {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+    border-radius: 0 !important;
+  }
+  .cmg-main-content:has(.cmg-table-card) .cmg-table-card > .card-header {
+    flex-shrink: 0;
+  }
+  .cmg-main-content:has(.cmg-table-card) .cmg-table-card > .card-body {
+    flex: 1 1 auto;
+    overflow: hidden;
+    min-height: 0;
+    padding: 0;
+  }
+  .cmg-main-content:has(.cmg-table-card) [class*="-scroll"]:not([class*="cmg-"]) {
+    height: 100% !important;
+    max-height: none !important;
+    overflow-x: auto !important;   /* barra horizontal si las columnas no caben */
+    overflow-y: auto !important;
+  }
+  .cmg-main-content:has(.cmg-table-card) [class*="-scroll"]:not([class*="cmg-"]) .table {
+    width: auto !important;
+    min-width: 100% !important;
+    table-layout: auto;
+  }
+  .cmg-main-content:has(.cmg-table-card) [class*="-scroll"]:not([class*="cmg-"]) .table td,
+  .cmg-main-content:has(.cmg-table-card) [class*="-scroll"]:not([class*="cmg-"]) .table th {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cmg-main-content:has(.cmg-table-card) > .container > div:has(> h5),
+  .cmg-main-content:has(.cmg-table-card) > .container-fluid > div:has(> h5) {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
 }
 
 /* Variables según reglas del proyecto */
@@ -234,7 +323,8 @@ body.cmg-has-table [class*="-scroll"]:not([class*="cmg-"]) .table th {
   /* Páginas con tabla (cmg-has-table): el height ya está calculado como
      100dvh − cmg-sticky-h. Usar margin-top en lugar de padding-top para no
      modificar esa altura y que el contenido arranque justo debajo del header. */
-  body.cmg-has-table .cmg-main-content {
+  body.cmg-has-table .cmg-main-content,
+  .cmg-main-content:has(.cmg-table-card) {
     padding-top: 0 !important;
     margin-top: var(--cmg-sticky-h) !important;
   }
@@ -1054,19 +1144,20 @@ th[data-col] {
    por lo que además se agrega un indicador de gradiente derecho.
    ──────────────────────────────────────────────────────────────── */
 [class*="-scroll"]:not([class*="cmg-"]) {
-    scrollbar-width: thin;
+    scrollbar-width: auto;
     scrollbar-color: #adb5bd #f1f3f5;
 }
 [class*="-scroll"]:not([class*="cmg-"])::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 14px;
+    height: 14px;
 }
 [class*="-scroll"]:not([class*="cmg-"])::-webkit-scrollbar-track {
     background: #f1f3f5;
 }
 [class*="-scroll"]:not([class*="cmg-"])::-webkit-scrollbar-thumb {
     background: #adb5bd;
-    border-radius: 4px;
+    border-radius: 7px;
+    border: 3px solid #f1f3f5;   /* deja un margen para que el thumb no toque los bordes */
 }
 [class*="-scroll"]:not([class*="cmg-"])::-webkit-scrollbar-thumb:hover {
     background: #6c757d;

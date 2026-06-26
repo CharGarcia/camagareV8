@@ -45,6 +45,7 @@ class TransportistasController extends BaseModuloController
 
         $this->viewWithLayout('layouts.main', 'modulos/transportistas/index', [
             'titulo'      => 'Transportistas',
+            'fullWidth'   => true,
             'perm'        => $perm,
             'rows'        => $result['rows'],
             'total'       => $result['total'],
