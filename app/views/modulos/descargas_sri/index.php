@@ -354,9 +354,10 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
     </div>
 </div>
 
+<!-- Token del agente para la extensión CaMaGaRe: la extensión lo LEE de este elemento al cargar
+     (robusto, no depende del momento exacto) y también lo recibe por postMessage. Same-origin. -->
+<div id="cmg-config" data-token="<?= htmlspecialchars($agenteToken ?? '', ENT_QUOTES) ?>" hidden></div>
 <script>
-// Entrega el token del agente a la extensión CaMaGaRe (si está instalada), para que el usuario
-// NO tenga que configurarlo a mano. Es same-origin: solo lo recibe el content script de la extensión.
 (function () {
     var t = <?= json_encode($agenteToken ?? '') ?>;
     if (!t) return;
