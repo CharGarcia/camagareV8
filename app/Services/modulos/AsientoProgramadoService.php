@@ -36,6 +36,7 @@ class AsientoProgramadoService
         $idAsientoTipo = (int) $data['id_asiento_tipo'];
         $idReferencia = !empty($data['id_referencia']) ? (int) $data['id_referencia'] : null;
         $tipoReferencia = !empty($data['tipo_referencia']) ? trim($data['tipo_referencia']) : null;
+        $referenciaTexto = !empty($data['referencia_texto']) ? trim((string) $data['referencia_texto']) : null;
 
         // Resolving legacy or general 'asientos tipo' to actual concept name dynamically
         if ($tipoReferencia === 'asientos tipo' && $idAsientoTipo > 0) {
@@ -47,7 +48,7 @@ class AsientoProgramadoService
         }
 
         // Validar si ya existe una regla idéntica para evitar redundancia
-        if ($this->repo->existeRegla($idEmpresa, $idAsientoTipo, $idReferencia, $tipoReferencia)) {
+        if ($this->repo->existeRegla($idEmpresa, $idAsientoTipo, $idReferencia, $tipoReferencia, null, $referenciaTexto)) {
             throw new Exception('Ya existe un asiento programado con la misma configuración para el tipo de asiento y entidad seleccionados.');
         }
 
@@ -91,6 +92,7 @@ class AsientoProgramadoService
         $idAsientoTipo = (int) $data['id_asiento_tipo'];
         $idReferencia = !empty($data['id_referencia']) ? (int) $data['id_referencia'] : null;
         $tipoReferencia = !empty($data['tipo_referencia']) ? trim($data['tipo_referencia']) : null;
+        $referenciaTexto = !empty($data['referencia_texto']) ? trim((string) $data['referencia_texto']) : null;
 
         // Resolving legacy or general 'asientos tipo' to actual concept name dynamically
         if ($tipoReferencia === 'asientos tipo' && $idAsientoTipo > 0) {
@@ -102,7 +104,7 @@ class AsientoProgramadoService
         }
 
         // Validar si ya existe otra regla idéntica que no sea la actual
-        if ($this->repo->existeRegla($idEmpresa, $idAsientoTipo, $idReferencia, $tipoReferencia, $id)) {
+        if ($this->repo->existeRegla($idEmpresa, $idAsientoTipo, $idReferencia, $tipoReferencia, $id, $referenciaTexto)) {
             throw new Exception('Ya existe otro asiento programado configurado con el mismo tipo de asiento y entidad seleccionados.');
         }
 

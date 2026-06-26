@@ -84,7 +84,9 @@ $base = BASE_URL;
                 <select class="form-select form-select-sm border shadow-none" id="tipoAsientoSelector">
                     <option value="" disabled selected>-- Elija un Tipo de Asiento --</option>
                     <option value="ventas_factura">Ventas con Factura (Facturas y notas de crédito)</option>
+                    <!-- Oculto hasta crear el módulo de Ventas con Recibo:
                     <option value="ventas_recibo">Ventas con Recibo (Recibos no autorizados)</option>
+                    -->
                     <option value="adquisiciones_compras">Adquisiciones de Compras/Servicios (Documentos recibidos)</option>
                     <option value="retenciones_venta">Retenciones en Venta</option>
                     <option value="retenciones_compra">Retenciones en Compra</option>
@@ -105,28 +107,20 @@ $base = BASE_URL;
 <!-- Panel de Configuración en Acordeones (Oculto por defecto) -->
 <div id="seccionAcordeones" style="display: none;" class="mb-4">
 
-    <div class="border rounded-3 bg-light px-3 py-2 mb-3 text-muted" style="font-size:0.72rem; line-height:1.55;">
-        <span class="fw-bold text-dark"><i class="bi bi-info-circle me-1"></i>Cómo funciona:</span>
-        La pestaña <b>General</b> es la base obligatoria: define una cuenta para cada concepto del asiento (ventas, IVA, cuentas por cobrar/pagar, costo, etc.).
-        <b>Contabilizar Por</b> decide <b>de dónde toma el sistema la cuenta de cada línea</b> cuando genera el asiento:
-        <ul class="mb-1 mt-1 ps-3">
-            <li><b>General</b> — todas las líneas usan las cuentas de la pestaña General. Es el modo por defecto.</li>
-            <li><b>Por Cliente / Proveedor</b> — el asiento usa las cuentas que le definiste a <i>ese</i> cliente o proveedor; los conceptos que no le configuraste se toman de General. (Ej.: un cliente con su propia cuenta de ventas, el resto de clientes con la de General.)</li>
-            <li><b>Por Producto / Categoría / Marca</b> — cada línea del documento usa la cuenta de su producto, categoría o marca; las líneas cuyo producto no tenga cuenta propia usan la de General.</li>
-        </ul>
-        En todos los casos, <b>si no existe una regla específica se usa General</b> (por eso, un método sin reglas configuradas se comporta igual que General).
-        Las columnas <b>Debe / Haber</b> indican la naturaleza de cada cuenta, el <b>IVA por tarifa</b> se configura dentro de General, y el botón <b>“Copiar cuentas de General”</b> precarga las cuentas base para que solo cambies lo necesario.
-    </div>
-
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-light p-3 rounded-3 shadow-sm border">
+    <div class="mb-3 bg-light p-3 rounded-3 shadow-sm border">
         <h6 class="fw-bold mb-0 text-dark" id="conceptoSeleccionadoTitulo">
             <i class="bi bi-gear-fill text-primary me-1"></i> Configuración del Concepto
         </h6>
-        <div class="d-flex align-items-center gap-2 mt-2 mt-md-0">
-            <label for="selectorMetodoPreferencia" class="form-label small fw-bold mb-0 text-muted"><i class="bi bi-diagram-3-fill me-1"></i> Contabilizar Por:</label>
-            <select class="form-select form-select-sm fw-medium shadow-sm text-dark bg-white" id="selectorMetodoPreferencia" style="width: 250px;" onchange="ASIENTOPROG_guardarMetodoPreferencia(this.value)">
-                <option value="general">General (Por Defecto)</option>
-            </select>
+        <div class="text-muted mt-2 pt-2 border-top" style="font-size:0.72rem; line-height:1.55;">
+            <span class="fw-bold text-dark"><i class="bi bi-info-circle me-1"></i>Cómo funciona:</span>
+            La pestaña <b>General</b> es la base obligatoria: una cuenta por cada concepto (ventas/compras, IVA, cuentas por cobrar/pagar, costo, etc.). Sobre esa base puedes crear <b>reglas específicas</b> por Cliente/Proveedor, Producto, Categoría o Marca.
+            <div class="fw-bold text-dark mt-1">Cómo decide el sistema la cuenta de cada documento (cascada):</div>
+            <ul class="mb-1 mt-1 ps-3">
+                <li><b>1. Cliente / Proveedor</b> — si la entidad del documento tiene reglas, <b>todo el documento se contabiliza con sus cuentas</b>; los conceptos que no le configuraste pasan directo a <b>General</b> (no se reparten por producto).</li>
+                <li><b>2. Producto → Categoría → Marca</b> — solo cuando el documento <b>no</b> tiene cliente/proveedor con reglas: cada línea usa la cuenta de su producto; si no, la de su categoría; si no, la de su marca.</li>
+                <li><b>3. General</b> — todo lo que no haya resuelto un nivel anterior.</li>
+            </ul>
+            Siempre se toman de su propia fuente (no se personalizan por entidad): <b>IVA por tarifa</b>, <b>Costo de venta</b> e <b>Inventario</b>. Las columnas <b>Debe / Haber</b> indican la naturaleza de la cuenta, y <b>“Copiar cuentas de General”</b> precarga las cuentas base.
         </div>
     </div>
 
@@ -196,11 +190,22 @@ $base = BASE_URL;
                             <h6 class="text-primary mb-0 fw-bold"><i class="bi bi-person-plus-fill me-1"></i> Nueva Asociaci&oacute;n por Cliente</h6>
                         </div>
                         <div class="col-md-12 mb-2">
-                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Buscar Cliente</label>
-                            <div class="position-relative">
-                                <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_cliente" placeholder="Escriba nombre o RUC del cliente..." autocomplete="off" required>
-                                <input type="hidden" id="dim_id_cliente" required>
-                                <div class="list-group sugerencias-flotantes" id="dim_sug_cliente" style="display: none;"></div>
+                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Cliente</label>
+                            <div class="d-flex gap-2 align-items-center flex-wrap">
+                                <div class="position-relative" style="flex:1 1 240px; min-width:220px; max-width:420px;">
+                                    <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_cliente" placeholder="Escriba, o use &quot;Clientes con ventas&quot;..." autocomplete="off" required>
+                                    <input type="hidden" id="dim_id_cliente" required>
+                                    <div class="list-group sugerencias-flotantes" id="dim_sug_cliente" style="display: none;"></div>
+                                </div>
+                                <select id="dim_anio_cliente" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de ventas">
+                                    <option value="">Todos los a&ntilde;os</option>
+                                </select>
+                                <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalEntidades('cliente')">
+                                    <i class="bi bi-people me-1"></i> Clientes con ventas
+                                </button>
+                                <button type="button" class="btn btn-outline-primary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalItems('cliente')">
+                                    <i class="bi bi-box-seam me-1"></i> Informaci&oacute;n de adquisiciones
+                                </button>
                             </div>
                         </div>
                         <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_cliente"></div></div>
@@ -232,11 +237,22 @@ $base = BASE_URL;
                             <h6 class="text-primary mb-0 fw-bold"><i class="bi bi-building-add me-1"></i> Nueva Asociaci&oacute;n por Proveedor</h6>
                         </div>
                         <div class="col-md-12 mb-2">
-                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Buscar Proveedor</label>
-                            <div class="position-relative">
-                                <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_proveedor" placeholder="Escriba raz&oacute;n social o RUC del proveedor..." autocomplete="off" required>
-                                <input type="hidden" id="dim_id_proveedor" required>
-                                <div class="list-group sugerencias-flotantes" id="dim_sug_proveedor" style="display: none;"></div>
+                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Proveedor</label>
+                            <div class="d-flex gap-2 align-items-center flex-wrap">
+                                <div class="position-relative" style="flex:1 1 240px; min-width:220px; max-width:420px;">
+                                    <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_proveedor" placeholder="Escriba, o use &quot;Proveedores con compras&quot;..." autocomplete="off" required>
+                                    <input type="hidden" id="dim_id_proveedor" required>
+                                    <div class="list-group sugerencias-flotantes" id="dim_sug_proveedor" style="display: none;"></div>
+                                </div>
+                                <select id="dim_anio_proveedor" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de compras">
+                                    <option value="">Todos los a&ntilde;os</option>
+                                </select>
+                                <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalEntidades('proveedor')">
+                                    <i class="bi bi-truck me-1"></i> Proveedores con compras
+                                </button>
+                                <button type="button" class="btn btn-outline-primary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalItems('proveedor')">
+                                    <i class="bi bi-box-seam me-1"></i> Informaci&oacute;n de adquisiciones
+                                </button>
                             </div>
                         </div>
                         <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_proveedor"></div></div>
@@ -266,11 +282,19 @@ $base = BASE_URL;
                     <form onsubmit="ASIENTOPROG_agregarDim(event, 'producto')" class="row g-3 align-items-end mb-4 bg-light p-3 rounded-3 border shadow-sm">
                         <div class="col-12 mb-2 border-bottom pb-2"><h6 class="text-primary mb-0 fw-bold"><i class="bi bi-box-seam me-1"></i> Nueva Asociaci&oacute;n por Producto/Servicio</h6></div>
                         <div class="col-md-12 mb-2">
-                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Buscar Producto/Servicio</label>
-                            <div class="position-relative">
-                                <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_producto" placeholder="Escriba c&oacute;digo o nombre del producto..." autocomplete="off" required>
-                                <input type="hidden" id="dim_id_producto" required>
-                                <div class="list-group sugerencias-flotantes" id="dim_sug_producto" style="display: none;"></div>
+                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Producto / Servicio</label>
+                            <div class="d-flex gap-2 align-items-center flex-wrap">
+                                <div class="position-relative" style="flex:1 1 240px; min-width:220px; max-width:420px;">
+                                    <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_producto" placeholder="Escriba, o use &quot;Productos con movimientos&quot;..." autocomplete="off" required>
+                                    <input type="hidden" id="dim_id_producto" required>
+                                    <div class="list-group sugerencias-flotantes" id="dim_sug_producto" style="display: none;"></div>
+                                </div>
+                                <select id="dim_anio_producto" class="form-select form-select-sm" style="width:auto;" title="A&ntilde;o de movimientos">
+                                    <option value="">Todos los a&ntilde;os</option>
+                                </select>
+                                <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalEntidades('producto')">
+                                    <i class="bi bi-box-seam me-1"></i> Productos con movimientos
+                                </button>
                             </div>
                         </div>
                         <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_producto"></div></div>
@@ -298,11 +322,16 @@ $base = BASE_URL;
                     <form onsubmit="ASIENTOPROG_agregarDim(event, 'categoria')" class="row g-3 align-items-end mb-4 bg-light p-3 rounded-3 border shadow-sm">
                         <div class="col-12 mb-2 border-bottom pb-2"><h6 class="text-primary mb-0 fw-bold"><i class="bi bi-tags me-1"></i> Nueva Asociaci&oacute;n por Categor&iacute;a</h6></div>
                         <div class="col-md-12 mb-2">
-                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Buscar Categor&iacute;a</label>
-                            <div class="position-relative">
-                                <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_categoria" placeholder="Escriba nombre de la categor&iacute;a..." autocomplete="off" required>
-                                <input type="hidden" id="dim_id_categoria" required>
-                                <div class="list-group sugerencias-flotantes" id="dim_sug_categoria" style="display: none;"></div>
+                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Categor&iacute;a</label>
+                            <div class="d-flex gap-2 align-items-center flex-wrap">
+                                <div class="position-relative" style="flex:1 1 240px; min-width:220px; max-width:420px;">
+                                    <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_categoria" placeholder="Escriba, o use &quot;Categor&iacute;as&quot;..." autocomplete="off" required>
+                                    <input type="hidden" id="dim_id_categoria" required>
+                                    <div class="list-group sugerencias-flotantes" id="dim_sug_categoria" style="display: none;"></div>
+                                </div>
+                                <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalEntidades('categoria')">
+                                    <i class="bi bi-tags me-1"></i> Categor&iacute;as
+                                </button>
                             </div>
                         </div>
                         <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_categoria"></div></div>
@@ -330,11 +359,16 @@ $base = BASE_URL;
                     <form onsubmit="ASIENTOPROG_agregarDim(event, 'marca')" class="row g-3 align-items-end mb-4 bg-light p-3 rounded-3 border shadow-sm">
                         <div class="col-12 mb-2 border-bottom pb-2"><h6 class="text-primary mb-0 fw-bold"><i class="bi bi-bookmark-star me-1"></i> Nueva Asociaci&oacute;n por Marca</h6></div>
                         <div class="col-md-12 mb-2">
-                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Buscar Marca</label>
-                            <div class="position-relative">
-                                <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_marca" placeholder="Escriba nombre de la marca..." autocomplete="off" required>
-                                <input type="hidden" id="dim_id_marca" required>
-                                <div class="list-group sugerencias-flotantes" id="dim_sug_marca" style="display: none;"></div>
+                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Marca</label>
+                            <div class="d-flex gap-2 align-items-center flex-wrap">
+                                <div class="position-relative" style="flex:1 1 240px; min-width:220px; max-width:420px;">
+                                    <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_marca" placeholder="Escriba, o use &quot;Marcas&quot;..." autocomplete="off" required>
+                                    <input type="hidden" id="dim_id_marca" required>
+                                    <div class="list-group sugerencias-flotantes" id="dim_sug_marca" style="display: none;"></div>
+                                </div>
+                                <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalEntidades('marca')">
+                                    <i class="bi bi-bookmark-star me-1"></i> Marcas
+                                </button>
                             </div>
                         </div>
                         <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_marca"></div></div>
@@ -737,6 +771,36 @@ $base = BASE_URL;
             </div>
         </div>
 
+    </div>
+</div>
+
+<!-- Modal: Proveedores con compras -->
+<div class="modal fade" id="modalProveedoresCompras" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:540px;">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0" id="modalEntidadesTitulo"><i class="bi bi-card-list me-1 text-primary"></i> Entidades</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="modalProvSearch" class="form-control form-control-sm mb-2" placeholder="Filtrar..." autocomplete="off">
+                <div class="small text-muted mb-2"><i class="bi bi-check-circle-fill text-success"></i> = ya tiene cuentas asignadas en esta regla.</div>
+                <div id="modalProvLista" class="list-group list-group-flush small"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Información de adquisiciones del proveedor -->
+<div class="modal fade" id="modalItemsProveedor" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:560px;">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0"><i class="bi bi-box-seam me-1 text-primary"></i> Informaci&oacute;n de adquisiciones <span id="modalItemsProvNombre" class="text-muted fw-normal ms-1"></span></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="modalItemsBody"></div>
+        </div>
     </div>
 </div>
 

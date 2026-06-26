@@ -5,25 +5,19 @@
     let activeDropdown = null;
     let debounceTimer = null;
 
-    // Métodos de "Contabilizar Por" disponibles por tipo de asiento (Fase A).
-    const METODOS_DIM = {
-        ventas_factura:        [['general', 'General (Por Defecto)'], ['cliente', 'Por Cliente'], ['producto', 'Por Producto/Servicio'], ['categoria', 'Por Categoría'], ['marca', 'Por Marca']],
-        adquisiciones_compras: [['general', 'General (Por Defecto)'], ['proveedor', 'Por Proveedor'], ['producto', 'Por Producto/Servicio'], ['categoria', 'Por Categoría'], ['marca', 'Por Marca']]
-    };
-    // Acordeones de dimensión visibles por tipo de asiento.
+    // Acordeones de dimensión visibles por tipo de asiento (se muestran todos los aplicables;
+    // la resolución de cuentas elige el más específico configurado, cayendo a General).
     const ACORDEONES_DIM = {
         ventas_factura:        ['accItemCliente', 'accItemProducto', 'accItemCategoria', 'accItemMarca'],
         adquisiciones_compras: ['accItemProveedor', 'accItemProducto', 'accItemCategoria', 'accItemMarca']
     };
     const ACORDEONES_DIM_TODOS = ['accItemCliente', 'accItemProveedor', 'accItemProducto', 'accItemCategoria', 'accItemMarca'];
 
-    function ASIENTOPROG_poblarSelectorMetodo(tipoAsiento, metodoActual) {
-        const sel = document.getElementById('selectorMetodoPreferencia');
-        if (!sel) return;
-        const opciones = METODOS_DIM[tipoAsiento] || [['general', 'General (Por Defecto)']];
-        sel.innerHTML = opciones.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
-        const valido = opciones.some(([v]) => v === metodoActual);
-        sel.value = valido ? metodoActual : 'general';
+    // ¿La dimensión actual es la regla por NOMBRE del ítem de compra? (producto + adquisiciones_compras).
+    // En ese caso la regla se guarda por texto (tipo_referencia='item_compra', clave = descripción del ítem).
+    function ASIENTOPROG_esItemCompra(tipo) {
+        const ta = (document.getElementById('tipoAsientoSelector') || {}).value || '';
+        return tipo === 'producto' && ta === 'adquisiciones_compras';
     }
 
     function ASIENTOPROG_mostrarAcordeonesDim(tipoAsiento) {
@@ -33,6 +27,27 @@
             if (el) el.style.display = visibles.includes(id) ? '' : 'none';
         });
     }
+
+    // Retroceso/Suprimir limpia de golpe cualquier buscador del módulo cuando ya hay un valor
+    // seleccionado (input + su hidden + su dropdown de sugerencias). Mientras se escribe una
+    // búsqueda (sin selección) el borrado funciona carácter a carácter como siempre.
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+        const el = e.target;
+        if (!el || el.tagName !== 'INPUT' || el.type === 'hidden') return;
+        const parent = el.parentElement;
+        if (!parent) return;
+        const hidden = parent.querySelector('input[type="hidden"]');
+        const sug = parent.querySelector('.sugerencias-flotantes');
+        if (!hidden || !sug) return; // no es un buscador de este módulo
+        if (hidden.value) {
+            e.preventDefault();
+            el.value = '';
+            hidden.value = '';
+            sug.style.display = 'none';
+            el.classList.remove('is-valid', 'is-invalid', 'border-danger');
+        }
+    });
 
     /**
      * Inicializa o actualiza la visualización de acordeones al presionar "Configurar Asientos".
@@ -217,8 +232,7 @@
                     });
                 }
 
-                // Selector "Contabilizar Por" + acordeones de dimensión según el tipo de asiento
-                ASIENTOPROG_poblarSelectorMetodo(tipoAsiento, res.metodo || 'general');
+                // Acordeones de dimensión visibles según el tipo de asiento
                 ASIENTOPROG_mostrarAcordeonesDim(tipoAsiento);
 
                 // Actualizar título y mostrar panel de acordeones
@@ -489,9 +503,6 @@
             if (el) el.style.display = (id === idContenedor) ? 'block' : 'none';
         });
 
-        const selectorMetodo = document.getElementById('selectorMetodoPreferencia');
-        if (selectorMetodo) selectorMetodo.value = 'general';
-
         const selectedText = selector.options[selector.selectedIndex].text;
         document.getElementById('conceptoSeleccionadoTitulo').innerHTML =
             `<i class="bi bi-gear-fill text-primary me-1"></i> Configuración para: <span class="text-primary fw-bold">${selectedText}</span>`;
@@ -736,52 +747,29 @@
     }
 
     /**
-     * Guarda la preferencia del método de contabilización seleccionado.
-     */
-    window.ASIENTOPROG_guardarMetodoPreferencia = async function (metodo) {
-        const selector = document.getElementById('tipoAsientoSelector');
-        const tipoAsiento = selector.value;
-        if (!tipoAsiento) return;
-
-        const fd = new FormData();
-        fd.append('tipo_asiento', tipoAsiento);
-        fd.append('metodo', metodo);
-
-        try {
-            const resp = await fetch(`${API_PROG}/guardarMetodoPreferenciaAjax`, {
-                method: 'POST',
-                body: fd
-            });
-            const res = await resp.json();
-            if (res.ok) {
-                if (window.Swal) {
-                    const Toast = Swal.mixin({
-                        toast: true,
-                        position: 'top-end',
-                        showConfirmButton: false,
-                        timer: 2000,
-                        timerProgressBar: true
-                    });
-                    Toast.fire({
-                        icon: 'success',
-                        title: res.msg
-                    });
-                }
-            } else {
-                if (window.Swal) Swal.fire('Error', res.error || 'Error al guardar la preferencia.', 'error');
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    };
-
-    /**
      * Carga dinámicamente las reglas correspondientes a una dimensión contable.
      */
     window.ASIENTOPROG_cargarDim = async function (tipo) {
         const selector = document.getElementById('tipoAsientoSelector');
         const tipoAsiento = selector.value;
         if (!tipoAsiento) return;
+
+        // Filtro de años (movimientos de la empresa) para las dimensiones con filtro de año.
+        if (tipo === 'proveedor' || tipo === 'cliente' || tipo === 'producto') {
+            const modulo = (tipo === 'cliente') ? 'ventas'
+                         : (tipo === 'proveedor') ? 'compras'
+                         : (tipoAsiento === 'ventas_factura' ? 'ventas' : 'compras');
+            try {
+                const ra = await fetch(`${API_PROG}/getAniosMovimientosAjax?modulo=${modulo}`);
+                const ja = await ra.json();
+                const selAnio = document.getElementById(`dim_anio_${tipo}`);
+                if (selAnio && ja.ok && Array.isArray(ja.anios)) {
+                    const prev = selAnio.value;
+                    selAnio.innerHTML = '<option value="">Todos los años</option>' + ja.anios.map(a => `<option value="${a}">${a}</option>`).join('');
+                    selAnio.value = ja.anios.map(String).includes(prev) ? prev : '';
+                }
+            } catch (e) { /* noop */ }
+        }
 
         // Renderizar los inputs de cuenta en dos columnas (Debe | Haber), igual que la sección General.
         // Se excluye el IVA por tarifa (id_asiento_tipo = 0): ese se configura en General, no por dimensión.
@@ -827,7 +815,8 @@
         tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Cargando asociaciones...</td></tr>';
 
         try {
-            const resp = await fetch(`${API_PROG}/cargarReglasDimensionAjax?tipo_asiento=${tipoAsiento}&tipo_referencia=${tipo}`);
+            const refType = ASIENTOPROG_esItemCompra(tipo) ? 'item_compra' : tipo;
+            const resp = await fetch(`${API_PROG}/cargarReglasDimensionAjax?tipo_asiento=${tipoAsiento}&tipo_referencia=${refType}`);
             const res = await resp.json();
 
             if (res.ok) {
@@ -873,7 +862,8 @@
         if (searchInput && !searchInput.dataset.autocompleteBound) {
             searchInput.dataset.autocompleteBound = "true";
 
-            // Autocomplete de Entidad (Cliente, Producto, etc.)
+            // Autocomplete de Entidad (Cliente, Proveedor, Producto, Categoría, Marca) por texto.
+            // La lista completa con ✓ de configurados se ofrece aparte, en el modal de cada dimensión.
             searchInput.addEventListener('input', function () {
                 const q = searchInput.value.trim();
                 if (q === '') {
@@ -889,6 +879,37 @@
                 clearTimeout(debounceTimer);
                 debounceTimer = setTimeout(async () => {
                     try {
+                        // Compras + producto → buscar ÍTEMS de compra; la clave de la regla es el nombre (texto).
+                        if (ASIENTOPROG_esItemCompra(tipo)) {
+                            const ri = await fetch(`${API_PROG}/getItemsComprasAjax?q=${encodeURIComponent(q)}`);
+                            const resi = await ri.json();
+                            const items = (resi.ok && resi.data) ? resi.data : [];
+                            sugDiv.innerHTML = '';
+                            if (items.length > 0) {
+                                items.slice(0, 60).forEach(it => {
+                                    const btn = document.createElement('button');
+                                    btn.type = 'button';
+                                    btn.className = 'list-group-item list-group-item-action py-1 px-2 border-0 small text-dark bg-white d-flex justify-content-between align-items-center';
+                                    const badge = (it.configurado == 1)
+                                        ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2"><i class="bi bi-check-circle-fill"></i></span>'
+                                        : (it.homologado == 1 ? '<span class="badge bg-secondary bg-opacity-10 text-secondary ms-2">homol.</span>' : '');
+                                    const safe = (it.descripcion || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                    btn.innerHTML = `<span>${safe}</span>${badge}`;
+                                    btn.addEventListener('click', () => {
+                                        searchInput.value = it.descripcion;
+                                        hiddenInput.value = it.descripcion; // clave = nombre del ítem
+                                        sugDiv.style.display = 'none';
+                                    });
+                                    sugDiv.appendChild(btn);
+                                });
+                                sugDiv.style.display = 'block';
+                                activeDropdown = sugDiv;
+                            } else {
+                                sugDiv.style.display = 'none';
+                            }
+                            return;
+                        }
+
                         const r = await fetch(`${API_PROG}/searchEntidadesAjax?tipo=${tipo}&q=${encodeURIComponent(q)}`);
                         const res = await r.json();
 
@@ -987,10 +1008,28 @@
      * (Cliente/Proveedor/Producto/Categoría/Marca), para que el usuario solo ajuste lo que quiera.
      * Excluye el IVA por tarifa (id_asiento_tipo = 0), que se configura en General.
      */
-    window.ASIENTOPROG_copiarDeGeneral = function (tipo) {
-        const conceptos = (window.CONCEPTOS_CONFIGURADOS || []).filter(c => parseInt(c.id_asiento_tipo) > 0 && c.id_cuenta);
+    window.ASIENTOPROG_copiarDeGeneral = async function (tipo) {
+        const selTipo = document.getElementById('tipoAsientoSelector');
+        const tipoAsiento = selTipo ? selTipo.value : '';
+
+        // Releer la configuración General MÁS RECIENTE (puede haber cambiado en esta sesión sin
+        // recargar la página). Así se copian también las cuentas recién asignadas en General.
+        let conceptos = window.CONCEPTOS_CONFIGURADOS || [];
+        if (tipoAsiento) {
+            try {
+                const resp = await fetch(`${API_PROG}/cargarConfiguracionAjax?tipo_asiento=${tipoAsiento}`);
+                const res = await resp.json();
+                if (res.ok && Array.isArray(res.data)) {
+                    conceptos = res.data;
+                    window.CONCEPTOS_CONFIGURADOS = res.data;
+                }
+            } catch (e) { /* fallback: usar lo que ya está en memoria */ }
+        }
+
+        const aplicables = conceptos.filter(c => parseInt(c.id_asiento_tipo) > 0 && c.id_cuenta);
+        const sinCuenta  = conceptos.filter(c => parseInt(c.id_asiento_tipo) > 0 && !c.id_cuenta).length;
         let copiadas = 0;
-        conceptos.forEach(item => {
+        aplicables.forEach(item => {
             const search = document.getElementById(`dim_cuenta_search_${tipo}_${item.id_asiento_tipo}`);
             const hidden = document.getElementById(`dim_cuenta_id_${tipo}_${item.id_asiento_tipo}`);
             if (search && hidden) {
@@ -1000,14 +1039,178 @@
                 copiadas++;
             }
         });
+
         if (window.Swal) {
-            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2200, timerProgressBar: true });
-            Toast.fire({
-                icon: copiadas > 0 ? 'success' : 'info',
-                title: copiadas > 0
-                    ? `Se copiaron ${copiadas} cuenta(s) de General. Ajuste las que necesite y guarde.`
-                    : 'No hay cuentas configuradas en General para copiar.'
+            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2600, timerProgressBar: true });
+            let msg;
+            if (copiadas === 0) {
+                msg = 'No hay cuentas configuradas en General para copiar.';
+            } else {
+                msg = `Se copiaron ${copiadas} cuenta(s) de General.`;
+                if (sinCuenta > 0) msg += ` (${sinCuenta} concepto(s) siguen sin cuenta en General: configúrelos allí para poder copiarlos.)`;
+            }
+            Toast.fire({ icon: copiadas > 0 ? 'success' : 'info', title: msg });
+        }
+    };
+
+    // Etiquetas para el título del modal de lista, según la dimensión.
+    const ETIQUETA_ENTIDAD = {
+        cliente:   'Clientes con ventas',
+        proveedor: 'Proveedores con compras',
+        producto:  'Productos con movimientos',
+        categoria: 'Categorías',
+        marca:     'Marcas'
+    };
+
+    /**
+     * Abre un modal con la lista de entidades de la dimensión (cliente/proveedor/producto/categoría/
+     * marca), marcando con ✓ las que ya tienen cuentas. Al hacer clic, la selecciona y cierra el modal.
+     */
+    window.ASIENTOPROG_abrirModalEntidades = async function (tipo) {
+        const modalEl  = document.getElementById('modalProveedoresCompras');
+        const lista    = document.getElementById('modalProvLista');
+        const buscador = document.getElementById('modalProvSearch');
+        const titulo   = document.getElementById('modalEntidadesTitulo');
+        if (!modalEl || !lista) return;
+
+        // Para producto, el listado depende del módulo: en compras son los productos HOMOLOGADOS
+        // (los ítems de compra son texto libre y entran al catálogo vía homologación); en ventas, los vendidos.
+        const tipoAsiento = (document.getElementById('tipoAsientoSelector') || {}).value || '';
+        const modulo = (tipoAsiento === 'ventas_factura') ? 'ventas' : 'compras';
+        let etiqueta = ETIQUETA_ENTIDAD[tipo] || 'Entidades';
+        if (tipo === 'producto') etiqueta = (modulo === 'compras') ? 'Productos homologados (compras)' : 'Productos vendidos';
+
+        if (titulo) titulo.innerHTML = `<i class="bi bi-card-list me-1 text-primary"></i> ${etiqueta}`;
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        lista.innerHTML = '<div class="text-muted small py-3 text-center"><span class="spinner-border spinner-border-sm me-1"></span> Cargando...</div>';
+
+        // En compras, la regla por producto se basa en los ÍTEMS de las compras (texto libre), no en
+        // el catálogo. El modal los lista con una columna que indica si están homologados (informativa).
+        if (tipo === 'producto' && modulo === 'compras') {
+            if (titulo) titulo.innerHTML = '<i class="bi bi-card-list me-1 text-primary"></i> Ítems de compras';
+            const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            let items = [];
+            const pintarItems = (arr) => {
+                lista.innerHTML = '';
+                if (!arr.length) { lista.innerHTML = '<div class="text-muted small py-3 text-center">Sin ítems.</div>'; return; }
+                arr.forEach(it => {
+                    const row = document.createElement('button');
+                    row.type = 'button';
+                    row.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 gap-2';
+                    const cfg = (it.configurado == 1)
+                        ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="bi bi-check-circle-fill me-1"></i>con cuentas</span>'
+                        : '';
+                    const homol = (it.homologado == 1)
+                        ? '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">Homologado</span>'
+                        : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Sin homologar</span>';
+                    row.innerHTML = `<span class="small text-truncate" title="${esc(it.descripcion)}">${esc(it.descripcion)}</span><span class="text-nowrap d-flex gap-1">${cfg}${homol}</span>`;
+                    row.addEventListener('click', () => {
+                        const s = document.getElementById('dim_search_producto');
+                        const h = document.getElementById('dim_id_producto');
+                        if (s) { s.value = it.descripcion; s.classList.remove('is-invalid', 'border-danger'); }
+                        if (h) h.value = it.descripcion; // clave de la regla = nombre del ítem
+                        bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                    });
+                    lista.appendChild(row);
+                });
+            };
+            try {
+                const r = await fetch(`${API_PROG}/getItemsComprasAjax`);
+                const res = await r.json();
+                items = (res.ok && res.data) ? res.data : [];
+                pintarItems(items);
+            } catch (e) {
+                lista.innerHTML = '<div class="text-danger small py-3 text-center">Error al cargar ítems.</div>';
+            }
+            if (buscador) {
+                buscador.value = '';
+                buscador.oninput = () => {
+                    const q = buscador.value.trim().toLowerCase();
+                    pintarItems(items.filter(it => (it.descripcion || '').toLowerCase().includes(q)));
+                };
+            }
+            return;
+        }
+
+        let datos = [];
+        const pintar = (arr) => {
+            lista.innerHTML = '';
+            if (!arr.length) { lista.innerHTML = '<div class="text-muted small py-3 text-center">Sin resultados.</div>'; return; }
+            arr.forEach(p => {
+                const a = document.createElement('button');
+                a.type = 'button';
+                a.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2';
+                const cfg = (p.configurado == 1) ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="bi bi-check-circle-fill me-1"></i>con cuentas</span>' : '';
+                a.innerHTML = `<span>${(p.nombre || '')}${p.identificacion ? ` <span class="text-muted">(${p.identificacion})</span>` : ''}</span>${cfg}`;
+                a.addEventListener('click', () => {
+                    const s = document.getElementById(`dim_search_${tipo}`);
+                    const h = document.getElementById(`dim_id_${tipo}`);
+                    if (s) { s.value = p.nombre; s.classList.remove('is-invalid', 'border-danger'); }
+                    if (h) h.value = p.id;
+                    bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                });
+                lista.appendChild(a);
             });
+        };
+
+        try {
+            let url = `${API_PROG}/getEntidadesDimensionAjax?tipo=${encodeURIComponent(tipo)}`;
+            if (tipo === 'producto') url += `&modulo=${encodeURIComponent(modulo)}`;
+            const r = await fetch(url);
+            const res = await r.json();
+            datos = (res.ok && res.data) ? res.data : [];
+            pintar(datos);
+        } catch (e) {
+            lista.innerHTML = '<div class="text-danger small py-3 text-center">Error al cargar.</div>';
+        }
+
+        if (buscador) {
+            buscador.value = '';
+            buscador.oninput = () => {
+                const q = buscador.value.trim().toLowerCase();
+                pintar(datos.filter(p => (p.nombre || '').toLowerCase().includes(q) || (p.identificacion || '').toLowerCase().includes(q)));
+            };
+        }
+    };
+
+    /**
+     * Abre un modal con las descripciones ÚNICAS de los ítems transados con la entidad seleccionada
+     * (proveedor → compras; cliente → ventas), filtradas por el año elegido. Solo para cliente/proveedor.
+     */
+    window.ASIENTOPROG_abrirModalItems = async function (tipo) {
+        const idEl     = document.getElementById(`dim_id_${tipo}`);
+        const nombreEl = document.getElementById(`dim_search_${tipo}`);
+        const anioSel  = document.getElementById(`dim_anio_${tipo}`);
+        const modalEl  = document.getElementById('modalItemsProveedor');
+        const body     = document.getElementById('modalItemsBody');
+        const titProv  = document.getElementById('modalItemsProvNombre');
+        if (!modalEl || !body) return;
+
+        const idEnt = idEl ? idEl.value : '';
+        if (!idEnt) {
+            if (window.Swal) Swal.fire('Atención', 'Seleccione primero una entidad.', 'warning');
+            else alert('Seleccione primero una entidad.');
+            return;
+        }
+        const anio = anioSel ? anioSel.value : '';
+        if (titProv) titProv.textContent = (nombreEl && nombreEl.value) ? `· ${nombreEl.value}` : '';
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        body.innerHTML = '<div class="text-muted small py-3 text-center"><span class="spinner-border spinner-border-sm me-1"></span> Cargando ítems...</div>';
+
+        try {
+            const r = await fetch(`${API_PROG}/getItemsEntidadAjax?tipo=${encodeURIComponent(tipo)}&id=${encodeURIComponent(idEnt)}&anio=${encodeURIComponent(anio)}`);
+            const res = await r.json();
+            if (!res.ok) { body.innerHTML = `<div class="text-danger small">${res.error || 'Error al cargar ítems.'}</div>`; return; }
+            const items = res.data || [];
+            if (items.length === 0) {
+                body.innerHTML = `<div class="text-muted small py-3 text-center">Sin ítems${anio ? ` en ${anio}` : ''}.</div>`;
+                return;
+            }
+            const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            body.innerHTML = `<div class="small fw-bold text-muted mb-2">${items.length} ítem(s)${anio ? ` en ${anio}` : ' (todos los años)'}:</div>`
+                + '<div class="d-flex flex-column gap-1">' + items.map(d => `<div class="border rounded px-2 py-1 small">${esc(d)}</div>`).join('') + '</div>';
+        } catch (e) {
+            body.innerHTML = '<div class="text-danger small">Error al cargar ítems.</div>';
         }
     };
 
@@ -1018,10 +1221,12 @@
         const tipoAsiento = selector.value;
         if (!tipoAsiento) return;
 
+        const esItem = ASIENTOPROG_esItemCompra(tipo);
         const idRef = document.getElementById(`dim_id_${tipo}`).value;
         if (!idRef) {
-            if (window.Swal) Swal.fire('Atención', 'Debe seleccionar una entidad de la lista desplegable.', 'warning');
-            else alert('Debe seleccionar una entidad de la lista desplegable.');
+            const msg = esItem ? 'Debe seleccionar un ítem de compra de la lista.' : 'Debe seleccionar una entidad de la lista desplegable.';
+            if (window.Swal) Swal.fire('Atención', msg, 'warning');
+            else alert(msg);
             return;
         }
 
@@ -1038,8 +1243,14 @@
                     const fd = new FormData();
                     fd.append('id_asiento_tipo', item.id_asiento_tipo.toString());
                     fd.append('id_cuenta', idCuenta);
-                    fd.append('id_referencia', idRef);
-                    fd.append('tipo_referencia', tipo);
+                    if (esItem) {
+                        // La clave de la regla es el NOMBRE del ítem (texto), no un id.
+                        fd.append('tipo_referencia', 'item_compra');
+                        fd.append('referencia_texto', idRef);
+                    } else {
+                        fd.append('id_referencia', idRef);
+                        fd.append('tipo_referencia', tipo);
+                    }
 
                     promesas.push(
                         fetch(`${API_PROG}/guardarReglaDimensionAjax`, {
@@ -1146,47 +1357,6 @@
         }
     };
 
-    /**
-     * Guarda la preferencia del método de contabilización seleccionado para el tipo de asiento.
-     */
-    window.ASIENTOPROG_guardarMetodoPreferencia = async function (metodo) {
-        const selector = document.getElementById('tipoAsientoSelector');
-        const tipoAsiento = selector ? selector.value : '';
-        if (!tipoAsiento) return;
-
-        const fd = new FormData();
-        fd.append('tipo_asiento', tipoAsiento);
-        fd.append('metodo', metodo);
-
-        try {
-            const resp = await fetch(`${API_PROG}/guardarMetodoPreferenciaAjax`, {
-                method: 'POST',
-                body: fd
-            });
-            const res = await resp.json();
-
-            if (res.ok) {
-                if (window.Swal) {
-                    const Toast = Swal.mixin({
-                        toast: true,
-                        position: 'top-end',
-                        showConfirmButton: false,
-                        timer: 2000,
-                        timerProgressBar: true
-                    });
-                    Toast.fire({
-                        icon: 'success',
-                        title: res.msg || 'Preferencia guardada correctamente.'
-                    });
-                }
-            } else {
-                if (window.Swal) Swal.fire('Error', res.error || 'No se pudo guardar la preferencia.', 'error');
-                else alert(res.error || 'No se pudo guardar la preferencia.');
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    };
 
     // Cerrar sugerencias flotantes al hacer clic en otra parte de la pantalla
     document.addEventListener('click', function (e) {

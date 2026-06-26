@@ -40,13 +40,34 @@ class AsientoBuilderService
             return [];
         }
 
-        // 2. Obtener el método de preferencia contable establecido por la empresa para este módulo
-        $metodo = $this->programadoRepo->getMetodoPreferencia($idEmpresa, $tipoAsiento);
+        // 2. CASCADA (Opción 2: la ENTIDAD del documento manda).
+        //    Cliente (ventas) o Proveedor (compras): si tiene reglas, sus cuentas sobreescriben los
+        //    conceptos que configuró; lo no configurado queda en General y NO se reparte por línea.
+        //    Si la entidad no tiene reglas, recién ahí se reparte por línea (producto → categoría → marca).
+        $entidadTipo = match ($tipoAsiento) {
+            'ventas_factura'        => 'cliente',
+            'adquisiciones_compras' => 'proveedor',
+            default                 => '',
+        };
 
-        // 3. Resolver cuentas específicas en base al método de preferencia activo
-        $customAccounts = $this->resolverCuentasPorMetodo($idEmpresa, $tipoAsiento, $metodo, $documentData);
+        // Asegurar el id de la entidad en documentData (si no vino, leerlo de la cabecera).
+        if ($entidadTipo === 'cliente' && empty($documentData['id_cliente']) && !empty($documentData['id_venta'])) {
+            $documentData['id_cliente'] = $this->buscarEntidadDocumento('ventas_cabecera', 'id_cliente', (int)$documentData['id_venta']);
+        } elseif ($entidadTipo === 'proveedor' && empty($documentData['id_proveedor'])) {
+            $idCompra = (int)($documentData['id_compra'] ?? $documentData['id'] ?? 0);
+            if ($idCompra > 0) {
+                $documentData['id_proveedor'] = $this->buscarEntidadDocumento('compras_cabecera', 'id_proveedor', $idCompra);
+            }
+        }
 
-        // 4. Combinar la plantilla base con las cuentas específicas resueltas (Fallback automático)
+        $customAccounts = [];
+        $entidadTieneReglas = false;
+        if ($entidadTipo !== '') {
+            $customAccounts = $this->resolverCuentasPorMetodo($idEmpresa, $tipoAsiento, $entidadTipo, $documentData);
+            $entidadTieneReglas = !empty($customAccounts);
+        }
+
+        // 3. Combinar la plantilla base con las cuentas de la entidad (fallback a General).
         foreach ($reglasBase as &$r) {
             $idAsientoTipo = (int)$r['id_asiento_tipo'];
             if (isset($customAccounts[$idAsientoTipo])) {
@@ -57,10 +78,8 @@ class AsientoBuilderService
         }
         unset($r);
 
-        // 5. Armar la distribución de importes Debe/Haber según el módulo específico.
-        //    Se pasa el método activo para que los builders puedan repartir por línea
-        //    (producto/categoría/marca) la cuenta de ventas/gasto del documento.
-        $documentData['__metodo__'] = $metodo;
+        // 4. Solo se reparte por línea (producto/categoría/marca) cuando la entidad NO tiene reglas (Opción 2).
+        $documentData['__reparte_por_linea__'] = !$entidadTieneReglas;
         $asientoResult = match ($tipoAsiento) {
             'ventas_factura' => $this->armarDistribucionVentasFactura($reglasBase, $documentData),
             'adquisiciones_compras' => $this->armarDistribucionCompras($reglasBase, $documentData),
@@ -80,7 +99,22 @@ class AsientoBuilderService
     }
 
     /**
-     * Resuelve cuentas contables personalizadas basadas en el método de preferencia configurado.
+     * Lee el id de la entidad (cliente/proveedor) de la cabecera del documento. $tabla y $columna son
+     * constantes internas (no entrada de usuario), por lo que es seguro interpolarlas.
+     */
+    private function buscarEntidadDocumento(string $tabla, string $columna, int $id): int
+    {
+        if ($id <= 0) {
+            return 0;
+        }
+        $db = \App\core\Database::getConnection();
+        $st = $db->prepare("SELECT {$columna} FROM {$tabla} WHERE id = ? LIMIT 1");
+        $st->execute([$id]);
+        return (int) ($st->fetchColumn() ?: 0);
+    }
+
+    /**
+     * Resuelve las cuentas personalizadas de una ENTIDAD del documento (cliente/proveedor) por concepto.
      */
     private function resolverCuentasPorMetodo(int $idEmpresa, string $tipoAsiento, string $metodo, array $documentData): array
     {
@@ -129,7 +163,9 @@ class AsientoBuilderService
                       AND ap.id_referencia = :id_ref 
                       AND ap.eliminado = false";
             
-            $st = $this->programadoRepo->query($sql, [
+            $db = \App\core\Database::getConnection();
+            $st = $db->prepare($sql);
+            $st->execute([
                 ':id_empresa' => $idEmpresa,
                 ':tipo_ref' => $tipoReferencia,
                 ':id_ref' => $idReferencia
@@ -144,16 +180,13 @@ class AsientoBuilderService
     }
 
     /**
-     * Reparto POR LÍNEA de un monto (subtotal de ventas / gasto de compras) entre cuentas, según la
-     * dimensión activa (producto/categoría/marca): suma las líneas del documento agrupadas por la
-     * cuenta mapeada de su producto/categoría/marca para el asiento_tipo indicado. Las líneas sin
-     * cuenta mapeada caen en $cuentaBase. Para métodos sin reparto (general/cliente/proveedor/iva)
-     * o sin documento, devuelve una sola entrada con $cuentaBase y $montoTotal.
+     * Reparto POR LÍNEA del subtotal de ventas en CASCADA: cada línea toma la cuenta de su producto;
+     * si no, la de su categoría; si no, la de su marca; si ninguna, la cuenta base (General de Ventas).
+     * Agrupa por la cuenta resultante y concilia el redondeo contra $montoTotal.
      *
-     * @param string $soloInventariable ''=todas | 'si'=solo inventariables | 'no'=solo NO inventariables
      * @return array<int,array{id_cuenta:int,cuenta_codigo:string,cuenta_nombre:string,monto:float}>
      */
-    private function repartirPorDimension(\PDO $db, int $idEmpresa, string $metodo, int $idDoc, string $detalleTabla, string $fkCol, int $idAsientoTipo, array $cuentaBase, float $montoTotal, string $soloInventariable = ''): array
+    private function repartirVentasCascada(\PDO $db, int $idEmpresa, int $idVenta, int $idAsientoTipo, array $cuentaBase, float $montoTotal): array
     {
         $baseLinea = [
             'id_cuenta'     => (int)($cuentaBase['id_cuenta'] ?? 0),
@@ -161,46 +194,37 @@ class AsientoBuilderService
             'cuenta_nombre' => $cuentaBase['cuenta_nombre'] ?? '',
             'monto'         => round($montoTotal, 2),
         ];
-
-        if (!in_array($metodo, ['producto', 'categoria', 'marca'], true) || $idDoc <= 0 || $montoTotal <= 0 || empty($baseLinea['id_cuenta'])) {
+        if ($idVenta <= 0 || $montoTotal <= 0 || empty($baseLinea['id_cuenta'])) {
             return [$baseLinea];
         }
 
-        $dimExpr = match ($metodo) {
-            'categoria' => 'p.id_categoria',
-            'marca'     => 'p.id_marca',
-            default     => 'd.id_producto',
-        };
-
-        $filtroInv = '';
-        if ($soloInventariable === 'no') {
-            $filtroInv = " AND NOT (p.inventariable = true AND COALESCE(p.tipo_produccion,'') <> '02')";
-        } elseif ($soloInventariable === 'si') {
-            $filtroInv = " AND (p.inventariable = true AND COALESCE(p.tipo_produccion,'') <> '02')";
-        }
-
-        $sql = "SELECT ap.id_cuenta AS dim_cuenta, pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
+        // COALESCE(producto, categoría, marca) → la cuenta más específica configurada para cada línea.
+        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
+                       pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
                        ROUND(SUM(d.precio_total_sin_impuesto)::numeric, 2) AS monto
-                FROM {$detalleTabla} d
+                FROM ventas_detalle d
                 LEFT JOIN productos p ON p.id = d.id_producto
-                LEFT JOIN asientos_programados ap
-                       ON ap.id_referencia   = {$dimExpr}
-                      AND ap.tipo_referencia = :metodo
-                      AND ap.id_asiento_tipo = :id_tipo
-                      AND ap.id_empresa      = :emp
-                      AND ap.eliminado       = false
-                LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
-                WHERE d.{$fkCol} = :id_doc {$filtroInv}
-                GROUP BY ap.id_cuenta, pc.codigo, pc.nombre";
+                LEFT JOIN asientos_programados ap_p
+                       ON ap_p.id_referencia = d.id_producto AND ap_p.tipo_referencia = 'producto'
+                      AND ap_p.id_asiento_tipo = :id_tipo1 AND ap_p.id_empresa = :emp1 AND ap_p.eliminado = false
+                LEFT JOIN asientos_programados ap_c
+                       ON ap_c.id_referencia = p.id_categoria AND ap_c.tipo_referencia = 'categoria'
+                      AND ap_c.id_asiento_tipo = :id_tipo2 AND ap_c.id_empresa = :emp2 AND ap_c.eliminado = false
+                LEFT JOIN asientos_programados ap_m
+                       ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
+                      AND ap_m.id_asiento_tipo = :id_tipo3 AND ap_m.id_empresa = :emp3 AND ap_m.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta)
+                WHERE d.id_venta = :id_doc
+                GROUP BY COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta), pc.codigo, pc.nombre";
         $st = $db->prepare($sql);
         $st->execute([
-            ':metodo'  => $metodo,
-            ':id_tipo' => $idAsientoTipo,
-            ':emp'     => $idEmpresa,
-            ':id_doc'  => $idDoc,
+            ':id_tipo1' => $idAsientoTipo, ':emp1' => $idEmpresa,
+            ':id_tipo2' => $idAsientoTipo, ':emp2' => $idEmpresa,
+            ':id_tipo3' => $idAsientoTipo, ':emp3' => $idEmpresa,
+            ':id_doc'   => $idVenta,
         ]);
 
-        $mapa  = []; // id_cuenta => linea
+        $mapa  = [];
         $total = 0.0;
         while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
             $monto = round((float)$row['monto'], 2);
@@ -220,7 +244,85 @@ class AsientoBuilderService
             return [$baseLinea];
         }
 
-        // Ajuste de redondeo: cuadrar la suma de partes con el monto total esperado.
+        // Conciliación de redondeo contra el subtotal esperado.
+        $dif = round($montoTotal - $total, 2);
+        if (abs($dif) >= 0.01) {
+            $keys = array_keys($mapa);
+            $ult = end($keys);
+            $mapa[$ult]['monto'] = round($mapa[$ult]['monto'] + $dif, 2);
+        }
+
+        return array_values($mapa);
+    }
+
+    /**
+     * Reparto POR LÍNEA del gasto de COMPRAS por NOMBRE del ítem: cada línea NO inventariable toma la
+     * cuenta de la regla 'item_compra' cuya `referencia_texto` coincide con su descripción; si no, la de
+     * su categoría; si no, la de su marca; si ninguna, la cuenta base (General de gasto). Incluye los
+     * ítems de texto libre (sin id_producto). Concilia el redondeo contra $montoTotal (subGasto).
+     *
+     * @return array<int,array{id_cuenta:int,cuenta_codigo:string,cuenta_nombre:string,monto:float}>
+     */
+    private function repartirComprasPorItem(\PDO $db, int $idEmpresa, int $idCompra, int $idAsientoTipo, array $cuentaBase, float $montoTotal): array
+    {
+        $baseLinea = [
+            'id_cuenta'     => (int)($cuentaBase['id_cuenta'] ?? 0),
+            'cuenta_codigo' => $cuentaBase['cuenta_codigo'] ?? '',
+            'cuenta_nombre' => $cuentaBase['cuenta_nombre'] ?? '',
+            'monto'         => round($montoTotal, 2),
+        ];
+        if ($idCompra <= 0 || $montoTotal <= 0 || empty($baseLinea['id_cuenta'])) {
+            return [$baseLinea];
+        }
+
+        // Solo líneas de GASTO (no inventariables; incluye ítems de texto libre sin id_producto).
+        $sql = "SELECT COALESCE(ap_i.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
+                       pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
+                       ROUND(SUM(d.precio_total_sin_impuesto)::numeric, 2) AS monto
+                FROM compras_detalle d
+                LEFT JOIN productos p ON p.id = d.id_producto
+                LEFT JOIN asientos_programados ap_i
+                       ON TRIM(ap_i.referencia_texto) = TRIM(d.descripcion) AND ap_i.tipo_referencia = 'item_compra'
+                      AND ap_i.id_asiento_tipo = :id_tipo1 AND ap_i.id_empresa = :emp1 AND ap_i.eliminado = false
+                LEFT JOIN asientos_programados ap_c
+                       ON ap_c.id_referencia = p.id_categoria AND ap_c.tipo_referencia = 'categoria'
+                      AND ap_c.id_asiento_tipo = :id_tipo2 AND ap_c.id_empresa = :emp2 AND ap_c.eliminado = false
+                LEFT JOIN asientos_programados ap_m
+                       ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
+                      AND ap_m.id_asiento_tipo = :id_tipo3 AND ap_m.id_empresa = :emp3 AND ap_m.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_i.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta)
+                WHERE d.id_compra = :id_doc
+                  AND (d.id_producto IS NULL OR COALESCE(p.inventariable, false) <> true OR COALESCE(p.tipo_produccion, '') = '02')
+                GROUP BY COALESCE(ap_i.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta), pc.codigo, pc.nombre";
+        $st = $db->prepare($sql);
+        $st->execute([
+            ':id_tipo1' => $idAsientoTipo, ':emp1' => $idEmpresa,
+            ':id_tipo2' => $idAsientoTipo, ':emp2' => $idEmpresa,
+            ':id_tipo3' => $idAsientoTipo, ':emp3' => $idEmpresa,
+            ':id_doc'   => $idCompra,
+        ]);
+
+        $mapa  = [];
+        $total = 0.0;
+        while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
+            $monto = round((float)$row['monto'], 2);
+            if ($monto == 0.0) continue;
+            $tieneCta = !empty($row['dim_cuenta']);
+            $idCta = $tieneCta ? (int)$row['dim_cuenta'] : (int)$baseLinea['id_cuenta'];
+            $cod   = $tieneCta ? ($row['dim_codigo'] ?? '') : $baseLinea['cuenta_codigo'];
+            $nom   = $tieneCta ? ($row['dim_nombre'] ?? '') : $baseLinea['cuenta_nombre'];
+            if (!isset($mapa[$idCta])) {
+                $mapa[$idCta] = ['id_cuenta' => $idCta, 'cuenta_codigo' => $cod, 'cuenta_nombre' => $nom, 'monto' => 0.0];
+            }
+            $mapa[$idCta]['monto'] = round($mapa[$idCta]['monto'] + $monto, 2);
+            $total = round($total + $monto, 2);
+        }
+
+        if (empty($mapa)) {
+            return [$baseLinea];
+        }
+
+        // Conciliación de redondeo contra el gasto esperado.
         $dif = round($montoTotal - $total, 2);
         if (abs($dif) >= 0.01) {
             $keys = array_keys($mapa);
@@ -249,7 +351,9 @@ class AsientoBuilderService
     {
         $idVenta  = (int)($data['id_venta'] ?? 0);
         $idEmpresa = (int)($data['id_empresa'] ?? 0);
-        $metodo   = (string)($data['__metodo__'] ?? 'general');
+        // Cascada: solo se reparte la línea de Ventas por producto/categoría/marca si el cliente NO
+        // tiene reglas propias (cuando las tiene, manda el cliente y no se reparte — Opción 2).
+        $repartePorLinea = (bool)($data['__reparte_por_linea__'] ?? false);
         $db = \App\core\Database::getConnection();
 
         // ── 1. Totales: leer SIEMPRE desde la BD cuando hay id_venta (fuente de verdad) ──
@@ -393,12 +497,12 @@ class AsientoBuilderService
             // Subtotal / Ventas: neto si no hay desc, bruto si hay cuenta de desc
             elseif (str_contains($codigo, 'SUBTOTAL') || str_contains($concepto, 'subtotal')) {
                 $valorMapeado = $tieneReglaDescuento ? ($subtotal + $descuento) : $subtotal;
-                // Reparto por dimensión (producto/categoría/marca): cada línea a la cuenta de su
-                // producto/categoría/marca; las no mapeadas, a la cuenta base de Ventas.
-                if (in_array($metodo, ['producto', 'categoria', 'marca'], true) && !$tieneReglaDescuento && $idVenta > 0 && $valorMapeado > 0) {
+                // Reparto en cascada por línea (producto → categoría → marca → General): cada línea a la
+                // cuenta más específica de su producto; las no mapeadas, a la cuenta base de Ventas.
+                if ($repartePorLinea && !$tieneReglaDescuento && $idVenta > 0 && $valorMapeado > 0) {
                     $lado = (($r['debe_haber'] ?? 'haber') === 'debe') ? 'debe' : 'haber';
-                    $partes = $this->repartirPorDimension(
-                        $db, $idEmpresa, $metodo, $idVenta, 'ventas_detalle', 'id_venta', (int)$r['id_asiento_tipo'],
+                    $partes = $this->repartirVentasCascada(
+                        $db, $idEmpresa, $idVenta, (int)$r['id_asiento_tipo'],
                         ['id_cuenta' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'] ?? '', 'cuenta_nombre' => $r['cuenta_nombre'] ?? ''],
                         $valorMapeado
                     );
@@ -410,7 +514,7 @@ class AsientoBuilderService
                             'cuenta_nombre'      => $pte['cuenta_nombre'],
                             'debe'               => $lado === 'debe' ? round($pte['monto'], 2) : 0.0,
                             'haber'              => $lado === 'debe' ? 0.0 : round($pte['monto'], 2),
-                            'referencia_detalle' => $refBase . ' · ' . ucfirst($metodo),
+                            'referencia_detalle' => $refBase . ' · por línea',
                         ];
                     }
                     continue;
@@ -546,7 +650,9 @@ class AsientoBuilderService
     {
         $idCompra  = (int)($data['id_compra'] ?? $data['id'] ?? 0);
         $idEmpresa = (int)($data['id_empresa'] ?? 0);
-        $metodo    = (string)($data['__metodo__'] ?? 'general');
+        // Cascada: solo se reparte el gasto por nombre de ítem si el proveedor NO tiene reglas propias
+        // (cuando las tiene, manda el proveedor y no se reparte — Opción 2).
+        $repartePorLinea = (bool)($data['__reparte_por_linea__'] ?? false);
         $db = \App\core\Database::getConnection();
 
         // ── 1. Cabecera + tipo de comprobante (fuente de verdad: BD) ──
@@ -638,19 +744,20 @@ class AsientoBuilderService
         }
 
         // ── 4. Ensamblar el cuerpo (Inventario/Gasto/IVA/Por pagar) respetando la dirección ──
-        // Reparto por dimensión (producto/categoría/marca) del gasto: las líneas NO inventariables
-        // van a la cuenta de su producto/categoría/marca; las inventariables siguen en Inventario.
+        // Reparto del GASTO por NOMBRE del ítem (item_compra → categoría → marca → General): cada línea
+        // NO inventariable va a la cuenta de su ítem; las inventariables siguen en Inventario. Solo si
+        // el proveedor no tiene reglas propias (si las tiene, manda el proveedor — Opción 2).
         $gastoLineas = null;
-        if (in_array($metodo, ['producto', 'categoria', 'marca'], true) && $idCompra > 0 && $subGasto > 0) {
+        if ($repartePorLinea && $idCompra > 0 && $subGasto > 0) {
             foreach ($reglas as $rr) {
                 if (empty($rr['id_cuenta'])) continue;
                 $cod = strtoupper($rr['asiento_tipo_codigo'] ?? $rr['codigo'] ?? '');
                 $con = strtolower($rr['asiento_tipo_referencia'] ?? $rr['concepto'] ?? $rr['referencia'] ?? '');
                 if (str_contains($cod, 'SUBTOTAL') || str_contains($con, 'subtotal')) {
-                    $gastoLineas = $this->repartirPorDimension(
-                        $db, $idEmpresa, $metodo, $idCompra, 'compras_detalle', 'id_compra', (int)$rr['id_asiento_tipo'],
+                    $gastoLineas = $this->repartirComprasPorItem(
+                        $db, $idEmpresa, $idCompra, (int)$rr['id_asiento_tipo'],
                         ['id_cuenta' => (int)$rr['id_cuenta'], 'cuenta_codigo' => $rr['cuenta_codigo'] ?? '', 'cuenta_nombre' => $rr['cuenta_nombre'] ?? ''],
-                        $subGasto, 'no'
+                        $subGasto
                     );
                     break;
                 }

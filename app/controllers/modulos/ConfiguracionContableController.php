@@ -115,6 +115,8 @@ class ConfiguracionContableController extends BaseModuloController
                     $refNombre = '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 small me-1">Cliente</span> ' . htmlspecialchars($r['cliente_nombre']);
                 } elseif ($r['tipo_referencia'] === 'proveedor' && !empty($r['proveedor_nombre'])) {
                     $refNombre = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 small me-1">Proveedor</span> ' . htmlspecialchars($r['proveedor_nombre']);
+                } elseif ($r['tipo_referencia'] === 'item_compra' && !empty($r['referencia_texto'])) {
+                    $refNombre = '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 small me-1">Ítem compra</span> ' . htmlspecialchars($r['referencia_texto']);
                 }
 
                 echo '<tr class="asiento-programado-row" role="button" onclick="ASIENTOPROG_editar(' . $r['id'] . ')">
@@ -752,6 +754,207 @@ class ConfiguracionContableController extends BaseModuloController
     }
 
     /**
+     * Lista las entidades de una dimensión (cliente/proveedor/producto/categoría/marca) relevantes para
+     * configurar reglas, marcando con "configurado" las que ya tienen cuentas asignadas en esa regla.
+     * Proveedor: con compras · Cliente: con ventas · Producto: con movimientos · Categoría/Marca: todas.
+     */
+    public function getEntidadesDimensionAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $tipo   = trim($_GET['tipo'] ?? '');
+        $q      = trim($_GET['q'] ?? '');
+        $modulo = trim($_GET['modulo'] ?? '');
+
+        if (!in_array($tipo, ['cliente', 'proveedor', 'producto', 'categoria', 'marca'], true)) {
+            echo json_encode(['ok' => false, 'error' => 'Tipo de dimensión no válido.']);
+            exit;
+        }
+
+        try {
+            $db = Database::getConnection();
+            $cfg = "(EXISTS (SELECT 1 FROM asientos_programados ap
+                             WHERE ap.id_empresa = :e AND ap.tipo_referencia = :tref
+                               AND ap.id_referencia = ent.id AND ap.eliminado = false))::int AS configurado";
+            $params = [':e' => $idEmpresa, ':tref' => $tipo];
+            $like = '';
+
+            if ($tipo === 'proveedor') {
+                $sql = "SELECT ent.id, ent.razon_social AS nombre, ent.identificacion, $cfg
+                        FROM proveedores ent
+                        WHERE ent.id_empresa = :e AND ent.eliminado = false
+                          AND EXISTS (SELECT 1 FROM compras_cabecera c WHERE c.id_proveedor = ent.id AND c.id_empresa = :e AND c.eliminado = false)";
+                $like = "(ent.razon_social ILIKE :q OR ent.identificacion ILIKE :q)";
+            } elseif ($tipo === 'cliente') {
+                $sql = "SELECT ent.id, ent.nombre AS nombre, ent.identificacion, $cfg
+                        FROM clientes ent
+                        WHERE ent.id_empresa = :e AND ent.eliminado = false
+                          AND EXISTS (SELECT 1 FROM ventas_cabecera v WHERE v.id_cliente = ent.id AND v.id_empresa = :e AND v.eliminado = false)";
+                $like = "(ent.nombre ILIKE :q OR ent.identificacion ILIKE :q)";
+            } elseif ($tipo === 'producto') {
+                // En compras los ítems llegan como texto libre; los productos del catálogo entran a
+                // compras vía homologación (productos_homologacion). En ventas sí van por id_producto.
+                $homol = "EXISTS (SELECT 1 FROM productos_homologacion ph
+                                  WHERE ph.id_producto = ent.id AND ph.id_empresa = :e AND ph.eliminado = false)";
+                $vendido = "EXISTS (SELECT 1 FROM ventas_detalle vd WHERE vd.id_producto = ent.id)";
+                if ($modulo === 'compras') {
+                    $movim = $homol;
+                } elseif ($modulo === 'ventas') {
+                    $movim = $vendido;
+                } else {
+                    $movim = "($vendido OR $homol)";
+                }
+                $sql = "SELECT ent.id, ent.nombre AS nombre, ent.codigo AS identificacion, $cfg
+                        FROM productos ent
+                        WHERE ent.id_empresa = :e AND ent.eliminado = false AND {$movim}";
+                $like = "(ent.nombre ILIKE :q OR ent.codigo ILIKE :q)";
+            } else {
+                $tabla = $tipo === 'categoria' ? 'categorias' : 'marcas';
+                $sql = "SELECT ent.id, ent.nombre AS nombre, NULL AS identificacion, $cfg
+                        FROM {$tabla} ent
+                        WHERE ent.id_empresa = :e AND ent.eliminado = false";
+                $like = "ent.nombre ILIKE :q";
+            }
+
+            if ($q !== '') {
+                $sql .= " AND $like";
+                $params[':q'] = "%$q%";
+            }
+            $sql .= " ORDER BY configurado DESC, nombre ASC LIMIT 200";
+            $st = $db->prepare($sql);
+            $st->execute($params);
+            echo json_encode(['ok' => true, 'data' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Descripciones ÚNICAS de los ítems transados con una entidad (proveedor → compras; cliente → ventas),
+     * opcionalmente filtradas por año. Para ayudar a decidir qué cuenta asignar.
+     */
+    public function getItemsEntidadAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $tipo = trim($_GET['tipo'] ?? '');
+        $id   = (int) ($_GET['id'] ?? 0);
+        $anio = trim($_GET['anio'] ?? '');
+
+        try {
+            if ($id <= 0 || !in_array($tipo, ['cliente', 'proveedor'], true)) {
+                echo json_encode(['ok' => true, 'data' => []]);
+                exit;
+            }
+            if ($tipo === 'proveedor') {
+                $detalle = 'compras_detalle'; $cab = 'compras_cabecera'; $fk = 'id_compra'; $colEnt = 'id_proveedor';
+            } else {
+                $detalle = 'ventas_detalle';  $cab = 'ventas_cabecera';  $fk = 'id_venta';  $colEnt = 'id_cliente';
+            }
+            $db = Database::getConnection();
+            $sql = "SELECT DISTINCT TRIM(d.descripcion) AS descripcion
+                    FROM {$detalle} d
+                    JOIN {$cab} c ON c.id = d.{$fk}
+                    WHERE c.{$colEnt} = :id AND c.id_empresa = :e AND c.eliminado = false
+                      AND COALESCE(TRIM(d.descripcion), '') <> ''";
+            $params = [':id' => $id, ':e' => $idEmpresa];
+            if ($anio !== '' && ctype_digit($anio)) {
+                $sql .= " AND EXTRACT(YEAR FROM c.fecha_emision) = :anio";
+                $params[':anio'] = (int) $anio;
+            }
+            $sql .= " ORDER BY descripcion ASC";
+            $st = $db->prepare($sql);
+            $st->execute($params);
+            echo json_encode(['ok' => true, 'data' => array_column($st->fetchAll(PDO::FETCH_ASSOC), 'descripcion')]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Lista los ítems ÚNICOS de las compras (por descripción), marcando si cada uno está homologado
+     * a un producto del catálogo (productos_homologacion: id_proveedor + codigo_proveedor). Para la
+     * regla por Producto/Servicio en compras, donde se contabiliza en base a los ítems de compra.
+     */
+    public function getItemsComprasAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q = trim($_GET['q'] ?? '');
+
+        try {
+            $db = Database::getConnection();
+            $sql = "SELECT TRIM(d.descripcion) AS descripcion,
+                           (BOOL_OR(EXISTS (
+                                SELECT 1 FROM productos_homologacion ph
+                                WHERE ph.id_empresa     = c.id_empresa
+                                  AND ph.id_proveedor   = c.id_proveedor
+                                  AND ph.codigo_proveedor = d.codigo_principal
+                                  AND ph.eliminado      = false
+                           )))::int AS homologado,
+                           (BOOL_OR(EXISTS (
+                                SELECT 1 FROM asientos_programados ap
+                                WHERE ap.id_empresa      = c.id_empresa
+                                  AND ap.tipo_referencia = 'item_compra'
+                                  AND TRIM(ap.referencia_texto) = TRIM(d.descripcion)
+                                  AND ap.eliminado       = false
+                           )))::int AS configurado,
+                           COUNT(*) AS veces
+                    FROM compras_detalle d
+                    JOIN compras_cabecera c ON c.id = d.id_compra
+                    WHERE c.id_empresa = :e AND c.eliminado = false
+                      AND COALESCE(TRIM(d.descripcion), '') <> ''";
+            $params = [':e' => $idEmpresa];
+            if ($q !== '') {
+                $sql .= " AND TRIM(d.descripcion) ILIKE :q";
+                $params[':q'] = "%$q%";
+            }
+            $sql .= " GROUP BY TRIM(d.descripcion) ORDER BY configurado DESC, descripcion ASC LIMIT 1000";
+            $st = $db->prepare($sql);
+            $st->execute($params);
+            echo json_encode(['ok' => true, 'data' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Años con movimientos en la empresa para el filtro. Acepta `modulo` (compras|ventas) directamente;
+     * si no se envía, lo deriva del `tipo` (cliente → ventas; resto → compras).
+     */
+    public function getAniosMovimientosAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $tipo = trim($_GET['tipo'] ?? '');
+        $modulo = trim($_GET['modulo'] ?? '');
+        if ($modulo === '') { $modulo = $tipo === 'cliente' ? 'ventas' : 'compras'; }
+        try {
+            $cab = $modulo === 'ventas' ? 'ventas_cabecera' : 'compras_cabecera';
+            $db = Database::getConnection();
+            $st = $db->prepare("SELECT DISTINCT EXTRACT(YEAR FROM fecha_emision)::int AS anio
+                                FROM {$cab}
+                                WHERE id_empresa = ? AND eliminado = false AND fecha_emision IS NOT NULL
+                                ORDER BY anio DESC");
+            $st->execute([$idEmpresa]);
+            echo json_encode(['ok' => true, 'anios' => array_map('intval', array_column($st->fetchAll(PDO::FETCH_ASSOC), 'anio'))]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
      * Guarda la preferencia del método de contabilización preferido de la empresa.
      */
     public function guardarMetodoPreferenciaAjax(): void
@@ -794,25 +997,36 @@ class ConfiguracionContableController extends BaseModuloController
         $idCuenta = (int) ($_POST['id_cuenta'] ?? 0);
         $idReferencia = (int) ($_POST['id_referencia'] ?? 0);
         $tipoReferencia = trim($_POST['tipo_referencia'] ?? '');
+        $referenciaTexto = trim($_POST['referencia_texto'] ?? '');
 
-        if ($idAsientoTipo <= 0 || $idCuenta <= 0 || $idReferencia <= 0 || $tipoReferencia === '') {
-            echo json_encode(['ok' => false, 'error' => 'Parámetros incompletos. Debe seleccionar una entidad y una cuenta válida.']);
+        // 'item_compra' (regla por nombre del ítem de compra) usa clave de TEXTO, no id entero.
+        $esItem = ($tipoReferencia === 'item_compra');
+
+        if ($idAsientoTipo <= 0 || $idCuenta <= 0 || $tipoReferencia === '' || ($esItem ? $referenciaTexto === '' : $idReferencia <= 0)) {
+            echo json_encode(['ok' => false, 'error' => 'Parámetros incompletos. Debe seleccionar una entidad/ítem y una cuenta válida.']);
             exit;
         }
 
         try {
             // Comprobar si ya existe una regla para esa dimensión específica y asiento tipo
             $db = Database::getConnection();
-            $stCheck = $db->prepare("SELECT id FROM asientos_programados 
-                                     WHERE id_empresa = ? AND id_asiento_tipo = ? AND id_referencia = ? AND tipo_referencia = ? AND eliminado = false");
-            $stCheck->execute([$idEmpresa, $idAsientoTipo, $idReferencia, $tipoReferencia]);
+            if ($esItem) {
+                $stCheck = $db->prepare("SELECT id FROM asientos_programados
+                                         WHERE id_empresa = ? AND id_asiento_tipo = ? AND tipo_referencia = ? AND TRIM(referencia_texto) = ? AND eliminado = false");
+                $stCheck->execute([$idEmpresa, $idAsientoTipo, $tipoReferencia, $referenciaTexto]);
+            } else {
+                $stCheck = $db->prepare("SELECT id FROM asientos_programados
+                                         WHERE id_empresa = ? AND id_asiento_tipo = ? AND id_referencia = ? AND tipo_referencia = ? AND eliminado = false");
+                $stCheck->execute([$idEmpresa, $idAsientoTipo, $idReferencia, $tipoReferencia]);
+            }
             $idExistente = $stCheck->fetchColumn();
 
             $dataRule = [
-                'id_asiento_tipo' => $idAsientoTipo,
-                'id_cuenta'       => $idCuenta,
-                'id_referencia'   => $idReferencia,
-                'tipo_referencia' => $tipoReferencia
+                'id_asiento_tipo'  => $idAsientoTipo,
+                'id_cuenta'        => $idCuenta,
+                'id_referencia'    => $esItem ? null : $idReferencia,
+                'tipo_referencia'  => $tipoReferencia,
+                'referencia_texto' => $esItem ? $referenciaTexto : null
             ];
 
             if ($idExistente) {
@@ -879,10 +1093,27 @@ class ConfiguracionContableController extends BaseModuloController
 
         try {
             $db = Database::getConnection();
-            
+
+            // Regla por NOMBRE del ítem de compra: no hay tabla de catálogo; el nombre es referencia_texto.
+            if ($tipoReferencia === 'item_compra') {
+                $sql = "SELECT ap.id, ap.id_asiento_tipo, ap.id_cuenta, ap.id_referencia, ap.tipo_referencia,
+                               at.referencia AS asiento_tipo_referencia,
+                               pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
+                               ap.referencia_texto AS dimension_nombre
+                        FROM asientos_programados ap
+                        INNER JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                        INNER JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                        WHERE ap.id_empresa = ? AND at.tipo_asiento = ? AND ap.tipo_referencia = 'item_compra' AND ap.eliminado = false
+                        ORDER BY dimension_nombre ASC";
+                $st = $db->prepare($sql);
+                $st->execute([$idEmpresa, $tipoAsiento]);
+                echo json_encode(['ok' => true, 'data' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+                exit;
+            }
+
             $joinTable = '';
             $joinField = '';
-            
+
             if ($tipoReferencia === 'cliente') {
                 $joinTable = 'clientes';
                 $joinField = 'nombre';

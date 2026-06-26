@@ -35,6 +35,7 @@ class AsientoProgramadoRules
         if ($tipoRef !== '') {
             $allowedTypes = [
                 'cliente', 'proveedor', 'empleado', 'asientos tipo', 'producto', 'categoria', 'marca', 'iva', 'iva_ventas_factura', 'iva_compras_factura',
+                'item_compra',
                 'ventas_factura', 'ventas_recibo', 'adquisiciones_compras', 'retenciones_venta', 'retenciones_compra',
                 'ingresos_egresos', 'cobros_pagos', 'nomina', 'retenciones_venta_debe', 'retenciones_venta_haber',
                 'opcion_ingreso', 'opcion_egreso', 'forma_cobro', 'forma_pago'
@@ -42,7 +43,12 @@ class AsientoProgramadoRules
             if (!in_array($tipoRef, $allowedTypes, true)) {
                 $errores[] = 'El tipo de referencia de entidad no es válido.';
             }
-            if ($idRef <= 0) {
+            // 'item_compra' se identifica por TEXTO (nombre del ítem), no por id_referencia.
+            if ($tipoRef === 'item_compra') {
+                if (trim((string) ($data['referencia_texto'] ?? '')) === '') {
+                    $errores[] = 'Debe seleccionar un ítem de compra (nombre) para esta regla.';
+                }
+            } elseif ($idRef <= 0) {
                 $errores[] = 'Debe seleccionar una entidad (Cliente/Proveedor) específica para este tipo de referencia.';
             }
         } else {

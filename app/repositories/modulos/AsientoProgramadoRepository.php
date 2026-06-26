@@ -125,10 +125,10 @@ class AsientoProgramadoRepository extends BaseRepository
     {
         $sql = "INSERT INTO {$this->table} (
                     id_empresa, id_usuario, id_asiento_tipo, id_cuenta, id_referencia, tipo_referencia,
-                    created_by, created_at, eliminado
+                    referencia_texto, created_by, created_at, eliminado
                 ) VALUES (
                     :id_empresa, :id_usuario, :id_asiento_tipo, :id_cuenta, :id_referencia, :tipo_referencia,
-                    :created_by, CURRENT_TIMESTAMP, false
+                    :referencia_texto, :created_by, CURRENT_TIMESTAMP, false
                 )";
         $st = $this->db->prepare($sql);
         $st->execute([
@@ -138,6 +138,7 @@ class AsientoProgramadoRepository extends BaseRepository
             ':id_cuenta'        => $data['id_cuenta'],
             ':id_referencia'    => $data['id_referencia'] ?: null,
             ':tipo_referencia'  => $data['tipo_referencia'] ?: null,
+            ':referencia_texto' => !empty($data['referencia_texto']) ? trim((string) $data['referencia_texto']) : null,
             ':created_by'       => $data['created_by']
         ]);
         return $this->lastInsertId();
@@ -148,11 +149,12 @@ class AsientoProgramadoRepository extends BaseRepository
      */
     public function update(int $id, int $idEmpresa, array $data): bool
     {
-        $sql = "UPDATE {$this->table} SET 
+        $sql = "UPDATE {$this->table} SET
                     id_asiento_tipo = :id_asiento_tipo,
                     id_cuenta = :id_cuenta,
                     id_referencia = :id_referencia,
                     tipo_referencia = :tipo_referencia,
+                    referencia_texto = :referencia_texto,
                     updated_by = :updated_by,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
@@ -162,6 +164,7 @@ class AsientoProgramadoRepository extends BaseRepository
             ':id_cuenta'        => $data['id_cuenta'],
             ':id_referencia'    => $data['id_referencia'] ?: null,
             ':tipo_referencia'  => $data['tipo_referencia'] ?: null,
+            ':referencia_texto' => !empty($data['referencia_texto']) ? trim((string) $data['referencia_texto']) : null,
             ':updated_by'       => $data['updated_by'],
             ':id'               => $id,
             ':id_empresa'       => $idEmpresa
@@ -189,17 +192,31 @@ class AsientoProgramadoRepository extends BaseRepository
     /**
      * Verifica si ya existe una regla para el mismo Asiento Tipo y misma Referencia (evitar duplicaciones).
      */
-    public function existeRegla(int $idEmpresa, int $idAsientoTipo, ?int $idReferencia, ?string $tipoReferencia, ?int $idExcluir = null): bool
+    public function existeRegla(int $idEmpresa, int $idAsientoTipo, ?int $idReferencia, ?string $tipoReferencia, ?int $idExcluir = null, ?string $referenciaTexto = null): bool
     {
-        $sql = "SELECT COUNT(*) FROM {$this->table} 
-                WHERE id_empresa = :id_empresa 
-                  AND id_asiento_tipo = :id_asiento_tipo 
+        $sql = "SELECT COUNT(*) FROM {$this->table}
+                WHERE id_empresa = :id_empresa
+                  AND id_asiento_tipo = :id_asiento_tipo
                   AND eliminado = false";
-                  
+
         $params = [
             ':id_empresa' => $idEmpresa,
             ':id_asiento_tipo' => $idAsientoTipo
         ];
+
+        // Reglas con clave de TEXTO (p. ej. 'item_compra'): se identifican por tipo + referencia_texto.
+        if ($referenciaTexto !== null && trim($referenciaTexto) !== '') {
+            $sql .= " AND tipo_referencia = :tipo_ref AND TRIM(referencia_texto) = :ref_txt";
+            $params[':tipo_ref'] = $tipoReferencia;
+            $params[':ref_txt'] = trim($referenciaTexto);
+            if ($idExcluir !== null && $idExcluir > 0) {
+                $sql .= " AND id != :id_exc";
+                $params[':id_exc'] = $idExcluir;
+            }
+            $st = $this->db->prepare($sql);
+            $st->execute($params);
+            return ((int) $st->fetchColumn()) > 0;
+        }
 
         if ($idReferencia !== null && $idReferencia > 0) {
             if ($tipoReferencia !== 'cliente' && $tipoReferencia !== 'proveedor' && $tipoReferencia !== 'producto' && $tipoReferencia !== 'categoria' && $tipoReferencia !== 'marca' && $tipoReferencia !== 'iva') {
