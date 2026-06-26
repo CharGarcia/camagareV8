@@ -8,7 +8,7 @@ document.getElementById('archivo_txt_input').addEventListener('change', function
     const formData = new FormData();
     formData.append('archivo_txt', file);
 
-    fetch(`${BASE_URL}/modulos/DescargasSri/procesarTxtSriAjax`, {
+    fetch(`${BASE_URL}/modulos/descargas_sri/procesarTxtSriAjax`, {
         method: 'POST',
         body: formData
     })
@@ -55,7 +55,7 @@ function procesarClaveAcceso() {
     const formData = new FormData();
     formData.append('claves', claveStr);
 
-    fetch(`${BASE_URL}/modulos/DescargasSri/procesarClavesAccesoAjax`, {
+    fetch(`${BASE_URL}/modulos/descargas_sri/procesarClavesAccesoAjax`, {
         method: 'POST',
         body: formData
     })
@@ -106,7 +106,7 @@ async function iniciarDescargaClavesTxt() {
             const formData = new FormData();
             formData.append('claves', clave);
 
-            const res = await fetch(`${BASE_URL}/modulos/DescargasSri/procesarClavesAccesoAjax`, {
+            const res = await fetch(`${BASE_URL}/modulos/descargas_sri/procesarClavesAccesoAjax`, {
                 method: 'POST',
                 body: formData
             });
@@ -162,7 +162,7 @@ function procesarArchivosXml() {
         formData.append('archivos_xml[]', input.files[i]);
     }
 
-    fetch(`${BASE_URL}/modulos/DescargasSri/procesarArchivosXmlAjax`, {
+    fetch(`${BASE_URL}/modulos/descargas_sri/procesarArchivosXmlAjax`, {
         method: 'POST',
         body: formData
     })
@@ -224,7 +224,7 @@ function ejecutarRegistro(clave, xmlBase64) {
     formData.append('clave', clave);
     formData.append('xml_base64', xmlBase64);
 
-    fetch(`${BASE_URL}/modulos/DescargasSri/registrarComprobanteAjax`, {
+    fetch(`${BASE_URL}/modulos/descargas_sri/registrarComprobanteAjax`, {
         method: 'POST',
         body: formData
     })
@@ -342,7 +342,7 @@ function listarDocumentosIgnorados() {
     const tbody = document.getElementById('tbodyIgnorados');
     if (!tbody) return;
 
-    fetch(`${BASE_URL}/modulos/DescargasSri/listarDocumentosIgnoradosAjax`)
+    fetch(`${BASE_URL}/modulos/descargas_sri/listarDocumentosIgnoradosAjax`)
     .then(res => res.json())
     .then(data => {
         if (data.ok) {
@@ -428,7 +428,7 @@ function agregarDocumentoIgnorado() {
     formData.append('nombre_proveedor', inputClave.dataset.nombreAuto || '');
     formData.append('fecha_documento', inputClave.dataset.fechaAuto || '');
 
-    fetch(`${BASE_URL}/modulos/DescargasSri/agregarDocumentoIgnoradoAjax`, {
+    fetch(`${BASE_URL}/modulos/descargas_sri/agregarDocumentoIgnoradoAjax`, {
         method: 'POST',
         body: formData
     })
@@ -464,7 +464,7 @@ function eliminarDocumentoIgnorado(id) {
             const formData = new FormData();
             formData.append('id', id);
 
-            fetch(`${BASE_URL}/modulos/DescargasSri/eliminarDocumentoIgnoradoAjax`, {
+            fetch(`${BASE_URL}/modulos/descargas_sri/eliminarDocumentoIgnoradoAjax`, {
                 method: 'POST',
                 body: formData
             })
@@ -491,7 +491,7 @@ function eliminarDocumentoIgnorado(id) {
 // =============================================================================
 
 function cargarConfigDescarga() {
-    fetch(`${BASE_URL}/modulos/DescargasSri/obtenerConfigDescargaAjax`)
+    fetch(`${BASE_URL}/modulos/descargas_sri/obtenerConfigDescargaAjax`)
         .then(r => r.json())
         .then(data => {
             if (!data.ok) return;
@@ -582,7 +582,7 @@ function guardarConfigDescarga() {
     // El tipo de documento ya no se configura aquí; se elige por ejecución en la descarga semiautomática.
     formData.append('tipos_documento', 'todos');
 
-    fetch(`${BASE_URL}/modulos/DescargasSri/guardarConfigDescargaAjax`, {
+    fetch(`${BASE_URL}/modulos/descargas_sri/guardarConfigDescargaAjax`, {
         method: 'POST',
         body: formData
     })
@@ -620,7 +620,7 @@ function cargarHistorialDescargas() {
     if (!tbody) return;
 
     const limite = document.getElementById('historial_limite')?.value || 20;
-    fetch(`${BASE_URL}/modulos/DescargasSri/historialDescargasAjax?limite=${limite}`)
+    fetch(`${BASE_URL}/modulos/descargas_sri/historialDescargasAjax?limite=${limite}`)
         .then(r => r.json())
         .then(data => {
             if (!data.ok || !data.data.length) {
@@ -664,7 +664,7 @@ function cargarHistorialDescargas() {
 }
 
 function verDetalleLog(idLog) {
-    fetch(`${BASE_URL}/modulos/DescargasSri/detalleLogAjax?id=${idLog}`)
+    fetch(`${BASE_URL}/modulos/descargas_sri/detalleLogAjax?id=${idLog}`)
         .then(r => r.json())
         .then(data => {
             if (!data.ok) { alert(data.error); return; }
@@ -786,7 +786,7 @@ function escHtml(str) {
 function generarDescargaSri() {
     const btn = document.getElementById('btnGenerarDescargaSri');
     if (btn) btn.disabled = true;
-    fetch(`${BASE_URL}/modulos/DescargasSri/marcarLoginPendienteAjax`, { method: 'POST' })
+    fetch(`${BASE_URL}/modulos/descargas_sri/marcarLoginPendienteAjax`, { method: 'POST' })
         .then(r => r.json())
         .then(data => {
             if (btn) btn.disabled = false;

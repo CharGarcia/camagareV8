@@ -47,7 +47,7 @@ async function pedirLoginPendiente() {
         const body = new URLSearchParams();
         body.set('agente_token', cfg.agenteToken);
 
-        const resp = await fetch(`${base}/modulos/DescargasSri/agenteLoginPendienteAjax`, {
+        const resp = await fetch(`${base}/modulos/descargas_sri/agenteLoginPendienteAjax`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: body.toString(),
@@ -70,7 +70,7 @@ async function registrar(claves) {
         body.set('agente_token', cfg.agenteToken);
         body.set('claves', JSON.stringify(claves));
 
-        const resp = await fetch(`${base}/modulos/DescargasSri/agenteRegistrarClavesAjax`, {
+        const resp = await fetch(`${base}/modulos/descargas_sri/agenteRegistrarClavesAjax`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: body.toString(),
