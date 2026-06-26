@@ -19,7 +19,7 @@ class AsientoProgramadoRules
         $tipoRef = trim($data['tipo_referencia'] ?? '');
 
         // Tipos de referencia que no dependen de un asiento tipo base (id_asiento_tipo = 0)
-        $tiposSinAsientoBase = ['iva_ventas_factura', 'retenciones_venta_debe', 'retenciones_venta_haber', 'opcion_ingreso', 'opcion_egreso', 'forma_cobro', 'forma_pago'];
+        $tiposSinAsientoBase = ['iva_ventas_factura', 'iva_compras_factura', 'retenciones_venta_debe', 'retenciones_venta_haber', 'opcion_ingreso', 'opcion_egreso', 'forma_cobro', 'forma_pago'];
         if ($idAsientoTipo <= 0 && !in_array($tipoRef, $tiposSinAsientoBase, true)) {
             $errores[] = 'El tipo de asiento base es obligatorio.';
         }
@@ -34,7 +34,7 @@ class AsientoProgramadoRules
 
         if ($tipoRef !== '') {
             $allowedTypes = [
-                'cliente', 'proveedor', 'empleado', 'asientos tipo', 'producto', 'categoria', 'marca', 'iva', 'iva_ventas_factura',
+                'cliente', 'proveedor', 'empleado', 'asientos tipo', 'producto', 'categoria', 'marca', 'iva', 'iva_ventas_factura', 'iva_compras_factura',
                 'ventas_factura', 'ventas_recibo', 'adquisiciones_compras', 'retenciones_venta', 'retenciones_compra',
                 'ingresos_egresos', 'cobros_pagos', 'nomina', 'retenciones_venta_debe', 'retenciones_venta_haber',
                 'opcion_ingreso', 'opcion_egreso', 'forma_cobro', 'forma_pago'

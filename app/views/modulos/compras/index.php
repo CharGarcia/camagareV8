@@ -287,6 +287,7 @@ $tiposComprobanteMap = [
 <?php include MVC_APP . '/views/modulos/retenciones_compras/modal_retencion.php'; ?>
 <script src="<?= $base ?>/js/modulos/proveedores_modal.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/productos_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/asiento_contable_tab.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/compras.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/retenciones_compras.js?v=<?= time() ?>"></script>
 

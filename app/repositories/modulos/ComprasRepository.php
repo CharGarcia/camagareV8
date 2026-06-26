@@ -222,6 +222,17 @@ class ComprasRepository extends BaseRepository
         )->fetchAll();
     }
 
+    /**
+     * Vincula el asiento contable generado a la compra.
+     */
+    public function updateAsientoContable(int $idCompra, int $idAsiento): void
+    {
+        $this->query(
+            "UPDATE compras_cabecera SET id_asiento_contable = ? WHERE id = ?",
+            [$idAsiento, $idCompra]
+        );
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // PAGOS
     // ─────────────────────────────────────────────────────────────────────────

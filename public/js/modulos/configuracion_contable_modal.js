@@ -5,6 +5,35 @@
     let activeDropdown = null;
     let debounceTimer = null;
 
+    // Métodos de "Contabilizar Por" disponibles por tipo de asiento (Fase A).
+    const METODOS_DIM = {
+        ventas_factura:        [['general', 'General (Por Defecto)'], ['cliente', 'Por Cliente'], ['producto', 'Por Producto/Servicio'], ['categoria', 'Por Categoría'], ['marca', 'Por Marca']],
+        adquisiciones_compras: [['general', 'General (Por Defecto)'], ['proveedor', 'Por Proveedor'], ['producto', 'Por Producto/Servicio'], ['categoria', 'Por Categoría'], ['marca', 'Por Marca']]
+    };
+    // Acordeones de dimensión visibles por tipo de asiento.
+    const ACORDEONES_DIM = {
+        ventas_factura:        ['accItemCliente', 'accItemProducto', 'accItemCategoria', 'accItemMarca'],
+        adquisiciones_compras: ['accItemProveedor', 'accItemProducto', 'accItemCategoria', 'accItemMarca']
+    };
+    const ACORDEONES_DIM_TODOS = ['accItemCliente', 'accItemProveedor', 'accItemProducto', 'accItemCategoria', 'accItemMarca'];
+
+    function ASIENTOPROG_poblarSelectorMetodo(tipoAsiento, metodoActual) {
+        const sel = document.getElementById('selectorMetodoPreferencia');
+        if (!sel) return;
+        const opciones = METODOS_DIM[tipoAsiento] || [['general', 'General (Por Defecto)']];
+        sel.innerHTML = opciones.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+        const valido = opciones.some(([v]) => v === metodoActual);
+        sel.value = valido ? metodoActual : 'general';
+    }
+
+    function ASIENTOPROG_mostrarAcordeonesDim(tipoAsiento) {
+        const visibles = ACORDEONES_DIM[tipoAsiento] || [];
+        ACORDEONES_DIM_TODOS.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = visibles.includes(id) ? '' : 'none';
+        });
+    }
+
     /**
      * Inicializa o actualiza la visualización de acordeones al presionar "Configurar Asientos".
      */
@@ -50,6 +79,20 @@
                 const tbody = document.getElementById('tbodyConfiguracionGeneral');
                 tbody.innerHTML = '';
 
+                // Layout: ventas/compras y demás conceptos de naturaleza fija → dos columnas (Debe | Haber).
+                // retenciones_venta conserva la tabla clásica (doble cuenta por fila).
+                const usaDosColumnas = (tipoAsiento !== 'retenciones_venta');
+                const dosColCont = document.getElementById('dosColumnasGeneral');
+                const tablaWrap  = document.getElementById('tablaGeneralWrap');
+                const colDebe    = document.getElementById('colDebeGeneral');
+                const colHaber   = document.getElementById('colHaberGeneral');
+                if (dosColCont) dosColCont.style.display = usaDosColumnas ? '' : 'none';
+                if (tablaWrap)  tablaWrap.style.display  = usaDosColumnas ? 'none' : '';
+                if (usaDosColumnas) {
+                    if (colDebe)  colDebe.innerHTML  = '';
+                    if (colHaber) colHaber.innerHTML = '';
+                }
+
                 // Actualizar dinámicamente la cabecera thead de la tabla general
                 const thead = document.getElementById('theadConfiguracionGeneral');
                 if (thead) {
@@ -79,7 +122,13 @@
                 }
 
                 if (res.data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> No hay reglas predefinidas para este tipo de asiento.</td></tr>';
+                    if (usaDosColumnas) {
+                        const vacio = '<div class="text-center py-4 text-muted small"><i class="bi bi-info-circle me-1"></i> Sin conceptos.</div>';
+                        if (colDebe)  colDebe.innerHTML  = vacio;
+                        if (colHaber) colHaber.innerHTML = '';
+                    } else {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> No hay reglas predefinidas para este tipo de asiento.</td></tr>';
+                    }
                 } else {
                     res.data.forEach(item => {
                         const tr = document.createElement('tr');
@@ -128,58 +177,39 @@
                             ASIENTOPROG_vincularAutocomplete(0, inputDebeId, hiddenDebeId, sugDebeId, 'activo', 'retenciones_venta_debe', item.id_referencia);
                             ASIENTOPROG_vincularAutocomplete(0, inputHaberId, hiddenHaberId, sugHaberId, 'activo', 'retenciones_venta_haber', item.id_referencia);
                         } else {
-                            const safeSuffix = item.tipo_referencia === 'iva_ventas_factura' ? `iva_${item.id_referencia}` : `at_${item.id_asiento_tipo}`;
+                            const safeSuffix = (item.tipo_referencia === 'iva_ventas_factura' || item.tipo_referencia === 'iva_compras_factura') ? `iva_${item.id_referencia}` : `at_${item.id_asiento_tipo}`;
                             const inputId = `cuenta_search_${safeSuffix}`;
                             const hiddenId = `cuenta_hidden_${safeSuffix}`;
                             const sugId = `sug_${safeSuffix}`;
-                            
+
                             const cuentaVal = item.id_cuenta ? `${item.cuenta_codigo} - ${item.cuenta_nombre}` : '';
                             const idCuentaVal = item.id_cuenta || '';
-
-                            // Mapeo visual premium de badges para el Tipo de Cuenta
-                            const colorMap = {
-                                activo: 'success',
-                                pasivo: 'danger',
-                                patrimonio: 'dark',
-                                ingreso: 'primary',
-                                costo: 'info',
-                                gasto: 'warning'
-                            };
-                            const parts = (item.tipo_cuenta || '').split(',').map(p => p.trim().toLowerCase());
-                            let badgeHtml = '';
-                            parts.forEach(p => {
-                                if (p) {
-                                    const label = p.charAt(0).toUpperCase() + p.slice(1);
-                                    badgeHtml += `<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 m-1 small">${label}</span>`;
-                                }
-                            });
-                            if (!badgeHtml) {
-                                badgeHtml = '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 m-1 small">Todos</span>';
-                            }
-
-                            const debeHaberBadge = (item.debe_haber || 'debe').toLowerCase() === 'debe'
-                                ? '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 fw-bold small">DEBE</span>'
-                                : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 py-1 px-2 fw-bold small">HABER</span>';
-
                             const borderClass = idCuentaVal ? '' : 'is-invalid border-danger';
 
-                            tr.innerHTML = `
-                                <td class="ps-4 fw-bold text-dark">${item.concepto}</td>
-                                <td class="small text-muted">${item.detalle || 'Sin descripción detallada.'}</td>
-                                <td>${badgeHtml}</td>
-                                <td class="text-center">${debeHaberBadge}</td>
-                                <td class="autocomplete-celda">
-                                    <input type="text" class="form-control form-control-sm ${borderClass}" id="${inputId}" placeholder="Escriba código o nombre..." value="${cuentaVal}" autocomplete="off">
+                            // Cada concepto se ubica en su columna natural (Debe o Haber).
+                            const esDebe = (item.debe_haber || 'debe').toLowerCase() === 'debe';
+                            const cont = esDebe ? colDebe : colHaber;
+                            if (!cont) return;
+
+                            const card = document.createElement('div');
+                            card.className = 'px-3 py-2 border-top';
+                            card.innerHTML = `
+                                <div class="d-flex justify-content-between align-items-start mb-1">
+                                    <div class="pe-2">
+                                        <div class="fw-bold text-dark small">${item.concepto}</div>
+                                        ${item.detalle ? `<div class="text-muted" style="font-size:0.72rem;">${item.detalle}</div>` : ''}
+                                    </div>
+                                    <button type="button" class="btn btn-link text-danger p-0 border-0" onclick="ASIENTOPROG_eliminarAlVuelo(${item.id_asiento_tipo || 0}, '${inputId}', '${hiddenId}', '${item.tipo_referencia || ''}', ${item.id_referencia || 0})" title="Limpiar cuenta">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                                <div class="autocomplete-celda position-relative">
+                                    <input type="text" class="form-control form-control-sm ${borderClass}" id="${inputId}" placeholder="Buscar cuenta..." value="${cuentaVal}" autocomplete="off">
                                     <input type="hidden" id="${hiddenId}" value="${idCuentaVal}">
                                     <div class="list-group sugerencias-flotantes" id="${sugId}" style="display: none;"></div>
-                                </td>
-                                <td class="text-center">
-                                    <button type="button" class="btn btn-link text-danger p-0 border-0" onclick="ASIENTOPROG_eliminarAlVuelo(item.id_asiento_tipo, '${inputId}', '${hiddenId}', item.tipo_referencia || '', item.id_referencia || 0)" title="Limpiar Cuenta">
-                                        <i class="bi bi-trash fs-5"></i>
-                                    </button>
-                                </td>
+                                </div>
                             `;
-                            tbody.appendChild(tr);
+                            cont.appendChild(card);
 
                             // Configurar autocompletado en caliente para este input filtrando por tipo de cuenta
                             ASIENTOPROG_vincularAutocomplete(item.id_asiento_tipo, inputId, hiddenId, sugId, item.tipo_cuenta || '', item.tipo_referencia || '', item.id_referencia || 0);
@@ -187,14 +217,9 @@
                     });
                 }
 
-                // Actualizar método preferido
-                const selectorMetodo = document.getElementById('selectorMetodoPreferencia');
-                if (selectorMetodo) {
-                    selectorMetodo.value = 'general';
-                    if (res.metodo !== 'general') {
-                        ASIENTOPROG_guardarMetodoPreferencia('general');
-                    }
-                }
+                // Selector "Contabilizar Por" + acordeones de dimensión según el tipo de asiento
+                ASIENTOPROG_poblarSelectorMetodo(tipoAsiento, res.metodo || 'general');
+                ASIENTOPROG_mostrarAcordeonesDim(tipoAsiento);
 
                 // Actualizar título y mostrar panel de acordeones
                 const selectedText = selector.options[selector.selectedIndex].text;
@@ -202,7 +227,7 @@
                 document.getElementById('seccionAcordeones').style.display = 'block';
 
                 // Cerrar acordeones colapsados por defecto (excepto el general)
-                ['Clientes', 'Productos', 'Categorias', 'Marcas', 'Ivas'].forEach(dim => {
+                ['Clientes', 'Proveedores', 'Productos', 'Categorias', 'Marcas', 'Ivas'].forEach(dim => {
                     const el = document.getElementById(`collapse${dim}`);
                     if (el && el.classList.contains('show')) {
                         const bsCollapse = bootstrap.Collapse.getInstance(el);
@@ -289,7 +314,7 @@
      * Registra o actualiza al vuelo una regla general de cuenta contable.
      */
     window.ASIENTOPROG_guardarAlVuelo = async function (idAsientoTipo, idCuenta, inputElement, tipoReferencia = '', idReferencia = 0) {
-        if ((!idAsientoTipo && tipoReferencia !== 'iva_ventas_factura' && tipoReferencia !== 'retenciones_venta' && tipoReferencia !== 'retenciones_venta_debe' && tipoReferencia !== 'retenciones_venta_haber') || !idCuenta) return;
+        if ((!idAsientoTipo && tipoReferencia !== 'iva_ventas_factura' && tipoReferencia !== 'iva_compras_factura' && tipoReferencia !== 'retenciones_venta' && tipoReferencia !== 'retenciones_venta_debe' && tipoReferencia !== 'retenciones_venta_haber') || !idCuenta) return;
 
         // Añadir indicador visual de carga corta
         inputElement.classList.add('is-valid');
@@ -350,7 +375,7 @@
      * Elimina al vuelo de forma dinámica una regla general de cuenta.
      */
     window.ASIENTOPROG_eliminarAlVuelo = async function (idAsientoTipo, inputId, hiddenId, tipoReferencia = '', idReferencia = 0) {
-        if (!idAsientoTipo && tipoReferencia !== 'iva_ventas_factura' && tipoReferencia !== 'retenciones_venta' && tipoReferencia !== 'retenciones_venta_debe' && tipoReferencia !== 'retenciones_venta_haber') return;
+        if (!idAsientoTipo && tipoReferencia !== 'iva_ventas_factura' && tipoReferencia !== 'iva_compras_factura' && tipoReferencia !== 'retenciones_venta' && tipoReferencia !== 'retenciones_venta_debe' && tipoReferencia !== 'retenciones_venta_haber') return;
 
         const input = document.getElementById(inputId);
         const hidden = document.getElementById(hiddenId);
@@ -758,28 +783,39 @@
         const tipoAsiento = selector.value;
         if (!tipoAsiento) return;
 
-        // Renderizar dinámicamente los inputs de cuenta en base a la Configuración General
+        // Renderizar los inputs de cuenta en dos columnas (Debe | Haber), igual que la sección General.
+        // Se excluye el IVA por tarifa (id_asiento_tipo = 0): ese se configura en General, no por dimensión.
         const container = document.getElementById(`inputsDinamicos_${tipo}`);
         if (container) {
-            container.innerHTML = '';
-            if (window.CONCEPTOS_CONFIGURADOS && window.CONCEPTOS_CONFIGURADOS.length > 0) {
-                const totalConceptos = window.CONCEPTOS_CONFIGURADOS.length;
-                const colClass = totalConceptos <= 2 ? 'col-md-6 mb-2' : (totalConceptos === 3 ? 'col-md-4 mb-2' : 'col-md-3 mb-2');
-                window.CONCEPTOS_CONFIGURADOS.forEach(item => {
-                    const col = document.createElement('div');
-                    col.className = colClass;
-                    col.innerHTML = `
-                        <label class="form-label small fw-bold text-dark mb-1">
-                            <i class="bi bi-journal-bookmark text-primary me-1"></i> ${item.concepto}
-                        </label>
+            const conceptos = (window.CONCEPTOS_CONFIGURADOS || []).filter(c => parseInt(c.id_asiento_tipo) > 0);
+            if (conceptos.length > 0) {
+                const tarjeta = (item) => `
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-dark mb-1"><i class="bi bi-journal-bookmark text-primary me-1"></i> ${item.concepto}</label>
                         <div class="position-relative">
-                            <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_cuenta_search_${tipo}_${item.id_asiento_tipo}" placeholder="Buscar cuenta para ${item.concepto}..." autocomplete="off">
+                            <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_cuenta_search_${tipo}_${item.id_asiento_tipo}" placeholder="Buscar cuenta..." autocomplete="off">
                             <input type="hidden" id="dim_cuenta_id_${tipo}_${item.id_asiento_tipo}">
                             <div class="list-group sugerencias-flotantes" id="dim_cuenta_sug_${tipo}_${item.id_asiento_tipo}" style="display: none;"></div>
                         </div>
-                    `;
-                    container.appendChild(col);
-                });
+                    </div>`;
+                const esDebe = (c) => (c.debe_haber || 'debe').toLowerCase() === 'debe';
+                const debeHtml  = conceptos.filter(esDebe).map(tarjeta).join('')          || '<div class="text-muted small py-1">Sin conceptos.</div>';
+                const haberHtml = conceptos.filter(c => !esDebe(c)).map(tarjeta).join('')  || '<div class="text-muted small py-1">Sin conceptos.</div>';
+                container.innerHTML = `
+                    <div class="col-12 mb-1 d-flex align-items-center gap-2 flex-wrap">
+                        <button type="button" class="btn btn-outline-secondary btn-sm fw-bold" onclick="ASIENTOPROG_copiarDeGeneral('${tipo}')">
+                            <i class="bi bi-clipboard-check me-1"></i> Copiar cuentas de General
+                        </button>
+                        <span class="small text-muted">Precarga las cuentas de la configuración General; luego ajuste solo las que necesite.</span>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="fw-bold small mb-2 px-2 py-1 rounded" style="background:#E6F1FB; color:#0C447C;"><i class="bi bi-arrow-down-right me-1"></i> Debe</div>
+                        ${debeHtml}
+                    </div>
+                    <div class="col-md-6">
+                        <div class="fw-bold small mb-2 px-2 py-1 rounded" style="background:#FAEEDA; color:#633806;"><i class="bi bi-arrow-up-right me-1"></i> Haber</div>
+                        ${haberHtml}
+                    </div>`;
             } else {
                 container.innerHTML = '<div class="col-12 text-center text-muted small py-2"><i class="bi bi-info-circle me-1"></i> Debe configurar y cargar conceptos en la sección General primero.</div>';
             }
@@ -946,6 +982,35 @@
     /**
      * Agrega asíncronamente una nueva regla de dimensión.
      */
+    /**
+     * Copia las cuentas configuradas en la sección General a los inputs de la dimensión activa
+     * (Cliente/Proveedor/Producto/Categoría/Marca), para que el usuario solo ajuste lo que quiera.
+     * Excluye el IVA por tarifa (id_asiento_tipo = 0), que se configura en General.
+     */
+    window.ASIENTOPROG_copiarDeGeneral = function (tipo) {
+        const conceptos = (window.CONCEPTOS_CONFIGURADOS || []).filter(c => parseInt(c.id_asiento_tipo) > 0 && c.id_cuenta);
+        let copiadas = 0;
+        conceptos.forEach(item => {
+            const search = document.getElementById(`dim_cuenta_search_${tipo}_${item.id_asiento_tipo}`);
+            const hidden = document.getElementById(`dim_cuenta_id_${tipo}_${item.id_asiento_tipo}`);
+            if (search && hidden) {
+                search.value = `${item.cuenta_codigo} - ${item.cuenta_nombre}`;
+                hidden.value = item.id_cuenta;
+                search.classList.remove('is-invalid', 'border-danger');
+                copiadas++;
+            }
+        });
+        if (window.Swal) {
+            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2200, timerProgressBar: true });
+            Toast.fire({
+                icon: copiadas > 0 ? 'success' : 'info',
+                title: copiadas > 0
+                    ? `Se copiaron ${copiadas} cuenta(s) de General. Ajuste las que necesite y guarde.`
+                    : 'No hay cuentas configuradas en General para copiar.'
+            });
+        }
+    };
+
     window.ASIENTOPROG_agregarDim = async function (e, tipo) {
         e.preventDefault();
 

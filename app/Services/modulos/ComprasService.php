@@ -17,6 +17,7 @@ class ComprasService
     private ComprasRules $rules;
     private LogSistemaService $logService;
     private PeriodosContablesService $periodosService;
+    private ?string $lastAsientoWarning = null;
 
     public function __construct()
     {
@@ -60,11 +61,14 @@ class ComprasService
             $this->sincronizarCasilleros($idCompra, $data);
 
             if ($managed) $db->commit();
-            return $idCompra;
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();
             throw $e;
         }
+
+        // Asiento contable FUERA de la transacción: un fallo no revierte la compra ya guardada.
+        $this->generarAsientoTrasGuardar($idCompra, $data);
+        return $idCompra;
     }
 
     public function getPorId(int $id, int $idEmpresa): ?array
@@ -93,6 +97,105 @@ class ComprasService
         $compra['egresos_vinculados'] = $this->repository->getEgresosVinculados($id);
 
         return $compra;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ASIENTO CONTABLE
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function getLastAsientoWarning(): ?string
+    {
+        return $this->lastAsientoWarning;
+    }
+
+    /**
+     * Genera el asiento contable tras guardar una compra (fuera de la transacción principal).
+     * Un fallo —p. ej. cuentas sin configurar— no revierte la compra: solo se registra el aviso.
+     */
+    private function generarAsientoTrasGuardar(int $idCompra, array $data): void
+    {
+        $this->lastAsientoWarning = null;
+        try {
+            $numDoc = ($data['establecimiento_prov'] ?? '') . '-'
+                    . ($data['punto_emision_prov'] ?? '') . '-'
+                    . ($data['secuencial_prov'] ?? '');
+            $this->procesarAsientoContable($idCompra, $data, $numDoc);
+        } catch (\Throwable $e) {
+            error_log("[Compras] Asiento no generado para compra $idCompra: " . $e->getMessage());
+            $this->lastAsientoWarning = $e->getMessage();
+        }
+    }
+
+    /**
+     * Punto de entrada del sincronizador (Estados Financieros) para compras sin asiento.
+     */
+    public function procesarAsientoContablePorSincronizacion(int $idCompra): void
+    {
+        $cabecera = $this->repository->getPorId($idCompra);
+        if (!$cabecera) return;
+        $numDoc = ($cabecera['establecimiento_prov'] ?? '') . '-'
+                . ($cabecera['punto_emision_prov'] ?? '') . '-'
+                . ($cabecera['secuencial_prov'] ?? '');
+        $this->procesarAsientoContable($idCompra, $cabecera, $numDoc);
+    }
+
+    /**
+     * Arma (vía AsientoBuilderService, concepto 'adquisiciones_compras') y persiste el asiento
+     * de una compra. Idempotente: si ya existe asiento para esta compra, lo actualiza.
+     * El enrutamiento inventariable→Inventario / resto→Gasto y la dirección (factura vs NC)
+     * los resuelve el builder, evitando duplicar costo/gasto con el costeo de la venta.
+     */
+    public function procesarAsientoContable(int $idCompra, array $data, string $numDoc): void
+    {
+        $idEmpresa = (int)($data['id_empresa'] ?? 0);
+        $idUsuario = (int)($data['id_usuario'] ?? $data['created_by'] ?? $_SESSION['id_usuario'] ?? 0);
+        $fechaEmision = $data['fecha_emision'] ?? date('Y-m-d');
+        $proveedorNombre = $data['proveedor_nombre'] ?? 'Proveedor';
+
+        // Siempre regenerar desde el builder con los valores actuales del documento.
+        $data['id_compra'] = $idCompra;
+        $builder = new \App\Services\modulos\AsientoBuilderService();
+        $detallesSugeridos = $builder->generarAsientoSugerido($idEmpresa, 'adquisiciones_compras', $data);
+
+        $detalles = [];
+        foreach ($detallesSugeridos as $det) {
+            $detalles[] = [
+                'id_cuenta_contable'   => $det['id_cuenta_contable'],
+                'debe'                 => $det['debe'],
+                'haber'                => $det['haber'],
+                'referencia_detalle'   => $det['referencia_detalle'] ?: "Compra # $numDoc",
+                'documento_referencia' => "Compra # $numDoc",
+                'id_entidad'           => (int)($data['id_proveedor'] ?? 0),
+                'tipo_entidad'         => 'proveedor',
+            ];
+        }
+
+        // Documento excluido (p. ej. retención) o sin cuentas configuradas: no se genera asiento.
+        if (empty($detalles)) {
+            return;
+        }
+
+        $asientoRepo    = new \App\repositories\modulos\AsientoContableRepository();
+        $asientoRules   = new \App\Rules\modulos\AsientoContableRules();
+        $asientoService = new \App\Services\modulos\AsientoContableService($asientoRepo, $asientoRules, $this->logService);
+
+        $asientoPrevio = $asientoService->getAsientoPorOrigen('compra', $idCompra, $idEmpresa);
+        $idAsiento = $asientoPrevio ? (int)$asientoPrevio['id'] : 0;
+
+        $cabeceraData = [
+            'id'                   => $idAsiento > 0 ? $idAsiento : null,
+            'fecha_asiento'        => $fechaEmision,
+            'tipo_comprobante'     => 'compras',
+            'numero_comprobante'   => '',
+            'concepto'             => "Compra # " . $numDoc . " - Proveedor: " . $proveedorNombre,
+            'estado'               => 'contabilizado',
+            'modulo_origen'        => 'compra',
+            'id_referencia_origen' => $idCompra,
+            'observaciones'        => $data['observaciones'] ?? null,
+        ];
+
+        $idAsientoGenerado = $asientoService->guardarAsiento($cabeceraData, $detalles, $idEmpresa, $idUsuario);
+        $this->repository->updateAsientoContable($idCompra, $idAsientoGenerado);
     }
 
     public function actualizar(int $id, array $data): int
@@ -147,13 +250,16 @@ class ComprasService
             $this->sincronizarCasilleros($id, $data);
 
             if ($managed) $db->commit();
-            return $id;
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) {
                 $db->rollBack();
             }
             throw $e;
         }
+
+        // Asiento contable FUERA de la transacción: un fallo no revierte la compra ya guardada.
+        $this->generarAsientoTrasGuardar($id, $data);
+        return $id;
     }
 
     public function eliminar(int $id, int $idUsuario, int $idEmpresa): bool

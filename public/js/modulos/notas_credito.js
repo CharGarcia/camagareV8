@@ -1234,4 +1234,38 @@
 
 })();
 
+// ─── Pestaña Asiento Contable (vista previa reutilizable) ───────────────────────
+(function () {
+    let _ncAsientoTab = null;
+    function ncAsientoTab() {
+        if (!_ncAsientoTab && typeof window.crearAsientoTab === 'function') {
+            _ncAsientoTab = window.crearAsientoTab({
+                tbodyId: 'nc-asiento-tbody',
+                debeId:  'nc-asiento-debe',
+                haberId: 'nc-asiento-haber',
+                difId:   'nc-asiento-dif',
+                badgeId: 'nc-asiento-badge',
+                countId: 'nc-asiento-count',
+                statusId: 'nc-asiento-status',
+                previewUrl: `${BASE_URL}/modulos/notas_credito/getAsientoSugeridoAjax`,
+                cuentasUrl: `${BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`
+            });
+            const addBtn = document.getElementById('nc-asiento-add');
+            if (addBtn) addBtn.addEventListener('click', () => _ncAsientoTab.agregarLinea());
+        }
+        return _ncAsientoTab;
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const btnTab = document.getElementById('tab-nc-contable-btn');
+        if (btnTab) {
+            btnTab.addEventListener('shown.bs.tab', function () {
+                const tab = ncAsientoTab();
+                const idEl = document.getElementById('nc_id');
+                if (tab) tab.cargar(idEl ? idEl.value : 0);
+            });
+        }
+    });
+})();
+
 

@@ -131,6 +131,15 @@ class NotaCreditoRepository extends BaseRepository
         return $st->fetchAll();
     }
 
+    /**
+     * Vincula el asiento contable generado a la nota de crédito.
+     */
+    public function updateAsientoContable(int $idNotaCredito, int $idAsiento): void
+    {
+        $st = $this->db->prepare("UPDATE notas_credito_cabecera SET id_asiento_contable = ? WHERE id = ?");
+        $st->execute([$idAsiento, $idNotaCredito]);
+    }
+
     public function insertCabecera(array $data): int
     {
         $sql = "INSERT INTO notas_credito_cabecera (

@@ -7,6 +7,19 @@
 $base = BASE_URL;
 ?>
 
+<style>
+    .asientos-tipo-scroll {
+        max-height: calc(100dvh - 280px);
+        overflow-y: auto;
+    }
+    .asiento-tipo-row {
+        cursor: pointer;
+    }
+    .asiento-tipo-row:hover {
+        background-color: rgba(0, 0, 0, .04);
+    }
+</style>
+
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div>
         <h5 class="mb-0 fw-bold"><i class="bi bi-sliders me-2 text-primary"></i> <?= htmlspecialchars($titulo) ?></h5>
@@ -23,7 +36,7 @@ $base = BASE_URL;
 </div>
 
 <!-- Tarjeta principal estándar de tablas (cmg-table-card) -->
-<div class="card cmg-table-card border-0 shadow-sm rounded-3 bg-white mb-4">
+<div class="card cmg-table-card border-0 shadow-sm rounded-3 bg-white">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">
             <form id="asiento-tipo-form-buscar" class="input-group input-group-sm" style="width:280px" onsubmit="event.preventDefault(); ASIENTOTIPO_cambiarPagina(1);">
@@ -46,7 +59,7 @@ $base = BASE_URL;
     </div>
 
     <div class="card-body p-0">
-        <div style="max-height: 550px; overflow-y: auto;">
+        <div class="asientos-tipo-scroll w-100">
             <table class="table table-hover table-sm mb-0 align-middle">
                 <thead class="table-light shadow-sm sticky-top" style="z-index: 1;">
                     <tr>
@@ -61,7 +74,7 @@ $base = BASE_URL;
                 </thead>
                 <tbody id="tbodyAsientosTipo">
                     <tr>
-                        <td colspan="5" class="text-center py-5">
+                        <td colspan="7" class="text-center py-5">
                             <span class="spinner-border spinner-border-sm text-primary me-2"></span> Cargando asientos tipo...
                         </td>
                     </tr>

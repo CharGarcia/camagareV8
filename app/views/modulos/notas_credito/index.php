@@ -273,4 +273,5 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.nc_dec_c = <?= (int)($empresa['decimales_cantidad'] ?? 2) ?>;
     window.NC_STORAGE_KEY = 'nc_borrador_' + <?= (int)($_SESSION['id_empresa'] ?? 0) ?> + '_' + <?= (int)($_SESSION['id_usuario'] ?? 0) ?>;
 </script>
+<script src="<?= rtrim($base, '/') ?>/js/modulos/asiento_contable_tab.js?v=<?= time() ?>" defer></script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/notas_credito.js?v=<?= time() ?>" defer></script>

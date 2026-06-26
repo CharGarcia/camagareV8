@@ -84,11 +84,83 @@ class LiquidacionCompraService
 
             $db->commit();
             $this->generarYGuardarXml($id, $data);
-            return $id;
         } catch (\Throwable $e) {
             $db->rollBack();
             throw $e;
         }
+
+        // Asiento contable FUERA de la transacción: un fallo no revierte la liquidación guardada.
+        try {
+            $this->procesarAsientoContable($id, $data);
+        } catch (\Throwable $eAs) {
+            error_log("[Liquidacion] Asiento no generado para liquidación $id: " . $eAs->getMessage());
+        }
+        return $id;
+    }
+
+    /**
+     * Punto de entrada del sincronizador (Estados Financieros) para liquidaciones sin asiento.
+     */
+    public function procesarAsientoContablePorSincronizacion(int $idLiquidacion): void
+    {
+        $cab = $this->repository->getPorId($idLiquidacion);
+        if (!$cab) return;
+        $this->procesarAsientoContable($idLiquidacion, $cab);
+    }
+
+    /**
+     * Arma (vía AsientoBuilderService::generarAsientoLiquidacionCompra) y persiste el asiento de
+     * una liquidación de compra. Idempotente: si ya existe asiento para esta liquidación lo actualiza.
+     */
+    public function procesarAsientoContable(int $idLiquidacion, array $data): void
+    {
+        $idEmpresa = (int)($data['id_empresa'] ?? 0);
+        $idUsuario = (int)($data['id_usuario'] ?? $data['created_by'] ?? $_SESSION['id_usuario'] ?? 0);
+        $fecha = $data['fecha_emision'] ?? date('Y-m-d');
+        $numDoc = ($data['establecimiento'] ?? '') . '-' . ($data['punto_emision'] ?? '') . '-' . ($data['secuencial'] ?? '');
+        $proveedorNombre = $data['proveedor_nombre'] ?? 'Proveedor';
+
+        $builder = new \App\Services\modulos\AsientoBuilderService();
+        $detallesSugeridos = $builder->generarAsientoLiquidacionCompra($idEmpresa, $idLiquidacion);
+
+        $detalles = [];
+        foreach ($detallesSugeridos as $det) {
+            $detalles[] = [
+                'id_cuenta_contable'   => $det['id_cuenta_contable'],
+                'debe'                 => $det['debe'],
+                'haber'                => $det['haber'],
+                'referencia_detalle'   => $det['referencia_detalle'] ?: "Liquidación # $numDoc",
+                'documento_referencia' => "Liquidación # $numDoc",
+                'id_entidad'           => (int)($data['id_proveedor'] ?? 0),
+                'tipo_entidad'         => 'proveedor',
+            ];
+        }
+
+        if (empty($detalles)) {
+            return;
+        }
+
+        $asientoRepo    = new \App\repositories\modulos\AsientoContableRepository();
+        $asientoRules   = new \App\Rules\modulos\AsientoContableRules();
+        $asientoService = new \App\Services\modulos\AsientoContableService($asientoRepo, $asientoRules, $this->logService);
+
+        $asientoPrevio = $asientoService->getAsientoPorOrigen('liquidacion_compra', $idLiquidacion, $idEmpresa);
+        $idAsiento = $asientoPrevio ? (int)$asientoPrevio['id'] : 0;
+
+        $cabeceraData = [
+            'id'                   => $idAsiento > 0 ? $idAsiento : null,
+            'fecha_asiento'        => $fecha,
+            'tipo_comprobante'     => 'compras',
+            'numero_comprobante'   => '',
+            'concepto'             => "Liquidación de compra # " . $numDoc . " - Proveedor: " . $proveedorNombre,
+            'estado'               => 'contabilizado',
+            'modulo_origen'        => 'liquidacion_compra',
+            'id_referencia_origen' => $idLiquidacion,
+            'observaciones'        => $data['observaciones'] ?? null,
+        ];
+
+        $idAsientoGenerado = $asientoService->guardarAsiento($cabeceraData, $detalles, $idEmpresa, $idUsuario);
+        $this->repository->updateAsientoContable($idLiquidacion, $idAsientoGenerado);
     }
 
     public function actualizar(int $id, array $data): int

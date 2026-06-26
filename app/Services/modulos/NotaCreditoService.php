@@ -117,11 +117,83 @@ class NotaCreditoService
 
             $db->commit();
             $this->generarYGuardarXml($idNC, $data['empresa_config'] ?? []);
-            return $idNC;
         } catch (Exception $e) {
             $db->rollBack();
             throw $e;
         }
+
+        // Asiento contable FUERA de la transacción: la NC ya está guardada; un fallo no la revierte.
+        try {
+            $this->procesarAsientoContable($idNC, $data);
+        } catch (\Throwable $eAs) {
+            error_log("[NotaCredito] Asiento no generado para NC $idNC: " . $eAs->getMessage());
+        }
+        return $idNC;
+    }
+
+    /**
+     * Punto de entrada del sincronizador (Estados Financieros) para NC de venta sin asiento.
+     */
+    public function procesarAsientoContablePorSincronizacion(int $idNotaCredito): void
+    {
+        $nc = $this->repository->getPorId($idNotaCredito);
+        if (!$nc) return;
+        $this->procesarAsientoContable($idNotaCredito, $nc);
+    }
+
+    /**
+     * Arma (vía AsientoBuilderService::generarAsientoNotaCreditoVenta — cuentas de venta invertidas)
+     * y persiste el asiento de una nota de crédito de venta. Idempotente.
+     */
+    public function procesarAsientoContable(int $idNotaCredito, array $data): void
+    {
+        $idEmpresa = (int)($data['id_empresa'] ?? 0);
+        $idUsuario = (int)($data['id_usuario'] ?? $data['created_by'] ?? $_SESSION['id_usuario'] ?? 0);
+        $fecha = $data['fecha_emision'] ?? date('Y-m-d');
+        $numNC = ($data['establecimiento'] ?? '') . '-' . ($data['punto_emision'] ?? '') . '-' . ($data['secuencial'] ?? '');
+        $clienteNombre = $data['cliente_nombre'] ?? 'Cliente';
+
+        $builder = new \App\Services\modulos\AsientoBuilderService();
+        $detallesSugeridos = $builder->generarAsientoNotaCreditoVenta($idEmpresa, $idNotaCredito);
+
+        $detalles = [];
+        foreach ($detallesSugeridos as $det) {
+            $detalles[] = [
+                'id_cuenta_contable'   => $det['id_cuenta_contable'],
+                'debe'                 => $det['debe'],
+                'haber'                => $det['haber'],
+                'referencia_detalle'   => $det['referencia_detalle'] ?: "Nota de crédito # $numNC",
+                'documento_referencia' => "Nota de crédito # $numNC",
+                'id_entidad'           => (int)($data['id_cliente'] ?? 0),
+                'tipo_entidad'         => 'cliente',
+            ];
+        }
+
+        if (empty($detalles)) {
+            return;
+        }
+
+        $asientoRepo    = new \App\repositories\modulos\AsientoContableRepository();
+        $asientoRules   = new \App\Rules\modulos\AsientoContableRules();
+        $asientoService = new \App\Services\modulos\AsientoContableService($asientoRepo, $asientoRules, $this->logService);
+
+        $asientoPrevio = $asientoService->getAsientoPorOrigen('nota_credito', $idNotaCredito, $idEmpresa);
+        $idAsiento = $asientoPrevio ? (int)$asientoPrevio['id'] : 0;
+
+        $cabeceraData = [
+            'id'                   => $idAsiento > 0 ? $idAsiento : null,
+            'fecha_asiento'        => $fecha,
+            'tipo_comprobante'     => 'ventas',
+            'numero_comprobante'   => '',
+            'concepto'             => "Nota de crédito # " . $numNC . " - Cliente: " . $clienteNombre,
+            'estado'               => 'contabilizado',
+            'modulo_origen'        => 'nota_credito',
+            'id_referencia_origen' => $idNotaCredito,
+            'observaciones'        => $data['observaciones'] ?? null,
+        ];
+
+        $idAsientoGenerado = $asientoService->guardarAsiento($cabeceraData, $detalles, $idEmpresa, $idUsuario);
+        $this->repository->updateAsientoContable($idNotaCredito, $idAsientoGenerado);
     }
 
     public function actualizar(int $id, array $data): int

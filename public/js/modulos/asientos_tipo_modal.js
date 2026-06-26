@@ -35,7 +35,7 @@
         const b = inputB ? inputB.value.trim() : '';
 
         const tbody = document.getElementById('tbodyAsientosTipo');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
 
         try {
             const resp = await fetch(`${API_ASIENTOS_TIPO}/asientosTipoListAjax?b=${encodeURIComponent(b)}&page=${page}`);
@@ -47,11 +47,11 @@
                 const pag = document.getElementById('asientoTipoWrapperPagination');
                 if (pag) pag.innerHTML = res.pagination;
             } else {
-                if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">${res.error || 'Error al cargar listado'}</td></tr>`;
+                if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger">${res.error || 'Error al cargar listado'}</td></tr>`;
             }
         } catch (e) {
             console.error(e);
-            if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Error de conexión con el servidor.</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">Error de conexión con el servidor.</td></tr>';
         }
     };
 

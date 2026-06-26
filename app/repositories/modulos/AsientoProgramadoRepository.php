@@ -476,6 +476,39 @@ class AsientoProgramadoRepository extends BaseRepository
     }
 
     /**
+     * Reglas de IVA por tarifa para COMPRAS (crédito tributario).
+     * Espejo de getReglasIvaVentas, pero la cuenta es de naturaleza ACTIVO (IVA crédito
+     * tributario) y va al DEBE. tipo_referencia = 'iva_compras_factura'.
+     */
+    public function getReglasIvaCompras(int $idEmpresa): array
+    {
+        $sql = "SELECT 0 AS id_asiento_tipo,
+                       'adquisiciones_compras' AS tipo_asiento,
+                       'Tarifa iva ' || t.tarifa AS concepto,
+                       'IVA crédito tributario tarifa ' || t.tarifa AS detalle,
+                       'IVA-' || t.codigo AS codigo,
+                       'activo' AS tipo_cuenta,
+                       'debe' AS debe_haber,
+                       ap.id AS id_programado,
+                       ap.id_cuenta,
+                       CAST(t.codigo AS INTEGER) AS id_referencia,
+                       'iva_compras_factura' AS tipo_referencia,
+                       pc.codigo AS cuenta_codigo,
+                       pc.nombre AS cuenta_nombre
+                FROM tarifa_iva t
+                LEFT JOIN {$this->table} ap ON ap.id_referencia = CAST(t.codigo AS INTEGER)
+                                           AND ap.tipo_referencia = 'iva_compras_factura'
+                                           AND ap.id_empresa = :id_empresa
+                                           AND ap.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                WHERE t.porcentaje_iva > 0
+                ORDER BY t.tarifa ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Obtiene una regla específica de Tarifa IVA para ventas.
      */
     public function getReglaGeneralIva(int $idEmpresa, int $idTarifa): ?array

@@ -153,6 +153,39 @@ window.abrirModalCompra = function (el) {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PESTAÑA ASIENTO CONTABLE (vista previa reutilizable)
+// ─────────────────────────────────────────────────────────────────────────────
+let _mcAsientoTab = null;
+function mcAsientoTab() {
+    if (!_mcAsientoTab && typeof window.crearAsientoTab === 'function') {
+        _mcAsientoTab = window.crearAsientoTab({
+            tbodyId: 'mc-asiento-tbody',
+            debeId:  'mc-asiento-debe',
+            haberId: 'mc-asiento-haber',
+            difId:   'mc-asiento-dif',
+            badgeId: 'mc-asiento-badge',
+            countId: 'mc-asiento-count',
+            statusId: 'mc-asiento-status',
+            previewUrl: `${window.CMG_urlBase}/getAsientoSugeridoAjax`,
+            cuentasUrl: `${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`
+        });
+        const addBtn = document.getElementById('mc-asiento-add');
+        if (addBtn) addBtn.addEventListener('click', () => _mcAsientoTab.agregarLinea());
+    }
+    return _mcAsientoTab;
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const btnTab = document.getElementById('tab_asiento');
+    if (btnTab) {
+        btnTab.addEventListener('shown.bs.tab', function () {
+            const tab = mcAsientoTab();
+            if (tab) tab.cargar(document.getElementById('mcId') ? document.getElementById('mcId').value : 0);
+        });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POBLAR MODAL CON DATOS EXISTENTES
 // ─────────────────────────────────────────────────────────────────────────────
 function CMG_poblarModal(d) {

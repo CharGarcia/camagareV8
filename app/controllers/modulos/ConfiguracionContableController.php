@@ -309,10 +309,14 @@ class ConfiguracionContableController extends BaseModuloController
                 $reglas = $this->repository->getReglasRetencionesVenta($idEmpresa);
             } else {
                 $reglas = $this->repository->getReglasGeneralesPorConcepto($idEmpresa, $tipoAsiento);
-                
-                // Aumentar reglas específicas para las tarifas de IVA si estamos en ventas_factura
+
+                // Aumentar reglas específicas para las tarifas de IVA por concepto
                 if ($tipoAsiento === 'ventas_factura') {
                     $reglasIva = $this->repository->getReglasIvaVentas($idEmpresa);
+                    $reglas = array_merge($reglas, $reglasIva);
+                } elseif ($tipoAsiento === 'adquisiciones_compras') {
+                    // IVA crédito tributario por tarifa (espejo de ventas, cuenta de activo)
+                    $reglasIva = $this->repository->getReglasIvaCompras($idEmpresa);
                     $reglas = array_merge($reglas, $reglasIva);
                 }
             }
@@ -348,31 +352,35 @@ class ConfiguracionContableController extends BaseModuloController
         }
 
         try {
-            if ($tipoReferencia === 'iva_ventas_factura') {
+            if ($tipoReferencia === 'iva_ventas_factura' || $tipoReferencia === 'iva_compras_factura') {
                 if ($idReferencia <= 0) {
                     echo json_encode(['ok' => false, 'error' => 'ID de referencia de tarifa inválido.']);
                     exit;
                 }
-                // Verificar si ya existe una regla para este IVA
-                $reglaExistente = $this->repository->getReglaGeneralIva($idEmpresa, $idReferencia);
-                
-                if ($reglaExistente) {
+                // Verificar si ya existe una regla para este IVA (ventas o compras) según tarifa
+                $db = Database::getConnection();
+                $stCheck = $db->prepare("SELECT id FROM asientos_programados
+                                         WHERE id_empresa = ? AND id_referencia = ? AND tipo_referencia = ? AND eliminado = false LIMIT 1");
+                $stCheck->execute([$idEmpresa, $idReferencia, $tipoReferencia]);
+                $idExistente = $stCheck->fetchColumn();
+
+                if ($idExistente) {
                     $dataUpdate = [
                         'id_asiento_tipo' => 0,
                         'id_cuenta'       => $idCuenta,
                         'id_referencia'   => $idReferencia,
-                        'tipo_referencia' => 'iva_ventas_factura',
+                        'tipo_referencia' => $tipoReferencia,
                         'updated_by'      => $idUsuario
                     ];
-                    $this->service->actualizar((int)$reglaExistente['id'], $dataUpdate, $idEmpresa, $idUsuario);
-                    $idProgramado = $reglaExistente['id'];
+                    $this->service->actualizar((int)$idExistente, $dataUpdate, $idEmpresa, $idUsuario);
+                    $idProgramado = (int)$idExistente;
                     $msg = 'Configuración contable actualizada correctamente.';
                 } else {
                     $dataInsert = [
                         'id_asiento_tipo' => 0,
                         'id_cuenta'       => $idCuenta,
                         'id_referencia'   => $idReferencia,
-                        'tipo_referencia' => 'iva_ventas_factura'
+                        'tipo_referencia' => $tipoReferencia
                     ];
                     $idProgramado = $this->service->registrar($dataInsert, $idEmpresa, $idUsuario);
                     $msg = 'Configuración contable registrada correctamente.';
@@ -465,8 +473,12 @@ class ConfiguracionContableController extends BaseModuloController
         $idReferencia = (int) ($_POST['id_referencia'] ?? 0);
 
         try {
-            if ($tipoReferencia === 'iva_ventas_factura') {
-                $reglaExistente = $this->repository->getReglaGeneralIva($idEmpresa, $idReferencia);
+            if ($tipoReferencia === 'iva_ventas_factura' || $tipoReferencia === 'iva_compras_factura') {
+                $db = Database::getConnection();
+                $stCheck = $db->prepare("SELECT id FROM asientos_programados
+                                         WHERE id_empresa = ? AND id_referencia = ? AND tipo_referencia = ? AND eliminado = false LIMIT 1");
+                $stCheck->execute([$idEmpresa, $idReferencia, $tipoReferencia]);
+                $reglaExistente = $stCheck->fetch(PDO::FETCH_ASSOC) ?: null;
             } elseif ($tipoReferencia === 'retenciones_venta_debe' || $tipoReferencia === 'retenciones_venta_haber') {
                 $db = Database::getConnection();
                 $stCheck = $db->prepare("SELECT id FROM asientos_programados 
@@ -874,6 +886,9 @@ class ConfiguracionContableController extends BaseModuloController
             if ($tipoReferencia === 'cliente') {
                 $joinTable = 'clientes';
                 $joinField = 'nombre';
+            } elseif ($tipoReferencia === 'proveedor') {
+                $joinTable = 'proveedores';
+                $joinField = 'razon_social';
             } elseif ($tipoReferencia === 'producto') {
                 $joinTable = 'productos';
                 $joinField = 'nombre';

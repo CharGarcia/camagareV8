@@ -911,7 +911,7 @@ class ConfigController extends Controller
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="6" class="text-center py-4 text-muted">No se encontraron asientos tipo.</td></tr>';
+            echo '<tr><td colspan="7" class="text-center py-4 text-muted">No se encontraron asientos tipo.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 $tipoText = $tiposTextos[$r['tipo_asiento']] ?? ucwords(str_replace('_', ' ', $r['tipo_asiento']));

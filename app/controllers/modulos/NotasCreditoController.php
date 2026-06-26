@@ -195,6 +195,65 @@ class NotasCreditoController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Vista previa del asiento contable de una nota de crédito de venta (pestaña del modal).
+     * Si ya tiene asiento guardado devuelve sus líneas; si no, devuelve la sugerencia del builder
+     * (asiento inverso de la venta). Para una NC nueva (id = 0) devuelve vacío.
+     */
+    public function getAsientoSugeridoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $id        = (int) ($_GET['id'] ?? $_GET['id_nota_credito'] ?? 0);
+
+        try {
+            if ($id <= 0) {
+                echo json_encode(['ok' => true, 'detalles' => [], 'es_guardado' => false]);
+                exit;
+            }
+
+            $cab = $this->repository->getPorId($id);
+            if (!$cab || (int) ($cab['id_empresa'] ?? 0) !== $idEmpresa) {
+                echo json_encode(['ok' => true, 'detalles' => []]);
+                exit;
+            }
+
+            // 1. Asiento guardado → devolver sus líneas.
+            $idAsiento = (int) ($cab['id_asiento_contable'] ?? 0);
+            if ($idAsiento > 0) {
+                $asientoRepo    = new \App\repositories\modulos\AsientoContableRepository();
+                $asientoRules   = new \App\Rules\modulos\AsientoContableRules();
+                $asientoService = new \App\Services\modulos\AsientoContableService($asientoRepo, $asientoRules, new \App\Services\LogSistemaService());
+                $cabA = $asientoService->getDetalleAsiento($idAsiento, $idEmpresa);
+
+                $detalles = [];
+                foreach (($cabA['detalles'] ?? []) as $det) {
+                    $detalles[] = [
+                        'id_cuenta_contable'   => (int) $det['id_cuenta_contable'],
+                        'cuenta_codigo'        => $det['codigo_cuenta'] ?? $det['cuenta_codigo'] ?? '',
+                        'cuenta_nombre'        => $det['nombre_cuenta'] ?? $det['cuenta_nombre'] ?? '',
+                        'debe'                 => (float) $det['debe'],
+                        'haber'                => (float) $det['haber'],
+                        'referencia_detalle'   => $det['referencia_detalle'] ?? '',
+                        'documento_referencia' => $det['documento_referencia'] ?? '',
+                    ];
+                }
+                echo json_encode(['ok' => true, 'detalles' => $detalles, 'es_guardado' => true]);
+                exit;
+            }
+
+            // 2. Sin asiento guardado: sugerencia del builder (inverso de la venta).
+            $builder = new \App\Services\modulos\AsientoBuilderService();
+            $detalles = $builder->generarAsientoNotaCreditoVenta($idEmpresa, $id);
+            echo json_encode(['ok' => true, 'detalles' => $detalles, 'es_guardado' => false]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function buscarFacturasAjax(): void
     {
         $this->requireLeer();

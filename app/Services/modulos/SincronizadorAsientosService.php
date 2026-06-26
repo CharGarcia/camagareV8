@@ -29,10 +29,44 @@ class SincronizadorAsientosService
         }
 
         // 1. Facturas de Venta
+        //    Se (re)generan dos grupos:
+        //    (a) las que no tienen ningún asiento todavía, y
+        //    (b) las que YA tienen asiento pero les falta el bloque de costo de ventas,
+        //        siempre que: vendieron inventario con costo en el Kardex (costo_total > 0)
+        //        y estén configuradas AMBAS cuentas (Costo de Ventas e Inventario). Si falta
+        //        una de las dos no se reprocesa (evita reproceso en cada carga) y se avisa
+        //        en verificarCosteoVentasPendiente(). El "juez" de si se necesita costeo es
+        //        el Kardex de la factura, no la configuración de cuentas.
+        $subCosto      = $this->sqlCuentaVentasPorPalabra('COSTO');
+        $subInventario = $this->sqlCuentaVentasPorPalabra('INVENTARIO');
+
+        $sqlFacturas = "SELECT v.id
+                        FROM ventas_cabecera v
+                        WHERE v.id_empresa = ?
+                          AND v.eliminado = false
+                          AND v.estado IN ('autorizado', 'contabilizado')
+                          AND (
+                                v.id_asiento_contable IS NULL
+                             OR (
+                                    v.id_asiento_contable IS NOT NULL
+                                AND EXISTS (SELECT 1 FROM inventario_kardex k
+                                            WHERE k.referencia_tipo = 'factura_venta'
+                                              AND k.referencia_id   = v.id
+                                              AND k.tipo_movimiento = 'salida'
+                                              AND k.eliminado       = false
+                                              AND k.costo_total      > 0)
+                                AND EXISTS ($subCosto)
+                                AND EXISTS ($subInventario)
+                                AND NOT EXISTS (SELECT 1 FROM asientos_contables_detalle ad
+                                                WHERE ad.id_asiento = v.id_asiento_contable
+                                                  AND ad.id_cuenta_contable IN ($subCosto))
+                                )
+                          )";
+
         $this->sincronizarModulo(
             $db,
-            "SELECT id FROM ventas_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado IN ('autorizado', 'contabilizado')",
-            [$idEmpresa],
+            $sqlFacturas,
+            [$idEmpresa, $idEmpresa, $idEmpresa, $idEmpresa],
             function() {
                 return new \App\Services\modulos\FacturaVentaService(
                     new \App\repositories\modulos\FacturaVentaRepository(),
@@ -134,6 +168,10 @@ class SincronizadorAsientosService
         // 8. Verificación proactiva: conceptos y formas SIN cuenta contable configurada
         //    (avisa aunque todavía no existan documentos pendientes).
         $this->verificarConfiguracionCuentas($db, $idEmpresa);
+
+        // 9. Verificación proactiva: facturas con costo en Kardex que no se puede contabilizar
+        //    porque faltan las cuentas de Costo de Ventas e Inventario.
+        $this->verificarCosteoVentasPendiente($db, $idEmpresa);
     }
 
     /**
@@ -168,6 +206,68 @@ class SincronizadorAsientosService
             }
         } catch (\Throwable $e) {
             // Tabla inexistente (migración pendiente): omitir sin romper.
+        }
+    }
+
+    /**
+     * Subconsulta que devuelve los id_cuenta configurados para el tipo de asiento de Ventas
+     * cuyo asiento_tipo (código o referencia) contiene la palabra clave dada (p. ej. 'COSTO'
+     * o 'INVENTARIO'). Replica el cruce de AsientoProgramadoRepository::getReglasGeneralesPorConcepto.
+     * Lleva un parámetro posicional (?) que debe enlazarse a id_empresa.
+     * La palabra clave se sanitiza a solo letras (se interpola, no es entrada de usuario).
+     */
+    private function sqlCuentaVentasPorPalabra(string $palabra): string
+    {
+        $kw = strtoupper(preg_replace('/[^A-Za-z]/', '', $palabra));
+        return "SELECT ap.id_cuenta
+                FROM asientos_tipo at
+                JOIN asientos_programados ap
+                  ON ap.id_asiento_tipo = at.id
+                 AND ap.id_empresa = ?
+                 AND ap.id_referencia = at.id
+                 AND (ap.tipo_referencia = 'asientos tipo' OR ap.tipo_referencia = at.tipo_asiento)
+                 AND ap.eliminado = false
+                WHERE at.tipo_asiento = 'ventas_factura' AND at.eliminado = false
+                  AND ap.id_cuenta IS NOT NULL
+                  AND (UPPER(COALESCE(at.codigo, '')) LIKE '%{$kw}%'
+                       OR UPPER(COALESCE(at.referencia, '')) LIKE '%{$kw}%')";
+    }
+
+    /**
+     * Avisa si hay facturas de venta que NECESITAN costeo (vendieron inventario con costo > 0)
+     * pero cuyo costo no se puede contabilizar porque faltan las cuentas de Costo de Ventas
+     * y/o Inventario en la configuración del tipo de asiento de Ventas. Esas facturas no se
+     * reprocesan (se evita reproceso en cada carga); solo se cuentan para avisar al usuario.
+     */
+    private function verificarCosteoVentasPendiente(\PDO $db, int $idEmpresa): void
+    {
+        try {
+            $subCosto      = $this->sqlCuentaVentasPorPalabra('COSTO');
+            $subInventario = $this->sqlCuentaVentasPorPalabra('INVENTARIO');
+
+            $sql = "SELECT COUNT(*)
+                    FROM ventas_cabecera v
+                    WHERE v.id_empresa = ?
+                      AND v.eliminado = false
+                      AND v.estado IN ('autorizado', 'contabilizado')
+                      AND v.id_asiento_contable IS NOT NULL
+                      AND EXISTS (SELECT 1 FROM inventario_kardex k
+                                  WHERE k.referencia_tipo = 'factura_venta'
+                                    AND k.referencia_id   = v.id
+                                    AND k.tipo_movimiento = 'salida'
+                                    AND k.eliminado       = false
+                                    AND k.costo_total      > 0)
+                      AND NOT (EXISTS ($subCosto) AND EXISTS ($subInventario))";
+            $st = $db->prepare($sql);
+            $st->execute([$idEmpresa, $idEmpresa, $idEmpresa]);
+            $n = (int) $st->fetchColumn();
+            if ($n > 0) {
+                $this->warnings[] = "Hay {$n} factura(s) de venta con productos cuyo costo de venta no se está contabilizando. "
+                    . "Configure las cuentas de Costo de Ventas e Inventario en Configuración Contable (tipo de asiento de Ventas); "
+                    . "al volver a abrir Estados Financieros, los asientos se completarán automáticamente.";
+            }
+        } catch (\Throwable $e) {
+            // Tabla/columna inexistente (migración pendiente): omitir sin romper.
         }
     }
 

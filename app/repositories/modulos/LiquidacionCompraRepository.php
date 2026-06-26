@@ -125,6 +125,14 @@ class LiquidacionCompraRepository extends BaseRepository
         return $this->query($sql, [$idDetalle])->fetchAll();
     }
 
+    /**
+     * Vincula el asiento contable generado a la liquidación de compra.
+     */
+    public function updateAsientoContable(int $idLiquidacion, int $idAsiento): void
+    {
+        $this->query("UPDATE liquidaciones_cabecera SET id_asiento_contable = ? WHERE id = ?", [$idAsiento, $idLiquidacion]);
+    }
+
     public function getPagos(int $idCabecera): array
     {
         $sql = "SELECT * FROM liquidaciones_pagos WHERE id_cabecera = ?";

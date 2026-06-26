@@ -343,11 +343,44 @@
                TAB 2: ASIENTO CONTABLE (placeholder)
           ════════════════════════════════════════ -->
           <div class="tab-pane fade" id="tabAsiento" role="tabpanel">
-            <div class="d-flex flex-column align-items-center justify-content-center py-5 text-muted">
-              <i class="bi bi-calculator fs-1 mb-3 text-success opacity-50"></i>
-              <h6 class="fw-semibold">Asiento Contable Automático - Próximamente</h6>
-              <p class="text-center small">La visualización del <strong>asiento contable</strong> generado por esta compra se mostrará aquí automáticamente una vez integrada la contabilidad.</p>
+            <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+              <div class="table-responsive" style="max-height: 350px;">
+                <table class="table table-sm table-detalle mb-0 text-nowrap" id="mc-table-asiento">
+                  <thead>
+                    <tr class="table-light border-bottom">
+                      <th class="ps-3 py-2 small fw-bold text-muted" style="width:45%;">Cuenta Contable</th>
+                      <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:20%;">D&eacute;bito / Debe</th>
+                      <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:20%;">Cr&eacute;dito / Haber</th>
+                      <th class="py-2 small fw-bold text-muted" style="width:15%;">Referencia</th>
+                      <th style="width:40px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="mc-asiento-tbody">
+                    <tr><td colspan="5" class="text-center py-4 text-muted">Guarda el documento para generar el asiento contable.</td></tr>
+                  </tbody>
+                  <tfoot class="bg-light fw-bold border-top sticky-bottom">
+                    <tr>
+                      <td class="text-end py-2">Totales:</td>
+                      <td class="text-end pe-3 py-2 text-primary" id="mc-asiento-debe">0.00</td>
+                      <td class="text-end pe-3 py-2 text-primary" id="mc-asiento-haber">0.00</td>
+                      <td colspan="2" class="py-2">
+                        <div class="d-flex align-items-center gap-2 justify-content-end pe-3">
+                          <span class="x-small text-muted">Diferencia: <span id="mc-asiento-dif">0.00</span></span>
+                          <span id="mc-asiento-badge" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2">Cuadrado</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center">
+                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" id="mc-asiento-add">
+                  <i class="bi bi-plus-circle me-1"></i> Agregar l&iacute;nea
+                </button>
+                <div class="small fw-bold text-muted pe-3">L&iacute;neas: <span id="mc-asiento-count">0</span></div>
+              </div>
             </div>
+            <div class="px-1 pt-2 small text-muted" id="mc-asiento-status"></div>
           </div>
 
           <div class="tab-pane fade" id="tabPagos" role="tabpanel">
