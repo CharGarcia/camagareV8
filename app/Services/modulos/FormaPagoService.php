@@ -81,6 +81,27 @@ class FormaPagoService
                 throw new Exception("Debe seleccionar al menos una modalidad de tarjeta (Débito o Crédito).");
             }
         }
+
+        // Validación especial para ANTICIPO: aplica a una sola dirección
+        // (INGRESO = anticipos de clientes, EGRESO = anticipos a proveedores), nunca AMBAS.
+        if ($data['tipo'] === 'ANTICIPO') {
+            $aplica = strtoupper((string)($data['aplica_en'] ?? ''));
+            if (!in_array($aplica, ['INGRESO', 'EGRESO'], true)) {
+                throw new Exception("Un anticipo debe aplicar a una sola dirección: Ingreso (clientes) o Egreso (proveedores).");
+            }
+        }
+    }
+
+    /** Mapa [id_forma => saldo] de las formas no-anticipo (Efectivo/Banco/Tarjeta/Otro). */
+    public function getSaldosActuales(int $idEmpresa): array
+    {
+        return $this->repository->getSaldosActuales($idEmpresa);
+    }
+
+    /** Saldo de un anticipo para un cliente/proveedor concreto. */
+    public function getSaldoAnticipo(int $idEmpresa, int $idForma, int $idTercero): float
+    {
+        return $this->repository->getSaldoAnticipo($idEmpresa, $idForma, $idTercero);
     }
 
     public function eliminar(int $id, int $idEmpresa, int $usuarioId): bool

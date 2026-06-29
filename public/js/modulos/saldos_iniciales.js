@@ -21,7 +21,34 @@ document.addEventListener('DOMContentLoaded', () => {
     SI_cargarCatalogos();
     // Marcar el flag de la vista para que SI_onTabCxc no recargue al hacer click
     if (typeof SI_tabCxcCargado !== 'undefined') SI_tabCxcCargado = true;
+    // Máscara Nº documento (000-000-000000000) en CXC, CXP y Consignaciones
+    SI_aplicarMascaraNroDoc(document.getElementById('si-cxc-nro'));
+    SI_aplicarMascaraNroDoc(document.getElementById('si-cxp-nro'));
+    SI_aplicarMascaraNroDoc(document.getElementById('si-consig-nro'));
 });
+
+/* Máscara de comprobante 000-000-000000000 (3-3-9) */
+function SI_aplicarMascaraNroDoc(el) {
+    if (!el) return;
+    el.addEventListener('input', (e) => {
+        let v = e.target.value.replace(/\D/g, '');
+        if (v.length > 15) v = v.slice(0, 15);
+        let res = '';
+        if (v.length > 0) res += v.slice(0, 3);
+        if (v.length > 3) res += '-' + v.slice(3, 6);
+        if (v.length > 6) res += '-' + v.slice(6, 15);
+        e.target.value = res;
+    });
+    el.addEventListener('blur', (e) => {
+        const parts = e.target.value.split('-');
+        if (parts.length === 1 && parts[0].length > 0) {
+            const v = parts[0];
+            if (v.length <= 9) e.target.value = `001-001-${v.padStart(9, '0')}`;
+        } else if (parts.length === 3) {
+            e.target.value = `${parts[0].padStart(3,'0')}-${parts[1].padStart(3,'0')}-${parts[2].padStart(9,'0')}`;
+        }
+    });
+}
 
 /* ════════════════════════════════
    CATÁLOGOS
@@ -109,8 +136,11 @@ function SI_abrirModalCxc(row = null) {
     document.getElementById('si-cxc-nro').value = row?.nro_documento || '';
     document.getElementById('si-cxc-femision').value = row?.fecha_emision || '';
     document.getElementById('si-cxc-fvenc').value = row?.fecha_vencimiento || '';
-    document.getElementById('si-cxc-ruc').value = row?.ruc_cliente || '';
-    document.getElementById('si-cxc-nombre').value = row?.nombre_cliente || '';
+    if (row?.id_cliente) {
+        SI_setTercero('cxc', row.id_cliente, row.ruc_cliente, row.nombre_cliente);
+    } else {
+        SI_limpiarTercero('cxc');
+    }
     document.getElementById('si-cxc-saldo').value = row?.saldo_inicial || '';
     document.getElementById('si-cxc-obs').value = row?.observaciones || '';
     const btnEl = document.getElementById('btn-eliminar-cxc');
@@ -127,11 +157,12 @@ async function SI_guardarCxc() {
     const id = document.getElementById('si-cxc-id').value;
     const form = new FormData();
     if (id) form.append('id', id);
+    const idCliente = document.getElementById('si-cxc-id-cliente').value;
+    if (!idCliente) { SI_toast('Debe seleccionar un cliente registrado.', 'warning'); return; }
     form.append('nro_documento',     document.getElementById('si-cxc-nro').value);
     form.append('fecha_emision',     document.getElementById('si-cxc-femision').value);
     form.append('fecha_vencimiento', document.getElementById('si-cxc-fvenc').value);
-    form.append('ruc_cliente',       document.getElementById('si-cxc-ruc').value);
-    form.append('nombre_cliente',    document.getElementById('si-cxc-nombre').value);
+    form.append('id_cliente',        idCliente);
     form.append('saldo_inicial',     document.getElementById('si-cxc-saldo').value);
     form.append('observaciones',     document.getElementById('si-cxc-obs').value);
 
@@ -264,8 +295,11 @@ function SI_abrirModalCxp(row = null) {
     document.getElementById('si-cxp-nro').value = row?.nro_documento || '';
     document.getElementById('si-cxp-femision').value = row?.fecha_emision || '';
     document.getElementById('si-cxp-fvenc').value = row?.fecha_vencimiento || '';
-    document.getElementById('si-cxp-ruc').value = row?.ruc_proveedor || '';
-    document.getElementById('si-cxp-nombre').value = row?.nombre_proveedor || '';
+    if (row?.id_proveedor) {
+        SI_setTercero('cxp', row.id_proveedor, row.ruc_proveedor, row.nombre_proveedor);
+    } else {
+        SI_limpiarTercero('cxp');
+    }
     document.getElementById('si-cxp-saldo').value = row?.saldo_inicial || '';
     document.getElementById('si-cxp-obs').value = row?.observaciones || '';
     const btnEl = document.getElementById('btn-eliminar-cxp');
@@ -282,12 +316,13 @@ async function SI_guardarCxp() {
     const id = document.getElementById('si-cxp-id').value;
     const form = new FormData();
     if (id) form.append('id', id);
+    const idProveedor = document.getElementById('si-cxp-id-proveedor').value;
+    if (!idProveedor) { SI_toast('Debe seleccionar un proveedor registrado.', 'warning'); return; }
     form.append('tipo_documento',    document.getElementById('si-cxp-tipo').value);
     form.append('nro_documento',     document.getElementById('si-cxp-nro').value);
     form.append('fecha_emision',     document.getElementById('si-cxp-femision').value);
     form.append('fecha_vencimiento', document.getElementById('si-cxp-fvenc').value);
-    form.append('ruc_proveedor',     document.getElementById('si-cxp-ruc').value);
-    form.append('nombre_proveedor',  document.getElementById('si-cxp-nombre').value);
+    form.append('id_proveedor',      idProveedor);
     form.append('saldo_inicial',     document.getElementById('si-cxp-saldo').value);
     form.append('observaciones',     document.getElementById('si-cxp-obs').value);
 
@@ -440,6 +475,512 @@ async function SI_eliminarBanco(id) {
         if (d.ok) { SI_toast(d.mensaje, 'success'); SI_cargarBancos(); }
         else { SI_toast(d.error, 'danger'); }
     } catch(e) { SI_toast('Error de conexión', 'danger'); }
+}
+
+/* ════════════════════════════════
+   EFECTIVO — CARGAR Y GUARDAR
+   (formas de cobro/pago de tipo EFECTIVO)
+════════════════════════════════ */
+async function SI_cargarEfectivo() {
+    const container = document.getElementById('efectivo-container');
+    container.innerHTML = `<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Cargando…</div>`;
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/getEfectivoAjax`, { headers: {'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (!d.ok) { container.innerHTML = `<div class="text-danger p-3">${siEsc(d.error)}</div>`; return; }
+        SI_renderEfectivo(d.cuentas || []);
+    } catch(e) { container.innerHTML = `<div class="text-danger p-3">Error de conexión</div>`; }
+}
+
+function SI_renderEfectivo(cuentas) {
+    const container = document.getElementById('efectivo-container');
+    if (!cuentas.length) {
+        container.innerHTML = `<div class="text-center py-5 text-muted"><i class="bi bi-cash-stack fs-3 d-block mb-2 opacity-25"></i>No hay formas de cobro/pago de tipo Efectivo registradas.</div>`;
+        return;
+    }
+    container.innerHTML = `<div class="table-responsive">
+        <table class="table table-sm table-hover align-middle border rounded-3">
+            <thead class="table-light"><tr>
+                <th>Forma de Cobro/Pago</th>
+                <th style="width:150px;" class="text-center">Fecha Saldo</th>
+                <th style="width:150px;" class="text-end">Saldo Inicial ($)</th>
+                <th style="width:200px;">Observaciones</th>
+                ${SI_PERM_ELIMINAR ? '<th style="width:60px;"></th>' : ''}
+            </tr></thead>
+            <tbody>
+                ${cuentas.map(c => `<tr>
+                    <td><span class="fw-semibold">${siEsc(c.nombre)}</span></td>
+                    <td><input type="date" class="form-control form-control-sm shadow-none border si-efectivo-fecha"
+                        data-forma="${c.id}" value="${c.fecha_saldo||''}"></td>
+                    <td><div class="input-group input-group-sm">
+                        <span class="input-group-text text-success">$</span>
+                        <input type="number" class="form-control form-control-sm shadow-none text-end fw-semibold si-efectivo-saldo"
+                            data-forma="${c.id}" step="0.01" placeholder="0.00" value="${c.saldo_inicial||''}">
+                    </div></td>
+                    <td><input type="text" class="form-control form-control-sm shadow-none si-efectivo-obs"
+                        data-forma="${c.id}" maxlength="255" placeholder="Opcional…" value="${siEsc(c.observaciones||'')}"></td>
+                    ${SI_PERM_ELIMINAR ? `<td class="text-center">${c.id_saldo_inicial ? `<button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="SI_eliminarEfectivo(${c.id_saldo_inicial})" title="Quitar saldo"><i class="bi bi-x-lg"></i></button>` : ''}</td>` : ''}
+                </tr>`).join('')}
+            </tbody>
+        </table>
+    </div>`;
+}
+
+async function SI_guardarEfectivo() {
+    const cuentas = [];
+    document.querySelectorAll('.si-efectivo-fecha').forEach(el => {
+        const forma = el.getAttribute('data-forma');
+        const saldo = document.querySelector(`.si-efectivo-saldo[data-forma="${forma}"]`)?.value;
+        const fecha = el.value;
+        const obs   = document.querySelector(`.si-efectivo-obs[data-forma="${forma}"]`)?.value || '';
+        if (fecha && saldo !== '' && saldo !== undefined) {
+            cuentas.push({ id_forma_pago: forma, fecha_saldo: fecha, saldo_inicial: saldo, observaciones: obs });
+        }
+    });
+
+    if (!cuentas.length) { SI_toast('No hay saldos para guardar.', 'warning'); return; }
+
+    const fd = new FormData();
+    fd.append('cuentas', JSON.stringify(cuentas));
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/guardarBancosAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (d.ok) { SI_toast(d.mensaje, 'success'); SI_cargarEfectivo(); }
+        else { SI_toast(d.error, 'danger'); }
+    } catch(e) { SI_toast('Error de conexión', 'danger'); }
+}
+
+async function SI_eliminarEfectivo(id) {
+    if (!confirm('¿Eliminar el saldo inicial de esta forma de efectivo?')) return;
+    const fd = new FormData(); fd.append('id', id);
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/eliminarBancoAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (d.ok) { SI_toast(d.mensaje, 'success'); SI_cargarEfectivo(); }
+        else { SI_toast(d.error, 'danger'); }
+    } catch(e) { SI_toast('Error de conexión', 'danger'); }
+}
+
+/* ════════════════════════════════
+   ANTICIPOS — listado + modal (atado a cliente/proveedor)
+════════════════════════════════ */
+let SI_datosAnti = [];
+let SI_formasAnti = null;
+
+async function SI_cargarFormasAnticipo() {
+    if (SI_formasAnti === null) {
+        try {
+            const r = await fetch(`${BASE_URL}/${RUTA_SI}/getFormasAnticipoAjax`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
+            const d = await r.json();
+            SI_formasAnti = d.ok ? (d.formas || []) : [];
+        } catch(e) { SI_formasAnti = []; }
+    }
+    return SI_formasAnti;
+}
+
+async function SI_cargarAnticipos() {
+    const tbody = document.getElementById('si-anti-tbody');
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4"><div class="spinner-border spinner-border-sm me-2" style="color:#6f42c1;"></div>Cargando…</td></tr>`;
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/getAnticiposAjax`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (!d.ok) { tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">${siEsc(d.error)}</td></tr>`; return; }
+        SI_datosAnti = d.filas || [];
+        SI_renderAnticipos(SI_datosAnti);
+    } catch(e) { tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">Error de conexión</td></tr>`; }
+}
+
+function SI_renderAnticipos(filas) {
+    const tbody = document.getElementById('si-anti-tbody');
+    document.getElementById('si-anti-count').textContent = filas.length + ' registros';
+    if (!filas.length) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-3 d-block mb-2 opacity-25"></i>Sin registros</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = filas.map(f => {
+        const esCli = f.tipo === 'CLIENTE';
+        const badge = esCli
+            ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:.65rem;">Cliente</span>'
+            : '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" style="font-size:.65rem;">Proveedor</span>';
+        return `<tr>
+            <td class="ps-3">${badge}</td>
+            <td class="text-truncate" title="${siEsc(f.nombre_tercero)}">${siEsc(f.nombre_tercero)}${f.ruc_tercero ? `<small class="text-muted d-block">${siEsc(f.ruc_tercero)}</small>` : ''}</td>
+            <td class="small">${siEsc(f.forma_nombre||'—')}</td>
+            <td class="text-center small">${siFmtFecha(f.fecha_saldo)}</td>
+            <td class="text-end fw-bold">$${f.saldo_inicial}</td>
+            <td class="small text-muted text-truncate" style="max-width:200px;" title="${siEsc(f.observaciones||'')}">${siEsc(f.observaciones||'')}</td>
+            <td class="text-center">
+                ${SI_PERM_MODIFICAR ? `<button class="btn btn-outline-warning btn-sm py-0 px-1" onclick='SI_abrirModalAnticipo(${JSON.stringify(f)})' title="Editar"><i class="bi bi-pencil"></i></button>` : ''}
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function SI_filtrarAnticipos(q) {
+    const t = q.toLowerCase();
+    SI_renderAnticipos(t ? SI_datosAnti.filter(f =>
+        (f.nombre_tercero||'').toLowerCase().includes(t) ||
+        (f.ruc_tercero||'').toLowerCase().includes(t) ||
+        (f.forma_nombre||'').toLowerCase().includes(t)
+    ) : SI_datosAnti);
+}
+
+/* Muestra el selector de cliente o proveedor según la dirección de la forma */
+function SI_onFormaAnticipoChange() {
+    const sel = document.getElementById('si-anti-forma');
+    const aplica = sel.options[sel.selectedIndex]?.getAttribute('data-aplica') || '';
+    const esProv = aplica === 'EGRESO';
+    document.getElementById('si-anti-cli-block').classList.toggle('d-none', esProv || aplica === '');
+    document.getElementById('si-anti-prov-block').classList.toggle('d-none', !esProv);
+}
+
+async function SI_abrirModalAnticipo(row = null) {
+    const formas = await SI_cargarFormasAnticipo();
+    const sel = document.getElementById('si-anti-forma');
+    sel.innerHTML = '<option value="">— Seleccione —</option>' +
+        formas.map(f => {
+            const dir = f.aplica_en === 'EGRESO' ? 'Proveedores' : 'Clientes';
+            return `<option value="${f.id}" data-aplica="${siEsc(f.aplica_en||'')}">${siEsc(f.nombre)} · ${dir}</option>`;
+        }).join('');
+
+    document.getElementById('si-anti-id').value = row?.id || '';
+    sel.value = row?.id_forma_pago || '';
+    document.getElementById('si-anti-fecha').value = row?.fecha_saldo || new Date().toISOString().slice(0,10);
+    document.getElementById('si-anti-saldo').value = row?.saldo_inicial || '';
+    document.getElementById('si-anti-obs').value = row?.observaciones || '';
+
+    SI_limpiarTercero('anticli');
+    SI_limpiarTercero('antiprov');
+    SI_onFormaAnticipoChange();
+    if (row) {
+        if (row.tipo === 'CLIENTE' && row.id_cliente) SI_setTercero('anticli', row.id_cliente, row.ruc_tercero, row.nombre_tercero);
+        if (row.tipo === 'PROVEEDOR' && row.id_proveedor) SI_setTercero('antiprov', row.id_proveedor, row.ruc_tercero, row.nombre_tercero);
+    }
+
+    const btnEl = document.getElementById('btn-eliminar-anti');
+    if (row?.id && SI_PERM_ELIMINAR) { btnEl.style.removeProperty('display'); btnEl.setAttribute('data-id', row.id); }
+    else { btnEl.style.setProperty('display','none','important'); }
+
+    new bootstrap.Modal(document.getElementById('modalSIAnticipo')).show();
+}
+
+async function SI_guardarAnticipo() {
+    const idForma = document.getElementById('si-anti-forma').value;
+    if (!idForma) { SI_toast('Debe seleccionar una forma de anticipo.', 'warning'); return; }
+    const esProv = !document.getElementById('si-anti-prov-block').classList.contains('d-none');
+    const idTercero = esProv
+        ? document.getElementById('si-anti-id-proveedor').value
+        : document.getElementById('si-anti-id-cliente').value;
+    if (!idTercero) { SI_toast(esProv ? 'Debe seleccionar un proveedor.' : 'Debe seleccionar un cliente.', 'warning'); return; }
+
+    const id = document.getElementById('si-anti-id').value;
+    const fd = new FormData();
+    if (id) fd.append('id', id);
+    fd.append('id_forma_pago', idForma);
+    fd.append('id_tercero',    idTercero);
+    fd.append('fecha_saldo',   document.getElementById('si-anti-fecha').value);
+    fd.append('saldo_inicial', document.getElementById('si-anti-saldo').value);
+    fd.append('observaciones', document.getElementById('si-anti-obs').value);
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/guardarAnticipoAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (d.ok) { bootstrap.Modal.getInstance(document.getElementById('modalSIAnticipo'))?.hide(); SI_toast(d.mensaje, 'success'); SI_cargarAnticipos(); }
+        else { SI_toast(d.error, 'danger'); }
+    } catch(e) { SI_toast('Error de conexión', 'danger'); }
+}
+
+async function SI_eliminarAnticipo() {
+    const id = document.getElementById('btn-eliminar-anti').getAttribute('data-id');
+    if (!id || !confirm('¿Eliminar este saldo inicial de anticipo?')) return;
+    const fd = new FormData(); fd.append('id', id);
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/eliminarAnticipoAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (d.ok) { bootstrap.Modal.getInstance(document.getElementById('modalSIAnticipo'))?.hide(); SI_toast(d.mensaje, 'success'); SI_cargarAnticipos(); }
+        else { SI_toast(d.error, 'danger'); }
+    } catch(e) { SI_toast('Error de conexión', 'danger'); }
+}
+
+/* ════════════════════════════════
+   CATÁLOGOS (bodegas / vendedores) — cacheados
+════════════════════════════════ */
+let SI_bodegas = null;
+let SI_vendedores = null;
+
+async function SI_cargarBodegasSelect() {
+    if (SI_bodegas === null) {
+        try {
+            const r = await fetch(`${BASE_URL}/${RUTA_SI}/getBodegasAjax`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
+            const d = await r.json();
+            SI_bodegas = d.ok ? (d.data || []) : [];
+        } catch(e) { SI_bodegas = []; }
+    }
+    return SI_bodegas;
+}
+async function SI_cargarVendedoresSelect() {
+    if (SI_vendedores === null) {
+        try {
+            const r = await fetch(`${BASE_URL}/${RUTA_SI}/getVendedoresAjax`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
+            const d = await r.json();
+            SI_vendedores = d.ok ? (d.data || []) : [];
+        } catch(e) { SI_vendedores = []; }
+    }
+    return SI_vendedores;
+}
+function SI_fillSelect(selId, items, valKey, txtKey, placeholder) {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    sel.innerHTML = `<option value="">${placeholder}</option>` +
+        items.map(it => `<option value="${it[valKey]}">${siEsc(it[txtKey])}</option>`).join('');
+}
+
+/* ════════════════════════════════
+   INVENTARIO — saldos de apertura
+════════════════════════════════ */
+let SI_datosInv = [];
+
+async function SI_cargarInventario() {
+    const tbody = document.getElementById('si-inv-tbody');
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4"><div class="spinner-border spinner-border-sm text-info me-2"></div>Cargando…</td></tr>`;
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/getInventarioAjax`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (!d.ok) { tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger py-4">${siEsc(d.error)}</td></tr>`; return; }
+        SI_datosInv = d.filas || [];
+        SI_renderInventario(SI_datosInv);
+    } catch(e) { tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger py-4">Error de conexión</td></tr>`; }
+}
+
+function SI_renderInventario(filas) {
+    const tbody = document.getElementById('si-inv-tbody');
+    document.getElementById('si-inv-count').textContent = filas.length + ' registros';
+    if (!filas.length) {
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-3 d-block mb-2 opacity-25"></i>Sin registros</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = filas.map(f => `<tr>
+        <td class="ps-3"><span class="fw-semibold">${siEsc(f.producto_nombre)}</span>${f.producto_codigo ? `<small class="text-muted d-block font-monospace">${siEsc(f.producto_codigo)}</small>` : ''}</td>
+        <td>${siEsc(f.bodega_nombre)}</td>
+        <td class="text-end fw-semibold">${siFmt(f.cantidad)}</td>
+        <td class="text-end small">$${siFmt(f.costo_unitario)}</td>
+        <td class="text-end small">$${siFmt(f.costo_total)}</td>
+        <td class="small">${siEsc(f.numero_lote||'—')}</td>
+        <td class="text-center small">${f.fecha_caducidad ? siFmtFecha(f.fecha_caducidad) : '—'}</td>
+        <td class="small">${siEsc(f.nup||'—')}</td>
+        <td class="text-center">${SI_PERM_ELIMINAR ? `<button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="SI_eliminarInventario(${f.id})" title="Eliminar"><i class="bi bi-trash"></i></button>` : ''}</td>
+    </tr>`).join('');
+}
+
+function SI_filtrarInventario(q) {
+    const t = q.toLowerCase();
+    SI_renderInventario(t ? SI_datosInv.filter(f =>
+        (f.producto_nombre||'').toLowerCase().includes(t) ||
+        (f.producto_codigo||'').toLowerCase().includes(t) ||
+        (f.bodega_nombre||'').toLowerCase().includes(t) ||
+        (f.numero_lote||'').toLowerCase().includes(t)
+    ) : SI_datosInv);
+}
+
+async function SI_abrirModalInventario() {
+    SI_limpiarProducto('inv');
+    document.getElementById('si-inv-cantidad').value = '';
+    document.getElementById('si-inv-costo').value = '';
+    document.getElementById('si-inv-lote').value = '';
+    document.getElementById('si-inv-caducidad').value = '';
+    document.getElementById('si-inv-nup').value = '';
+    document.getElementById('si-inv-obs').value = '';
+    const bodegas = await SI_cargarBodegasSelect();
+    SI_fillSelect('si-inv-bodega', bodegas, 'id', 'nombre', '— Seleccione —');
+    new bootstrap.Modal(document.getElementById('modalSIInventario')).show();
+}
+
+async function SI_guardarInventario() {
+    const idProd = document.getElementById('si-inv-id-producto').value;
+    if (!idProd) { SI_toast('Debe seleccionar un producto.', 'warning'); return; }
+    if (!document.getElementById('si-inv-bodega').value) { SI_toast('Debe seleccionar una bodega.', 'warning'); return; }
+    const fd = new FormData();
+    fd.append('id_producto',     idProd);
+    fd.append('id_bodega',       document.getElementById('si-inv-bodega').value);
+    fd.append('cantidad',        document.getElementById('si-inv-cantidad').value);
+    fd.append('costo_unitario',  document.getElementById('si-inv-costo').value);
+    fd.append('lote',            document.getElementById('si-inv-lote').value);
+    fd.append('fecha_caducidad', document.getElementById('si-inv-caducidad').value);
+    fd.append('nup',             document.getElementById('si-inv-nup').value);
+    fd.append('observaciones',   document.getElementById('si-inv-obs').value);
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/guardarInventarioAjax`, { method:'POST', body: fd, headers:{'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (d.ok) { bootstrap.Modal.getInstance(document.getElementById('modalSIInventario'))?.hide(); SI_toast(d.mensaje, 'success'); SI_cargarInventario(); }
+        else { SI_toast(d.error, 'danger'); }
+    } catch(e) { SI_toast('Error de conexión', 'danger'); }
+}
+
+async function SI_eliminarInventario(id) {
+    if (!confirm('¿Eliminar este saldo de inventario? Se revertirá el stock.')) return;
+    const fd = new FormData(); fd.append('id', id);
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/eliminarInventarioAjax`, { method:'POST', body: fd, headers:{'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (d.ok) { SI_toast(d.mensaje, 'success'); SI_cargarInventario(); }
+        else { SI_toast(d.error, 'danger'); }
+    } catch(e) { SI_toast('Error de conexión', 'danger'); }
+}
+
+async function SI_importarInventario(input) {
+    if (!input.files[0]) return;
+    const fd = new FormData(); fd.append('archivo', input.files[0]);
+    SI_toast('Importando archivo…', 'info');
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/importarInventarioAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (d.ok) {
+            let msg = d.mensaje;
+            if (d.errores?.length) msg += '\n' + d.errores.join('\n');
+            alert(msg);
+            SI_cargarInventario();
+        } else { SI_toast(d.error, 'danger'); }
+    } catch(e) { SI_toast('Error al importar', 'danger'); }
+    input.value = '';
+}
+
+function SI_descargarTemplateInventario() {
+    window.location.href = `${BASE_URL}/${RUTA_SI}/descargarTemplateInventario`;
+}
+
+/* ════════════════════════════════
+   CONSIGNACIONES — registro de saldo pendiente
+════════════════════════════════ */
+let SI_datosConsig = [];
+
+async function SI_cargarConsig() {
+    const tbody = document.getElementById('si-consig-tbody');
+    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4"><div class="spinner-border spinner-border-sm text-secondary me-2"></div>Cargando…</td></tr>`;
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/getConsignacionesAjax`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (!d.ok) { tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger py-4">${siEsc(d.error)}</td></tr>`; return; }
+        SI_datosConsig = d.filas || [];
+        SI_renderConsig(SI_datosConsig);
+    } catch(e) { tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger py-4">Error de conexión</td></tr>`; }
+}
+
+function SI_renderConsig(filas) {
+    const tbody = document.getElementById('si-consig-tbody');
+    document.getElementById('si-consig-count').textContent = filas.length + ' registros';
+    if (!filas.length) {
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-3 d-block mb-2 opacity-25"></i>Sin registros</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = filas.map(f => `<tr>
+        <td class="ps-3 font-monospace small">${siEsc(f.nro_documento||'—')}</td>
+        <td class="text-center small">${siFmtFecha(f.fecha_emision)}</td>
+        <td class="text-truncate" title="${siEsc(f.nombre_cliente)}">${siEsc(f.nombre_cliente)}${f.ruc_cliente ? `<small class="text-muted d-block">${siEsc(f.ruc_cliente)}</small>` : ''}</td>
+        <td class="text-truncate" title="${siEsc(f.producto_nombre)}">${siEsc(f.producto_nombre)}${f.producto_codigo ? `<small class="text-muted d-block font-monospace">${siEsc(f.producto_codigo)}</small>` : ''}</td>
+        <td class="text-end fw-semibold">${f.cantidad}</td>
+        <td class="text-end small">$${f.precio_unitario}</td>
+        <td class="text-end fw-bold">$${f.total}</td>
+        <td class="small">${siEsc(f.nombre_vendedor||'—')}</td>
+        <td class="small">${siEsc(f.nombre_bodega||'—')}</td>
+        <td class="text-center">
+            ${SI_PERM_MODIFICAR ? `<button class="btn btn-outline-warning btn-sm py-0 px-1" onclick='SI_abrirModalConsig(${JSON.stringify(f)})' title="Editar"><i class="bi bi-pencil"></i></button>` : ''}
+        </td>
+    </tr>`).join('');
+}
+
+function SI_filtrarConsig(q) {
+    const t = q.toLowerCase();
+    SI_renderConsig(t ? SI_datosConsig.filter(f =>
+        (f.nombre_cliente||'').toLowerCase().includes(t) ||
+        (f.producto_nombre||'').toLowerCase().includes(t) ||
+        (f.nro_documento||'').toLowerCase().includes(t)
+    ) : SI_datosConsig);
+}
+
+async function SI_abrirModalConsig(row = null) {
+    document.getElementById('si-consig-id').value = row?.id || '';
+    document.getElementById('si-consig-fecha').value = row?.fecha_emision || new Date().toISOString().slice(0,10);
+    document.getElementById('si-consig-nro').value = row?.nro_documento || '';
+    if (row?.id_cliente) SI_setTercero('consig', row.id_cliente, row.ruc_cliente, row.nombre_cliente); else SI_limpiarTercero('consig');
+    if (row?.id_producto) SI_setProducto('consig', row.id_producto, row.producto_codigo, row.producto_nombre); else SI_limpiarProducto('consig');
+    document.getElementById('si-consig-cantidad').value = row?.cantidad || '';
+    document.getElementById('si-consig-precio').value = row?.precio_unitario || '';
+    document.getElementById('si-consig-lote').value = row?.lote || '';
+    document.getElementById('si-consig-caducidad').value = row?.fecha_caducidad || '';
+    document.getElementById('si-consig-nup').value = row?.nup || '';
+    document.getElementById('si-consig-obs').value = row?.observaciones || '';
+
+    const [bodegas, vendedores] = await Promise.all([SI_cargarBodegasSelect(), SI_cargarVendedoresSelect()]);
+    SI_fillSelect('si-consig-bodega', bodegas, 'id', 'nombre', '— Ninguna —');
+    SI_fillSelect('si-consig-vendedor', vendedores, 'id', 'nombre', '— Ninguno —');
+    document.getElementById('si-consig-bodega').value = row?.id_bodega || '';
+    document.getElementById('si-consig-vendedor').value = row?.id_vendedor || '';
+
+    const btnEl = document.getElementById('btn-eliminar-consig');
+    if (row?.id && SI_PERM_ELIMINAR) { btnEl.style.removeProperty('display'); btnEl.setAttribute('data-id', row.id); }
+    else { btnEl.style.setProperty('display','none','important'); }
+
+    new bootstrap.Modal(document.getElementById('modalSIConsig')).show();
+}
+
+async function SI_guardarConsig() {
+    const idCliente = document.getElementById('si-consig-id-cliente').value;
+    const idProd    = document.getElementById('si-consig-id-producto').value;
+    if (!idCliente) { SI_toast('Debe seleccionar un cliente registrado.', 'warning'); return; }
+    if (!idProd)    { SI_toast('Debe seleccionar un producto.', 'warning'); return; }
+    const id = document.getElementById('si-consig-id').value;
+    const fd = new FormData();
+    if (id) fd.append('id', id);
+    fd.append('fecha_emision',   document.getElementById('si-consig-fecha').value);
+    fd.append('nro_documento',   document.getElementById('si-consig-nro').value);
+    fd.append('id_cliente',      idCliente);
+    fd.append('id_producto',     idProd);
+    fd.append('cantidad',        document.getElementById('si-consig-cantidad').value);
+    fd.append('precio_unitario', document.getElementById('si-consig-precio').value);
+    fd.append('id_bodega',       document.getElementById('si-consig-bodega').value);
+    fd.append('id_vendedor',     document.getElementById('si-consig-vendedor').value);
+    fd.append('lote',            document.getElementById('si-consig-lote').value);
+    fd.append('fecha_caducidad', document.getElementById('si-consig-caducidad').value);
+    fd.append('nup',             document.getElementById('si-consig-nup').value);
+    fd.append('observaciones',   document.getElementById('si-consig-obs').value);
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/guardarConsignacionAjax`, { method:'POST', body: fd, headers:{'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (d.ok) { bootstrap.Modal.getInstance(document.getElementById('modalSIConsig'))?.hide(); SI_toast(d.mensaje, 'success'); SI_cargarConsig(); }
+        else { SI_toast(d.error, 'danger'); }
+    } catch(e) { SI_toast('Error de conexión', 'danger'); }
+}
+
+async function SI_eliminarConsig() {
+    const id = document.getElementById('btn-eliminar-consig').getAttribute('data-id');
+    if (!id || !confirm('¿Eliminar este registro de consignación?')) return;
+    const fd = new FormData(); fd.append('id', id);
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/eliminarConsignacionAjax`, { method:'POST', body: fd, headers:{'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (d.ok) { bootstrap.Modal.getInstance(document.getElementById('modalSIConsig'))?.hide(); SI_toast(d.mensaje, 'success'); SI_cargarConsig(); }
+        else { SI_toast(d.error, 'danger'); }
+    } catch(e) { SI_toast('Error de conexión', 'danger'); }
+}
+
+async function SI_importarConsig(input) {
+    if (!input.files[0]) return;
+    const fd = new FormData(); fd.append('archivo', input.files[0]);
+    SI_toast('Importando archivo…', 'info');
+    try {
+        const r = await fetch(`${BASE_URL}/${RUTA_SI}/importarConsignacionAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
+        const d = await r.json();
+        if (d.ok) {
+            let msg = d.mensaje;
+            if (d.errores?.length) msg += '\n' + d.errores.join('\n');
+            alert(msg);
+            SI_cargarConsig();
+        } else { SI_toast(d.error, 'danger'); }
+    } catch(e) { SI_toast('Error al importar', 'danger'); }
+    input.value = '';
+}
+
+function SI_descargarTemplateConsig() {
+    window.location.href = `${BASE_URL}/${RUTA_SI}/descargarTemplateConsignacion`;
 }
 
 /* ════════════════════════════════
@@ -599,6 +1140,180 @@ function SI_renderHistorial(historial, campoMonto) {
         </tr>`;
     }).join('');
     document.getElementById('si-hist-total').textContent = siFmt(total);
+}
+
+/* ════════════════════════════════
+   SELECTOR CLIENTE / PROVEEDOR
+   (deben existir registrados)
+════════════════════════════════ */
+const SI_TERCERO_CFG = {
+    cxc: {
+        id:'si-cxc-id-cliente', buscar:'si-cxc-cliente-buscar', dropdown:'si-cxc-cliente-dropdown',
+        sel:'si-cxc-cliente-sel', selTxt:'si-cxc-cliente-sel-txt', endpoint:'buscarClienteAjax',
+        vacio:'No se encontraron clientes registrados.'
+    },
+    cxp: {
+        id:'si-cxp-id-proveedor', buscar:'si-cxp-proveedor-buscar', dropdown:'si-cxp-proveedor-dropdown',
+        sel:'si-cxp-proveedor-sel', selTxt:'si-cxp-proveedor-sel-txt', endpoint:'buscarProveedorAjax',
+        vacio:'No se encontraron proveedores registrados.'
+    },
+    consig: {
+        id:'si-consig-id-cliente', buscar:'si-consig-cli-buscar', dropdown:'si-consig-cli-dropdown',
+        sel:'si-consig-cli-sel', selTxt:'si-consig-cli-sel-txt', endpoint:'buscarClienteAjax',
+        vacio:'No se encontraron clientes registrados.'
+    },
+    anticli: {
+        id:'si-anti-id-cliente', buscar:'si-anti-cli-buscar', dropdown:'si-anti-cli-dropdown',
+        sel:'si-anti-cli-sel', selTxt:'si-anti-cli-sel-txt', endpoint:'buscarClienteAjax',
+        vacio:'No se encontraron clientes registrados.'
+    },
+    antiprov: {
+        id:'si-anti-id-proveedor', buscar:'si-anti-prov-buscar', dropdown:'si-anti-prov-dropdown',
+        sel:'si-anti-prov-sel', selTxt:'si-anti-prov-sel-txt', endpoint:'buscarProveedorAjax',
+        vacio:'No se encontraron proveedores registrados.'
+    }
+};
+let SI_terceroTimer = null;
+
+function SI_buscarTercero(modo, q) {
+    const cfg = SI_TERCERO_CFG[modo];
+    const dropdown = document.getElementById(cfg.dropdown);
+    clearTimeout(SI_terceroTimer);
+    SI_terceroTimer = setTimeout(async () => {
+        try {
+            const r = await fetch(`${BASE_URL}/${RUTA_SI}/${cfg.endpoint}?q=${encodeURIComponent(q || '')}`,
+                { headers: {'X-Requested-With':'XMLHttpRequest'} });
+            const d = await r.json();
+            const items = d.ok ? (d.data || []) : [];
+            if (!items.length) {
+                dropdown.innerHTML = `<div class="list-group-item small text-muted py-2">${cfg.vacio}</div>`;
+            } else {
+                dropdown.innerHTML = items.map(it => {
+                    const tipo = it.tipo_nombre ? `<small class="text-muted ms-1">· ${siEsc(it.tipo_nombre)}</small>` : '';
+                    const payload = siEsc(JSON.stringify({ id: it.id, ident: it.identificacion, nombre: it.nombre })).replace(/'/g, '&#39;');
+                    return `<button type="button" class="list-group-item list-group-item-action py-1 px-2 small"
+                                onmousedown='SI_pickTercero("${modo}", ${payload})'>
+                                <span class="fw-semibold font-monospace">${siEsc(it.identificacion || '—')}</span>${tipo}
+                                <span class="d-block text-truncate">${siEsc(it.nombre || '')}</span>
+                            </button>`;
+                }).join('');
+            }
+            dropdown.classList.remove('d-none');
+        } catch (e) { dropdown.classList.add('d-none'); }
+    }, 250);
+}
+
+function SI_pickTercero(modo, obj) {
+    SI_setTercero(modo, obj.id, obj.ident, obj.nombre);
+}
+
+function SI_setTercero(modo, id, ident, nombre) {
+    const cfg = SI_TERCERO_CFG[modo];
+    document.getElementById(cfg.id).value = id || '';
+    document.getElementById(cfg.selTxt).textContent = `${ident || '—'} — ${nombre || ''}`;
+    document.getElementById(cfg.sel).classList.remove('d-none');
+    const buscar = document.getElementById(cfg.buscar);
+    buscar.value = '';
+    buscar.classList.add('d-none');
+    document.getElementById(cfg.dropdown).classList.add('d-none');
+}
+
+function SI_limpiarTercero(modo) {
+    const cfg = SI_TERCERO_CFG[modo];
+    document.getElementById(cfg.id).value = '';
+    document.getElementById(cfg.selTxt).textContent = '';
+    document.getElementById(cfg.sel).classList.add('d-none');
+    const buscar = document.getElementById(cfg.buscar);
+    buscar.value = '';
+    buscar.classList.remove('d-none');
+    document.getElementById(cfg.dropdown).classList.add('d-none');
+    buscar.focus();
+}
+
+/* Cerrar dropdowns al hacer clic fuera */
+document.addEventListener('click', (e) => {
+    Object.values(SI_TERCERO_CFG).forEach(cfg => {
+        const dd = document.getElementById(cfg.dropdown);
+        const inp = document.getElementById(cfg.buscar);
+        if (dd && !dd.classList.contains('d-none') && e.target !== inp && !dd.contains(e.target)) {
+            dd.classList.add('d-none');
+        }
+    });
+    Object.values(SI_PROD_CFG).forEach(cfg => {
+        const dd = document.getElementById(cfg.dropdown);
+        const inp = document.getElementById(cfg.buscar);
+        if (dd && !dd.classList.contains('d-none') && e.target !== inp && !dd.contains(e.target)) {
+            dd.classList.add('d-none');
+        }
+    });
+});
+
+/* ════════════════════════════════
+   SELECTOR DE PRODUCTO (inventario / consignaciones)
+════════════════════════════════ */
+const SI_PROD_CFG = {
+    inv: {
+        id:'si-inv-id-producto', buscar:'si-inv-prod-buscar', dropdown:'si-inv-prod-dropdown',
+        sel:'si-inv-prod-sel', selTxt:'si-inv-prod-sel-txt'
+    },
+    consig: {
+        id:'si-consig-id-producto', buscar:'si-consig-prod-buscar', dropdown:'si-consig-prod-dropdown',
+        sel:'si-consig-prod-sel', selTxt:'si-consig-prod-sel-txt'
+    }
+};
+let SI_prodTimer = null;
+
+function SI_buscarProducto(modo, q) {
+    const cfg = SI_PROD_CFG[modo];
+    const dropdown = document.getElementById(cfg.dropdown);
+    clearTimeout(SI_prodTimer);
+    SI_prodTimer = setTimeout(async () => {
+        try {
+            const r = await fetch(`${BASE_URL}/${RUTA_SI}/buscarProductoAjax?q=${encodeURIComponent(q || '')}`,
+                { headers: {'X-Requested-With':'XMLHttpRequest'} });
+            const d = await r.json();
+            const items = d.ok ? (d.data || []) : [];
+            if (!items.length) {
+                dropdown.innerHTML = `<div class="list-group-item small text-muted py-2">No se encontraron productos.</div>`;
+            } else {
+                dropdown.innerHTML = items.map(it => {
+                    const payload = siEsc(JSON.stringify({ id: it.id, codigo: it.codigo, nombre: it.nombre })).replace(/'/g, '&#39;');
+                    return `<button type="button" class="list-group-item list-group-item-action py-1 px-2 small"
+                                onmousedown='SI_pickProducto("${modo}", ${payload})'>
+                                <span class="fw-semibold font-monospace">${siEsc(it.codigo || '—')}</span>
+                                <span class="d-block text-truncate">${siEsc(it.nombre || '')}</span>
+                            </button>`;
+                }).join('');
+            }
+            dropdown.classList.remove('d-none');
+        } catch (e) { dropdown.classList.add('d-none'); }
+    }, 250);
+}
+
+function SI_pickProducto(modo, obj) {
+    SI_setProducto(modo, obj.id, obj.codigo, obj.nombre);
+}
+
+function SI_setProducto(modo, id, codigo, nombre) {
+    const cfg = SI_PROD_CFG[modo];
+    document.getElementById(cfg.id).value = id || '';
+    document.getElementById(cfg.selTxt).textContent = `${codigo || '—'} — ${nombre || ''}`;
+    document.getElementById(cfg.sel).classList.remove('d-none');
+    const buscar = document.getElementById(cfg.buscar);
+    buscar.value = '';
+    buscar.classList.add('d-none');
+    document.getElementById(cfg.dropdown).classList.add('d-none');
+}
+
+function SI_limpiarProducto(modo) {
+    const cfg = SI_PROD_CFG[modo];
+    document.getElementById(cfg.id).value = '';
+    document.getElementById(cfg.selTxt).textContent = '';
+    document.getElementById(cfg.sel).classList.add('d-none');
+    const buscar = document.getElementById(cfg.buscar);
+    buscar.value = '';
+    buscar.classList.remove('d-none');
+    document.getElementById(cfg.dropdown).classList.add('d-none');
 }
 
 /* ════════════════════════════════

@@ -59,8 +59,17 @@ class EgresosController extends BaseModuloController
         // Usamos repositorio auxiliar para formas de pago si no es un método directo en EgresoRepository
         // O simplemente instanciamos el IngresoRepo que ya tiene el getFormasCobro genérico.
         // Mejor aún, la tabla es universal. Lo extraeré mediante repositorio dedicado de la empresa.
-        $fpRepo = new \App\repositories\modulos\FormaPagoRepository(); 
+        $fpRepo = new \App\repositories\modulos\FormaPagoRepository();
         $formasPago = $fpRepo->getFormasFiltradas($idEmpresa, 'EGRESO');
+
+        // Saldo actual de cada forma (anticipos se resuelven por proveedor vía AJAX)
+        $saldosFormas = (new \App\Services\modulos\FormaPagoService($fpRepo))->getSaldosActuales($idEmpresa);
+        foreach ($formasPago as &$fp) {
+            $esAnt = (($fp['tipo'] ?? '') === 'ANTICIPO');
+            $fp['es_anticipo'] = $esAnt;
+            $fp['saldo']       = $esAnt ? null : (float)($saldosFormas[(int)$fp['id']] ?? 0);
+        }
+        unset($fp);
 
         $conceptos  = $this->service->getConceptosEgreso($idEmpresa);
 
@@ -86,6 +95,27 @@ class EgresosController extends BaseModuloController
             'conceptos'         => $conceptos,
             'fullWidth'         => true,
         ]);
+    }
+
+    /** Saldo de un anticipo a proveedor para el proveedor seleccionado. */
+    public function getSaldoAnticipoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idForma   = (int) ($_GET['id_forma'] ?? 0);
+        $idTercero = (int) ($_GET['id_tercero'] ?? 0);
+
+        if ($idForma <= 0 || $idTercero <= 0) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Forma y proveedor requeridos.']);
+            exit;
+        }
+
+        $fpService = new \App\Services\modulos\FormaPagoService(new \App\repositories\modulos\FormaPagoRepository());
+        $saldo = $fpService->getSaldoAnticipo($idEmpresa, $idForma, $idTercero);
+        echo json_encode(['ok' => true, 'saldo' => $saldo]);
+        exit;
     }
 
     public function searchAjax(): void

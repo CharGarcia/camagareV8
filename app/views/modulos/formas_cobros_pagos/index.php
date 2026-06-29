@@ -114,6 +114,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                                 'BANCO'    => 'bg-primary',
                                 'TARJETA'  => 'bg-warning text-dark',
                                 'EFECTIVO' => 'bg-success',
+                                'ANTICIPO' => 'bg-info',
                                 'OTRO'     => 'bg-dark',
                                 default    => 'bg-secondary'
                             };

@@ -40,14 +40,15 @@ try {
                                 <option value="EFECTIVO">Efectivo</option>
                                 <option value="BANCO">Bancaria</option>
                                 <option value="TARJETA">Tarjeta</option>
+                                <option value="ANTICIPO">Anticipo</option>
                                 <option value="OTRO">Otros</option>
                             </select>
                         </div>
 
                         <div class="col-md-8">
                             <label class="form-label small fw-bold">Concepto <span class="text-danger">*</span></label>
-                            <input type="text" name="nombre" id="fp-nombre" class="form-control form-control-sm" placeholder="Ej: Efectivo, caja chica, etc." required maxlength="20" autocomplete="off">
-                            <div class="form-text" style="font-size: 0.7rem;">Máx. 20 caracteres para evitar desbordes.</div>
+                            <input type="text" name="nombre" id="fp-nombre" class="form-control form-control-sm" placeholder="Ej: Efectivo, caja chica, etc." required maxlength="50" autocomplete="off">
+                            <div class="form-text" style="font-size: 0.7rem;">Máx. 50 caracteres para evitar desbordes.</div>
                         </div>
 
                         <!-- Fila 2: Aplica Para -->
@@ -64,6 +65,9 @@ try {
                                 </div>
                             </div>
                             <input type="hidden" name="aplica_en" id="fp-aplica" value="AMBAS">
+                            <div id="fp-hint-anticipo" class="form-text text-info d-none" style="font-size: 0.72rem;">
+                                <i class="bi bi-info-circle me-1"></i> Para un anticipo debe elegir <strong>una sola</strong> aplicación: <strong>Ingreso</strong> = anticipos de clientes, <strong>Egreso</strong> = anticipos a proveedores.
+                            </div>
                         </div>
 
                         <!-- SECCION DE BANCOS CONDICIONAL -->
@@ -245,6 +249,12 @@ try {
                     aplicaVal = 'EGRESO';
                 }
 
+                // Anticipo: no puede aplicar a Ingreso y Egreso a la vez
+                if (document.getElementById('fp-tipo').value === 'ANTICIPO' && aplicaVal === 'AMBAS') {
+                    Swal.fire('Atención', 'Un anticipo debe aplicar a una sola dirección: Ingreso (clientes) o Egreso (proveedores).', 'warning');
+                    return;
+                }
+
                 const formData = new FormData(this);
                 formData.set('aplica_en', aplicaVal);
 
@@ -346,6 +356,20 @@ try {
                 document.getElementById('fp-chk-credito').checked = false;
                 document.getElementById('fp-modalidad-tarjeta').value = '';
             }
+        }
+
+        // Anticipo: aplica a una sola dirección (clientes O proveedores), nunca ambas
+        const hintAnt = document.getElementById('fp-hint-anticipo');
+        const chkIng  = document.getElementById('fp-chk-ingreso');
+        const chkEgr  = document.getElementById('fp-chk-egreso');
+        if (tipo === 'ANTICIPO') {
+            if (hintAnt) hintAnt.classList.remove('d-none');
+            // Si están ambas marcadas, dejar solo Ingreso (anticipos de clientes) por defecto
+            if (chkIng && chkEgr && chkIng.checked && chkEgr.checked) {
+                chkEgr.checked = false;
+            }
+        } else if (hintAnt) {
+            hintAnt.classList.add('d-none');
         }
     }
 

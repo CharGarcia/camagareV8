@@ -472,10 +472,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             <label class="form-label small fw-bold d-flex align-items-center">Forma de Cobro <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('ingresos', 'm-add-cobro-forma', 'id_forma_cobro_default') ?></label>
                                             <select id="m-add-cobro-forma" class="form-select form-select-sm">
                                                 <option value="">-- Seleccione --</option>
-                                                <?php foreach ($formasCobro as $fc): ?>
-                                                    <option value="<?= $fc['id'] ?>" data-tipo="<?= htmlspecialchars($fc['tipo'] ?? '') ?>"><?= htmlspecialchars($fc['nombre']) ?></option>
+                                                <?php foreach ($formasCobro as $fc):
+                                                    $esAnt = !empty($fc['es_anticipo']);
+                                                    $lblSaldo = $esAnt ? '' : ' — $' . number_format((float)($fc['saldo'] ?? 0), 2);
+                                                ?>
+                                                    <option value="<?= $fc['id'] ?>"
+                                                            data-tipo="<?= htmlspecialchars($fc['tipo'] ?? '') ?>"
+                                                            data-anticipo="<?= $esAnt ? '1' : '0' ?>"
+                                                            data-saldo="<?= $esAnt ? '' : number_format((float)($fc['saldo'] ?? 0), 2, '.', '') ?>"><?= htmlspecialchars($fc['nombre']) . $lblSaldo ?></option>
                                                 <?php endforeach; ?>
                                             </select>
+                                            <div id="ing-saldo-forma" class="small mt-1 d-none"></div>
                                         </div>
                                         <div class="col-md-4">
                                             <label class="form-label small fw-bold">Monto</label>
@@ -773,6 +780,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('m-input-recibo-de').value    = cli.nombre;
         document.getElementById('m-input-id-recibo-cliente').value = cli.id;
         document.getElementById('m-dropdown-recibo-de').classList.add('d-none');
+        if (typeof ING_renderSaldoForma === 'function') ING_renderSaldoForma();
     }
 
     // ── Modal secundario: selección de documentos pendientes ─────────────────
@@ -1333,6 +1341,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('m-input-recibo-de').value = '';
         document.getElementById('m-input-id-recibo-cliente').value = '';
 
+        const boxSaldoIng = document.getElementById('ing-saldo-forma');
+        if (boxSaldoIng) { boxSaldoIng.classList.add('d-none'); boxSaldoIng.innerHTML = ''; }
+
         // Reset pestaña Asiento contable (placeholder para registros nuevos)
         const tbAsientoIng = document.getElementById('tbody-asiento-contable');
         if (tbAsientoIng) tbAsientoIng.innerHTML = '<tr><td colspan="3" class="text-center py-5 text-muted"><i class="bi bi-calculator fs-4 d-block mb-2"></i> El asiento contable se visualiza al consultar un registro guardado.</td></tr>';
@@ -1866,6 +1877,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 } else {
                     divBancoExtra.classList.add('d-none');
                 }
+                ING_renderSaldoForma();
             });
         }
 
@@ -1879,6 +1891,49 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             });
         }
     });
+
+    function ING_fmtMoney(n) {
+        return '$' + (parseFloat(n) || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function ING_renderSaldoForma() {
+        const combo = document.getElementById('m-add-cobro-forma');
+        const box   = document.getElementById('ing-saldo-forma');
+        if (!combo || !box) return;
+        const opt = combo.options[combo.selectedIndex];
+        if (!opt || !opt.value) { box.classList.add('d-none'); box.innerHTML = ''; return; }
+
+        const esAnt = opt.dataset.anticipo === '1';
+        if (!esAnt) {
+            const saldo = parseFloat(opt.dataset.saldo || '0');
+            box.className = 'small mt-1 fw-bold ' + (saldo < 0 ? 'text-danger' : 'text-success');
+            box.innerHTML = '<i class="bi bi-wallet2 me-1"></i>Saldo disponible: ' + ING_fmtMoney(saldo);
+            box.classList.remove('d-none');
+            return;
+        }
+
+        // Anticipo: el saldo depende del cliente seleccionado
+        const idCli = document.getElementById('m-input-id-recibo-cliente').value
+                   || document.getElementById('m-input-id-cliente').value || '';
+        if (!idCli) {
+            box.className = 'small mt-1 fw-bold text-warning';
+            box.innerHTML = '<i class="bi bi-info-circle me-1"></i>Selecciona el cliente para ver su saldo de anticipo.';
+            box.classList.remove('d-none');
+            return;
+        }
+        box.className = 'small mt-1 text-muted';
+        box.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Consultando saldo...';
+        box.classList.remove('d-none');
+        fetch(`<?= BASE_URL ?>/modulos/ingresos/getSaldoAnticipoAjax?id_forma=${opt.value}&id_tercero=${idCli}`)
+            .then(r => r.json())
+            .then(res => {
+                if (!res.ok) { box.className = 'small mt-1 text-danger'; box.innerHTML = res.mensaje || 'No se pudo obtener el saldo.'; return; }
+                const saldo = parseFloat(res.saldo) || 0;
+                box.className = 'small mt-1 fw-bold ' + (saldo < 0 ? 'text-danger' : 'text-success');
+                box.innerHTML = '<i class="bi bi-person-badge me-1"></i>Saldo de anticipo del cliente: ' + ING_fmtMoney(saldo);
+            })
+            .catch(() => { box.className = 'small mt-1 text-danger'; box.innerHTML = 'Error al consultar el saldo.'; });
+    }
 
     function abrirPrevisualizadorDoc(id, tipo) {
         const offcanvasEl = document.getElementById('offcanvasDocPreview');

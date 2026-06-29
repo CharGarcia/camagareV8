@@ -59,6 +59,17 @@ class IngresosController extends BaseModuloController
         }
 
         $formasCobro = $this->service->getFormasCobro($idEmpresa);
+
+        // Saldo actual de cada forma (anticipos se resuelven por cliente vía AJAX)
+        $fpRepo = new \App\repositories\modulos\FormaPagoRepository();
+        $saldosFormas = (new \App\Services\modulos\FormaPagoService($fpRepo))->getSaldosActuales($idEmpresa);
+        foreach ($formasCobro as &$fc) {
+            $esAnt = (($fc['tipo'] ?? '') === 'ANTICIPO');
+            $fc['es_anticipo'] = $esAnt;
+            $fc['saldo']       = $esAnt ? null : (float)($saldosFormas[(int)$fc['id']] ?? 0);
+        }
+        unset($fc);
+
         $conceptos   = $this->service->getConceptosIngreso($idEmpresa);
 
         $this->viewWithLayout('layouts.main', 'modulos/ingresos/index', [
@@ -162,6 +173,27 @@ class IngresosController extends BaseModuloController
             'pdf_url'    => $urlBase . '/export-pdf?b='    . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
             'excel_url'  => $urlBase . '/export-excel?b='  . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
         ]);
+        exit;
+    }
+
+    /** Saldo de un anticipo de cliente para el cliente seleccionado. */
+    public function getSaldoAnticipoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idForma   = (int) ($_GET['id_forma'] ?? 0);
+        $idTercero = (int) ($_GET['id_tercero'] ?? 0);
+
+        if ($idForma <= 0 || $idTercero <= 0) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Forma y cliente requeridos.']);
+            exit;
+        }
+
+        $fpService = new \App\Services\modulos\FormaPagoService(new \App\repositories\modulos\FormaPagoRepository());
+        $saldo = $fpService->getSaldoAnticipo($idEmpresa, $idForma, $idTercero);
+        echo json_encode(['ok' => true, 'saldo' => $saldo]);
         exit;
     }
 

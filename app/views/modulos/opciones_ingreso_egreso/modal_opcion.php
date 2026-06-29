@@ -38,6 +38,8 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                                 <option value="FACTURA_VENTA">Módulo facturas de venta</option>
                                 <option value="RECIBO_VENTA">Módulo recibo de venta</option>
                                 <option value="ROLES">Módulo roles de pago</option>
+                                <option value="ANTICIPO_CLIENTE">Anticipo de cliente</option>
+                                <option value="ANTICIPO_PROVEEDOR">Anticipo a proveedor</option>
                             </select>
                         </div>
 
@@ -155,11 +157,11 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
             selComp.addEventListener('change', function() {
                 const comp = this.value;
                 // Comportamientos puramente de egresos
-                if (['COMPRA', 'LIQUIDACION', 'ROLES'].includes(comp)) {
+                if (['COMPRA', 'LIQUIDACION', 'ROLES', 'ANTICIPO_PROVEEDOR'].includes(comp)) {
                     document.getElementById('oie-rdo-egreso').checked = true;
                 }
                 // Comportamientos puramente de ingresos
-                else if (['FACTURA_VENTA', 'RECIBO_VENTA'].includes(comp)) {
+                else if (['FACTURA_VENTA', 'RECIBO_VENTA', 'ANTICIPO_CLIENTE'].includes(comp)) {
                     document.getElementById('oie-rdo-ingreso').checked = true;
                 }
             });

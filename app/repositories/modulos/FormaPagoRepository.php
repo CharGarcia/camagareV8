@@ -222,10 +222,120 @@ class FormaPagoRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Saldo actual de cada forma NO-anticipo (Efectivo/Banco/Tarjeta/Otro):
+     *   saldo = saldo_inicial (saldos_iniciales_bancos) + Σ cobros (ingresos_pagos) − Σ pagos (egresos_pagos)
+     * Filtra por empresa + ambiente, excluyendo anulados/eliminados.
+     *
+     * @return array Mapa [id_forma => saldo (float)]
+     */
+    public function getSaldosActuales(int $idEmpresa): array
+    {
+        $sql = "
+            SELECT efp.id,
+                   COALESCE(sib.saldo_inicial, 0)
+                   + COALESCE(ing.total, 0)
+                   - COALESCE(egr.total, 0) AS saldo
+            FROM {$this->table} efp
+            LEFT JOIN saldos_iniciales_bancos sib
+                   ON sib.id_forma_pago = efp.id
+                  AND sib.id_empresa   = efp.id_empresa
+                  AND sib.eliminado    = FALSE
+            LEFT JOIN (
+                SELECT ip.id_forma_cobro AS id_forma, SUM(ip.monto) AS total
+                FROM ingresos_pagos ip
+                INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
+                WHERE ic.id_empresa = :id_empresa
+                  AND ic.eliminado  = FALSE
+                  AND ic.estado    <> 'anulado'
+                  AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                GROUP BY ip.id_forma_cobro
+            ) ing ON ing.id_forma = efp.id
+            LEFT JOIN (
+                SELECT ep.id_forma_pago AS id_forma, SUM(ep.monto) AS total
+                FROM egresos_pagos ep
+                INNER JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
+                WHERE ec.id_empresa = :id_empresa
+                  AND ec.eliminado  = FALSE
+                  AND ec.estado    <> 'anulado'
+                  AND ep.eliminado  = FALSE
+                  AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                GROUP BY ep.id_forma_pago
+            ) egr ON egr.id_forma = efp.id
+            WHERE efp.id_empresa = :id_empresa
+              AND efp.eliminado  = FALSE
+              AND efp.activo     = TRUE
+              AND efp.tipo      <> 'ANTICIPO'";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+
+        $mapa = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $mapa[(int)$r['id']] = (float)$r['saldo'];
+        }
+        return $mapa;
+    }
+
+    /**
+     * Saldo de un anticipo para un tercero concreto (cliente o proveedor):
+     *   saldo = saldo_inicial_anticipo (saldos_iniciales_anticipos por forma + tercero)
+     *           − Σ aplicado (pagos que usan esta forma de anticipo para ese tercero)
+     * La dirección (cliente/proveedor) la define el aplica_en de la forma.
+     */
+    public function getSaldoAnticipo(int $idEmpresa, int $idForma, int $idTercero): float
+    {
+        $stF = $this->db->prepare(
+            "SELECT aplica_en FROM {$this->table}
+             WHERE id = :id AND id_empresa = :e AND eliminado = FALSE AND tipo = 'ANTICIPO'"
+        );
+        $stF->execute([':id' => $idForma, ':e' => $idEmpresa]);
+        $forma = $stF->fetch(PDO::FETCH_ASSOC);
+        if (!$forma) {
+            return 0.0;
+        }
+        $esEgreso = strtoupper((string)$forma['aplica_en']) === 'EGRESO';
+
+        // Saldo inicial registrado en el módulo de saldos iniciales
+        $stI = $this->db->prepare(
+            "SELECT COALESCE(SUM(saldo_inicial), 0)
+             FROM saldos_iniciales_anticipos
+             WHERE id_empresa = :e AND id_forma_pago = :forma AND eliminado = FALSE
+               AND (id_cliente = :t OR id_proveedor = :t)"
+        );
+        $stI->execute([':e' => $idEmpresa, ':forma' => $idForma, ':t' => $idTercero]);
+        $inicial = (float)$stI->fetchColumn();
+
+        // Aplicado: pagos que consumen este anticipo para ese tercero (flujo Fase 3; hoy 0)
+        if ($esEgreso) {
+            $stA = $this->db->prepare(
+                "SELECT COALESCE(SUM(ep.monto), 0)
+                 FROM egresos_pagos ep
+                 INNER JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
+                 WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado'
+                   AND ep.eliminado = FALSE
+                   AND ep.id_forma_pago = :forma
+                   AND ec.id_proveedor = :t"
+            );
+        } else {
+            $stA = $this->db->prepare(
+                "SELECT COALESCE(SUM(ip.monto), 0)
+                 FROM ingresos_pagos ip
+                 INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
+                 WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado'
+                   AND ip.id_forma_cobro = :forma
+                   AND ic.id_cliente = :t"
+            );
+        }
+        $stA->execute([':e' => $idEmpresa, ':forma' => $idForma, ':t' => $idTercero]);
+        $aplicado = (float)$stA->fetchColumn();
+
+        return round($inicial - $aplicado, 2);
+    }
+
     public function estaUsado(int $id, int $idEmpresa): bool
     {
         // 1. Verificar en ingresos_pagos
-        $sqlIng = "SELECT COUNT(*) 
+        $sqlIng = "SELECT COUNT(*)
                    FROM ingresos_pagos ip 
                    JOIN ingresos_cabecera ic ON ip.id_ingreso = ic.id 
                    WHERE ip.id_forma_cobro = :id 

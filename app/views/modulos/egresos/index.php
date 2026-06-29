@@ -465,10 +465,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             <label class="form-label small fw-bold d-flex align-items-center">Forma de pago <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('egresos', 'eg-add-pago-forma', 'id_forma_pago_default') ?></label>
                                             <select id="eg-add-pago-forma" class="form-select form-select-sm" onchange="manejarCambioFormaPagoEgreso(this)">
                                                 <option value="">-- Seleccione --</option>
-                                                <?php foreach ($formasPago as $fp): ?>
-                                                    <option value="<?= $fp['id'] ?>" data-tipo="<?= htmlspecialchars($fp['tipo'] ?? '') ?>"><?= htmlspecialchars($fp['nombre']) ?></option>
+                                                <?php foreach ($formasPago as $fp):
+                                                    $esAnt = !empty($fp['es_anticipo']);
+                                                    $lblSaldo = $esAnt ? '' : ' — $' . number_format((float)($fp['saldo'] ?? 0), 2);
+                                                ?>
+                                                    <option value="<?= $fp['id'] ?>"
+                                                            data-tipo="<?= htmlspecialchars($fp['tipo'] ?? '') ?>"
+                                                            data-anticipo="<?= $esAnt ? '1' : '0' ?>"
+                                                            data-saldo="<?= $esAnt ? '' : number_format((float)($fp['saldo'] ?? 0), 2, '.', '') ?>"><?= htmlspecialchars($fp['nombre']) . $lblSaldo ?></option>
                                                 <?php endforeach; ?>
                                             </select>
+                                            <div id="eg-saldo-forma" class="small mt-1 d-none"></div>
                                         </div>
                                         <div class="col-md-4">
                                             <label class="form-label small fw-bold">Monto</label>
@@ -812,6 +819,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('eg-input-id-sujeto').value = item.id;
         document.getElementById('eg-search-input').value = item.razon_social || item.nombre;
         document.getElementById('eg-dropdown-sujetos').classList.add('d-none');
+        if (typeof EGR_renderSaldoForma === 'function') EGR_renderSaldoForma();
 
         // Para COMPRA/LIQUIDACION: los docs se agregan mediante el modal secundario de documentos pendientes.
         // Para GENERAL/EMPLEADO: no hay tabla de docs pendientes en ese bloque.
@@ -975,6 +983,50 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         } else {
             wrapper.classList.add('d-none');
         }
+        EGR_renderSaldoForma();
+    }
+
+    function EGR_fmtMoney(n) {
+        return '$' + (parseFloat(n) || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function EGR_renderSaldoForma() {
+        const combo = document.getElementById('eg-add-pago-forma');
+        const box   = document.getElementById('eg-saldo-forma');
+        if (!combo || !box) return;
+        const opt = combo.options[combo.selectedIndex];
+        if (!opt || !opt.value) { box.classList.add('d-none'); box.innerHTML = ''; return; }
+
+        const esAnt = opt.dataset.anticipo === '1';
+        if (!esAnt) {
+            const saldo = parseFloat(opt.dataset.saldo || '0');
+            box.className = 'small mt-1 fw-bold ' + (saldo < 0 ? 'text-danger' : 'text-success');
+            box.innerHTML = '<i class="bi bi-wallet2 me-1"></i>Saldo disponible: ' + EGR_fmtMoney(saldo);
+            box.classList.remove('d-none');
+            return;
+        }
+
+        // Anticipo: el saldo depende del proveedor seleccionado
+        const tipoSujeto = (document.getElementById('eg-select-tipo-sujeto') || {}).value || '';
+        const idProv = document.getElementById('eg-input-id-sujeto').value || '';
+        if (tipoSujeto !== 'PROVEEDOR' || !idProv) {
+            box.className = 'small mt-1 fw-bold text-warning';
+            box.innerHTML = '<i class="bi bi-info-circle me-1"></i>Selecciona el proveedor para ver su saldo de anticipo.';
+            box.classList.remove('d-none');
+            return;
+        }
+        box.className = 'small mt-1 text-muted';
+        box.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Consultando saldo...';
+        box.classList.remove('d-none');
+        fetch(`${EGR_URL}/getSaldoAnticipoAjax?id_forma=${opt.value}&id_tercero=${idProv}`)
+            .then(r => r.json())
+            .then(res => {
+                if (!res.ok) { box.className = 'small mt-1 text-danger'; box.innerHTML = res.mensaje || 'No se pudo obtener el saldo.'; return; }
+                const saldo = parseFloat(res.saldo) || 0;
+                box.className = 'small mt-1 fw-bold ' + (saldo < 0 ? 'text-danger' : 'text-success');
+                box.innerHTML = '<i class="bi bi-person-badge me-1"></i>Saldo de anticipo del proveedor: ' + EGR_fmtMoney(saldo);
+            })
+            .catch(() => { box.className = 'small mt-1 text-danger'; box.innerHTML = 'Error al consultar el saldo.'; });
     }
 
     function manejarCambioTipoOperacionEgreso(val) {
@@ -1091,6 +1143,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('formEgresoModal').reset();
         document.getElementById('eg-input-id').value = '';
         document.getElementById('eg-input-id-sujeto').value = '';
+
+        const boxSaldoEgr = document.getElementById('eg-saldo-forma');
+        if (boxSaldoEgr) { boxSaldoEgr.classList.add('d-none'); boxSaldoEgr.innerHTML = ''; }
 
         // Reset pestaña Asiento contable (placeholder para registros nuevos)
         const egTbAsientoReset = document.getElementById('eg-tbody-asiento');
