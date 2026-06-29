@@ -98,13 +98,13 @@ class SuscripcionesRepository extends BaseRepository
                      fecha_inicio, fecha_fin, proximo_cobro,
                      forma_cobro, estado, tipo_comprobante,
                      kushki_token, kushki_card_last4, kushki_card_brand, kushki_card_name,
-                     observaciones, created_by, created_at, eliminado)
+                     observaciones, info_adicional, created_by, created_at, eliminado)
                 VALUES
                     (:id_empresa, :id_cliente, :id_periodicidad,
                      :fecha_inicio, :fecha_fin, :proximo_cobro,
                      :forma_cobro, :estado, :tipo_comprobante,
                      :kushki_token, :kushki_card_last4, :kushki_card_brand, :kushki_card_name,
-                     :observaciones, :created_by, CURRENT_TIMESTAMP, false)";
+                     :observaciones, :info_adicional, :created_by, CURRENT_TIMESTAMP, false)";
         $st = $this->db->prepare($sql);
         $st->execute([
             ':id_empresa'        => $data['id_empresa'],
@@ -121,6 +121,7 @@ class SuscripcionesRepository extends BaseRepository
             ':kushki_card_brand' => $data['kushki_card_brand'] ?? null,
             ':kushki_card_name'  => $data['kushki_card_name'] ?? null,
             ':observaciones'     => $data['observaciones'] ?? null,
+            ':info_adicional'    => $data['info_adicional'] ?? null,
             ':created_by'        => $data['id_usuario'],
         ]);
         return $this->lastInsertId('suscripciones_id_seq');
@@ -138,6 +139,7 @@ class SuscripcionesRepository extends BaseRepository
                     estado          = :estado,
                     tipo_comprobante= :tipo_comprobante,
                     observaciones   = :observaciones,
+                    info_adicional  = :info_adicional,
                     updated_by      = :updated_by,
                     updated_at      = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
@@ -152,6 +154,7 @@ class SuscripcionesRepository extends BaseRepository
             ':estado'          => $data['estado'],
             ':tipo_comprobante'=> $data['tipo_comprobante'] ?? 'factura',
             ':observaciones'   => $data['observaciones'] ?? null,
+            ':info_adicional'  => $data['info_adicional'] ?? null,
             ':updated_by'      => $data['id_usuario'],
             ':id'              => $id,
             ':id_empresa'      => $idEmpresa,

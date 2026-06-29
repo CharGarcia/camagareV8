@@ -802,6 +802,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
     });
 
+    // Clave única de un documento pendiente: combina tipo + id para evitar
+    // colisiones entre el id de una factura y el de un saldo inicial CXC.
+    function docUid(d) {
+        return (d.tipo_documento || 'FACTURA') + ':' + d.id;
+    }
+
     function abrirModalDocsPendientes() {
         _selModal = {};
         const modalEl = document.getElementById('modalSelDocPendientes');
@@ -843,12 +849,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
 
         docs.forEach(doc => {
-            const yaAgregado = docPendientes.some(d => d.id === doc.id);
-            const montoPrev  = _selModal[doc.id] !== undefined
-                ? _selModal[doc.id]
+            const uid        = docUid(doc);
+            const yaAgregado = docPendientes.some(d => docUid(d) === uid);
+            const montoPrev  = _selModal[uid] !== undefined
+                ? _selModal[uid]
                 : parseFloat(doc.saldo_pendiente);
-            const checked    = _selModal[doc.id] !== undefined;
+            const checked    = _selModal[uid] !== undefined;
             const saldo      = parseFloat(doc.saldo_pendiente);
+            const esSaldoIni = (doc.tipo_documento === 'SALDO_INICIAL');
+            const badgeTipo  = esSaldoIni
+                ? ' <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.62rem;">Saldo inicial</span>'
+                : '';
 
             const tr = document.createElement('tr');
             tr.className = yaAgregado ? 'table-success' : '';
@@ -859,19 +870,19 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     const chk = this.querySelector('.sdp-chk');
                     if (!chk) return;
                     chk.checked = !chk.checked;
-                    toggleDocModal(doc.id, chk.checked, saldo);
+                    toggleDocModal(uid, chk.checked, saldo);
                 });
             }
             tr.innerHTML = `
                 <td class="text-center ps-2">
                     ${yaAgregado
                         ? '<i class="bi bi-check-circle-fill text-success" title="Ya agregado"></i>'
-                        : `<input type="checkbox" class="form-check-input sdp-chk" data-id="${doc.id}" data-saldo="${saldo}"
+                        : `<input type="checkbox" class="form-check-input sdp-chk" data-id="${uid}" data-saldo="${saldo}"
                                ${checked ? 'checked' : ''}
-                               onchange="toggleDocModal(${doc.id}, this.checked, ${saldo})">`
+                               onchange="toggleDocModal('${uid}', this.checked, ${saldo})">`
                     }
                 </td>
-                <td><code class="text-primary small">${doc.numero_documento}</code></td>
+                <td><code class="text-primary small">${doc.numero_documento}</code>${badgeTipo}</td>
                 <td class="small">${doc.cliente_nombre}</td>
                 <td class="small">${doc.fecha_emision ? doc.fecha_emision.split('-').reverse().join('/') : ''}</td>
                 <td class="small">${(() => {
@@ -892,12 +903,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <td class="text-end">
                     ${yaAgregado
                         ? `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 small">Agregado</span>`
-                        : `<input type="number" class="form-control form-control-sm text-end sdp-monto px-1" data-id="${doc.id}" data-saldo="${saldo}"
+                        : `<input type="number" class="form-control form-control-sm text-end sdp-monto px-1" data-id="${uid}" data-saldo="${saldo}"
                                style="height:26px;font-size:0.8rem;width:90px;"
                                step="0.01" min="0.01" max="${saldo}"
                                value="${checked ? montoPrev.toFixed(2) : saldo.toFixed(2)}"
                                ${checked ? '' : 'disabled'}
-                               oninput="actualizarMontoModal(${doc.id}, this)">`
+                               oninput="actualizarMontoModal('${uid}', this)">`
                     }
                 </td>`;
             tbody.appendChild(tr);
@@ -914,25 +925,25 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         actualizarResumenModal();
     }
 
-    function toggleDocModal(id, checked, saldo) {
-        const inputMonto = document.querySelector(`.sdp-monto[data-id="${id}"]`);
+    function toggleDocModal(uid, checked, saldo) {
+        const inputMonto = document.querySelector(`.sdp-monto[data-id="${uid}"]`);
         if (checked) {
             const monto = inputMonto ? parseFloat(inputMonto.value) || saldo : saldo;
-            _selModal[id] = monto;
+            _selModal[uid] = monto;
             if (inputMonto) inputMonto.disabled = false;
         } else {
-            delete _selModal[id];
+            delete _selModal[uid];
             if (inputMonto) { inputMonto.disabled = true; }
         }
         actualizarResumenModal();
     }
 
-    function actualizarMontoModal(id, input) {
+    function actualizarMontoModal(uid, input) {
         const saldo = parseFloat(input.dataset.saldo);
         let val = parseFloat(input.value);
         if (isNaN(val) || val <= 0) val = 0;
         if (val > saldo) { val = saldo; input.value = saldo.toFixed(2); }
-        _selModal[id] = val;
+        _selModal[uid] = val;
         actualizarResumenModal();
     }
 
@@ -951,14 +962,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
 
         let agregados = 0;
-        ids.forEach(id => {
-            const doc = _docsModal.find(d => d.id == id);
+        ids.forEach(uid => {
+            const doc = _docsModal.find(d => docUid(d) === uid);
             if (!doc) return;
-            if (docPendientes.some(d => d.id == id)) return; // ya existe
+            if (docPendientes.some(d => docUid(d) === uid)) return; // ya existe
 
-            const monto = _selModal[id] || parseFloat(doc.saldo_pendiente);
+            const monto = _selModal[uid] || parseFloat(doc.saldo_pendiente);
             docPendientes.push({
                 id:             doc.id,
+                tipo_documento: doc.tipo_documento || 'FACTURA',
                 numero:         doc.numero_documento,
                 fecha:          doc.fecha_emision,
                 cliente_nombre: doc.cliente_nombre,
@@ -1001,13 +1013,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
 
         // Evitar duplicados
-        if (docPendientes.some(d => d.id === doc.id)) {
-            if (typeof showToast === 'function') showToast(`La factura ${doc.numero_documento} ya está en la lista.`, 'info');
+        if (docPendientes.some(d => docUid(d) === docUid(doc))) {
+            if (typeof showToast === 'function') showToast(`El documento ${doc.numero_documento} ya está en la lista.`, 'info');
             return;
         }
 
         docPendientes.push({
             id:             doc.id,
+            tipo_documento: doc.tipo_documento || 'FACTURA',
             numero:         doc.numero_documento,
             fecha:          doc.fecha_emision,
             cliente_nombre: doc.cliente_nombre,
@@ -1058,12 +1071,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 const disInput = (!f.seleccionado || esHistorico) ? 'disabled' : '';
                 const disChk   = esHistorico ? 'disabled' : '';
                 const cliLabel = f.cliente_nombre ? `<span class="badge bg-light text-dark border" style="font-size:0.7rem;">${f.cliente_nombre}</span>` : '';
+                const esSaldoIni = (f.tipo_documento === 'SALDO_INICIAL');
+                const numeroCell = esSaldoIni
+                    ? `<code class="text-secondary fw-bold">${f.numero}</code> <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.62rem;">Saldo inicial</span>`
+                    : `<code class="text-primary fw-bold pointer text-decoration-underline" onclick="abrirPrevisualizadorDoc(${f.id}, 'FACTURA_VENTA')">${f.numero}</code>`;
 
                 tr.innerHTML = `
                     <td class="text-center">
                         <input type="checkbox" class="form-check-input chk-sel-doc" ${f.seleccionado ? 'checked' : ''} ${disChk} onchange="toggleDoc(${idx}, this.checked)">
                     </td>
-                    <td><code class="text-primary fw-bold pointer text-decoration-underline" onclick="abrirPrevisualizadorDoc(${f.id}, 'FACTURA_VENTA')">${f.numero}</code></td>
+                    <td>${numeroCell}</td>
                     <td class="small">${cliLabel}</td>
                     <td class="small">${f.fecha ? f.fecha.split('-').reverse().join('/') : ''}</td>
                     <td class="text-end">$${f.monto_doc.toFixed(2)}</td>
@@ -1457,7 +1474,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             }
             sel.forEach(s => {
                 data.detalles.push({
-                    tipo_documento:          'FACTURA',
+                    tipo_documento:          s.tipo_documento || 'FACTURA',
                     id_referencia_documento: s.id,
                     numero_documento:        s.numero,
                     fecha_documento:         s.fecha || '',
@@ -1671,6 +1688,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     (ing.detalles || []).forEach(d => {
                         docPendientes.push({
                             id:             d.id_referencia_documento,
+                            tipo_documento: d.tipo_documento || 'FACTURA',
                             numero:         d.numero_documento,
                             fecha:          d.fecha_documento || '',
                             cliente_nombre: d.cliente_nombre || '',

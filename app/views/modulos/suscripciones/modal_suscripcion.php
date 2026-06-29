@@ -109,6 +109,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                         </div>
                                     </div>
 
+                                    <!-- Estado (junto al buscador de cliente) -->
+                                    <div class="col-md-2">
+                                        <label>Estado</label>
+                                        <select class="form-select form-select-sm" name="estado" id="susc_estado">
+                                            <option value="activo">Activo</option>
+                                            <option value="pausado">Pausado</option>
+                                            <option value="suspendido">Suspendido</option>
+                                            <option value="cancelado">Cancelado</option>
+                                        </select>
+                                    </div>
+
                                     <!-- Fechas y periodicidad -->
                                     <div class="col-md-2">
                                         <label>Comprobante *</label>
@@ -116,7 +127,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                             <option value="factura">Factura de Venta</option>
                                         </select>
                                     </div>
-                                    <div class="col-md-3">
+                                    <div class="col-md-2">
                                         <label>Fecha Inicio *</label>
                                         <input type="date" class="form-control form-control-sm" name="fecha_inicio" id="susc_fecha_inicio" required onchange="suscRecalcularProximoCobro()">
                                     </div>
@@ -124,7 +135,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                         <label>Fecha Fin <small class="text-muted fw-normal">(opc)</small></label>
                                         <input type="date" class="form-control form-control-sm" name="fecha_fin" id="susc_fecha_fin">
                                     </div>
-                                    <div class="col-md-3">
+                                    <div class="col-md-2">
                                         <label>Periodicidad *</label>
                                         <select class="form-select form-select-sm" name="id_periodicidad" id="susc_id_periodicidad" required onchange="suscRecalcularProximoCobro()">
                                             <option value="">- Seleccione -</option>
@@ -183,14 +194,28 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
 
                                 <!-- Totales e Información Adicional -->
                                 <div class="row mt-3 justify-content-between">
-                                    <div class="col-md-4">
-                                        <label>Estado</label>
-                                        <select class="form-select form-select-sm" name="estado" id="susc_estado">
-                                            <option value="activo">Activo</option>
-                                            <option value="pausado">Pausado</option>
-                                            <option value="suspendido">Suspendido</option>
-                                            <option value="cancelado">Cancelado</option>
-                                        </select>
+                                    <div class="col-md-7">
+                                        <!-- Información Adicional (concepto / detalle) -->
+                                        <label>Información Adicional</label>
+                                        <div class="border rounded-2 overflow-hidden bg-white">
+                                            <div class="table-responsive" style="max-height: 180px;">
+                                                <table class="table table-sm mb-0">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th class="ps-2 py-0 small fw-bold text-muted" style="width: 40%;">Concepto</th>
+                                                            <th class="py-0 small fw-bold text-muted" style="width: 50%;">Detalle</th>
+                                                            <th class="py-0" style="width: 10%;"></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="susc_tbody_info_adicional"></tbody>
+                                                </table>
+                                            </div>
+                                            <div class="p-1 border-top bg-light">
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="suscAgregarInfoAdicional()">
+                                                    <i class="bi bi-plus-circle me-1"></i> Agregar línea
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div class="col-md-4">
                                         <div class="bg-white border rounded p-2 shadow-sm" style="font-size:0.75rem;">
@@ -564,6 +589,50 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         }
     }
 
+    /* ── Información adicional (concepto / detalle) ───────────────────────────── */
+    let suscInfoIdx = 0;
+
+    window.suscAgregarInfoAdicional = function (item) {
+        const idx   = suscInfoIdx++;
+        const tbody = document.getElementById('susc_tbody_info_adicional');
+        const concepto = (item?.concepto ?? '').replace(/"/g, '&quot;');
+        const detalle  = (item?.detalle  ?? '').replace(/"/g, '&quot;');
+
+        const tr = document.createElement('tr');
+        tr.className = 'row-susc-info';
+        tr.innerHTML = `
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent" style="padding:0 4px;height:20px;font-size:0.78rem;" name="info_adicional[${idx}][concepto]" value="${concepto}" placeholder="Concepto..."></td>
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent" style="padding:0 4px;height:20px;font-size:0.78rem;" name="info_adicional[${idx}][detalle]" value="${detalle}" placeholder="Detalle..."></td>
+            <td class="p-0 text-center pe-1">
+                <button type="button" class="btn btn-link btn-sm p-0 m-0 text-danger shadow-none" onclick="this.closest('tr').remove();">
+                    <i class="bi bi-x-circle-fill"></i>
+                </button>
+            </td>`;
+        tbody.appendChild(tr);
+        if (!item) tr.querySelector('input').focus();
+    };
+
+    function suscLimpiarInfoAdicional() {
+        suscInfoIdx = 0;
+        const tbody = document.getElementById('susc_tbody_info_adicional');
+        if (tbody) tbody.innerHTML = '';
+    }
+
+    function suscCargarInfoAdicional(raw) {
+        suscLimpiarInfoAdicional();
+        let filas = raw;
+        if (typeof filas === 'string' && filas.trim() !== '') {
+            try { filas = JSON.parse(filas); } catch (e) { filas = []; }
+        }
+        if (Array.isArray(filas)) {
+            filas.forEach(f => suscAgregarInfoAdicional({ concepto: f.concepto ?? '', detalle: f.detalle ?? '' }));
+        }
+        // Si no había info adicional guardada, dejar una línea lista para ingresar.
+        if (!document.querySelector('#susc_tbody_info_adicional tr')) {
+            suscAgregarInfoAdicional();
+        }
+    }
+
     /* ── Recalcular próximo cobro ─────────────────────────────────────────────── */
     window.suscRecalcularProximoCobro = function () {
         const fechaInicio = document.getElementById('susc_fecha_inicio').value;
@@ -641,6 +710,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         document.getElementById('susc_tarjeta_actual')?.classList.add('d-none');
         suscLimpiarDetalle();
         suscAgregarFilaVacia();
+        suscLimpiarInfoAdicional();
+        suscAgregarInfoAdicional();
         suscOnFormaCobro();
         // Activar primera pestaña
         const tabEl = document.querySelector('#modalSusc a[href="#pane-susc-servicios"]');
@@ -663,6 +734,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         document.getElementById('susc_observaciones').value     = s.observaciones ?? '';
         document.getElementById('tituloModalSusc').textContent  = 'Suscripción: ' + (s.nombre_cliente ?? '');
         document.getElementById('btnEliminarSusc')?.classList.remove('d-none');
+
+        suscCargarInfoAdicional(s.info_adicional ?? null);
 
 
         // Poblar cliente

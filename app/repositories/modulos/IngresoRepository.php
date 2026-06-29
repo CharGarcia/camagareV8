@@ -118,15 +118,33 @@ class IngresoRepository extends BaseRepository
     public function getDetalles(int $idIngreso): array
     {
         $sql = "SELECT d.*,
-                       c.id   AS id_cliente,
-                       c.nombre AS cliente_nombre,
-                       v.fecha_emision AS fecha_documento
+                       COALESCE(cv.id, cs.id, s.id_cliente)            AS id_cliente,
+                       COALESCE(cv.nombre, cs.nombre, s.nombre_cliente) AS cliente_nombre,
+                       COALESCE(v.fecha_emision, s.fecha_emision)       AS fecha_documento
                 FROM ingresos_detalle d
-                LEFT JOIN ventas_cabecera v ON d.id_referencia_documento = v.id AND d.tipo_documento = 'FACTURA'
-                LEFT JOIN clientes c ON v.id_cliente = c.id
+                LEFT JOIN ventas_cabecera v       ON d.id_referencia_documento = v.id AND d.tipo_documento = 'FACTURA'
+                LEFT JOIN clientes cv             ON v.id_cliente = cv.id
+                LEFT JOIN saldos_iniciales_cxc s  ON d.id_referencia_documento = s.id AND d.tipo_documento = 'SALDO_INICIAL'
+                LEFT JOIN clientes cs             ON s.id_cliente = cs.id
                 WHERE d.id_ingreso = ?
                 ORDER BY d.id ASC";
         return $this->query($sql, [$idIngreso])->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * IDs de saldos iniciales CXC (saldos_iniciales_cxc.id) cobrados por un ingreso,
+     * para recalcular su saldo pendiente al crear/editar/anular/eliminar el ingreso.
+     *
+     * @return int[]
+     */
+    public function getSaldosInicialesReferenciados(int $idIngreso): array
+    {
+        $sql = "SELECT DISTINCT id_referencia_documento
+                FROM ingresos_detalle
+                WHERE id_ingreso = ?
+                  AND tipo_documento = 'SALDO_INICIAL'
+                  AND id_referencia_documento IS NOT NULL";
+        return array_map('intval', $this->query($sql, [$idIngreso])->fetchAll(PDO::FETCH_COLUMN));
     }
 
     public function getPagos(int $idIngreso): array
@@ -169,32 +187,97 @@ class IngresoRepository extends BaseRepository
             $params[':excluir'] = $excluirIngresoId;
         }
 
+        $excluirSqlSi = $excluirIngresoId !== null ? " AND i.id <> :excluir" : '';
+
         // Nota: Se calcula el saldo dinámicamente restando lo ya cobrado en ingresos activos
+        // y las retenciones de venta del cliente. Incluye también los saldos iniciales CXC.
         $sql = "WITH cobrado AS (
                     SELECT id_referencia_documento, SUM(monto_cobrado) as total_cobrado
                     FROM ingresos_detalle d
                     INNER JOIN ingresos_cabecera i ON d.id_ingreso = i.id
-                    WHERE d.tipo_documento = 'FACTURA' 
-                      AND i.estado != 'anulado' 
+                    WHERE d.tipo_documento = 'FACTURA'
+                      AND i.estado != 'anulado'
                       AND i.eliminado = FALSE
                       $excluirSql
                     GROUP BY id_referencia_documento
+                ),
+                retenido_fact AS (
+                    SELECT id_venta, SUM(total_renta + total_iva + total_isd) AS total_retenido
+                    FROM retencion_venta_cabecera
+                    WHERE id_empresa = :id_empresa
+                      AND eliminado = FALSE
+                      AND id_venta IS NOT NULL
+                      AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                    GROUP BY id_venta
+                ),
+                cobrado_si AS (
+                    SELECT id_referencia_documento, SUM(monto_cobrado) AS total_cobrado
+                    FROM ingresos_detalle d
+                    INNER JOIN ingresos_cabecera i ON d.id_ingreso = i.id
+                    WHERE d.tipo_documento = 'SALDO_INICIAL'
+                      AND i.estado != 'anulado'
+                      AND i.eliminado = FALSE
+                      $excluirSqlSi
+                    GROUP BY id_referencia_documento
+                ),
+                retenido_si AS (
+                    SELECT s.id AS id_saldo, SUM(rd.valor_retenido) AS total_retenido
+                    FROM saldos_iniciales_cxc s
+                    INNER JOIN retencion_venta_cabecera r
+                        ON r.eliminado = FALSE AND r.id_empresa = s.id_empresa
+                       AND r.id_venta IS NULL AND r.id_cliente = s.id_cliente
+                    INNER JOIN retencion_venta_detalle rd
+                        ON rd.id_retencion = r.id
+                       AND rd.num_doc_sustento IS NOT NULL AND rd.num_doc_sustento <> ''
+                       AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
+                           = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                    WHERE s.id_empresa = :id_empresa AND s.eliminado = FALSE
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ventas_cabecera vc
+                          WHERE vc.id_empresa = s.id_empresa AND vc.eliminado = FALSE
+                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      )
+                    GROUP BY s.id
                 )
-                SELECT v.id, 
-                       CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_documento,
-                       v.fecha_emision,
-                       v.importe_total,
-                       COALESCE(c.total_cobrado, 0) AS monto_cobrado,
-                       (v.importe_total - COALESCE(c.total_cobrado, 0)) AS saldo_pendiente
-                FROM ventas_cabecera v
-                LEFT JOIN cobrado c ON v.id = c.id_referencia_documento
-                WHERE v.id_cliente = :id_cliente
-                  AND v.id_empresa = :id_empresa
-                  AND v.estado = 'autorizado' -- Solo facturas vigentes/autorizadas
-                  AND v.eliminado = FALSE
-                  AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                  AND (v.importe_total - COALESCE(c.total_cobrado, 0)) > 0.01
-                ORDER BY v.fecha_emision ASC, v.id ASC";
+                SELECT * FROM (
+                    SELECT 'FACTURA'::varchar AS tipo_documento,
+                           v.id,
+                           CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_documento,
+                           v.fecha_emision,
+                           v.importe_total,
+                           COALESCE(c.total_cobrado, 0) AS monto_cobrado,
+                           COALESCE(rf.total_retenido, 0) AS monto_retenido,
+                           (v.importe_total - COALESCE(c.total_cobrado, 0) - COALESCE(rf.total_retenido, 0)) AS saldo_pendiente
+                    FROM ventas_cabecera v
+                    LEFT JOIN cobrado c        ON v.id = c.id_referencia_documento
+                    LEFT JOIN retenido_fact rf ON v.id = rf.id_venta
+                    WHERE v.id_cliente = :id_cliente
+                      AND v.id_empresa = :id_empresa
+                      AND v.estado = 'autorizado' -- Solo facturas vigentes/autorizadas
+                      AND v.eliminado = FALSE
+                      AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                      AND (v.importe_total - COALESCE(c.total_cobrado, 0) - COALESCE(rf.total_retenido, 0)) > 0.01
+
+                    UNION ALL
+
+                    SELECT 'SALDO_INICIAL'::varchar AS tipo_documento,
+                           s.id,
+                           s.nro_documento AS numero_documento,
+                           s.fecha_emision,
+                           s.saldo_inicial AS importe_total,
+                           COALESCE(csi.total_cobrado, 0) AS monto_cobrado,
+                           COALESCE(rsi.total_retenido, 0)  AS monto_retenido,
+                           (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) AS saldo_pendiente
+                    FROM saldos_iniciales_cxc s
+                    LEFT JOIN cobrado_si csi  ON s.id = csi.id_referencia_documento
+                    LEFT JOIN retenido_si rsi ON s.id = rsi.id_saldo
+                    WHERE s.id_cliente = :id_cliente
+                      AND s.id_empresa = :id_empresa
+                      AND s.eliminado = FALSE
+                      AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) > 0.01
+                ) docs
+                ORDER BY fecha_emision ASC, id ASC";
 
         return $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -412,6 +495,19 @@ class IngresoRepository extends BaseRepository
             $params[':q'] = '%' . $q . '%';
         }
 
+        // Filtro de búsqueda para la rama de saldos iniciales CXC (usa el mismo :q)
+        $filtroBusqCxc = '';
+        if ($q !== '') {
+            $filtroBusqCxc = " AND (
+                s.nro_documento ILIKE :q
+                OR COALESCE(c.nombre, s.nombre_cliente)         ILIKE :q
+                OR COALESCE(c.identificacion, s.ruc_cliente)    ILIKE :q
+            )";
+        }
+
+        // Exclusión del propio ingreso (al editar) también para los cobros de saldos iniciales
+        $excluirSqlSi = $excluirIngresoId !== null ? " AND i.id <> :excluir" : '';
+
         $sql = "WITH cobrado AS (
                     SELECT id_referencia_documento, SUM(monto_cobrado) AS total_cobrado
                     FROM ingresos_detalle d
@@ -421,27 +517,98 @@ class IngresoRepository extends BaseRepository
                       AND i.eliminado = FALSE
                       $excluirSql
                     GROUP BY id_referencia_documento
+                ),
+                retenido_fact AS (
+                    SELECT id_venta, SUM(total_renta + total_iva + total_isd) AS total_retenido
+                    FROM retencion_venta_cabecera
+                    WHERE id_empresa = :id_empresa
+                      AND eliminado = FALSE
+                      AND id_venta IS NOT NULL
+                      AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                    GROUP BY id_venta
+                ),
+                cobrado_si AS (
+                    SELECT id_referencia_documento, SUM(monto_cobrado) AS total_cobrado
+                    FROM ingresos_detalle d
+                    INNER JOIN ingresos_cabecera i ON d.id_ingreso = i.id
+                    WHERE d.tipo_documento = 'SALDO_INICIAL'
+                      AND i.estado != 'anulado'
+                      AND i.eliminado = FALSE
+                      $excluirSqlSi
+                    GROUP BY id_referencia_documento
+                ),
+                retenido_si AS (
+                    SELECT s.id AS id_saldo, SUM(rd.valor_retenido) AS total_retenido
+                    FROM saldos_iniciales_cxc s
+                    INNER JOIN retencion_venta_cabecera r
+                        ON r.eliminado = FALSE AND r.id_empresa = s.id_empresa
+                       AND r.id_venta IS NULL AND r.id_cliente = s.id_cliente
+                    INNER JOIN retencion_venta_detalle rd
+                        ON rd.id_retencion = r.id
+                       AND rd.num_doc_sustento IS NOT NULL AND rd.num_doc_sustento <> ''
+                       AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
+                           = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                    WHERE s.id_empresa = :id_empresa AND s.eliminado = FALSE
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ventas_cabecera vc
+                          WHERE vc.id_empresa = s.id_empresa AND vc.eliminado = FALSE
+                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      )
+                    GROUP BY s.id
                 )
-                SELECT v.id,
-                       CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_documento,
-                       v.fecha_emision,
-                       v.dias_credito,
-                       v.importe_total,
-                       COALESCE(cb.total_cobrado, 0) AS monto_cobrado,
-                       (v.importe_total - COALESCE(cb.total_cobrado, 0)) AS saldo_pendiente,
-                       c.id             AS id_cliente,
-                       c.nombre         AS cliente_nombre,
-                       c.identificacion AS cliente_ruc
-                FROM ventas_cabecera v
-                INNER JOIN clientes c ON v.id_cliente = c.id
-                LEFT  JOIN cobrado cb ON v.id = cb.id_referencia_documento
-                WHERE v.id_empresa = :id_empresa
-                  AND v.estado = 'autorizado'
-                  AND v.eliminado = FALSE
-                  AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                  AND (v.importe_total - COALESCE(cb.total_cobrado, 0)) > 0.01
-                  $filtroBusq
-                ORDER BY c.nombre ASC, v.fecha_emision ASC, v.id ASC
+                SELECT * FROM (
+                    -- Facturas de venta pendientes (saldo neto = total - cobros - retenciones)
+                    SELECT 'FACTURA'::varchar AS tipo_documento,
+                           v.id,
+                           CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_documento,
+                           v.fecha_emision,
+                           v.dias_credito,
+                           v.importe_total,
+                           COALESCE(cb.total_cobrado, 0) AS monto_cobrado,
+                           COALESCE(rf.total_retenido, 0) AS monto_retenido,
+                           (v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rf.total_retenido, 0)) AS saldo_pendiente,
+                           c.id             AS id_cliente,
+                           c.nombre         AS cliente_nombre,
+                           c.identificacion AS cliente_ruc
+                    FROM ventas_cabecera v
+                    INNER JOIN clientes c ON v.id_cliente = c.id
+                    LEFT  JOIN cobrado cb       ON v.id = cb.id_referencia_documento
+                    LEFT  JOIN retenido_fact rf ON v.id = rf.id_venta
+                    WHERE v.id_empresa = :id_empresa
+                      AND v.estado = 'autorizado'
+                      AND v.eliminado = FALSE
+                      AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                      AND (v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rf.total_retenido, 0)) > 0.01
+                      $filtroBusq
+
+                    UNION ALL
+
+                    -- Saldos iniciales CXC pendientes (saldo = inicial - cobros - retención registrada)
+                    SELECT 'SALDO_INICIAL'::varchar AS tipo_documento,
+                           s.id,
+                           s.nro_documento AS numero_documento,
+                           s.fecha_emision,
+                           CASE WHEN s.fecha_vencimiento IS NOT NULL
+                                THEN (s.fecha_vencimiento - s.fecha_emision)::int
+                                ELSE 0 END AS dias_credito,
+                           s.saldo_inicial AS importe_total,
+                           COALESCE(csi.total_cobrado, 0) AS monto_cobrado,
+                           COALESCE(rsi.total_retenido, 0)  AS monto_retenido,
+                           (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) AS saldo_pendiente,
+                           c.id                                          AS id_cliente,
+                           COALESCE(c.nombre, s.nombre_cliente)          AS cliente_nombre,
+                           COALESCE(c.identificacion, s.ruc_cliente)     AS cliente_ruc
+                    FROM saldos_iniciales_cxc s
+                    LEFT JOIN clientes c      ON s.id_cliente = c.id
+                    LEFT JOIN cobrado_si csi  ON s.id = csi.id_referencia_documento
+                    LEFT JOIN retenido_si rsi ON s.id = rsi.id_saldo
+                    WHERE s.id_empresa = :id_empresa
+                      AND s.eliminado = FALSE
+                      AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) > 0.01
+                      $filtroBusqCxc
+                ) docs
+                ORDER BY cliente_nombre ASC, fecha_emision ASC, id ASC
                 LIMIT 301";
 
         $rows    = $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);

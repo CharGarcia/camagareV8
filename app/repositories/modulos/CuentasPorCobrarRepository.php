@@ -61,6 +61,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                 JOIN retencion_venta_detalle rd ON rd.id_retencion = r.id
                 JOIN ventas_cabecera vc
                      ON rd.num_doc_sustento = CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial)
+                    AND vc.id_empresa = r.id_empresa
+                    AND vc.eliminado  = false
                 WHERE r.eliminado = false
                 {$filtroFecha}
             ) tmp
@@ -548,26 +550,63 @@ class CuentasPorCobrarRepository extends BaseRepository
 
     public function getSaldosInicialesCxc(int $idEmpresa, array $filtros = []): array
     {
-        $where  = "id_empresa = :id_empresa AND eliminado = false";
+        // Pendiente real = saldo_inicial - cobrado - retenido. Lo retenido se
+        // calcula al vuelo desde las retenciones de venta (igual que en las
+        // facturas normales); no se almacena en el saldo inicial.
+        $pend     = '(s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0))';
+        $aplicado = '(s.monto_cobrado + COALESCE(ret.retenido, 0))';
+
+        $where  = "s.id_empresa = :id_empresa AND s.eliminado = false";
         $params = [':id_empresa' => $idEmpresa];
 
         if (!empty($filtros['estado']) && $filtros['estado'] !== 'TODOS') {
-            $where .= " AND estado = :estado";
-            $params[':estado'] = $filtros['estado'];
+            if ($filtros['estado'] === 'PAGADO') {
+                $where .= " AND {$pend} <= 0";
+            } elseif ($filtros['estado'] === 'PARCIAL') {
+                $where .= " AND {$pend} > 0 AND {$aplicado} > 0";
+            } elseif ($filtros['estado'] === 'PENDIENTE') {
+                $where .= " AND {$pend} > 0 AND {$aplicado} <= 0";
+            }
         }
 
         $sql = "SELECT
-                    id, nro_documento, fecha_emision, fecha_vencimiento,
-                    ruc_cliente, nombre_cliente,
-                    CAST(saldo_inicial   AS NUMERIC(16,2)) AS saldo_inicial,
-                    CAST(monto_cobrado   AS NUMERIC(16,2)) AS monto_cobrado,
-                    CAST(saldo_pendiente AS NUMERIC(16,2)) AS saldo_pendiente,
-                    estado, observaciones,
-                    CASE WHEN fecha_vencimiento < CURRENT_DATE AND estado != 'PAGADO'
-                         THEN CURRENT_DATE - fecha_vencimiento ELSE 0 END AS dias_vencido
-                FROM saldos_iniciales_cxc
+                    s.id, s.nro_documento, s.fecha_emision, s.fecha_vencimiento,
+                    s.ruc_cliente, s.nombre_cliente,
+                    CAST(s.saldo_inicial          AS NUMERIC(16,2)) AS saldo_inicial,
+                    CAST(s.monto_cobrado          AS NUMERIC(16,2)) AS monto_cobrado,
+                    CAST(COALESCE(ret.retenido,0) AS NUMERIC(16,2)) AS monto_retenido,
+                    CAST({$pend}                  AS NUMERIC(16,2)) AS saldo_pendiente,
+                    CASE
+                        WHEN {$pend} <= 0     THEN 'PAGADO'
+                        WHEN {$aplicado} > 0  THEN 'PARCIAL'
+                        ELSE 'PENDIENTE'
+                    END AS estado,
+                    s.observaciones,
+                    CASE WHEN s.fecha_vencimiento < CURRENT_DATE AND {$pend} > 0
+                         THEN CURRENT_DATE - s.fecha_vencimiento ELSE 0 END AS dias_vencido
+                FROM saldos_iniciales_cxc s
+                LEFT JOIN LATERAL (
+                    SELECT SUM(rd.valor_retenido) AS retenido
+                    FROM retencion_venta_detalle rd
+                    INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
+                    WHERE r.eliminado = false
+                      AND r.id_empresa = s.id_empresa
+                      AND r.id_venta IS NULL
+                      AND r.id_cliente = s.id_cliente
+                      AND rd.num_doc_sustento IS NOT NULL
+                      AND rd.num_doc_sustento <> ''
+                      AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
+                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ventas_cabecera vc
+                          WHERE vc.id_empresa = s.id_empresa
+                            AND vc.eliminado = false
+                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      )
+                ) ret ON true
                 WHERE {$where}
-                ORDER BY fecha_emision ASC, nro_documento ASC";
+                ORDER BY s.fecha_emision ASC, s.nro_documento ASC";
 
         $st = $this->db->prepare($sql);
         $st->execute($params);

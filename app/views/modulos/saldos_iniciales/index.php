@@ -149,7 +149,7 @@ $urlBase = $base . '/' . $rutaModulo;
 
             <div class="card-body p-0">
                 <div class="si-scroll">
-                    <table class="table table-hover table-sm mb-0 align-middle" style="table-layout:fixed;min-width:820px;">
+                    <table class="table table-hover table-sm mb-0 align-middle" style="table-layout:fixed;min-width:910px;">
                         <colgroup>
                             <col style="width:150px;">
                             <col>

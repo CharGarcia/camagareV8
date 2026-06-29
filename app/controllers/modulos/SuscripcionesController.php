@@ -484,6 +484,23 @@ class SuscripcionesController extends BaseModuloController
                     $secuencial = $secRes['formateado'];
 
                     $infoAdicional = [];
+
+                    // Información adicional propia de la suscripción (concepto/detalle),
+                    // capturada en el modal. Se traslada tal cual a la factura.
+                    $infoSusc = $susc['info_adicional'] ?? null;
+                    if (is_string($infoSusc) && $infoSusc !== '') {
+                        $infoSusc = json_decode($infoSusc, true);
+                    }
+                    if (is_array($infoSusc)) {
+                        foreach ($infoSusc as $fila) {
+                            $nombre = trim((string) ($fila['concepto'] ?? ''));
+                            $valor  = trim((string) ($fila['detalle']  ?? ''));
+                            if ($nombre !== '' && $valor !== '') {
+                                $infoAdicional[] = ['nombre' => $nombre, 'valor' => $valor];
+                            }
+                        }
+                    }
+
                     if (!empty($infoConcepto) && !empty($infoDetalle)) {
                         $infoAdicional[] = ['nombre' => $infoConcepto, 'valor' => $infoDetalle];
                     }

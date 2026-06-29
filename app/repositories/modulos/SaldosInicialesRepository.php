@@ -20,18 +20,22 @@ class SaldosInicialesRepository extends BaseRepository
 
     public function getCxcListado(int $idEmpresa, array $filtros = []): array
     {
+        // Pendiente real = saldo_inicial - cobrado - retenido (retenido calculado
+        // al vuelo desde las retenciones de venta, igual que en cuentas por cobrar).
+        $pendiente = '(s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0))';
+
         $where  = 'WHERE s.id_empresa = :id_empresa AND s.eliminado = false';
         $params = [':id_empresa' => $idEmpresa];
 
         $estado = $filtros['estado'] ?? 'PENDIENTES';
         if ($estado === 'PENDIENTES') {
-            $where .= " AND s.saldo_pendiente > 0";
+            $where .= " AND {$pendiente} > 0";
         } elseif ($estado === 'VENCIDAS') {
-            $where .= " AND s.saldo_pendiente > 0 AND s.fecha_vencimiento < CURRENT_DATE";
+            $where .= " AND {$pendiente} > 0 AND s.fecha_vencimiento < CURRENT_DATE";
         } elseif ($estado === 'AL_DIA') {
-            $where .= " AND s.saldo_pendiente > 0 AND (s.fecha_vencimiento IS NULL OR s.fecha_vencimiento >= CURRENT_DATE)";
+            $where .= " AND {$pendiente} > 0 AND (s.fecha_vencimiento IS NULL OR s.fecha_vencimiento >= CURRENT_DATE)";
         } elseif ($estado === 'PAGADAS') {
-            $where .= " AND s.saldo_pendiente <= 0";
+            $where .= " AND {$pendiente} <= 0";
         }
 
         if (!empty($filtros['fecha_desde'])) {
@@ -55,11 +59,41 @@ class SaldosInicialesRepository extends BaseRepository
         }
 
         $sql = "
-            SELECT s.*,
+            SELECT s.id, s.id_empresa, s.id_lote, s.nro_documento,
+                   s.fecha_emision, s.fecha_vencimiento,
+                   s.id_cliente, s.nombre_cliente, s.ruc_cliente, s.observaciones,
+                   s.saldo_inicial, s.monto_cobrado,
+                   COALESCE(ret.retenido, 0)         AS monto_retenido,
+                   {$pendiente}                      AS saldo_pendiente,
+                   CASE
+                       WHEN {$pendiente} <= 0                         THEN 'PAGADO'
+                       WHEN (s.monto_cobrado + COALESCE(ret.retenido, 0)) > 0 THEN 'PARCIAL'
+                       ELSE 'PENDIENTE'
+                   END AS estado,
                    CASE WHEN s.fecha_vencimiento IS NOT NULL
                         THEN (CURRENT_DATE - s.fecha_vencimiento)::int
                         ELSE 0 END AS dias_vencido
             FROM saldos_iniciales_cxc s
+            LEFT JOIN LATERAL (
+                SELECT SUM(rd.valor_retenido) AS retenido
+                FROM retencion_venta_detalle rd
+                INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
+                WHERE r.eliminado = false
+                  AND r.id_empresa = s.id_empresa
+                  AND r.id_venta IS NULL
+                  AND r.id_cliente = s.id_cliente
+                  AND rd.num_doc_sustento IS NOT NULL
+                  AND rd.num_doc_sustento <> ''
+                  AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
+                      = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ventas_cabecera vc
+                      WHERE vc.id_empresa = s.id_empresa
+                        AND vc.eliminado = false
+                        AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                            = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                  )
+            ) ret ON true
             $where
             ORDER BY s.fecha_vencimiento ASC NULLS LAST, s.fecha_emision DESC
         ";
@@ -170,49 +204,63 @@ class SaldosInicialesRepository extends BaseRepository
     {
         $st = $this->db->prepare("
             UPDATE saldos_iniciales_cxc s SET
-                monto_cobrado   = COALESCE((
-                    SELECT SUM(id2.monto_cobrado)
-                    FROM ingresos_detalle id2
-                    INNER JOIN ingresos_cabecera ic ON ic.id = id2.id_ingreso
-                    WHERE id2.tipo_documento = 'SALDO_INICIAL'
-                      AND id2.id_referencia_documento = s.id
-                      AND ic.estado != 'anulado'
-                      AND ic.eliminado = false
-                ), 0),
-                saldo_pendiente = s.saldo_inicial - COALESCE((
-                    SELECT SUM(id2.monto_cobrado)
-                    FROM ingresos_detalle id2
-                    INNER JOIN ingresos_cabecera ic ON ic.id = id2.id_ingreso
-                    WHERE id2.tipo_documento = 'SALDO_INICIAL'
-                      AND id2.id_referencia_documento = s.id
-                      AND ic.estado != 'anulado'
-                      AND ic.eliminado = false
-                ), 0),
+                monto_cobrado   = c.cobrado,
+                saldo_pendiente = s.saldo_inicial - c.cobrado,
                 estado = CASE
-                    WHEN s.saldo_inicial - COALESCE((
-                        SELECT SUM(id2.monto_cobrado)
-                        FROM ingresos_detalle id2
-                        INNER JOIN ingresos_cabecera ic ON ic.id = id2.id_ingreso
-                        WHERE id2.tipo_documento = 'SALDO_INICIAL'
-                          AND id2.id_referencia_documento = s.id
-                          AND ic.estado != 'anulado'
-                          AND ic.eliminado = false
-                    ), 0) <= 0 THEN 'PAGADO'
-                    WHEN COALESCE((
-                        SELECT SUM(id2.monto_cobrado)
-                        FROM ingresos_detalle id2
-                        INNER JOIN ingresos_cabecera ic ON ic.id = id2.id_ingreso
-                        WHERE id2.tipo_documento = 'SALDO_INICIAL'
-                          AND id2.id_referencia_documento = s.id
-                          AND ic.estado != 'anulado'
-                          AND ic.eliminado = false
-                    ), 0) > 0 THEN 'PARCIAL'
+                    WHEN s.saldo_inicial - c.cobrado <= 0 THEN 'PAGADO'
+                    WHEN c.cobrado > 0                    THEN 'PARCIAL'
                     ELSE 'PENDIENTE'
                 END,
                 updated_at = CURRENT_TIMESTAMP
+            FROM (
+                SELECT COALESCE(SUM(id2.monto_cobrado), 0) AS cobrado
+                FROM ingresos_detalle id2
+                INNER JOIN ingresos_cabecera ic ON ic.id = id2.id_ingreso
+                WHERE id2.tipo_documento = 'SALDO_INICIAL'
+                  AND id2.id_referencia_documento = :id
+                  AND ic.estado != 'anulado'
+                  AND ic.eliminado = false
+            ) c
             WHERE s.id = :id AND s.id_empresa = :id_empresa
         ");
         $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+    }
+
+    /**
+     * Total retenido (calculado, NO almacenado) que afecta a un saldo inicial
+     * CXC: suma de lo retenido por las retenciones de venta cuyo documento
+     * sustento coincide con el nro_documento del saldo y el mismo cliente, y que
+     * NO corresponde a una factura real (para no duplicar con la CxC normal).
+     * Mismo criterio que las facturas en cuentas por cobrar.
+     */
+    public function getRetenidoSaldoCxc(int $idSaldo, int $idEmpresa): float
+    {
+        $st = $this->db->prepare("
+            SELECT COALESCE((
+                SELECT SUM(rd.valor_retenido)
+                FROM retencion_venta_detalle rd
+                INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
+                WHERE r.eliminado = false
+                  AND r.id_empresa = s.id_empresa
+                  AND r.id_venta IS NULL
+                  AND r.id_cliente = s.id_cliente
+                  AND rd.num_doc_sustento IS NOT NULL
+                  AND rd.num_doc_sustento <> ''
+                  AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
+                      = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ventas_cabecera vc
+                      WHERE vc.id_empresa = s.id_empresa
+                        AND vc.eliminado = false
+                        AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                            = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                  )
+            ), 0)
+            FROM saldos_iniciales_cxc s
+            WHERE s.id = :id AND s.id_empresa = :ie
+        ");
+        $st->execute([':id' => $idSaldo, ':ie' => $idEmpresa]);
+        return (float) $st->fetchColumn();
     }
 
     public function getHistorialCobrosCxc(int $id, int $idEmpresa): array

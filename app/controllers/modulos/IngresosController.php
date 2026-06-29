@@ -496,7 +496,8 @@ class IngresosController extends BaseModuloController
             $secuencialService = new \App\Services\SecuencialService();
             $secRes = $secuencialService->obtenerSiguienteSecuencial((int)$data['id_punto_emision'], 'Ingresos');
 
-            // 4. Calcular saldo anterior (total cobrado hasta ahora para esta factura)
+            // 4. Calcular saldo anterior = importe_total - cobros previos - retenciones de venta
+            //    (mismo criterio que el selector de documentos pendientes).
             $stSaldo = $db->prepare(
                 "SELECT COALESCE(SUM(id2.monto_cobrado), 0)
                  FROM ingresos_detalle id2
@@ -508,7 +509,17 @@ class IngresosController extends BaseModuloController
             );
             $stSaldo->execute([(int)$data['id_factura']]);
             $totalCobrado  = (float) $stSaldo->fetchColumn();
-            $saldoAnterior = round((float)$factura['importe_total'] - $totalCobrado, 2);
+
+            $stRet = $db->prepare(
+                "SELECT COALESCE(SUM(total_renta + total_iva + total_isd), 0)
+                 FROM retencion_venta_cabecera
+                 WHERE id_venta = ? AND id_empresa = ? AND eliminado = false
+                   AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)"
+            );
+            $stRet->execute([(int)$data['id_factura'], $idEmpresa, $idEmpresa]);
+            $totalRetenido = (float) $stRet->fetchColumn();
+
+            $saldoAnterior = round((float)$factura['importe_total'] - $totalCobrado - $totalRetenido, 2);
             $montoCobrar   = round((float)$data['monto_cobrar'], 2);
 
             $numDoc = $factura['establecimiento'] . '-' . $factura['punto_emision'] . '-' . $factura['secuencial'];

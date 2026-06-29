@@ -84,6 +84,24 @@ class SuscripcionFacturacionService
         $secuencial = $secRes['formateado'];
 
         $infoAdicional = [];
+
+        // Información adicional propia de la suscripción (concepto/detalle),
+        // capturada en el modal igual que en la factura de venta.
+        $infoSusc = $susc['info_adicional'] ?? null;
+        if (is_string($infoSusc) && $infoSusc !== '') {
+            $infoSusc = json_decode($infoSusc, true);
+        }
+        if (is_array($infoSusc)) {
+            foreach ($infoSusc as $fila) {
+                $nombre = strtr(trim((string)($fila['concepto'] ?? '')), $reemplazos);
+                $valor  = strtr(trim((string)($fila['detalle']  ?? '')), $reemplazos);
+                if ($nombre !== '' && $valor !== '') {
+                    $infoAdicional[] = ['nombre' => $nombre, 'valor' => $valor];
+                }
+            }
+        }
+
+        // Info adicional adicional pasada como override en la generación (lote).
         if ($infoConcepto !== '' && $infoDetalle !== '') {
             $infoAdicional[] = ['nombre' => $infoConcepto, 'valor' => $infoDetalle];
         }

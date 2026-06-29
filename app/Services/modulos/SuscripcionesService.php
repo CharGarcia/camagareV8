@@ -55,6 +55,7 @@ class SuscripcionesService
     public function crear(array $data): int
     {
         $detalle = $this->_extraerDetalle($data);
+        $data['info_adicional'] = $this->_extraerInfoAdicional($data);
         $this->rules->validar($data, $detalle);
         $data['proximo_cobro'] = $data['proximo_cobro'] ?? $data['fecha_inicio'];
 
@@ -85,6 +86,7 @@ class SuscripcionesService
     public function actualizar(int $id, int $idEmpresa, array $data): void
     {
         $detalle = $this->_extraerDetalle($data);
+        $data['info_adicional'] = $this->_extraerInfoAdicional($data);
         $this->rules->validar($data, $detalle);
 
         $antes = $this->repository->findById($id, $idEmpresa);
@@ -207,5 +209,27 @@ class SuscripcionesService
 
         // Filtrar filas vacías (sin producto)
         return array_values(array_filter($detalle, fn($item) => !empty($item['id_producto'])));
+    }
+
+    /**
+     * Extrae las filas de información adicional (concepto/detalle) del formulario
+     * y las devuelve como JSON listo para la columna info_adicional (o null si vacío).
+     * El frontend envía: info_adicional[0][concepto], info_adicional[0][detalle], ...
+     */
+    private function _extraerInfoAdicional(array &$data): ?string
+    {
+        $filas = $data['info_adicional'] ?? [];
+        unset($data['info_adicional']);
+
+        $limpias = [];
+        foreach ((array) $filas as $fila) {
+            $concepto = trim((string) ($fila['concepto'] ?? ''));
+            $detalle  = trim((string) ($fila['detalle']  ?? ''));
+            if ($concepto !== '' || $detalle !== '') {
+                $limpias[] = ['concepto' => $concepto, 'detalle' => $detalle];
+            }
+        }
+
+        return $limpias ? json_encode($limpias, JSON_UNESCAPED_UNICODE) : null;
     }
 }

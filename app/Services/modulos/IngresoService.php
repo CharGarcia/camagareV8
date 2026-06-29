@@ -133,7 +133,39 @@ class IngresoService
             $this->generarAsientoContableSeguro($idIngreso, $data);
         }
 
+        // Recalcular saldos iniciales CXC cobrados (no debe bloquear el ingreso)
+        $this->recalcularSaldosInicialesCxc($this->saldoIdsDesdeDetalles($data), (int) $data['id_empresa']);
+
         return $idIngreso;
+    }
+
+    /** IDs de saldos iniciales CXC presentes en los detalles de un payload de ingreso. */
+    private function saldoIdsDesdeDetalles(array $data): array
+    {
+        $ids = [];
+        foreach (($data['detalles'] ?? []) as $d) {
+            if (($d['tipo_documento'] ?? '') === 'SALDO_INICIAL' && !empty($d['id_referencia_documento'])) {
+                $ids[] = (int) $d['id_referencia_documento'];
+            }
+        }
+        return $ids;
+    }
+
+    /** Recalcula (cobrado/retenido/saldo/estado) cada saldo inicial CXC afectado. No propaga errores. */
+    private function recalcularSaldosInicialesCxc(array $idsSaldo, int $idEmpresa): void
+    {
+        $idsSaldo = array_unique(array_filter($idsSaldo));
+        if (empty($idsSaldo)) {
+            return;
+        }
+        try {
+            $repo = new \App\repositories\modulos\SaldosInicialesRepository();
+            foreach ($idsSaldo as $idSaldo) {
+                $repo->actualizarMontoCobradoCxc((int) $idSaldo, $idEmpresa);
+            }
+        } catch (\Throwable $e) {
+            error_log('[Ingreso] No se pudo recalcular saldos iniciales CXC: ' . $e->getMessage());
+        }
     }
 
     public function actualizar(int $id, array $data): void
@@ -223,6 +255,13 @@ class IngresoService
         if ($managedTransaction) {
             $this->generarAsientoContableSeguro($id, $data);
         }
+
+        // Recalcular saldos iniciales CXC afectados, tanto los nuevos como los que se quitaron.
+        $idsSaldo = array_merge(
+            $this->saldoIdsDesdeDetalles($data),
+            $this->saldoIdsDesdeDetalles($original ?? [])
+        );
+        $this->recalcularSaldosInicialesCxc($idsSaldo, (int) $data['id_empresa']);
     }
 
     public function anular(int $id, int $idEmpresa, int $idUsuario): void
@@ -234,6 +273,8 @@ class IngresoService
         if ($ingreso['estado'] === 'anulado') {
             throw new \Exception('El ingreso ya se encuentra anulado.');
         }
+
+        $idsSaldo = $this->repository->getSaldosInicialesReferenciados($id);
 
         // Bloqueo: si el ingreso proviene de un pago con tarjeta (Payphone) que aún
         // NO ha sido reversado, no se puede anular directamente. Primero debe reversarse el pago.
@@ -288,6 +329,9 @@ class IngresoService
 
         // Anular el asiento contable asociado (fuera de la transacción).
         $this->anularAsientoContable($id, $idEmpresa, $idUsuario);
+
+        // Recalcular saldos iniciales CXC que cobraba este ingreso (ya excluye el anulado).
+        $this->recalcularSaldosInicialesCxc($idsSaldo, $idEmpresa);
     }
 
     public function eliminar(int $id, int $idEmpresa, int $idUsuario): void
@@ -296,6 +340,8 @@ class IngresoService
         if (!$ingreso) {
             throw new \Exception('Ingreso no encontrado.');
         }
+
+        $idsSaldo = $this->repository->getSaldosInicialesReferenciados($id);
 
         // Validar Periodo Contable antes de eliminar
         $this->periodosService->validarFechaPermitida(
@@ -338,6 +384,9 @@ class IngresoService
 
         // Anular el asiento contable asociado (fuera de la transacción).
         $this->anularAsientoContable($id, $idEmpresa, $idUsuario);
+
+        // Recalcular saldos iniciales CXC que cobraba este ingreso (ya excluye el eliminado).
+        $this->recalcularSaldosInicialesCxc($idsSaldo, $idEmpresa);
     }
 
     public function getFormasCobro(int $idEmpresa): array

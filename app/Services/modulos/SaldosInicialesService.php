@@ -821,7 +821,10 @@ class SaldosInicialesService
         if (!$saldo) {
             throw new \RuntimeException('Saldo inicial no encontrado.');
         }
-        $saldoPendiente = (float)$saldo['saldo_pendiente'];
+        // El pendiente cobrable descuenta lo retenido (calculado desde las
+        // retenciones de venta): la parte retenida no se cobra en efectivo.
+        $retenido = $this->repo->getRetenidoSaldoCxc($idSaldo, $idEmpresa);
+        $saldoPendiente = (float)$saldo['saldo_pendiente'] - $retenido;
         $monto = (float)$datos['monto'];
         if ($monto <= 0) {
             throw new \RuntimeException('El monto debe ser mayor a 0.');
