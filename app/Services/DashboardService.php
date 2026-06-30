@@ -217,6 +217,25 @@ class DashboardService
      */
     private function getSaldosIniciales(int $e, string $ta): array
     {
+        // Panel auxiliar: si una tabla de saldos iniciales aún no existe en el
+        // entorno (migración no aplicada), no debe tumbar todo el dashboard.
+        try {
+            return $this->calcularSaldosIniciales($e, $ta);
+        } catch (\Throwable $ex) {
+            return [
+                'cxc'            => ['monto' => 0.0, 'n' => 0],
+                'cxp'            => ['monto' => 0.0, 'n' => 0],
+                'bancos'         => ['monto' => 0.0, 'n' => 0],
+                'anticipos'      => ['monto' => 0.0, 'n' => 0],
+                'inventario'     => ['monto' => 0.0, 'n' => 0],
+                'consignaciones' => ['monto' => 0.0, 'n' => 0],
+                'tiene_datos'    => false,
+            ];
+        }
+    }
+
+    private function calcularSaldosIniciales(int $e, string $ta): array
+    {
         // CXC: pendiente = saldo_inicial - monto_cobrado (saldo_pendiente almacenado).
         $cxc = $this->db->prepare(
             "SELECT COALESCE(SUM(saldo_pendiente), 0) AS monto, COUNT(*) AS n
