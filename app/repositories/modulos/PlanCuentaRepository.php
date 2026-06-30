@@ -302,7 +302,9 @@ class PlanCuentaRepository extends BaseRepository
                 'patrimonio' => '3',
                 'ingreso' => '4',
                 'costo' => '5',
-                'gasto' => '6'
+                // En este plan (modelo Supercías) costos y gastos viven juntos en el grupo 5
+                // ("COSTOS Y GASTOS"); no hay grupo 6. Por eso "Gasto" también apunta al 5.
+                'gasto' => '5'
             ];
 
             if ($tipo === 'costo_gasto') {
