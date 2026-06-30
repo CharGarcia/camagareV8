@@ -695,17 +695,21 @@ class NotasCreditoController extends BaseModuloController
     {
         $this->requireLeer();
         header('Content-Type: application/json');
-        
-        $idPt = (int) ($_GET['id_punto'] ?? 0);
-        $idEmpresa = (int) $_SESSION['id_empresa'];
 
-        $sql = "SELECT MAX(secuencial) FROM notas_credito_cabecera WHERE id_punto_emision = ? AND id_empresa = ?";
-        $db = \App\core\Database::getConnection();
-        $st = $db->prepare($sql);
-        $st->execute([$idPt, $idEmpresa]);
-        $max = (int) $st->fetchColumn();
-        
-        echo json_encode(['ok' => true, 'secuencial' => $max + 1]);
+        $idPt = (int) ($_GET['id_punto'] ?? $_GET['id_punto_emision'] ?? 0);
+
+        if ($idPt <= 0) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Punto de emisión requerido.']);
+            exit;
+        }
+
+        // Mismo servicio centralizado que usa factura de venta: respeta el
+        // secuencial inicial configurado, filtra por ambiente/eliminado y
+        // detecta huecos en la numeración.
+        $secuencialService = new \App\Services\SecuencialService();
+        $res = $secuencialService->obtenerSiguienteSecuencial($idPt, 'Nota de crédito');
+
+        echo json_encode(array_merge(['ok' => true], $res));
         exit;
     }
 
