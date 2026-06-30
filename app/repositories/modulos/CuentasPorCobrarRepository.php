@@ -218,6 +218,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                 $where .= " AND s.id_cliente IN (" . implode(',', $in) . ")";
             }
         }
+        if (!empty($filtros['fecha_desde'])) { $where .= " AND s.fecha_emision >= :sfd"; $params[':sfd'] = $filtros['fecha_desde']; }
+        if (!empty($filtros['fecha_hasta'])) { $where .= " AND s.fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
 
         $sql = "
             SELECT
@@ -338,6 +340,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                 $where .= " AND s.id_cliente IN (" . implode(',', $in) . ")";
             }
         }
+        if (!empty($filtros['fecha_desde'])) { $where .= " AND s.fecha_emision >= :sfd"; $params[':sfd'] = $filtros['fecha_desde']; }
+        if (!empty($filtros['fecha_hasta'])) { $where .= " AND s.fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
 
         $sql = "
             SELECT
@@ -724,6 +728,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                 $where .= " AND s.id_cliente IN (" . implode(',', $in) . ")";
             }
         }
+        if (!empty($filtros['fecha_desde'])) { $where .= " AND s.fecha_emision >= :sfd"; $params[':sfd'] = $filtros['fecha_desde']; }
+        if (!empty($filtros['fecha_hasta'])) { $where .= " AND s.fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
 
         $sql = "SELECT
                     s.id, s.nro_documento, s.fecha_emision, s.fecha_vencimiento,

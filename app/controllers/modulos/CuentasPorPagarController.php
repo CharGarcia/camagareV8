@@ -115,6 +115,8 @@ class CuentasPorPagarController extends BaseModuloController
         $saldos = $this->repo->getSaldosInicialesCxp($idEmpresa, [
             'estado'       => 'TODOS',
             'id_proveedor' => $filtros['id_proveedor'] ?? '',
+            'fecha_desde'  => $filtros['fecha_desde'] ?? '',
+            'fecha_hasta'  => $filtros['fecha_hasta'] ?? '',
         ]);
 
         $estado = $filtros['estado'] ?? 'PENDIENTES';
@@ -407,7 +409,7 @@ class CuentasPorPagarController extends BaseModuloController
             $estadoCxP = $saldo <= 0 ? 'PAGADA' : ($dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE');
             $ncRet = number_format((float)($r['total_nc'] ?? 0) + (float)($r['total_retenido'] ?? 0), 2);
             echo implode("\t", [
-                $r['tipo_fuente']     === 'LIQUIDACION' ? 'Liquidación' : 'Factura',
+                $r['tipo_fuente'] === 'SALDO_INICIAL' ? 'Saldo inicial' : ($r['tipo_fuente'] === 'LIQUIDACION' ? 'Liquidación' : 'Factura'),
                 $r['numero_documento'] ?? '',
                 $r['proveedor_nombre'] ?? '',
                 $r['proveedor_ruc']    ?? '',
@@ -463,7 +465,7 @@ class CuentasPorPagarController extends BaseModuloController
                         : "<small style='color:#198754;'>Vigente</small>");
                 $fVenc = !empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '—';
                 $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
-                $tipo  = $r['tipo_fuente'] === 'LIQUIDACION' ? 'Liq.' : 'Fac.';
+                $tipo  = $r['tipo_fuente'] === 'SALDO_INICIAL' ? 'Saldo ini.' : ($r['tipo_fuente'] === 'LIQUIDACION' ? 'Liq.' : 'Fac.');
 
                 $filaHtml .= "<tr style='{$color}'>
                     <td><small style='color:#6c757d;'>{$tipo}</small><br>" . htmlspecialchars($r['numero_documento'] ?? '') . "</td>

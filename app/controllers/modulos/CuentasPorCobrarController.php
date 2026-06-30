@@ -112,8 +112,10 @@ class CuentasPorCobrarController extends BaseModuloController
 
         // Saldos iniciales (todos; se filtran en PHP por el mismo estado del listado)
         $saldos = $this->repo->getSaldosInicialesCxc($idEmpresa, [
-            'estado'     => 'TODOS',
-            'id_cliente' => $filtros['id_cliente'] ?? '',
+            'estado'      => 'TODOS',
+            'id_cliente'  => $filtros['id_cliente'] ?? '',
+            'fecha_desde' => $filtros['fecha_desde'] ?? '',
+            'fecha_hasta' => $filtros['fecha_hasta'] ?? '',
         ]);
 
         $estado = $filtros['estado'] ?? 'PENDIENTES';
@@ -762,7 +764,7 @@ $plantillasFiltradas = [];
         header('Cache-Control: max-age=0');
         echo "\xEF\xBB\xBF"; // BOM UTF-8
 
-        $headers = ['Factura', 'Cliente', 'RUC/Cédula', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Cobrado', 'Saldo', 'Estado'];
+        $headers = ['Documento', 'Origen', 'Cliente', 'RUC/Cédula', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Cobrado', 'Saldo', 'Estado'];
         echo implode("\t", $headers) . "\n";
 
         foreach ($filas as $r) {
@@ -770,6 +772,7 @@ $plantillasFiltradas = [];
             $estadoCxC = $dias > 0 ? "VENCIDA ({$dias} días)" : ($dias <= 0 ? 'VIGENTE' : '');
             echo implode("\t", [
                 $r['numero_factura'] ?? '',
+                (($r['origen'] ?? 'FACTURA') === 'SALDO_INICIAL') ? 'Saldo inicial' : 'Factura',
                 $r['cliente_nombre'] ?? '',
                 $r['cliente_ruc']    ?? '',
                 $r['fecha_emision']  ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
@@ -817,8 +820,10 @@ $plantillasFiltradas = [];
                 $badge = $dias > 0 ? "<small style='color:#dc3545;font-weight:bold;'> ({$dias}d vencida)</small>" : "<small style='color:#198754;'>Vigente</small>";
                 $fVenc = !empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '—';
                 $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
+                $origenTxt = (($r['origen'] ?? 'FACTURA') === 'SALDO_INICIAL') ? 'Saldo inicial' : 'Factura';
                 $filaHtml .= "<tr style='{$color}'>
                     <td>" . htmlspecialchars($r['numero_factura'] ?? '') . "</td>
+                    <td class='text-center'>{$origenTxt}</td>
                     <td>" . htmlspecialchars($r['cliente_nombre'] ?? '') . "<br><small style='color:#6c757d;'>" . htmlspecialchars($r['cliente_ruc'] ?? '') . "</small></td>
                     <td class='text-center'>{$fEmis}</td>
                     <td class='text-center'>{$fVenc} {$badge}</td>
@@ -868,7 +873,8 @@ $plantillasFiltradas = [];
             <table>
                 <thead>
                     <tr>
-                        <th>Factura</th>
+                        <th>Documento</th>
+                        <th>Origen</th>
                         <th>Cliente / RUC</th>
                         <th>F. Emisión</th>
                         <th>F. Vencimiento</th>
@@ -882,7 +888,7 @@ $plantillasFiltradas = [];
                 </tbody>
                 <tfoot>
                     <tr style="background:#f8f9fa;font-weight:bold;">
-                        <th colspan="4" class="text-end">TOTALES:</th>
+                        <th colspan="5" class="text-end">TOTALES:</th>
                         <th class="text-end">$<?= number_format($totalTotal, 2) ?></th>
                         <th class="text-end" style="color:#198754;">$<?= number_format($totalCobrado, 2) ?></th>
                         <th class="text-end" style="color:#dc3545;">$<?= number_format($totalSaldo, 2) ?></th>

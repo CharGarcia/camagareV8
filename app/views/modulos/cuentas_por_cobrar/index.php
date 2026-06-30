@@ -86,7 +86,10 @@
                                  style="z-index:1050;width:calc(100% - 1.5rem);max-height:220px;overflow-y:auto;margin-top:2px;"></div>
                         </div>
 
-                        <div class="col-12 d-flex justify-content-end border-top pt-3 mt-1">
+                        <div class="col-12 d-flex justify-content-end gap-2 border-top pt-3 mt-1">
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="CXC_limpiarFiltros()">
+                                <i class="bi bi-eraser me-1"></i>Limpiar filtros
+                            </button>
                             <button type="submit" class="btn btn-success btn-sm px-4 shadow-sm">
                                 <i class="bi bi-search me-1"></i>Aplicar Filtros
                             </button>

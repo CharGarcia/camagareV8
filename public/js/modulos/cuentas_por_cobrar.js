@@ -782,6 +782,27 @@ function CXC_getClientesSeleccionados() {
 }
 
 /* ════════════════════════════════════════════════════
+   LIMPIAR FILTROS
+════════════════════════════════════════════════════ */
+function CXC_limpiarFiltros() {
+    const hoy = new Date();
+    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+
+    document.getElementById('cxc-estado').value      = 'PENDIENTES';
+    document.getElementById('cxc-fecha-desde').value = '';
+    document.getElementById('cxc-fecha-hasta').value = hoyStr;
+    document.getElementById('cxc-search-cliente').value = '';
+
+    CXC_clientesSeleccionados = [];
+    CXC_renderChipsClientes();
+
+    const buscador = document.getElementById('cxc-buscador');
+    if (buscador) buscador.value = '';
+
+    CXC_cargar();
+}
+
+/* ════════════════════════════════════════════════════
    EXPORTACIONES
 ════════════════════════════════════════════════════ */
 function CXC_exportarExcel() {

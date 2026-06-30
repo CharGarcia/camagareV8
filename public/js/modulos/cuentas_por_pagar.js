@@ -700,6 +700,28 @@ function CXP_getProveedoresSeleccionados() {
 }
 
 /* ════════════════════════════════════════════════════
+   LIMPIAR FILTROS
+════════════════════════════════════════════════════ */
+function CXP_limpiarFiltros() {
+    const hoy = new Date();
+    const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+
+    document.getElementById('cxp-estado').value      = 'PENDIENTES';
+    document.getElementById('cxp-tipo').value        = '';
+    document.getElementById('cxp-fecha-desde').value = '';
+    document.getElementById('cxp-fecha-hasta').value = hoyStr;
+    document.getElementById('cxp-search-proveedor').value = '';
+
+    CXP_proveedoresSeleccionados = {};
+    CXP_renderChipsProveedores();
+
+    const buscador = document.getElementById('cxp-buscador');
+    if (buscador) buscador.value = '';
+
+    CXP_cargar();
+}
+
+/* ════════════════════════════════════════════════════
    EXPORTACIÓN
 ════════════════════════════════════════════════════ */
 function CXP_exportarExcel() {

@@ -344,6 +344,8 @@ class CuentasPorPagarRepository extends BaseRepository
                 $where .= " AND id_proveedor IN (" . implode(',', $in) . ")";
             }
         }
+        if (!empty($filtros['fecha_desde'])) { $where .= " AND fecha_emision >= :sfd"; $params[':sfd'] = $filtros['fecha_desde']; }
+        if (!empty($filtros['fecha_hasta'])) { $where .= " AND fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
 
         $sql = "
             SELECT
@@ -467,6 +469,8 @@ class CuentasPorPagarRepository extends BaseRepository
                 $where .= " AND id_proveedor IN (" . implode(',', $in) . ")";
             }
         }
+        if (!empty($filtros['fecha_desde'])) { $where .= " AND fecha_emision >= :sfd"; $params[':sfd'] = $filtros['fecha_desde']; }
+        if (!empty($filtros['fecha_hasta'])) { $where .= " AND fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
 
         $dv = "CASE WHEN fecha_vencimiento IS NULL THEN 0 ELSE (CURRENT_DATE - fecha_vencimiento)::int END";
 
@@ -787,6 +791,8 @@ class CuentasPorPagarRepository extends BaseRepository
                 $where .= " AND id_proveedor IN (" . implode(',', $in) . ")";
             }
         }
+        if (!empty($filtros['fecha_desde'])) { $where .= " AND fecha_emision >= :sfd"; $params[':sfd'] = $filtros['fecha_desde']; }
+        if (!empty($filtros['fecha_hasta'])) { $where .= " AND fecha_emision <= :sfh"; $params[':sfh'] = $filtros['fecha_hasta']; }
 
         $sql = "SELECT
                     id, tipo_documento, nro_documento, fecha_emision, fecha_vencimiento,
