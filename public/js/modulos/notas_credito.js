@@ -16,12 +16,11 @@
         initModal();
         cargarTarifasIva();
         
-        // Inicializar ordenamiento desde preferencias si existen
-        const table = document.querySelector('.nc-scroll table');
-        if (table) {
-            window.currentSort = 'fecha_emision'; // Default
-            window.currentDir = 'DESC';
-        }
+        // El ordenamiento inicial proviene de la preferencia del usuario que el
+        // controlador ya aplicó (window.NC_ORDEN_COL / NC_ORDEN_DIR inyectados en
+        // la vista). Solo se usa el default si la vista no los definió.
+        if (!window.currentSort) window.currentSort = window.NC_ORDEN_COL || 'fecha_emision';
+        if (!window.currentDir)  window.currentDir  = window.NC_ORDEN_DIR || 'DESC';
     });
 
     // ─── FUNCIONES DE LISTADO (INDEX) ──────────────────────────────────────────
@@ -39,34 +38,56 @@
         const dir = (window.currentSort === col && window.currentDir === 'ASC') ? 'DESC' : 'ASC';
         window.currentSort = col;
         window.currentDir = dir;
-        
-        // Guardar preferencia de ordenamiento
-        if (window.FavoritosService) {
-            window.FavoritosService.guardarPreferencia('modulos/notas_credito', '__ordenCol__', col);
-            window.FavoritosService.guardarPreferencia('modulos/notas_credito', '__ordenDir__', dir);
+
+        // Guardar preferencia de ordenamiento en la vista (__vista__), que es lo
+        // que lee el controlador (getPreferenciasVista → __ordenCol__/__ordenDir__).
+        if (typeof window.guardarOrdenacionVista === 'function') {
+            window.guardarOrdenacionVista('notas_credito', col, dir);
         }
-        
+
         window.NC_fetchSearch(1);
     };
 
     window.NC_fetchSearch = async (page = 1) => {
-        const buscarEl = document.getElementById('buscarNC');
-        if (!buscarEl) return;
-        const buscar = buscarEl.value;
-        const url = `${BASE_URL}/modulos/notas_credito/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&sort=${window.currentSort || 'fecha_emision'}&dir=${window.currentDir || 'DESC'}`;
+        const buscar = document.getElementById('buscarNC')?.value || '';
+        const sort   = window.currentSort || 'fecha_emision';
+        const dir    = window.currentDir  || 'DESC';
+        const url = `${BASE_URL}/modulos/notas_credito/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(dir)}`;
 
         try {
             const resp = await fetch(url);
+            if (!resp.ok) return;
             const data = await resp.json();
-            if (data.ok) {
-                document.getElementById('nc-table-body').innerHTML = data.rows;
-                document.getElementById('nc-pagination').innerHTML = data.pagination;
-                document.getElementById('nc-pagination-info').textContent = data.info;
-            }
+            if (!data.ok) return;
+
+            const tbody = document.getElementById('nc-table-body');
+            if (tbody) tbody.innerHTML = data.rows ?? '';
+            const pg = document.getElementById('nc-pagination');
+            if (pg) pg.innerHTML = data.pagination ?? '';
+            const pgInfo = document.getElementById('nc-pagination-info');
+            if (pgInfo) pgInfo.textContent = data.info ?? '';
+
+            NC_actualizarIconosOrden(sort, dir);
         } catch (e) {
             console.error('Error al buscar NC:', e);
         }
     };
+
+    // Refleja la columna/dirección activa en los íconos del encabezado (en vivo).
+    function NC_actualizarIconosOrden(sort, dir) {
+        document.querySelectorAll('th.sortable-header').forEach(th => {
+            const icon = th.querySelector('i.bi');
+            if (!icon) return;
+            const m = (th.getAttribute('onclick') || '').match(/NC_ordenar\('([^']+)'\)/);
+            const thCol = m ? m[1] : null;
+            if (!thCol) return;
+            if (thCol === sort) {
+                icon.className = `bi ${dir === 'ASC' ? 'bi-sort-alpha-down' : 'bi-sort-alpha-up'} text-primary ms-1`;
+            } else {
+                icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
+            }
+        });
+    }
 
     // ─── FUNCIONES DEL MODAL ──────────────────────────────────────────────────
 
@@ -80,6 +101,18 @@
         if (modalEl && typeof bootstrap !== 'undefined') {
             modalNC = new bootstrap.Modal(modalEl);
             console.log('Modal NC inicializado con éxito');
+
+            // Enter en Motivo → pasar el cursor a Cliente.
+            const inpMotivo = document.getElementById('nc_motivo');
+            if (inpMotivo) {
+                inpMotivo.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const inpCli = document.getElementById('nc_cliente_search');
+                        if (inpCli) inpCli.focus();
+                    }
+                });
+            }
             return true;
         }
         
@@ -154,8 +187,15 @@
             setEl('nc_lbl_cliente_ruc', 'textContent', '');
             setEl('nc_lbl_cliente_direccion', 'textContent', '');
             setEl('nc_lbl_cliente_correo', 'textContent', '');
+            setEl('nc_factura_search', 'value', '');
+            setEl('nc_fecha_emision_docs_sustento', 'value', '');
+            setEl('nc_id_cliente', 'value', '');
             const infoCli = document.getElementById('nc_info_cliente');
             if (infoCli) infoCli.classList.add('d-none');
+            NC_limpiarInfoAdicional();
+            // En una NC nueva, el documento a modificar arranca deshabilitado
+            // hasta que se seleccione un cliente.
+            NC_setFacturaHabilitada(false);
             
             window.NC_cargarSecuencial();
             
@@ -166,7 +206,6 @@
             setEl('nc-sri-numero-documento',        'value', '');
             setEl('nc-sri-identificacion-cliente',  'value', '');
             setEl('nc-sri-correo-cliente',          'value', '');
-            setEl('nc-sri-mensajes', 'innerHTML', '<p class="text-muted text-center mb-0 py-3 small">Sin respuesta del SRI registrada.</p>');
             window.NC_FECHA_EMISION = null;
             window.NC_CLIENTE_RUC   = '';
             const tbodySri = document.getElementById('nc-sri-tbody-historial');
@@ -174,12 +213,13 @@
 
             modalNC.show();
 
-            if (borrador) {
-                document.getElementById('modalNC').addEventListener('shown.bs.modal', function onShown() {
-                    window.NC_restaurarRespaldo(borrador);
-                    this.removeEventListener('shown.bs.modal', onShown);
-                });
-            }
+            document.getElementById('modalNC').addEventListener('shown.bs.modal', function onShown() {
+                if (borrador) window.NC_restaurarRespaldo(borrador);
+                // NC nueva: el cursor inicia en Motivo (luego pasa a Cliente con Enter).
+                const inpMotivo = document.getElementById('nc_motivo');
+                if (inpMotivo) inpMotivo.focus();
+                this.removeEventListener('shown.bs.modal', onShown);
+            });
 
             window.NC_registrarAutoGuardado();
 
@@ -214,14 +254,17 @@
             document.getElementById('nc_secuencial').value = String(data.secuencial).padStart(9, '0');
             document.getElementById('nc_id_cliente').value = data.id_cliente;
             document.getElementById('nc_cliente_search').value = data.cliente_nombre;
-            document.getElementById('nc_num_doc_modificado').value = data.num_doc_modificado;
-            document.getElementById('nc_fecha_emision_docs_sustento').value = data.fecha_emision_docs_sustento;
+            // En edición el documento a modificar siempre está habilitado.
+            NC_setFacturaHabilitada(true);
+            const fechaSustento = (data.fecha_emision_docs_sustento || '').split(' ')[0].split('T')[0];
+            document.getElementById('nc_factura_search').value = data.num_doc_modificado || '';
+            document.getElementById('nc_fecha_emision_docs_sustento').value = fechaSustento;
             document.getElementById('nc_motivo').value = data.motivo;
-            
+
             document.getElementById('nc_info_factura_modificada').innerHTML = `
-                <div class="d-flex gap-3">
-                    <span><i class="bi bi-file-earmark-text me-1"></i> ${data.num_doc_modificado}</span>
-                    <span><i class="bi bi-calendar me-1"></i> ${data.fecha_emision_docs_sustento}</span>
+                <div class="d-flex gap-3 flex-wrap">
+                    <span><i class="bi bi-file-earmark-text me-1"></i> ${data.num_doc_modificado || '—'}</span>
+                    <span><i class="bi bi-calendar me-1"></i> ${fechaSustento || '—'}</span>
                 </div>
             `;
 
@@ -240,6 +283,7 @@
                 const result = await resp.json();
                 if (result.ok) {
                     renderDetalles(result.detalles);
+                    NC_renderInfoAdicional(result.info_adicional);
                     calcTotales();
                     // cliente_email solo viene en getPorId (no en el listado), lo tomamos aquí
                     const cab = result.cabecera;
@@ -261,7 +305,6 @@
             const elAutorizacion = document.getElementById('nc-sri-autorizacion');
             const elFechaAut     = document.getElementById('nc-sri-fecha-autorizacion');
             const elBadge        = document.getElementById('nc-sri-badge-estado');
-            const elMensajes     = document.getElementById('nc-sri-mensajes');
 
             if (elClaveAcceso)  elClaveAcceso.value = data.clave_acceso || '';
 
@@ -307,11 +350,6 @@
                 elBadge.className = `badge ${cls} border border-opacity-25 px-2`;
                 elBadge.textContent = lbl;
             }
-
-            if (elMensajes) {
-                elMensajes.innerHTML = '<p class="text-muted text-center mb-0 py-3 small">Sin respuesta del SRI registrada.</p>';
-            }
-
 
             // Cargar historial SRI
             ncCargarHistorialSri(data.id);
@@ -420,7 +458,32 @@
         }, 300));
     }
 
-    window.NC_seleccionarCliente = (c) => {
+    // Enter en la fecha del documento → saltar a la descripción del primer detalle.
+    const inpFechaDoc = document.getElementById('nc_fecha_emision_docs_sustento');
+    if (inpFechaDoc) {
+        inpFechaDoc.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            const body = document.getElementById('nc_detalles_body');
+            const primeraDesc = body && body.querySelector('input[name="det_descripcion[]"]');
+            if (primeraDesc) primeraDesc.focus();
+        });
+    }
+
+    // Habilita/inhabilita la sección de "documento a modificar" según haya cliente.
+    function NC_setFacturaHabilitada(habilitar) {
+        const inpFactura = document.getElementById('nc_factura_search');
+        const inpFecha   = document.getElementById('nc_fecha_emision_docs_sustento');
+        if (inpFactura) {
+            inpFactura.disabled = !habilitar;
+            inpFactura.placeholder = habilitar
+                ? 'Buscar factura del cliente o escribir el número...'
+                : 'Seleccione un cliente primero...';
+        }
+        if (inpFecha) inpFecha.disabled = !habilitar;
+    }
+
+    window.NC_seleccionarCliente = (c, opciones = {}) => {
         if (c.identificacion === '9999999999999') {
             Swal.fire('Atención', 'No se puede emitir una Nota de Crédito a Consumidor Final.', 'warning');
             document.getElementById('nc_cliente_search').value = '';
@@ -429,67 +492,176 @@
         }
         document.getElementById('nc_id_cliente').value = c.id;
         searchCliente.value = c.nombre;
-        dropdownCliente.classList.add('d-none');
+        if (dropdownCliente) dropdownCliente.classList.add('d-none');
+
+        // Info detallada del cliente
+        setEl('nc_lbl_cliente_ruc', 'textContent', c.identificacion || '');
+        setEl('nc_lbl_cliente_direccion', 'textContent', c.direccion || '');
+        setEl('nc_lbl_cliente_correo', 'textContent', c.email || '');
+        const infoCli = document.getElementById('nc_info_cliente');
+        if (infoCli) infoCli.classList.remove('d-none');
+        window.NC_CLIENTE_RUC = (c.identificacion || '').trim();
+
+        // Correo del cliente como información adicional (fila fija)
+        NC_actualizarCorreoCliente(c.email || '');
+
+        // Habilitar el documento a modificar
+        NC_setFacturaHabilitada(true);
+
+        // Si el cambio viene de elegir un cliente (no al cargar una factura),
+        // limpiar el documento previo para evitar inconsistencias.
+        if (!opciones.conservarDoc) {
+            const inpFactura = document.getElementById('nc_factura_search');
+            const inpFecha   = document.getElementById('nc_fecha_emision_docs_sustento');
+            if (inpFactura) inpFactura.value = '';
+            if (inpFecha)   inpFecha.value = '';
+            setEl('nc_info_factura_modificada', 'innerHTML', '');
+            // Aún no hay factura del sistema cargada: dejar la grilla con una
+            // línea vacía lista para ingresar manualmente.
+            NC_grillaListaParaIngresar();
+            // Tras elegir el cliente, llevar el cursor a la factura.
+            if (inpFactura) inpFactura.focus();
+        }
     };
+
+    // Deja la grilla de detalles con una sola línea vacía lista para capturar.
+    function NC_grillaListaParaIngresar() {
+        if (!tableBody) return;
+        NC_limpiarDropdownsProducto();
+        tableBody.innerHTML = '';
+        agregarFila();
+        calcTotales();
+    }
 
     // ─── AUTOCOMPLETE FACTURAS ─────────────────────────────────────────────
 
     const searchFactura = document.getElementById('nc_factura_search');
     const dropdownFactura = document.getElementById('nc_factura_dropdown');
 
-    if (searchFactura) {
-        searchFactura.addEventListener('input', debounce(async () => {
-            const term = searchFactura.value.trim();
-            const idCliente = document.getElementById('nc_id_cliente').value;
-            
-            const url = `${BASE_URL}/modulos/notas_credito/buscarFacturasAjax?q=${encodeURIComponent(term)}&id_cliente=${idCliente}`;
-            
+    // Normaliza una fecha (puede venir como 'YYYY-MM-DD HH:MM:SS' o ISO) a 'YYYY-MM-DD'.
+    function NC_fechaSoloDia(f) {
+        if (!f) return '';
+        return String(f).split(' ')[0].split('T')[0];
+    }
+
+    // Máscara de comprobante 000-000-000000000 (3-3-9) para entrada manual.
+    function NC_aplicarMascaraNroDoc(el) {
+        if (!el) return;
+        el.addEventListener('input', (e) => {
+            let v = e.target.value.replace(/\D/g, '');
+            if (v.length > 15) v = v.slice(0, 15);
+            let res = '';
+            if (v.length > 0) res += v.slice(0, 3);
+            if (v.length > 3) res += '-' + v.slice(3, 6);
+            if (v.length > 6) res += '-' + v.slice(6, 15);
+            e.target.value = res;
+        });
+        el.addEventListener('blur', (e) => {
+            const parts = e.target.value.split('-');
+            if (parts.length === 1 && parts[0].length > 0) {
+                const v = parts[0];
+                if (v.length <= 9) e.target.value = `001-001-${v.padStart(9, '0')}`;
+            } else if (parts.length === 3) {
+                e.target.value = `${parts[0].padStart(3, '0')}-${parts[1].padStart(3, '0')}-${parts[2].padStart(9, '0')}`;
+            }
+        });
+    }
+
+    // Carga el listado de documentos (facturas + saldos iniciales) del cliente seleccionado.
+    async function NC_cargarFacturasCliente(term = '') {
+        const idCliente = document.getElementById('nc_id_cliente').value;
+        if (!idCliente) {
+            dropdownFactura.classList.add('d-none');
+            return;
+        }
+
+        const url = `${BASE_URL}/modulos/notas_credito/buscarFacturasAjax?q=${encodeURIComponent(term)}&id_cliente=${idCliente}`;
+        try {
             const resp = await fetch(url);
             const data = await resp.json();
             if (data.ok && data.data.length > 0) {
                 dropdownFactura.innerHTML = data.data.map(f => {
-                    const pEst = (f.establecimiento || '').toString().padStart(3, '0');
-                    const pPunto = (f.punto_emision || '').toString().padStart(3, '0');
-                    const pSec = (f.secuencial || '').toString().padStart(9, '0');
-                    const pNum = `${pEst}-${pPunto}-${pSec}`;
+                    const json = JSON.stringify(f).replace(/"/g, '&quot;');
+                    const esSaldo = f.origen === 'saldo_inicial';
+                    const badge = esSaldo
+                        ? '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.62rem;">SALDO INICIAL</span>'
+                        : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:0.62rem;">${(f.estado || '').toUpperCase()}</span>`;
+                    const total = parseFloat(f.importe_total || 0).toFixed(2);
                     return `
-                        <a href="#" class="list-group-item list-group-item-action py-2" onclick="window.NC_seleccionarFactura(${JSON.stringify(f).replace(/"/g, '&quot;')})">
-                            <div class="fw-bold small">${pNum}</div>
-                            <small class="text-muted" style="font-size:0.7rem;">${f.cliente_nombre} - ${f.fecha_emision}</small>
+                        <a href="#" class="list-group-item list-group-item-action py-2" onclick="window.NC_seleccionarFactura(${json})">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="fw-bold small">${f.num}</span>
+                                ${badge}
+                            </div>
+                            <small class="text-muted" style="font-size:0.7rem;"><i class="bi bi-calendar me-1"></i>${NC_fechaSoloDia(f.fecha_emision)} &middot; $${total}</small>
                         </a>
                     `;
                 }).join('');
                 dropdownFactura.classList.remove('d-none');
             } else {
+                dropdownFactura.innerHTML = '<div class="list-group-item small text-muted py-2"><i class="bi bi-info-circle me-1"></i>Sin documentos para este cliente. Puede escribir el número manualmente.</div>';
+                dropdownFactura.classList.remove('d-none');
+            }
+        } catch (e) {
+            console.error('Error al buscar documentos del cliente:', e);
+            dropdownFactura.classList.add('d-none');
+        }
+    }
+
+    if (searchFactura) {
+        // Máscara 000-000-000000000 en la entrada manual del número de documento.
+        NC_aplicarMascaraNroDoc(searchFactura);
+        // Al escribir: el valor tecleado ES el num_doc_modificado (entrada manual)
+        // y a la vez se filtra el listado de documentos del cliente.
+        searchFactura.addEventListener('input', debounce(() => {
+            NC_cargarFacturasCliente(searchFactura.value.trim());
+        }, 300));
+        // Al enfocar: mostrar todos los documentos del cliente.
+        searchFactura.addEventListener('focus', () => {
+            NC_cargarFacturasCliente(searchFactura.value.trim());
+        });
+        // Al completar manualmente el documento (commit con 'change'): limpiar la
+        // grilla y dejar una línea lista para capturar. La selección desde el
+        // dropdown fija el valor por código (no dispara 'change'), por lo que no
+        // afecta a los detalles cargados de una factura del sistema.
+        searchFactura.addEventListener('change', () => {
+            NC_grillaListaParaIngresar();
+        });
+        // Cerrar el dropdown al hacer clic fuera.
+        document.addEventListener('click', (e) => {
+            if (dropdownFactura && !dropdownFactura.contains(e.target) && e.target !== searchFactura) {
                 dropdownFactura.classList.add('d-none');
             }
-        }, 300));
+        });
     }
 
     window.NC_seleccionarFactura = async (f) => {
         if (f.cliente_ruc === '9999999999999') {
-            Swal.fire('Atención', 'No se puede emitir una Nota de Crédito a una factura de Consumidor Final.', 'warning');
+            Swal.fire('Atención', 'No se puede emitir una Nota de Crédito a un documento de Consumidor Final.', 'warning');
             return;
         }
-        const pEst = (f.establecimiento || '').toString().padStart(3, '0');
-        const pPunto = (f.punto_emision || '').toString().padStart(3, '0');
-        const pSec = (f.secuencial || '').toString().padStart(9, '0');
-        const numComp = `${pEst}-${pPunto}-${pSec}`;
-        document.getElementById('nc_num_doc_modificado').value = numComp;
-        document.getElementById('nc_fecha_emision_docs_sustento').value = f.fecha_emision;
-        searchFactura.value = numComp;
+        const fechaDia = NC_fechaSoloDia(f.fecha_emision);
+        searchFactura.value = f.num_doc || f.num || '';
+        document.getElementById('nc_fecha_emision_docs_sustento').value = fechaDia;
         dropdownFactura.classList.add('d-none');
-        
+        // Tras elegir la factura, llevar el cursor a la fecha del documento.
+        document.getElementById('nc_fecha_emision_docs_sustento').focus();
+
+        const esSaldo = f.origen === 'saldo_inicial';
+        const tipoLbl = esSaldo ? 'SALDO INICIAL' : (f.estado || '').toUpperCase();
         document.getElementById('nc_info_factura_modificada').innerHTML = `
-            <div class="d-flex gap-3">
-                <span><i class="bi bi-calendar me-1"></i> ${f.fecha_emision}</span>
-                <span><i class="bi bi-cash me-1"></i> $${f.importe_total}</span>
-                <span class="text-primary fw-bold">${f.estado.toUpperCase()}</span>
+            <div class="d-flex gap-3 flex-wrap">
+                <span><i class="bi bi-calendar me-1"></i> ${fechaDia}</span>
+                <span><i class="bi bi-cash me-1"></i> $${parseFloat(f.importe_total || 0).toFixed(2)}</span>
+                <span class="${esSaldo ? 'text-warning' : 'text-primary'} fw-bold">${tipoLbl}</span>
             </div>
         `;
 
-        if (!document.getElementById('nc_id_cliente').value) {
-            window.NC_seleccionarCliente({ id: f.id_cliente, nombre: f.cliente_nombre, identificacion: f.cliente_ruc });
+        if (esSaldo) {
+            // Los saldos iniciales no tienen detalle de productos: dejar una línea
+            // vacía lista para que el usuario capture los ítems manualmente.
+            NC_grillaListaParaIngresar();
+            return;
         }
 
         try {
@@ -537,6 +709,7 @@
     }
 
     function renderDetallesFromFactura(detalles) {
+        NC_limpiarDropdownsProducto();
         tableBody.innerHTML = '';
         detalles.forEach(d => {
             const idTarifa = resolverIdTarifa(d.impuestos, d.id_tarifa_iva);
@@ -553,6 +726,7 @@
     }
 
     function renderDetalles(detalles) {
+        NC_limpiarDropdownsProducto();
         tableBody.innerHTML = '';
         detalles.forEach(d => {
             const idTarifa = resolverIdTarifa(d.impuestos, d.id_tarifa_iva);
@@ -576,9 +750,9 @@
         const idTarifaIva = data.id_tarifa_iva || 1;
 
         tr.innerHTML = `
-            <td class="ps-3 py-1">
+            <td class="ps-3 py-1 position-relative">
                 <input type="hidden" name="det_id_producto[]" value="${idProducto}">
-                <input type="text" name="det_descripcion[]" class="input-detalle" value="${descripcion}" placeholder="Descripción...">
+                <input type="text" name="det_descripcion[]" class="input-detalle" value="${descripcion}" placeholder="Buscar producto/servicio o escribir..." autocomplete="off">
             </td>
             <td class="py-1">
                 <input type="number" name="det_cantidad[]" class="input-detalle text-center" value="${cantidad}" step="0.000001" oninput="window.NC_calcFila(this)">
@@ -603,16 +777,190 @@
         `;
         
         tableBody.appendChild(tr);
+        NC_attachProductoAutocomplete(tr);
         window.NC_calcFila(tr.querySelector('input[name="det_cantidad[]"]'));
     }
 
+    // Quita los dropdowns de productos colgados del <body> antes de reconstruir
+    // la grilla, para no dejar elementos huérfanos.
+    function NC_limpiarDropdownsProducto() {
+        if (!tableBody) return;
+        tableBody.querySelectorAll('tr').forEach(tr => { if (tr._ncDdProd) tr._ncDdProd.remove(); });
+    }
+
+    // Autocomplete de productos/servicios sobre el campo descripción de la fila.
+    function NC_attachProductoAutocomplete(tr) {
+        const inpDesc = tr.querySelector('input[name="det_descripcion[]"]');
+        const inpId   = tr.querySelector('input[name="det_id_producto[]"]');
+        if (!inpDesc) return;
+
+        // El dropdown se cuelga del <body> con position:fixed para escapar el
+        // overflow de la tabla/modal.
+        const dd = document.createElement('div');
+        dd.className = 'list-group shadow d-none';
+        dd.style.cssText = 'position:fixed;z-index:20000;min-width:320px;max-height:240px;overflow-y:auto;background:#fff;border:1px solid #dee2e6;border-radius:0 0 6px 6px;box-shadow:0 4px 16px rgba(0,0,0,.12);';
+        document.body.appendChild(dd);
+        tr._ncDdProd = dd;   // referencia para limpieza al eliminar la fila
+        dd._ncTr = tr;       // referencia inversa para la selección
+
+        function posicionar() {
+            const r = inpDesc.getBoundingClientRect();
+            dd.style.top   = r.bottom + 'px';
+            dd.style.left  = r.left + 'px';
+            dd.style.width = Math.max(r.width, 320) + 'px';
+        }
+
+        let timer;
+        inpDesc.addEventListener('input', () => {
+            clearTimeout(timer);
+            // Al editar manualmente la descripción se rompe el vínculo con el producto.
+            if (inpId) inpId.value = '';
+            const q = inpDesc.value.trim();
+            if (q.length < 2) { dd.classList.add('d-none'); return; }
+            timer = setTimeout(async () => {
+                try {
+                    const res = await (await fetch(`${BASE_URL}/modulos/factura_venta/getProductosAjax?q=${encodeURIComponent(q)}`)).json();
+                    if (!res.ok || !res.data || !res.data.length) {
+                        dd.innerHTML = '<div class="list-group-item text-muted small py-2 px-3">Sin resultados — puede dejar la descripción manual.</div>';
+                    } else {
+                        dd.innerHTML = res.data.map(p =>
+                            `<div class="list-group-item list-group-item-action py-1 px-3" style="font-size:0.8rem;cursor:pointer;"
+                                 onclick='window.NC_seleccionarProducto(this, ${JSON.stringify(p).replace(/'/g, "&#39;")})'>
+                                <span class="fw-semibold">${(p.codigo || '')} — ${(p.nombre || '')}</span>
+                                <span class="text-muted ms-2 float-end">$${parseFloat(p.precio_base || 0).toFixed(2)}</span>
+                            </div>`
+                        ).join('');
+                    }
+                    posicionar();
+                    dd.classList.remove('d-none');
+                } catch (e) { console.error('Error al buscar productos NC:', e); }
+            }, 280);
+        });
+
+        const tabla = tr.closest('.table-responsive');
+        if (tabla) tabla.addEventListener('scroll', () => { if (!dd.classList.contains('d-none')) posicionar(); });
+        document.addEventListener('click', (e) => {
+            if (!inpDesc.contains(e.target) && !dd.contains(e.target)) dd.classList.add('d-none');
+        });
+    }
+
+    window.NC_seleccionarProducto = (el, p) => {
+        const dd = el.closest('.list-group');
+        const tr = dd && dd._ncTr;
+        if (!tr) return;
+
+        const inpId   = tr.querySelector('input[name="det_id_producto[]"]');
+        const inpDesc = tr.querySelector('input[name="det_descripcion[]"]');
+        const inpCant = tr.querySelector('input[name="det_cantidad[]"]');
+        const inpPrec = tr.querySelector('input[name="det_precio_unitario[]"]');
+        const selIva  = tr.querySelector('select[name="det_id_tarifa_iva[]"]');
+
+        if (inpId)   inpId.value = p.id || '';
+        if (inpDesc) inpDesc.value = p.nombre || '';
+        if (inpCant && (!inpCant.value || parseFloat(inpCant.value) <= 0)) inpCant.value = 1;
+        if (inpPrec) inpPrec.value = parseFloat(p.precio_base || 0).toFixed(2);
+
+        // Asignar tarifa IVA: por id directo y, como respaldo, por porcentaje.
+        if (selIva) {
+            let opt = p.tarifa_iva ? Array.from(selIva.options).find(o => o.value == p.tarifa_iva) : null;
+            if (!opt && p.porcentaje_iva_final != null) {
+                const pct = parseFloat(p.porcentaje_iva_final);
+                opt = Array.from(selIva.options).find(o => Math.abs(parseFloat(o.dataset.porcentaje || 0) - pct) < 0.001);
+            }
+            if (opt) selIva.value = opt.value;
+        }
+
+        dd.classList.add('d-none');
+        window.NC_calcFila(inpCant || inpPrec);
+        if (inpCant) inpCant.focus();
+    };
+
     window.NC_removerFila = (btn) => {
-        btn.closest('tr').remove();
+        const tr = btn.closest('tr');
+        if (tr && tr._ncDdProd) tr._ncDdProd.remove();   // limpiar dropdown colgado del body
+        tr.remove();
         if (tableBody.children.length === 0) {
             tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No hay items.</td></tr>';
         }
         calcTotales();
     };
+
+    // ─── INFORMACIÓN ADICIONAL ─────────────────────────────────────────────────
+
+    const NC_INFO_INPUT_STYLE = 'padding:0 4px;height:20px;font-size:0.78rem;';
+
+    window.NC_agregarInfoAdicional = (concepto = '', detalle = '') => {
+        const tbody = document.getElementById('nc-tbody-info-adicional');
+        if (!tbody) return;
+        const tr = document.createElement('tr');
+        tr.className = 'row-info-adicional-nc';
+        tr.innerHTML = `
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto-nc" style="${NC_INFO_INPUT_STYLE}" placeholder="Concepto..." value="${(concepto || '').replace(/"/g, '&quot;')}"></td>
+            <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle-nc" style="${NC_INFO_INPUT_STYLE}" placeholder="Detalle..." value="${(detalle || '').replace(/"/g, '&quot;')}"></td>
+            <td class="p-0 text-center pe-1">
+                <button type="button" class="btn btn-link btn-sm p-0 m-0 text-danger shadow-none" onclick="this.closest('tr').remove();">
+                    <i class="bi bi-x-circle-fill"></i>
+                </button>
+            </td>`;
+        // Insertar antes de la fila fija (correo del cliente) si existe.
+        const filaFija = tbody.querySelector('tr[data-tipo]');
+        if (filaFija) tbody.insertBefore(tr, filaFija);
+        else tbody.appendChild(tr);
+        if (!concepto) tr.querySelector('.input-info-concepto-nc').focus();
+    };
+
+    // Fila fija con el correo del cliente; se actualiza al cambiar de cliente.
+    function NC_actualizarCorreoCliente(email) {
+        const tbody = document.getElementById('nc-tbody-info-adicional');
+        if (!tbody) return;
+        let fila = tbody.querySelector('tr[data-tipo="correo-cliente"]');
+        if (!email) { if (fila) fila.remove(); return; }
+
+        if (fila) {
+            fila.querySelector('.input-info-detalle-nc').value = email;
+        } else {
+            fila = document.createElement('tr');
+            fila.className = 'row-info-adicional-nc';
+            fila.dataset.tipo = 'correo-cliente';
+            fila.innerHTML = `
+                <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto-nc" style="${NC_INFO_INPUT_STYLE}" value="Correo del cliente" readonly></td>
+                <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle-nc" style="${NC_INFO_INPUT_STYLE}" value="${(email || '').replace(/"/g, '&quot;')}"></td>
+                <td class="p-0 text-center pe-1"><span class="text-muted small" title="Se actualiza al cambiar el cliente"><i class="bi bi-lock-fill"></i></span></td>`;
+            tbody.appendChild(fila);
+        }
+    }
+
+    function NC_capturarInfoAdicional() {
+        const items = [];
+        document.querySelectorAll('#nc-tbody-info-adicional tr.row-info-adicional-nc').forEach(tr => {
+            const nombre = (tr.querySelector('.input-info-concepto-nc')?.value || '').trim();
+            const valor  = (tr.querySelector('.input-info-detalle-nc')?.value || '').trim();
+            if (nombre && valor) items.push({ nombre, valor });
+        });
+        return items;
+    }
+
+    function NC_limpiarInfoAdicional() {
+        const tbody = document.getElementById('nc-tbody-info-adicional');
+        if (tbody) tbody.innerHTML = '';
+    }
+
+    // Renderiza la info adicional guardada; el correo del cliente va a la fila fija.
+    function NC_renderInfoAdicional(items) {
+        NC_limpiarInfoAdicional();
+        let correo = '';
+        (items || []).forEach(ia => {
+            const nombre = ia.nombre ?? '';
+            const valor  = ia.valor ?? '';
+            const n = nombre.trim().toLowerCase();
+            if (n === 'correo del cliente' || n === 'correo') {
+                correo = valor;
+            } else {
+                window.NC_agregarInfoAdicional(nombre, valor);
+            }
+        });
+        if (correo) NC_actualizarCorreoCliente(correo);
+    }
 
     window.NC_calcFila = (el) => {
         const tr = el.closest('tr');
@@ -760,7 +1108,52 @@
     };
     window.NC_copiarClaveAcceso = () => window.NC_copiarCampoSri('nc-sri-clave-acceso');
 
+    // Muestra el aviso y, al cerrarlo, deja el cursor en el campo que falta completar.
+    function NC_focusYError(el, mensaje) {
+        // Asegurar que la pestaña principal esté visible antes de enfocar.
+        try {
+            const tabBtn = document.getElementById('tab-nc-principal-btn');
+            if (tabBtn && typeof bootstrap !== 'undefined') bootstrap.Tab.getOrCreateInstance(tabBtn).show();
+        } catch (e) {}
+        Swal.fire('Falta completar', mensaje, 'warning').then(() => {
+            if (el) {
+                el.focus();
+                if (typeof el.select === 'function') { try { el.select(); } catch (e) {} }
+            }
+        });
+    }
+
+    // Valida los campos obligatorios en orden y enfoca el primero que falte.
+    function NC_validarObligatorios() {
+        const motivo = document.getElementById('nc_motivo');
+        if (!motivo || !motivo.value.trim()) { NC_focusYError(motivo, 'El motivo de la nota de crédito es obligatorio.'); return false; }
+
+        const idCliente = document.getElementById('nc_id_cliente').value;
+        if (!idCliente) { NC_focusYError(document.getElementById('nc_cliente_search'), 'Debe seleccionar el cliente.'); return false; }
+
+        const serie = document.getElementById('nc_id_punto_emision');
+        if (!serie || !serie.value) { NC_focusYError(serie, 'Debe seleccionar la serie (punto de emisión).'); return false; }
+
+        const factura = document.getElementById('nc_factura_search');
+        if (!factura || !factura.value.trim()) { NC_focusYError(factura, 'Debe indicar la factura o documento a modificar.'); return false; }
+
+        const fechaDoc = document.getElementById('nc_fecha_emision_docs_sustento');
+        if (!fechaDoc || !fechaDoc.value) { NC_focusYError(fechaDoc, 'Debe indicar la fecha del documento a modificar.'); return false; }
+
+        const rows = Array.from(tableBody.querySelectorAll('tr.row-det'));
+        if (rows.length === 0) { NC_focusYError(null, 'Debe agregar al menos un ítem a la nota de crédito.'); return false; }
+        for (const tr of rows) {
+            const desc = tr.querySelector('input[name="det_descripcion[]"]');
+            const cant = tr.querySelector('input[name="det_cantidad[]"]');
+            if (!desc.value.trim()) { NC_focusYError(desc, 'La descripción del ítem es obligatoria.'); return false; }
+            if (!(parseFloat(cant.value) > 0)) { NC_focusYError(cant, 'La cantidad del ítem debe ser mayor a cero.'); return false; }
+        }
+        return true;
+    }
+
     window.NC_guardar = async () => {
+        if (!NC_validarObligatorios()) return;
+
         const formData = new FormData(formNC);
         const detalles = [];
         const rows = tableBody.querySelectorAll('tr.row-det');
@@ -799,14 +1192,15 @@
             secuencial: document.getElementById('nc_secuencial').value,
             fecha_emision: document.getElementById('nc_fecha_emision').value,
             id_cliente: document.getElementById('nc_id_cliente').value,
-            num_doc_modificado: document.getElementById('nc_num_doc_modificado').value,
+            num_doc_modificado: document.getElementById('nc_factura_search').value,
             fecha_emision_docs_sustento: document.getElementById('nc_fecha_emision_docs_sustento').value,
             motivo: document.getElementById('nc_motivo').value,
             id_bodega: document.getElementById('nc_id_bodega').value,
             total_sin_impuestos: document.getElementById('nc_total_sin_impuestos').value,
             total_descuento: document.getElementById('nc_total_descuento').value,
             importe_total: document.getElementById('nc_importe_total').value,
-            detalles: detalles
+            detalles: detalles,
+            info_adicional: NC_capturarInfoAdicional()
         };
 
         const btn = document.getElementById('btnGuardarNC');
@@ -867,11 +1261,12 @@
             cliente_ruc: document.getElementById('nc_lbl_cliente_ruc').textContent,
             cliente_direccion: document.getElementById('nc_lbl_cliente_direccion').textContent,
             cliente_correo: document.getElementById('nc_lbl_cliente_correo').textContent,
-            num_doc_modificado: document.getElementById('nc_num_doc_modificado').value,
+            num_doc_modificado: document.getElementById('nc_factura_search').value,
             fecha_emision_docs_sustento: document.getElementById('nc_fecha_emision_docs_sustento').value,
             motivo: document.getElementById('nc_motivo').value,
             id_bodega: document.getElementById('nc_id_bodega').value,
-            detalles: detalles
+            detalles: detalles,
+            info_adicional: NC_capturarInfoAdicional()
         };
     }
 
@@ -931,21 +1326,52 @@
         const infoCli = document.getElementById('nc_info_cliente');
         if (data.id_cliente && infoCli) infoCli.classList.remove('d-none');
 
-        document.getElementById('nc_num_doc_modificado').value = data.num_doc_modificado || '';
-        document.getElementById('nc_fecha_emision_docs_sustento').value = data.fecha_emision_docs_sustento || '';
+        // Habilitar el documento a modificar si hay cliente en el borrador.
+        NC_setFacturaHabilitada(!!data.id_cliente);
+        setEl('nc_factura_search', 'value', data.num_doc_modificado || '');
+        document.getElementById('nc_fecha_emision_docs_sustento').value = (data.fecha_emision_docs_sustento || '').split(' ')[0].split('T')[0];
         document.getElementById('nc_motivo').value = data.motivo || '';
         document.getElementById('nc_id_bodega').value = data.id_bodega || '';
 
         if (tableBody) {
+            NC_limpiarDropdownsProducto();
             tableBody.innerHTML = '';
             (data.detalles || []).forEach(det => {
                 window.NC_agregarFila(det);
             });
         }
 
+        NC_renderInfoAdicional(data.info_adicional);
+
         calcTotales();
         if (typeof mostrarToast === 'function') mostrarToast('Borrador de NC restaurado.', 'info');
     };
+
+    // Pinta el resultado del SRI en la pestaña SRI (badge + panel de mensajes),
+    // El detalle de los mensajes del SRI queda registrado en el Historial de Envíos;
+    // aquí solo se refleja el estado en el badge de la pestaña SRI.
+    function NC_pintarMensajesSri(estado) {
+        const badge = document.getElementById('nc-sri-badge-estado');
+        if (!badge) return;
+        const map = {
+            'autorizado':       ['bg-success bg-opacity-10 text-success border-success', 'Autorizado'],
+            'no_autorizado':    ['bg-danger bg-opacity-10 text-danger border-danger',   'No autorizado'],
+            'devuelta':         ['bg-danger bg-opacity-10 text-danger border-danger',   'Devuelta'],
+            'en_procesamiento': ['bg-warning bg-opacity-10 text-warning border-warning','En procesamiento'],
+            'recibida':         ['bg-info bg-opacity-10 text-info border-info',         'Recibida'],
+            'error':            ['bg-danger bg-opacity-10 text-danger border-danger',   'Error'],
+        };
+        const [cls, lbl] = map[estado] || ['bg-secondary bg-opacity-10 text-secondary border-secondary', 'Sin enviar'];
+        badge.className = `badge ${cls} border border-opacity-25 px-2`;
+        badge.textContent = lbl;
+    }
+
+    function NC_irPestanaSri() {
+        const tabBtn = document.getElementById('tab-nc-sri-btn');
+        if (tabBtn && typeof bootstrap !== 'undefined') {
+            try { bootstrap.Tab.getOrCreateInstance(tabBtn).show(); } catch (e) {}
+        }
+    }
 
     window.NC_enviarSRI = async () => {
         const id = document.getElementById('nc_id').value;
@@ -960,7 +1386,15 @@
             cancelButtonText: 'Cancelar'
         }).then(async (result) => {
             if (result.isConfirmed) {
-                Swal.showLoading();
+                // Progreso persistente mientras se firma/envía (igual que factura):
+                // no se cierra al hacer clic afuera y no tiene botón de confirmar.
+                Swal.fire({
+                    title: 'Enviando al SRI...',
+                    html: '<div class="spinner-border text-primary" role="status"></div><br><small class="text-muted mt-2 d-block">Firmando y enviando comprobante…</small>',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    showConfirmButton: false,
+                });
                 try {
                     const resp = await fetch(`${BASE_URL}/modulos/notas_credito/autorizarSRIAjax`, {
                         method: 'POST',
@@ -968,16 +1402,34 @@
                         body: `id=${id}`
                     });
                     const data = await resp.json();
+
+                    // El mensaje del SRI queda fijo en la pestaña SRI (badge + panel)
+                    // y en el historial, para que permanezca a la vista del usuario.
+                    const estadoSri = (data.estado || (data.ok ? 'autorizado' : 'error')).toLowerCase();
+                    NC_pintarMensajesSri(estadoSri);
+                    ncCargarHistorialSri(id);
+
                     if (data.ok) {
-                        Swal.fire('Éxito', 'Comprobante autorizado correctamente.', 'success');
-                        modalNC.hide();
+                        toggleBotonesAccion(true, 'autorizado');
                         window.NC_fetchSearch();
+                        Swal.fire('Éxito', 'Comprobante autorizado correctamente.', 'success');
                     } else {
-                        let msg = data.mensaje || 'Error desconocido';
+                        NC_irPestanaSri(); // dejar el mensaje a la vista
+                        const esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+                        let html = `<div class="text-start small">${esc(data.mensaje || 'Error desconocido')}</div>`;
                         if (data.errores && data.errores.length > 0) {
-                            msg += ':\n' + data.errores.map(e => `- ${e.mensaje || e}`).join('\n');
+                            html += '<ul class="text-start small mt-2 mb-0 ps-3">';
+                            data.errores.forEach(e => {
+                                if (typeof e === 'string') { html += `<li>${esc(e)}</li>`; return; }
+                                const id   = e.id ? `[${esc(e.id)}] ` : '';
+                                const mens = esc(e.mensaje || '');
+                                const info = e.info ? `<br><em class="text-muted">${esc(e.info)}</em>` : '';
+                                html += `<li>${id}${mens}${info}</li>`;
+                            });
+                            html += '</ul>';
                         }
-                        Swal.fire('Error', msg, 'error');
+                        html += '<div class="text-muted small mt-2">El detalle queda registrado en la pestaña <strong>SRI</strong>.</div>';
+                        Swal.fire({ icon: 'error', title: 'El SRI rechazó el comprobante', html });
                     }
                 } catch (e) {
                     console.error('Error SRI:', e);
@@ -1001,30 +1453,56 @@
         const id = document.getElementById('nc_id').value;
         if (!id) return;
 
-        Swal.fire({
-            title: 'Enviar por Correo',
-            text: '¿Desea enviar esta nota de crédito al correo del cliente?',
-            icon: 'question',
+        const modalEl = document.getElementById('modalNC');
+
+        // Correo actual del cliente (se puede ver y editar antes de enviar).
+        const correoInput  = document.getElementById('nc-sri-correo-cliente');
+        const correoActual = correoInput ? (correoInput.value || '').trim() : '';
+
+        const { value: correos, isConfirmed } = await Swal.fire({
+            title: 'Enviar por correo',
+            input: 'text',
+            inputLabel: 'Correos electrónicos (separados por coma)',
+            inputValue: correoActual,
+            target: modalEl,
             showCancelButton: true,
-            confirmButtonText: 'Sí, enviar',
-            cancelButtonText: 'Cancelar'
-        }).then(async (result) => {
-            if (result.isConfirmed) {
-                Swal.showLoading();
-                try {
-                    const resp = await fetch(`${BASE_URL}/modulos/notas_credito/enviarCorreoAjax?id=${id}`);
-                    const data = await resp.json();
-                    if (data.ok) {
-                        Swal.fire('Éxito', 'Correo enviado correctamente.', 'success');
-                    } else {
-                        Swal.fire('Error', data.mensaje || 'Error al enviar correo', 'error');
-                    }
-                } catch (e) {
-                    console.error('Error Correo:', e);
-                    Swal.fire('Error', 'Error de comunicación con el servidor.', 'error');
-                }
+            confirmButtonText: '<i class="bi bi-send me-1"></i> Enviar',
+            cancelButtonText: 'Cancelar',
+            inputValidator: (value) => {
+                if (!value.trim()) return 'Debes ingresar al menos un correo válido!';
             }
         });
+        if (!isConfirmed) return;
+
+        Swal.fire({
+            title: 'Enviando correo...',
+            text: 'Por favor espera',
+            allowOutsideClick: false,
+            target: modalEl,
+            didOpen: () => Swal.showLoading()
+        });
+
+        try {
+            const fd = new FormData();
+            fd.append('id', id);
+            fd.append('correos', correos);
+
+            const resp = await fetch(`${BASE_URL}/modulos/notas_credito/enviarCorreoAjax`, {
+                method: 'POST',
+                body: fd
+            });
+            const data = await resp.json();
+
+            if (data.ok) {
+                Swal.fire({ icon: 'success', title: '¡Enviado!', text: data.mensaje, timer: 2500, showConfirmButton: false, target: modalEl });
+                window.NC_fetchSearch();
+            } else {
+                Swal.fire({ icon: 'error', title: 'Error', text: data.mensaje || 'No se pudo enviar el correo.', target: modalEl });
+            }
+        } catch (e) {
+            console.error('Error Correo:', e);
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Error de conexión al enviar el correo.', target: modalEl });
+        }
     };
 
     window.NC_abrirModalClienteCrear = () => {

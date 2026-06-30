@@ -114,7 +114,7 @@ class NotasCreditoController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-minus fs-3 d-block mb-2"></i>No se encontraron notas de crédito.</td></tr>';
+            echo '<tr><td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-minus fs-3 d-block mb-2"></i>No se encontraron notas de crédito.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 $rowData      = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
@@ -129,18 +129,25 @@ class NotasCreditoController extends BaseModuloController
                 };
                 $estadoBadge  = '<span class="badge ' . $estadoClass . ' border border-opacity-25">' . ucfirst($estado) . '</span>';
 
+                $estadoCorreo = $r['estado_correo'] ?? 'pendiente';
+                $correoClass  = $estadoCorreo === 'enviado'
+                    ? 'bg-success bg-opacity-10 text-success border-success'
+                    : 'bg-warning bg-opacity-10 text-warning border-warning';
+                $correoBadge  = '<span class="badge ' . $correoClass . ' border border-opacity-25">' . ucfirst($estadoCorreo) . '</span>';
+
                 echo '<tr class="nc-row" role="button" tabindex="0" data-row=\'' . $rowData . '\' onclick="window.NC_abrirModalNC(this)">
-                        <td class="ps-3"><code>' . $numero . '</code></td>
-                        <td>' . $fecha . '</td>
-                        <td class="fw-medium text-truncate" style="max-width:200px">' . htmlspecialchars($r['cliente_nombre'] ?? '�€”') . '</td>
-                        <td><small class="text-muted">' . htmlspecialchars($r['cliente_ruc'] ?? '�€”') . '</small></td>
-                        <td><small class="text-muted">' . htmlspecialchars($r['num_doc_modificado'] ?? '�€”') . '</small></td>
-                        <td class="text-end">$' . number_format((float)($r['total_sin_impuestos'] ?? 0), 2) . '</td>
-                        <td class="text-end text-danger">$' . number_format((float)($r['total_descuento'] ?? 0), 2) . '</td>
-                        <td class="text-end fw-bold">$' . number_format((float)($r['importe_total'] ?? 0), 2) . '</td>
-                        <td class="text-truncate" style="max-width:180px">' . htmlspecialchars($r['motivo'] ?? '') . '</td>
-                        <td>' . htmlspecialchars($r['usuario_nombre'] ?? '�€”') . '</td>
-                        <td class="text-center pe-3">' . $estadoBadge . '</td>
+                        <td class="ps-3" data-col="numero"><code>' . $numero . '</code></td>
+                        <td data-col="fecha_emision">' . $fecha . '</td>
+                        <td class="fw-medium text-truncate" data-col="cliente_nombre" style="max-width:200px">' . htmlspecialchars($r['cliente_nombre'] ?? '�€”') . '</td>
+                        <td data-col="cliente_ruc"><small class="text-muted">' . htmlspecialchars($r['cliente_ruc'] ?? '�€”') . '</small></td>
+                        <td data-col="num_doc_modificado"><small class="text-muted">' . htmlspecialchars($r['num_doc_modificado'] ?? '�€”') . '</small></td>
+                        <td class="text-end" data-col="total_sin_impuestos">$' . number_format((float)($r['total_sin_impuestos'] ?? 0), 2) . '</td>
+                        <td class="text-end text-danger" data-col="total_descuento">$' . number_format((float)($r['total_descuento'] ?? 0), 2) . '</td>
+                        <td class="text-end fw-bold" data-col="importe_total">$' . number_format((float)($r['importe_total'] ?? 0), 2) . '</td>
+                        <td class="text-truncate" data-col="motivo" style="max-width:180px">' . htmlspecialchars($r['motivo'] ?? '') . '</td>
+                        <td data-col="usuario_nombre">' . htmlspecialchars($r['usuario_nombre'] ?? '�€”') . '</td>
+                        <td class="text-center" data-col="estado_correo">' . $correoBadge . '</td>
+                        <td class="text-center pe-3" data-col="estado">' . $estadoBadge . '</td>
                       </tr>';
             }
         }
@@ -186,11 +193,13 @@ class NotasCreditoController extends BaseModuloController
         foreach ($detalles as &$d) {
             $d['impuestos'] = $this->repository->getImpuestosDetalle((int) $d['id']);
         }
+        unset($d);
 
         echo json_encode([
-            'ok'       => true,
-            'cabecera' => $cabecera,
-            'detalles' => $detalles
+            'ok'             => true,
+            'cabecera'       => $cabecera,
+            'detalles'       => $detalles,
+            'info_adicional' => $this->repository->getInfoAdicional($id),
         ]);
         exit;
     }
@@ -263,15 +272,58 @@ class NotasCreditoController extends BaseModuloController
         $buscar    = trim($_GET['q'] ?? '');
         $idCliente = (int) ($_GET['id_cliente'] ?? 0);
 
-        $facturaRepo = new FacturaVentaRepository();
-        $result = $facturaRepo->getListado($idEmpresa, $buscar, 1, 20, 'fecha_emision', 'DESC', null); 
-        
-        $rows = array_filter($result['rows'], function($f) use ($idCliente) {
-            return ($f['estado'] === 'autorizado' || $f['estado'] === 'aprobado') && 
-                   ($idCliente === 0 || (int)$f['id_cliente'] === $idCliente);
-        });
+        // El documento a modificar siempre se busca en base al cliente seleccionado.
+        if ($idCliente <= 0) {
+            echo json_encode(['ok' => true, 'data' => []]);
+            exit;
+        }
 
-        echo json_encode(['ok' => true, 'data' => array_values($rows)]);
+        $data = [];
+
+        // 1. Facturas de venta del cliente (autorizadas/aprobadas).
+        $facturaRepo = new FacturaVentaRepository();
+        foreach ($facturaRepo->getFacturasPorCliente($idEmpresa, $idCliente, $buscar) as $f) {
+            $est = str_pad((string)($f['establecimiento'] ?? ''), 3, '0', STR_PAD_LEFT);
+            $pto = str_pad((string)($f['punto_emision'] ?? ''), 3, '0', STR_PAD_LEFT);
+            $sec = str_pad((string)($f['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+            $num = "$est-$pto-$sec";
+            $data[] = [
+                'origen'         => 'venta',
+                'id'             => (int) $f['id'],
+                'num'            => $num,
+                'num_doc'        => $num,
+                'fecha_emision'  => $f['fecha_emision'],
+                'importe_total'  => (float) ($f['importe_total'] ?? 0),
+                'estado'         => $f['estado'],
+                'id_cliente'     => (int) $f['id_cliente'],
+                'cliente_nombre' => $f['cliente_nombre'] ?? '',
+                'cliente_ruc'    => $f['cliente_ruc'] ?? '',
+            ];
+        }
+
+        // 2. Saldos iniciales (cuentas por cobrar) del cliente.
+        $siRepo = new \App\repositories\modulos\SaldosInicialesRepository();
+        $cxc = $siRepo->getCxcListado($idEmpresa, ['id_cliente' => $idCliente, 'estado' => 'TODOS']);
+        foreach ($cxc as $s) {
+            $num = trim((string)($s['nro_documento'] ?? ''));
+            if ($buscar !== '' && stripos($num, $buscar) === false) {
+                continue;
+            }
+            $data[] = [
+                'origen'         => 'saldo_inicial',
+                'id'             => (int) $s['id'],
+                'num'            => $num,
+                'num_doc'        => $num,
+                'fecha_emision'  => $s['fecha_emision'],
+                'importe_total'  => (float) ($s['saldo_inicial'] ?? 0),
+                'estado'         => 'saldo_inicial',
+                'id_cliente'     => (int) ($s['id_cliente'] ?? 0),
+                'cliente_nombre' => $s['nombre_cliente'] ?? '',
+                'cliente_ruc'    => $s['ruc_cliente'] ?? '',
+            ];
+        }
+
+        echo json_encode(['ok' => true, 'data' => $data]);
         exit;
     }
 
@@ -435,6 +487,54 @@ class NotasCreditoController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Arma el arreglo de empresa enriquecido con la configuración del
+     * establecimiento (igual que el RIDE de factura de venta) y devuelve también
+     * la dirección del establecimiento para el XML.
+     *
+     * @return array{0: array, 1: ?string} [empresa, dirEstablecimiento]
+     */
+    private function construirEmpresaComprobante(int $idEmpresa, array $nc): array
+    {
+        $empresaModel = new Empresa();
+        $empresa = $empresaModel->getPorId($idEmpresa) ?? [];
+        $dirEstablecimiento = null;
+
+        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+
+        // Preferir el establecimiento de la NC; si no, el primero disponible.
+        $est = null;
+        if (!empty($nc['id_establecimiento'])) {
+            foreach ($establecimientos as $e) {
+                if ((int)$e['id'] === (int)$nc['id_establecimiento']) { $est = $e; break; }
+            }
+        }
+        if (!$est && !empty($establecimientos)) $est = $establecimientos[0];
+
+        if ($est) {
+            $dirEstablecimiento = $est['direccion'] ?? null;
+            if (!empty($est['logo_ruta']))           $empresa['logo_ruta'] = $est['logo_ruta'];
+            if (!empty($est['direccion']))           $empresa['direccion_establecimiento'] = $est['direccion'];
+            if (!empty($est['leyenda_pdf_titulo']))  $empresa['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+            if (!empty($est['leyenda_pdf_mensaje'])) $empresa['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+
+            try {
+                $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                $estConfig = $estRepo->getEstablecimientoConfig((int)$est['id']);
+                if ($estConfig) {
+                    $estConfig['direccion_matriz']          = $empresa['direccion'] ?? '';
+                    $estConfig['direccion_establecimiento'] = $est['direccion'] ?? '';
+                    if (!empty($est['logo_ruta']))           $estConfig['logo_ruta'] = $est['logo_ruta'];
+                    if (!empty($est['leyenda_pdf_titulo']))  $estConfig['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+                    if (!empty($est['leyenda_pdf_mensaje'])) $estConfig['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+                    $empresa = array_merge($empresa, $estConfig);
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        return [$empresa, $dirEstablecimiento];
+    }
+
     public function exportPdfDoc(): void
     {
         $this->requireLeer();
@@ -451,12 +551,13 @@ class NotasCreditoController extends BaseModuloController
             foreach ($detalles as &$d) {
                 $d['impuestos'] = $this->repository->getImpuestosDetalle((int)$d['id']);
             }
+            unset($d);
 
-            $empresaModel = new Empresa();
-            $empresa = $empresaModel->getPorId($idEmpresa) ?? [];
+            [$empresa] = $this->construirEmpresaComprobante($idEmpresa, $nc);
+            $infoAdicional = $this->repository->getInfoAdicional($id);
 
             $pdfService = new \App\Services\modulos\NotaCreditoPdfService();
-            $pdfService->generar($nc, $detalles, $empresa);
+            $pdfService->generar($nc, $detalles, $empresa, $infoAdicional);
         } catch (\Throwable $e) {
             die('Error al generar PDF: ' . $e->getMessage());
         }
@@ -475,18 +576,31 @@ class NotasCreditoController extends BaseModuloController
                 die('Nota de crédito no encontrada');
             }
 
+            $numero = ($nc['establecimiento'] ?? '001') . '-' . ($nc['punto_emision'] ?? '001') . '-' . str_pad((string)$nc['secuencial'], 9, '0', STR_PAD_LEFT);
+
+            // Servir el XML ya persistido (autorizado por el SRI cuando aplica).
+            if (!empty($nc['detalle_xml'])) {
+                header('Content-Type: application/xml; charset=UTF-8');
+                header('Content-Disposition: attachment; filename="nc_' . $numero . '.xml"');
+                echo $nc['detalle_xml'];
+                exit;
+            }
+
+            // Fallback: generar el XML, persistirlo en detalle_xml y servirlo.
             $detalles = $this->repository->getDetalles($id);
             foreach ($detalles as &$d) {
                 $d['impuestos'] = $this->repository->getImpuestosDetalle((int)$d['id']);
             }
+            unset($d);
 
-            $empresaModel = new Empresa();
-            $empresa = $empresaModel->getPorId($idEmpresa) ?? [];
+            [$empresa, $dirEstablecimiento] = $this->construirEmpresaComprobante($idEmpresa, $nc);
+            $infoAdicional = $this->repository->getInfoAdicional($id);
 
             $xmlService = new \App\Services\Xml\XmlNotaCreditoService();
-            $xmlString  = $xmlService->generar($nc, $detalles, $empresa);
+            $xmlString  = $xmlService->generar($nc, $detalles, $infoAdicional, $empresa, $dirEstablecimiento);
 
-            $numero = ($nc['establecimiento'] ?? '001') . '-' . ($nc['punto_emision'] ?? '001') . '-' . str_pad((string)$nc['secuencial'], 9, '0', STR_PAD_LEFT);
+            try { $this->repository->updateDetalleXml($id, $xmlString); } catch (\Throwable $e) {}
+
             header('Content-Type: application/xml; charset=UTF-8');
             header('Content-Disposition: attachment; filename="nc_' . $numero . '.xml"');
             echo $xmlString;
@@ -498,13 +612,70 @@ class NotasCreditoController extends BaseModuloController
 
     public function enviarCorreoAjax(): void
     {
+        ob_start();
         $this->requireLeer();
         header('Content-Type: application/json');
-        
-        $id = (int) ($_GET['id'] ?? 0);
+
+        $id        = (int) ($_POST['id'] ?? $_GET['id'] ?? 0);
         $idEmpresa = (int) $_SESSION['id_empresa'];
 
-        echo json_encode(['ok' => true, 'mensaje' => 'Correo enviado exitosamente.']);
+        if (!$id) {
+            ob_end_clean();
+            echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
+            exit;
+        }
+
+        try {
+            $nc = $this->repository->getPorId($id);
+            if (!$nc || (int)($nc['id_empresa'] ?? 0) !== $idEmpresa) {
+                ob_end_clean();
+                echo json_encode(['ok' => false, 'mensaje' => 'Nota de crédito no encontrada.']);
+                exit;
+            }
+            if (($nc['estado'] ?? '') !== 'autorizado') {
+                ob_end_clean();
+                echo json_encode(['ok' => false, 'mensaje' => 'La nota de crédito debe estar autorizada para enviar el correo.']);
+                exit;
+            }
+
+            $detalles = $this->repository->getDetalles($id);
+            foreach ($detalles as &$d) {
+                $d['impuestos'] = $this->repository->getImpuestosDetalle((int)$d['id']);
+            }
+            unset($d);
+
+            $infoAdicional = $this->repository->getInfoAdicional($id);
+            [$empresa, $dirEstablecimiento] = $this->construirEmpresaComprobante($idEmpresa, $nc);
+
+            $pdfService = new \App\Services\modulos\NotaCreditoPdfService();
+            $pdfString  = $pdfService->generarBytes($nc, $detalles, $empresa, $infoAdicional);
+
+            // XML autorizado persistido; si no existe (NC vieja), se regenera y guarda.
+            $xmlString = $nc['detalle_xml'] ?? '';
+            if (empty($xmlString)) {
+                $xmlService = new \App\Services\Xml\XmlNotaCreditoService();
+                $xmlString  = $xmlService->generar($nc, $detalles, $infoAdicional, $empresa, $dirEstablecimiento);
+                try { $this->repository->updateDetalleXml($id, $xmlString); } catch (\Throwable $e) {}
+            }
+
+            $numAut         = $nc['numero_autorizacion'] ?? $nc['clave_acceso'] ?? '';
+            $correosDestino = trim($_POST['correos'] ?? '');
+
+            $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+            $enviado  = $emailSvc->enviarSiAplica($idEmpresa, 'nota_credito', $nc, $xmlString, $pdfString, $numAut, true, $correosDestino);
+
+            ob_end_clean();
+            if ($enviado) {
+                $db = \App\core\Database::getConnection();
+                $db->prepare("UPDATE notas_credito_cabecera SET estado_correo = 'enviado' WHERE id = ?")->execute([$id]);
+                echo json_encode(['ok' => true, 'mensaje' => 'Correo enviado correctamente.']);
+            } else {
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración o el correo del destinatario.']);
+            }
+        } catch (\Throwable $e) {
+            ob_end_clean();
+            echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
+        }
         exit;
     }
 
@@ -587,7 +758,7 @@ class NotasCreditoController extends BaseModuloController
             }
 
             $xml = (new \App\Services\Xml\XmlNotaCreditoService())
-                ->generar($nc, $detalles, [], $empresa, $dirEstablecimiento);
+                ->generar($nc, $detalles, $this->repository->getInfoAdicional($id), $empresa, $dirEstablecimiento);
 
             $this->repository->updateDetalleXml($id, $xml);
 

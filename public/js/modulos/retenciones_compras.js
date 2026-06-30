@@ -803,20 +803,6 @@
         window.RET_FECHA_EMISION   = (cab.fecha_emision || '').split(' ')[0].split('T')[0] || null;
         window.RET_PROVEEDOR_RUC   = (cab.proveedor_identificacion || '').trim();
 
-        // Mensajes
-        const msgEl = document.getElementById('ret-sri-mensajes');
-        if (msgEl) {
-            let mensajes = [];
-            if (cab.mensajes_sri) { try { mensajes = JSON.parse(cab.mensajes_sri); } catch { mensajes = []; } }
-            msgEl.innerHTML = mensajes.length
-                ? mensajes.map(m => {
-                    const tipo = (m.tipo || 'INFO').toUpperCase();
-                    const cls  = tipo === 'ERROR' ? 'text-danger' : tipo === 'ADVERTENCIA' ? 'text-warning' : 'text-info';
-                    return `<div class="mb-1 ${cls}"><strong>[${tipo}]</strong> ${m.mensaje || ''}${m.info ? `<br><small class="text-muted">${m.info}</small>` : ''}</div>`;
-                }).join('')
-                : '<p class="text-muted text-center mb-0 py-3 small">Sin respuesta del SRI registrada.</p>';
-        }
-
         actualizarBadgeSriEstado(cab.estado || 'borrador');
         cargarHistorialSri(cab.id);
     }
@@ -855,8 +841,6 @@
         });
         window.RET_FECHA_EMISION = null;
         window.RET_PROVEEDOR_RUC = '';
-        const el = document.getElementById('ret-sri-mensajes');
-        if (el) el.innerHTML = '<p class="text-muted text-center mb-0 py-3 small">Sin respuesta del SRI registrada.</p>';
         const h = document.getElementById('ret-sri-historial');
         if (h) h.innerHTML = '<p class="text-muted text-center mb-0 py-3 small">Sin historial.</p>';
         actualizarBadgeSriEstado('borrador');

@@ -128,6 +128,37 @@ class FacturaVentaRepository extends BaseRepository
         return ['rows' => $rows, 'total' => (int) $total];
     }
 
+    /**
+     * Facturas autorizadas/aprobadas de un cliente, para seleccionarlas como
+     * documento a modificar en una Nota de Crédito. Filtro opcional de texto
+     * sobre el número de comprobante (establecimiento-punto-secuencial).
+     */
+    public function getFacturasPorCliente(int $idEmpresa, int $idCliente, string $buscar = '', int $limit = 30): array
+    {
+        $params = [':id_empresa' => $idEmpresa, ':id_cliente' => $idCliente];
+        $where  = "WHERE v.id_empresa = :id_empresa
+                     AND v.eliminado = FALSE
+                     AND v.id_cliente = :id_cliente
+                     AND v.estado IN ('autorizado','aprobado')
+                     AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+
+        $buscar = trim($buscar);
+        if ($buscar !== '') {
+            $where .= " AND CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) ILIKE :buscar";
+            $params[':buscar'] = "%$buscar%";
+        }
+
+        $sql = "SELECT v.id, v.establecimiento, v.punto_emision, v.secuencial,
+                       v.fecha_emision, v.importe_total, v.estado,
+                       v.id_cliente, c.nombre AS cliente_nombre, c.identificacion AS cliente_ruc
+                FROM ventas_cabecera v
+                INNER JOIN clientes c ON v.id_cliente = c.id
+                $where
+                ORDER BY v.fecha_emision DESC, v.id DESC
+                LIMIT $limit";
+        return $this->query($sql, $params)->fetchAll();
+    }
+
     public function getPorId(int $id): ?array
     {
         $sql = "SELECT v.*,

@@ -102,6 +102,18 @@ class NotaCreditoService
                 }
             }
 
+            // Información adicional
+            $this->repository->deleteInfoAdicional($idNC);
+            if (!empty($data['info_adicional']) && is_array($data['info_adicional'])) {
+                foreach ($data['info_adicional'] as $ia) {
+                    $this->repository->insertInfoAdicional([
+                        'id_nota_credito' => $idNC,
+                        'nombre'          => $ia['nombre'] ?? '',
+                        'valor'           => $ia['valor'] ?? '',
+                    ]);
+                }
+            }
+
             $this->logService->registrar(
                 (int)$data['id_usuario'],
                 (int)$data['id_empresa'],
@@ -290,6 +302,18 @@ class NotaCreditoService
                 }
             }
 
+            // Reemplazar información adicional
+            $this->repository->deleteInfoAdicional($id);
+            if (!empty($data['info_adicional']) && is_array($data['info_adicional'])) {
+                foreach ($data['info_adicional'] as $ia) {
+                    $this->repository->insertInfoAdicional([
+                        'id_nota_credito' => $id,
+                        'nombre'          => $ia['nombre'] ?? '',
+                        'valor'           => $ia['valor'] ?? '',
+                    ]);
+                }
+            }
+
             $this->logService->registrar(
                 (int)$data['id_usuario'],
                 (int)$data['id_empresa'],
@@ -413,8 +437,7 @@ class NotaCreditoService
             }
             unset($d);
 
-            // NC no tiene infoAdicional propia — se pasa vacío
-            $infoAdicional = [];
+            $infoAdicional = $this->repository->getInfoAdicional($idNC);
 
             $empresaModel = new \App\models\Empresa();
             $empresa      = $empresaModel->getPorId((int)$cabecera['id_empresa']) ?? [];

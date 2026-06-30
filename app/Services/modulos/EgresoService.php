@@ -46,6 +46,9 @@ class EgresoService
         }
         $egreso['detalles'] = $this->repository->getDetalles($id);
         $egreso['pagos']    = $this->repository->getPagos($id);
+        // Enriquecer las líneas manuales con la cuenta contable usada en el asiento (si existe),
+        // para que la grilla del modal muestre la cuenta elegida al reabrir.
+        $this->enriquecerCuentasDetalle($egreso, $id, $idEmpresa);
         return $egreso;
     }
 
@@ -300,10 +303,52 @@ class EgresoService
             throw $e;
         }
 
-        // Regenerar el asiento contable fuera de la transacción.
+        // Regenerar el asiento contable fuera de la transacción. Se pasan los detalles (con su
+        // cuenta contable por línea) cuando el egreso es GENERAL, para que el asiento las refleje.
         if (!$inTrans) {
-            $this->generarAsientoContableSeguro($id, ['id_empresa' => $idEmpresa, 'usuario_id' => $idUsuario]);
+            $this->generarAsientoContableSeguro($id, [
+                'id_empresa' => $idEmpresa,
+                'usuario_id' => $idUsuario,
+                'detalles'   => $extraData['detalles'] ?? [],
+            ]);
         }
+    }
+
+    /**
+     * Agrega a cada línea manual del egreso la cuenta contable con la que se contabilizó en el
+     * asiento (match por descripción ↔ referencia_detalle del lado Debe). No persiste nada: solo
+     * enriquece la respuesta para que el modal muestre la cuenta elegida.
+     */
+    private function enriquecerCuentasDetalle(array &$egreso, int $idEgreso, int $idEmpresa): void
+    {
+        if (empty($egreso['detalles'])) {
+            return;
+        }
+        $asiento = $this->asientoContableService()->getAsientoPorOrigen('egreso', $idEgreso, $idEmpresa);
+        if (!$asiento || empty($asiento['detalles'])) {
+            return;
+        }
+        $mapa = [];
+        foreach ($asiento['detalles'] as $ad) {
+            if ((float) ($ad['debe'] ?? 0) <= 0) continue; // contrapartida del egreso = lado Debe
+            $ref = trim((string) ($ad['referencia_detalle'] ?? ''));
+            if ($ref === '' || isset($mapa[$ref])) continue;
+            $mapa[$ref] = [
+                'id'     => (int) ($ad['id_cuenta_contable'] ?? 0),
+                'codigo' => $ad['codigo_cuenta'] ?? '',
+                'nombre' => $ad['nombre_cuenta'] ?? '',
+            ];
+        }
+        foreach ($egreso['detalles'] as &$d) {
+            if (($d['tipo_documento'] ?? '') !== 'MANUAL') continue;
+            $ref = trim((string) ($d['descripcion'] ?? ''));
+            if (isset($mapa[$ref])) {
+                $d['id_cuenta_contable'] = $mapa[$ref]['id'];
+                $d['cuenta_codigo']      = $mapa[$ref]['codigo'];
+                $d['cuenta_nombre']      = $mapa[$ref]['nombre'];
+            }
+        }
+        unset($d);
     }
 
     public function getConceptosEgreso(int $idEmpresa): array
@@ -400,7 +445,10 @@ class EgresoService
             return;
         }
 
-        $detalles = (new AsientoBuilderService())->generarAsientoEgreso($idEmpresa, $idEgreso);
+        // Cuentas por línea elegidas en el modal (si vinieron en el payload). En regeneración
+        // masiva/sincronización no llegan y el builder las recupera del asiento existente.
+        $detallesConCuenta = $data['detalles'] ?? [];
+        $detalles = (new AsientoBuilderService())->generarAsientoEgreso($idEmpresa, $idEgreso, $detallesConCuenta);
         if (empty($detalles)) {
             return;
         }

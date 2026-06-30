@@ -282,10 +282,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.modalCrearEmpleado ? window.modalCrearEmpleado() : Swal.fire('Módulo en desarrollo','','info')" title="Registrar nuevo Empleado">
                         <i class="bi bi-person-lines-fill fs-6"></i>
                     </button>
-                    <!-- Botones de concepto de egreso (derecha) -->
+                    <!-- Conceptos de egreso (derecha): los relacionados con un módulo van como botón; el resto en un selector -->
+                    <?php
+                        $conceptosBoton  = array_values(array_filter($conceptos, fn($c) => ($c['comportamiento'] ?? 'GENERAL') !== 'GENERAL'));
+                        $conceptosSelect = array_values(array_filter($conceptos, fn($c) => ($c['comportamiento'] ?? 'GENERAL') === 'GENERAL'));
+                    ?>
                     <div id="concepto-egreso-btns-group" class="ms-auto d-flex gap-1 align-items-center flex-wrap">
                         <div class="vr mx-1"></div>
-                        <?php foreach ($conceptos as $c): ?>
+                        <?php foreach ($conceptosBoton as $c): ?>
                         <button type="button"
                                 class="btn btn-sm btn-outline-secondary concepto-egreso-btn"
                                 data-id="<?= $c['id'] ?>"
@@ -293,6 +297,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <?= htmlspecialchars($c['nombre']) ?>
                         </button>
                         <?php endforeach; ?>
+                        <select id="eg-select-concepto-general" class="form-select form-select-sm" style="width:auto;max-width:220px;"
+                                onchange="seleccionarConceptoGeneralEgreso(this.value)"
+                                title="Otros conceptos (sin relación con módulos)">
+                            <option value="">Otro concepto…</option>
+                            <?php foreach ($conceptosSelect as $c): ?>
+                            <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                 </div>
 
@@ -371,7 +383,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     <select name="id_egreso_concepto" id="eg-select-concepto" class="d-none" onchange="manejarCambioConceptoEgreso(this)">
                                         <option value="" data-comportamiento="GENERAL"></option>
                                         <?php foreach ($conceptos as $c): ?>
-                                            <option value="<?= $c['id'] ?>" data-comportamiento="<?= htmlspecialchars($c['comportamiento'] ?? 'GENERAL') ?>">
+                                            <option value="<?= $c['id'] ?>" data-comportamiento="<?= htmlspecialchars($c['comportamiento'] ?? 'GENERAL') ?>"
+                                                    data-cuenta-id="<?= (int)($c['id_cuenta_contable'] ?? 0) ?>"
+                                                    data-cuenta-codigo="<?= htmlspecialchars($c['cuenta_codigo'] ?? '') ?>"
+                                                    data-cuenta-nombre="<?= htmlspecialchars($c['cuenta_nombre'] ?? '') ?>">
                                                 <?= htmlspecialchars($c['nombre']) ?>
                                             </option>
                                         <?php endforeach; ?>
@@ -426,8 +441,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                 <table class="table table-sm table-detalle mb-0 text-nowrap align-middle">
                                                     <thead class="table-light border-bottom">
                                                         <tr>
-                                                            <th class="ps-3 py-2 small fw-bold text-muted" style="width: 75%;">Descripción / Concepto</th>
-                                                            <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 20%;">Monto</th>
+                                                            <th class="ps-3 py-2 small fw-bold text-muted" style="width: 45%;">Descripción / Concepto</th>
+                                                            <th class="py-2 small fw-bold text-muted" style="width: 35%;">Cuenta contable</th>
+                                                            <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 15%;">Monto</th>
                                                             <th style="width: 40px;"></th>
                                                         </tr>
                                                     </thead>
@@ -447,6 +463,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         </div>
                                     </div>
 
+                                    <!-- Dropdown compartido del buscador de cuentas por línea -->
+                                    <div id="eg-cuenta-drop" class="list-group shadow position-fixed d-none" style="z-index:2200; max-height:200px; overflow-y:auto; width:320px;"></div>
+
                                     <div class="mt-3">
                                         <label class="form-label small fw-bold">Observaciones del Egreso</label>
                                         <textarea name="observaciones" id="eg-input-obs" rows="2" class="form-control form-control-sm"></textarea>
@@ -461,7 +480,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     </div>
 
                                     <div class="row g-2 mb-2 bg-light p-2 rounded border">
-                                        <div class="col-md-5">
+                                        <div class="col-md-7">
                                             <label class="form-label small fw-bold d-flex align-items-center">Forma de pago <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('egresos', 'eg-add-pago-forma', 'id_forma_pago_default') ?></label>
                                             <select id="eg-add-pago-forma" class="form-select form-select-sm" onchange="manejarCambioFormaPagoEgreso(this)">
                                                 <option value="">-- Seleccione --</option>
@@ -477,14 +496,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             </select>
                                             <div id="eg-saldo-forma" class="small mt-1 d-none"></div>
                                         </div>
-                                        <div class="col-md-4">
+                                        <div class="col-md-3">
                                             <label class="form-label small fw-bold">Monto</label>
                                             <input type="number" id="eg-add-pago-monto" class="form-control form-control-sm input-numeric fw-bold" step="0.01" value="0.00">
                                         </div>
-                                        <div class="col-md-3 d-flex align-items-end">
-                                            <button type="button" class="btn btn-primary btn-sm w-100" onclick="addEgresoPago()">
-                                                <i class="bi bi-plus-lg me-1"></i> Agregar
-                                            </button>
+                                        <div class="col-md-2">
+                                            <label class="form-label small fw-bold d-block">&nbsp;</label>
+                                            <button type="button" class="btn btn-primary btn-sm w-100 px-1" onclick="addEgresoPago()" title="Agregar forma de pago">Agregar</button>
                                         </div>
 
                                         <!-- Campos Condicionales para BANCO -->
@@ -711,10 +729,38 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             btn.classList.toggle('btn-outline-secondary', !activo);
             btn.classList.toggle('active', activo);
         });
+        // Sincronizar el selector de conceptos generales (sin relación con módulos)
+        const selGen = document.getElementById('eg-select-concepto-general');
+        if (selGen) {
+            const existe = [...selGen.options].some(o => o.value !== '' && o.value == id);
+            selGen.value = existe ? id : '';
+        }
     }
 
     function setConceptoEgresoBotonesDisabled(disabled) {
         document.querySelectorAll('.concepto-egreso-btn').forEach(btn => { btn.disabled = disabled; });
+        const selGen = document.getElementById('eg-select-concepto-general');
+        if (selGen) selGen.disabled = disabled;
+    }
+
+    function seleccionarConceptoGeneralEgreso(id) {
+        const sel = document.getElementById('eg-select-concepto');
+        if (!sel || sel.value == id) return;
+        const hayDatos = docsEgreso.length > 0 || manualEgreso.some(m => m.desc.trim() !== '' || m.monto > 0);
+        const aplicarCambio = () => { sel.value = id; manejarCambioConceptoEgreso(sel); };
+        if (hayDatos) {
+            Swal.fire({
+                title: '¿Cambiar concepto?',
+                html: 'Si cambia el concepto, se eliminarán los documentos o detalles ya cargados en este egreso.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, cambiar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#d33'
+            }).then(r => { if (r.isConfirmed) aplicarCambio(); else sincronizarBotonesConceptoEgreso(sel.value); });
+        } else {
+            aplicarCambio();
+        }
     }
 
     function manejarCambioConceptoEgreso(sel) {
@@ -872,28 +918,40 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             
             // Inicializar primera fila vacía automáticamente si está vacío en modo creación
             if (manualEgreso.length === 0 && !isReadOnly) {
-                manualEgreso.push({ desc: '', monto: 0 });
+                manualEgreso.push({ desc: '', monto: 0, ...egConceptoCuentaActual() });
             }
 
             if (manualEgreso.length === 0) {
-                tb.innerHTML = '<tr><td colspan="3" class="text-center py-3 small text-muted">Sin registros asignados.</td></tr>';
+                tb.innerHTML = '<tr><td colspan="4" class="text-center py-3 small text-muted">Sin registros asignados.</td></tr>';
             } else {
                 manualEgreso.forEach((m, i) => {
                     const tr = document.createElement('tr');
                     tr.className = 'row-detalle';
+                    const ctaTxt = m.cuenta_codigo ? `${m.cuenta_codigo} - ${m.cuenta_nombre}` : '';
                     tr.innerHTML = `
                         <td class="ps-3">
-                            <input type="text" class="form-control form-control-sm input-detalle" 
-                                value="${m.desc}" 
-                                placeholder="Escriba el detalle o concepto del egreso..." 
+                            <input type="text" class="form-control form-control-sm input-detalle"
+                                value="${m.desc}"
+                                placeholder="Escriba el detalle o concepto del egreso..."
                                 ${isReadOnly ? 'disabled' : ''}
                                 oninput="actualizarManualEgresoDesc(${i}, this.value)">
                         </td>
+                        <td class="px-1">
+                            <input type="text" class="form-control form-control-sm input-detalle eg-cuenta-input"
+                                value="${ctaTxt.replace(/"/g, '&quot;')}"
+                                placeholder="Buscar cuenta contable..."
+                                autocomplete="off"
+                                data-idx="${i}"
+                                ${isReadOnly ? 'disabled' : ''}
+                                oninput="egCuentaInput(this)"
+                                onfocus="this.select()"
+                                onblur="egCuentaBlur(this)">
+                        </td>
                         <td class="pe-4">
-                            <input type="number" class="form-control form-control-sm input-detalle text-end fw-bold" 
-                                value="${m.monto > 0 ? m.monto.toFixed(2) : ''}" 
-                                placeholder="0.00" 
-                                step="0.01" 
+                            <input type="number" class="form-control form-control-sm input-detalle text-end fw-bold"
+                                value="${m.monto > 0 ? m.monto.toFixed(2) : ''}"
+                                placeholder="0.00"
+                                step="0.01"
                                 ${isReadOnly ? 'disabled' : ''}
                                 oninput="actualizarManualEgresoMonto(${i}, this.value)">
                         </td>
@@ -931,9 +989,74 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     function agregarFilaManualEgreso() {
-        manualEgreso.push({ desc: '', monto: 0 });
+        manualEgreso.push({ desc: '', monto: 0, ...egConceptoCuentaActual() });
         renderDocsEgreso();
         recalcEgresoTot();
+    }
+
+    // ── Cuenta contable por línea ─────────────────────────────────────────────
+    // Cuenta por defecto = la del concepto seleccionado (puede cambiarse por línea).
+    function egConceptoCuentaActual() {
+        const sel = document.getElementById('eg-select-concepto');
+        const opt = sel ? sel.options[sel.selectedIndex] : null;
+        if (!opt) return {};
+        const id = parseInt(opt.dataset.cuentaId || '0') || 0;
+        if (!id) return {};
+        return { id_cuenta: id, cuenta_codigo: opt.dataset.cuentaCodigo || '', cuenta_nombre: opt.dataset.cuentaNombre || '' };
+    }
+
+    let _egCuentaTimer = null;
+    function egCuentaInput(input) {
+        const drop = document.getElementById('eg-cuenta-drop');
+        const idx  = parseInt(input.dataset.idx);
+        const q    = input.value.trim();
+        clearTimeout(_egCuentaTimer);
+        if (q.length < 2) { drop.classList.add('d-none'); return; }
+        _egCuentaTimer = setTimeout(() => {
+            fetch(`${EGR_URL}/searchCuentasAjax?q=${encodeURIComponent(q)}`)
+                .then(r => r.json())
+                .then(res => {
+                    drop.innerHTML = '';
+                    if (!res.ok || !res.data || res.data.length === 0) {
+                        drop.innerHTML = '<div class="list-group-item small text-muted">Sin resultados.</div>';
+                    } else {
+                        res.data.forEach(item => {
+                            const b = document.createElement('button');
+                            b.type = 'button';
+                            b.className = 'list-group-item list-group-item-action py-1 small';
+                            b.innerHTML = `<strong>${item.codigo}</strong> - ${item.nombre}`;
+                            // mousedown + preventDefault: selecciona antes de que el input pierda foco.
+                            b.onmousedown = (e) => { e.preventDefault(); egCuentaSelect(idx, item); };
+                            drop.appendChild(b);
+                        });
+                    }
+                    const r = input.getBoundingClientRect();
+                    drop.style.left  = r.left + 'px';
+                    drop.style.top   = r.bottom + 'px';
+                    drop.style.width = Math.max(r.width, 280) + 'px';
+                    drop.classList.remove('d-none');
+                })
+                .catch(() => drop.classList.add('d-none'));
+        }, 250);
+    }
+
+    function egCuentaSelect(idx, item) {
+        if (manualEgreso[idx]) {
+            manualEgreso[idx].id_cuenta     = item.id;
+            manualEgreso[idx].cuenta_codigo = item.codigo;
+            manualEgreso[idx].cuenta_nombre = item.nombre;
+        }
+        document.getElementById('eg-cuenta-drop').classList.add('d-none');
+        renderDocsEgreso();
+    }
+
+    function egCuentaBlur(input) {
+        setTimeout(() => {
+            document.getElementById('eg-cuenta-drop').classList.add('d-none');
+            const idx = parseInt(input.dataset.idx);
+            const m = manualEgreso[idx];
+            if (m) input.value = m.cuenta_codigo ? `${m.cuenta_codigo} - ${m.cuenta_nombre}` : '';
+        }, 150);
     }
 
     function eliminarFilaManualEgreso(i) {
@@ -964,9 +1087,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('eg-final-total').innerText = '$ ' + total.toFixed(2);
         document.getElementById('eg-sumary-total').innerText = '$ ' + total.toFixed(2);
 
-        // Sugerir pago
-        const inputPag = document.getElementById('eg-add-pago-monto');
-        if (parseFloat(inputPag.value) === 0) inputPag.value = total.toFixed(2);
+        // El monto sugerido siempre refleja lo que falta por pagar (= saldo a pagar).
+        document.getElementById('eg-add-pago-monto').value = egPendientePago().toFixed(2);
+    }
+
+    // Monto que falta por pagar = total del egreso − suma de pagos ya cargados.
+    function egPendientePago() {
+        const total = parseFloat(document.getElementById('eg-final-total').innerText.replace('$', '').trim()) || 0;
+        const sum = pagosEgreso.reduce((a, b) => a + b.monto, 0);
+        return Math.max(0, +(total - sum).toFixed(2));
     }
 
     function manejarCambioFormaPagoEgreso(el) {
@@ -984,6 +1113,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             wrapper.classList.add('d-none');
         }
         EGR_renderSaldoForma();
+
+        // Al elegir forma de pago, sugerir el monto pendiente por pagar (= saldo a pagar).
+        const inpMonto = document.getElementById('eg-add-pago-monto');
+        if (sel && sel.value) {
+            inpMonto.value = egPendientePago().toFixed(2);
+        }
     }
 
     function EGR_fmtMoney(n) {
@@ -1129,12 +1264,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         });
 
         // Reset inputs
-        document.getElementById('eg-add-pago-monto').value = '0.00';
         document.getElementById('eg-add-pago-ref').value = '';
         document.getElementById('eg-add-pago-num-cheque').value = '';
         document.getElementById('eg-add-pago-fecha-cheque').value = '';
-        
+
         renderPagosEgreso();
+        // Pre-cargar el monto con lo que aún falta por pagar.
+        document.getElementById('eg-add-pago-monto').value = egPendientePago().toFixed(2);
     }
 
     function abrirModalEgreso(esNuevo = true) {
@@ -1233,7 +1369,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             // Lógica Manual
             if(manualEgreso.length===0){ Swal.fire('Atención', 'Agregue al menos un concepto o ítem manual.', 'warning'); return;}
             manualEgreso.forEach(m => {
-                data.detalles.push({ tipo_documento: 'MANUAL', descripcion: m.desc, monto_documento: m.monto, saldo_anterior: m.monto, monto_pagado: m.monto, saldo_actual: 0 });
+                data.detalles.push({ tipo_documento: 'MANUAL', descripcion: m.desc, monto_documento: m.monto, saldo_anterior: m.monto, monto_pagado: m.monto, saldo_actual: 0, id_cuenta_contable: m.id_cuenta || null });
             });
         } else {
             // Lógica Documentos Pendientes (Compras, Liquidaciones, etc)
@@ -1344,7 +1480,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 blkOtr.classList.remove('d-none');
                 
                 document.getElementById('eg-search-input').value = e.sujeto_nombre;
-                manualEgreso = (e.detalles||[]).map(d=>({ desc: d.descripcion||'Detalle', monto: parseFloat(d.monto_pagado) }));
+                manualEgreso = (e.detalles||[]).map(d=>({
+                    desc: d.descripcion||'Detalle',
+                    monto: parseFloat(d.monto_pagado),
+                    id_cuenta: d.id_cuenta_contable ? parseInt(d.id_cuenta_contable) : 0,
+                    cuenta_codigo: d.cuenta_codigo || '',
+                    cuenta_nombre: d.cuenta_nombre || ''
+                }));
                 // Renderizado diferido hasta que se definan los permisos visuales más abajo.
             } else {
                 blkDoc.classList.remove('d-none');
@@ -1561,7 +1703,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 monto_documento: d.monto,
                 saldo_anterior: d.monto,
                 monto_pagado: d.monto,
-                saldo_actual: 0
+                saldo_actual: 0,
+                id_cuenta_contable: d.id_cuenta || null
             }));
 
             // Recalcular el monto_total de los conceptos para enviarlo a la API
@@ -1902,7 +2045,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         abrirModalOpcion();
     };
     window.onOpcionCreada = function (id, nombre, comportamiento) {
-        // Agregar al select oculto
+        comportamiento = comportamiento || 'GENERAL';
+        // Agregar al select oculto (fuente de verdad del concepto seleccionado)
         const sel = document.getElementById('eg-select-concepto');
         if (sel) {
             const opt = document.createElement('option');
@@ -1911,33 +2055,47 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             opt.textContent = nombre;
             sel.appendChild(opt);
         }
-        // Agregar botón dinámico al grupo de concepto
-        const grp = document.getElementById('concepto-egreso-btns-group');
-        if (grp) {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'btn btn-sm btn-outline-secondary concepto-egreso-btn';
-            btn.dataset.id = id;
-            btn.dataset.comportamiento = comportamiento;
-            btn.textContent = nombre;
-            btn.addEventListener('click', function () {
-                const selEl = document.getElementById('eg-select-concepto');
-                if (selEl.value == this.dataset.id) return;
-                const hayDatos = docsEgreso.length > 0 || manualEgreso.some(m => m.desc.trim() !== '' || m.monto > 0);
-                const aplicarCambio = () => { selEl.value = this.dataset.id; manejarCambioConceptoEgreso(selEl); };
-                if (hayDatos) {
-                    Swal.fire({
-                        title: '¿Cambiar concepto?',
-                        html: 'Si cambia el concepto, se eliminarán los documentos o detalles ya cargados en este egreso.',
-                        icon: 'warning',
-                        showCancelButton: true,
-                        confirmButtonText: 'Sí, cambiar',
-                        cancelButtonText: 'Cancelar',
-                        confirmButtonColor: '#d33'
-                    }).then(r => { if (r.isConfirmed) aplicarCambio(); });
-                } else { aplicarCambio(); }
-            });
-            grp.appendChild(btn);
+
+        if (comportamiento === 'GENERAL') {
+            // Concepto sin relación con módulos → al selector
+            const selGen = document.getElementById('eg-select-concepto-general');
+            if (selGen) {
+                const optG = document.createElement('option');
+                optG.value = id;
+                optG.textContent = nombre;
+                selGen.appendChild(optG);
+            }
+        } else {
+            // Concepto relacionado con un módulo → botón dinámico
+            const grp = document.getElementById('concepto-egreso-btns-group');
+            if (grp) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-sm btn-outline-secondary concepto-egreso-btn';
+                btn.dataset.id = id;
+                btn.dataset.comportamiento = comportamiento;
+                btn.textContent = nombre;
+                btn.addEventListener('click', function () {
+                    const selEl = document.getElementById('eg-select-concepto');
+                    if (selEl.value == this.dataset.id) return;
+                    const hayDatos = docsEgreso.length > 0 || manualEgreso.some(m => m.desc.trim() !== '' || m.monto > 0);
+                    const aplicarCambio = () => { selEl.value = this.dataset.id; manejarCambioConceptoEgreso(selEl); };
+                    if (hayDatos) {
+                        Swal.fire({
+                            title: '¿Cambiar concepto?',
+                            html: 'Si cambia el concepto, se eliminarán los documentos o detalles ya cargados en este egreso.',
+                            icon: 'warning',
+                            showCancelButton: true,
+                            confirmButtonText: 'Sí, cambiar',
+                            cancelButtonText: 'Cancelar',
+                            confirmButtonColor: '#d33'
+                        }).then(r => { if (r.isConfirmed) aplicarCambio(); });
+                    } else { aplicarCambio(); }
+                });
+                // Insertar antes del selector general para conservar el orden
+                const selGen = document.getElementById('eg-select-concepto-general');
+                if (selGen) grp.insertBefore(btn, selGen); else grp.appendChild(btn);
+            }
         }
         Swal.fire({ icon: 'success', title: '¡Creada!', text: `Opción de egreso "${nombre}" creada correctamente.`, timer: 2000, showConfirmButton: false });
     };

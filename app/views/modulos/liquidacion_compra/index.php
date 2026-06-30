@@ -766,13 +766,6 @@ $pestanasConfigLiq = [
                                         </button>
                                     </div>
                                 </div>
-                                <!-- Mensajes / Observaciones SRI -->
-                                <div class="col-12">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-chat-left-text me-1"></i>Mensajes del SRI</label>
-                                    <div id="liq-sri-mensajes-container" class="border rounded-2 bg-light p-2" style="min-height: 80px; font-size: 0.8rem;">
-                                        <p class="text-muted text-center mb-0 py-3 small">Sin respuesta del SRI registrada.</p>
-                                    </div>
-                                </div>
                                 <!-- Historial de envíos SRI -->
                                 <div class="col-12">
                                     <label class="small fw-bold text-muted mb-1"><i class="bi bi-clock-history me-1"></i>Historial de Envíos</label>

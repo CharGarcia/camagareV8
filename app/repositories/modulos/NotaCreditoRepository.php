@@ -16,6 +16,18 @@ class NotaCreditoRepository extends BaseRepository
         try {
             $this->db->exec("ALTER TABLE notas_credito_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
         } catch (\Throwable $e) {}
+        try {
+            $this->db->exec("ALTER TABLE notas_credito_cabecera ADD COLUMN IF NOT EXISTS estado_correo VARCHAR(20) DEFAULT 'pendiente';");
+        } catch (\Throwable $e) {}
+        try {
+            $this->db->exec("CREATE TABLE IF NOT EXISTS notas_credito_adicional (
+                id SERIAL PRIMARY KEY,
+                id_nota_credito INTEGER NOT NULL,
+                nombre VARCHAR(300) NOT NULL,
+                valor VARCHAR(500)
+            );");
+            $this->db->exec("CREATE INDEX IF NOT EXISTS idx_nc_adicional_nc ON notas_credito_adicional(id_nota_credito);");
+        } catch (\Throwable $e) {}
     }
 
     public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null): array
@@ -78,6 +90,19 @@ class NotaCreditoRepository extends BaseRepository
         $stCount->execute($params);
         $total = (int) $stCount->fetchColumn();
 
+        // Mapear la columna de orden a su expresión real (algunas son alias de JOINs).
+        $ordenExpr = match ($ordenCol) {
+            'cliente_nombre'  => 'c.nombre',
+            'cliente_ruc'     => 'c.identificacion',
+            'usuario_nombre'  => 'u.nombre',
+            'numero'          => 'nc.secuencial',
+            'secuencial', 'fecha_emision', 'total_sin_impuestos', 'total_descuento',
+            'importe_total', 'estado', 'estado_correo', 'num_doc_modificado', 'motivo'
+                              => "nc.$ordenCol",
+            default           => 'nc.fecha_emision',
+        };
+        $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
+
         // Listado paginado
         $sql = "SELECT nc.*, c.nombre as cliente_nombre, c.identificacion as cliente_ruc,
                        c.email as cliente_email,
@@ -88,7 +113,7 @@ class NotaCreditoRepository extends BaseRepository
                 LEFT JOIN usuarios u ON nc.id_usuario = u.id
                 LEFT JOIN empresas e ON e.id = nc.id_empresa
                 $where
-                ORDER BY nc.$ordenCol $ordenDir
+                ORDER BY $ordenExpr $ordenDir
                 LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
         
         $st = $this->db->prepare($sql);
@@ -105,7 +130,7 @@ class NotaCreditoRepository extends BaseRepository
     {
         $sql = "SELECT nc.*, c.nombre as cliente_nombre, c.identificacion as cliente_ruc,
                        c.direccion as cliente_direccion, c.telefono as cliente_telefono,
-                       c.email as cliente_email
+                       c.email as cliente_email, c.tipo_id as cliente_tipo_id
                 FROM notas_credito_cabecera nc
                 LEFT JOIN clientes c ON nc.id_cliente = c.id
                 WHERE nc.id = ? AND nc.eliminado = false";
@@ -129,6 +154,29 @@ class NotaCreditoRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([$idDetalle]);
         return $st->fetchAll();
+    }
+
+    // ── Información adicional ──────────────────────────────────────────────────
+
+    public function getInfoAdicional(int $idNC): array
+    {
+        $sql = "SELECT * FROM notas_credito_adicional WHERE id_nota_credito = ? ORDER BY id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([$idNC]);
+        return $st->fetchAll();
+    }
+
+    public function insertInfoAdicional(array $data): void
+    {
+        $sql = "INSERT INTO notas_credito_adicional (id_nota_credito, nombre, valor) VALUES (?, ?, ?)";
+        $st = $this->db->prepare($sql);
+        $st->execute([$data['id_nota_credito'], $data['nombre'], $data['valor']]);
+    }
+
+    public function deleteInfoAdicional(int $idNC): void
+    {
+        $st = $this->db->prepare("DELETE FROM notas_credito_adicional WHERE id_nota_credito = ?");
+        $st->execute([$idNC]);
     }
 
     /**

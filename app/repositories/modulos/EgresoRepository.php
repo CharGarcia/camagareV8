@@ -139,12 +139,14 @@ class EgresoRepository extends BaseRepository
 
     public function getConceptosEgreso(int $idEmpresa): array
     {
-        $sql = "SELECT * FROM empresa_opciones_ingreso_egreso 
-                WHERE id_empresa = :id_empresa 
-                  AND aplica_egresos = TRUE 
-                  AND UPPER(estado) = 'ACTIVO' 
-                  AND eliminado = FALSE 
-                ORDER BY nombre ASC";
+        $sql = "SELECT o.*, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                FROM empresa_opciones_ingreso_egreso o
+                LEFT JOIN plan_cuentas pc ON pc.id = o.id_cuenta_contable
+                WHERE o.id_empresa = :id_empresa
+                  AND o.aplica_egresos = TRUE
+                  AND UPPER(o.estado) = 'ACTIVO'
+                  AND o.eliminado = FALSE
+                ORDER BY o.nombre ASC";
         return $this->query($sql, [':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -159,6 +161,17 @@ class EgresoRepository extends BaseRepository
                       AND e.eliminado = FALSE
                       AND d.eliminado = FALSE
                     GROUP BY d.tipo_documento, d.id_referencia_documento
+                ),
+                nc_nd AS (
+                    -- Notas de crédito ('04') y débito ('05') de compra, enlazadas a la factura por documento_modificado
+                    SELECT nc.id_empresa, nc.id_proveedor, nc.documento_modificado,
+                           SUM(CASE WHEN nc.tipo_comprobante = '04' THEN nc.importe_total ELSE 0 END) AS total_nc,
+                           SUM(CASE WHEN nc.tipo_comprobante = '05' THEN nc.importe_total ELSE 0 END) AS total_nd
+                    FROM compras_cabecera nc
+                    WHERE nc.tipo_comprobante IN ('04','05')
+                      AND nc.eliminado = FALSE
+                      AND nc.id_empresa = :id_empresa
+                    GROUP BY nc.id_empresa, nc.id_proveedor, nc.documento_modificado
                 )
                 -- Unimos Compras (compras_cabecera) y Liquidaciones (liquidaciones_cabecera)
                 SELECT 'COMPRA' as tipo_doc_bd, c.id,
@@ -166,15 +179,19 @@ class EgresoRepository extends BaseRepository
                        c.fecha_emision,
                        c.importe_total AS monto_total,
                        COALESCE(p.total_pagado, 0) AS monto_pagado_previo,
-                       (c.importe_total - COALESCE(p.total_pagado, 0)) AS saldo_pendiente,
+                       (c.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) AS saldo_pendiente,
                        0 AS dias_credito
                 FROM compras_cabecera c
                 LEFT JOIN pagado p ON c.id = p.id_referencia_documento AND p.tipo_documento = 'COMPRA'
+                LEFT JOIN nc_nd nn ON nn.id_empresa = c.id_empresa
+                                  AND nn.id_proveedor = c.id_proveedor
+                                  AND nn.documento_modificado = CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)
                 WHERE c.id_proveedor = :id_prov
                   AND c.id_empresa = :id_empresa
                   AND c.eliminado = FALSE
+                  AND COALESCE(c.tipo_comprobante, '01') NOT IN ('04','05')
                   AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                  AND (c.importe_total - COALESCE(p.total_pagado, 0)) > 0.01
+                  AND (c.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
                 UNION ALL
                 SELECT 'LIQUIDACION' as tipo_doc_bd, l.id,
                        CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial) AS numero_documento,
@@ -336,6 +353,16 @@ class EgresoRepository extends BaseRepository
                           AND d.eliminado = FALSE
                           $excluirSql
                         GROUP BY d.id_referencia_documento
+                    ),
+                    nc_nd AS (
+                        SELECT nc.id_empresa, nc.id_proveedor, nc.documento_modificado,
+                               SUM(CASE WHEN nc.tipo_comprobante = '04' THEN nc.importe_total ELSE 0 END) AS total_nc,
+                               SUM(CASE WHEN nc.tipo_comprobante = '05' THEN nc.importe_total ELSE 0 END) AS total_nd
+                        FROM compras_cabecera nc
+                        WHERE nc.tipo_comprobante IN ('04','05')
+                          AND nc.eliminado = FALSE
+                          AND nc.id_empresa = :id_empresa
+                        GROUP BY nc.id_empresa, nc.id_proveedor, nc.documento_modificado
                     )
                     SELECT 'COMPRA' AS tipo_doc_bd,
                            cb.id,
@@ -344,17 +371,21 @@ class EgresoRepository extends BaseRepository
                            0 AS dias_credito,
                            cb.importe_total AS monto_total,
                            COALESCE(p.total_pagado, 0) AS monto_cobrado,
-                           (cb.importe_total - COALESCE(p.total_pagado, 0)) AS saldo_pendiente,
+                           (cb.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) AS saldo_pendiente,
                            prov.id             AS proveedor_id,
                            prov.razon_social   AS proveedor_nombre,
                            prov.identificacion AS proveedor_ruc
                     FROM compras_cabecera cb
                     INNER JOIN proveedores prov ON cb.id_proveedor = prov.id
                     LEFT  JOIN pagado p ON cb.id = p.id_referencia_documento
+                    LEFT  JOIN nc_nd nn ON nn.id_empresa = cb.id_empresa
+                                       AND nn.id_proveedor = cb.id_proveedor
+                                       AND nn.documento_modificado = CONCAT(cb.establecimiento_prov,'-',cb.punto_emision_prov,'-',cb.secuencial_prov)
                     WHERE cb.id_empresa = :id_empresa
                       AND cb.eliminado = FALSE
+                      AND COALESCE(cb.tipo_comprobante, '01') NOT IN ('04','05')
                       AND cb.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
-                      AND (cb.importe_total - COALESCE(p.total_pagado, 0)) > 0.01
+                      AND (cb.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
                       $filtroBusq
                     ORDER BY prov.razon_social ASC, cb.fecha_emision ASC
                     LIMIT 301";

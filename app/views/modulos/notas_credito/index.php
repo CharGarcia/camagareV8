@@ -166,6 +166,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'importe_total'       => 'Total',
                     'motivo'              => 'Motivo',
                     'usuario_nombre'      => 'Usuario',
+                    'estado_correo'       => 'Correo',
                     'estado'              => 'Estado',
                 ];
                 ?>
@@ -222,6 +223,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="sortable-header" role="button" onclick="window.NC_ordenar('usuario_nombre')" data-col="usuario_nombre">
                             Usuario <i class="bi <?= $ordenCol === 'usuario_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
+                        <th class="text-center sortable-header" role="button" onclick="window.NC_ordenar('estado_correo')" data-col="estado_correo">
+                            Correo <i class="bi <?= $ordenCol === 'estado_correo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        </th>
                         <th class="text-center pe-3 sortable-header" role="button" onclick="window.NC_ordenar('estado')" data-col="estado">
                             Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
@@ -230,7 +234,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <tbody id="nc-table-body">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-minus fs-3 d-block mb-2"></i>No se encontraron notas de crédito.</td>
+                            <td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-minus fs-3 d-block mb-2"></i>No se encontraron notas de crédito.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
@@ -242,6 +246,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 'borrador'   => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
                                 default      => 'bg-primary bg-opacity-10 text-primary border-primary',
                             };
+                            $estadoCorreo = $r['estado_correo'] ?? 'pendiente';
+                            $correoClass  = $estadoCorreo === 'enviado'
+                                ? 'bg-success bg-opacity-10 text-success border-success'
+                                : 'bg-warning bg-opacity-10 text-warning border-warning';
                             ?>
                             <tr class="nc-row" role="button" tabindex="0" data-row='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8') ?>' onclick="window.NC_abrirModalNC(this)">
                                 <td class="ps-3" data-col="numero"><code class="text-secondary"><?= htmlspecialchars(($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '')) ?></code></td>
@@ -254,6 +262,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td class="text-end fw-bold" data-col="importe_total">$<?= number_format((float)($r['importe_total'] ?? 0), 2) ?></td>
                                 <td data-col="motivo" class="text-truncate" style="max-width:180px"><?= htmlspecialchars($r['motivo'] ?? '') ?></td>
                                 <td data-col="usuario_nombre"><?= htmlspecialchars($r['usuario_nombre'] ?? '-') ?></td>
+                                <td class="text-center" data-col="estado_correo">
+                                    <span class="badge <?= $correoClass ?> border border-opacity-25"><?= ucfirst($estadoCorreo) ?></span>
+                                </td>
                                 <td class="text-center pe-3" data-col="estado">
                                     <span class="badge <?= $estadoClass ?> border border-opacity-25"><?= ucfirst($estado) ?></span>
                                 </td>
@@ -272,6 +283,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.nc_dec_p = <?= (int)($empresa['decimales_precio'] ?? 2) ?>;
     window.nc_dec_c = <?= (int)($empresa['decimales_cantidad'] ?? 2) ?>;
     window.NC_STORAGE_KEY = 'nc_borrador_' + <?= (int)($_SESSION['id_empresa'] ?? 0) ?> + '_' + <?= (int)($_SESSION['id_usuario'] ?? 0) ?>;
+    // Ordenamiento aplicado por el servidor (preferencia del usuario).
+    window.NC_ORDEN_COL = <?= json_encode($ordenCol ?? 'fecha_emision') ?>;
+    window.NC_ORDEN_DIR = <?= json_encode($ordenDir ?? 'DESC') ?>;
+    window.currentSort  = window.NC_ORDEN_COL;
+    window.currentDir   = window.NC_ORDEN_DIR;
 </script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/asiento_contable_tab.js?v=<?= time() ?>" defer></script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/notas_credito.js?v=<?= time() ?>" defer></script>

@@ -1337,7 +1337,7 @@ class AsientoBuilderService
      * Devuelve [] si no hay valores. Las líneas sin cuenta configurada se omiten;
      * el asiento quedará descuadrado y no se generará (se avisa).
      */
-    public function generarAsientoIngreso(int $idEmpresa, int $idIngreso): array
+    public function generarAsientoIngreso(int $idEmpresa, int $idIngreso, array $detallesConCuenta = []): array
     {
         $db = \App\core\Database::getConnection();
 
@@ -1360,13 +1360,20 @@ class AsientoBuilderService
             return [];
         }
 
-        // ── HABER: cuenta del concepto del ingreso → config Ingresos/Egresos ──
-        if (!empty($ingreso['concepto_id_cuenta'])) {
+        // ── HABER: contrapartida repartida por la cuenta de cada línea de descripción.
+        //    Por defecto la cuenta del concepto; si la línea trae otra, manda la de la línea.
+        $contrapartida = $this->contrapartidaPorCuenta(
+            $db, $idEmpresa, $idIngreso, 'ingreso',
+            (int) ($ingreso['concepto_id_cuenta'] ?? 0),
+            (string) ($ingreso['concepto_nombre'] ?? 'Ingreso'),
+            $totalMovido, $detallesConCuenta
+        );
+        foreach ($contrapartida as $linea) {
             $detalles[] = [
-                'id_cuenta_contable' => (int) $ingreso['concepto_id_cuenta'],
+                'id_cuenta_contable' => $linea['id_cuenta'],
                 'debe'               => 0.0,
-                'haber'              => $totalMovido,
-                'referencia_detalle' => $ingreso['concepto_nombre'] ?? 'Ingreso',
+                'haber'              => round($linea['monto'], 2),
+                'referencia_detalle' => $linea['referencia'],
             ];
         }
 
@@ -1379,7 +1386,7 @@ class AsientoBuilderService
      *   HABER: cuenta de cada forma de pago (config Cobros/Pagos), por su monto.
      *   DEBE : cuenta del concepto del egreso (config Ingresos/Egresos), por el total pagado.
      */
-    public function generarAsientoEgreso(int $idEmpresa, int $idEgreso): array
+    public function generarAsientoEgreso(int $idEmpresa, int $idEgreso, array $detallesConCuenta = []): array
     {
         $db = \App\core\Database::getConnection();
 
@@ -1402,17 +1409,134 @@ class AsientoBuilderService
             return [];
         }
 
-        // ── DEBE: cuenta del concepto del egreso → config Ingresos/Egresos ──
-        if (!empty($egreso['concepto_id_cuenta'])) {
+        // ── DEBE: contrapartida repartida por la cuenta de cada línea de descripción.
+        //    Por defecto la cuenta del concepto; si la línea trae otra, manda la de la línea.
+        $contrapartida = $this->contrapartidaPorCuenta(
+            $db, $idEmpresa, $idEgreso, 'egreso',
+            (int) ($egreso['concepto_id_cuenta'] ?? 0),
+            (string) ($egreso['concepto_nombre'] ?? 'Egreso'),
+            $totalMovido, $detallesConCuenta
+        );
+        foreach ($contrapartida as $linea) {
             $detalles[] = [
-                'id_cuenta_contable' => (int) $egreso['concepto_id_cuenta'],
-                'debe'               => $totalMovido,
+                'id_cuenta_contable' => $linea['id_cuenta'],
+                'debe'               => round($linea['monto'], 2),
                 'haber'              => 0.0,
-                'referencia_detalle' => $egreso['concepto_nombre'] ?? 'Egreso',
+                'referencia_detalle' => $linea['referencia'],
             ];
         }
 
         return $detalles;
+    }
+
+    /**
+     * Construye la contrapartida (lado concepto) de un ingreso/egreso GENERAL repartida por la
+     * cuenta contable elegida en cada línea de descripción. Para documentos sin líneas manuales
+     * (egresos/ingresos atados a módulo) devuelve UNA sola línea con la cuenta del concepto por el
+     * total, igual que antes (cero regresión).
+     *
+     * Fuente de la cuenta por línea, en orden de prioridad:
+     *   1. $detallesModal: lo que envió el modal al guardar/actualizar (descripcion + id_cuenta_contable).
+     *   2. El asiento ya existente del documento (regeneración sin modal): referencia_detalle → cuenta.
+     *   3. La cuenta del concepto.
+     *
+     * Si alguna línea no logra resolver cuenta, NO se concilia el redondeo: el asiento queda
+     * descuadrado a propósito para que no se genere (misma política que "forma sin cuenta").
+     *
+     * @param string $flujo 'ingreso' | 'egreso'
+     * @return array<int,array{id_cuenta:int,monto:float,referencia:string}>
+     */
+    private function contrapartidaPorCuenta(
+        \PDO $db, int $idEmpresa, int $idDocumento, string $flujo,
+        int $conceptoCuenta, string $conceptoNombre, float $totalMovido, array $detallesModal
+    ): array {
+        $esEgreso   = ($flujo === 'egreso');
+        $tablaDet   = $esEgreso ? 'egresos_detalle' : 'ingresos_detalle';
+        $colDoc     = $esEgreso ? 'id_egreso' : 'id_ingreso';
+        $colMonto   = $esEgreso ? 'monto_pagado' : 'monto_cobrado';
+        $manualTipo = $esEgreso ? 'MANUAL' : 'OTRO';
+
+        // 1. Líneas manuales del documento (descripción + monto). Definen líneas y montos.
+        $sql = "SELECT descripcion, {$colMonto} AS monto
+                FROM {$tablaDet}
+                WHERE {$colDoc} = :id AND eliminado = FALSE AND tipo_documento = :tipo
+                ORDER BY id ASC";
+        $st = $db->prepare($sql);
+        $st->execute([':id' => $idDocumento, ':tipo' => $manualTipo]);
+        $manualRows = $st->fetchAll(\PDO::FETCH_ASSOC);
+
+        // Sin líneas manuales (documento atado a módulo): una contrapartida por el total al concepto.
+        if (empty($manualRows)) {
+            if ($conceptoCuenta <= 0) return [];
+            return [['id_cuenta' => $conceptoCuenta, 'monto' => round($totalMovido, 2), 'referencia' => $conceptoNombre]];
+        }
+
+        // 2. Mapa descripción → cuenta elegida (modal prioritario; si no, asiento existente).
+        $mapaCuenta = [];
+        if (!empty($detallesModal)) {
+            foreach ($detallesModal as $d) {
+                if (($d['tipo_documento'] ?? $manualTipo) !== $manualTipo) continue;
+                $desc = trim((string) ($d['descripcion'] ?? ''));
+                $cta  = (int) ($d['id_cuenta_contable'] ?? 0);
+                if ($cta > 0) $mapaCuenta[$desc] = $cta;
+            }
+        } else {
+            // Recuperar del asiento existente del documento (lado contrapartida).
+            $ladoCol = $esEgreso ? 'd.debe' : 'd.haber';
+            $sqlAs = "SELECT d.referencia_detalle, d.id_cuenta_contable
+                      FROM asientos_contables_cabecera c
+                      INNER JOIN asientos_contables_detalle d ON d.id_asiento = c.id
+                      WHERE c.modulo_origen = :mod AND c.id_referencia_origen = :id
+                        AND c.id_empresa = :emp AND c.eliminado = false AND c.estado != 'anulado'
+                        AND d.eliminado = false AND {$ladoCol} > 0
+                      ORDER BY c.id DESC, d.id ASC";
+            $stAs = $db->prepare($sqlAs);
+            $stAs->execute([':mod' => $flujo, ':id' => $idDocumento, ':emp' => $idEmpresa]);
+            while ($r = $stAs->fetch(\PDO::FETCH_ASSOC)) {
+                $desc = trim((string) ($r['referencia_detalle'] ?? ''));
+                $cta  = (int) ($r['id_cuenta_contable'] ?? 0);
+                if ($desc !== '' && $cta > 0 && !isset($mapaCuenta[$desc])) {
+                    $mapaCuenta[$desc] = $cta;
+                }
+            }
+        }
+
+        // 3. Agrupar por cuenta resultante (cuenta de la línea ?: cuenta del concepto).
+        $grupos = [];
+        $faltaCuenta = false;
+        foreach ($manualRows as $row) {
+            $desc  = trim((string) ($row['descripcion'] ?? ''));
+            $monto = round((float) ($row['monto'] ?? 0), 2);
+            if ($monto <= 0) continue;
+            $cta = $mapaCuenta[$desc] ?? $conceptoCuenta;
+            if ($cta <= 0) { $faltaCuenta = true; continue; } // sin cuenta → descuadre intencional
+            if (!isset($grupos[$cta])) {
+                $grupos[$cta] = ['id_cuenta' => $cta, 'monto' => 0.0, 'referencia' => $desc !== '' ? $desc : $conceptoNombre];
+            }
+            $grupos[$cta]['monto'] = round($grupos[$cta]['monto'] + $monto, 2);
+        }
+
+        if (empty($grupos)) {
+            // No se mapeó ninguna cuenta: fallback al concepto por el total (o nada si tampoco hay).
+            if ($conceptoCuenta <= 0 || $faltaCuenta) return [];
+            return [['id_cuenta' => $conceptoCuenta, 'monto' => round($totalMovido, 2), 'referencia' => $conceptoNombre]];
+        }
+
+        // 4. Conciliar centavos contra el total movido (la pata banco/caja es la fuente de verdad).
+        //    Solo si TODAS las líneas resolvieron cuenta; si faltó alguna, dejamos el descuadre.
+        if (!$faltaCuenta) {
+            $sumaGrupos = round(array_sum(array_column($grupos, 'monto')), 2);
+            $dif = round($totalMovido - $sumaGrupos, 2);
+            if (abs($dif) >= 0.01) {
+                $keyMax = null; $max = -1.0;
+                foreach ($grupos as $k => $g) {
+                    if ($g['monto'] > $max) { $max = $g['monto']; $keyMax = $k; }
+                }
+                if ($keyMax !== null) $grupos[$keyMax]['monto'] = round($grupos[$keyMax]['monto'] + $dif, 2);
+            }
+        }
+
+        return array_values($grupos);
     }
 
     /**

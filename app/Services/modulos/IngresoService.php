@@ -47,6 +47,9 @@ class IngresoService
 
         $ingreso['detalles'] = $this->repository->getDetalles($id);
         $ingreso['pagos']    = $this->repository->getPagos($id);
+        // Enriquecer las líneas manuales con la cuenta contable usada en el asiento (si existe),
+        // para que la grilla del modal muestre la cuenta elegida al reabrir.
+        $this->enriquecerCuentasDetalle($ingreso, $id, $idEmpresa);
 
         return $ingreso;
     }
@@ -469,6 +472,43 @@ class IngresoService
         return $detalle ?: null;
     }
 
+    /**
+     * Agrega a cada línea manual del ingreso la cuenta contable con la que se contabilizó en el
+     * asiento (match por descripción ↔ referencia_detalle del lado Haber). No persiste nada: solo
+     * enriquece la respuesta para que el modal muestre la cuenta elegida.
+     */
+    private function enriquecerCuentasDetalle(array &$ingreso, int $idIngreso, int $idEmpresa): void
+    {
+        if (empty($ingreso['detalles'])) {
+            return;
+        }
+        $asiento = $this->asientoContableService()->getAsientoPorOrigen('ingreso', $idIngreso, $idEmpresa);
+        if (!$asiento || empty($asiento['detalles'])) {
+            return;
+        }
+        $mapa = [];
+        foreach ($asiento['detalles'] as $ad) {
+            if ((float) ($ad['haber'] ?? 0) <= 0) continue; // contrapartida del ingreso = lado Haber
+            $ref = trim((string) ($ad['referencia_detalle'] ?? ''));
+            if ($ref === '' || isset($mapa[$ref])) continue;
+            $mapa[$ref] = [
+                'id'     => (int) ($ad['id_cuenta_contable'] ?? 0),
+                'codigo' => $ad['codigo_cuenta'] ?? '',
+                'nombre' => $ad['nombre_cuenta'] ?? '',
+            ];
+        }
+        foreach ($ingreso['detalles'] as &$d) {
+            if (($d['tipo_documento'] ?? '') !== 'OTRO') continue;
+            $ref = trim((string) ($d['descripcion'] ?? ''));
+            if (isset($mapa[$ref])) {
+                $d['id_cuenta_contable'] = $mapa[$ref]['id'];
+                $d['cuenta_codigo']      = $mapa[$ref]['codigo'];
+                $d['cuenta_nombre']      = $mapa[$ref]['nombre'];
+            }
+        }
+        unset($d);
+    }
+
     /** Genera el asiento sin propagar errores (lo contable no bloquea lo operativo). */
     private function generarAsientoContableSeguro(int $idIngreso, array $data): void
     {
@@ -494,7 +534,10 @@ class IngresoService
             return;
         }
 
-        $detalles = (new AsientoBuilderService())->generarAsientoIngreso($idEmpresa, $idIngreso);
+        // Cuentas por línea elegidas en el modal (si vinieron en el payload). En regeneración
+        // masiva/sincronización no llegan y el builder las recupera del asiento existente.
+        $detallesConCuenta = $data['detalles'] ?? [];
+        $detalles = (new AsientoBuilderService())->generarAsientoIngreso($idEmpresa, $idIngreso, $detallesConCuenta);
         if (empty($detalles)) {
             return;
         }

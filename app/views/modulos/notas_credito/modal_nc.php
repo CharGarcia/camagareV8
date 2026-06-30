@@ -96,41 +96,47 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                                         </div>
                                     </div>
 
-                                    <!-- Documento Modificado -->
+                                    <!-- Cliente (se selecciona primero) -->
                                     <div class="col-12 mt-2">
-                                        <div class="p-2 border rounded-3 bg-white shadow-sm border-primary border-opacity-10">
+                                        <div class="p-2 border rounded-3 bg-light bg-opacity-10">
                                             <div class="row g-2 align-items-center">
-                                                <div class="col-md-6 position-relative">
-                                                    <label class="x-small fw-bold text-muted mb-1">Factura a Modificar</label>
-                                                    <div class="input-group input-group-sm rounded-pill overflow-hidden border border-primary border-opacity-25">
-                                                        <span class="input-group-text bg-white border-0 text-primary"><i class="bi bi-file-earmark-text"></i></span>
-                                                        <input type="text" class="form-control border-0 px-1" id="nc_factura_search" placeholder="Buscar factura autorizada..." autocomplete="off">
-                                                        <input type="hidden" name="num_doc_modificado" id="nc_num_doc_modificado">
-                                                        <input type="hidden" name="fecha_emision_docs_sustento" id="nc_fecha_emision_docs_sustento">
+                                                <div class="col-md-12 position-relative">
+                                                    <label class="x-small fw-bold text-muted mb-1">1. Seleccione el cliente</label>
+                                                    <div class="input-group input-group-sm flex-grow-1 elevation-1 rounded-pill overflow-hidden border">
+                                                        <span class="input-group-text bg-white border-0 text-primary"><i class="bi bi-search"></i></span>
+                                                        <input type="text" class="form-control border-0 px-1" id="nc_cliente_search" placeholder="Buscar cliente por RUC o Razón Social..." autocomplete="off">
+                                                        <input type="hidden" name="id_cliente" id="nc_id_cliente">
                                                     </div>
-                                                    <div id="nc_factura_dropdown" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: 100%; max-height: 250px; overflow-y: auto; right: 0px; top: 55px;"></div>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <div id="nc_info_factura_modificada" class="small text-muted pt-3">
-                                                        <!-- Se llena vía JS -->
-                                                    </div>
+                                                    <div id="nc_cliente_dropdown" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: 100%; max-height: 250px; overflow-y: auto; right: 0px; top: 55px;"></div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <!-- Cliente -->
+                                    <!-- Documento Modificado (depende del cliente) -->
                                     <div class="col-12 mt-2">
-                                        <div class="p-2 border rounded-3 bg-light bg-opacity-10">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-12 position-relative">
-                                                    <div class="input-group input-group-sm flex-grow-1 elevation-1 rounded-pill overflow-hidden border">
-                                                        <span class="input-group-text bg-white border-0 text-primary"><i class="bi bi-search"></i></span>
-                                                        <input type="text" class="form-control border-0 px-1" id="nc_cliente_search" placeholder="Buscar cliente por RUC o Razón Social..." autocomplete="off" readonly>
-                                                        <input type="hidden" name="id_cliente" id="nc_id_cliente">
+                                        <div class="p-2 border rounded-3 bg-white shadow-sm border-primary border-opacity-10">
+                                            <div class="row g-2 align-items-end">
+                                                <div class="col-md-5 position-relative">
+                                                    <label class="x-small fw-bold text-muted mb-1">2. Factura / Documento a modificar</label>
+                                                    <div class="input-group input-group-sm rounded-pill overflow-hidden border border-primary border-opacity-25">
+                                                        <span class="input-group-text bg-white border-0 text-primary"><i class="bi bi-file-earmark-text"></i></span>
+                                                        <input type="text" class="form-control border-0 px-1" id="nc_factura_search" name="num_doc_modificado" placeholder="Seleccione un cliente primero..." autocomplete="off" maxlength="17" inputmode="numeric" disabled>
                                                     </div>
-                                                    <div id="nc_cliente_dropdown" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: 100%; max-height: 250px; overflow-y: auto; right: 0px; top: 35px;"></div>
+                                                    <div id="nc_factura_dropdown" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: 100%; max-height: 250px; overflow-y: auto; right: 0px; top: 55px;"></div>
                                                 </div>
+                                                <div class="col-md-3">
+                                                    <label class="x-small fw-bold text-muted mb-1">Fecha del documento</label>
+                                                    <input type="date" name="fecha_emision_docs_sustento" id="nc_fecha_emision_docs_sustento" class="form-control form-control-sm border-primary border-opacity-25 py-0" style="height: 31px;" disabled>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div id="nc_info_factura_modificada" class="small text-muted">
+                                                        <!-- Se llena vía JS -->
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="x-small text-muted mt-1 ps-1">
+                                                <i class="bi bi-info-circle me-1"></i>Elija una factura del cliente o escriba el número manualmente si no figura en el listado.
                                             </div>
                                         </div>
                                     </div>
@@ -195,11 +201,34 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                                 </div>
                             </div>
 
-                            <!-- Pie de Totales (Diseño Factura de Venta) -->
+                            <!-- Pie: Información Adicional (izquierda) + Totales (derecha) -->
                             <div class="p-3 border-top bg-light">
                                 <div class="row g-3">
-                                    <!-- Izquierda: Espacio para info adicional si se requiere -->
-                                    <div class="col-md-8"></div>
+                                    <!-- Izquierda: Información Adicional -->
+                                    <div class="col-md-8">
+                                        <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+                                            <div class="px-2 py-1 bg-light border-bottom">
+                                                <span class="x-small fw-bold text-muted"><i class="bi bi-info-circle me-1"></i>Información Adicional</span>
+                                            </div>
+                                            <div class="table-responsive" style="max-height: 160px;">
+                                                <table class="table table-sm mb-0">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th class="ps-2 py-0 small fw-bold text-muted" style="width: 40%;">Concepto</th>
+                                                            <th class="py-0 small fw-bold text-muted" style="width: 50%;">Detalle</th>
+                                                            <th class="py-0" style="width: 10%;"></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="nc-tbody-info-adicional"></tbody>
+                                                </table>
+                                            </div>
+                                            <div class="p-1 border-top bg-light">
+                                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="window.NC_agregarInfoAdicional()">
+                                                    <i class="bi bi-plus-circle me-1"></i> Agregar línea
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
 
                                     <!-- Derecha: Totales Verticales -->
                                     <div class="col-md-4">
@@ -358,13 +387,6 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                                         <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.NC_copiarCampoSri('nc-sri-correo-cliente')" title="Copiar correo">
                                             <i class="bi bi-clipboard"></i>
                                         </button>
-                                    </div>
-                                </div>
-                                <!-- Mensajes del SRI -->
-                                <div class="col-12">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-chat-dots me-1"></i>Mensajes del SRI</label>
-                                    <div id="nc-sri-mensajes" class="border rounded-2 bg-light p-2" style="min-height: 80px; max-height: 200px; overflow-y: auto; font-size: 0.8rem;">
-                                        <p class="text-muted text-center mb-0 py-3 small">Sin respuesta del SRI registrada.</p>
                                     </div>
                                 </div>
                                 <!-- Historial de Envíos SRI -->

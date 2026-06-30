@@ -277,8 +277,6 @@
         window.LC_PROVEEDOR_RUC   = '';
         const badge = document.getElementById('liq-sri-badge-estado');
         if (badge) { badge.textContent = 'Sin enviar'; badge.className = 'badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2'; }
-        const msgs = document.getElementById('liq-sri-mensajes-container');
-        if (msgs) msgs.innerHTML = '<p class="text-muted text-center mb-0 py-3 small">Sin respuesta del SRI registrada.</p>';
         const hist = document.getElementById('liq-sri-tbody-historial');
         if (hist) hist.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted">Sin historial de envíos.</td></tr>';
         const btnAnular = document.getElementById('btnAnularLiq');
@@ -1061,18 +1059,6 @@
             } catch { elFecha.value = data.fecha_autorizacion; }
         }
 
-        const msgBox = document.getElementById('liq-sri-mensajes-container');
-        if (msgBox) {
-            let mensajes = [];
-            if (data.mensajes_sri) { try { mensajes = JSON.parse(data.mensajes_sri); } catch { mensajes = []; } }
-            msgBox.innerHTML = mensajes.length
-                ? mensajes.map(m => {
-                    const tipo = (m.tipo || 'INFO').toUpperCase();
-                    const cls2 = tipo === 'ERROR' ? 'text-danger' : tipo === 'ADVERTENCIA' ? 'text-warning' : 'text-info';
-                    return `<div class="mb-1 ${cls2}"><strong>[${tipo}]</strong> ${m.mensaje || ''}${m.info ? `<br><small class="text-muted">${m.info}</small>` : ''}</div>`;
-                }).join('')
-                : '<p class="text-muted text-center mb-0 py-3 small">Sin respuesta del SRI registrada.</p>';
-        }
     }
 
     async function liqCargarHistorialSri(id) {

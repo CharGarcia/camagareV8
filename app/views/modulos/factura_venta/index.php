@@ -1141,13 +1141,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         </button>
                                     </div>
                                 </div>
-                                <!-- Mensajes / Observaciones SRI -->
-                                <div class="col-12">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-chat-left-text me-1"></i>Mensajes del SRI</label>
-                                    <div id="sri-mensajes-container" class="border rounded-2 bg-light p-2" style="min-height: 80px; max-height: 200px; overflow-y: auto; font-size: 0.8rem;">
-                                        <p class="text-muted text-center mb-0 py-3 small">Sin respuesta del SRI registrada.</p>
-                                    </div>
-                                </div>
                                 <!-- Historial de envíos SRI -->
                                 <div class="col-12">
                                     <label class="small fw-bold text-muted mb-1"><i class="bi bi-clock-history me-1"></i>Historial de Envíos</label>
@@ -2253,10 +2246,7 @@ $perm = $permOriginal;
         _fvSaldoPendiente    = 0;
         _fvIngresoDepsCargas = false; // Forzar recarga de catálogos al cambiar factura
 
-        // Mensajes y Historial SRI
-        const msgSri = document.getElementById('sri-mensajes-container');
-        if (msgSri) msgSri.innerHTML = '<p class="text-muted text-center mb-0 py-3 small">Sin respuesta del SRI registrada.</p>';
-
+        // Historial SRI
         const histSri = document.getElementById('sri-tbody-historial');
         if (histSri) histSri.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">Sin historial de envíos.</td></tr>';
 
@@ -2687,27 +2677,6 @@ $perm = $permOriginal;
             }
         }
 
-        // Mensajes del SRI
-        const msgBox = document.getElementById('sri-mensajes-container');
-        if (msgBox) {
-            let mensajes = [];
-            if (data.mensajes_sri) {
-                try {
-                    mensajes = JSON.parse(data.mensajes_sri);
-                } catch {
-                    mensajes = [];
-                }
-            }
-            if (mensajes.length > 0) {
-                msgBox.innerHTML = mensajes.map(m => {
-                    const tipo = (m.tipo || 'INFO').toUpperCase();
-                    const cls = tipo === 'ERROR' ? 'text-danger' : tipo === 'ADVERTENCIA' ? 'text-warning' : 'text-info';
-                    return `<div class="mb-1 ${cls}"><strong>[${tipo}]</strong> ${m.mensaje || ''}${m.info ? `<br><small class="text-muted">${m.info}</small>` : ''}</div>`;
-                }).join('');
-            } else {
-                msgBox.innerHTML = '<p class="text-muted text-center mb-0 py-3 small">Sin respuesta del SRI registrada.</p>';
-            }
-        }
     }
 
     // ”€”€ Historial SRI ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€

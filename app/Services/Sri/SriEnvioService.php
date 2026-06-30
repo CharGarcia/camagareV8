@@ -323,9 +323,25 @@ class SriEnvioService
         $empresaModel = new \App\models\Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
 
+        $infoAdicional = $repo->getInfoAdicional($idNC);
+
+        // Dirección del establecimiento para el XML (igual que en el guardado).
+        $dirEstablecimiento = null;
+        if (!empty($cabecera['id_establecimiento'])) {
+            try {
+                $estRepo = new \App\repositories\modulos\EmpresaRepository();
+                foreach ($estRepo->getEstablecimientos($idEmpresa) as $est) {
+                    if ((int)$est['id'] === (int)$cabecera['id_establecimiento']) {
+                        $dirEstablecimiento = $est['direccion'] ?? null;
+                        break;
+                    }
+                }
+            } catch (\Throwable) {}
+        }
+
         // 1. Generar XML
         $xmlService = new \App\Services\Xml\XmlNotaCreditoService();
-        $xmlLimpio  = $xmlService->generar($cabecera, $detalles, $empresa);
+        $xmlLimpio  = $xmlService->generar($cabecera, $detalles, $infoAdicional, $empresa, $dirEstablecimiento);
 
         // 2. Obtener config firma
         $firmaConfig = $this->getFirmaConfig($idEmpresa);

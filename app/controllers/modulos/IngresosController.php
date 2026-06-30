@@ -32,6 +32,21 @@ class IngresosController extends BaseModuloController
         );
     }
 
+    /** Buscador predictivo de cuentas contables de movimiento para la grilla manual de ingresos. */
+    public function searchCuentasAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q = trim($_GET['q'] ?? '');
+
+        $repoCta = new \App\repositories\modulos\PlanCuentaRepository();
+        $cuentas = $repoCta->searchCuentas($idEmpresa, $q, '', 20);
+        echo json_encode(['ok' => true, 'data' => $cuentas]);
+        exit;
+    }
+
     public function index(): void
     {
         $this->requireLeer();

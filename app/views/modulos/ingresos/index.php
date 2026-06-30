@@ -283,10 +283,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.abrirModalClienteCrear ? window.abrirModalClienteCrear() : Swal.fire('Módulo en desarrollo','','info')" title="Registrar nuevo cliente">
                         <i class="bi bi-person-plus fs-6"></i>
                     </button>
-                    <!-- Botones de concepto de ingreso (derecha) -->
+                    <!-- Conceptos de ingreso (derecha): los relacionados con un módulo van como botón; el resto en un selector -->
+                    <?php
+                        $conceptosBoton  = array_values(array_filter($conceptos, fn($c) => ($c['comportamiento'] ?? 'GENERAL') !== 'GENERAL'));
+                        $conceptosSelect = array_values(array_filter($conceptos, fn($c) => ($c['comportamiento'] ?? 'GENERAL') === 'GENERAL'));
+                    ?>
                     <div id="concepto-btns-group" class="ms-auto d-flex gap-1 align-items-center flex-wrap">
                         <div class="vr mx-1"></div>
-<?php foreach ($conceptos as $c): ?>
+<?php foreach ($conceptosBoton as $c): ?>
                         <button type="button"
                                 class="btn btn-sm btn-outline-secondary concepto-ingreso-btn"
                                 data-id="<?= $c['id'] ?>"
@@ -294,6 +298,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <?= htmlspecialchars($c['nombre']) ?>
                         </button>
                         <?php endforeach; ?>
+                        <select id="m-select-concepto-general" class="form-select form-select-sm" style="width:auto;max-width:220px;"
+                                onchange="seleccionarConceptoGeneralIngreso(this.value)"
+                                title="Otros conceptos (sin relación con módulos)">
+                            <option value="">Otro concepto…</option>
+                            <?php foreach ($conceptosSelect as $c): ?>
+                            <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['nombre']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                 </div>
 
@@ -370,7 +382,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     <select name="id_ingreso_concepto" id="m-select-concepto" class="d-none" onchange="manejarCambioConceptoIngreso(this)">
                                         <option value="" data-comportamiento="GENERAL"></option>
                                         <?php foreach ($conceptos as $c): ?>
-                                            <option value="<?= $c['id'] ?>" data-comportamiento="<?= htmlspecialchars($c['comportamiento'] ?? 'GENERAL') ?>">
+                                            <option value="<?= $c['id'] ?>" data-comportamiento="<?= htmlspecialchars($c['comportamiento'] ?? 'GENERAL') ?>"
+                                                    data-cuenta-id="<?= (int)($c['id_cuenta_contable'] ?? 0) ?>"
+                                                    data-cuenta-codigo="<?= htmlspecialchars($c['cuenta_codigo'] ?? '') ?>"
+                                                    data-cuenta-nombre="<?= htmlspecialchars($c['cuenta_nombre'] ?? '') ?>">
                                                 <?= htmlspecialchars($c['nombre']) ?>
                                             </option>
                                         <?php endforeach; ?>
@@ -432,8 +447,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                 <table class="table table-sm table-detalle mb-0 text-nowrap align-middle">
                                                     <thead class="table-light border-bottom">
                                                         <tr>
-                                                            <th class="ps-3 py-2 small fw-bold text-muted" style="width: 75%;">Descripción / Concepto</th>
-                                                            <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 20%;">Monto</th>
+                                                            <th class="ps-3 py-2 small fw-bold text-muted" style="width: 45%;">Descripción / Concepto</th>
+                                                            <th class="py-2 small fw-bold text-muted" style="width: 35%;">Cuenta contable</th>
+                                                            <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 15%;">Monto</th>
                                                             <th style="width: 40px;"></th>
                                                         </tr>
                                                     </thead>
@@ -453,6 +469,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         </div>
                                     </div>
 
+                                    <!-- Dropdown compartido del buscador de cuentas por línea -->
+                                    <div id="m-cuenta-drop" class="list-group shadow position-fixed d-none" style="z-index:2200; max-height:200px; overflow-y:auto; width:320px;"></div>
+
                                     <!-- Sección Observaciones Generales -->
                                     <div class="mt-3">
                                         <label class="form-label small fw-bold">Observaciones Generales</label>
@@ -468,7 +487,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     </div>
 
                                     <div class="row g-2 mb-2 bg-light p-2 rounded border">
-                                        <div class="col-md-5">
+                                        <div class="col-md-7">
                                             <label class="form-label small fw-bold d-flex align-items-center">Forma de Cobro <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('ingresos', 'm-add-cobro-forma', 'id_forma_cobro_default') ?></label>
                                             <select id="m-add-cobro-forma" class="form-select form-select-sm">
                                                 <option value="">-- Seleccione --</option>
@@ -484,14 +503,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             </select>
                                             <div id="ing-saldo-forma" class="small mt-1 d-none"></div>
                                         </div>
-                                        <div class="col-md-4">
+                                        <div class="col-md-3">
                                             <label class="form-label small fw-bold">Monto</label>
                                             <input type="number" id="m-add-cobro-monto" class="form-control form-control-sm input-numeric fw-bold" step="0.01" value="0.00">
                                         </div>
-                                        <div class="col-md-3 d-flex align-items-end">
-                                            <button type="button" class="btn btn-primary btn-sm w-100" onclick="agregarLineaCobro()">
-                                                <i class="bi bi-plus-lg me-1"></i> Agregar
-                                            </button>
+                                        <div class="col-md-2">
+                                            <label class="form-label small fw-bold d-block">&nbsp;</label>
+                                            <button type="button" class="btn btn-primary btn-sm w-100 px-1" onclick="agregarLineaCobro()" title="Agregar forma de cobro">Agregar</button>
                                         </div>
                                         <!-- Campos condicionales para BANCO -->
                                         <div id="wrapper-banco-extra" class="col-12 d-none">
@@ -682,12 +700,45 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             btn.classList.toggle('btn-outline-secondary', !activo);
             btn.classList.toggle('active', activo);
         });
+        // Sincronizar el selector de conceptos generales (sin relación con módulos)
+        const selGen = document.getElementById('m-select-concepto-general');
+        if (selGen) {
+            const existe = [...selGen.options].some(o => o.value !== '' && o.value == id);
+            selGen.value = existe ? id : '';
+        }
     }
 
     function setConceptoBotonesDisabled(disabled) {
         document.querySelectorAll('.concepto-ingreso-btn').forEach(btn => {
             btn.disabled = disabled;
         });
+        const selGen = document.getElementById('m-select-concepto-general');
+        if (selGen) selGen.disabled = disabled;
+    }
+
+    function seleccionarConceptoGeneralIngreso(id) {
+        const sel = document.getElementById('m-select-concepto');
+        if (!sel || sel.value == id) return;
+        const hayDatos = docPendientes.length > 0
+                      || detalleManual.some(d => d.descripcion.trim() !== '' || parseFloat(d.monto) > 0);
+        const aplicarCambio = () => { sel.value = id; manejarCambioConceptoIngreso(sel); };
+        if (hayDatos) {
+            Swal.fire({
+                title: '¿Cambiar concepto?',
+                text: 'Al cambiar el concepto se eliminará toda la información de detalle que has agregado. ¿Deseas continuar?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: '<i class="bi bi-trash3 me-1"></i> Sí, cambiar',
+                cancelButtonText: 'Cancelar',
+            }).then(result => {
+                if (result.isConfirmed) aplicarCambio();
+                else sincronizarBotonesConcepto(sel.value);
+            });
+        } else {
+            aplicarCambio();
+        }
     }
 
     function manejarCambioConceptoIngreso(sel) {
@@ -1103,29 +1154,41 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             
             // Si está vacío y no está en lectura, inicializar línea inteligente
             if (detalleManual.length === 0 && !isObsReadOnly) {
-                detalleManual.push({ descripcion: '', monto: 0 });
+                detalleManual.push({ descripcion: '', monto: 0, ...ingConceptoCuentaActual() });
             }
 
             if (detalleManual.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3" class="text-center py-3 small text-muted">Sin registros asignados.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 small text-muted">Sin registros asignados.</td></tr>';
             } else {
                 detalleManual.forEach((d, idx) => {
                     const tr = document.createElement('tr');
                     tr.className = 'row-detalle';
-                    
+                    const ctaTxt = d.cuenta_codigo ? `${d.cuenta_codigo} - ${d.cuenta_nombre}` : '';
+
                     tr.innerHTML = `
                         <td class="ps-3">
-                            <input type="text" class="form-control form-control-sm input-detalle" 
-                                value="${d.descripcion}" 
-                                placeholder="Escriba la descripción o referencia del ingreso..." 
+                            <input type="text" class="form-control form-control-sm input-detalle"
+                                value="${d.descripcion}"
+                                placeholder="Escriba la descripción o referencia del ingreso..."
                                 ${isObsReadOnly ? 'disabled' : ''}
                                 oninput="actualizarManualIngresoDesc(${idx}, this.value)">
                         </td>
+                        <td class="px-1">
+                            <input type="text" class="form-control form-control-sm input-detalle ing-cuenta-input"
+                                value="${ctaTxt.replace(/"/g, '&quot;')}"
+                                placeholder="Buscar cuenta contable..."
+                                autocomplete="off"
+                                data-idx="${idx}"
+                                ${isObsReadOnly ? 'disabled' : ''}
+                                oninput="ingCuentaInput(this)"
+                                onfocus="this.select()"
+                                onblur="ingCuentaBlur(this)">
+                        </td>
                         <td class="pe-4">
-                            <input type="number" class="form-control form-control-sm input-detalle text-end fw-bold" 
-                                value="${d.monto > 0 ? d.monto.toFixed(2) : ''}" 
-                                placeholder="0.00" 
-                                step="0.01" 
+                            <input type="number" class="form-control form-control-sm input-detalle text-end fw-bold"
+                                value="${d.monto > 0 ? d.monto.toFixed(2) : ''}"
+                                placeholder="0.00"
+                                step="0.01"
                                 ${isObsReadOnly ? 'disabled' : ''}
                                 oninput="actualizarManualIngresoMonto(${idx}, this.value)">
                         </td>
@@ -1175,9 +1238,74 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     function agregarFilaManualIngreso() {
-        detalleManual.push({ descripcion: '', monto: 0 });
+        detalleManual.push({ descripcion: '', monto: 0, ...ingConceptoCuentaActual() });
         renderDetalles();
         recalcularTotales();
+    }
+
+    // ── Cuenta contable por línea ─────────────────────────────────────────────
+    // Cuenta por defecto = la del concepto seleccionado (puede cambiarse por línea).
+    function ingConceptoCuentaActual() {
+        const sel = document.getElementById('m-select-concepto');
+        const opt = sel ? sel.options[sel.selectedIndex] : null;
+        if (!opt) return {};
+        const id = parseInt(opt.dataset.cuentaId || '0') || 0;
+        if (!id) return {};
+        return { id_cuenta: id, cuenta_codigo: opt.dataset.cuentaCodigo || '', cuenta_nombre: opt.dataset.cuentaNombre || '' };
+    }
+
+    let _ingCuentaTimer = null;
+    function ingCuentaInput(input) {
+        const drop = document.getElementById('m-cuenta-drop');
+        const idx  = parseInt(input.dataset.idx);
+        const q    = input.value.trim();
+        clearTimeout(_ingCuentaTimer);
+        if (q.length < 2) { drop.classList.add('d-none'); return; }
+        _ingCuentaTimer = setTimeout(() => {
+            fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/searchCuentasAjax?q=${encodeURIComponent(q)}`)
+                .then(r => r.json())
+                .then(res => {
+                    drop.innerHTML = '';
+                    if (!res.ok || !res.data || res.data.length === 0) {
+                        drop.innerHTML = '<div class="list-group-item small text-muted">Sin resultados.</div>';
+                    } else {
+                        res.data.forEach(item => {
+                            const b = document.createElement('button');
+                            b.type = 'button';
+                            b.className = 'list-group-item list-group-item-action py-1 small';
+                            b.innerHTML = `<strong>${item.codigo}</strong> - ${item.nombre}`;
+                            // mousedown + preventDefault: selecciona antes de que el input pierda foco.
+                            b.onmousedown = (e) => { e.preventDefault(); ingCuentaSelect(idx, item); };
+                            drop.appendChild(b);
+                        });
+                    }
+                    const r = input.getBoundingClientRect();
+                    drop.style.left  = r.left + 'px';
+                    drop.style.top   = r.bottom + 'px';
+                    drop.style.width = Math.max(r.width, 280) + 'px';
+                    drop.classList.remove('d-none');
+                })
+                .catch(() => drop.classList.add('d-none'));
+        }, 250);
+    }
+
+    function ingCuentaSelect(idx, item) {
+        if (detalleManual[idx]) {
+            detalleManual[idx].id_cuenta     = item.id;
+            detalleManual[idx].cuenta_codigo = item.codigo;
+            detalleManual[idx].cuenta_nombre = item.nombre;
+        }
+        document.getElementById('m-cuenta-drop').classList.add('d-none');
+        renderDetalles();
+    }
+
+    function ingCuentaBlur(input) {
+        setTimeout(() => {
+            document.getElementById('m-cuenta-drop').classList.add('d-none');
+            const idx = parseInt(input.dataset.idx);
+            const d = detalleManual[idx];
+            if (d) input.value = d.cuenta_codigo ? `${d.cuenta_codigo} - ${d.cuenta_nombre}` : '';
+        }, 150);
     }
 
     function eliminarFilaManualIngreso(idx) {
@@ -1505,7 +1633,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     monto_documento: d.monto,
                     saldo_anterior: d.monto,
                     monto_cobrado: d.monto,
-                    saldo_actual: 0
+                    saldo_actual: 0,
+                    id_cuenta_contable: d.id_cuenta || null
                 });
             });
         }
@@ -1716,7 +1845,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     
                     detalleManual = (ing.detalles || []).map(d => ({
                         descripcion: d.descripcion || 'Detalle',
-                        monto: parseFloat(d.monto_cobrado)
+                        monto: parseFloat(d.monto_cobrado),
+                        id_cuenta: d.id_cuenta_contable ? parseInt(d.id_cuenta_contable) : 0,
+                        cuenta_codigo: d.cuenta_codigo || '',
+                        cuenta_nombre: d.cuenta_nombre || ''
                     }));
                     
                     renderDetalles();
@@ -2270,23 +2402,35 @@ window.modalCrearOpcionIngreso = function () {
 
 // Callback tras guardar opción: agrega el nuevo botón de concepto dinámicamente
 window.onOpcionCreada = function (id, nombre, comportamiento) {
-    const grupo = document.getElementById('concepto-btns-group');
-    const sel   = document.getElementById('m-select-concepto');
+    comportamiento = comportamiento || 'GENERAL';
+    const grupo  = document.getElementById('concepto-btns-group');
+    const sel    = document.getElementById('m-select-concepto');
+    const selGen = document.getElementById('m-select-concepto-general');
 
-    if (grupo && sel) {
-        // Agregar al select oculto
+    if (sel) {
+        // Agregar al select oculto (fuente de verdad del concepto seleccionado)
         const opt = document.createElement('option');
         opt.value = id;
-        opt.dataset.comportamiento = comportamiento || 'GENERAL';
+        opt.dataset.comportamiento = comportamiento;
         opt.textContent = nombre;
         sel.appendChild(opt);
+    }
 
-        // Agregar botón visible
+    if (comportamiento === 'GENERAL') {
+        // Concepto sin relación con módulos → al selector
+        if (selGen) {
+            const optG = document.createElement('option');
+            optG.value = id;
+            optG.textContent = nombre;
+            selGen.appendChild(optG);
+        }
+    } else if (grupo && sel) {
+        // Concepto relacionado con un módulo → botón visible
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'btn btn-sm btn-outline-secondary concepto-ingreso-btn';
         btn.dataset.id = id;
-        btn.dataset.comportamiento = comportamiento || 'GENERAL';
+        btn.dataset.comportamiento = comportamiento;
         btn.textContent = nombre;
         btn.addEventListener('click', function () {
             if (sel.value == this.dataset.id) return;
@@ -2306,7 +2450,8 @@ window.onOpcionCreada = function (id, nombre, comportamiento) {
                 aplicar();
             }
         });
-        grupo.appendChild(btn);
+        // Insertar antes del selector general para conservar el orden
+        if (selGen) grupo.insertBefore(btn, selGen); else grupo.appendChild(btn);
     }
 
     Swal.fire({

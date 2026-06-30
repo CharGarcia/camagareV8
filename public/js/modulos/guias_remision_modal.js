@@ -131,7 +131,6 @@
         document.getElementById('gr-sri-correo-cliente').value          = '';
         window.GR_FECHA_EMISION = null;
         window.GR_CLIENTE_RUC   = '';
-        document.getElementById('gr-sri-mensajes').innerHTML       = '<p class="text-muted text-center mb-0 py-3 small">Sin respuesta del SRI registrada.</p>';
         document.getElementById('gr-sri-tbody-historial').innerHTML= '<tr><td colspan="4" class="text-center py-3 text-muted">Sin historial de envíos.</td></tr>';
 
         document.getElementById('gr-tbody-detalle').innerHTML = '';
@@ -232,32 +231,6 @@
         // Guardar globales para validación de anulación
         window.GR_FECHA_EMISION = (cab.fecha_emision || '').split(' ')[0].split('T')[0] || null;
         window.GR_CLIENTE_RUC   = (cab.cliente_ruc   || '').trim();
-
-        // Mensajes SRI
-        const msgEl = document.getElementById('gr-sri-mensajes');
-        if (cab.mensajes_sri) {
-            try {
-                const msgs = JSON.parse(cab.mensajes_sri);
-                if (Array.isArray(msgs) && msgs.length > 0) {
-                    msgEl.innerHTML = msgs.map(m => `
-                        <div class="mb-2 pb-2 border-bottom">
-                            <div class="d-flex justify-content-between align-items-start gap-2">
-                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-10 small">${m.identificador || 'ERROR'}</span>
-                                <small class="text-muted" style="font-size:0.7rem">${m.tipo || ''}</small>
-                            </div>
-                            <div class="mt-1 fw-medium text-wrap">${m.mensaje || ''}</div>
-                            ${m.informacionAdicional ? `<div class="small text-muted mt-1">${m.informacionAdicional}</div>` : ''}
-                        </div>
-                    `).join('');
-                } else {
-                    msgEl.innerHTML = `<div class="p-2 small text-dark">${cab.mensajes_sri}</div>`;
-                }
-            } catch(e) {
-                msgEl.innerHTML = `<div class="p-2 small text-dark">${cab.mensajes_sri}</div>`;
-            }
-        } else {
-            msgEl.innerHTML = '<p class="text-muted text-center mb-0 py-3 small">Sin respuesta del SRI registrada.</p>';
-        }
 
         // Bloquear si no es borrador
         const esBorrador = estadoActual === 'borrador';
