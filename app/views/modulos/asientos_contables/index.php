@@ -232,6 +232,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     currentSort = f;
                     currentDir = 'ASC';
                 }
+                if (typeof window.guardarOrdenacionVista === 'function') {
+                    window.guardarOrdenacionVista('asientos_contables', currentSort, currentDir);
+                }
                 window.fetchSearch(1);
             });
         });

@@ -2566,6 +2566,34 @@ $perm = $permOriginal;
                 window.updateFacturasBorradorBadge();
             }
 
+            // ── Preservar el ORDENAMIENTO al salir del mensaje / cerrar el modal ──
+            // En CUALQUIER resultado del SRI (autorizado o rechazado), cuando el
+            // usuario cierre el mensaje o el modal la tabla debe recargarse
+            // MANTENIENDO el orden (sort), la dirección y la página vigentes según
+            // sus preferencias. Capturamos el orden actual y lo re-aplicamos al
+            // refrescar, y armamos el refresco en el evento de cierre del modal:
+            // así cubre tanto el cierre automático tras autorizar como el cierre
+            // manual tras un rechazo. Se arma una sola vez por intento (once + dedupe).
+            const _fvSortPrev = window.FV_currentSort || 'fecha_emision';
+            const _fvDirPrev  = window.FV_currentDir  || 'DESC';
+            const _fvPagePrev = window.FV_currentPage || 1;
+            const _fvModalEl  = document.getElementById('modalNuevaFactura');
+            const refrescarPreservandoOrden = () => {
+                // Re-aplicar el orden capturado por si algún flujo lo hubiera alterado
+                window.FV_currentSort = _fvSortPrev;
+                window.FV_currentDir  = _fvDirPrev;
+                if (typeof window.FV_fetchSearch === 'function') {
+                    window.FV_fetchSearch(_fvPagePrev);
+                }
+            };
+            if (_fvModalEl) {
+                if (_fvModalEl._fvRefrescoOrden) {
+                    _fvModalEl.removeEventListener('hidden.bs.modal', _fvModalEl._fvRefrescoOrden);
+                }
+                _fvModalEl._fvRefrescoOrden = refrescarPreservandoOrden;
+                _fvModalEl.addEventListener('hidden.bs.modal', refrescarPreservandoOrden, { once: true });
+            }
+
             if (json.ok) {
                 Swal.fire({
                     icon: 'success',
@@ -2573,26 +2601,16 @@ $perm = $permOriginal;
                     html: `<p>${json.mensaje}</p><code class="small">${json.numero_autorizacion || ''}</code>`,
                     confirmButtonColor: '#0d6efd',
                 }).then(() => {
-                    const modalEl   = document.getElementById('modalNuevaFactura');
-                    const modalInst = bootstrap.Modal.getInstance(modalEl);
-
-                    // Refrescar la tabla DESPUÉS de que el modal se cierre completamente,
-                    // para preservar filtros activos (FiltrosBusqueda), favoritos y ordenamiento.
-                    // Si llamamos FV_fetchSearch antes de hidden.bs.modal, el modal todavía
-                    // está en animación y Bootstrap puede interferir con el estado de la vista.
-                    const refrescarTabla = () => {
-                        if (typeof window.FV_fetchSearch === 'function') {
-                            window.FV_fetchSearch(window.FV_currentPage || 1);
-                        }
-                    };
-
+                    // El refresco que preserva el orden ya está armado en
+                    // hidden.bs.modal (ver arriba). Solo cerramos el modal: al
+                    // terminar de cerrarse, la tabla se recarga manteniendo el
+                    // ordenamiento (sort), la dirección y la página del usuario.
+                    const modalInst = bootstrap.Modal.getInstance(_fvModalEl);
                     if (modalInst) {
-                        // Listener de un solo disparo: se ejecuta cuando el modal termina de cerrarse
-                        modalEl.addEventListener('hidden.bs.modal', refrescarTabla, { once: true });
                         modalInst.hide();
                     } else {
                         // Modal ya estaba cerrado — refrescar directamente
-                        refrescarTabla();
+                        refrescarPreservandoOrden();
                     }
                 });
             } else {

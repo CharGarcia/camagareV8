@@ -432,6 +432,35 @@
         }
     };
 
+    /**
+     * Borrado total: en cualquier input editable del modal, una sola pulsación
+     * de Retroceso (Backspace) o Delete (Supr) vacía por completo el campo.
+     * Listener delegado sobre el modal para cubrir también las filas dinámicas.
+     */
+    (function initBorradoTotalModal() {
+        const modalEl = document.getElementById('modalAsientoContable');
+        if (!modalEl) return;
+
+        const TIPOS_EDITABLES = ['text', 'number', 'search', 'date', 'tel'];
+
+        modalEl.addEventListener('keydown', function (e) {
+            if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+
+            const el = e.target;
+            if (!el || el.tagName !== 'INPUT') return;
+            if (el.readOnly || el.disabled) return;
+
+            const tipo = (el.type || 'text').toLowerCase();
+            if (!TIPOS_EDITABLES.includes(tipo)) return;
+            if (el.value === '') return;
+
+            e.preventDefault();
+            el.value = '';
+            // Notificar a los handlers existentes (totales, autocomplete, etc.)
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+    })();
+
     window.ASIENTO_restablecer = async function() {
         const id = document.getElementById('asiento_id').value;
         if (!id) return;
