@@ -234,6 +234,13 @@ return [
     ],
 
     // ─── REPORTES ─────────────────────────────────────────────────────────────
+    'modulos/dashboard' => [
+        // Registrar el submódulo en submodulos_menu (id_modulo = 9, Reportes) con
+        // ruta = 'modulos/dashboard', y actualizar este id_submodulo con el id real.
+        // Asignar permisos en /config/permisos-modulos.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
     'modulos/reporte_ventas' => [
         'id_submodulo' => 38,
         'legacy_rutas' => [],

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace App\Services;
+namespace App\Services\modulos;
 
 use App\core\Database;
 use PDO;
@@ -52,8 +52,9 @@ class DashboardService
             // CxC / CxP filtradas por período seleccionado
             'cxc_total'             => $this->getCxcTotal($idEmpresa, $tipoAmbiente, $desde, $hasta),
             'cxp_total'             => $this->getCxpTotal($idEmpresa, $tipoAmbiente, $desde, $hasta),
-            // Saldos iniciales de apertura (estado puntual, NO filtrado por período)
-            'saldos_iniciales'      => $this->getSaldosIniciales($idEmpresa, $tipoAmbiente),
+            // Saldos de caja: bancos/efectivo (saldo real actual) y anticipos globales.
+            // Estado puntual, NO filtrado por período.
+            'saldos_caja'           => $this->getSaldosCaja($idEmpresa),
             // Tablas recientes
             'facturas_recientes'    => $this->getVentasRecientes($idEmpresa, 6, $tipoAmbiente),
             'compras_recientes'     => $this->getComprasRecientes($idEmpresa, 6, $tipoAmbiente),
@@ -181,7 +182,40 @@ class DashboardService
                AND (v.importe_total - COALESCE(c.tc, 0)) > 0"
         );
         $st->execute([$e, $ta, $d, $h]);
-        return (float) $st->fetchColumn();
+        $total = (float) $st->fetchColumn();
+
+        // Sumar los saldos iniciales CxC pendientes del período (pendiente
+        // descuenta lo retenido, igual que el módulo).
+        $si = $this->db->prepare(
+            "SELECT COALESCE(SUM(t.pend), 0) FROM (
+                SELECT (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0)) AS pend
+                FROM saldos_iniciales_cxc s
+                LEFT JOIN LATERAL (
+                    SELECT SUM(rd.valor_retenido) AS retenido
+                    FROM retencion_venta_detalle rd
+                    INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
+                    WHERE r.eliminado = false
+                      AND r.id_empresa = s.id_empresa
+                      AND r.id_venta IS NULL
+                      AND r.id_cliente = s.id_cliente
+                      AND rd.num_doc_sustento IS NOT NULL
+                      AND rd.num_doc_sustento <> ''
+                      AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
+                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ventas_cabecera vc
+                          WHERE vc.id_empresa = s.id_empresa
+                            AND vc.eliminado = false
+                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      )
+                ) ret ON true
+                WHERE s.id_empresa = ? AND s.eliminado = false
+                  AND s.fecha_emision BETWEEN ? AND ?
+            ) t WHERE t.pend > 0"
+        );
+        $si->execute([$e, $d, $h]);
+        return $total + (float) $si->fetchColumn();
     }
 
     private function getCxpTotal(int $e, string $ta, string $d, string $h): float
@@ -202,107 +236,148 @@ class DashboardService
                AND (c.importe_total - COALESCE(p.tp, 0)) > 0"
         );
         $st->execute([$e, $ta, $d, $h]);
-        return (float) $st->fetchColumn();
+        $total = (float) $st->fetchColumn();
+
+        // Sumar los saldos iniciales CxP pendientes del período.
+        $si = $this->db->prepare(
+            "SELECT COALESCE(SUM(saldo_pendiente), 0)
+             FROM saldos_iniciales_cxp
+             WHERE id_empresa = ? AND eliminado = false
+               AND saldo_pendiente > 0
+               AND fecha_emision BETWEEN ? AND ?"
+        );
+        $si->execute([$e, $d, $h]);
+        return $total + (float) $si->fetchColumn();
     }
 
-    // ── Saldos iniciales de apertura ──────────────────────────────────────────
+    // ── Saldos de caja: bancos/efectivo y anticipos ───────────────────────────
 
     /**
-     * Resumen de los saldos iniciales de apertura cargados en el módulo
-     * modulos/saldos_iniciales. Es un estado puntual de arranque: NO se filtra
-     * por el período seleccionado en el dashboard.
+     * Saldos de bancos/efectivo (saldo real actual por forma de pago) y
+     * anticipos globales (clientes y proveedores). Reutiliza la misma lógica
+     * de cálculo del módulo de Ingresos (FormaPagoRepository::getSaldosActuales
+     * y getSaldoAnticipo), pero los anticipos se agregan de forma global sin
+     * depender de un tercero. Estado puntual: NO se filtra por período.
      *
-     * Devuelve, por cada categoría, el monto pendiente/saldo y el número de
-     * registros, más los totales por cobrar y por pagar de apertura.
+     * Si alguna tabla de saldos iniciales aún no existe en el entorno
+     * (migración no aplicada), degrada con elegancia y no tumba el dashboard.
      */
-    private function getSaldosIniciales(int $e, string $ta): array
+    private function getSaldosCaja(int $e): array
     {
-        // Panel auxiliar: si una tabla de saldos iniciales aún no existe en el
-        // entorno (migración no aplicada), no debe tumbar todo el dashboard.
         try {
-            return $this->calcularSaldosIniciales($e, $ta);
+            return $this->calcularSaldosCaja($e);
         } catch (\Throwable $ex) {
             return [
-                'cxc'            => ['monto' => 0.0, 'n' => 0],
-                'cxp'            => ['monto' => 0.0, 'n' => 0],
-                'bancos'         => ['monto' => 0.0, 'n' => 0],
-                'anticipos'      => ['monto' => 0.0, 'n' => 0],
-                'inventario'     => ['monto' => 0.0, 'n' => 0],
-                'consignaciones' => ['monto' => 0.0, 'n' => 0],
-                'tiene_datos'    => false,
+                'formas'                => [],
+                'anticipos_clientes'    => 0.0,
+                'anticipos_proveedores' => 0.0,
+                'tiene_datos'           => false,
             ];
         }
     }
 
-    private function calcularSaldosIniciales(int $e, string $ta): array
+    private function calcularSaldosCaja(int $e): array
     {
-        // CXC: pendiente = saldo_inicial - monto_cobrado (saldo_pendiente almacenado).
-        $cxc = $this->db->prepare(
-            "SELECT COALESCE(SUM(saldo_pendiente), 0) AS monto, COUNT(*) AS n
-             FROM saldos_iniciales_cxc
-             WHERE id_empresa = ? AND eliminado = false AND saldo_pendiente > 0"
-        );
-        $cxc->execute([$e]);
-        $rCxc = $cxc->fetch(PDO::FETCH_ASSOC) ?: ['monto' => 0, 'n' => 0];
-
-        // CXP
-        $cxp = $this->db->prepare(
-            "SELECT COALESCE(SUM(saldo_pendiente), 0) AS monto, COUNT(*) AS n
-             FROM saldos_iniciales_cxp
-             WHERE id_empresa = ? AND eliminado = false AND saldo_pendiente > 0"
-        );
-        $cxp->execute([$e]);
-        $rCxp = $cxp->fetch(PDO::FETCH_ASSOC) ?: ['monto' => 0, 'n' => 0];
-
-        // Bancos / Efectivo / Tarjeta (apertura): una fila por forma de pago.
-        $ban = $this->db->prepare(
-            "SELECT COALESCE(SUM(saldo_inicial), 0) AS monto, COUNT(*) AS n
-             FROM saldos_iniciales_bancos
-             WHERE id_empresa = ? AND eliminado = false"
-        );
-        $ban->execute([$e]);
-        $rBan = $ban->fetch(PDO::FETCH_ASSOC) ?: ['monto' => 0, 'n' => 0];
-
-        // Anticipos de clientes y proveedores.
-        $ant = $this->db->prepare(
-            "SELECT COALESCE(SUM(saldo_inicial), 0) AS monto, COUNT(*) AS n
-             FROM saldos_iniciales_anticipos
-             WHERE id_empresa = ? AND eliminado = false"
-        );
-        $ant->execute([$e]);
-        $rAnt = $ant->fetch(PDO::FETCH_ASSOC) ?: ['monto' => 0, 'n' => 0];
-
-        // Inventario de apertura: entradas al kardex con referencia SALDO_INICIAL,
-        // alineadas al ambiente real de la empresa (igual que el listado del módulo).
-        $inv = $this->db->prepare(
-            "SELECT COALESCE(SUM(costo_total), 0) AS monto, COUNT(*) AS n
-             FROM inventario_kardex
-             WHERE id_empresa = ? AND eliminado = false
-               AND referencia_tipo = 'SALDO_INICIAL'
-               AND tipo_ambiente = ?"
-        );
-        $inv->execute([$e, $ta]);
-        $rInv = $inv->fetch(PDO::FETCH_ASSOC) ?: ['monto' => 0, 'n' => 0];
-
-        // Consignaciones (solo registro, no afecta stock).
-        $con = $this->db->prepare(
-            "SELECT COALESCE(SUM(total), 0) AS monto, COUNT(*) AS n
-             FROM saldos_iniciales_consignaciones
-             WHERE id_empresa = ? AND eliminado = false"
-        );
-        $con->execute([$e]);
-        $rCon = $con->fetch(PDO::FETCH_ASSOC) ?: ['monto' => 0, 'n' => 0];
+        // ── Bancos / Efectivo / Tarjeta / Otro: saldo real actual por forma ──
+        //   saldo = saldo_inicial (saldos_iniciales_bancos)
+        //           + Σ cobros (ingresos_pagos)  − Σ pagos (egresos_pagos)
+        //   Filtrado por el ambiente real de la empresa (igual que Ingresos).
+        $sqlFormas = "
+            SELECT efp.id, efp.nombre, efp.tipo,
+                   COALESCE(sib.saldo_inicial, 0)
+                   + COALESCE(ing.total, 0)
+                   - COALESCE(egr.total, 0) AS saldo
+            FROM empresa_formas_pago efp
+            LEFT JOIN saldos_iniciales_bancos sib
+                   ON sib.id_forma_pago = efp.id
+                  AND sib.id_empresa   = efp.id_empresa
+                  AND sib.eliminado    = FALSE
+            LEFT JOIN (
+                SELECT ip.id_forma_cobro AS id_forma, SUM(ip.monto) AS total
+                FROM ingresos_pagos ip
+                INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
+                WHERE ic.id_empresa = :e
+                  AND ic.eliminado  = FALSE
+                  AND ic.estado    <> 'anulado'
+                  AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
+                GROUP BY ip.id_forma_cobro
+            ) ing ON ing.id_forma = efp.id
+            LEFT JOIN (
+                SELECT ep.id_forma_pago AS id_forma, SUM(ep.monto) AS total
+                FROM egresos_pagos ep
+                INNER JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
+                WHERE ec.id_empresa = :e
+                  AND ec.eliminado  = FALSE
+                  AND ec.estado    <> 'anulado'
+                  AND ep.eliminado  = FALSE
+                  AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
+                GROUP BY ep.id_forma_pago
+            ) egr ON egr.id_forma = efp.id
+            WHERE efp.id_empresa = :e
+              AND efp.eliminado  = FALSE
+              AND efp.activo     = TRUE
+              AND efp.tipo      <> 'ANTICIPO'
+            ORDER BY efp.tipo, efp.nombre";
+        $st = $this->db->prepare($sqlFormas);
+        $st->execute([':e' => $e]);
+        $formas = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $formas[] = [
+                'id'     => (int) $r['id'],
+                'nombre' => $r['nombre'],
+                'tipo'   => $r['tipo'],
+                'saldo'  => (float) $r['saldo'],
+            ];
+        }
 
         return [
-            'cxc'           => ['monto' => (float) $rCxc['monto'], 'n' => (int) $rCxc['n']],
-            'cxp'           => ['monto' => (float) $rCxp['monto'], 'n' => (int) $rCxp['n']],
-            'bancos'        => ['monto' => (float) $rBan['monto'], 'n' => (int) $rBan['n']],
-            'anticipos'     => ['monto' => (float) $rAnt['monto'], 'n' => (int) $rAnt['n']],
-            'inventario'    => ['monto' => (float) $rInv['monto'], 'n' => (int) $rInv['n']],
-            'consignaciones'=> ['monto' => (float) $rCon['monto'], 'n' => (int) $rCon['n']],
-            'tiene_datos'   => ((int) $rCxc['n'] + (int) $rCxp['n'] + (int) $rBan['n']
-                              + (int) $rAnt['n'] + (int) $rInv['n'] + (int) $rCon['n']) > 0,
+            'formas'                => $formas,
+            'anticipos_clientes'    => $this->getAnticipoGlobal($e, 'CLIENTE'),
+            'anticipos_proveedores' => $this->getAnticipoGlobal($e, 'PROVEEDOR'),
+            'tiene_datos'           => true,
         ];
+    }
+
+    /**
+     * Saldo global de anticipos por dirección (sin depender de un tercero):
+     *   saldo = Σ saldo_inicial (saldos_iniciales_anticipos del tipo)
+     *           − Σ aplicado (pagos que consumen formas de anticipo de esa dirección)
+     * Hoy el aplicado es 0 (consumo de anticipos es Fase 3); la fórmula queda lista.
+     */
+    private function getAnticipoGlobal(int $e, string $tipo): float
+    {
+        $ini = $this->db->prepare(
+            "SELECT COALESCE(SUM(saldo_inicial), 0)
+             FROM saldos_iniciales_anticipos
+             WHERE id_empresa = :e AND eliminado = FALSE AND tipo = :t"
+        );
+        $ini->execute([':e' => $e, ':t' => $tipo]);
+        $inicial = (float) $ini->fetchColumn();
+
+        if ($tipo === 'PROVEEDOR') {
+            $apl = $this->db->prepare(
+                "SELECT COALESCE(SUM(ep.monto), 0)
+                 FROM egresos_pagos ep
+                 INNER JOIN egresos_cabecera ec ON ec.id = ep.id_egreso
+                 INNER JOIN empresa_formas_pago efp ON efp.id = ep.id_forma_pago
+                 WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado'
+                   AND ep.eliminado = FALSE
+                   AND efp.tipo = 'ANTICIPO' AND UPPER(efp.aplica_en) = 'EGRESO'"
+            );
+        } else {
+            $apl = $this->db->prepare(
+                "SELECT COALESCE(SUM(ip.monto), 0)
+                 FROM ingresos_pagos ip
+                 INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
+                 INNER JOIN empresa_formas_pago efp ON efp.id = ip.id_forma_cobro
+                 WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado'
+                   AND efp.tipo = 'ANTICIPO' AND UPPER(efp.aplica_en) = 'INGRESO'"
+            );
+        }
+        $apl->execute([':e' => $e]);
+        $aplicado = (float) $apl->fetchColumn();
+
+        return round($inicial - $aplicado, 2);
     }
 
     // ── Tablas recientes ──────────────────────────────────────────────────────
@@ -380,58 +455,120 @@ class DashboardService
 
     private function getCxcVencidas(int $e, string $ta, int $lim): array
     {
+        // Une las facturas de venta vencidas con los saldos iniciales CxC
+        // vencidos (que tienen su propia fecha_vencimiento). En los saldos
+        // iniciales el pendiente descuenta lo retenido, igual que el módulo.
         $st = $this->db->prepare(
-            "SELECT cl.nombre AS cliente,
-                    CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) AS comprobante,
-                    v.fecha_emision AS fecha,
-                    (v.importe_total - COALESCE(c.tc, 0)) AS saldo,
-                    (CURRENT_DATE - CAST(v.fecha_emision AS DATE)) AS dias_vencido
-             FROM ventas_cabecera v
-             INNER JOIN clientes cl ON cl.id = v.id_cliente
-             LEFT JOIN (
-                 SELECT d.id_referencia_documento, SUM(d.monto_cobrado) AS tc
-                 FROM ingresos_detalle d
-                 INNER JOIN ingresos_cabecera ic ON ic.id = d.id_ingreso
-                 WHERE ic.eliminado = false AND ic.estado != 'anulado'
-                 GROUP BY d.id_referencia_documento
-             ) c ON c.id_referencia_documento = v.id
-             WHERE v.id_empresa = ? AND v.eliminado = false
-               AND v.estado NOT IN ('anulado', 'pagado')
-               AND COALESCE(v.tipo_ambiente, '1') = ?
-               AND (v.importe_total - COALESCE(c.tc, 0)) > 0
-               AND (CURRENT_DATE - CAST(v.fecha_emision AS DATE)) > COALESCE(cl.plazo, 0)
-             ORDER BY dias_vencido DESC
-             LIMIT ?"
+            "SELECT cliente, comprobante, fecha, saldo, dias_vencido FROM (
+                SELECT cl.nombre AS cliente,
+                       CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) AS comprobante,
+                       v.fecha_emision AS fecha,
+                       (v.importe_total - COALESCE(c.tc, 0)) AS saldo,
+                       (CURRENT_DATE - CAST(v.fecha_emision AS DATE)) AS dias_vencido
+                FROM ventas_cabecera v
+                INNER JOIN clientes cl ON cl.id = v.id_cliente
+                LEFT JOIN (
+                    SELECT d.id_referencia_documento, SUM(d.monto_cobrado) AS tc
+                    FROM ingresos_detalle d
+                    INNER JOIN ingresos_cabecera ic ON ic.id = d.id_ingreso
+                    WHERE ic.eliminado = false AND ic.estado != 'anulado'
+                    GROUP BY d.id_referencia_documento
+                ) c ON c.id_referencia_documento = v.id
+                WHERE v.id_empresa = :e AND v.eliminado = false
+                  AND v.estado NOT IN ('anulado', 'pagado')
+                  AND COALESCE(v.tipo_ambiente, '1') = :ta
+                  AND (v.importe_total - COALESCE(c.tc, 0)) > 0
+                  AND (CURRENT_DATE - CAST(v.fecha_emision AS DATE)) > COALESCE(cl.plazo, 0)
+
+                UNION ALL
+
+                SELECT s.nombre_cliente AS cliente,
+                       s.nro_documento AS comprobante,
+                       s.fecha_emision AS fecha,
+                       (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0)) AS saldo,
+                       (CURRENT_DATE - s.fecha_vencimiento)::int AS dias_vencido
+                FROM saldos_iniciales_cxc s
+                LEFT JOIN LATERAL (
+                    SELECT SUM(rd.valor_retenido) AS retenido
+                    FROM retencion_venta_detalle rd
+                    INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
+                    WHERE r.eliminado = false
+                      AND r.id_empresa = s.id_empresa
+                      AND r.id_venta IS NULL
+                      AND r.id_cliente = s.id_cliente
+                      AND rd.num_doc_sustento IS NOT NULL
+                      AND rd.num_doc_sustento <> ''
+                      AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
+                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ventas_cabecera vc
+                          WHERE vc.id_empresa = s.id_empresa
+                            AND vc.eliminado = false
+                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      )
+                ) ret ON true
+                WHERE s.id_empresa = :e2 AND s.eliminado = false
+                  AND s.fecha_vencimiento IS NOT NULL
+                  AND s.fecha_vencimiento < CURRENT_DATE
+                  AND (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0)) > 0
+            ) u
+            ORDER BY dias_vencido DESC
+            LIMIT :lim"
         );
-        $st->execute([$e, $ta, $lim]);
+        $st->bindValue(':e',   $e,   PDO::PARAM_INT);
+        $st->bindValue(':ta',  $ta,  PDO::PARAM_STR);
+        $st->bindValue(':e2',  $e,   PDO::PARAM_INT);
+        $st->bindValue(':lim', $lim, PDO::PARAM_INT);
+        $st->execute();
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     private function getCxpVencidas(int $e, string $ta, int $lim): array
     {
+        // Une las compras vencidas con los saldos iniciales CxP vencidos.
         $st = $this->db->prepare(
-            "SELECT p.razon_social AS proveedor,
-                    CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) AS comprobante,
-                    c.fecha_emision AS fecha,
-                    (c.importe_total - COALESCE(pg.tp, 0)) AS saldo,
-                    (CURRENT_DATE - CAST(c.fecha_emision AS DATE)) AS dias_vencido
-             FROM compras_cabecera c
-             INNER JOIN proveedores p ON p.id = c.id_proveedor
-             LEFT JOIN (
-                 SELECT ed.id_referencia_documento, SUM(ed.monto_pagado) AS tp
-                 FROM egresos_detalle ed
-                 INNER JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
-                 WHERE ed.eliminado = false AND ec.eliminado = false AND ec.estado != 'anulado'
-                 GROUP BY ed.id_referencia_documento
-             ) pg ON pg.id_referencia_documento = c.id
-             WHERE c.id_empresa = ? AND c.eliminado = false
-               AND COALESCE(c.tipo_ambiente::text, '1') = ?
-               AND (c.importe_total - COALESCE(pg.tp, 0)) > 0
-               AND (CURRENT_DATE - CAST(c.fecha_emision AS DATE)) > COALESCE(p.plazo, 0)
-             ORDER BY dias_vencido DESC
-             LIMIT ?"
+            "SELECT proveedor, comprobante, fecha, saldo, dias_vencido FROM (
+                SELECT p.razon_social AS proveedor,
+                       CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) AS comprobante,
+                       c.fecha_emision AS fecha,
+                       (c.importe_total - COALESCE(pg.tp, 0)) AS saldo,
+                       (CURRENT_DATE - CAST(c.fecha_emision AS DATE)) AS dias_vencido
+                FROM compras_cabecera c
+                INNER JOIN proveedores p ON p.id = c.id_proveedor
+                LEFT JOIN (
+                    SELECT ed.id_referencia_documento, SUM(ed.monto_pagado) AS tp
+                    FROM egresos_detalle ed
+                    INNER JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                    WHERE ed.eliminado = false AND ec.eliminado = false AND ec.estado != 'anulado'
+                    GROUP BY ed.id_referencia_documento
+                ) pg ON pg.id_referencia_documento = c.id
+                WHERE c.id_empresa = :e AND c.eliminado = false
+                  AND COALESCE(c.tipo_ambiente::text, '1') = :ta
+                  AND (c.importe_total - COALESCE(pg.tp, 0)) > 0
+                  AND (CURRENT_DATE - CAST(c.fecha_emision AS DATE)) > COALESCE(p.plazo, 0)
+
+                UNION ALL
+
+                SELECT s.nombre_proveedor AS proveedor,
+                       s.nro_documento AS comprobante,
+                       s.fecha_emision AS fecha,
+                       s.saldo_pendiente AS saldo,
+                       (CURRENT_DATE - s.fecha_vencimiento)::int AS dias_vencido
+                FROM saldos_iniciales_cxp s
+                WHERE s.id_empresa = :e2 AND s.eliminado = false
+                  AND s.fecha_vencimiento IS NOT NULL
+                  AND s.fecha_vencimiento < CURRENT_DATE
+                  AND s.saldo_pendiente > 0
+            ) u
+            ORDER BY dias_vencido DESC
+            LIMIT :lim"
         );
-        $st->execute([$e, $ta, $lim]);
+        $st->bindValue(':e',   $e,   PDO::PARAM_INT);
+        $st->bindValue(':ta',  $ta,  PDO::PARAM_STR);
+        $st->bindValue(':e2',  $e,   PDO::PARAM_INT);
+        $st->bindValue(':lim', $lim, PDO::PARAM_INT);
+        $st->execute();
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
