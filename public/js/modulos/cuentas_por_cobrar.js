@@ -22,11 +22,10 @@ let CXC_catalogosCargados = false;
    INICIALIZACIÓN
 ════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-    CXC_cargar();
+    CXC_cargar(); // dispara también CXC_cargarSaldosIniciales() al finalizar
     CXC_cargarCatalogos();
     if (CXC_TIENE_WA) CXC_cargarPlantillasWA();
     CXC_initBuscadorClientes();
-    CXC_cargarSaldosIniciales();
 });
 
 /* ════════════════════════════════════════════════════
@@ -66,6 +65,9 @@ async function CXC_cargar() {
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error de conexión</td></tr>`;
         console.error('[CXC]', e);
+    } finally {
+        // Reaplicar el mismo filtro de cliente a la sección de saldos iniciales
+        CXC_cargarSaldosIniciales();
     }
 }
 
@@ -830,8 +832,12 @@ async function CXC_cargarSaldosIniciales() {
     const estado = document.getElementById('cxc-si-estado')?.value || 'PENDIENTE';
     tbody.innerHTML = `<tr><td colspan="8" class="text-center py-3"><div class="spinner-border spinner-border-sm text-warning me-2"></div>Cargando…</td></tr>`;
 
+    const params = new URLSearchParams({ estado });
+    const idCliente = CXC_getClientesSeleccionados();
+    if (idCliente) params.set('id_cliente', idCliente);
+
     try {
-        const r = await fetch(`${BASE_URL}/modulos/cuentas_por_cobrar/getSaldosInicialesCxcAjax?estado=${estado}`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
+        const r = await fetch(`${BASE_URL}/modulos/cuentas_por_cobrar/getSaldosInicialesCxcAjax?${params}`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
         const d = await r.json();
         if (!d.ok) {
             seccion.style.display = 'none';

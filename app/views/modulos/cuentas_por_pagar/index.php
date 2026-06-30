@@ -237,17 +237,6 @@
         </div>
     </div>
 
-    <!-- ── Gráfico de Antigüedad ── -->
-    <div class="card border-0 shadow-sm mt-4" id="cxp-chart-card" style="display:none;">
-        <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-            <h6 class="fw-bold mb-0"><i class="bi bi-bar-chart me-2 text-primary"></i>Análisis de Antigüedad de Saldo</h6>
-            <small class="text-muted">Distribución de cuentas por pagar por tramos de vencimiento</small>
-        </div>
-        <div class="card-body">
-            <canvas id="cxpAgingChart" style="max-height:260px;"></canvas>
-        </div>
-    </div>
-
     <!-- ── Saldos Iniciales CXP ── -->
     <div class="card border-0 shadow-sm mt-4" id="cxp-si-seccion" style="display:none;">
         <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
@@ -295,6 +284,17 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+
+    <!-- ── Gráfico de Antigüedad (al final de todas las tablas) ── -->
+    <div class="card border-0 shadow-sm mt-4" id="cxp-chart-card" style="display:none;">
+        <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+            <h6 class="fw-bold mb-0"><i class="bi bi-bar-chart me-2 text-primary"></i>Análisis de Antigüedad de Saldo</h6>
+            <small class="text-muted">Distribución de cuentas por pagar por tramos de vencimiento</small>
+        </div>
+        <div class="card-body">
+            <canvas id="cxpAgingChart" style="max-height:260px;"></canvas>
         </div>
     </div>
 

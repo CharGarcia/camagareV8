@@ -187,12 +187,83 @@ class CuentasPorCobrarRepository extends BaseRepository
         $st->execute($params);
         $r = $st->fetch(PDO::FETCH_ASSOC);
 
+        // Sumar los saldos iniciales CXC (mismo filtro de cliente)
+        $si = $this->getStatsSaldosInicialesCxc($idEmpresa, $filtros);
+
         return [
-            'total_facturas'   => (int)($r['total_facturas']   ?? 0),
-            'total_saldo'      => (float)($r['total_saldo']    ?? 0),
-            'total_vencido'    => (float)($r['total_vencido']  ?? 0),
-            'total_al_dia'     => (float)($r['total_al_dia']   ?? 0),
-            'facturas_vencidas'=> (int)($r['facturas_vencidas'] ?? 0),
+            'total_facturas'   => (int)($r['total_facturas']    ?? 0) + $si['cnt'],
+            'total_saldo'      => (float)($r['total_saldo']     ?? 0) + $si['total_saldo'],
+            'total_vencido'    => (float)($r['total_vencido']   ?? 0) + $si['total_vencido'],
+            'total_al_dia'     => (float)($r['total_al_dia']    ?? 0) + $si['total_al_dia'],
+            'facturas_vencidas'=> (int)($r['facturas_vencidas'] ?? 0) + $si['vencidas'],
+        ];
+    }
+
+    /**
+     * Agregados de los saldos iniciales CXC pendientes (pendiente = saldo_inicial
+     * - cobrado - retenido, con la retención calculada al vuelo) para sumarlos a
+     * las tarjetas. Respeta el filtro de cliente.
+     */
+    private function getStatsSaldosInicialesCxc(int $idEmpresa, array $filtros): array
+    {
+        $where  = "s.id_empresa = :si_emp AND s.eliminado = false";
+        $params = [':si_emp' => $idEmpresa];
+
+        if (!empty($filtros['id_cliente'])) {
+            $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
+            $cli = array_filter(array_map('intval', $raw));
+            if (!empty($cli)) {
+                $in = [];
+                foreach (array_values($cli) as $i => $id) { $k = ":sicc{$i}"; $in[] = $k; $params[$k] = $id; }
+                $where .= " AND s.id_cliente IN (" . implode(',', $in) . ")";
+            }
+        }
+
+        $sql = "
+            SELECT
+                COUNT(*) FILTER (WHERE sub.pend > 0) AS cnt,
+                COALESCE(SUM(CASE WHEN sub.pend > 0 THEN sub.pend ELSE 0 END), 0) AS total_saldo,
+                COALESCE(SUM(CASE WHEN sub.pend > 0 AND sub.fecha_vencimiento IS NOT NULL AND sub.fecha_vencimiento < CURRENT_DATE THEN sub.pend ELSE 0 END), 0) AS total_vencido,
+                COALESCE(SUM(CASE WHEN sub.pend > 0 AND (sub.fecha_vencimiento IS NULL OR sub.fecha_vencimiento >= CURRENT_DATE) THEN sub.pend ELSE 0 END), 0) AS total_al_dia,
+                COUNT(*) FILTER (WHERE sub.pend > 0 AND sub.fecha_vencimiento IS NOT NULL AND sub.fecha_vencimiento < CURRENT_DATE) AS vencidas
+            FROM (
+                SELECT s.fecha_vencimiento,
+                       (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0)) AS pend
+                FROM saldos_iniciales_cxc s
+                LEFT JOIN LATERAL (
+                    SELECT SUM(rd.valor_retenido) AS retenido
+                    FROM retencion_venta_detalle rd
+                    INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
+                    WHERE r.eliminado = false
+                      AND r.id_empresa = s.id_empresa
+                      AND r.id_venta IS NULL
+                      AND r.id_cliente = s.id_cliente
+                      AND rd.num_doc_sustento IS NOT NULL
+                      AND rd.num_doc_sustento <> ''
+                      AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
+                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ventas_cabecera vc
+                          WHERE vc.id_empresa = s.id_empresa
+                            AND vc.eliminado = false
+                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      )
+                ) ret ON true
+                WHERE {$where}
+            ) sub
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'cnt'           => (int)($r['cnt']           ?? 0),
+            'total_saldo'   => (float)($r['total_saldo'] ?? 0),
+            'total_vencido' => (float)($r['total_vencido'] ?? 0),
+            'total_al_dia'  => (float)($r['total_al_dia']  ?? 0),
+            'vencidas'      => (int)($r['vencidas']      ?? 0),
         ];
     }
 
@@ -237,12 +308,84 @@ class CuentasPorCobrarRepository extends BaseRepository
         $st->execute($params);
         $r = $st->fetch(PDO::FETCH_ASSOC);
 
+        // Sumar los tramos de los saldos iniciales CXC (mismo filtro de cliente)
+        $si = $this->getAntiguedadSaldosInicialesCxc($idEmpresa, $filtros);
+
         return [
-            'vigente'    => (float)($r['tramo_vigente']  ?? 0),
-            'tramo_1_30' => (float)($r['tramo_1_30']    ?? 0),
-            'tramo_31_60'=> (float)($r['tramo_31_60']   ?? 0),
-            'tramo_61_90'=> (float)($r['tramo_61_90']   ?? 0),
-            'mas_90'     => (float)($r['tramo_mas_90']  ?? 0),
+            'vigente'    => (float)($r['tramo_vigente']  ?? 0) + $si['vigente'],
+            'tramo_1_30' => (float)($r['tramo_1_30']    ?? 0) + $si['tramo_1_30'],
+            'tramo_31_60'=> (float)($r['tramo_31_60']   ?? 0) + $si['tramo_31_60'],
+            'tramo_61_90'=> (float)($r['tramo_61_90']   ?? 0) + $si['tramo_61_90'],
+            'mas_90'     => (float)($r['tramo_mas_90']  ?? 0) + $si['mas_90'],
+        ];
+    }
+
+    /**
+     * Tramos de antigüedad de los saldos iniciales CXC pendientes (pendiente
+     * neto de retención calculada al vuelo). Respeta el filtro de cliente.
+     */
+    private function getAntiguedadSaldosInicialesCxc(int $idEmpresa, array $filtros): array
+    {
+        $where  = "s.id_empresa = :si_emp AND s.eliminado = false";
+        $params = [':si_emp' => $idEmpresa];
+
+        if (!empty($filtros['id_cliente'])) {
+            $raw = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
+            $cli = array_filter(array_map('intval', $raw));
+            if (!empty($cli)) {
+                $in = [];
+                foreach (array_values($cli) as $i => $id) { $k = ":sica{$i}"; $in[] = $k; $params[$k] = $id; }
+                $where .= " AND s.id_cliente IN (" . implode(',', $in) . ")";
+            }
+        }
+
+        $sql = "
+            SELECT
+                COALESCE(SUM(CASE WHEN dv <= 0           THEN pend ELSE 0 END), 0) AS tramo_vigente,
+                COALESCE(SUM(CASE WHEN dv BETWEEN 1 AND 30  THEN pend ELSE 0 END), 0) AS tramo_1_30,
+                COALESCE(SUM(CASE WHEN dv BETWEEN 31 AND 60 THEN pend ELSE 0 END), 0) AS tramo_31_60,
+                COALESCE(SUM(CASE WHEN dv BETWEEN 61 AND 90 THEN pend ELSE 0 END), 0) AS tramo_61_90,
+                COALESCE(SUM(CASE WHEN dv > 90            THEN pend ELSE 0 END), 0) AS tramo_mas_90
+            FROM (
+                SELECT (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0)) AS pend,
+                       CASE WHEN s.fecha_vencimiento IS NULL THEN 0
+                            ELSE (CURRENT_DATE - s.fecha_vencimiento)::int END AS dv
+                FROM saldos_iniciales_cxc s
+                LEFT JOIN LATERAL (
+                    SELECT SUM(rd.valor_retenido) AS retenido
+                    FROM retencion_venta_detalle rd
+                    INNER JOIN retencion_venta_cabecera r ON r.id = rd.id_retencion
+                    WHERE r.eliminado = false
+                      AND r.id_empresa = s.id_empresa
+                      AND r.id_venta IS NULL
+                      AND r.id_cliente = s.id_cliente
+                      AND rd.num_doc_sustento IS NOT NULL
+                      AND rd.num_doc_sustento <> ''
+                      AND regexp_replace(rd.num_doc_sustento, '[^0-9]', '', 'g')
+                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ventas_cabecera vc
+                          WHERE vc.id_empresa = s.id_empresa
+                            AND vc.eliminado = false
+                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      )
+                ) ret ON true
+                WHERE {$where}
+            ) sub
+            WHERE sub.pend > 0
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'vigente'     => (float)($r['tramo_vigente'] ?? 0),
+            'tramo_1_30'  => (float)($r['tramo_1_30']   ?? 0),
+            'tramo_31_60' => (float)($r['tramo_31_60']  ?? 0),
+            'tramo_61_90' => (float)($r['tramo_61_90']  ?? 0),
+            'mas_90'      => (float)($r['tramo_mas_90'] ?? 0),
         ];
     }
 
@@ -566,6 +709,19 @@ class CuentasPorCobrarRepository extends BaseRepository
                 $where .= " AND {$pend} > 0 AND {$aplicado} > 0";
             } elseif ($filtros['estado'] === 'PENDIENTE') {
                 $where .= " AND {$pend} > 0 AND {$aplicado} <= 0";
+            }
+        }
+
+        // Filtro por cliente (mismo criterio que el listado principal de CxC)
+        if (!empty($filtros['id_cliente'])) {
+            $rawClientes = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
+            $clientes = array_filter(array_map('intval', $rawClientes));
+            if (!empty($clientes)) {
+                $in = [];
+                foreach (array_values($clientes) as $i => $id) {
+                    $k = ":sicli{$i}"; $in[] = $k; $params[$k] = $id;
+                }
+                $where .= " AND s.id_cliente IN (" . implode(',', $in) . ")";
             }
         }
 

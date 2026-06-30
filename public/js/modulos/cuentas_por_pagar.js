@@ -18,10 +18,9 @@ let CXP_catalogosCargados = false;
    INICIALIZACIÓN
 ════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-    CXP_cargar();
+    CXP_cargar(); // dispara también CXP_cargarSaldosIniciales() al finalizar
     CXP_cargarCatalogos();
     CXP_initBuscadorProveedores();
-    CXP_cargarSaldosIniciales();
 });
 
 /* ════════════════════════════════════════════════════
@@ -61,6 +60,9 @@ async function CXP_cargar() {
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error de conexión</td></tr>`;
         console.error('[CXP]', e);
+    } finally {
+        // Reaplicar el mismo filtro de proveedor a la sección de saldos iniciales
+        CXP_cargarSaldosIniciales();
     }
 }
 
@@ -766,8 +768,12 @@ async function CXP_cargarSaldosIniciales() {
     const estado = document.getElementById('cxp-si-estado')?.value || 'PENDIENTE';
     tbody.innerHTML = `<tr><td colspan="9" class="text-center py-3"><div class="spinner-border spinner-border-sm text-warning me-2"></div>Cargando…</td></tr>`;
 
+    const params = new URLSearchParams({ estado });
+    const idProv = CXP_getProveedoresSeleccionados();
+    if (idProv) params.set('id_proveedor', idProv);
+
     try {
-        const r = await fetch(`${BASE_URL}/modulos/cuentas_por_pagar/getSaldosInicialesCxpAjax?estado=${estado}`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
+        const r = await fetch(`${BASE_URL}/modulos/cuentas_por_pagar/getSaldosInicialesCxpAjax?${params}`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
         const d = await r.json();
         if (!d.ok) {
             seccion.style.display = 'none';

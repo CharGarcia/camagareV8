@@ -313,12 +313,59 @@ class CuentasPorPagarRepository extends BaseRepository
         $st->execute($params);
         $r = $st->fetch(PDO::FETCH_ASSOC);
 
+        // Sumar los saldos iniciales CXP (mismo filtro de proveedor)
+        $si = $this->getStatsSaldosInicialesCxp($idEmpresa, $filtros);
+
         return [
-            'total_docs'    => (int)($r['total_docs']    ?? 0),
+            'total_docs'    => (int)($r['total_docs']    ?? 0) + $si['cnt'],
+            'total_saldo'   => (float)($r['total_saldo'] ?? 0) + $si['total_saldo'],
+            'total_vencido' => (float)($r['total_vencido'] ?? 0) + $si['total_vencido'],
+            'total_al_dia'  => (float)($r['total_al_dia']  ?? 0) + $si['total_al_dia'],
+            'docs_vencidos' => (int)($r['docs_vencidos']   ?? 0) + $si['vencidas'],
+        ];
+    }
+
+    /**
+     * Agregados de los saldos iniciales CXP pendientes (saldo_pendiente =
+     * saldo_inicial - monto_pagado) para sumarlos a las tarjetas. Respeta el
+     * filtro de proveedor.
+     */
+    private function getStatsSaldosInicialesCxp(int $idEmpresa, array $filtros): array
+    {
+        $where  = "id_empresa = :si_emp AND eliminado = false";
+        $params = [':si_emp' => $idEmpresa];
+
+        if (!empty($filtros['id_proveedor'])) {
+            $raw = is_array($filtros['id_proveedor']) ? $filtros['id_proveedor'] : explode(',', (string)$filtros['id_proveedor']);
+            $prov = array_filter(array_map('intval', $raw));
+            if (!empty($prov)) {
+                $in = [];
+                foreach (array_values($prov) as $i => $id) { $k = ":sipp{$i}"; $in[] = $k; $params[$k] = $id; }
+                $where .= " AND id_proveedor IN (" . implode(',', $in) . ")";
+            }
+        }
+
+        $sql = "
+            SELECT
+                COUNT(*) FILTER (WHERE saldo_pendiente > 0) AS cnt,
+                COALESCE(SUM(CASE WHEN saldo_pendiente > 0 THEN saldo_pendiente ELSE 0 END), 0) AS total_saldo,
+                COALESCE(SUM(CASE WHEN saldo_pendiente > 0 AND fecha_vencimiento IS NOT NULL AND fecha_vencimiento < CURRENT_DATE THEN saldo_pendiente ELSE 0 END), 0) AS total_vencido,
+                COALESCE(SUM(CASE WHEN saldo_pendiente > 0 AND (fecha_vencimiento IS NULL OR fecha_vencimiento >= CURRENT_DATE) THEN saldo_pendiente ELSE 0 END), 0) AS total_al_dia,
+                COUNT(*) FILTER (WHERE saldo_pendiente > 0 AND fecha_vencimiento IS NOT NULL AND fecha_vencimiento < CURRENT_DATE) AS vencidas
+            FROM saldos_iniciales_cxp
+            WHERE {$where}
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'cnt'           => (int)($r['cnt']           ?? 0),
             'total_saldo'   => (float)($r['total_saldo'] ?? 0),
             'total_vencido' => (float)($r['total_vencido'] ?? 0),
             'total_al_dia'  => (float)($r['total_al_dia']  ?? 0),
-            'docs_vencidos' => (int)($r['docs_vencidos']   ?? 0),
+            'vencidas'      => (int)($r['vencidas']      ?? 0),
         ];
     }
 
@@ -389,6 +436,54 @@ class CuentasPorPagarRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute($params);
         $r = $st->fetch(PDO::FETCH_ASSOC);
+
+        // Sumar los tramos de los saldos iniciales CXP (mismo filtro de proveedor)
+        $si = $this->getAntiguedadSaldosInicialesCxp($idEmpresa, $filtros);
+
+        return [
+            'vigente'     => (float)($r['tramo_vigente'] ?? 0) + $si['vigente'],
+            'tramo_1_30'  => (float)($r['tramo_1_30']   ?? 0) + $si['tramo_1_30'],
+            'tramo_31_60' => (float)($r['tramo_31_60']  ?? 0) + $si['tramo_31_60'],
+            'tramo_61_90' => (float)($r['tramo_61_90']  ?? 0) + $si['tramo_61_90'],
+            'mas_90'      => (float)($r['tramo_mas_90'] ?? 0) + $si['mas_90'],
+        ];
+    }
+
+    /**
+     * Tramos de antigüedad de los saldos iniciales CXP pendientes
+     * (saldo_pendiente = saldo_inicial - monto_pagado). Respeta el filtro de proveedor.
+     */
+    private function getAntiguedadSaldosInicialesCxp(int $idEmpresa, array $filtros): array
+    {
+        $where  = "id_empresa = :si_emp AND eliminado = false AND saldo_pendiente > 0";
+        $params = [':si_emp' => $idEmpresa];
+
+        if (!empty($filtros['id_proveedor'])) {
+            $raw = is_array($filtros['id_proveedor']) ? $filtros['id_proveedor'] : explode(',', (string)$filtros['id_proveedor']);
+            $prov = array_filter(array_map('intval', $raw));
+            if (!empty($prov)) {
+                $in = [];
+                foreach (array_values($prov) as $i => $id) { $k = ":sipa{$i}"; $in[] = $k; $params[$k] = $id; }
+                $where .= " AND id_proveedor IN (" . implode(',', $in) . ")";
+            }
+        }
+
+        $dv = "CASE WHEN fecha_vencimiento IS NULL THEN 0 ELSE (CURRENT_DATE - fecha_vencimiento)::int END";
+
+        $sql = "
+            SELECT
+                COALESCE(SUM(CASE WHEN {$dv} <= 0           THEN saldo_pendiente ELSE 0 END), 0) AS tramo_vigente,
+                COALESCE(SUM(CASE WHEN {$dv} BETWEEN 1 AND 30  THEN saldo_pendiente ELSE 0 END), 0) AS tramo_1_30,
+                COALESCE(SUM(CASE WHEN {$dv} BETWEEN 31 AND 60 THEN saldo_pendiente ELSE 0 END), 0) AS tramo_31_60,
+                COALESCE(SUM(CASE WHEN {$dv} BETWEEN 61 AND 90 THEN saldo_pendiente ELSE 0 END), 0) AS tramo_61_90,
+                COALESCE(SUM(CASE WHEN {$dv} > 90            THEN saldo_pendiente ELSE 0 END), 0) AS tramo_mas_90
+            FROM saldos_iniciales_cxp
+            WHERE {$where}
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
 
         return [
             'vigente'     => (float)($r['tramo_vigente'] ?? 0),
@@ -679,6 +774,18 @@ class CuentasPorPagarRepository extends BaseRepository
         if (!empty($filtros['tipo_documento'])) {
             $where .= " AND tipo_documento = :tipo_documento";
             $params[':tipo_documento'] = $filtros['tipo_documento'];
+        }
+        // Filtro por proveedor (mismo criterio que el listado principal de CxP)
+        if (!empty($filtros['id_proveedor'])) {
+            $rawProv = is_array($filtros['id_proveedor']) ? $filtros['id_proveedor'] : explode(',', (string)$filtros['id_proveedor']);
+            $provs = array_filter(array_map('intval', $rawProv));
+            if (!empty($provs)) {
+                $in = [];
+                foreach (array_values($provs) as $i => $id) {
+                    $k = ":siprov{$i}"; $in[] = $k; $params[$k] = $id;
+                }
+                $where .= " AND id_proveedor IN (" . implode(',', $in) . ")";
+            }
         }
 
         $sql = "SELECT

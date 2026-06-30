@@ -891,7 +891,8 @@ HTML;
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros = [
-            'estado' => $_GET['estado'] ?? 'TODOS',
+            'estado'     => $_GET['estado']     ?? 'TODOS',
+            'id_cliente' => $_GET['id_cliente'] ?? '',
         ];
         $filas = $this->repo->getSaldosInicialesCxc($idEmpresa, $filtros);
         $this->jsonSuccess(['filas' => $filas]);
