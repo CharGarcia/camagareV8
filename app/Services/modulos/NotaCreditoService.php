@@ -55,6 +55,12 @@ class NotaCreditoService
         try {
             // Generar Clave de Acceso (si es para SRI)
             $empresaConfig = $data['empresa_config'] ?? [];
+
+            // Ambiente de la empresa (1 pruebas / 2 producción). Sin esto la NC se
+            // guardaría siempre como '1' y, en producción, no aparecería en el
+            // listado (que filtra por el ambiente real de la empresa).
+            $data['tipo_ambiente'] = (string) ($empresaConfig['tipo_ambiente'] ?? '1');
+
             if (!empty($empresaConfig['ruc'])
                 && !empty($data['establecimiento'])
                 && !empty($data['punto_emision'])
@@ -102,18 +108,6 @@ class NotaCreditoService
                 }
             }
 
-            // Información adicional
-            $this->repository->deleteInfoAdicional($idNC);
-            if (!empty($data['info_adicional']) && is_array($data['info_adicional'])) {
-                foreach ($data['info_adicional'] as $ia) {
-                    $this->repository->insertInfoAdicional([
-                        'id_nota_credito' => $idNC,
-                        'nombre'          => $ia['nombre'] ?? '',
-                        'valor'           => $ia['valor'] ?? '',
-                    ]);
-                }
-            }
-
             $this->logService->registrar(
                 (int)$data['id_usuario'],
                 (int)$data['id_empresa'],
@@ -128,6 +122,9 @@ class NotaCreditoService
             $this->sincronizarCasilleros($idNC, $data);
 
             $db->commit();
+            // Info adicional fuera de la transacción: si la tabla no existe (BD sin
+            // migrar) NO debe impedir que la NC se guarde.
+            $this->guardarInfoAdicional($idNC, $data['info_adicional'] ?? []);
             $this->generarYGuardarXml($idNC, $data['empresa_config'] ?? []);
         } catch (Exception $e) {
             $db->rollBack();
@@ -302,18 +299,6 @@ class NotaCreditoService
                 }
             }
 
-            // Reemplazar información adicional
-            $this->repository->deleteInfoAdicional($id);
-            if (!empty($data['info_adicional']) && is_array($data['info_adicional'])) {
-                foreach ($data['info_adicional'] as $ia) {
-                    $this->repository->insertInfoAdicional([
-                        'id_nota_credito' => $id,
-                        'nombre'          => $ia['nombre'] ?? '',
-                        'valor'           => $ia['valor'] ?? '',
-                    ]);
-                }
-            }
-
             $this->logService->registrar(
                 (int)$data['id_usuario'],
                 (int)$data['id_empresa'],
@@ -328,11 +313,36 @@ class NotaCreditoService
             $this->sincronizarCasilleros($id, $data);
 
             $db->commit();
+            // Info adicional fuera de la transacción (no debe bloquear el guardado).
+            $this->guardarInfoAdicional($id, $data['info_adicional'] ?? []);
             $this->generarYGuardarXml($id, $data['empresa_config'] ?? []);
             return $id;
         } catch (Exception $e) {
             $db->rollBack();
             throw $e;
+        }
+    }
+
+    /**
+     * Persiste la información adicional fuera de la transacción principal.
+     * Si la tabla notas_credito_adicional no existe (BD sin migrar), se registra
+     * el error pero NO se interrumpe el guardado de la nota de crédito.
+     */
+    private function guardarInfoAdicional(int $idNC, $infoAdicional): void
+    {
+        try {
+            $this->repository->deleteInfoAdicional($idNC);
+            if (!empty($infoAdicional) && is_array($infoAdicional)) {
+                foreach ($infoAdicional as $ia) {
+                    $this->repository->insertInfoAdicional([
+                        'id_nota_credito' => $idNC,
+                        'nombre'          => $ia['nombre'] ?? '',
+                        'valor'           => $ia['valor'] ?? '',
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('[NotaCredito] Info adicional no guardada para NC ' . $idNC . ': ' . $e->getMessage());
         }
     }
 

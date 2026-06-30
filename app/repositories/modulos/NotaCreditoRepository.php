@@ -160,10 +160,16 @@ class NotaCreditoRepository extends BaseRepository
 
     public function getInfoAdicional(int $idNC): array
     {
-        $sql = "SELECT * FROM notas_credito_adicional WHERE id_nota_credito = ? ORDER BY id ASC";
-        $st = $this->db->prepare($sql);
-        $st->execute([$idNC]);
-        return $st->fetchAll();
+        // Tolerante: si la tabla aún no existe en la BD (producción sin migrar),
+        // devuelve vacío en lugar de romper la apertura/exportación de la NC.
+        try {
+            $sql = "SELECT * FROM notas_credito_adicional WHERE id_nota_credito = ? ORDER BY id ASC";
+            $st = $this->db->prepare($sql);
+            $st->execute([$idNC]);
+            return $st->fetchAll();
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     public function insertInfoAdicional(array $data): void
