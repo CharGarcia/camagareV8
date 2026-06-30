@@ -18,7 +18,7 @@ let CXP_catalogosCargados = false;
    INICIALIZACIÓN
 ════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-    CXP_cargar(); // dispara también CXP_cargarSaldosIniciales() al finalizar
+    CXP_cargar();
     CXP_cargarCatalogos();
     CXP_initBuscadorProveedores();
 });
@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
 ════════════════════════════════════════════════════ */
 async function CXP_cargar() {
     const tbody = document.getElementById('cxp-tbody');
-    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Cargando…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Cargando…</td></tr>`;
 
     const params = new URLSearchParams({
         accion:      'generarAjax',
@@ -46,7 +46,7 @@ async function CXP_cargar() {
         const data = await r.json();
 
         if (!data.ok) {
-            tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>${cxpEsc(data.error || 'Error al cargar')}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>${cxpEsc(data.error || 'Error al cargar')}</td></tr>`;
             return;
         }
 
@@ -58,11 +58,8 @@ async function CXP_cargar() {
         CXP_renderTabla(CXP_filtradoLocal);
 
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error de conexión</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error de conexión</td></tr>`;
         console.error('[CXP]', e);
-    } finally {
-        // Reaplicar el mismo filtro de proveedor a la sección de saldos iniciales
-        CXP_cargarSaldosIniciales();
     }
 }
 
@@ -132,7 +129,7 @@ function CXP_renderTabla(filas) {
     label.textContent = filas.length + ' registros';
 
     if (!filas.length) {
-        tbody.innerHTML = `<tr><td colspan="10" class="text-center py-5 text-muted">
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-muted">
             <i class="bi bi-credit-card fs-3 d-block mb-2 text-primary opacity-40"></i>
             No se encontraron cuentas por pagar con los filtros aplicados.
         </td></tr>`;
@@ -148,6 +145,7 @@ function CXP_renderTabla(filas) {
         const ret     = parseFloat(r.total_retenido|| 0);
         const ncRet   = nc + ret - nd;
         const esLiq   = r.tipo_fuente === 'LIQUIDACION';
+        const esSaldo = r.tipo_fuente === 'SALDO_INICIAL';
         const pagada  = saldo <= 0.001;
 
         // ── Badge de estado y color de fila ──
@@ -170,10 +168,12 @@ function CXP_renderTabla(filas) {
             rowClass  = '';
         }
 
-        // ── Badge tipo: integrado en columna Documento ──
-        const tipoBadge = esLiq
-            ? `<span class="badge badge-liquid rounded-pill me-1">Liq.</span>`
-            : `<span class="badge badge-compra rounded-pill me-1">Fac.</span>`;
+        // ── Badge de origen (columna Origen) ──
+        const origenBadge = esSaldo
+            ? `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 small px-2" title="Saldo inicial de apertura">Saldo inicial</span>`
+            : esLiq
+                ? `<span class="badge badge-liquid rounded-pill px-2">Liquidación</span>`
+                : `<span class="badge badge-compra rounded-pill px-2">Factura</span>`;
 
         // ── Fechas ──
         const fEmision     = CXP_fmtFecha(r.fecha_emision);
@@ -194,10 +194,13 @@ function CXP_renderTabla(filas) {
         <tr class="${rowClass}" data-id="${r.id}" data-tipo="${cxpEsc(r.tipo_fuente)}"
             data-proveedor="${cxpEsc(r.proveedor_nombre)}" data-doc="${cxpEsc(r.numero_documento)}">
 
-            <!-- Documento (badge tipo + número) -->
+            <!-- Documento -->
             <td class="ps-2" title="${cxpEsc(r.numero_documento)}">
-                ${tipoBadge}<span class="fw-semibold" style="font-size:.79rem;">${cxpEsc(r.numero_documento)}</span>
+                <span class="fw-semibold" style="font-size:.79rem;">${cxpEsc(r.numero_documento)}</span>
             </td>
+
+            <!-- Origen -->
+            <td class="text-center" style="white-space:nowrap;">${origenBadge}</td>
 
             <!-- Proveedor -->
             <td title="${cxpEsc(r.proveedor_nombre)}" style="font-size:.8rem;">
@@ -291,20 +294,28 @@ async function CXP_cargarCatalogos() {
    MODAL PAGO — abrir
 ════════════════════════════════════════════════════ */
 async function CXP_abrirModalPago(idDoc, tipoFuente) {
-    // Obtener datos en tiempo real del servidor (sin filtro de fecha de corte)
     let d;
-    try {
-        const resp = await fetch(`${BASE_URL}/${RUTA_MODULO_CXP}/getDocumentoParaPagoInfoAjax?id_doc=${idDoc}&tipo_fuente=${tipoFuente}`);
-        const data = await resp.json();
-        if (!data.ok) { alert(data.error || 'Error al cargar el documento.'); return; }
-        d = data.doc;
-    } catch(e) {
-        // Fallback a datos del listado si falla la conexión
-        const fila = CXP_datos.find(r => r.id == idDoc && r.tipo_fuente == tipoFuente);
+    if (tipoFuente === 'SALDO_INICIAL') {
+        // Saldo inicial: tomar datos de la fila ya cargada (no hay endpoint de documento)
+        const fila = CXP_datos.find(r => r.id == idDoc && r.tipo_fuente === 'SALDO_INICIAL');
         if (!fila) return;
         d = { numero_documento: fila.numero_documento, proveedor_nombre: fila.proveedor_nombre,
               importe_total: fila.total, total_pagado: fila.total_pagado, tipo_fuente: tipoFuente,
-              total_retenido: fila.total_retenido || 0, total_nc: 0, total_nd: 0, saldo: fila.saldo };
+              total_retenido: 0, total_nc: 0, total_nd: 0, saldo: fila.saldo };
+    } else {
+        // Compra / liquidación: obtener datos en tiempo real del servidor
+        try {
+            const resp = await fetch(`${BASE_URL}/${RUTA_MODULO_CXP}/getDocumentoParaPagoInfoAjax?id_doc=${idDoc}&tipo_fuente=${tipoFuente}`);
+            const data = await resp.json();
+            if (!data.ok) { alert(data.error || 'Error al cargar el documento.'); return; }
+            d = data.doc;
+        } catch(e) {
+            const fila = CXP_datos.find(r => r.id == idDoc && r.tipo_fuente == tipoFuente);
+            if (!fila) return;
+            d = { numero_documento: fila.numero_documento, proveedor_nombre: fila.proveedor_nombre,
+                  importe_total: fila.total, total_pagado: fila.total_pagado, tipo_fuente: tipoFuente,
+                  total_retenido: fila.total_retenido || 0, total_nc: 0, total_nd: 0, saldo: fila.saldo };
+        }
     }
 
     const saldo  = Math.max(0, parseFloat(d.saldo));
@@ -502,8 +513,9 @@ async function CXP_guardarPago() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Registrando…';
 
     try {
+        const esSaldo = tipoFuente === 'SALDO_INICIAL';
         const fd = new FormData();
-        fd.append('id_doc',             idDoc);
+        fd.append(esSaldo ? 'id_saldo' : 'id_doc', idDoc);
         fd.append('tipo_fuente',        tipoFuente);
         fd.append('id_punto_emision',   idPunto);
         fd.append('id_egreso_concepto', concepto);
@@ -523,7 +535,8 @@ async function CXP_guardarPago() {
             }
         }
 
-        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXP}/registrarPagoAjax`, {
+        const endpoint = esSaldo ? 'registrarPagoSaldoInicialAjax' : 'registrarPagoAjax';
+        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXP}/${endpoint}`, {
             method: 'POST',
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             body: fd
@@ -550,7 +563,8 @@ async function CXP_guardarPago() {
    MODAL HISTORIAL DE PAGOS
 ════════════════════════════════════════════════════ */
 async function CXP_abrirHistorial(idDoc, tipoFuente, nroDoc) {
-    document.getElementById('historial-pago-subtitulo').textContent = 'Documento: ' + nroDoc;
+    const esSaldo = tipoFuente === 'SALDO_INICIAL';
+    document.getElementById('historial-pago-subtitulo').textContent = (esSaldo ? 'Saldo inicial: ' : 'Documento: ') + nroDoc;
     document.getElementById('historial-pagos-tbody').innerHTML =
         '<tr><td colspan="6" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Cargando…</td></tr>';
     document.getElementById('historial-pagos-total').textContent = '0.00';
@@ -558,10 +572,10 @@ async function CXP_abrirHistorial(idDoc, tipoFuente, nroDoc) {
     new bootstrap.Modal(document.getElementById('modalHistorialPagos')).show();
 
     try {
-        const r = await fetch(
-            `${BASE_URL}/${RUTA_MODULO_CXP}/historialPagosAjax?id_doc=${idDoc}&tipo_fuente=${tipoFuente}`,
-            { headers: { 'X-Requested-With': 'XMLHttpRequest' } }
-        );
+        const url = esSaldo
+            ? `${BASE_URL}/${RUTA_MODULO_CXP}/historialPagosSaldoInicialAjax?id_saldo=${idDoc}`
+            : `${BASE_URL}/${RUTA_MODULO_CXP}/historialPagosAjax?id_doc=${idDoc}&tipo_fuente=${tipoFuente}`;
+        const r = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         const data = await r.json();
 
         if (!data.ok) {
@@ -755,78 +769,4 @@ function CXP_toast(mensaje, tipo = 'info') {
         Swal.fire({ toast: true, position: 'top-end', icon: tipo === 'danger' ? 'error' : tipo,
                     title: mensaje, showConfirmButton: false, timer: 3000 });
     }
-}
-
-/* ════════════════════════════════
-   SALDOS INICIALES CXP
-════════════════════════════════ */
-async function CXP_cargarSaldosIniciales() {
-    const seccion = document.getElementById('cxp-si-seccion');
-    const tbody   = document.getElementById('cxp-si-tbody');
-    if (!tbody || !seccion) return;
-
-    const estado = document.getElementById('cxp-si-estado')?.value || 'PENDIENTE';
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-3"><div class="spinner-border spinner-border-sm text-warning me-2"></div>Cargando…</td></tr>`;
-
-    const params = new URLSearchParams({ estado });
-    const idProv = CXP_getProveedoresSeleccionados();
-    if (idProv) params.set('id_proveedor', idProv);
-
-    try {
-        const r = await fetch(`${BASE_URL}/modulos/cuentas_por_pagar/getSaldosInicialesCxpAjax?${params}`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
-        const d = await r.json();
-        if (!d.ok) {
-            seccion.style.display = 'none';
-            return;
-        }
-        const filas = d.filas || [];
-
-        // Ocultar sección completa si no hay datos
-        if (!filas.length) {
-            seccion.style.display = 'none';
-            return;
-        }
-
-        seccion.style.display = '';
-        const countEl = document.getElementById('cxp-si-count');
-        if (countEl) countEl.textContent = filas.length + ' registros';
-
-        const tipoLabels = { FACTURA_COMPRA:'Factura', LIQUIDACION:'Liquidación', NOTA_CREDITO:'NC', NOTA_DEBITO:'ND' };
-        tbody.innerHTML = filas.map(f => {
-            const dias = parseInt(f.dias_vencido) || 0;
-            const stCol = dias > 0 ? 'color:#dc3545;' : '';
-            const estadoBadge = f.estado === 'PAGADO'
-                ? `<span class="badge bg-secondary bg-opacity-10 text-secondary border" style="font-size:.65rem;">Pagado</span>`
-                : dias > 0
-                    ? `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:.65rem;">Vencida</span>`
-                    : f.estado === 'PARCIAL'
-                        ? `<span class="badge bg-warning bg-opacity-10 text-warning border" style="font-size:.65rem;">Parcial</span>`
-                        : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:.65rem;">Pendiente</span>`;
-            const tipoLbl = tipoLabels[f.tipo_documento] || f.tipo_documento;
-            return `<tr style="${stCol}">
-                <td class="ps-3 small"><span class="badge bg-secondary bg-opacity-10 text-secondary border" style="font-size:.6rem;">${cxpEsc(tipoLbl)}</span></td>
-                <td class="font-monospace small fw-semibold">${cxpEsc(f.nro_documento)}</td>
-                <td class="small text-truncate">${cxpEsc(f.nombre_proveedor)}${f.ruc_proveedor ? `<small class='text-muted d-block'>${cxpEsc(f.ruc_proveedor)}</small>` : ''}</td>
-                <td class="text-center small">${cxpFmtFecha(f.fecha_emision)}</td>
-                <td class="text-center small">${f.fecha_vencimiento ? cxpFmtFecha(f.fecha_vencimiento) : '—'}</td>
-                <td class="text-end small">$${f.saldo_inicial}</td>
-                <td class="text-end small text-success">$${f.monto_pagado}</td>
-                <td class="text-end pe-3 fw-bold">$${f.saldo_pendiente}</td>
-                <td class="text-center">${estadoBadge}</td>
-            </tr>`;
-        }).join('');
-
-    } catch (e) {
-        // En caso de error de red ocultar silenciosamente — no interrumpir la vista principal
-        seccion.style.display = 'none';
-    }
-}
-
-function cxpEsc(s) {
-    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function cxpFmtFecha(f) {
-    if (!f) return '—';
-    const d = new Date(f + 'T00:00:00');
-    return d.toLocaleDateString('es-EC', { day:'2-digit', month:'2-digit', year:'numeric' });
 }

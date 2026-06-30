@@ -17,12 +17,13 @@ let CXC_seleccionados = new Set(); // ids de facturas seleccionadas
 // Catálogos del modal cobro
 let CXC_catalogos = { puntos: [], conceptos: [], formas: [] };
 let CXC_catalogosCargados = false;
+let CXC_cobroOrigen = 'FACTURA'; // origen del documento en el modal de cobro
 
 /* ════════════════════════════════════════════════════
    INICIALIZACIÓN
 ════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-    CXC_cargar(); // dispara también CXC_cargarSaldosIniciales() al finalizar
+    CXC_cargar();
     CXC_cargarCatalogos();
     if (CXC_TIENE_WA) CXC_cargarPlantillasWA();
     CXC_initBuscadorClientes();
@@ -33,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
 ════════════════════════════════════════════════════ */
 async function CXC_cargar() {
     const tbody = document.getElementById('cxc-tbody');
-    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4"><div class="spinner-border spinner-border-sm text-success me-2"></div>Cargando…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4"><div class="spinner-border spinner-border-sm text-success me-2"></div>Cargando…</td></tr>`;
     CXC_seleccionados.clear();
 
     const params = new URLSearchParams({
@@ -51,7 +52,7 @@ async function CXC_cargar() {
         const data = await r.json();
 
         if (!data.ok) {
-            tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>${data.error || 'Error al cargar'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>${data.error || 'Error al cargar'}</td></tr>`;
             return;
         }
 
@@ -63,11 +64,8 @@ async function CXC_cargar() {
         CXC_renderTabla(CXC_filtradoLocal);
 
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error de conexión</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error de conexión</td></tr>`;
         console.error('[CXC]', e);
-    } finally {
-        // Reaplicar el mismo filtro de cliente a la sección de saldos iniciales
-        CXC_cargarSaldosIniciales();
     }
 }
 
@@ -143,7 +141,7 @@ function CXC_renderTabla(filas) {
     label.textContent = filas.length + ' registros';
 
     if (!filas.length) {
-        tbody.innerHTML = `<tr><td colspan="10" class="text-center py-5 text-muted">
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-muted">
             <i class="bi bi-wallet2 fs-3 d-block mb-2 text-success opacity-40"></i>
             No se encontraron cuentas por cobrar con los filtros aplicados.
         </td></tr>`;
@@ -174,15 +172,20 @@ function CXC_renderTabla(filas) {
 
         const fEmision   = CXC_fmtFecha(r.fecha_emision);
         const fVenc      = CXC_fmtFecha(r.fecha_vencimiento);
+        const esSaldo    = r.origen === 'SALDO_INICIAL';
+        const origenBadge = esSaldo
+            ? `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 small px-2" title="Saldo inicial de apertura">Saldo inicial</span>`
+            : `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 small px-2">Factura</span>`;
 
         html += `
-        <tr class="${rowClass}" data-id="${r.id}" data-cliente="${esc(r.cliente_nombre)}" data-factura="${esc(r.numero_factura)}">
+        <tr class="${rowClass}" data-id="${r.id}" data-origen="${r.origen}" data-cliente="${esc(r.cliente_nombre)}" data-factura="${esc(r.numero_factura)}">
             <td class="text-center p-1">
                 <input class="form-check-input cxc-chk" type="checkbox" value="${r.id}"
-                       ${selec ? 'checked' : ''}
+                       ${esSaldo ? 'disabled' : (selec ? 'checked' : '')}
                        onchange="CXC_toggleSeleccion(${r.id}, this.checked)">
             </td>
             <td class="ps-2 fw-semibold text-truncate" title="${esc(r.numero_factura)}" style="font-size:.8rem;white-space:nowrap;">${esc(r.numero_factura)}</td>
+            <td class="text-center" style="white-space:nowrap;">${origenBadge}</td>
             <td class="text-truncate" title="${esc(r.cliente_nombre)}" style="font-size:.8rem;">${esc(r.cliente_nombre)}</td>
             <td style="font-size:.78rem;white-space:nowrap;">${fEmision}</td>
             <td style="font-size:.78rem;white-space:nowrap;">${fVenc}</td>
@@ -194,13 +197,14 @@ function CXC_renderTabla(filas) {
                 <div class="d-flex justify-content-center gap-1">
                     ${saldo > 0 ? `
                     <button class="btn btn-success btn-sm py-0 px-2" style="font-size:.72rem;" title="Registrar cobro"
-                            onclick="CXC_abrirModalCobro(${r.id})">
+                            onclick="CXC_abrirModalCobro(${r.id}, '${r.origen}')">
                         <i class="bi bi-cash-coin"></i>
                     </button>` : ''}
                     <button class="btn btn-outline-primary btn-sm py-0 px-2" style="font-size:.72rem;" title="Ver historial de cobros"
-                            onclick="CXC_abrirHistorial(${r.id}, '${esc(r.numero_factura)}')">
+                            onclick="CXC_abrirHistorial(${r.id}, '${esc(r.numero_factura)}', '${r.origen}')">
                         <i class="bi bi-clock-history"></i>
                     </button>
+                    ${!esSaldo ? `
                     <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;" title="Enviar recordatorio email"
                             onclick="CXC_abrirEmail(${r.id}, '${esc(r.numero_factura)}', '${esc(r.cliente_email || '')}', '${esc(r.cliente_nombre)}')">
                         <i class="bi bi-envelope"></i>
@@ -208,7 +212,7 @@ function CXC_renderTabla(filas) {
                     <button class="btn btn-sm py-0 px-2" style="font-size:.72rem;background:#25d366;color:#fff;" title="Enviar WhatsApp"
                             onclick="CXC_abrirWA(${r.id}, '${esc(r.numero_factura)}', '${esc(r.cliente_telefono || '')}', '${esc(r.cliente_nombre)}')">
                         <i class="bi bi-whatsapp"></i>
-                    </button>
+                    </button>` : ''}
                 </div>
             </td>
         </tr>`;
@@ -241,28 +245,41 @@ function CXC_toggleSeleccion(id, sel) {
 }
 
 function CXC_seleccionarTodos(sel) {
-    CXC_filtradoLocal.forEach(r => sel ? CXC_seleccionados.add(r.id) : CXC_seleccionados.delete(r.id));
-    document.querySelectorAll('.cxc-chk').forEach(c => c.checked = sel);
+    // Solo facturas: los saldos iniciales no tienen email/WhatsApp
+    CXC_filtradoLocal.forEach(r => {
+        if (r.origen === 'SALDO_INICIAL') return;
+        sel ? CXC_seleccionados.add(r.id) : CXC_seleccionados.delete(r.id);
+    });
+    document.querySelectorAll('.cxc-chk:not([disabled])').forEach(c => c.checked = sel);
 }
 
 /* ════════════════════════════════════════════════════
    MODAL COBRO
 ════════════════════════════════════════════════════ */
-async function CXC_abrirModalCobro(idVenta) {
-    // Obtener datos en tiempo real del servidor (sin filtro de fecha de corte)
+async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA') {
+    CXC_cobroOrigen = origen;
     let f;
-    try {
-        const resp = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/getFacturaParaCobroInfoAjax?id_venta=${idVenta}`);
-        const data = await resp.json();
-        if (!data.ok) { alert(data.error || 'Error al cargar la factura.'); return; }
-        f = data.factura;
-    } catch(e) {
-        // Fallback a datos del listado si falla la conexión
-        const fila = CXC_datos.find(r => r.id == idVenta);
+    if (origen === 'SALDO_INICIAL') {
+        // Saldo inicial: tomar datos de la fila ya cargada (no hay endpoint de factura)
+        const fila = CXC_datos.find(r => r.id == idVenta && r.origen === 'SALDO_INICIAL');
         if (!fila) return;
         f = { numero_factura: fila.numero_factura, cliente_nombre: fila.cliente_nombre,
               importe_total: fila.total, total_cobrado: fila.total_cobrado,
-              total_retenido: fila.total_retenido || 0, total_nc: fila.total_nc || 0, saldo: fila.saldo };
+              total_retenido: fila.total_retenido || 0, total_nc: 0, saldo: fila.saldo };
+    } else {
+        // Factura: obtener datos en tiempo real del servidor
+        try {
+            const resp = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/getFacturaParaCobroInfoAjax?id_venta=${idVenta}`);
+            const data = await resp.json();
+            if (!data.ok) { alert(data.error || 'Error al cargar la factura.'); return; }
+            f = data.factura;
+        } catch(e) {
+            const fila = CXC_datos.find(r => r.id == idVenta);
+            if (!fila) return;
+            f = { numero_factura: fila.numero_factura, cliente_nombre: fila.cliente_nombre,
+                  importe_total: fila.total, total_cobrado: fila.total_cobrado,
+                  total_retenido: fila.total_retenido || 0, total_nc: fila.total_nc || 0, saldo: fila.saldo };
+        }
     }
 
     const saldo = Math.max(0, parseFloat(f.saldo));
@@ -396,8 +413,9 @@ async function CXC_guardarCobro() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Registrando…';
 
     try {
+        const esSaldo = CXC_cobroOrigen === 'SALDO_INICIAL';
         const fd = new FormData();
-        fd.append('id_venta',           idVenta);
+        fd.append(esSaldo ? 'id_saldo' : 'id_venta', idVenta);
         fd.append('id_punto_emision',   idPunto);
         fd.append('id_ingreso_concepto',concepto);
         fd.append('monto',              monto);
@@ -412,7 +430,8 @@ async function CXC_guardarCobro() {
             fd.append('numero_operacion',        document.getElementById('cobro-num-op')?.value  || '');
         }
 
-        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/registrarCobroAjax`, {
+        const endpoint = esSaldo ? 'registrarCobroSaldoInicialAjax' : 'registrarCobroAjax';
+        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/${endpoint}`, {
             method: 'POST',
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             body: fd
@@ -437,15 +456,19 @@ async function CXC_guardarCobro() {
 /* ════════════════════════════════════════════════════
    MODAL HISTORIAL
 ════════════════════════════════════════════════════ */
-async function CXC_abrirHistorial(idVenta, nroFactura) {
-    document.getElementById('historial-subtitulo').textContent = 'Factura: ' + nroFactura;
+async function CXC_abrirHistorial(idVenta, nroFactura, origen = 'FACTURA') {
+    const esSaldo = origen === 'SALDO_INICIAL';
+    document.getElementById('historial-subtitulo').textContent = (esSaldo ? 'Saldo inicial: ' : 'Factura: ') + nroFactura;
     document.getElementById('historial-tbody').innerHTML = '<tr><td colspan="6" class="text-center text-muted">Cargando…</td></tr>';
     document.getElementById('historial-total').textContent = '0.00';
 
     new bootstrap.Modal(document.getElementById('modalHistorial')).show();
 
     try {
-        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/historialCobrosAjax?id_venta=${idVenta}`, {
+        const url = esSaldo
+            ? `${BASE_URL}/${RUTA_MODULO_CXC}/historialCobrosSaldoInicialAjax?id_saldo=${idVenta}`
+            : `${BASE_URL}/${RUTA_MODULO_CXC}/historialCobrosAjax?id_venta=${idVenta}`;
+        const r = await fetch(url, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         const data = await r.json();
@@ -819,72 +842,4 @@ function CXC_toast(msg, type = 'info') {
     if (cfg.timer)               opts.timer             = cfg.timer;
     if (!cfg.showConfirmButton)  opts.showConfirmButton = false;
     Swal.fire(opts);
-}
-
-/* ════════════════════════════════
-   SALDOS INICIALES CXC
-════════════════════════════════ */
-async function CXC_cargarSaldosIniciales() {
-    const seccion = document.getElementById('cxc-si-seccion');
-    const tbody   = document.getElementById('cxc-si-tbody');
-    if (!tbody || !seccion) return;
-
-    const estado = document.getElementById('cxc-si-estado')?.value || 'PENDIENTE';
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-3"><div class="spinner-border spinner-border-sm text-warning me-2"></div>Cargando…</td></tr>`;
-
-    const params = new URLSearchParams({ estado });
-    const idCliente = CXC_getClientesSeleccionados();
-    if (idCliente) params.set('id_cliente', idCliente);
-
-    try {
-        const r = await fetch(`${BASE_URL}/modulos/cuentas_por_cobrar/getSaldosInicialesCxcAjax?${params}`, { headers:{'X-Requested-With':'XMLHttpRequest'} });
-        const d = await r.json();
-        if (!d.ok) {
-            seccion.style.display = 'none';
-            return;
-        }
-        const filas = d.filas || [];
-
-        // Ocultar sección completa si no hay datos
-        if (!filas.length) {
-            seccion.style.display = 'none';
-            return;
-        }
-
-        seccion.style.display = '';
-        const countEl = document.getElementById('cxc-si-count');
-        if (countEl) countEl.textContent = filas.length + ' registros';
-
-        tbody.innerHTML = filas.map(f => {
-            const dias = parseInt(f.dias_vencido) || 0;
-            const stCol = dias > 0 ? 'color:#dc3545;' : '';
-            const estadoBadge = f.estado === 'PAGADO'
-                ? `<span class="badge bg-secondary bg-opacity-10 text-secondary border" style="font-size:.65rem;">Pagado</span>`
-                : dias > 0
-                    ? `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:.65rem;">Vencida</span>`
-                    : f.estado === 'PARCIAL'
-                        ? `<span class="badge bg-warning bg-opacity-10 text-warning border" style="font-size:.65rem;">Parcial</span>`
-                        : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:.65rem;">Pendiente</span>`;
-            return `<tr style="${stCol}">
-                <td class="ps-3 font-monospace small fw-semibold">${esc(f.nro_documento)}</td>
-                <td class="small text-truncate">${esc(f.nombre_cliente)}${f.ruc_cliente ? `<small class='text-muted d-block'>${esc(f.ruc_cliente)}</small>` : ''}</td>
-                <td class="text-center small">${cxcFmtFecha(f.fecha_emision)}</td>
-                <td class="text-center small">${f.fecha_vencimiento ? cxcFmtFecha(f.fecha_vencimiento) : '—'}</td>
-                <td class="text-end small">$${f.saldo_inicial}</td>
-                <td class="text-end small text-success">$${f.monto_cobrado}</td>
-                <td class="text-end pe-3 fw-bold">$${f.saldo_pendiente}</td>
-                <td class="text-center">${estadoBadge}</td>
-            </tr>`;
-        }).join('');
-
-    } catch (e) {
-        // En caso de error de red ocultar silenciosamente — no interrumpir la vista principal
-        seccion.style.display = 'none';
-    }
-}
-
-function cxcFmtFecha(f) {
-    if (!f) return '—';
-    const d = new Date(f + 'T00:00:00');
-    return d.toLocaleDateString('es-EC', { day:'2-digit', month:'2-digit', year:'numeric' });
 }

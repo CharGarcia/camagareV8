@@ -77,7 +77,7 @@ class CuentasPorCobrarController extends BaseModuloController
 
         $filtros = $this->getFiltros();
 
-        $filas      = $this->repo->getListado($idEmpresa, $filtros);
+        $filas      = $this->getFilasUnificadas($idEmpresa, $filtros);
         $stats      = $this->repo->getEstadisticas($idEmpresa, $filtros);
         $antiguedad = $this->repo->getAntiguedad($idEmpresa, $filtros);
 
@@ -95,6 +95,71 @@ class CuentasPorCobrarController extends BaseModuloController
             'stats'      => $stats,
             'antiguedad' => $antiguedad,
         ]);
+    }
+
+    /**
+     * Lista unificada de Cuentas por Cobrar: facturas (ventas_cabecera) +
+     * saldos iniciales por cobrar, en una sola tabla. Cada fila lleva un campo
+     * `origen` ('FACTURA' | 'SALDO_INICIAL') para distinguirla y enrutar acciones.
+     * Los saldos iniciales se filtran por el mismo estado/cliente del listado.
+     */
+    private function getFilasUnificadas(int $idEmpresa, array $filtros): array
+    {
+        // Facturas
+        $facturas = $this->repo->getListado($idEmpresa, $filtros);
+        foreach ($facturas as &$f) { $f['origen'] = 'FACTURA'; }
+        unset($f);
+
+        // Saldos iniciales (todos; se filtran en PHP por el mismo estado del listado)
+        $saldos = $this->repo->getSaldosInicialesCxc($idEmpresa, [
+            'estado'     => 'TODOS',
+            'id_cliente' => $filtros['id_cliente'] ?? '',
+        ]);
+
+        $estado = $filtros['estado'] ?? 'PENDIENTES';
+        $filasSI = [];
+        foreach ($saldos as $s) {
+            $pend = (float)$s['saldo_pendiente'];
+            $venc = ((int)($s['dias_vencido'] ?? 0)) > 0;
+            $incluir = match ($estado) {
+                'PENDIENTES' => $pend > 0,
+                'VENCIDAS'   => $pend > 0 && $venc,
+                'AL_DIA'     => $pend > 0 && !$venc,
+                'PAGADAS'    => $pend <= 0,
+                default      => true, // TODOS
+            };
+            if (!$incluir) continue;
+
+            $filasSI[] = [
+                'origen'            => 'SALDO_INICIAL',
+                'id'                => (int)$s['id'],
+                'numero_factura'    => $s['nro_documento'],
+                'id_cliente'        => $s['id_cliente'] ?? null,
+                'cliente_nombre'    => $s['nombre_cliente'],
+                'cliente_ruc'       => $s['ruc_cliente'],
+                'cliente_email'     => '',
+                'cliente_telefono'  => '',
+                'fecha_emision'     => $s['fecha_emision'],
+                'fecha_vencimiento' => $s['fecha_vencimiento'],
+                'total'             => $s['saldo_inicial'],
+                'total_cobrado'     => $s['monto_cobrado'],
+                'total_retenido'    => $s['monto_retenido'] ?? 0,
+                'total_nc'          => 0,
+                'saldo'             => $s['saldo_pendiente'],
+                'dias_vencido'      => (int)($s['dias_vencido'] ?? 0),
+            ];
+        }
+
+        $filas = array_merge($facturas, $filasSI);
+
+        // Orden por vencimiento ascendente (igual que el listado de facturas)
+        usort($filas, function ($a, $b) {
+            $va = $a['fecha_vencimiento'] ?? '';
+            $vb = $b['fecha_vencimiento'] ?? '';
+            return strcmp((string)$va, (string)$vb);
+        });
+
+        return $filas;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -690,7 +755,7 @@ $plantillasFiltradas = [];
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltros();
 
-        $filas = $this->repo->getListado($idEmpresa, $filtros);
+        $filas = $this->getFilasUnificadas($idEmpresa, $filtros);
 
         header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
         header('Content-Disposition: attachment; filename="cuentas_por_cobrar_' . date('Ymd_His') . '.xls"');
@@ -729,7 +794,7 @@ $plantillasFiltradas = [];
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltros();
 
-        $filas = $this->repo->getListado($idEmpresa, $filtros);
+        $filas = $this->getFilasUnificadas($idEmpresa, $filtros);
         $stats = $this->repo->getEstadisticas($idEmpresa, $filtros);
 
         try {
@@ -896,5 +961,76 @@ HTML;
         ];
         $filas = $this->repo->getSaldosInicialesCxc($idEmpresa, $filtros);
         $this->jsonSuccess(['filas' => $filas]);
+    }
+
+    /**
+     * Cobro de un saldo inicial CXC desde la tabla unificada de Cuentas por Cobrar.
+     * Delega en SaldosInicialesService::registrarCobroCxc (mismo flujo de ingresos).
+     */
+    public function registrarCobroSaldoInicialAjax(): void
+    {
+        $this->requireCrear();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $idSaldo = (int)($_POST['id_saldo'] ?? 0);
+        $idPunto = (int)($_POST['id_punto_emision'] ?? 0);
+        $monto   = (float)($_POST['monto'] ?? 0);
+        $idForma = (int)($_POST['id_forma_cobro'] ?? 0);
+
+        if ($idSaldo <= 0 || $idPunto <= 0 || $monto <= 0 || $idForma <= 0) {
+            $this->jsonError('Datos incompletos. Verifique serie, monto y forma de cobro.');
+            return;
+        }
+
+        $punto = $this->repo->getPuntoEmisionPorId($idPunto, $idEmpresa);
+        if (!$punto) {
+            $this->jsonError('Punto de emisión no válido.');
+            return;
+        }
+
+        try {
+            $service = new \App\Services\modulos\SaldosInicialesService(
+                new \App\repositories\modulos\SaldosInicialesRepository(),
+                new \App\Rules\modulos\SaldosInicialesRules(),
+                new \App\Services\LogSistemaService()
+            );
+            $result = $service->registrarCobroCxc($idSaldo, $idEmpresa, $idUsuario, [
+                'id_punto_emision'       => $idPunto,
+                'punto'                  => $punto,
+                'monto'                  => $monto,
+                'id_forma_cobro'         => $idForma,
+                'id_ingreso_concepto'    => !empty($_POST['id_ingreso_concepto']) ? (int)$_POST['id_ingreso_concepto'] : null,
+                'fecha_cobro'            => $_POST['fecha_cobro'] ?? date('Y-m-d'),
+                'observaciones'          => $_POST['observaciones'] ?? '',
+                'tipo_operacion_bancaria'=> $_POST['tipo_operacion_bancaria'] ?? '',
+                'numero_operacion'       => $_POST['numero_operacion'] ?? '',
+            ]);
+            $this->jsonSuccess(array_merge($result, [
+                'mensaje'     => "Cobro registrado correctamente. Ingreso: {$result['numero_ingreso']}",
+                'nuevo_saldo' => $result['nuevo_saldo'] ?? null,
+                'pagada'      => $result['pagado'] ?? false,
+            ]));
+        } catch (\Throwable $e) {
+            error_log('[CxC cobro saldo inicial] ' . $e->getMessage());
+            $this->jsonError('Error al registrar el cobro: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Historial de cobros de un saldo inicial CXC (para la tabla unificada).
+     */
+    public function historialCobrosSaldoInicialAjax(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idSaldo   = (int)($_GET['id_saldo'] ?? 0);
+        if ($idSaldo <= 0) {
+            $this->jsonError('ID de saldo inválido.');
+            return;
+        }
+        $repo = new \App\repositories\modulos\SaldosInicialesRepository();
+        $historial = $repo->getHistorialCobrosCxc($idSaldo, $idEmpresa);
+        $this->jsonSuccess(['historial' => $historial]);
     }
 }

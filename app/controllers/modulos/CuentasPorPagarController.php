@@ -72,7 +72,7 @@ class CuentasPorPagarController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltros();
 
-        $filas      = $this->repo->getListado($idEmpresa, $filtros);
+        $filas      = $this->getFilasUnificadas($idEmpresa, $filtros);
         $stats      = $this->repo->getEstadisticas($idEmpresa, $filtros);
         $antiguedad = $this->repo->getAntiguedad($idEmpresa, $filtros);
 
@@ -92,6 +92,73 @@ class CuentasPorPagarController extends BaseModuloController
             'stats'      => $stats,
             'antiguedad' => $antiguedad,
         ]);
+    }
+
+    /**
+     * Lista unificada de Cuentas por Pagar: compras/liquidaciones + saldos
+     * iniciales por pagar, en una sola tabla. Cada fila lleva `tipo_fuente`
+     * ('COMPRA' | 'LIQUIDACION' | 'SALDO_INICIAL') para distinguirla y enrutar.
+     */
+    private function getFilasUnificadas(int $idEmpresa, array $filtros): array
+    {
+        // Compras + liquidaciones
+        $docs = $this->repo->getListado($idEmpresa, $filtros);
+
+        // Si el usuario filtró explícitamente por tipo (COMPRA/LIQUIDACION),
+        // no incluir saldos iniciales (no aplican a ese filtro).
+        $tipo = $filtros['tipo_fuente'] ?? '';
+        if ($tipo === 'COMPRA' || $tipo === 'LIQUIDACION') {
+            return $docs;
+        }
+
+        // Saldos iniciales (todos; se filtran en PHP por el mismo estado)
+        $saldos = $this->repo->getSaldosInicialesCxp($idEmpresa, [
+            'estado'       => 'TODOS',
+            'id_proveedor' => $filtros['id_proveedor'] ?? '',
+        ]);
+
+        $estado = $filtros['estado'] ?? 'PENDIENTES';
+        $filasSI = [];
+        foreach ($saldos as $s) {
+            $pend = (float)$s['saldo_pendiente'];
+            $venc = ((int)($s['dias_vencido'] ?? 0)) > 0;
+            $incluir = match ($estado) {
+                'PENDIENTES' => $pend > 0,
+                'VENCIDAS'   => $pend > 0 && $venc,
+                'AL_DIA'     => $pend > 0 && !$venc,
+                'PAGADAS'    => $pend <= 0,
+                default      => true, // TODOS
+            };
+            if (!$incluir) continue;
+
+            $filasSI[] = [
+                'tipo_fuente'        => 'SALDO_INICIAL',
+                'id'                 => (int)$s['id'],
+                'id_proveedor'       => $s['id_proveedor'] ?? null,
+                'proveedor_nombre'   => $s['nombre_proveedor'],
+                'proveedor_ruc'      => $s['ruc_proveedor'],
+                'proveedor_email'    => '',
+                'proveedor_telefono' => '',
+                'numero_documento'   => $s['nro_documento'],
+                'fecha_emision'      => $s['fecha_emision'],
+                'fecha_vencimiento'  => $s['fecha_vencimiento'],
+                'total'              => $s['saldo_inicial'],
+                'total_pagado'       => $s['monto_pagado'],
+                'total_nc'           => 0,
+                'total_nd'           => 0,
+                'total_retenido'     => 0,
+                'saldo'              => $s['saldo_pendiente'],
+                'dias_vencido'       => (int)($s['dias_vencido'] ?? 0),
+            ];
+        }
+
+        $filas = array_merge($docs, $filasSI);
+
+        usort($filas, function ($a, $b) {
+            return strcmp((string)($a['fecha_vencimiento'] ?? ''), (string)($b['fecha_vencimiento'] ?? ''));
+        });
+
+        return $filas;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -324,7 +391,7 @@ class CuentasPorPagarController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltros();
 
-        $filas = $this->repo->getListado($idEmpresa, $filtros);
+        $filas = $this->getFilasUnificadas($idEmpresa, $filtros);
 
         header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
         header('Content-Disposition: attachment; filename="cuentas_por_pagar_' . date('Ymd_His') . '.xls"');
@@ -367,7 +434,7 @@ class CuentasPorPagarController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltros();
 
-        $filas = $this->repo->getListado($idEmpresa, $filtros);
+        $filas = $this->getFilasUnificadas($idEmpresa, $filtros);
         $stats = $this->repo->getEstadisticas($idEmpresa, $filtros);
 
         try {
@@ -509,5 +576,76 @@ class CuentasPorPagarController extends BaseModuloController
         ];
         $filas = $this->repo->getSaldosInicialesCxp($idEmpresa, $filtros);
         $this->jsonSuccess(['filas' => $filas]);
+    }
+
+    /**
+     * Pago de un saldo inicial CXP desde la tabla unificada de Cuentas por Pagar.
+     * Delega en SaldosInicialesService::registrarPagoCxp (mismo flujo de egresos).
+     */
+    public function registrarPagoSaldoInicialAjax(): void
+    {
+        $this->requireCrear();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $idSaldo = (int)($_POST['id_saldo'] ?? 0);
+        $idPunto = (int)($_POST['id_punto_emision'] ?? 0);
+        $monto   = (float)($_POST['monto'] ?? 0);
+        $idForma = (int)($_POST['id_forma_pago'] ?? 0);
+
+        if ($idSaldo <= 0 || $idPunto <= 0 || $monto <= 0 || $idForma <= 0) {
+            $this->jsonError('Datos incompletos. Verifique serie, monto y forma de pago.');
+            return;
+        }
+
+        $punto = $this->repo->getPuntoEmisionPorId($idPunto, $idEmpresa);
+        if (!$punto) {
+            $this->jsonError('Punto de emisión no válido.');
+            return;
+        }
+
+        try {
+            $service = new \App\Services\modulos\SaldosInicialesService(
+                new \App\repositories\modulos\SaldosInicialesRepository(),
+                new \App\Rules\modulos\SaldosInicialesRules(),
+                new \App\Services\LogSistemaService()
+            );
+            $result = $service->registrarPagoCxp($idSaldo, $idEmpresa, $idUsuario, [
+                'id_punto_emision'       => $idPunto,
+                'punto'                  => $punto,
+                'monto'                  => $monto,
+                'id_forma_pago'          => $idForma,
+                'id_egreso_concepto'     => !empty($_POST['id_egreso_concepto']) ? (int)$_POST['id_egreso_concepto'] : null,
+                'fecha_pago'             => $_POST['fecha_pago'] ?? date('Y-m-d'),
+                'observaciones'          => $_POST['observaciones'] ?? '',
+                'tipo_operacion_bancaria'=> $_POST['tipo_operacion_bancaria'] ?? '',
+                'numero_operacion'       => $_POST['numero_operacion'] ?? '',
+            ]);
+            $this->jsonSuccess(array_merge($result, [
+                'mensaje'     => "Pago registrado correctamente. Egreso: {$result['numero_egreso']}",
+                'nuevo_saldo' => $result['nuevo_saldo'] ?? null,
+                'pagada'      => $result['pagado'] ?? false,
+            ]));
+        } catch (\Throwable $e) {
+            error_log('[CxP pago saldo inicial] ' . $e->getMessage());
+            $this->jsonError('Error al registrar el pago: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Historial de pagos de un saldo inicial CXP (para la tabla unificada).
+     */
+    public function historialPagosSaldoInicialAjax(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idSaldo   = (int)($_GET['id_saldo'] ?? 0);
+        if ($idSaldo <= 0) {
+            $this->jsonError('ID de saldo inválido.');
+            return;
+        }
+        $repo = new \App\repositories\modulos\SaldosInicialesRepository();
+        $historial = $repo->getHistorialPagosCxp($idSaldo, $idEmpresa);
+        $this->jsonSuccess(['historial' => $historial]);
     }
 }

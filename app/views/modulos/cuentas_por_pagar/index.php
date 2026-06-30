@@ -199,9 +199,10 @@
         <div class="card-body p-0">
             <div class="cxp-scroll w-100">
                 <table class="table table-hover table-sm mb-0 align-middle" id="tabla-cxp"
-                       style="table-layout:fixed; min-width:860px;">
+                       style="table-layout:fixed; min-width:980px;">
                     <colgroup>
                         <col style="width:165px;"><!-- Documento (badge+nro) -->
+                        <col style="width:120px;"><!-- Origen -->
                         <col>                    <!-- Proveedor (flex) -->
                         <col style="width:92px;"><!-- F.Emisión -->
                         <col style="width:108px;"><!-- F.Vencimiento -->
@@ -215,6 +216,7 @@
                     <thead class="table-light">
                         <tr>
                             <th class="ps-2">Documento</th>
+                            <th class="text-center">Origen</th>
                             <th>Proveedor</th>
                             <th class="text-center">F.Emisión</th>
                             <th class="text-center">F.Vencimiento</th>
@@ -227,59 +229,9 @@
                         </tr>
                     </thead>
                     <tbody id="cxp-tbody">
-                        <tr><td colspan="10" class="text-center py-5 text-muted">
+                        <tr><td colspan="11" class="text-center py-5 text-muted">
                             <i class="bi bi-credit-card fs-3 d-block mb-2 text-primary opacity-50"></i>
                             Cargando cuentas por pagar…
-                        </td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- ── Saldos Iniciales CXP ── -->
-    <div class="card border-0 shadow-sm mt-4" id="cxp-si-seccion" style="display:none;">
-        <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
-            <div>
-                <h6 class="fw-bold mb-0 text-warning"><i class="bi bi-archive me-2"></i>Saldos Iniciales CXP</h6>
-                <small class="text-muted">Saldos cargados manualmente desde sistemas anteriores — no corresponden a documentos registrados en este sistema</small>
-            </div>
-            <div class="d-flex gap-2 align-items-center">
-                <small class="text-muted" id="cxp-si-count"></small>
-                <select id="cxp-si-estado" class="form-select form-select-sm shadow-none border" style="width:160px;" onchange="CXP_cargarSaldosIniciales()">
-                    <option value="TODOS">Todos los estados</option>
-                    <option value="PENDIENTE" selected>Pendiente</option>
-                    <option value="PARCIAL">Parcial</option>
-                    <option value="PAGADO">Pagado</option>
-                </select>
-                <button class="btn btn-outline-warning btn-sm" onclick="window.location.href='<?php echo BASE_URL; ?>/modulos/saldos_iniciales'">
-                    <i class="bi bi-box-arrow-up-right me-1"></i>Ir a Saldos Iniciales
-                </button>
-            </div>
-        </div>
-        <div class="card-body p-0">
-            <div style="max-height:300px;overflow-y:auto;">
-                <table class="table table-hover table-sm mb-0 align-middle" style="table-layout:fixed;">
-                    <colgroup>
-                        <col style="width:90px;"><col style="width:130px;"><col><col style="width:110px;">
-                        <col style="width:110px;"><col style="width:100px;"><col style="width:100px;"><col style="width:100px;"><col style="width:90px;">
-                    </colgroup>
-                    <thead class="table-light" style="position:sticky;top:0;z-index:5;">
-                        <tr>
-                            <th class="ps-3 small fw-semibold">Tipo</th>
-                            <th class="small fw-semibold">Documento</th>
-                            <th class="small fw-semibold">Proveedor / RUC</th>
-                            <th class="text-center small fw-semibold">F.Emisión</th>
-                            <th class="text-center small fw-semibold">F.Vencimiento</th>
-                            <th class="text-end small fw-semibold">Saldo Inicial</th>
-                            <th class="text-end small fw-semibold">Pagado</th>
-                            <th class="text-end pe-3 small fw-semibold">Pendiente</th>
-                            <th class="text-center small fw-semibold">Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody id="cxp-si-tbody">
-                        <tr><td colspan="9" class="text-center py-4 text-muted">
-                            <div class="spinner-border spinner-border-sm text-warning me-2"></div>Cargando saldos iniciales…
                         </td></tr>
                     </tbody>
                 </table>
