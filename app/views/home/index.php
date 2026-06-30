@@ -1,11 +1,27 @@
 <?php
 /** @var string $titulo */
 /** @var bool $sinEmpresaSuperAdmin */
+/** @var bool $mostrarDashboard */
 $sinEmpresaSuperAdmin = $sinEmpresaSuperAdmin ?? false;
+$mostrarDashboard     = $mostrarDashboard ?? true;
 $base = rtrim(BASE_URL ?? '', '/');
 $anioActual = (int) date('Y');
 $mesActual  = (int) date('n');
 ?>
+
+<?php if (!$mostrarDashboard): ?>
+<!-- Nivel 1: sin dashboard (datos financieros de toda la empresa). Bienvenida simple. -->
+<div class="d-flex align-items-center justify-content-center" style="min-height:60vh">
+    <div class="text-center">
+        <img src="<?= $base ?>/image/logofinal.png" alt="CaMaGaRe ERP" class="mb-3 d-block mx-auto" style="max-height:140px;width:auto">
+
+        <h4 class="fw-bold mb-3">Bienvenid@<?= !empty($_SESSION['nombre']) ? ', ' . htmlspecialchars($_SESSION['nombre']) : '' ?></h4>
+        <p class="mb-0" style="font-size:5rem;line-height:1.1"><span class="fw-bold text-primary">CaMaGaRe</span> <span class="text-muted">ERP</span></p>
+    </div>
+</div>
+<?php return; // No se renderiza el dashboard ni su JS. ?>
+<?php endif; ?>
+
 <style>
 .db-metric-card {
     background:#fff; border-radius:10px; padding:1.1rem 1.25rem;
@@ -187,6 +203,35 @@ $mesActual  = (int) date('n');
             </div>
             <div class="db-metric-change ch-neu mt-2 small text-muted">Pendiente de pago del período</div>
         </div>
+    </div>
+</div>
+
+<!-- ── Saldos Iniciales (apertura) ── -->
+<div id="panelSaldosIniciales" class="db-panel mb-3 d-none">
+    <div class="db-panel-header">
+        <h6 class="db-panel-title"><i class="bi bi-flag me-2 text-secondary"></i>Saldos Iniciales (apertura)</h6>
+        <a href="<?= $base ?>/modulos/saldos_iniciales" class="small text-decoration-none">Ver módulo <i class="bi bi-arrow-right-short"></i></a>
+    </div>
+    <div class="row g-0">
+        <?php
+        $siItems = [
+            ['k'=>'cxc',            'lbl'=>'CxC inicial',    'ico'=>'bi-person-check', 'cls'=>'text-primary'],
+            ['k'=>'cxp',            'lbl'=>'CxP inicial',    'ico'=>'bi-building',     'cls'=>'text-danger'],
+            ['k'=>'bancos',         'lbl'=>'Bancos / Efectivo','ico'=>'bi-bank',       'cls'=>'text-success'],
+            ['k'=>'anticipos',      'lbl'=>'Anticipos',      'ico'=>'bi-wallet2',      'cls'=>'text-info'],
+            ['k'=>'inventario',     'lbl'=>'Inventario',     'ico'=>'bi-box-seam',     'cls'=>'text-warning'],
+            ['k'=>'consignaciones', 'lbl'=>'Consignaciones', 'ico'=>'bi-truck',        'cls'=>'text-secondary'],
+        ];
+        foreach ($siItems as $it): ?>
+        <div class="col-6 col-md-4 col-xl-2 border-end border-bottom p-3">
+            <div class="d-flex align-items-center mb-1">
+                <i class="bi <?= $it['ico'] ?> <?= $it['cls'] ?> me-2"></i>
+                <span class="db-metric-label"><?= $it['lbl'] ?></span>
+            </div>
+            <div class="db-metric-value text-tr sk" id="si_<?= $it['k'] ?>" style="font-size:1.15rem">$0.00</div>
+            <div class="small text-muted" id="siN_<?= $it['k'] ?>">—</div>
+        </div>
+        <?php endforeach; ?>
     </div>
 </div>
 
@@ -486,6 +531,19 @@ function renderTopClientes(data){
     });
 }
 
+// ── Saldos iniciales (apertura) ──
+function renderSaldosIniciales(si){
+    const panel = $('panelSaldosIniciales');
+    if(!si || !si.tiene_datos){ if(panel) panel.classList.add('d-none'); return; }
+    if(panel) panel.classList.remove('d-none');
+    ['cxc','cxp','bancos','anticipos','inventario','consignaciones'].forEach(k=>{
+        const c = si[k] || {monto:0, n:0};
+        const elV = $('si_'+k), elN = $('siN_'+k);
+        if(elV){ elV.classList.remove('sk','text-tr'); elV.textContent = fmt(c.monto); }
+        if(elN){ elN.textContent = c.n + (c.n===1?' registro':' registros'); }
+    });
+}
+
 // ── Carga principal ──
 async function applyFilters(){
     saveFilters();
@@ -567,6 +625,9 @@ async function applyFilters(){
         // Vencidos
         renderVenc('tCxcVencidas', d.cxc_vencidas, 'cliente');
         renderVenc('tCxpVencidas', d.cxp_vencidas, 'proveedor');
+
+        // Saldos iniciales (apertura)
+        renderSaldosIniciales(d.saldos_iniciales);
 
     } catch(e){
         console.error(e);

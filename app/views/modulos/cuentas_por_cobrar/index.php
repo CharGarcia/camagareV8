@@ -43,12 +43,12 @@
             </h2>
             <div id="collapseFiltrosCxC" class="accordion-collapse collapse show">
                 <div class="accordion-body bg-light bg-opacity-10 p-3 pt-2">
-                    <form id="form-filtros-cxc" onsubmit="event.preventDefault(); CXC_cargar();" class="row g-3">
+                    <form id="form-filtros-cxc" onsubmit="event.preventDefault(); CXC_cargar();" class="row g-2 align-items-start">
 
                         <!-- Estado CxC -->
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-auto">
                             <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
-                            <select id="cxc-estado" name="estado" class="form-select form-select-sm shadow-none border"
+                            <select id="cxc-estado" name="estado" class="form-select form-select-sm shadow-none border" style="width:150px;"
                                     onchange="CXC_cargar()">
                                 <option value="PENDIENTES" selected>Saldo Pendiente</option>
                                 <option value="VENCIDAS">Vencidas</option>
@@ -59,17 +59,17 @@
                         </div>
 
                         <!-- Fecha Desde -->
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-auto">
                             <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>
                             <input type="date" id="cxc-fecha-desde" name="fecha_desde"
-                                   class="form-control form-control-sm shadow-none border">
+                                   class="form-control form-control-sm shadow-none border" style="width:140px;">
                         </div>
 
                         <!-- Fecha Hasta -->
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-auto">
                             <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Fecha Hasta</label>
                             <input type="date" id="cxc-fecha-hasta" name="fecha_hasta"
-                                   class="form-control form-control-sm shadow-none border"
+                                   class="form-control form-control-sm shadow-none border" style="width:140px;"
                                    value="<?php echo date('Y-m-d'); ?>">
                         </div>
 
@@ -86,13 +86,17 @@
                                  style="z-index:1050;width:calc(100% - 1.5rem);max-height:220px;overflow-y:auto;margin-top:2px;"></div>
                         </div>
 
-                        <div class="col-12 d-flex justify-content-end gap-2 border-top pt-3 mt-1">
-                            <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="CXC_limpiarFiltros()">
-                                <i class="bi bi-eraser me-1"></i>Limpiar filtros
-                            </button>
-                            <button type="submit" class="btn btn-success btn-sm px-4 shadow-sm">
-                                <i class="bi bi-search me-1"></i>Aplicar Filtros
-                            </button>
+                        <!-- Botones -->
+                        <div class="col-md-auto">
+                            <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="CXC_limpiarFiltros()">
+                                    <i class="bi bi-eraser me-1"></i>Limpiar filtros
+                                </button>
+                                <button type="submit" class="btn btn-success btn-sm px-4 shadow-sm">
+                                    <i class="bi bi-search me-1"></i>Aplicar Filtros
+                                </button>
+                            </div>
                         </div>
                     </form>
                 </div>

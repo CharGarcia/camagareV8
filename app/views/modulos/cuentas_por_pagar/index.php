@@ -52,9 +52,9 @@
                     <form id="form-filtros-cxp" onsubmit="event.preventDefault(); CXP_cargar();" class="row g-3">
 
                         <!-- Estado -->
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-auto">
                             <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Estado</label>
-                            <select id="cxp-estado" name="estado" class="form-select form-select-sm shadow-none border"
+                            <select id="cxp-estado" name="estado" class="form-select form-select-sm shadow-none border" style="width:150px;"
                                     onchange="CXP_cargar()">
                                 <option value="PENDIENTES" selected>Saldo Pendiente</option>
                                 <option value="VENCIDAS">Vencidas</option>
@@ -65,9 +65,9 @@
                         </div>
 
                         <!-- Tipo de documento -->
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-auto">
                             <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Tipo</label>
-                            <select id="cxp-tipo" name="tipo_fuente" class="form-select form-select-sm shadow-none border"
+                            <select id="cxp-tipo" name="tipo_fuente" class="form-select form-select-sm shadow-none border" style="width:150px;"
                                     onchange="CXP_cargar()">
                                 <option value="">Todos</option>
                                 <option value="COMPRA">Solo Facturas</option>
@@ -76,17 +76,17 @@
                         </div>
 
                         <!-- Fecha Desde -->
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-auto">
                             <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>
                             <input type="date" id="cxp-fecha-desde" name="fecha_desde"
-                                   class="form-control form-control-sm shadow-none border">
+                                   class="form-control form-control-sm shadow-none border" style="width:140px;">
                         </div>
 
                         <!-- Fecha Hasta -->
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-auto">
                             <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Fecha Hasta</label>
                             <input type="date" id="cxp-fecha-hasta" name="fecha_hasta"
-                                   class="form-control form-control-sm shadow-none border"
+                                   class="form-control form-control-sm shadow-none border" style="width:140px;"
                                    value="<?php echo date('Y-m-d'); ?>">
                         </div>
 
@@ -103,13 +103,17 @@
                                  style="z-index:1050;width:calc(100% - 1.5rem);max-height:220px;overflow-y:auto;margin-top:2px;"></div>
                         </div>
 
-                        <div class="col-12 d-flex justify-content-end gap-2 border-top pt-3 mt-1">
-                            <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="CXP_limpiarFiltros()">
-                                <i class="bi bi-eraser me-1"></i>Limpiar filtros
-                            </button>
-                            <button type="submit" class="btn btn-primary btn-sm px-4 shadow-sm">
-                                <i class="bi bi-search me-1"></i>Aplicar Filtros
-                            </button>
+                        <!-- Botones -->
+                        <div class="col-md-auto">
+                            <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="CXP_limpiarFiltros()">
+                                    <i class="bi bi-eraser me-1"></i>Limpiar filtros
+                                </button>
+                                <button type="submit" class="btn btn-primary btn-sm px-4 shadow-sm">
+                                    <i class="bi bi-search me-1"></i>Aplicar Filtros
+                                </button>
+                            </div>
                         </div>
                     </form>
                 </div>

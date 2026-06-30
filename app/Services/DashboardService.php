@@ -52,6 +52,8 @@ class DashboardService
             // CxC / CxP filtradas por período seleccionado
             'cxc_total'             => $this->getCxcTotal($idEmpresa, $tipoAmbiente, $desde, $hasta),
             'cxp_total'             => $this->getCxpTotal($idEmpresa, $tipoAmbiente, $desde, $hasta),
+            // Saldos iniciales de apertura (estado puntual, NO filtrado por período)
+            'saldos_iniciales'      => $this->getSaldosIniciales($idEmpresa, $tipoAmbiente),
             // Tablas recientes
             'facturas_recientes'    => $this->getVentasRecientes($idEmpresa, 6, $tipoAmbiente),
             'compras_recientes'     => $this->getComprasRecientes($idEmpresa, 6, $tipoAmbiente),
@@ -201,6 +203,87 @@ class DashboardService
         );
         $st->execute([$e, $ta, $d, $h]);
         return (float) $st->fetchColumn();
+    }
+
+    // ── Saldos iniciales de apertura ──────────────────────────────────────────
+
+    /**
+     * Resumen de los saldos iniciales de apertura cargados en el módulo
+     * modulos/saldos_iniciales. Es un estado puntual de arranque: NO se filtra
+     * por el período seleccionado en el dashboard.
+     *
+     * Devuelve, por cada categoría, el monto pendiente/saldo y el número de
+     * registros, más los totales por cobrar y por pagar de apertura.
+     */
+    private function getSaldosIniciales(int $e, string $ta): array
+    {
+        // CXC: pendiente = saldo_inicial - monto_cobrado (saldo_pendiente almacenado).
+        $cxc = $this->db->prepare(
+            "SELECT COALESCE(SUM(saldo_pendiente), 0) AS monto, COUNT(*) AS n
+             FROM saldos_iniciales_cxc
+             WHERE id_empresa = ? AND eliminado = false AND saldo_pendiente > 0"
+        );
+        $cxc->execute([$e]);
+        $rCxc = $cxc->fetch(PDO::FETCH_ASSOC) ?: ['monto' => 0, 'n' => 0];
+
+        // CXP
+        $cxp = $this->db->prepare(
+            "SELECT COALESCE(SUM(saldo_pendiente), 0) AS monto, COUNT(*) AS n
+             FROM saldos_iniciales_cxp
+             WHERE id_empresa = ? AND eliminado = false AND saldo_pendiente > 0"
+        );
+        $cxp->execute([$e]);
+        $rCxp = $cxp->fetch(PDO::FETCH_ASSOC) ?: ['monto' => 0, 'n' => 0];
+
+        // Bancos / Efectivo / Tarjeta (apertura): una fila por forma de pago.
+        $ban = $this->db->prepare(
+            "SELECT COALESCE(SUM(saldo_inicial), 0) AS monto, COUNT(*) AS n
+             FROM saldos_iniciales_bancos
+             WHERE id_empresa = ? AND eliminado = false"
+        );
+        $ban->execute([$e]);
+        $rBan = $ban->fetch(PDO::FETCH_ASSOC) ?: ['monto' => 0, 'n' => 0];
+
+        // Anticipos de clientes y proveedores.
+        $ant = $this->db->prepare(
+            "SELECT COALESCE(SUM(saldo_inicial), 0) AS monto, COUNT(*) AS n
+             FROM saldos_iniciales_anticipos
+             WHERE id_empresa = ? AND eliminado = false"
+        );
+        $ant->execute([$e]);
+        $rAnt = $ant->fetch(PDO::FETCH_ASSOC) ?: ['monto' => 0, 'n' => 0];
+
+        // Inventario de apertura: entradas al kardex con referencia SALDO_INICIAL,
+        // alineadas al ambiente real de la empresa (igual que el listado del módulo).
+        $inv = $this->db->prepare(
+            "SELECT COALESCE(SUM(costo_total), 0) AS monto, COUNT(*) AS n
+             FROM inventario_kardex
+             WHERE id_empresa = ? AND eliminado = false
+               AND referencia_tipo = 'SALDO_INICIAL'
+               AND tipo_ambiente = ?"
+        );
+        $inv->execute([$e, $ta]);
+        $rInv = $inv->fetch(PDO::FETCH_ASSOC) ?: ['monto' => 0, 'n' => 0];
+
+        // Consignaciones (solo registro, no afecta stock).
+        $con = $this->db->prepare(
+            "SELECT COALESCE(SUM(total), 0) AS monto, COUNT(*) AS n
+             FROM saldos_iniciales_consignaciones
+             WHERE id_empresa = ? AND eliminado = false"
+        );
+        $con->execute([$e]);
+        $rCon = $con->fetch(PDO::FETCH_ASSOC) ?: ['monto' => 0, 'n' => 0];
+
+        return [
+            'cxc'           => ['monto' => (float) $rCxc['monto'], 'n' => (int) $rCxc['n']],
+            'cxp'           => ['monto' => (float) $rCxp['monto'], 'n' => (int) $rCxp['n']],
+            'bancos'        => ['monto' => (float) $rBan['monto'], 'n' => (int) $rBan['n']],
+            'anticipos'     => ['monto' => (float) $rAnt['monto'], 'n' => (int) $rAnt['n']],
+            'inventario'    => ['monto' => (float) $rInv['monto'], 'n' => (int) $rInv['n']],
+            'consignaciones'=> ['monto' => (float) $rCon['monto'], 'n' => (int) $rCon['n']],
+            'tiene_datos'   => ((int) $rCxc['n'] + (int) $rCxp['n'] + (int) $rBan['n']
+                              + (int) $rAnt['n'] + (int) $rInv['n'] + (int) $rCon['n']) > 0,
+        ];
     }
 
     // ── Tablas recientes ──────────────────────────────────────────────────────

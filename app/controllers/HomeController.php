@@ -37,6 +37,8 @@ class HomeController extends Controller
         $this->viewWithLayout('layouts.main', 'home.index', [
             'titulo' => 'Inicio',
             'sinEmpresaSuperAdmin' => $sinEmpresa,
+            // El dashboard (datos financieros de toda la empresa) no se muestra a Nivel 1.
+            'mostrarDashboard'     => $nivel !== 1,
         ]);
     }
 
@@ -44,6 +46,13 @@ class HomeController extends Controller
     {
         $this->requireAuth();
         header('Content-Type: application/json');
+
+        // El dashboard no está disponible para usuarios Nivel 1.
+        if ((int) ($_SESSION['nivel'] ?? 1) === 1) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'No autorizado.']);
+            exit;
+        }
 
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
         if ($idEmpresa <= 0) {
