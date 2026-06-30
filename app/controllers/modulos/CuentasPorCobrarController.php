@@ -889,7 +889,7 @@ HTML;
     public function getSaldosInicialesCxcAjax(): void
     {
         $this->requireLeer();
-        $idEmpresa = $this->getIdEmpresa();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros = [
             'estado' => $_GET['estado'] ?? 'TODOS',
         ];

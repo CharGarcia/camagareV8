@@ -9,6 +9,9 @@ $urlBase = $base . '/' . $rutaModulo;
 
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
 
+<?php /* Página con pestañas sobre la tabla: desactivar app-shell para que las tablas tengan su propio scroll vertical */ ?>
+<script>document.body.classList.add('cmg-no-app-shell');</script>
+
 <style>
     .si-header { flex-shrink: 0; }
 

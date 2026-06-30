@@ -181,7 +181,8 @@ async function SI_guardarCxc() {
 
 async function SI_eliminarCxc() {
     const id = document.getElementById('btn-eliminar-cxc').getAttribute('data-id');
-    if (!id || !confirm('¿Eliminar este registro de saldo inicial?')) return;
+    if (!id) return;
+    if (!(await SI_confirmar('¿Eliminar este registro de saldo inicial?'))) return;
     const fd = new FormData(); fd.append('id', id);
     try {
         const r = await fetch(`${BASE_URL}/${RUTA_SI}/eliminarCxcAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
@@ -205,9 +206,7 @@ async function SI_importarCxc(input) {
         const r = await fetch(`${BASE_URL}/${RUTA_SI}/importarCxcAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
         const d = await r.json();
         if (d.ok) {
-            let msg = d.mensaje;
-            if (d.errores?.length) msg += '\n' + d.errores.join('\n');
-            alert(msg);
+            SI_mostrarImport(d);
             SI_cargarCxc();
         } else { SI_toast(d.error, 'danger'); }
     } catch(e) { SI_toast('Error al importar', 'danger'); }
@@ -339,7 +338,8 @@ async function SI_guardarCxp() {
 
 async function SI_eliminarCxp() {
     const id = document.getElementById('btn-eliminar-cxp').getAttribute('data-id');
-    if (!id || !confirm('¿Eliminar este registro de saldo inicial?')) return;
+    if (!id) return;
+    if (!(await SI_confirmar('¿Eliminar este registro de saldo inicial?'))) return;
     const fd = new FormData(); fd.append('id', id);
     try {
         const r = await fetch(`${BASE_URL}/${RUTA_SI}/eliminarCxpAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
@@ -363,9 +363,7 @@ async function SI_importarCxp(input) {
         const r = await fetch(`${BASE_URL}/${RUTA_SI}/importarCxpAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
         const d = await r.json();
         if (d.ok) {
-            let msg = d.mensaje;
-            if (d.errores?.length) msg += '\n' + d.errores.join('\n');
-            alert(msg);
+            SI_mostrarImport(d);
             SI_cargarCxp();
         } else { SI_toast(d.error, 'danger'); }
     } catch(e) { SI_toast('Error al importar', 'danger'); }
@@ -467,7 +465,7 @@ async function SI_guardarBancos() {
 }
 
 async function SI_eliminarBanco(id) {
-    if (!confirm('¿Eliminar el saldo inicial de esta cuenta?')) return;
+    if (!(await SI_confirmar('¿Eliminar el saldo inicial de esta cuenta?'))) return;
     const fd = new FormData(); fd.append('id', id);
     try {
         const r = await fetch(`${BASE_URL}/${RUTA_SI}/eliminarBancoAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
@@ -551,7 +549,7 @@ async function SI_guardarEfectivo() {
 }
 
 async function SI_eliminarEfectivo(id) {
-    if (!confirm('¿Eliminar el saldo inicial de esta forma de efectivo?')) return;
+    if (!(await SI_confirmar('¿Eliminar el saldo inicial de esta forma de efectivo?'))) return;
     const fd = new FormData(); fd.append('id', id);
     try {
         const r = await fetch(`${BASE_URL}/${RUTA_SI}/eliminarBancoAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
@@ -691,7 +689,8 @@ async function SI_guardarAnticipo() {
 
 async function SI_eliminarAnticipo() {
     const id = document.getElementById('btn-eliminar-anti').getAttribute('data-id');
-    if (!id || !confirm('¿Eliminar este saldo inicial de anticipo?')) return;
+    if (!id) return;
+    if (!(await SI_confirmar('¿Eliminar este saldo inicial de anticipo?'))) return;
     const fd = new FormData(); fd.append('id', id);
     try {
         const r = await fetch(`${BASE_URL}/${RUTA_SI}/eliminarAnticipoAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
@@ -816,7 +815,7 @@ async function SI_guardarInventario() {
 }
 
 async function SI_eliminarInventario(id) {
-    if (!confirm('¿Eliminar este saldo de inventario? Se revertirá el stock.')) return;
+    if (!(await SI_confirmar('¿Eliminar este saldo de inventario? Se revertirá el stock.'))) return;
     const fd = new FormData(); fd.append('id', id);
     try {
         const r = await fetch(`${BASE_URL}/${RUTA_SI}/eliminarInventarioAjax`, { method:'POST', body: fd, headers:{'X-Requested-With':'XMLHttpRequest'} });
@@ -834,9 +833,7 @@ async function SI_importarInventario(input) {
         const r = await fetch(`${BASE_URL}/${RUTA_SI}/importarInventarioAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
         const d = await r.json();
         if (d.ok) {
-            let msg = d.mensaje;
-            if (d.errores?.length) msg += '\n' + d.errores.join('\n');
-            alert(msg);
+            SI_mostrarImport(d);
             SI_cargarInventario();
         } else { SI_toast(d.error, 'danger'); }
     } catch(e) { SI_toast('Error al importar', 'danger'); }
@@ -952,7 +949,8 @@ async function SI_guardarConsig() {
 
 async function SI_eliminarConsig() {
     const id = document.getElementById('btn-eliminar-consig').getAttribute('data-id');
-    if (!id || !confirm('¿Eliminar este registro de consignación?')) return;
+    if (!id) return;
+    if (!(await SI_confirmar('¿Eliminar este registro de consignación?'))) return;
     const fd = new FormData(); fd.append('id', id);
     try {
         const r = await fetch(`${BASE_URL}/${RUTA_SI}/eliminarConsignacionAjax`, { method:'POST', body: fd, headers:{'X-Requested-With':'XMLHttpRequest'} });
@@ -970,9 +968,7 @@ async function SI_importarConsig(input) {
         const r = await fetch(`${BASE_URL}/${RUTA_SI}/importarConsignacionAjax`, { method:'POST', body: fd, headers: {'X-Requested-With':'XMLHttpRequest'} });
         const d = await r.json();
         if (d.ok) {
-            let msg = d.mensaje;
-            if (d.errores?.length) msg += '\n' + d.errores.join('\n');
-            alert(msg);
+            SI_mostrarImport(d);
             SI_cargarConsig();
         } else { SI_toast(d.error, 'danger'); }
     } catch(e) { SI_toast('Error al importar', 'danger'); }
@@ -1334,11 +1330,47 @@ function siEstadoBadge(estado, dias) {
     if (estado === 'PARCIAL') return `<span class="badge bg-warning bg-opacity-10 text-warning border" style="font-size:.65rem;">Parcial</span>`;
     return `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:.65rem;">Pendiente</span>`;
 }
+/* SweetAlert: toast, confirmación y resultado de importación */
+const SI_SwalToast = (window.Swal)
+    ? Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2800, timerProgressBar: true })
+    : null;
+
 function SI_toast(msg, tipo = 'info') {
+    const icon = tipo === 'danger' ? 'error'
+               : tipo === 'warning' ? 'warning'
+               : tipo === 'success' ? 'success' : 'info';
+    if (SI_SwalToast) { SI_SwalToast.fire({ icon, title: msg }); return; }
+    // Fallback si SweetAlert no está disponible
     const c = document.createElement('div');
     c.className = `alert alert-${tipo} alert-dismissible shadow position-fixed bottom-0 end-0 m-3 py-2 px-3`;
     c.style.zIndex = '9999';
-    c.innerHTML = msg + `<button type="button" class="btn-close btn-sm" onclick="this.parentElement.remove()"></button>`;
+    c.innerHTML = siEsc(msg) + `<button type="button" class="btn-close btn-sm" onclick="this.parentElement.remove()"></button>`;
     document.body.appendChild(c);
     setTimeout(() => c.remove(), 4000);
+}
+
+async function SI_confirmar(texto, titulo = '¿Está seguro?') {
+    if (!window.Swal) return Promise.resolve(window.confirm(texto));
+    const r = await Swal.fire({
+        title: titulo, text: texto, icon: 'warning',
+        showCancelButton: true, confirmButtonText: 'Sí, continuar', cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#dc3545', reverseButtons: true
+    });
+    return r.isConfirmed;
+}
+
+function SI_mostrarImport(d) {
+    const conErrores = (d.errores && d.errores.length);
+    if (!window.Swal) {
+        let m = d.mensaje || '';
+        if (conErrores) m += '\n' + d.errores.join('\n');
+        alert(m);
+        return;
+    }
+    let html = `<div class="fw-semibold">${siEsc(d.mensaje || '')}</div>`;
+    if (conErrores) {
+        html += `<div class="mt-2 text-start small" style="max-height:260px;overflow:auto;border-top:1px solid #eee;padding-top:8px;">`
+              + d.errores.map(e => `• ${siEsc(e)}`).join('<br>') + `</div>`;
+    }
+    Swal.fire({ icon: conErrores ? 'warning' : 'success', title: 'Importación', html });
 }

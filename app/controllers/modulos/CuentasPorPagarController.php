@@ -501,7 +501,7 @@ class CuentasPorPagarController extends BaseModuloController
     public function getSaldosInicialesCxpAjax(): void
     {
         $this->requireLeer();
-        $idEmpresa = $this->getIdEmpresa();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros = [
             'estado'         => $_GET['estado']         ?? 'TODOS',
             'tipo_documento' => $_GET['tipo_documento']  ?? '',
