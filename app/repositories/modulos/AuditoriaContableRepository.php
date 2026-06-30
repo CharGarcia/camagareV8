@@ -196,7 +196,10 @@ class AuditoriaContableRepository extends BaseRepository
                 continue;
             }
             $montoAsiento = (float) $r['monto_asiento'];
-            if (round($montoDoc, 2) !== round($montoAsiento, 2)) {
+            // Una diferencia de hasta 3 centavos es redondeo legítimo absorbido por la cuenta de
+            // «Ajuste por redondeo» del asiento (mismo tope que AsientoBuilderService); solo es
+            // hallazgo real cuando la diferencia supera ese margen.
+            if (abs(round($montoDoc - $montoAsiento, 2)) > 0.03) {
                 $out[] = $this->normalizar('monto_no_coincide', $origen, (int) $r['id_documento'], (int) $r['id_asiento'],
                     $montoDoc, $montoAsiento, round($montoDoc - $montoAsiento, 2),
                     "El total del documento no coincide con el total del asiento.", $r['fecha_documento']);

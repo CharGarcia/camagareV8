@@ -15,6 +15,13 @@ use Exception;
  */
 class AsientoBuilderService
 {
+    /**
+     * Diferencia máxima (en valor absoluto) que se acepta como redondeo y se lleva a la
+     * cuenta de Ajuste por redondeo. Un descuadre mayor se considera error real de
+     * configuración (cuenta/impuesto faltante) y lanza excepción.
+     */
+    private const TOPE_AJUSTE_REDONDEO = 0.03;
+
     private AsientoProgramadoRepository $programadoRepo;
 
     public function __construct()
@@ -334,6 +341,77 @@ class AsientoBuilderService
     }
 
     /**
+     * Cuadra el asiento llevando la diferencia Debe/Haber a la CUENTA DE AJUSTE POR REDONDEO
+     * configurada para el concepto (asiento_tipo con código que contiene 'REDONDEO', p. ej.
+     * AJUSTEREDONDEOVENTA / AJUSTEREDONDEOCOMPRA). Reemplaza la antigua absorción de centavos
+     * en una línea existente: el asiento queda cuadrado EXACTO, sin tolerancia residual.
+     *
+     * Lado dinámico según el signo de la diferencia:
+     *   diff = totalDebe - totalHaber
+     *   diff > 0 (falta Haber) → línea de ajuste al HABER por abs(diff)
+     *   diff < 0 (falta Debe)  → línea de ajuste al DEBE  por abs(diff)
+     *
+     * Salvaguardas:
+     *   - |diff| > TOPE_AJUSTE_REDONDEO (0.03) → excepción: descuadre real de configuración,
+     *     NO se enmascara en la cuenta de ajuste.
+     *   - Descuadre dentro del tope pero sin cuenta de ajuste configurada → excepción pidiendo
+     *     configurarla (la empresa debe dejar la config completa).
+     *
+     * @param array  $reglas   Reglas base del concepto (incluye la regla de ajuste si existe).
+     * @param string $etiqueta Texto para los mensajes de error ('ventas', 'compras', …).
+     */
+    private function aplicarAjusteRedondeo(array $detalles, array $reglas, string $etiqueta): array
+    {
+        $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
+        $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
+        $diff = round($totalDebe - $totalHaber, 2);
+
+        if ($diff === 0.0) {
+            return $detalles;
+        }
+
+        // Descuadre mayor al tope = error real de configuración (cuenta/impuesto faltante).
+        if (abs($diff) > self::TOPE_AJUSTE_REDONDEO) {
+            throw new \Exception(
+                "El asiento no cuadra. Debe: $" . number_format($totalDebe, 2) .
+                ", Haber: $" . number_format($totalHaber, 2) .
+                ". La diferencia ($" . number_format(abs($diff), 2) . ") supera el máximo de ajuste por " .
+                "redondeo (3 centavos). Revise la configuración de cuentas contables para $etiqueta."
+            );
+        }
+
+        // Cuenta de ajuste por redondeo configurada para el concepto.
+        $ajuste = null;
+        foreach ($reglas as $r) {
+            $cod = strtoupper($r['asiento_tipo_codigo'] ?? $r['codigo'] ?? '');
+            if (str_contains($cod, 'REDONDEO') && !empty($r['id_cuenta'])) {
+                $ajuste = $r;
+                break;
+            }
+        }
+
+        if ($ajuste === null) {
+            throw new \Exception(
+                "El asiento difiere por redondeo en $" . number_format(abs($diff), 2) .
+                " pero no se ha configurado la cuenta de «Ajuste por redondeo» para $etiqueta. " .
+                "Configúrela en la pantalla de asientos programados para que el asiento cuadre."
+            );
+        }
+
+        $lado = $diff > 0 ? 'haber' : 'debe';
+        $detalles[] = [
+            'id_cuenta_contable' => (int) $ajuste['id_cuenta'],
+            'cuenta_codigo'      => $ajuste['cuenta_codigo'] ?? '',
+            'cuenta_nombre'      => $ajuste['cuenta_nombre'] ?? '',
+            'debe'               => $lado === 'debe'  ? round(abs($diff), 2) : 0.0,
+            'haber'              => $lado === 'haber' ? round(abs($diff), 2) : 0.0,
+            'referencia_detalle' => 'Ajuste por redondeo',
+        ];
+
+        return $detalles;
+    }
+
+    /**
      * Estructura y distribuye los montos Debe/Haber específicos para el módulo de Ventas con Factura.
      *
      * Regla de balance:
@@ -490,6 +568,9 @@ class AsientoBuilderService
             $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']    ?? '');
             $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto']  ?? $r['referencia'] ?? '');
 
+            // La cuenta de Ajuste por redondeo no se mapea aquí: se aplica al final para cuadrar.
+            if (str_contains($codigo, 'REDONDEO')) continue;
+
             // Cuenta por cobrar → importe total (incluyendo impuestos)
             if (str_contains($codigo, 'PORCOBRAR') || str_contains($concepto, 'cobrar')) {
                 $valorMapeado = $importeTotal;
@@ -597,40 +678,10 @@ class AsientoBuilderService
             throw new \Exception("No se ha configurado ninguna cuenta para este asiento o los montos son cero.");
         }
 
-        // Ajuste de redondeo: la cuenta por cobrar (Debe) = total del documento es la
-        // fuente de verdad; Base + IVA del Haber pueden diferir por ±centavos al
-        // redondear por separado. Si la diferencia es de centavos, se absorbe en la
-        // línea de mayor Haber (Ventas). Un descuadre mayor = error real de configuración.
-        $diff = round($totalDebe - $totalHaber, 2);
-        if ($diff !== 0.0) {
-            $tolerancia = max(0.02, count($detalles) * 0.01);
-            if (abs($diff) > $tolerancia) {
-                throw new \Exception(
-                    "El asiento no cuadra. Debe: $" . number_format($totalDebe, 2) .
-                    ", Haber: $" . number_format($totalHaber, 2) .
-                    ". Revise la configuración de cuentas contables para ventas."
-                );
-            }
-            $idxAjuste = null;
-            $maxHaber  = -1.0;
-            foreach ($detalles as $i => $d) {
-                if (($d['haber'] ?? 0) > $maxHaber) { $maxHaber = (float) $d['haber']; $idxAjuste = $i; }
-            }
-            if ($idxAjuste !== null && round($detalles[$idxAjuste]['haber'] + $diff, 2) >= 0) {
-                $detalles[$idxAjuste]['haber'] = round($detalles[$idxAjuste]['haber'] + $diff, 2);
-                $detalles[$idxAjuste]['referencia_detalle'] =
-                    trim(($detalles[$idxAjuste]['referencia_detalle'] ?? '') . ' (ajuste redondeo)');
-                $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
-            }
-        }
-
-        if ($totalDebe !== $totalHaber) {
-            throw new \Exception(
-                "El asiento no cuadra. Debe: $" . number_format($totalDebe, 2) .
-                ", Haber: $" . number_format($totalHaber, 2) .
-                ". Revise la configuración de cuentas contables para ventas."
-            );
-        }
+        // Cuadre exacto vía la cuenta de Ajuste por redondeo (la cuenta por cobrar = total del
+        // documento es la fuente de verdad; Base + IVA pueden diferir por ±centavos al redondear
+        // por separado). Un descuadre > 3 centavos = error real de configuración → excepción.
+        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'ventas');
 
         return $detalles;
     }
@@ -834,25 +885,26 @@ class AsientoBuilderService
             );
         }
 
-        // Reglas base (cuerpo del asiento). Se recuerda el índice de la línea de gasto (Subtotal)
-        // e Inventario para absorber en ella una eventual diferencia de redondeo del documento.
-        $idxGasto      = null;
-        $idxInventario = null;
+        // Reglas base (cuerpo del asiento). La eventual diferencia de redondeo del documento se
+        // cuadra al final con la cuenta de Ajuste por redondeo (aplicarAjusteRedondeo).
         foreach ($reglas as $r) {
             if (empty($r['id_cuenta'])) continue;
 
             $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']    ?? '');
             $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto']  ?? $r['referencia'] ?? '');
+
+            // La cuenta de Ajuste por redondeo no se mapea aquí: se aplica al final para cuadrar.
+            if (str_contains($codigo, 'REDONDEO')) continue;
+
             $ladoNatural = ($r['debe_haber'] ?? 'debe') === 'haber' ? 'haber' : 'debe';
 
             $valor = 0.0;
-            $esSubtotal = false; $esInventario = false;
             if (str_contains($codigo, 'PORPAGAR') || str_contains($concepto, 'pagar')) {
                 $valor = $importeTotal;
             } elseif (str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario')) {
-                $valor = $subInventario; $esInventario = true;
+                $valor = $subInventario;
             } elseif (str_contains($codigo, 'SUBTOTAL') || str_contains($concepto, 'subtotal')) {
-                $valor = $subGasto; $esSubtotal = true;
+                $valor = $subGasto;
                 if ($gastoLineas !== null) {
                     // Reparto por dimensión: una línea por cuenta en vez de un solo Subtotal.
                     foreach ($gastoLineas as $gl) {
@@ -863,7 +915,6 @@ class AsientoBuilderService
                             $m, $ladoNatural, ($r['concepto'] ?? 'Gasto')
                         );
                     }
-                    $idxGasto = count($detalles) - 1;
                     continue;
                 }
             } elseif (str_contains($codigo, 'PROPINA') || str_contains($concepto, 'propina')) {
@@ -871,46 +922,20 @@ class AsientoBuilderService
             }
             // DESCUENTO e ICE: el subtotal ya viene neto por línea; se omiten en v1.
 
-            $antes = count($detalles);
             $push($r, $valor, $ladoNatural, $r['concepto'] ?? '');
-            if (count($detalles) > $antes) {
-                if ($esSubtotal)       $idxGasto      = count($detalles) - 1;
-                elseif ($esInventario) $idxInventario = count($detalles) - 1;
-            }
         }
 
-        // ── Conciliación de redondeo ──
+        // ── Validación de balance + cuadre por cuenta de Ajuste por redondeo ──
         // Los documentos del SRI suelen diferir en centavos entre importe_total y (subtotal + IVA)
-        // por redondeo línea a línea. Si la diferencia es pequeña (≤ 0.05) se absorbe en la línea de
-        // gasto (o inventario) como ajuste por redondeo. Si es mayor, se trata de una cuenta/impuesto
-        // realmente faltante: NO se absorbe y el asiento queda descuadrado (se avisa).
+        // por redondeo línea a línea. Esa diferencia (≤ 3 centavos) se lleva a la cuenta de Ajuste
+        // por redondeo; un descuadre mayor = cuenta/impuesto realmente faltante → excepción.
         $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
         $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
-        $diff = round($totalDebe - $totalHaber, 2);
-        $idxAjuste = $idxGasto ?? $idxInventario;
-        if ($diff !== 0.0 && abs($diff) <= 0.05 && $idxAjuste !== null) {
-            if ($detalles[$idxAjuste]['debe'] > 0) {
-                $nuevo = round($detalles[$idxAjuste]['debe'] - $diff, 2);
-                if ($nuevo > 0) $detalles[$idxAjuste]['debe'] = $nuevo;
-            } else {
-                $nuevo = round($detalles[$idxAjuste]['haber'] + $diff, 2);
-                if ($nuevo > 0) $detalles[$idxAjuste]['haber'] = $nuevo;
-            }
-            $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
-            $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
-        }
-
-        // ── Validación de balance ──
         if ($totalDebe === 0.0 && $totalHaber === 0.0) {
             throw new \Exception("No se ha configurado ninguna cuenta para el asiento de adquisición o los montos son cero.");
         }
-        if ($totalDebe !== $totalHaber) {
-            throw new \Exception(
-                "El asiento de adquisición no cuadra. Debe: $" . number_format($totalDebe, 2) .
-                ", Haber: $" . number_format($totalHaber, 2) .
-                ". Revise las cuentas de Inventario, Subtotal (gasto), IVA crédito y Cuentas por pagar."
-            );
-        }
+
+        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'compras');
 
         return $detalles;
     }
@@ -1023,6 +1048,9 @@ class AsientoBuilderService
             $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']    ?? '');
             $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto']  ?? $r['referencia'] ?? '');
 
+            // La cuenta de Ajuste por redondeo no se mapea aquí: se aplica al final para cuadrar.
+            if (str_contains($codigo, 'REDONDEO')) continue;
+
             if (str_contains($codigo, 'PORPAGAR') || str_contains($concepto, 'pagar') || str_contains($codigo, 'PORCOBRAR') || str_contains($concepto, 'cobrar')) {
                 $valorMapeado = $importeTotal;
             } elseif (str_contains($codigo, 'SUBTOTAL') || str_contains($concepto, 'subtotal') || str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario')) {
@@ -1065,31 +1093,8 @@ class AsientoBuilderService
             throw new \Exception("No se ha configurado ninguna cuenta para este asiento o los montos son cero.");
         }
 
-        // Ajuste de redondeo: diferencias de centavos por redondeo línea a línea se
-        // absorben en la línea de mayor monto del lado corto. Un descuadre mayor = error real.
-        $diff = round($totalDebe - $totalHaber, 2);
-        if ($diff !== 0.0 && abs($diff) <= max(0.02, count($detalles) * 0.01)) {
-            $lado = $diff > 0 ? 'haber' : 'debe';
-            $idxAjuste = null; $maxLado = -1.0;
-            foreach ($detalles as $i => $d) {
-                if ((float) ($d[$lado] ?? 0) > $maxLado) { $maxLado = (float) $d[$lado]; $idxAjuste = $i; }
-            }
-            if ($idxAjuste !== null) {
-                $detalles[$idxAjuste][$lado] = round($detalles[$idxAjuste][$lado] + abs($diff), 2);
-                $detalles[$idxAjuste]['referencia_detalle'] =
-                    trim(($detalles[$idxAjuste]['referencia_detalle'] ?? '') . ' (ajuste redondeo)');
-                $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
-                $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
-            }
-        }
-
-        if ($totalDebe !== $totalHaber) {
-            throw new \Exception(
-                "El asiento no cuadra. Debe: $" . number_format($totalDebe, 2) .
-                ", Haber: $" . number_format($totalHaber, 2) .
-                ". Revise la configuración de cuentas."
-            );
-        }
+        // Cuadre exacto vía la cuenta de Ajuste por redondeo; descuadre > 3 centavos → excepción.
+        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'el documento');
 
         return $detalles;
     }
@@ -1230,31 +1235,9 @@ class AsientoBuilderService
             throw new \Exception("No hay cuentas configuradas para la nota de crédito de venta o los montos son cero.");
         }
 
-        // Ajuste de redondeo: diferencias de centavos por redondeo línea a línea se
-        // absorben en la línea de mayor monto del lado corto. Un descuadre mayor = error real.
-        $diff = round($totalDebe - $totalHaber, 2);
-        if ($diff !== 0.0 && abs($diff) <= max(0.02, count($detalles) * 0.01)) {
-            $lado = $diff > 0 ? 'haber' : 'debe';
-            $idxAjuste = null; $maxLado = -1.0;
-            foreach ($detalles as $i => $d) {
-                if ((float) ($d[$lado] ?? 0) > $maxLado) { $maxLado = (float) $d[$lado]; $idxAjuste = $i; }
-            }
-            if ($idxAjuste !== null) {
-                $detalles[$idxAjuste][$lado] = round($detalles[$idxAjuste][$lado] + abs($diff), 2);
-                $detalles[$idxAjuste]['referencia_detalle'] =
-                    trim(($detalles[$idxAjuste]['referencia_detalle'] ?? '') . ' (ajuste redondeo)');
-                $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
-                $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
-            }
-        }
-
-        if ($totalDebe !== $totalHaber) {
-            throw new \Exception(
-                "El asiento de la nota de crédito no cuadra. Debe: $" . number_format($totalDebe, 2) .
-                ", Haber: $" . number_format($totalHaber, 2) .
-                ". Revise las cuentas de Ventas, IVA y Cuentas por cobrar de la factura de venta."
-            );
-        }
+        // Cuadre exacto vía la cuenta de Ajuste por redondeo (reusa la config de ventas_factura).
+        // Un descuadre > 3 centavos = error real de configuración → excepción.
+        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'ventas (nota de crédito)');
 
         return $detalles;
     }
