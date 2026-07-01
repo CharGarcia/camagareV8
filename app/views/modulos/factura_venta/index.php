@@ -4585,17 +4585,30 @@ $perm = $permOriginal;
                 }
 
                 // Tarifa IVA desde impuestos del detalle
+                const selIva = tr.querySelector('.input-iva');
+                let ivaAsignado = false;
                 if (d.impuestos && d.impuestos.length > 0) {
                     const ivaTarifa = d.impuestos.find(i => i.codigo_impuesto == '2');
-                    if (ivaTarifa) {
-                        const selIva = tr.querySelector('.input-iva');
-                        if (selIva) {
-                            // Comparar numÃ©ricamente: "15.00" (DB) debe coincidir con value="15" (select)
-                            const pct = parseFloat(ivaTarifa.tarifa);
-                            const opt = Array.from(selIva.options).find(o => Math.abs(parseFloat(o.value) - pct) < 0.001);
-                            if (opt) selIva.value = opt.value;
-                        }
+                    if (ivaTarifa && selIva) {
+                        // Comparar numÃ©ricamente: "15.00" (DB) debe coincidir con value="15" (select)
+                        const pct = parseFloat(ivaTarifa.tarifa);
+                        const opt = Array.from(selIva.options).find(o => Math.abs(parseFloat(o.value) - pct) < 0.001);
+                        if (opt) { selIva.value = opt.value; ivaAsignado = true; }
                     }
+                }
+                // Respaldo: facturas creadas por automatización pueden no tener filas
+                // de impuestos. Restaurar la tarifa desde id_tarifa_iva o porcentaje_iva
+                // de la línea para no perder el IVA al re-guardar.
+                if (!ivaAsignado && selIva) {
+                    let opt = null;
+                    if (d.id_tarifa_iva) {
+                        opt = Array.from(selIva.options).find(o => o.dataset.id == d.id_tarifa_iva);
+                    }
+                    if (!opt && d.porcentaje_iva != null && d.porcentaje_iva !== '') {
+                        const pct = parseFloat(d.porcentaje_iva);
+                        opt = Array.from(selIva.options).find(o => Math.abs(parseFloat(o.value) - pct) < 0.001);
+                    }
+                    if (opt) selIva.value = opt.value;
                 }
 
                 // Carga de Precios y Variantes

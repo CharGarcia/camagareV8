@@ -51,10 +51,21 @@ class SuscripcionFacturacionService
         $totalIva        = 0.0;
 
         foreach ($detalle as $det) {
+            $tarifaIva = (float)($det['porcentaje_iva'] ?? 0);
             $base = round((float)$det['cantidad'] * (float)$det['precio_unitario'], 2);
-            $iva  = round($base * ((float)($det['porcentaje_iva'] ?? 0) / 100), 2);
+            $iva  = round($base * ($tarifaIva / 100), 2);
             $totalSinImp += $base;
             $totalIva    += $iva;
+
+            // El SRI exige declarar el IVA en CADA línea, incluso con tarifa 0%.
+            // Omitir el impuesto cuando la tarifa era 0 generaba un
+            // <totalConImpuestos> vacío y el rechazo "ARCHIVO NO CUMPLE ESTRUCTURA
+            // XML ... 'totalImpuesto' is expected". Para tarifa > 0 el código se
+            // deriva de la tarifa real; para tarifa 0 se respeta el código guardado
+            // de la tarifa (0 = 0%, 6 = no objeto, 7 = exento), con '0' por defecto.
+            $codigoPorcentaje = $tarifaIva > 0
+                ? \App\Helpers\SriIvaHelper::codigoPorcentaje($tarifaIva)
+                : (string)($det['codigo_porcentaje'] ?? '0');
 
             $detallesFactura[] = [
                 'id_producto'               => $det['id_producto'],
@@ -65,13 +76,18 @@ class SuscripcionFacturacionService
                 'precio_unitario'           => $det['precio_unitario'],
                 'descuento'                 => 0,
                 'precio_total_sin_impuesto' => $base,
-                'impuestos'                 => $det['porcentaje_iva'] > 0 ? [[
+                // Guardar la tarifa en la propia línea (igual que una factura manual),
+                // para que al re-abrir la factura el IVA se restaure aunque no hubiese
+                // filas de impuestos, y para el correcto armado del XML.
+                'porcentaje_iva'            => $tarifaIva,
+                'id_tarifa_iva'             => !empty($det['id_tarifa_iva']) ? (int)$det['id_tarifa_iva'] : null,
+                'impuestos'                 => [[
                     'codigo_impuesto'   => '2',
-                    'codigo_porcentaje' => \App\Helpers\SriIvaHelper::codigoPorcentaje($det['porcentaje_iva']),
-                    'tarifa'            => $det['porcentaje_iva'],
+                    'codigo_porcentaje' => $codigoPorcentaje,
+                    'tarifa'            => $tarifaIva,
                     'base_imponible'    => $base,
                     'valor'             => $iva,
-                ]] : [],
+                ]],
             ];
         }
 
