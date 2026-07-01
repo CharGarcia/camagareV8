@@ -97,10 +97,11 @@ class Usuario extends BaseModel
         return $tok;
     }
 
-    /** Marca la empresa que el usuario quiere loguear en el SRI (al pulsar el botón). */
+    /** Marca la empresa que el usuario quiere loguear en el SRI (al pulsar el botón) y la HORA,
+     *  para que la marca tenga caducidad. */
     public function setLoginPendiente(int $idUsuario, int $idEmpresa): bool
     {
-        $st = $this->db->prepare("UPDATE usuarios SET login_pendiente_empresa = ? WHERE id = ?");
+        $st = $this->db->prepare("UPDATE usuarios SET login_pendiente_empresa = ?, login_pendiente_at = NOW() WHERE id = ?");
         return $st->execute([$idEmpresa, $idUsuario]);
     }
 
@@ -117,10 +118,20 @@ class Usuario extends BaseModel
         return (int) $id;
     }
 
-    /** Lee la empresa marcada SIN limpiarla (persiste desde el botón hasta el registro). */
+    /**
+     * Lee la empresa marcada SÓLO si sigue VIGENTE (marcada en los últimos 30 minutos). Fuera de esa
+     * ventana devuelve null: así la extensión no inicia sesión sola cada vez que se abre el portal del
+     * SRI, sino únicamente poco después de que el usuario pulsó "Generar descarga del SRI".
+     */
     public function getLoginPendiente(int $idUsuario): ?int
     {
-        $st = $this->db->prepare("SELECT login_pendiente_empresa FROM usuarios WHERE id = ?");
+        $st = $this->db->prepare(
+            "SELECT login_pendiente_empresa FROM usuarios
+             WHERE id = ?
+               AND login_pendiente_empresa IS NOT NULL
+               AND login_pendiente_at IS NOT NULL
+               AND login_pendiente_at > (NOW() - INTERVAL '30 minutes')"
+        );
         $st->execute([$idUsuario]);
         $id = $st->fetchColumn();
         return ($id === false || $id === null) ? null : (int) $id;
