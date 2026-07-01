@@ -1738,6 +1738,8 @@ $perm = $permOriginal;
 
             if (json.ok) {
                 _guardadoOk = true;
+                // Capturar antes de cualquier limpieza: distingue crear vs actualizar.
+                const esActualizacion = FV_ID_ACTIVO > 0;
                 fvLimpiarBorrador();
                 modalMain.hide();
 
@@ -1749,6 +1751,17 @@ $perm = $permOriginal;
                         title: 'Factura guardada — asiento pendiente',
                         html: `La factura se guardó correctamente, pero el asiento contable no pudo generarse:<br><br><small class="text-muted">${json.asiento_warning}</small>`,
                         confirmButtonText: 'Entendido'
+                    });
+                } else {
+                    // Confirmación breve y no bloqueante del guardado exitoso.
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'success',
+                        title: esActualizacion ? 'Factura actualizada' : 'Factura guardada',
+                        showConfirmButton: false,
+                        timer: 2500,
+                        timerProgressBar: true
                     });
                 }
 
