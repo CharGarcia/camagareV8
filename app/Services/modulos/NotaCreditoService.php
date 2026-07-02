@@ -361,13 +361,14 @@ class NotaCreditoService
                 throw new Exception("Solo se pueden eliminar Notas de Crédito en estado borrador.");
             }
 
-            // Revertir inventario
+            // Revertir inventario (tolerante: no bloquear la eliminación si el
+            // stock reintegrado ya fue consumido).
             if ((int)($nc['id_empresa'] ?? 0) > 0) {
                 $invService = new \App\Services\modulos\InventarioService(
                     new \App\repositories\modulos\InventarioRepository(),
                     $this->logService
                 );
-                $invService->revertirMovimientosPorReferencia('nota_credito', $id, $idEmpresa, $idUsuario);
+                $invService->revertirMovimientosPorReferencia('nota_credito', $id, $idEmpresa, $idUsuario, true);
             }
 
             $this->repository->eliminarLogico($id, $idUsuario);
@@ -403,12 +404,13 @@ class NotaCreditoService
                 throw new Exception("La Nota de Crédito ya se encuentra anulada.");
             }
 
-            // Revertir inventario (eliminar los ingresos generados por la NC)
+            // Revertir inventario (tolerante: no bloquear la anulación si el
+            // stock reintegrado ya fue consumido).
             $invService = new \App\Services\modulos\InventarioService(
                 new \App\repositories\modulos\InventarioRepository(),
                 $this->logService
             );
-            $invService->revertirMovimientosPorReferencia('nota_credito', $id, $idEmpresa, $idUsuario);
+            $invService->revertirMovimientosPorReferencia('nota_credito', $id, $idEmpresa, $idUsuario, true);
 
             // Limpiar casilleros de declaracion 104
             $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
