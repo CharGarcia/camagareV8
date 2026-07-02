@@ -159,27 +159,48 @@ class FacturaExpressQrRepository extends BaseRepository
     public function getItemsPorPlantilla(int $idPlantilla): array
     {
         $st = $this->db->prepare(
-            "SELECT i.*, p.nombre AS nombre_producto
+            "SELECT i.*, p.nombre AS nombre_producto,
+                    ti.porcentaje_iva AS producto_iva_actual
              FROM factura_express_items i
              LEFT JOIN productos p ON p.id = i.id_producto
+             LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
              WHERE i.id_plantilla = :id_plantilla AND i.eliminado = false
              ORDER BY i.orden ASC, i.id ASC"
         );
         $st->execute([':id_plantilla' => $idPlantilla]);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+        return $this->sincronizarIvaProducto($st->fetchAll(PDO::FETCH_ASSOC));
     }
 
     public function getItemsActivosPorPlantilla(int $idPlantilla): array
     {
         $st = $this->db->prepare(
-            "SELECT i.*, p.nombre AS nombre_producto
+            "SELECT i.*, p.nombre AS nombre_producto,
+                    ti.porcentaje_iva AS producto_iva_actual
              FROM factura_express_items i
              LEFT JOIN productos p ON p.id = i.id_producto
+             LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
              WHERE i.id_plantilla = :id_plantilla AND i.eliminado = false AND i.activo = true
              ORDER BY i.orden ASC, i.id ASC"
         );
         $st->execute([':id_plantilla' => $idPlantilla]);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+        return $this->sincronizarIvaProducto($st->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /**
+     * Para los ítems ligados a un producto de catálogo, el IVA SIEMPRE debe
+     * reflejar la tarifa actual del producto (no la copia congelada guardada en
+     * el ítem). Los ítems libres (sin producto) conservan su porcentaje propio.
+     */
+    private function sincronizarIvaProducto(array $rows): array
+    {
+        foreach ($rows as &$r) {
+            if (!empty($r['id_producto']) && $r['producto_iva_actual'] !== null) {
+                $r['porcentaje_iva'] = $r['producto_iva_actual'];
+            }
+            unset($r['producto_iva_actual']);
+        }
+        unset($r);
+        return $rows;
     }
 
     public function insertItem(array $data): int

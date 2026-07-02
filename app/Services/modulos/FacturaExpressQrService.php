@@ -398,7 +398,13 @@ class FacturaExpressQrService
         $prodInfo = [];
         if ($idsProd) {
             $in  = implode(',', array_fill(0, count($idsProd), '?'));
-            $stP = $db->prepare("SELECT id, codigo, codigo_auxiliar, id_medida FROM productos WHERE id IN ($in) AND id_empresa = ? AND eliminado = false");
+            $stP = $db->prepare(
+                "SELECT p.id, p.codigo, p.codigo_auxiliar, p.id_medida,
+                        ti.porcentaje_iva AS porcentaje_iva
+                 FROM productos p
+                 LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
+                 WHERE p.id IN ($in) AND p.id_empresa = ? AND p.eliminado = false"
+            );
             $stP->execute([...$idsProd, $idEmpresa]);
             foreach ($stP->fetchAll(\PDO::FETCH_ASSOC) as $p) {
                 $prodInfo[(int) $p['id']] = $p;
@@ -410,15 +416,21 @@ class FacturaExpressQrService
         $totalIva    = 0.0;
 
         foreach ($items as $det) {
-            $base = round((float)$det['cantidad'] * (float)$det['precio_unitario'], 2);
-            $iva  = round($base * ((float)($det['porcentaje_iva'] ?? 0) / 100), 2);
-            $totalSinImp += $base;
-            $totalIva    += $iva;
-
             $idProd  = (int) ($det['id_producto'] ?? 0);
             $info    = $prodInfo[$idProd] ?? null;
             // Sin producto de catálogo válido → ítem libre (se creará en el catálogo al facturar)
             $esLibre = ($idProd <= 0 || $info === null);
+
+            // El IVA de un ítem de catálogo SIEMPRE es la tarifa actual del producto;
+            // solo los ítems libres usan el porcentaje enviado en la solicitud.
+            $porcentajeIva = (!$esLibre && $info['porcentaje_iva'] !== null)
+                ? (float) $info['porcentaje_iva']
+                : (float) ($det['porcentaje_iva'] ?? 0);
+
+            $base = round((float)$det['cantidad'] * (float)$det['precio_unitario'], 2);
+            $iva  = round($base * ($porcentajeIva / 100), 2);
+            $totalSinImp += $base;
+            $totalIva    += $iva;
 
             $detalles[] = [
                 'id_producto'               => $esLibre ? null : $idProd,
@@ -432,11 +444,11 @@ class FacturaExpressQrService
                 'precio_unitario'           => $det['precio_unitario'],
                 'descuento'                 => 0,
                 'precio_total_sin_impuesto' => $base,
-                'porcentaje_iva'            => (float) ($det['porcentaje_iva'] ?? 0),
-                'impuestos'                 => $det['porcentaje_iva'] > 0 ? [[
+                'porcentaje_iva'            => $porcentajeIva,
+                'impuestos'                 => $porcentajeIva > 0 ? [[
                     'codigo_impuesto'   => '2',
-                    'codigo_porcentaje' => \App\Helpers\SriIvaHelper::codigoPorcentaje($det['porcentaje_iva']),
-                    'tarifa'            => $det['porcentaje_iva'],
+                    'codigo_porcentaje' => \App\Helpers\SriIvaHelper::codigoPorcentaje($porcentajeIva),
+                    'tarifa'            => $porcentajeIva,
                     'base_imponible'    => $base,
                     'valor'             => $iva,
                 ]] : [],

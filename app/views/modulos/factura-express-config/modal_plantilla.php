@@ -220,6 +220,7 @@ $formasPago       = $formasPago       ?? [];
                                 <i class="bi bi-info-circle me-1"></i>
                                 Los ítems "Preseleccionados" aparecerán marcados por defecto en el formulario público.
                                 Los de "Cant. editable" permiten que el cliente cambie la cantidad.
+                                El <strong>IVA</strong> lo toma automáticamente del producto/servicio y no es editable (ni aquí ni para el cliente).
                             </small>
                         </div>
 
@@ -399,8 +400,10 @@ $formasPago       = $formasPago       ?? [];
             </td>
             <td><input type="number" class="inp-item text-end" name="items[${idx}][precio_unitario]"
                 value="${parseFloat(item.precio_unitario ?? 0).toFixed(2)}" min="0" step="0.01" style="width:90px;"></td>
-            <td class="text-center"><input type="number" class="inp-item text-center" name="items[${idx}][porcentaje_iva]"
-                value="${parseFloat(item.porcentaje_iva ?? 0).toFixed(2)}" min="0" step="0.01" style="width:60px;"></td>
+            <td class="text-center">
+                <span class="badge bg-light text-dark border" title="El IVA lo define el producto/servicio y no se puede editar aquí.">${parseFloat(item.porcentaje_iva ?? 0).toFixed(0)}%</span>
+                <input type="hidden" name="items[${idx}][porcentaje_iva]" value="${parseFloat(item.porcentaje_iva ?? 0).toFixed(2)}">
+            </td>
             <td class="text-center"><input type="number" class="inp-item text-center" name="items[${idx}][cantidad_default]"
                 value="${parseFloat(item.cantidad_default ?? 1)}" min="0.001" step="0.001" style="width:60px;"></td>
             <td class="text-center"><input type="checkbox" class="form-check-input" name="items[${idx}][cantidad_editable]"
