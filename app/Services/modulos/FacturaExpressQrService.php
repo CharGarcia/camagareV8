@@ -403,7 +403,9 @@ class FacturaExpressQrService
             $in  = implode(',', array_fill(0, count($idsProd), '?'));
             $stP = $db->prepare(
                 "SELECT p.id, p.codigo, p.codigo_auxiliar, p.id_medida,
-                        ti.porcentaje_iva AS porcentaje_iva
+                        p.tarifa_iva AS id_tarifa_iva,
+                        ti.porcentaje_iva AS porcentaje_iva,
+                        ti.codigo        AS codigo_porcentaje
                  FROM productos p
                  LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
                  WHERE p.id IN ($in) AND p.id_empresa = ? AND p.eliminado = false"
@@ -435,6 +437,15 @@ class FacturaExpressQrService
             $totalSinImp += $base;
             $totalIva    += $iva;
 
+            // El codigoPorcentaje del SRI NO se deriva del porcentaje cuando es 0:
+            // 0%, "No objeto" (6) y "Exento" (7) comparten tarifa 0 pero son códigos
+            // distintos. Para tarifa > 0 se deriva de la tarifa; para tarifa 0 se
+            // respeta el código guardado en la tarifa del producto (mismo criterio
+            // que el módulo de suscripciones).
+            $codigoPorcentaje = $porcentajeIva > 0
+                ? \App\Helpers\SriIvaHelper::codigoPorcentaje($porcentajeIva)
+                : (string) ($info['codigo_porcentaje'] ?? $det['codigo_porcentaje'] ?? '0');
+
             $detalles[] = [
                 'id_producto'               => $esLibre ? null : $idProd,
                 'es_libre'                  => $esLibre ? '1' : '0',
@@ -448,12 +459,13 @@ class FacturaExpressQrService
                 'descuento'                 => 0,
                 'precio_total_sin_impuesto' => $base,
                 'porcentaje_iva'            => $porcentajeIva,
+                'id_tarifa_iva'             => !empty($info['id_tarifa_iva']) ? (int) $info['id_tarifa_iva'] : null,
                 // El SRI exige SIEMPRE una línea de impuesto IVA por detalle, incluso
-                // con tarifa 0% (código '0', valor 0). Omitirla deja 'totalConImpuestos'
-                // vacío y el comprobante es rechazado por estructura XML inválida.
+                // con tarifa 0% (valor 0). Omitirla deja 'totalConImpuestos' vacío y el
+                // comprobante es rechazado por estructura XML inválida.
                 'impuestos'                 => [[
                     'codigo_impuesto'   => '2',
-                    'codigo_porcentaje' => \App\Helpers\SriIvaHelper::codigoPorcentaje($porcentajeIva),
+                    'codigo_porcentaje' => $codigoPorcentaje,
                     'tarifa'            => $porcentajeIva,
                     'base_imponible'    => $base,
                     'valor'             => $iva,
