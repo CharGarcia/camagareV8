@@ -88,16 +88,18 @@ class FacturaExpressPublicoController extends Controller
         try {
             $resultado = $this->service->recibirSolicitudPublica($token, $formData, $itemsSeleccionados, $ip, $userAgent);
 
-            // Enviar correo al dueño del negocio
-            $this->enviarCorreoDueno($resultado);
+            // Mostrar la confirmación al cliente y CERRAR la conexión ANTES de enviar
+            // los correos. El envío SMTP es lento (y con timeouts de IPv6 puede tardar
+            // decenas de segundos), y hacerlo de forma síncrona colgaba la respuesta.
+            $this->renderConfirmacionYCerrar($resultado);
 
-            // Enviar correo al cliente si tiene correo
+            // A partir de aquí el navegador del cliente ya recibió su confirmación;
+            // los correos se envían en segundo plano y su lentitud/fallos no le afectan.
+            $this->enviarCorreoDueno($resultado);
             if (!empty($formData['correo_cliente'])) {
                 $this->enviarCorreoCliente($resultado);
             }
-
-            // Mostrar página de confirmación
-            $this->renderConfirmacion($resultado);
+            return;
 
         } catch (\InvalidArgumentException $e) {
             // Error de validación: volver al formulario con el error
@@ -171,6 +173,47 @@ class FacturaExpressPublicoController extends Controller
         extract(['resultado' => $resultado]);
         $viewPath = MVC_APP . '/views/publica/factura-express/confirmacion.php';
         require $viewPath;
+    }
+
+    /**
+     * Renderiza la confirmación, la entrega al navegador del cliente y cierra la
+     * conexión HTTP. Todo lo que se ejecute después (envío de correos SMTP) corre
+     * en segundo plano sin bloquear la respuesta que ve el usuario.
+     */
+    private function renderConfirmacionYCerrar(array $resultado): void
+    {
+        // El proceso sigue aunque el cliente cierre el navegador.
+        ignore_user_abort(true);
+
+        // Capturar el HTML de confirmación en un buffer propio.
+        ob_start();
+        $this->renderConfirmacion($resultado);
+        $html = ob_get_clean();
+
+        if (!headers_sent()) {
+            header('Content-Type: text/html; charset=UTF-8');
+            header('Content-Length: ' . strlen($html));
+            header('Connection: close');
+        }
+
+        echo $html;
+
+        // Liberar la sesión para no bloquear otras peticiones del mismo cliente.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        // Cerrar la conexión con el navegador y continuar en segundo plano.
+        if (function_exists('fastcgi_finish_request')) {
+            // Entorno php-fpm (producción): entrega la respuesta y libera al cliente.
+            fastcgi_finish_request();
+        } else {
+            // Fallback (Apache/mod_php): vaciar todos los buffers hacia el cliente.
+            while (ob_get_level() > 0) {
+                ob_end_flush();
+            }
+            flush();
+        }
     }
 
     private function renderEstado(array $solicitud): void

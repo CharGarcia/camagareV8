@@ -194,6 +194,9 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             const col = this.dataset.sort;
             GR_dir = GR_sort === col ? (GR_dir === 'ASC' ? 'DESC' : 'ASC') : 'DESC';
             GR_sort = col;
+            if (typeof window.guardarOrdenacionVista === 'function') {
+                window.guardarOrdenacionVista('guias_remision', GR_sort, GR_dir);
+            }
             GR_cargar(1);
         });
     });

@@ -177,17 +177,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
         window.fetchSearch = cargarListado;
 
-        document.querySelectorAll('.sortable-header').forEach(h => {
-            h.addEventListener('click', () => {
-                const f = h.dataset.sort;
-                if (currentSort === f) currentDir = currentDir.toLowerCase() === 'asc' ? 'DESC' : 'ASC';
-                else {
-                    currentSort = f;
-                    currentDir = 'ASC';
-                }
-                cargarListado(1);
-            });
-        });
+        window.CMG_initSort('vehiculos', (col, dir) => {
+            currentSort = col;
+            currentDir = dir;
+            cargarListado(1);
+        }, { col: currentSort, dir: currentDir });
 
         if (inputB) inputB.addEventListener('input', () => {
             clearTimeout(timer);

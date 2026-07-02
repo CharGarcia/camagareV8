@@ -28,7 +28,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                     <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap">
                         <?php if ($perm['actualizar'] ?? false): ?>
                         <button id="ret-btn-sri" type="button" class="btn btn-outline-primary btn-sm" onclick="window.RET_enviarSRI()" disabled>
-                            <i class="fa-solid fa-cloud-arrow-up me-1"></i>Enviar al SRI
+                            <i class="bi bi-cloud-arrow-up me-1"></i>Enviar al SRI
                         </button>
                         <button type="button" id="ret-btn-anular" class="btn btn-outline-warning btn-sm d-none" onclick="window.RET_anular()">
                             <i class="fa-solid fa-ban me-1"></i>Anular
@@ -36,10 +36,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                         <div class="vr mx-1"></div>
                         <?php endif; ?>
                         <button id="ret-btn-pdf" type="button" class="btn btn-outline-danger btn-sm px-2" onclick="window.RET_exportarPdf()" title="Exportar PDF" disabled>
-                            <i class="fa-regular fa-file-pdf"></i>
+                            <i class="bi bi-file-earmark-pdf"></i>
                         </button>
                         <button id="ret-btn-xml" type="button" class="btn btn-outline-success btn-sm px-2" onclick="window.RET_exportarXml()" title="Exportar XML" disabled>
-                            <i class="fa-regular fa-file-code"></i>
+                            <i class="bi bi-file-earmark-code"></i>
+                        </button>
+                        <button id="ret-btn-correo" type="button" class="btn btn-outline-info btn-sm px-2" onclick="window.RET_enviarPorCorreo()" title="Enviar por correo" disabled>
+                            <i class="bi bi-envelope"></i>
                         </button>
                         <div class="vr mx-1"></div>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.abrirModalProveedorCrear()" title="Registrar nuevo proveedor">
@@ -52,20 +55,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                     <!-- Pestañas -->
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="retTabs" role="tablist">
-                            <li class="nav-item">
-                                <a class="nav-link active py-2 small" data-bs-toggle="tab" href="#tab-ret-principal" role="tab">
-                                    <i class="fa-regular fa-file-lines me-1"></i>Retención
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link py-2 small" id="tab-ret-sri-btn" data-bs-toggle="tab" href="#tab-ret-sri" role="tab">
-                                    <i class="fa-solid fa-cloud-check me-1"></i>SRI
-                                </a>
-                            </li>
+                            <li class="nav-item"><a class="nav-link active py-2 small" data-bs-toggle="tab" href="#tab-ret-principal" role="tab" style="white-space: nowrap;"><i class="bi bi-receipt me-1"></i> Retención</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-ret-asiento-btn" data-bs-toggle="tab" href="#tab-ret-asiento" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-ret-sri-btn" data-bs-toggle="tab" href="#tab-ret-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
                             $pestanasRet = [
+                                'tab-ret-asiento' => 'Asiento contable',
                                 'tab-ret-sri' => 'SRI',
                             ];
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasRet, $vistaConfigRet ?? [], $rutaModulo);
@@ -101,7 +98,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
 
                                     <!-- Serie (Punto de Emisión) -->
                                     <div class="col-md-2 col-6">
-                                        <label class="x-small fw-bold text-muted mb-1">Serie</label>
+                                        <label class="x-small fw-bold text-muted mb-1">Serie <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'ret_id_punto_emision', 'id_punto_emision') ?></label>
                                         <select name="id_punto_emision" id="ret_id_punto_emision"
                                                 class="form-select form-select-sm border-primary border-opacity-25"
                                                 onchange="window.RET_cargarSecuencial()" style="height:31px;">
@@ -130,12 +127,24 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                                                class="form-control form-control-sm border-primary border-opacity-25 text-center py-0"
                                                style="height:31px;" placeholder="MM/YYYY" maxlength="7" readonly>
                                     </div>
+
+                                    <!-- Tipo de Documento -->
+                                    <div class="col-md-2 col-6">
+                                        <label class="x-small fw-bold text-muted mb-1">Tipo Doc. <span class="text-danger">*</span> <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'ret_tipo_doc_sustento', 'tipo_doc_sustento') ?></label>
+                                        <select name="tipo_doc_sustento" id="ret_tipo_doc_sustento"
+                                                class="form-select form-select-sm border-primary border-opacity-25"
+                                                style="height:31px;" onchange="window.RET_filtrarSustentos(this.value)">
+                                            <option value="01">01 - Factura</option>
+                                            <option value="03">03 - Liquidación de compra</option>
+                                            <option value="05">05 - Nota de débito</option>
+                                        </select>
+                                    </div>
                                 </div>
 
                                 <!-- Segunda Línea: Proveedor y Datos del Documento -->
                                 <div class="row g-2 align-items-end">
                                     <!-- Proveedor -->
-                                    <div class="col-md-5 position-relative">
+                                    <div class="col-md-9 position-relative">
                                         <label class="x-small fw-bold text-muted mb-1">Proveedor (Sujeto Retenido) <span class="text-danger">*</span></label>
                                         <div class="input-group input-group-sm rounded-pill overflow-hidden border border-primary border-opacity-25">
                                             <span class="input-group-text bg-white border-0 text-primary"><i class="fa-solid fa-magnifying-glass"></i></span>
@@ -148,20 +157,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                                              style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;top:55px;"></div>
                                     </div>
 
-                                    <!-- Tipo de Documento -->
-                                    <div class="col-md-3">
-                                        <label class="x-small fw-bold text-muted mb-1">Tipo Documento <span class="text-danger">*</span></label>
-                                        <select name="tipo_doc_sustento" id="ret_tipo_doc_sustento"
-                                                class="form-select form-select-sm border-primary border-opacity-25"
-                                                style="height:31px;">
-                                            <option value="01">01 - Factura</option>
-                                            <option value="03">03 - Liquidación de compra</option>
-                                            <option value="05">05 - Nota de débito</option>
-                                        </select>
-                                    </div>
-
                                     <!-- Nº Doc Retenido -->
-                                    <div class="col-md-4">
+                                    <div class="col-md-3">
                                         <label class="x-small fw-bold text-muted mb-1">Nº Doc. Retenido <span class="text-danger">*</span></label>
                                         <input type="text" name="num_doc_sustento" id="ret_num_doc_sustento"
                                                class="form-control form-control-sm border-primary border-opacity-25 py-0"
@@ -171,9 +168,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
 
                                 <!-- Información extra del proveedor (oculta hasta seleccionar) -->
                                 <div id="ret_proveedor_info" class="mt-2 small text-muted d-none">
-                                    <div class="d-flex gap-3 px-2">
+                                    <div class="d-flex flex-wrap gap-3 px-2">
                                         <span><i class="fa-solid fa-id-card me-1"></i><span id="ret_lbl_proveedor_ruc"></span></span>
                                         <span><i class="fa-solid fa-location-dot me-1"></i><span id="ret_lbl_proveedor_direccion"></span></span>
+                                        <span><i class="fa-solid fa-envelope me-1"></i><span id="ret_lbl_proveedor_email"></span></span>
                                     </div>
                                 </div>
                             </div>
@@ -218,7 +216,48 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
 
                             <!-- Totales -->
                             <div class="px-3 py-1 border-top bg-light">
-                                <div class="row g-2 justify-content-end">
+                                <div class="row g-2 justify-content-between align-items-start">
+                                    <!-- Documento sustento (izquierda): se autocompleta si hay compra/liquidación;
+                                         si el documento NO está registrado, se captura aquí. -->
+                                    <div class="col-md-6">
+                                        <div class="bg-white border rounded p-2 shadow-sm" style="font-size:0.78rem;">
+                                            <div class="fw-bold text-muted mb-2">
+                                                <i class="fa-solid fa-receipt me-1"></i>Documento sustento
+                                                <span class="fw-normal" style="font-size:0.72rem;">(si no está registrado)</span>
+                                            </div>
+                                            <div class="row g-2">
+                                                <div class="col-4">
+                                                    <label class="d-block text-muted mb-1" style="font-size:0.72rem;">Subtotal (Base Imp.)</label>
+                                                    <input type="number" step="0.01" min="0" name="doc_sustento_subtotal" id="ret_doc_subtotal"
+                                                           class="form-control form-control-sm text-end py-0 w-100"
+                                                           style="height:28px;font-size:0.78rem;" placeholder="0.00"
+                                                           oninput="window.RET_calcTotalSustento()">
+                                                </div>
+                                                <div class="col-4">
+                                                    <label class="d-block text-muted mb-1" style="font-size:0.72rem;">IVA</label>
+                                                    <input type="number" step="0.01" min="0" name="doc_sustento_iva" id="ret_doc_iva"
+                                                           class="form-control form-control-sm text-end py-0 w-100"
+                                                           style="height:28px;font-size:0.78rem;" placeholder="0.00"
+                                                           oninput="window.RET_calcTotalSustento()">
+                                                </div>
+                                                <div class="col-4">
+                                                    <label class="d-block text-muted mb-1 fw-bold" style="font-size:0.72rem;">Total</label>
+                                                    <input type="number" step="0.01" min="0" name="doc_sustento_total" id="ret_doc_total"
+                                                           class="form-control form-control-sm text-end py-0 bg-light fw-bold w-100"
+                                                           style="height:28px;font-size:0.78rem;" placeholder="0.00" readonly>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!-- Sustento tributario (código de sustento, tabla 5 SRI).
+                                             Se filtra según el Tipo de Documento (igual que en compras). -->
+                                        <div class="mt-2">
+                                            <label class="d-block text-muted mb-1" style="font-size:0.72rem;">Sustento tributario</label>
+                                            <select name="id_sustento_tributario" id="ret_id_sustento_tributario"
+                                                    class="form-select form-select-sm" style="height:28px;font-size:0.74rem;"></select>
+                                        </div>
+                                        <script>window.RET_SUSTENTOS = <?= json_encode($sustentos ?? [], JSON_UNESCAPED_UNICODE) ?>;</script>
+                                    </div>
+
                                     <div class="col-md-4">
                                         <div class="bg-white border rounded p-2 shadow-sm" style="font-size:0.78rem;">
                                             <div class="d-flex justify-content-between align-items-center mb-1">
@@ -247,6 +286,37 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                                 </div>
                             </div>
                         </div>
+
+                        <!-- ── PESTAÑA ASIENTO CONTABLE ──────────────────────────────────── -->
+                        <div class="tab-pane fade" id="tab-ret-asiento" role="tabpanel">
+                            <div class="px-3 py-3">
+                                <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+                                    <div class="table-responsive" style="max-height:350px;">
+                                        <table class="table table-sm table-detalle mb-0 text-nowrap">
+                                            <thead>
+                                                <tr class="table-light border-bottom">
+                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width:14%;">Código</th>
+                                                    <th class="py-2 small fw-bold text-muted">Cuenta</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end" style="width:16%;">Debe</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:16%;">Haber</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="ret_asiento_body">
+                                                <tr><td colspan="4" class="text-center py-4 text-muted">Guarde la retención para generar el asiento contable.</td></tr>
+                                            </tbody>
+                                            <tfoot>
+                                                <tr class="table-light border-top fw-bold">
+                                                    <td colspan="2" class="text-end pe-2">Totales</td>
+                                                    <td class="text-end" id="ret_asiento_total_debe">0.00</td>
+                                                    <td class="text-end pe-3" id="ret_asiento_total_haber">0.00</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                    <div class="px-3 py-2 border-top bg-light small" id="ret_asiento_aviso"></div>
+                                </div>
+                            </div>
+                        </div><!-- /tab-ret-asiento -->
 
                         <!-- ── PESTAÑA SRI ──────────────────────────────────────────────── -->
                         <div class="tab-pane fade px-3 py-2" id="tab-ret-sri" role="tabpanel">
@@ -327,17 +397,32 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                                         </button>
                                     </div>
                                 </div>
-                                <!-- Historial de Envíos -->
+                                <!-- Historial de envíos SRI -->
                                 <div class="col-12">
                                     <label class="small fw-bold text-muted mb-1"><i class="bi bi-clock-history me-1"></i>Historial de Envíos</label>
-                                    <div id="ret-sri-historial" class="border rounded-2 bg-light p-2" style="min-height: 60px; font-size: 0.8rem;">
-                                        <p class="text-muted text-center mb-0 py-3 small">Sin historial.</p>
+                                    <div class="border rounded-2 overflow-hidden">
+                                        <table class="table table-sm small mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th class="ps-2 py-1 text-muted" style="width:140px">Fecha / Hora</th>
+                                                    <th class="py-1 text-muted" style="width:80px">Ambiente</th>
+                                                    <th class="py-1 text-muted" style="width:110px">Acción / Estado</th>
+                                                    <th class="py-1 text-muted">Mensaje / Detalle</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="ret-sri-tbody-historial">
+                                                <tr>
+                                                    <td colspan="4" class="text-center py-3 text-muted">Sin historial de envíos.</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             </div>
 
 
 
+                        </div><!-- /tab-pane SRI -->
                     </div><!-- /tab-content -->
                 </form>
             </div>

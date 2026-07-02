@@ -327,6 +327,9 @@ include 'modal_unidad.php';
             const f = th.dataset.sort;
             if (sortTipos === f) { dirTipos = dirTipos === 'asc' ? 'desc' : 'asc'; }
             else { sortTipos = f; dirTipos = 'asc'; }
+            if (typeof window.CMG_guardarVista === 'function') {
+                window.CMG_guardarVista('unidades_medida', { __ordenColTipos__: sortTipos, __ordenDirTipos__: dirTipos });
+            }
             fetchSearchTipos(1);
         });
     });
@@ -382,6 +385,9 @@ include 'modal_unidad.php';
             const f = th.dataset.sort;
             if (sortUni === f) { dirUni = dirUni === 'asc' ? 'desc' : 'asc'; }
             else { sortUni = f; dirUni = 'asc'; }
+            if (typeof window.CMG_guardarVista === 'function') {
+                window.CMG_guardarVista('unidades_medida', { __ordenColUni__: sortUni, __ordenDirUni__: dirUni });
+            }
             fetchSearchUnidades(1);
         });
     });

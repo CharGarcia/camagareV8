@@ -22,6 +22,7 @@ class SincronizadorAsientosService
             $db->exec("ALTER TABLE notas_credito_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
             $db->exec("ALTER TABLE nota_debito_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
             $db->exec("ALTER TABLE retencion_venta_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
+            $db->exec("ALTER TABLE retencion_compra_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
             $db->exec("ALTER TABLE ingresos_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
             $db->exec("ALTER TABLE egresos_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
         } catch (\Throwable $e) {
@@ -131,6 +132,21 @@ class SincronizadorAsientosService
                 );
             },
             'Retenciones en Ventas'
+        );
+
+        // 5b. Retenciones en Compras (emitidas al proveedor; solo se filtra por asiento faltante)
+        $this->sincronizarModulo(
+            $db,
+            "SELECT id FROM retencion_compra_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL",
+            [$idEmpresa],
+            function() {
+                return new \App\Services\modulos\RetencionCompraService(
+                    new \App\repositories\modulos\RetencionCompraRepository(),
+                    new \App\Rules\modulos\RetencionCompraRules(),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'Retenciones en Compras'
         );
 
         // 6. Ingresos (cobros): contrapartida del concepto + formas de cobro

@@ -9,9 +9,9 @@ use PDO;
 class ProveedorRepository extends BaseRepository
 {
     public const COLUMNAS_ORDEN = [
-        'razon_social', 'identificacion', 'nombre_tipo_id', 'email', 'telefono', 
-        'nombre_comercial', 'direccion', 'plazo', 'relacionado', 'status', 
-        'nombre_tipo_empresa'
+        'razon_social', 'identificacion', 'nombre_tipo_id', 'email', 'telefono',
+        'nombre_comercial', 'direccion', 'plazo', 'relacionado', 'status',
+        'nombre_tipo_empresa', 'nombre_banco', 'nombre_provincia', 'nombre_ciudad'
     ];
 
     private static bool $geoMigrated = false;

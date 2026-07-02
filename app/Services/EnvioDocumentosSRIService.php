@@ -49,7 +49,7 @@ class EnvioDocumentosSRIService
         $nombreDestino = $cabecera['cliente_nombre'] ?? $cabecera['proveedor_nombre'] ?? $cabecera['nombre'] ?? 'Cliente/Proveedor';
 
         // Convertir string separado por comas o punto y coma en array de correos válidos
-        $listaCorreosRaw = preg_split('/[,;]+/', $emailDestinoRaw);
+        $listaCorreosRaw = preg_split('/[\s,;]+/', $emailDestinoRaw);
         $listaDestinos = [];
         foreach ($listaCorreosRaw as $c) {
             $c = trim($c);
@@ -199,7 +199,7 @@ class EnvioDocumentosSRIService
             $mail->setFrom($smtpData['from'], $smtpData['fromName']);
             // Soporta uno o varios correos separados por coma/punto y coma
             $algunDestino = false;
-            foreach (preg_split('/[,;]+/', $correoDestino) as $dest) {
+            foreach (preg_split('/[\s,;]+/', $correoDestino) as $dest) {
                 $dest = trim($dest);
                 if (filter_var($dest, FILTER_VALIDATE_EMAIL)) {
                     $mail->addAddress($dest, $clienteNombre);
@@ -259,7 +259,7 @@ class EnvioDocumentosSRIService
         $nombreDestino = $cabecera['cliente_nombre'] ?? $cabecera['proveedor_nombre'] ?? $cabecera['nombre'] ?? 'Cliente';
 
         $listaDestinos = [];
-        foreach (preg_split('/[,;]+/', (string)$emailDestinoRaw) as $c) {
+        foreach (preg_split('/[\s,;]+/', (string)$emailDestinoRaw) as $c) {
             $c = trim($c);
             if (filter_var($c, FILTER_VALIDATE_EMAIL)) {
                 $listaDestinos[] = $c;
@@ -348,7 +348,7 @@ class EnvioDocumentosSRIService
 
         // Destinatarios válidos
         $listaDestinos = [];
-        foreach (preg_split('/[,;]+/', $emailDestino) as $c) {
+        foreach (preg_split('/[\s,;]+/', $emailDestino) as $c) {
             $c = trim($c);
             if (filter_var($c, FILTER_VALIDATE_EMAIL)) {
                 $listaDestinos[] = $c;

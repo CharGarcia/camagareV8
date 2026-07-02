@@ -222,18 +222,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         timer = setTimeout(() => fexqrBuscar(1), 400);
     });
 
-    document.querySelectorAll('.sortable-header').forEach(th => {
-        th.addEventListener('click', () => {
-            const f = th.dataset.sort;
-            if (window.currentSort === f) {
-                window.currentDir = window.currentDir.toLowerCase() === 'asc' ? 'DESC' : 'ASC';
-            } else {
-                window.currentSort = f;
-                window.currentDir  = 'ASC';
-            }
-            fexqrBuscar(1);
-        });
-    });
+    window.CMG_initSort('factura_express_config', (col, dir) => {
+        window.currentSort = col;
+        window.currentDir  = dir;
+        fexqrBuscar(1);
+    }, { col: window.currentSort, dir: window.currentDir });
 
     window.fexqrAbrirCrear = () => {
         window._fexqrEditando = null;

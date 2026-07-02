@@ -57,6 +57,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         padding: 0.75rem 1rem;
     }
 
+    .modal-ret .nav-tabs .nav-link {
+        font-size: 0.875rem;
+    }
+
     .modal-ret .modal-body {
         padding: 0 !important;
     }
@@ -140,6 +144,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'fecha_emision'        => 'Fecha',
                     'proveedor_nombre'     => 'Proveedor',
                     'proveedor_ruc'        => 'Identificación',
+                    'tipo_doc_sustento'    => 'Tipo Doc.',
                     'num_doc_sustento'     => 'Doc. Sustento',
                     'periodo_fiscal'       => 'Período',
                     'total_retenido'       => 'Total Ret.',
@@ -189,6 +194,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="sortable-header" role="button" onclick="window.RET_ordenar('proveedor_ruc')" data-col="proveedor_ruc" style="width:120px;">
                             Identificación <i class="bi <?= $ordenCol === 'proveedor_ruc' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> ms-1 small"></i>
                         </th>
+                        <th class="sortable-header" role="button" onclick="window.RET_ordenar('tipo_doc_sustento')" data-col="tipo_doc_sustento" style="width:110px;">
+                            Tipo Doc. <i class="bi <?= $ordenCol === 'tipo_doc_sustento' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> ms-1 small"></i>
+                        </th>
                         <th class="sortable-header" role="button" onclick="window.RET_ordenar('num_doc_sustento')" data-col="num_doc_sustento" style="width:150px;">
                             Doc. Sustento <i class="bi <?= $ordenCol === 'num_doc_sustento' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> ms-1 small"></i>
                         </th>
@@ -198,6 +206,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="text-end sortable-header" role="button" onclick="window.RET_ordenar('total_retenido')" data-col="total_retenido" style="width:100px;">
                             Total Ret. <i class="bi <?= $ordenCol === 'total_retenido' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> ms-1 small"></i>
                         </th>
+                        <th class="text-center sortable-header" role="button" onclick="window.RET_ordenar('estado_correo')" data-col="estado_correo" style="width:100px;">
+                            Correo <i class="bi <?= $ordenCol === 'estado_correo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> ms-1 small"></i>
+                        </th>
                         <th class="text-center pe-3 sortable-header" role="button" onclick="window.RET_ordenar('estado')" data-col="estado" style="width:110px;">
                             Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> ms-1 small"></i>
                         </th>
@@ -206,7 +217,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <tbody id="ret-table-body">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="8" class="text-center py-5 text-muted">
+                            <td colspan="10" class="text-center py-5 text-muted">
                                 <i class="fa-regular fa-file-lines fs-3 d-block mb-2"></i>No se encontraron retenciones.
                             </td>
                         </tr>
@@ -221,6 +232,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 'borrador'      => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
                                 default         => 'bg-primary bg-opacity-10 text-primary border-primary',
                             };
+                            $estadoCorreo = $r['estado_correo'] ?? 'pendiente';
+                            $correoClass  = $estadoCorreo === 'enviado'
+                                ? 'bg-success bg-opacity-10 text-success border-success'
+                                : 'bg-secondary bg-opacity-10 text-secondary border-secondary';
                             ?>
                             <tr class="ret-row" role="button" tabindex="0"
                                 data-row='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8') ?>'
@@ -231,9 +246,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td data-col="fecha_emision"><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
                                 <td class="fw-medium text-truncate" data-col="proveedor_nombre" style="max-width:200px;"><?= htmlspecialchars($r['proveedor_nombre'] ?? '-') ?></td>
                                 <td data-col="proveedor_ruc"><small class="text-muted"><?= htmlspecialchars($r['proveedor_ruc'] ?? '-') ?></small></td>
+                                <td data-col="tipo_doc_sustento"><small class="text-muted"><?= match((string)($r['tipo_doc_sustento'] ?? '01')) {
+                                    '01' => 'Factura', '03' => 'Liquidación', '05' => 'Nota débito',
+                                    default => htmlspecialchars((string)($r['tipo_doc_sustento'] ?? '-')),
+                                } ?></small></td>
                                 <td data-col="num_doc_sustento"><small class="text-muted"><?= htmlspecialchars($r['num_doc_sustento'] ?? '-') ?></small></td>
                                 <td data-col="periodo_fiscal"><small><?= htmlspecialchars($r['periodo_fiscal'] ?? '-') ?></small></td>
                                 <td class="text-end fw-bold" data-col="total_retenido">$<?= number_format((float)($r['total_retenido'] ?? 0), 2) ?></td>
+                                <td class="text-center" data-col="estado_correo">
+                                    <span class="badge <?= $correoClass ?> border border-opacity-25"><?= ucfirst($estadoCorreo) ?></span>
+                                </td>
                                 <td class="text-center pe-3" data-col="estado">
                                     <span class="badge <?= $estadoClass ?> border border-opacity-25"><?= ucfirst(str_replace('_', ' ', $estado)) ?></span>
                                 </td>
@@ -248,8 +270,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <?php include 'modal_retencion.php'; ?>
 
+<?php include MVC_APP . '/views/modulos/proveedores/modal_proveedor.php'; ?>
+
 <script>
     window.RET_rutaBase = '<?= $urlBase ?>';
     window.RET_perm = <?= json_encode($perm) ?>;
+    // Estado inicial de ordenamiento (desde la preferencia persistida en el servidor)
+    window.RET_ordenCol = '<?= $ordenCol ?>';
+    window.RET_ordenDir = '<?= $ordenDir ?>';
 </script>
+<script src="<?= rtrim($base, '/') ?>/js/modulos/proveedores_modal.js?v=<?= time() ?>"></script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/retenciones_compras.js?v=<?= time() ?>" defer></script>

@@ -26,7 +26,7 @@ class RetencionCompraRepository extends BaseRepository
     ): array {
         $colsPermitidas = [
             'fecha_emision', 'secuencial', 'proveedor_nombre', 'proveedor_ruc',
-            'num_doc_sustento', 'periodo_fiscal', 'total_retenido', 'estado', 'created_at',
+            'num_doc_sustento', 'tipo_doc_sustento', 'periodo_fiscal', 'total_retenido', 'estado', 'estado_correo', 'created_at',
         ];
         if (!in_array($ordenCol, $colsPermitidas, true)) $ordenCol = 'fecha_emision';
         $ordenDir = $ordenDir === 'ASC' ? 'ASC' : 'DESC';
@@ -98,7 +98,7 @@ class RetencionCompraRepository extends BaseRepository
                     r.id, r.fecha_emision, r.establecimiento, r.punto_emision, r.secuencial,
                     r.clave_acceso, r.numero_autorizacion, r.fecha_autorizacion,
                     r.tipo_doc_sustento, r.num_doc_sustento, r.fecha_emision_doc_sustento,
-                    r.periodo_fiscal, r.total_retenido, r.estado,
+                    r.periodo_fiscal, r.total_retenido, r.estado, r.estado_correo,
                     r.created_at, r.updated_at,
                     p.razon_social AS proveedor_nombre,
                     p.identificacion AS proveedor_ruc,
@@ -176,15 +176,17 @@ class RetencionCompraRepository extends BaseRepository
     {
         $sql = "SELECT r.*,
                     p.razon_social      AS proveedor_razon_social,
+                    p.razon_social      AS proveedor_nombre,
                     p.identificacion    AS proveedor_identificacion,
                     p.tipo_id_proveedor AS proveedor_tipo_id,
                     p.direccion         AS proveedor_direccion,
+                    p.email             AS proveedor_email,
                     e.nombre            AS empresa_razon_social,
                     e.ruc               AS empresa_ruc,
                     e.direccion         AS empresa_direccion,
                     e.nombre_comercial  AS empresa_nombre_comercial,
                     e.obligado_contabilidad AS empresa_obligado_contabilidad,
-                    e.contribuyente_especial AS empresa_contribuyente_especial,
+                    e.resolucion_contribuyente AS empresa_contribuyente_especial,
                     e.tipo_ambiente     AS empresa_tipo_ambiente,
                     ep.codigo_punto     AS punto_codigo,
                     ep.direccion_punto  AS punto_direccion,
@@ -221,6 +223,143 @@ class RetencionCompraRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    // ── Datos económicos del documento sustento (esquema SRI 2.0.0) ───────────
+
+    /**
+     * Reúne los datos del documento sustento (compra o liquidación vinculada)
+     * que exige el comprobante de retención v2.0.0: código de sustento,
+     * totales e impuestos (IVA) del documento que originó la retención.
+     *
+     * @param array $cabecera Fila de retencion_compra_cabecera (con id_empresa,
+     *                        id_compra / id_liquidacion, numero_autorizacion_sustento).
+     * @return array{codSustento:?string, numAutDocSustento:?string,
+     *               fechaRegistroContable:?string, pagoLocExt:string,
+     *               totalSinImpuestos:float, importeTotal:float, impuestos:array}
+     */
+    public function getDatosDocSustento(array $cabecera): array
+    {
+        $idEmpresa = (int)($cabecera['id_empresa'] ?? 0);
+
+        $out = [
+            'codSustento'             => null,
+            'numAutDocSustento'       => $cabecera['numero_autorizacion_sustento'] ?? null,
+            'fechaEmisionDocSustento' => null,
+            'fechaRegistroContable'   => null,
+            'pagoLocExt'            => '01', // 01 = pago a residente/local
+            'parteRel'              => 'NO', // parte relacionada (SI/NO)
+            'totalSinImpuestos'     => 0.0,
+            'importeTotal'          => 0.0,
+            'impuestos'             => [],
+        ];
+
+        $idCompra      = (int)($cabecera['id_compra'] ?? 0);
+        $idLiquidacion = (int)($cabecera['id_liquidacion'] ?? 0);
+
+        if ($idCompra > 0) {
+            $sql = "SELECT c.total_sin_impuestos, c.importe_total, c.numero_autorizacion,
+                           c.fecha_emision, c.fecha_registro, c.parte_relacionada, st.codigo AS sustento_codigo
+                    FROM compras_cabecera c
+                    LEFT JOIN sustento_tributario st ON st.id = c.id_sustento_tributario
+                    WHERE c.id = :id AND c.id_empresa = :ie";
+            $st = $this->db->prepare($sql);
+            $st->execute([':id' => $idCompra, ':ie' => $idEmpresa]);
+            $doc = $st->fetch(PDO::FETCH_ASSOC);
+
+            if ($doc) {
+                $out['totalSinImpuestos']       = (float)$doc['total_sin_impuestos'];
+                $out['importeTotal']            = (float)$doc['importe_total'];
+                $out['codSustento']             = ($doc['sustento_codigo'] ?? '') !== '' ? $doc['sustento_codigo'] : null;
+                $out['fechaEmisionDocSustento'] = $doc['fecha_emision'] ?? null;
+                $out['fechaRegistroContable']   = $doc['fecha_registro'] ?? null;
+                $pr = $doc['parte_relacionada'] ?? false;
+                $out['parteRel'] = ($pr === true || $pr === 't' || $pr === '1' || $pr === 1) ? 'SI' : 'NO';
+                if (empty($out['numAutDocSustento'])) {
+                    $out['numAutDocSustento'] = $doc['numero_autorizacion'] ?? null;
+                }
+
+                $sqlImp = "SELECT ci.codigo_impuesto, ci.codigo_porcentaje, ci.tarifa,
+                                  SUM(ci.base_imponible) AS base_imponible, SUM(ci.valor) AS valor
+                           FROM compras_detalle_impuestos ci
+                           JOIN compras_detalle cd ON cd.id = ci.id_compra_detalle
+                           WHERE cd.id_compra = :id AND ci.codigo_impuesto = '2'
+                           GROUP BY ci.codigo_impuesto, ci.codigo_porcentaje, ci.tarifa
+                           ORDER BY ci.tarifa";
+                $sti = $this->db->prepare($sqlImp);
+                $sti->execute([':id' => $idCompra]);
+                $out['impuestos'] = $sti->fetchAll(PDO::FETCH_ASSOC);
+            }
+        } elseif ($idLiquidacion > 0) {
+            $sql = "SELECT l.total_sin_impuestos, l.importe_total, l.fecha_emision, st.codigo AS sustento_codigo
+                    FROM liquidaciones_cabecera l
+                    LEFT JOIN sustento_tributario st ON st.id = l.id_sustento_tributario
+                    WHERE l.id = :id AND l.id_empresa = :ie";
+            $st = $this->db->prepare($sql);
+            $st->execute([':id' => $idLiquidacion, ':ie' => $idEmpresa]);
+            $doc = $st->fetch(PDO::FETCH_ASSOC);
+
+            if ($doc) {
+                $out['totalSinImpuestos']       = (float)$doc['total_sin_impuestos'];
+                $out['importeTotal']            = (float)$doc['importe_total'];
+                $out['codSustento']             = ($doc['sustento_codigo'] ?? '') !== '' ? $doc['sustento_codigo'] : null;
+                $out['fechaEmisionDocSustento'] = $doc['fecha_emision'] ?? null;
+
+                $sqlImp = "SELECT li.codigo_impuesto, li.codigo_porcentaje, li.tarifa,
+                                  SUM(li.base_imponible) AS base_imponible, SUM(li.valor) AS valor
+                           FROM liquidaciones_detalle_impuestos li
+                           JOIN liquidaciones_detalle d ON d.id = li.id_detalle
+                           WHERE d.id_cabecera = :id AND li.codigo_impuesto = '2'
+                           GROUP BY li.codigo_impuesto, li.codigo_porcentaje, li.tarifa
+                           ORDER BY li.tarifa";
+                $sti = $this->db->prepare($sqlImp);
+                $sti->execute([':id' => $idLiquidacion]);
+                $out['impuestos'] = $sti->fetchAll(PDO::FETCH_ASSOC);
+            }
+        }
+
+        // Código de sustento capturado manualmente (cuando no viene del documento vinculado)
+        if (empty($out['codSustento']) && !empty($cabecera['id_sustento_tributario'])) {
+            $stSus = $this->db->prepare("SELECT codigo FROM sustento_tributario WHERE id = ?");
+            $stSus->execute([(int)$cabecera['id_sustento_tributario']]);
+            $codSus = $stSus->fetchColumn();
+            if ($codSus) $out['codSustento'] = $codSus;
+        }
+
+        // Fallback: documento sustento NO registrado en el sistema → usar los totales
+        // capturados manualmente en la retención (doc_sustento_*).
+        if ($out['importeTotal'] <= 0 && empty($out['impuestos'])) {
+            $subtotal = (float)($cabecera['doc_sustento_subtotal'] ?? 0);
+            $iva      = (float)($cabecera['doc_sustento_iva'] ?? 0);
+            $total    = (float)($cabecera['doc_sustento_total'] ?? 0);
+            if ($total <= 0) $total = $subtotal + $iva;
+
+            if ($total > 0 || $subtotal > 0) {
+                $out['totalSinImpuestos'] = $subtotal;
+                $out['importeTotal']      = $total;
+
+                if ($iva > 0 && $subtotal > 0) {
+                    $out['impuestos'][] = [
+                        'codigo_impuesto'   => '2',
+                        'codigo_porcentaje' => '', // se deriva de la tarifa en el XML
+                        'tarifa'            => round($iva / $subtotal * 100, 2),
+                        'base_imponible'    => $subtotal,
+                        'valor'             => $iva,
+                    ];
+                } elseif ($subtotal > 0) {
+                    // Documento sin IVA (tarifa 0)
+                    $out['impuestos'][] = [
+                        'codigo_impuesto'   => '2',
+                        'codigo_porcentaje' => '0',
+                        'tarifa'            => 0.0,
+                        'base_imponible'    => $subtotal,
+                        'valor'             => 0.0,
+                    ];
+                }
+            }
+        }
+
+        return $out;
+    }
+
     // ── Insertar cabecera ────────────────────────────────────────
 
     public function insertCabecera(array $d): int
@@ -229,8 +368,9 @@ class RetencionCompraRepository extends BaseRepository
                     id_empresa, id_proveedor, id_usuario, id_establecimiento, id_punto_emision,
                     fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso,
                     tipo_ambiente, tipo_emision, periodo_fiscal,
-                    tipo_doc_sustento, id_compra, id_liquidacion,
+                    tipo_doc_sustento, id_compra, id_liquidacion, id_sustento_tributario,
                     num_doc_sustento, fecha_emision_doc_sustento,
+                    doc_sustento_subtotal, doc_sustento_iva, doc_sustento_total,
                     total_retenido, numero_autorizacion,
                     estado, detalle_xml,
                     created_by, updated_by
@@ -238,8 +378,9 @@ class RetencionCompraRepository extends BaseRepository
                     :ie, :ip, :iu, :iest, :ipt,
                     :fe, :estab, :pto, :sec, :ca,
                     :ta, :tem, :pf,
-                    :tds, :idc, :idl,
+                    :tds, :idc, :idl, :ist,
                     :nds, :feds,
+                    :dss, :dsi, :dst,
                     :tr, :na,
                     :est, :dxml,
                     :cb, :ub
@@ -263,8 +404,12 @@ class RetencionCompraRepository extends BaseRepository
             ':tds'  => $d['tipo_doc_sustento'] ?? '01',
             ':idc'  => !empty($d['id_compra']) ? $d['id_compra'] : null,
             ':idl'  => !empty($d['id_liquidacion']) ? $d['id_liquidacion'] : null,
+            ':ist'  => !empty($d['id_sustento_tributario']) ? (int)$d['id_sustento_tributario'] : null,
             ':nds'  => $d['num_doc_sustento']  ?? null,
             ':feds' => !empty($d['fecha_emision_doc_sustento']) ? $d['fecha_emision_doc_sustento'] : null,
+            ':dss'  => $d['doc_sustento_subtotal'] ?? 0,
+            ':dsi'  => $d['doc_sustento_iva']      ?? 0,
+            ':dst'  => $d['doc_sustento_total']    ?? 0,
             ':tr'   => $d['total_retenido']       ?? 0,
             ':na'   => $d['clave_acceso']         ?? null,
             ':est'  => $d['estado']    ?? 'borrador',
@@ -294,8 +439,12 @@ class RetencionCompraRepository extends BaseRepository
                     tipo_doc_sustento          = :tds,
                     id_compra                  = :idc,
                     id_liquidacion             = :idl,
+                    id_sustento_tributario     = :ist,
                     num_doc_sustento           = :nds,
                     fecha_emision_doc_sustento = :feds,
+                    doc_sustento_subtotal      = :dss,
+                    doc_sustento_iva           = :dsi,
+                    doc_sustento_total         = :dst,
                     total_retenido             = :tr,
                     numero_autorizacion        = :na,
                     estado                     = :est,
@@ -318,8 +467,12 @@ class RetencionCompraRepository extends BaseRepository
             ':tds'  => $d['tipo_doc_sustento'] ?? '01',
             ':idc'  => !empty($d['id_compra']) ? $d['id_compra'] : null,
             ':idl'  => !empty($d['id_liquidacion']) ? $d['id_liquidacion'] : null,
+            ':ist'  => !empty($d['id_sustento_tributario']) ? (int)$d['id_sustento_tributario'] : null,
             ':nds'  => $d['num_doc_sustento']  ?? null,
             ':feds' => !empty($d['fecha_emision_doc_sustento']) ? $d['fecha_emision_doc_sustento'] : null,
+            ':dss'  => $d['doc_sustento_subtotal'] ?? 0,
+            ':dsi'  => $d['doc_sustento_iva']      ?? 0,
+            ':dst'  => $d['doc_sustento_total']    ?? 0,
             ':tr'   => $d['total_retenido']       ?? 0,
             ':na'   => $d['clave_acceso']         ?? null,
             ':est'  => $d['estado'] ?? 'borrador',
@@ -445,6 +598,40 @@ class RetencionCompraRepository extends BaseRepository
         return (int) $st->fetchColumn() > 0;
     }
 
+    /**
+     * Verifica si un secuencial ya está en uso para el punto de emisión y ambiente.
+     * Segrega por tipo_ambiente (pruebas/producción llevan secuenciales independientes),
+     * igual que el generador SecuencialRepository.
+     */
+    public function existeSecuencial(int $idEmpresa, int $idEstablecimiento, int $idPunto, string $secuencial, string $tipoAmbiente, ?int $excluirId = null): bool
+    {
+        $sql = "SELECT COUNT(*) FROM retencion_compra_cabecera
+                WHERE id_empresa = :ie AND id_establecimiento = :iest AND id_punto_emision = :ipt
+                  AND secuencial = :sec AND tipo_ambiente = :amb AND eliminado = false";
+        $params = [
+            ':ie'   => $idEmpresa,
+            ':iest' => $idEstablecimiento,
+            ':ipt'  => $idPunto,
+            ':sec'  => $secuencial,
+            ':amb'  => $tipoAmbiente,
+        ];
+        if ($excluirId !== null) {
+            $sql          .= ' AND id <> :eid';
+            $params[':eid'] = $excluirId;
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return (int) $st->fetchColumn() > 0;
+    }
+
+    /** Catálogo de sustento tributario (tabla 5 SRI), con los tipos de comprobante que aplican. */
+    public function getSustentosTributarios(): array
+    {
+        return $this->db->query(
+            "SELECT id, codigo, nombre, tipo_comprobante FROM sustento_tributario WHERE status = 1 ORDER BY codigo ASC"
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     // ── Buscar compras disponibles para retener ──────────────────
 
     public function buscarComprasDisponibles(int $idEmpresa, string $buscar): array
@@ -549,6 +736,15 @@ class RetencionCompraRepository extends BaseRepository
     }
 
     // ── XML en base de datos ──────────────────────────────────────────────────
+
+    /** Enlaza el asiento contable generado a la retención. */
+    public function updateAsientoContable(int $id, int $idAsiento): void
+    {
+        $st = $this->db->prepare(
+            "UPDATE retencion_compra_cabecera SET id_asiento_contable = :ia, updated_at = CURRENT_TIMESTAMP WHERE id = :id"
+        );
+        $st->execute([':ia' => $idAsiento, ':id' => $id]);
+    }
 
     public function updateDetalleXml(int $id, string $xml): void
     {

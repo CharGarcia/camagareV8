@@ -77,17 +77,22 @@ class Application
 
     private function handleError(int $code, string $message): void
     {
+        // El mensaje técnico queda solo en el log; nunca se muestra al usuario.
         error_log("ROUTING ERROR $code: $message");
         http_response_code($code);
+
+        // Siempre renderizar la vista de error si existe (también en modo debug).
+        $viewPath = MVC_APP . '/views/errors/' . $code . '.php';
+        if (file_exists($viewPath)) {
+            require $viewPath;
+            return;
+        }
+
+        // Sin vista: en debug mostrar el detalle técnico; en producción, mensaje genérico.
         if ($this->config['debug'] ?? false) {
             echo "<h1>Error {$code}</h1><p>" . htmlspecialchars($message) . "</p>";
         } else {
-            $viewPath = MVC_APP . '/views/errors/' . $code . '.php';
-            if (file_exists($viewPath)) {
-                require $viewPath;
-            } else {
-                echo "<h1>Error {$code}</h1>";
-            }
+            echo "<h1>Error {$code}</h1>";
         }
     }
 }

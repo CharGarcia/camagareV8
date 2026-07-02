@@ -238,7 +238,7 @@ function CMG_poblarModal(d) {
         if (d.pagos && d.pagos.length) {
             d.pagos.forEach(p => CMG_agregarFormaPagoSRI(p.forma_pago, p.total));
         } else {
-            CMG_agregarFormaPagoSRI('01', d.importe_total || 0);
+            CMG_agregarFormaPagoSRI('', d.importe_total || 0);
         }
     }
 
@@ -381,8 +381,8 @@ function CMG_resetModal() {
     if (document.getElementById('tbodyDetalle')) document.getElementById('tbodyDetalle').innerHTML = '';
     if (document.getElementById('mc-container-pagos-sri')) document.getElementById('mc-container-pagos-sri').innerHTML = '';
     
-    CMG_agregarFormaPagoSRI('01', 0);
-    
+    CMG_agregarFormaPagoSRI('', 0);
+
     if (document.getElementById('mcDiasCredito')) document.getElementById('mcDiasCredito').value = 0;
     if (document.getElementById('mcPlazoSRI')) document.getElementById('mcPlazoSRI').value = 'Días';
 
@@ -607,6 +607,63 @@ window.CMG_seleccionarProveedor = function(p) {
 document.addEventListener('click', e => {
     if (!e.target.closest('#mcBuscarProveedor') && !e.target.closest('#mcListaProveedores')) {
         document.getElementById('mcListaProveedores').classList.add('d-none');
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTEGRACIÓN CON MODALES DE PROVEEDOR / PRODUCTO (creación rápida desde la compra)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Al guardar un proveedor desde el modal compartido, seleccionarlo en la compra
+document.addEventListener('proveedorGuardado', (e) => {
+    const res = e.detail;
+    if (!res || !res.ok || !res.data) return;
+    // El modal de compras solo debe reaccionar si está abierto
+    const modalEl = document.getElementById('modalCompra');
+    if (!modalEl || !modalEl.classList.contains('show')) return;
+
+    CMG_seleccionarProveedor({
+        id:             res.id || res.data.id,
+        nombre:         res.nombre || res.data.razon_social || res.data.nombre || '',
+        tipo_id:        res.data.tipo_id_proveedor || '',
+        plazo:          res.data.plazo || 0,
+        unidad_tiempo:  res.data.unidad_tiempo || 'DIAS',
+        relacionado:    res.data.relacionado
+    });
+});
+
+// Al guardar un producto desde el modal compartido, agregarlo como línea de la compra
+document.addEventListener('productoGuardado', async (e) => {
+    const res = e.detail;
+    if (!res || !res.ok || !res.id) return;
+    const modalEl = document.getElementById('modalCompra');
+    if (!modalEl || !modalEl.classList.contains('show')) return;
+
+    // El endpoint de creación solo devuelve el id; recuperamos el producto completo
+    // buscándolo por su código (el formulario aún conserva el valor tras guardar).
+    const codigo = document.getElementById('prod_codigo')?.value?.trim() || '';
+    const nombre = document.getElementById('prod_nombre')?.value?.trim() || '';
+    const termino = codigo || nombre;
+    if (!termino) return;
+
+    try {
+        const resp = await fetch(`${window.CMG_urlBase}/getProductosAjax?q=${encodeURIComponent(termino)}`);
+        const data = await resp.json();
+        if (data.ok && Array.isArray(data.data)) {
+            const prod = data.data.find(p => String(p.id) === String(res.id)) || data.data[0];
+            if (prod) {
+                CMG_seleccionarProducto(prod);
+                return;
+            }
+        }
+    } catch (err) {
+        console.error('Error al recuperar producto recién creado:', err);
+    }
+
+    if (typeof Swal !== 'undefined') {
+        Swal.fire({ toast: true, position: 'top-end', icon: 'success',
+            title: 'Producto creado. Búscalo en el catálogo para agregarlo.',
+            showConfirmButton: false, timer: 2500 });
     }
 });
 
@@ -1195,17 +1252,25 @@ window.CMG_guardar = async function() {
     const plazo = parseInt(document.getElementById('mcDiasCredito').value || 0);
     const unidad = document.getElementById('mcPlazoSRI').value || 'dias';
 
+    let pagoSinFormaSRI = false;
     document.querySelectorAll('.row-pago-sri').forEach(div => {
         const cod = div.querySelector('.input-pago-sri-id').value;
         const val = parseFloat(div.querySelector('.input-pago-sri-valor').value || 0);
+        // Con placeholder, un monto sin forma de pago seleccionada no es válido.
+        if (val > 0 && !cod) pagoSinFormaSRI = true;
         totalPagosSRI += val;
-        pagos.push({ 
-            forma_pago: cod, 
+        pagos.push({
+            forma_pago: cod,
             total: val,
             plazo: plazo,
             unidad_tiempo: unidad
         });
     });
+
+    if (pagoSinFormaSRI) {
+        Swal.fire('Atención', 'Seleccione la forma de pago SRI para cada monto ingresado.', 'warning');
+        return;
+    }
 
     if (Math.abs(totalFactura - totalPagosSRI) >= 0.01) {
         Swal.fire('Atención', `Las formas de pago SRI ($${totalPagosSRI.toFixed(2)}) no coinciden con el total de la compra ($${totalFactura.toFixed(2)}).`, 'warning');
@@ -1521,13 +1586,14 @@ function mcRegistrarAutoGuardado() {
 
 
 // ─── FORMAS DE PAGO SRI ───
-window.CMG_agregarFormaPagoSRI = function(codigo = '01', valor = 0) {
+window.CMG_agregarFormaPagoSRI = function(codigo = '', valor = 0) {
     const container = document.getElementById('mc-container-pagos-sri');
     if (!container) return;
-    
-    const opcFP = (window.CMG_formasPago || []).map(f => 
-        `<option value="${f.codigo}" ${f.codigo === codigo ? 'selected' : ''}>${f.nombre}</option>`
-    ).join('');
+
+    const opcFP = '<option value="">-- Seleccione forma de pago --</option>' +
+        (window.CMG_formasPago || []).map(f =>
+            `<option value="${f.codigo}" ${f.codigo === codigo ? 'selected' : ''}>${f.nombre}</option>`
+        ).join('');
 
     const uniqueId = 'sri-' + Date.now() + Math.floor(Math.random()*1000);
     const div = document.createElement('div');
@@ -2202,6 +2268,13 @@ window.CMG_nuevaRetencionDesdeCompra = function() {
             
             const elFechaDoc = document.getElementById('ret_fecha_emision_doc_sustento');
             if (elFechaDoc) elFechaDoc.value = fechaDoc;
+
+            // Totales del documento sustento (desde la compra)
+            const elSub = document.getElementById('ret_doc_subtotal');
+            const elIva = document.getElementById('ret_doc_iva');
+            if (elSub) elSub.value = subtotal;
+            if (elIva) elIva.value = totalIva;
+            if (typeof window.RET_calcTotalSustento === 'function') window.RET_calcTotalSustento();
         }, 300);
     }
 };

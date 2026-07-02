@@ -114,7 +114,7 @@ class FacturaVentaRepository extends BaseRepository
                        u.nombre        AS usuario_nombre,
                        (SELECT COALESCE(SUM(ind.monto_cobrado), 0) FROM ingresos_detalle ind INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' AND inc.estado != 'anulado' AND inc.eliminado = false) AS total_cobrado,
                        (SELECT COALESCE(SUM(nc.importe_total), 0) FROM notas_credito_cabecera nc WHERE nc.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) AND nc.id_empresa = v.id_empresa AND nc.estado != 'anulado' AND nc.eliminado = false) AS total_nc,
-                       (SELECT COALESCE(SUM(r.total_renta + r.total_iva + r.total_isd), 0) FROM retencion_venta_cabecera r WHERE r.eliminado = false AND (r.id_venta = v.id OR EXISTS (SELECT 1 FROM retencion_venta_detalle rd WHERE rd.id_retencion = r.id AND rd.num_doc_sustento = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)))) AS total_retencion
+                       (SELECT COALESCE(SUM(r.total_renta + r.total_iva + r.total_isd), 0) FROM retencion_venta_cabecera r WHERE r.eliminado = false AND r.id_empresa = v.id_empresa AND (r.id_venta = v.id OR EXISTS (SELECT 1 FROM retencion_venta_detalle rd WHERE rd.id_retencion = r.id AND rd.num_doc_sustento = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)))) AS total_retencion
                 FROM ventas_cabecera v
                 INNER JOIN clientes  c   ON v.id_cliente  = c.id
                 LEFT  JOIN vendedores ven ON v.id_vendedor = ven.id

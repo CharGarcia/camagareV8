@@ -1057,6 +1057,9 @@
             _reset();
             _initClienteBuscar();
             getModal().show();
+            if (typeof window.aplicarFavoritosModal === 'function') {
+                window.aplicarFavoritosModal('#modalProforma');
+            }
         };
     }
 
@@ -1076,6 +1079,9 @@
             _reset();
             _initClienteBuscar();
             getModal().show();
+            if (typeof window.aplicarFavoritosModal === 'function') {
+                window.aplicarFavoritosModal('#modalProforma');
+            }
         },
 
         /** Limpia el borrador guardado (uso externo/manual si hiciera falta). */

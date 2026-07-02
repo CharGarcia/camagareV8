@@ -487,7 +487,7 @@ class SriEnvioService
         $empresaModel = new \App\models\Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
 
-        // Dirección del establecimiento
+        // Dirección y logo del establecimiento (el logo vive en empresa_establecimiento).
         $dirEstablecimiento = null;
         if (!empty($cabecera['id_establecimiento'])) {
             try {
@@ -495,6 +495,11 @@ class SriEnvioService
                 foreach ($estRepo->getEstablecimientos($idEmpresa) as $est) {
                     if ((int)$est['id'] === (int)$cabecera['id_establecimiento']) {
                         $dirEstablecimiento = $est['direccion'] ?? null;
+                        if (!empty($est['logo_ruta'])) {
+                            $empresa['logo_ruta'] = $est['logo_ruta'];
+                        }
+                        $empresa['direccion_matriz']          = $empresa['direccion'] ?? '';
+                        $empresa['direccion_establecimiento'] = $est['direccion'] ?? '';
                         break;
                     }
                 }
@@ -502,8 +507,9 @@ class SriEnvioService
         }
 
         // 1. Generar XML
-        $xmlService = new \App\Services\Xml\XmlRetencionCompraService();
-        $xmlLimpio  = $xmlService->generar($cabecera, $lineas, $empresa, $dirEstablecimiento);
+        $docSustento = $repo->getDatosDocSustento($cabecera);
+        $xmlService  = new \App\Services\Xml\XmlRetencionCompraService();
+        $xmlLimpio   = $xmlService->generar($cabecera, $lineas, $empresa, $dirEstablecimiento, $docSustento);
 
         // 2. Obtener firma
         $firmaConfig = $this->getFirmaConfig($idEmpresa);
@@ -584,6 +590,20 @@ class SriEnvioService
                 $repo->updateDetalleXml($idRetencion, $xmlDetalleCompleto);
             } catch (\Throwable $eXml) {
                 error_log('[SRI] Error guardando detalle_xml en retención #' . $idRetencion . ': ' . $eXml->getMessage());
+            }
+
+            // --- ASIENTO CONTABLE (igual que factura de venta: se genera al autorizar) ---
+            try {
+                $retService = new \App\Services\modulos\RetencionCompraService(
+                    $repo,
+                    new \App\Rules\modulos\RetencionCompraRules(),
+                    new \App\Services\LogSistemaService()
+                );
+                $dataAsiento = $cabecera;
+                $dataAsiento['id_usuario'] = $idUsuario;
+                $retService->procesarAsientoContable($idRetencion, $dataAsiento);
+            } catch (\Throwable $eAs) {
+                error_log('[SRI] Asiento no generado para retención #' . $idRetencion . ': ' . $eAs->getMessage());
             }
 
             // --- ENVÍO AUTOMÁTICO DE CORREO ---

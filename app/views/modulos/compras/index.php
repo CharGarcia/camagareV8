@@ -99,6 +99,23 @@ $tiposComprobanteMap = [
         color: #dc3545;
         font-weight: 700;
     }
+
+    /* ── Apilado de modales sobre el modal de compra ──
+       app.css fuerza `.modal { z-index: 5060 !important }` a TODOS los modales,
+       lo que deja los submodales (nuevo producto / proveedor / retención) por
+       detrás del modal de compra. `#modalCompra` es el modal base; cualquier
+       otro modal se abre ENCIMA de él. El selector `.modal:not(#modalCompra)`
+       incluye un ID, así que gana en especificidad al `.modal` global y eleva
+       todos los modales apilados. El backdrop del 2.º modal (hermano `~`) se
+       coloca por encima del modal de compra (5060) para oscurecerlo. */
+    .modal:not(#modalCompra) {
+        z-index: 6060 !important;
+    }
+
+    /* El 2.º backdrop (y siguientes) va por encima del modal de compra (5060) */
+    .modal-backdrop ~ .modal-backdrop {
+        z-index: 6055 !important;
+    }
 </style>
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
 <?= \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfig ?? []) ?>
@@ -285,8 +302,13 @@ $tiposComprobanteMap = [
 
 <?php include __DIR__ . '/modal_compra.php'; ?>
 <?php include MVC_APP . '/views/modulos/retenciones_compras/modal_retencion.php'; ?>
+<?php include MVC_APP . '/views/modulos/proveedores/modal_proveedor.php'; ?>
+<?php include MVC_APP . '/views/modulos/productos/modal.php'; ?>
 <script src="<?= $base ?>/js/modulos/proveedores_modal.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/productos_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/categorias_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/marcas_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/unidades_medida_modal.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/asiento_contable_tab.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/compras.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/retenciones_compras.js?v=<?= time() ?>"></script>

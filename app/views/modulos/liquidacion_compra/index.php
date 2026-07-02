@@ -817,6 +817,9 @@ $pestanasConfigLiq = [
     window.R_MODULO  = '<?= $rutaModulo ?>';
     window.ID_EMPRESA = <?= (int)($_SESSION['id_empresa'] ?? 0) ?>;
     window.ID_USUARIO = <?= (int)($_SESSION['id_usuario'] ?? 0) ?>;
+    // Estado inicial de ordenamiento (desde la preferencia persistida en el servidor)
+    window.LC_ordenCol = '<?= $ordenCol ?>';
+    window.LC_ordenDir = '<?= $ordenDir ?>';
 
 
     // Pasar catálogos a JS

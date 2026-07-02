@@ -184,6 +184,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
             currentSort = col;
             currentDir = 'ASC';
         }
+        // Persistir el orden antes de navegar (sendBeacon sobrevive a la recarga)
+        if (navigator.sendBeacon && typeof APP_VISTAS_URL !== 'undefined') {
+            const fd = new FormData();
+            fd.append('modulo', 'opciones_ingreso_egreso');
+            fd.append('vistaPayload', JSON.stringify({ __ordenCol__: currentSort, __ordenDir__: currentDir }));
+            navigator.sendBeacon(APP_VISTAS_URL, fd);
+        }
         OIE_buscar(1);
     }
 </script>

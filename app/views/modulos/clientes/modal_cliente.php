@@ -95,7 +95,7 @@ if (!defined('LEAFLET_LOADED')) {
                         <div class="tab-pane fade show active" id="pane-general" role="tabpanel">
                             <div class="row g-3">
                                 <div class="col-md-4">
-                                    <label for="cliente_tipo_id" class="form-label small fw-bold d-flex align-items-center">Tipo Identificación * <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_tipo_id', 'tipo_id') ?></label>
+                                    <label class="form-label small fw-bold d-flex align-items-center">Tipo Identificación * <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_tipo_id', 'tipo_id') ?></label>
                                     <select class="form-select form-select-sm" name="tipo_id" id="cliente_tipo_id" required>
                                         <option value="">-- Seleccione --</option>
                                     </select>
@@ -114,7 +114,7 @@ if (!defined('LEAFLET_LOADED')) {
                                     <div id="identificacionError" class="invalid-feedback d-block text-danger small mt-1" style="display:none!important"></div>
                                 </div>
                                 <div class="col-md-3">
-                                    <label for="cliente_status" class="form-label small fw-bold d-flex align-items-center">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_status', 'status') ?></label>
+                                    <label class="form-label small fw-bold d-flex align-items-center">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_status', 'status') ?></label>
                                     <select class="form-select form-select-sm" name="status" id="cliente_status">
                                         <option value="1">Activo</option>
                                         <option value="0">Inactivo</option>
@@ -134,7 +134,7 @@ if (!defined('LEAFLET_LOADED')) {
                                     <input type="text" class="form-control form-control-sm" name="telefono" id="cliente_telefono" maxlength="50">
                                 </div>
                                 <div class="col-md-6">
-                                    <label for="cliente_provincia" class="form-label small fw-bold d-flex align-items-center">Provincia <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_provincia', 'provincia') ?></label>
+                                    <label class="form-label small fw-bold d-flex align-items-center">Provincia <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_provincia', 'provincia') ?></label>
                                     <select class="form-select form-select-sm" name="provincia" id="cliente_provincia">
                                         <option value="">- Seleccione provincia -</option>
                                     </select>

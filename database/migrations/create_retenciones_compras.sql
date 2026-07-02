@@ -1,7 +1,7 @@
 -- ============================================================
 -- MÓDULO RETENCIONES EN COMPRAS — Migración de Base de Datos
 -- Tablas: retencion_compra_cabecera, retencion_compra_detalle
--- Compatible con SRI Ecuador — Comprobante de Retención v1.0.0
+-- Compatible con SRI Ecuador — Comprobante de Retención v2.0.0 (formato ATS)
 -- codDoc SRI = 07
 -- ============================================================
 

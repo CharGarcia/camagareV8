@@ -1329,6 +1329,92 @@ class AsientoBuilderService
     }
 
     /**
+     * Arma el asiento contable de una retención emitida en compras.
+     *   HABER: cuenta configurada por cada código de retención (retenciones_compra_haber),
+     *          por el valor retenido de ese código (retención por pagar al SRI).
+     *   DEBE : cuenta por pagar (asientos_tipo.codigo = 'PORPAGARFACTURACOMPRA'),
+     *          por el total retenido (reduce el pasivo con el proveedor).
+     *
+     * Devuelve [] si no hay valores. Las líneas sin cuenta configurada se omiten
+     * (el asiento quedará descuadrado y se avisará al usuario, igual que en ventas).
+     */
+    public function generarAsientoRetencionCompra(int $idEmpresa, int $idRetencion): array
+    {
+        $db = \App\core\Database::getConnection();
+
+        // 1. HABER: por código de retención → cuenta configurada + valor retenido
+        $sqlHaber = "SELECT d.codigo_retencion,
+                            SUM(d.valor_retenido) AS total,
+                            ap.id_cuenta,
+                            pc.codigo AS cuenta_codigo,
+                            pc.nombre AS cuenta_nombre
+                     FROM retencion_compra_detalle d
+                     LEFT JOIN LATERAL (
+                         SELECT rs.id FROM retenciones_sri rs
+                         WHERE rs.codigo_ret = d.codigo_retencion
+                         ORDER BY rs.id DESC LIMIT 1
+                     ) rsx ON true
+                     LEFT JOIN asientos_programados ap
+                            ON ap.id_referencia = rsx.id
+                           AND ap.tipo_referencia = 'retenciones_compra_haber'
+                           AND ap.id_empresa = :emp
+                           AND ap.eliminado = false
+                     LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                     WHERE d.id_retencion = :id
+                     GROUP BY d.codigo_retencion, ap.id_cuenta, pc.codigo, pc.nombre";
+        $st = $db->prepare($sqlHaber);
+        $st->execute([':emp' => $idEmpresa, ':id' => $idRetencion]);
+
+        $detalles      = [];
+        $totalRetenido = 0.0;
+        while ($l = $st->fetch(\PDO::FETCH_ASSOC)) {
+            $valor = round((float) $l['total'], 2);
+            if ($valor <= 0) continue;
+            $totalRetenido += $valor;
+            if (empty($l['id_cuenta'])) continue; // sin cuenta configurada para ese código
+            $detalles[] = [
+                'id_cuenta_contable' => (int) $l['id_cuenta'],
+                'cuenta_codigo'      => $l['cuenta_codigo'],
+                'cuenta_nombre'      => $l['cuenta_nombre'],
+                'debe'               => 0.0,
+                'haber'              => $valor,
+                'referencia_detalle' => 'Retención ' . $l['codigo_retencion'],
+            ];
+        }
+        $totalRetenido = round($totalRetenido, 2);
+
+        if ($totalRetenido <= 0) {
+            return [];
+        }
+
+        // 2. DEBE: contrapartida en cuentas por pagar
+        $sqlDebe = "SELECT ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                    FROM asientos_programados ap
+                    INNER JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                    INNER JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                    WHERE ap.id_empresa = :emp
+                      AND at.codigo = 'PORPAGARFACTURACOMPRA'
+                      AND ap.eliminado = false
+                    LIMIT 1";
+        $stD = $db->prepare($sqlDebe);
+        $stD->execute([':emp' => $idEmpresa]);
+        $debe = $stD->fetch(\PDO::FETCH_ASSOC);
+
+        if ($debe && !empty($debe['id_cuenta'])) {
+            $detalles[] = [
+                'id_cuenta_contable' => (int) $debe['id_cuenta'],
+                'cuenta_codigo'      => $debe['cuenta_codigo'],
+                'cuenta_nombre'      => $debe['cuenta_nombre'],
+                'debe'               => $totalRetenido,
+                'haber'              => 0.0,
+                'referencia_detalle' => 'Cuentas por pagar (retención)',
+            ];
+        }
+
+        return $detalles;
+    }
+
+    /**
      * Arma el asiento contable de un INGRESO usando solo la configuración contable propia
      * (Tipo de asiento → Ingresos/Egresos y Cobros/Pagos), sin depender de asientos tipo:
      *   DEBE : cuenta de cada forma de cobro (config Cobros/Pagos), por su monto.

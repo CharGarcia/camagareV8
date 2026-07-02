@@ -689,9 +689,10 @@
             window.aplicarFavoritosModal('#modalCliente');
         }
 
-        // El usuario prefiere que empiece vacío
+        // Empieza vacío salvo que exista un favorito para el tipo de identificación
         const selTipos = document.getElementById('cliente_tipo_id');
-        if (selTipos) selTipos.value = "";
+        const favTipo = (typeof APP_FAVORITOS !== 'undefined') ? APP_FAVORITOS['tipo_id'] : undefined;
+        if (selTipos && (favTipo === undefined || favTipo === '')) selTipos.value = "";
 
         window.aplicarReglasIdentificacion();
         modal.show();

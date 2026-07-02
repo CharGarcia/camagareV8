@@ -8,8 +8,8 @@ use PDO;
 
 class UnidadesMedidaRepository extends BaseRepository
 {
-    public const COLUMNAS_ORDEN_TIPOS    = ['codigo', 'nombre', 'status'];
-    public const COLUMNAS_ORDEN_UNIDADES = ['codigo', 'nombre', 'abreviatura', 'factor_base', 'es_base', 'status'];
+    public const COLUMNAS_ORDEN_TIPOS    = ['codigo', 'nombre', 'status', 'total_unidades'];
+    public const COLUMNAS_ORDEN_UNIDADES = ['codigo', 'nombre', 'abreviatura', 'factor_base', 'es_base', 'status', 'tipo_nombre'];
 
     public function __construct()
     {
@@ -59,7 +59,7 @@ class UnidadesMedidaRepository extends BaseRepository
                     FROM tipo_medida tm
                     LEFT JOIN usuarios u_crea ON u_crea.id = tm.created_by
                     {$where}
-                    ORDER BY tm.{$col} {$dir}";
+                    ORDER BY " . ($col === 'total_unidades' ? 'total_unidades' : "tm.{$col}") . " {$dir}";
 
         if ($perPage > 0) {
             $sqlRows .= ' LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset;
@@ -213,6 +213,7 @@ class UnidadesMedidaRepository extends BaseRepository
 
         $orderExpr = match($col) {
             'factor_base' => 'um.factor_base',
+            'tipo_nombre' => 'tm.nombre',
             default       => "um.{$col}",
         };
 

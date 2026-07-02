@@ -241,6 +241,9 @@
                 const col = th.dataset.sort;
                 if (state.sort === col) state.dir = state.dir === 'ASC' ? 'DESC' : 'ASC';
                 else { state.sort = col; state.dir = 'DESC'; }
+                if (typeof window.guardarOrdenacionVista === 'function') {
+                    window.guardarOrdenacionVista('auditoria_contable', state.sort, state.dir);
+                }
                 fetchSearch(1);
             });
         });

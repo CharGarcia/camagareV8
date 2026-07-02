@@ -74,8 +74,8 @@ class FacturaExpressSolicitudesController extends BaseModuloController
         $buscar   = trim($_GET['b'] ?? '');
         $estado   = trim($_GET['estado'] ?? 'pendiente');
         $page     = max(1, (int) ($_GET['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? 'created_at');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? 'DESC'));
+        $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'created_at');
+        $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
         $perPage  = 20;
 
         $result     = $this->service->getListadoSolicitudes($idEmpresa, $buscar, $estado, $page, $perPage, $ordenCol, $ordenDir);

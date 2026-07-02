@@ -188,9 +188,10 @@ SOAP;
             $mensajes = $xpath->query('mensajes/mensaje', $aut);
             foreach ($mensajes as $m) {
                 $result['errores'][] = [
-                    'id'      => trim($xpath->query('identificador', $m)->item(0)?->textContent ?? ''),
-                    'mensaje' => trim($xpath->query('mensaje',       $m)->item(0)?->textContent ?? ''),
-                    'tipo'    => trim($xpath->query('tipo',          $m)->item(0)?->textContent ?? ''),
+                    'id'      => trim($xpath->query('identificador',        $m)->item(0)?->textContent ?? ''),
+                    'mensaje' => trim($xpath->query('mensaje',             $m)->item(0)?->textContent ?? ''),
+                    'tipo'    => trim($xpath->query('tipo',                $m)->item(0)?->textContent ?? ''),
+                    'info'    => trim($xpath->query('informacionAdicional', $m)->item(0)?->textContent ?? ''),
                 ];
             }
         } catch (\Throwable $e) {

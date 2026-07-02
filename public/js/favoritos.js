@@ -174,6 +174,19 @@ function initConfiguracionVistas() {
     });
 }
 
+/**
+ * Recarga la página actual tras guardar una preferencia de VISTA (columnas,
+ * anchos, pestañas u ordenamiento) para que el listado se re-renderice ya
+ * aplicando la preferencia en el servidor. Se protege contra recargas
+ * múltiples y aplica un pequeño retraso para que el toast alcance a mostrarse.
+ * No se usa para favoritos de campo (esos se aplican dentro del modal).
+ */
+let _cmgReloadTimer = null;
+function _cmgReloadPagina() {
+    if (_cmgReloadTimer) return;
+    _cmgReloadTimer = setTimeout(() => { window.location.reload(); }, 250);
+}
+
 let _timerVistaAjax = {};
 function guardarPreferenciaVista(modulo, key, valor, msg) {
     const moduloLimpio = modulo.split('/').pop().replace(/-/g, '_');
@@ -194,6 +207,7 @@ function guardarPreferenciaVista(modulo, key, valor, msg) {
                 if (msg) {
                     showToast(msg, 'success');
                 }
+                _cmgReloadPagina();
             } else {
                 alert("Error al guardar: " + res.error);
             }
@@ -203,6 +217,100 @@ function guardarPreferenciaVista(modulo, key, valor, msg) {
         }
     }, 500);
 }
+
+/**
+ * Motor global de ordenamiento de tablas.
+ *
+ * Engancha todos los `.sortable-header[data-sort]` de un contenedor, alterna la
+ * dirección al hacer clic, actualiza los íconos, PERSISTE la preferencia
+ * (`__ordenCol__`/`__ordenDir__` vía guardarOrdenacionVista) y llama al callback
+ * de recarga del módulo. Reemplaza la lógica inline duplicada en cada vista.
+ *
+ * @param {string} modulo Nombre del módulo para persistir (ej: 'marcas').
+ * @param {function(string,string)} onSort Callback (col, dir) que recarga la tabla.
+ * @param {object} [opts] { col, dir, container }.
+ *        - col/dir: estado inicial (para pintar el ícono activo al cargar).
+ *        - container: selector o elemento donde buscar los encabezados (def: document).
+ * @returns {{getSort:function, getDir:function, refreshIcons:function}|null}
+ */
+window.CMG_initSort = function(modulo, onSort, opts) {
+    opts = opts || {};
+    const scope = opts.container
+        ? (typeof opts.container === 'string' ? document.querySelector(opts.container) : opts.container)
+        : document;
+    if (!scope) return null;
+
+    const state = {
+        col: opts.col || '',
+        dir: (opts.dir || 'ASC').toString().toUpperCase()
+    };
+
+    function refreshIcons() {
+        scope.querySelectorAll('.sortable-header[data-sort]').forEach(th => {
+            const icon = th.querySelector('i');
+            if (!icon) return;
+            if (th.dataset.sort === state.col) {
+                icon.className = (state.dir === 'ASC')
+                    ? 'bi bi-sort-alpha-down text-primary ms-1'
+                    : 'bi bi-sort-alpha-up text-primary ms-1';
+            } else {
+                icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
+            }
+        });
+    }
+
+    scope.querySelectorAll('.sortable-header[data-sort]').forEach(th => {
+        if (th.dataset.sortBound === '1') return; // evitar doble binding
+        th.dataset.sortBound = '1';
+        if (!th.getAttribute('role')) th.setAttribute('role', 'button');
+
+        th.addEventListener('click', () => {
+            const f = th.dataset.sort;
+            if (state.col === f) {
+                state.dir = state.dir === 'ASC' ? 'DESC' : 'ASC';
+            } else {
+                state.col = f;
+                state.dir = 'ASC';
+            }
+            refreshIcons();
+            if (typeof window.guardarOrdenacionVista === 'function') {
+                window.guardarOrdenacionVista(modulo, state.col, state.dir);
+            }
+            try {
+                onSort(state.col, state.dir);
+            } catch (e) {
+                console.error('Error en callback de ordenamiento:', e);
+            }
+        });
+    });
+
+    refreshIcons();
+
+    return {
+        getSort: () => state.col,
+        getDir: () => state.dir,
+        refreshIcons: refreshIcons
+    };
+};
+
+/**
+ * Persiste un objeto de claves arbitrarias en la vista de un módulo (mezcla
+ * incremental en `__vista__`). Útil para vistas con más de una tabla que
+ * necesitan claves de orden propias (p. ej. __ordenColTipos__).
+ * @param {string} modulo Nombre del módulo.
+ * @param {object} payload Objeto { clave: valor, ... } a guardar.
+ */
+window.CMG_guardarVista = function(modulo, payload) {
+    const moduloLimpio = modulo.split('/').pop().replace(/-/g, '_');
+    const url = typeof APP_VISTAS_URL !== 'undefined' ? APP_VISTAS_URL : '/Preferencias/guardarVistaAjax';
+    const fd = new FormData();
+    fd.append('modulo', moduloLimpio);
+    fd.append('vistaPayload', JSON.stringify(payload || {}));
+    fetch(url, { method: 'POST', body: fd })
+        .then(res => res.json())
+        .then(json => { if (json && json.ok) _cmgReloadPagina(); })
+        .catch(err => console.error('Error guardando vista:', err));
+};
 
 /**
  * Guarda el ordenamiento de columnas de una vista.
@@ -238,6 +346,7 @@ window.guardarOrdenacionVista = function(modulo, col, dir) {
             .then(json => {
                 if (json.ok) {
                     console.log(`Ordenación guardada para ${modulo}: ${col} ${dir}`);
+                    _cmgReloadPagina();
                 }
             })
             .catch(err => console.error('Error guardando ordenación:', err));

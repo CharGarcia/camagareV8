@@ -464,7 +464,7 @@ if (!function_exists('enviar_correo_factura_express_dueno')) {
 
         try {
             $mail->isSMTP();
-            $mail->Host       = $base['host'];
+            $mail->Host       = _mail_resolve_ipv4_host($base['host']);
             $mail->SMTPAuth   = true;
             $mail->Username   = $base['emisor'];
             $mail->Password   = $base['pass'];
@@ -535,7 +535,7 @@ if (!function_exists('enviar_correo_factura_express_cliente')) {
 
         try {
             $mail->isSMTP();
-            $mail->Host       = $base['host'];
+            $mail->Host       = _mail_resolve_ipv4_host($base['host']);
             $mail->SMTPAuth   = true;
             $mail->Username   = $base['emisor'];
             $mail->Password   = $base['pass'];

@@ -664,6 +664,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                             <div class="d-flex align-items-center gap-1">
                                                                 <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'm-select-pago-sri', 'id_forma_pago_sri') ?>
                                                                 <select class="form-select form-select-sm border-0 bg-light" name="f_pago_id[]" id="m-select-pago-sri">
+                                                                    <option value="" data-id="">-- Seleccione forma de pago --</option>
                                                                     <?php foreach ($formasPago as $fp): ?>
                                                                         <option value="<?= $fp['codigo'] ?>" data-id="<?= $fp['id'] ?>"><?= htmlspecialchars($fp['nombre']) ?></option>
                                                                     <?php endforeach; ?>
@@ -1204,6 +1205,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 // Copia de seguridad de la ruta original del módulo de facturación
 $rutaModuloOriginal = $rutaModulo;
 $permOriginal = $perm;
+// También el estado de ordenamiento/paginación del listado (los modales lo pisan)
+$ordenColOriginal   = $ordenCol;
+$ordenDirOriginal   = $ordenDir;
+$pageOriginal       = $page ?? 1;
+$totalPagesOriginal = $totalPages ?? 1;
 
 // Variables requeridas por los modales originales para evitar errores de PHP durante la inclusión
 $urlBaseClientes = BASE_URL . '/modulos/clientes';
@@ -1222,6 +1228,10 @@ include dirname(__DIR__) . '/productos/modal.php';
 // RESTAURAR variables originales para la lógica de Facturación
 $rutaModulo = $rutaModuloOriginal;
 $perm = $permOriginal;
+$ordenCol   = $ordenColOriginal;
+$ordenDir   = $ordenDirOriginal;
+$page       = $pageOriginal;
+$totalPages = $totalPagesOriginal;
 ?>
 
 <script>
@@ -1604,12 +1614,15 @@ $perm = $permOriginal;
 
         // ”€”€ Recolectar pagos ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
         let sumPagos = 0;
+        let pagoSinForma = false;
         const pagos = [];
         document.querySelectorAll('#m-container-pagos .row-pago').forEach(row => {
             const sel = row.querySelector('select[name="f_pago_id[]"]');
             const inp = row.querySelector('input[name="f_pago_valor[]"]');
             const val = r2(parseFloat(inp?.value) || 0);
             if (sel && val > 0) {
+                // Con placeholder, un monto sin forma de pago seleccionada no es válido.
+                if (!sel.value) { pagoSinForma = true; return; }
                 pagos.push({
                     forma_pago: sel.value,
                     total: val.toFixed(2),
@@ -1618,6 +1631,12 @@ $perm = $permOriginal;
                 });
                 sumPagos = r2(sumPagos + val);
             }
+        });
+
+        if (pagoSinForma) return Swal.fire({
+            icon: 'warning',
+            title: 'Forma de pago requerida',
+            text: 'Seleccione la forma de pago SRI para cada monto ingresado.'
         });
 
         if (pagos.length === 0) return Swal.fire({
@@ -3118,7 +3137,7 @@ $perm = $permOriginal;
         const { value: correos, isConfirmed } = await Swal.fire({
             title: 'Enviar por correo',
             input: 'text',
-            inputLabel: 'Correos electrónicos (separados por coma)',
+            inputLabel: 'Correos electrónicos (separados por coma o espacio)',
             inputValue: correoActual,
             target: document.getElementById('modalNuevaFactura'),
             showCancelButton: true,
@@ -3177,6 +3196,11 @@ $perm = $permOriginal;
                     timer: 2500,
                     showConfirmButton: false
                 });
+                // Refrescar la tabla (preservando el orden) para que el badge
+                // "Correo" refleje el nuevo estado 'enviado' al cerrar el modal.
+                if (typeof window.FV_fetchSearch === 'function') {
+                    window.FV_fetchSearch(window.FV_currentPage || 1);
+                }
             } else {
                 Swal.fire({
                     icon: 'error',
@@ -3293,8 +3317,14 @@ $perm = $permOriginal;
 
         if (dropdownClientes) dropdownClientes.classList.add('d-none');
 
-        // Seleccionar la forma de pago SRI predeterminada desde el cliente o empresa
-        const idFpSri = c.id_forma_pago_sri || EMPRESA_CONFIG.id_forma_pago_sri_def;
+        // Seleccionar la forma de pago SRI predeterminada.
+        // Precedencia: forma del CLIENTE → FAVORITO del usuario → default de EMPRESA.
+        // (El favorito manda sobre el default de empresa.)
+        const favPagoSri = (typeof APP_FAVORITOS !== 'undefined'
+            && APP_FAVORITOS['id_forma_pago_sri'] != null
+            && APP_FAVORITOS['id_forma_pago_sri'] !== '')
+            ? APP_FAVORITOS['id_forma_pago_sri'] : null;
+        const idFpSri = c.id_forma_pago_sri || favPagoSri || EMPRESA_CONFIG.id_forma_pago_sri_def;
         if (idFpSri) {
             const selectPagoSri = document.querySelector('select[name="f_pago_id[]"]');
             if (selectPagoSri) {

@@ -193,19 +193,12 @@ $tiposId = ['04' => 'RUC', '05' => 'Cédula', '06' => 'Pasaporte'];
         } catch (e) { console.error(e); }
     };
 
-    // Ordenamiento
-    document.querySelectorAll('.sortable-header').forEach(h => {
-        h.addEventListener('click', () => {
-            const f = h.dataset.sort;
-            if (window.TR_currentSort === f) {
-                window.TR_currentDir = window.TR_currentDir.toUpperCase() === 'ASC' ? 'DESC' : 'ASC';
-            } else {
-                window.TR_currentSort = f;
-                window.TR_currentDir  = 'ASC';
-            }
-            window.TR_fetchSearch(1);
-        });
-    });
+    // Ordenamiento (motor global: persiste __ordenCol__/__ordenDir__)
+    window.CMG_initSort('transportistas', (col, dir) => {
+        window.TR_currentSort = col;
+        window.TR_currentDir  = dir;
+        window.TR_fetchSearch(1);
+    }, { col: window.TR_currentSort, dir: window.TR_currentDir });
 
     if (inputBuscar) {
         inputBuscar.addEventListener('input', () => {

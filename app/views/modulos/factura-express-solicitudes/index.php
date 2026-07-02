@@ -422,18 +422,11 @@ $decimalesPrec = $decimalesPrec ?? 2;
         timer = setTimeout(() => fexsolBuscar(1), 400);
     });
 
-    document.querySelectorAll('.sortable-header').forEach(th => {
-        th.addEventListener('click', () => {
-            const f = th.dataset.sort;
-            if (window.currentSort === f) {
-                window.currentDir = window.currentDir.toLowerCase() === 'asc' ? 'DESC' : 'ASC';
-            } else {
-                window.currentSort = f;
-                window.currentDir  = 'ASC';
-            }
-            fexsolBuscar(1);
-        });
-    });
+    window.CMG_initSort('factura_express_solicitudes', (col, dir) => {
+        window.currentSort = col;
+        window.currentDir  = dir;
+        fexsolBuscar(1);
+    }, { col: window.currentSort, dir: window.currentDir });
 
     window.fexsolAbrirSolicitud = function(el) {
         const r = JSON.parse(el.dataset.row);

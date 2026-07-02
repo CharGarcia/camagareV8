@@ -253,6 +253,7 @@
                           <div class="d-flex align-items-center gap-1">
                             <i class="bi bi-star text-muted btn-favorito" style="cursor:pointer;" data-modulo="compras" data-campo="pago_sri_default" data-target=".input-pago-sri-id" title="Marcar como favorita"></i>
                             <select class="form-select form-select-sm border-0 bg-light input-pago-sri-id" name="pago_sri_id[]">
+                              <option value="" data-id="">-- Seleccione forma de pago --</option>
                               <?php foreach ($formasPago as $fp): ?>
                                 <option value="<?= $fp['codigo'] ?>" data-id="<?= $fp['id'] ?>"><?= htmlspecialchars($fp['nombre']) ?></option>
                               <?php endforeach; ?>

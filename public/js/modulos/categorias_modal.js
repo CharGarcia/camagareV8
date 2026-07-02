@@ -42,6 +42,9 @@
         }
         
         getModal()?.show();
+        if (typeof window.aplicarFavoritosModal === 'function') {
+            window.aplicarFavoritosModal('#modalCategoria');
+        }
         setTimeout(() => {
             const nomInput = document.getElementById('categoria_nombre_modal');
             if (nomInput) nomInput.focus();

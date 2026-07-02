@@ -636,7 +636,7 @@ class AsientoProgramadoRepository extends BaseRepository
                 'codigo'            => $c['codigo_ret'],
                 'tipo_cuenta'       => 'activo',
                 'debe_haber'        => 'debe',
-                
+
                 // Datos del Debe
                 'id_programado'     => $debeRow['id_programado'],
                 'id_cuenta'         => $debeRow['id_cuenta'],
@@ -644,13 +644,120 @@ class AsientoProgramadoRepository extends BaseRepository
                 'cuenta_nombre'     => $debeRow['cuenta_nombre'],
                 'id_referencia'     => $c['id'],
                 'tipo_referencia'   => 'retenciones_venta_debe',
-                
+
                 // Datos del Haber
                 'haber_id_programado'=> $haberProgramadoId,
                 'haber_id_cuenta'   => $haberId,
                 'haber_cuenta_codigo'=> $haberCodigo,
                 'haber_cuenta_nombre'=> $haberNombre,
                 'haber_is_custom'    => $haberEspRow ? true : false
+            ];
+        }
+
+        return $reglas;
+    }
+
+    /**
+     * Retenciones SRI que la empresa EFECTÚA en compras (al proveedor), cruzando con su homóloga
+     * programada. En compras la retención es un PASIVO, por lo que se invierten los lados respecto a
+     * ventas: Debe = Cuentas por Pagar (contraparte, por defecto PORPAGARFACTURACOMPRA) y Haber =
+     * Retención por pagar (cuenta específica por concepto de retención).
+     */
+    public function getReglasRetencionesCompra(int $idEmpresa): array
+    {
+        // 1. Cuenta por pagar por defecto (PORPAGARFACTURACOMPRA) → contraparte del lado Debe.
+        $sqlDebe = "SELECT ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                    FROM asientos_programados ap
+                    INNER JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                    INNER JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                    WHERE ap.id_empresa = :id_empresa
+                      AND at.codigo = 'PORPAGARFACTURACOMPRA'
+                      AND ap.eliminado = false
+                      AND (ap.tipo_referencia = 'asientos tipo' OR ap.tipo_referencia = 'adquisiciones_compras' OR ap.tipo_referencia = at.tipo_asiento)
+                    LIMIT 1";
+        $stDebe = $this->db->prepare($sqlDebe);
+        $stDebe->execute([':id_empresa' => $idEmpresa]);
+        $debeDefecto = $stDebe->fetch(PDO::FETCH_ASSOC) ?: [
+            'id_cuenta' => null,
+            'cuenta_codigo' => '',
+            'cuenta_nombre' => 'No Configurada'
+        ];
+
+        // 2. Conceptos de retención usados en compras de esta empresa (ambiente actual, únicos por código).
+        $sqlConceptos = "SELECT DISTINCT ON (rs.codigo_ret) rs.id, rs.codigo_ret, rs.concepto_ret, rs.impuesto_ret
+                         FROM retencion_compra_detalle d
+                         INNER JOIN retencion_compra_cabecera c ON c.id = d.id_retencion
+                         INNER JOIN retenciones_sri rs ON rs.codigo_ret = d.codigo_retencion
+                         WHERE c.id_empresa = :id_empresa
+                           AND c.eliminado = false
+                           AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                         ORDER BY rs.codigo_ret ASC, rs.id DESC";
+        $stConceptos = $this->db->prepare($sqlConceptos);
+        $stConceptos->execute([':id_empresa' => $idEmpresa]);
+        $conceptos = $stConceptos->fetchAll(PDO::FETCH_ASSOC);
+
+        $reglas = [];
+        foreach ($conceptos as $c) {
+            // HABER: cuenta de la retención por pagar (específica por concepto).
+            $sqlHaberEsp = "SELECT ap.id AS id_programado, ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                            FROM asientos_programados ap
+                            INNER JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                            WHERE ap.id_empresa = :id_empresa
+                              AND ap.tipo_referencia = 'retenciones_compra_haber'
+                              AND ap.id_referencia = :id_referencia
+                              AND ap.eliminado = false
+                            ORDER BY ap.id DESC LIMIT 1";
+            $stHaberEsp = $this->db->prepare($sqlHaberEsp);
+            $stHaberEsp->execute([':id_empresa' => $idEmpresa, ':id_referencia' => $c['id']]);
+            $haberRow = $stHaberEsp->fetch(PDO::FETCH_ASSOC) ?: [
+                'id_programado' => null,
+                'id_cuenta' => null,
+                'cuenta_codigo' => '',
+                'cuenta_nombre' => ''
+            ];
+
+            // DEBE: cuenta por pagar. Específica por concepto si existe; si no, el default.
+            $sqlDebeEsp = "SELECT ap.id AS id_programado, ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                           FROM asientos_programados ap
+                           INNER JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                           WHERE ap.id_empresa = :id_empresa
+                             AND ap.tipo_referencia = 'retenciones_compra_debe'
+                             AND ap.id_referencia = :id_referencia
+                             AND ap.eliminado = false
+                           LIMIT 1";
+            $stDebeEsp = $this->db->prepare($sqlDebeEsp);
+            $stDebeEsp->execute([':id_empresa' => $idEmpresa, ':id_referencia' => $c['id']]);
+            $debeEspRow = $stDebeEsp->fetch(PDO::FETCH_ASSOC);
+
+            $debeId     = $debeEspRow ? $debeEspRow['id_cuenta'] : $debeDefecto['id_cuenta'];
+            $debeCodigo = $debeEspRow ? $debeEspRow['cuenta_codigo'] : $debeDefecto['cuenta_codigo'];
+            $debeNombre = $debeEspRow ? $debeEspRow['cuenta_nombre'] : $debeDefecto['cuenta_nombre'];
+            $debeProgId = $debeEspRow ? $debeEspRow['id_programado'] : null;
+
+            $reglas[] = [
+                'id_asiento_tipo'   => 0,
+                'tipo_asiento'      => 'retenciones_compra',
+                'concepto'          => $c['concepto_ret'],
+                'detalle'           => $c['codigo_ret'] . ' - ' . $c['impuesto_ret'],
+                'codigo'            => $c['codigo_ret'],
+                'tipo_cuenta'       => 'pasivo',
+                'debe_haber'        => 'haber',
+
+                // Datos del Debe (Cuentas por Pagar proveedores)
+                'id_programado'     => $debeProgId,
+                'id_cuenta'         => $debeId,
+                'cuenta_codigo'     => $debeCodigo,
+                'cuenta_nombre'     => $debeNombre,
+                'id_referencia'     => $c['id'],
+                'tipo_referencia'   => 'retenciones_compra_debe',
+                'debe_is_custom'    => $debeEspRow ? true : false,
+
+                // Datos del Haber (Retención por pagar)
+                'haber_id_programado'=> $haberRow['id_programado'],
+                'haber_id_cuenta'   => $haberRow['id_cuenta'],
+                'haber_cuenta_codigo'=> $haberRow['cuenta_codigo'],
+                'haber_cuenta_nombre'=> $haberRow['cuenta_nombre'],
+                'haber_is_custom'    => $haberRow['id_programado'] ? true : false
             ];
         }
 

@@ -4,9 +4,13 @@
     // ── Estado ──────────────────────────────────────────────────────────────────
     let modalRet;
     let lineasData = [];   // [{codigo_impuesto, codigo_retencion, concepto, base_imponible, porcentaje_retener, valor_retenido}]
-    let currentSort = 'fecha_emision';
-    let currentDir  = 'DESC';
+    let currentSort = (typeof window.RET_ordenCol !== 'undefined' && window.RET_ordenCol) ? window.RET_ordenCol : 'fecha_emision';
+    let currentDir  = (typeof window.RET_ordenDir !== 'undefined' && window.RET_ordenDir) ? window.RET_ordenDir : 'DESC';
     let retIdActual = 0;
+    // Bloquea la carga del secuencial SOLO mientras se abre una retención existente,
+    // para no sobrescribir el número guardado. Se libera al terminar la carga, de modo
+    // que un cambio manual de serie sí recargue el siguiente consecutivo (igual que factura).
+    let retBloquearSecuencial = false;
 
     const BASE = window.RET_rutaBase || (typeof BASE_URL !== 'undefined' ? BASE_URL : '') + '/modulos/retenciones_compras';
 
@@ -22,6 +26,9 @@
             document.getElementById('ret_proveedor_search').value = item.razon_social || item.nombre;
             mostrarInfoProveedor(item);
             document.getElementById('ret_proveedor_dropdown').classList.add('d-none');
+            // Pasar el foco al número de documento retenido
+            const numDoc = document.getElementById('ret_num_doc_sustento');
+            if (numDoc) numDoc.focus();
         });
 
         // Aplicar máscara al número de documento
@@ -63,6 +70,12 @@
                 if (e.key === 'Enter') { e.preventDefault(); RET_fetchSearch(1); }
             });
         }
+
+        // Recargar el asiento contable al abrir su pestaña
+        const tabAsientoBtn = document.getElementById('tab-ret-asiento-btn');
+        if (tabAsientoBtn) {
+            tabAsientoBtn.addEventListener('shown.bs.tab', () => cargarAsientoContable(retIdActual));
+        }
     });
 
     function initModal() {
@@ -79,6 +92,9 @@
     window.RET_ordenar = (col) => {
         currentDir  = (currentSort === col && currentDir === 'ASC') ? 'DESC' : 'ASC';
         currentSort = col;
+        if (typeof window.guardarOrdenacionVista === 'function') {
+            window.guardarOrdenacionVista('retenciones_compras', currentSort, currentDir);
+        }
         window.RET_fetchSearch(1);
     };
 
@@ -103,11 +119,19 @@
     window.RET_abrirModalNuevo = () => {
         initModal();
         retIdActual = 0;
+        retBloquearSecuencial = false; // nueva retención: permitir carga del consecutivo
         lineasData  = [];
         resetForm();
         setTitulo('Nueva Retención en Compras', true);
         toggleBotones(false);
         RET_cargarSecuencial();
+
+        // Cargar el catálogo de sustento filtrado por el tipo de documento por defecto
+        const tipoDefault = (document.getElementById('ret_tipo_doc_sustento') || {}).value || '01';
+        window.RET_filtrarSustentos(tipoDefault);
+
+        // Iniciar con una línea lista para capturar la retención
+        if (typeof window.RET_agregarLinea === 'function') window.RET_agregarLinea();
         
         // Fecha actual por defecto (Local)
         const d = new Date();
@@ -120,10 +144,21 @@
 
         window.RET_actualizarPeriodoFiscal(hoy);
         limpiarSriTab();
+        cargarAsientoContable(0);
 
         calcTotales();
         modalRet && modalRet.show();
-        if (typeof window.aplicarFavoritosModal === 'function') window.aplicarFavoritosModal('#modalRetencion');
+        if (typeof window.aplicarFavoritosModal === 'function') {
+            window.aplicarFavoritosModal('#modalRetencion');
+            // Recargar el consecutivo según la serie favorita aplicada
+            RET_cargarSecuencial();
+        }
+
+        // Foco inicial en el buscador de proveedor
+        setTimeout(() => {
+            const p = document.getElementById('ret_proveedor_search');
+            if (p) p.focus();
+        }, 400);
     };
 
     window.RET_abrirModal = async (row) => {
@@ -131,6 +166,8 @@
         resetForm();
         const data = JSON.parse(row.dataset.row);
         retIdActual = data.id;
+        // Bloquear la carga del secuencial mientras se cargan los datos guardados.
+        retBloquearSecuencial = true;
 
         try {
             const res  = await fetch(`${BASE}/getByIdAjax?id=${data.id}`);
@@ -150,6 +187,7 @@
             const esEditable = cab.estado === 'borrador';
             toggleBotones(true, esEditable, cab);
             cargarSriTab(cab);
+            cargarAsientoContable(retIdActual);
 
             window.RET_ID_ACTIVO = retIdActual;
 
@@ -158,6 +196,10 @@
         } catch (e) {
             console.error(e);
             mostrarAlerta('Error al cargar datos de la retención.', 'danger');
+        } finally {
+            // Liberar el bloqueo: a partir de aquí, cambiar la serie recarga el
+            // siguiente consecutivo con normalidad (igual que factura de venta).
+            retBloquearSecuencial = false;
         }
     };
 
@@ -169,9 +211,22 @@
             return;
         }
         const payload = recopilarFormulario();
-        
+
+        if (!payload.id_proveedor) {
+            mostrarAlerta('Debe seleccionar el proveedor (sujeto retenido).', 'warning');
+            document.getElementById('ret_proveedor_search')?.focus();
+            return;
+        }
+
+        if (!payload.num_doc_sustento) {
+            mostrarAlerta('Ingrese el número del documento retenido.', 'warning');
+            document.getElementById('ret_num_doc_sustento')?.focus();
+            return;
+        }
+
         if (!payload.fecha_emision) {
             mostrarAlerta('La fecha de emisión es obligatoria.', 'warning');
+            document.getElementById('ret_fecha_emision')?.focus();
             return;
         }
 
@@ -182,13 +237,28 @@
             
             if (fRet < fDoc) {
                 mostrarAlerta('La fecha de la retención no puede ser anterior a la del documento retenido.', 'warning');
+                document.getElementById('ret_fecha_emision_doc_sustento')?.focus();
                 return;
             }
-            
+
             const diffTime = fRet - fDoc;
             const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
             if (diffDays > 5) {
                 mostrarAlerta('La retención debe emitirse máximo 5 días después de la fecha de emisión de la compra.', 'warning');
+                document.getElementById('ret_fecha_emision_doc_sustento')?.focus();
+                return;
+            }
+        }
+
+        // Documento sustento no registrado (captura manual): exigir sus totales,
+        // necesarios para el XML 2.0.0 (totalSinImpuestos / importeTotal).
+        const vinculado = payload.id_compra || payload.id_liquidacion;
+        if (!vinculado) {
+            const subSustento   = parseFloat(payload.doc_sustento_subtotal || 0) || 0;
+            const totalSustento  = parseFloat(payload.doc_sustento_total || 0) || 0;
+            if (subSustento <= 0 && totalSustento <= 0) {
+                mostrarAlerta('El documento sustento no está registrado: ingrese sus totales (Subtotal e IVA) en la tarjeta "Documento sustento".', 'warning');
+                document.getElementById('ret_doc_subtotal')?.focus();
                 return;
             }
         }
@@ -307,6 +377,15 @@
         const btnOrigHtml = btn?.innerHTML;
         if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Anulando...'; }
 
+        // Progreso mientras se verifica el estado en el SRI y se anula (igual que factura)
+        Swal.fire({
+            title: 'Procesando anulación...',
+            html: 'Estamos <strong>verificando el estado en el SRI</strong> y anulando el comprobante.<br>Esto puede tardar unos segundos, por favor espere.',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+
         try {
             const res = await fetch(`${BASE}/anularAjax`, {
                 method: 'POST',
@@ -315,15 +394,15 @@
             });
             const data = await res.json();
             if (data.ok) {
-                mostrarAlerta(data.mensaje, 'success');
-                setTimeout(() => RET_fetchSearch(1), 400);
+                await Swal.fire({ icon: 'success', title: 'Retención anulada', text: data.mensaje || 'La retención fue anulada.', timer: 2200, showConfirmButton: false });
+                RET_fetchSearch(1);
                 const row = { dataset: { row: JSON.stringify({ id: retIdActual }) } };
-                setTimeout(() => window.RET_abrirModal(row), 600);
+                window.RET_abrirModal(row);
             } else {
-                mostrarAlerta(data.mensaje, 'danger');
+                await Swal.fire({ icon: 'error', title: 'No se pudo anular', text: data.mensaje || 'No se pudo anular la retención.', confirmButtonColor: '#dc3545' });
             }
         } catch (e) {
-            mostrarAlerta('Error al anular.', 'danger');
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Error al anular la retención.' });
         } finally {
             if (btn) { btn.disabled = false; btn.innerHTML = btnOrigHtml; }
         }
@@ -333,11 +412,29 @@
 
     window.RET_enviarSRI = async () => {
         if (!retIdActual) return;
-        const ok = await confirmar('¿Enviar al SRI?', 'Se firmará y enviará la retención al SRI Ecuador.');
-        if (!ok) return;
+
+        // Confirmación (mismo mensaje que factura de venta)
+        const confirmar = await Swal.fire({
+            icon: 'question',
+            title: 'Enviar al SRI',
+            html: 'Se firmará el comprobante con el certificado de la empresa y se enviará al SRI para su autorización.<br><small class="text-muted">Este proceso puede tardar unos segundos.</small>',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fa-solid fa-cloud-arrow-up me-1"></i> Enviar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#0d6efd',
+        });
+        if (!confirmar.isConfirmed) return;
+
+        // Progreso (bloqueante) — "Enviando al SRI..."
+        Swal.fire({
+            title: 'Enviando al SRI...',
+            html: '<div class="spinner-border text-primary" role="status"></div><br><small class="text-muted mt-2 d-block">Firmando y enviando comprobante...</small>',
+            allowOutsideClick: false,
+            showConfirmButton: false,
+        });
 
         const btn = document.getElementById('ret-btn-sri');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando...'; }
+        if (btn) btn.disabled = true;
 
         try {
             const res  = await fetch(`${BASE}/autorizarSRIAjax`, {
@@ -348,21 +445,40 @@
             const data = await res.json();
 
             if (data.ok) {
-                mostrarAlerta('✅ ' + data.mensaje, 'success');
+                await Swal.fire({
+                    icon: 'success',
+                    title: '¡Autorizada!',
+                    html: `<p>${data.mensaje || 'Retención autorizada por el SRI.'}</p><code class="small">${data.numero_autorizacion || ''}</code>`,
+                    confirmButtonColor: '#0d6efd',
+                });
             } else {
-                mostrarAlerta('⚠️ ' + (data.mensaje || 'Error al enviar al SRI.'), 'warning');
+                // Mostrar el detalle real devuelto por el SRI (tipo / mensaje / info)
+                let errHtml = `<p class="text-danger">${data.mensaje || 'Error al enviar.'}</p>`;
+                if (data.errores?.length) {
+                    errHtml += '<ul class="text-start small mt-2">';
+                    data.errores.forEach(e => {
+                        errHtml += `<li><strong>[${e.tipo || 'ERROR'}]</strong> ${e.mensaje || ''}`;
+                        if (e.info) errHtml += `<br><small class="text-muted">${e.info}</small>`;
+                        errHtml += '</li>';
+                    });
+                    errHtml += '</ul>';
+                }
+                await Swal.fire({
+                    icon: 'error',
+                    title: 'No autorizada',
+                    html: errHtml,
+                    confirmButtonColor: '#dc3545',
+                });
             }
 
-            // Recargar datos del modal
-            setTimeout(() => {
-                const row = { dataset: { row: JSON.stringify({ id: retIdActual }) } };
-                window.RET_abrirModal(row);
-                RET_fetchSearch(1);
-            }, 800);
+            // Recargar datos del modal y del listado
+            const row = { dataset: { row: JSON.stringify({ id: retIdActual }) } };
+            window.RET_abrirModal(row);
+            RET_fetchSearch(1);
         } catch (e) {
-            mostrarAlerta('Error de red al enviar al SRI.', 'danger');
+            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.' });
         } finally {
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up me-1"></i>Enviar al SRI'; }
+            if (btn) btn.disabled = false;
         }
     };
 
@@ -376,6 +492,69 @@
     window.RET_exportarXml = () => {
         if (!retIdActual) return;
         window.open(`${BASE}/exportXmlDoc?id=${retIdActual}`, '_blank');
+    };
+
+    window.RET_enviarPorCorreo = async () => {
+        const id = parseInt(retIdActual) || 0;
+        if (!id) return;
+
+        // Correo actual del proveedor mostrado en la interfaz
+        const mailLbl = document.getElementById('ret_lbl_proveedor_email');
+        const correoActual = (mailLbl && mailLbl.textContent && mailLbl.textContent !== '—') ? mailLbl.textContent.trim() : '';
+
+        const { value: correos, isConfirmed } = await Swal.fire({
+            title: 'Enviar por correo',
+            input: 'text',
+            inputLabel: 'Correos electrónicos (separados por coma o espacio)',
+            inputValue: correoActual,
+            target: document.getElementById('modalRetencion'),
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-send me-1"></i> Enviar',
+            cancelButtonText: 'Cancelar',
+            inputValidator: (value) => {
+                if (!value.trim()) return 'Debes ingresar al menos un correo válido!';
+            }
+        });
+        if (!isConfirmed) return;
+
+        Swal.fire({
+            title: 'Enviando correo...',
+            text: 'Por favor espera',
+            allowOutsideClick: false,
+            target: document.getElementById('modalRetencion'),
+            didOpen: () => { Swal.showLoading(); }
+        });
+
+        try {
+            const fd = new FormData();
+            fd.append('id', id);
+            fd.append('correos', correos);
+
+            const resp = await fetch(`${BASE}/reenviarCorreoAjax`, { method: 'POST', body: fd });
+            const textResponse = await resp.text();
+
+            let json;
+            try {
+                json = JSON.parse(textResponse);
+            } catch (err) {
+                console.error('RAW RESPONSE:', textResponse);
+                Swal.fire({
+                    icon: 'error', title: 'Respuesta inválida',
+                    html: '<pre style="text-align:left; max-height:200px; overflow:auto;">' + textResponse.substring(0, 500) + '</pre>',
+                    target: document.getElementById('modalRetencion')
+                });
+                return;
+            }
+
+            if (json.ok) {
+                Swal.fire({ icon: 'success', title: '¡Enviado!', text: json.mensaje, timer: 2500, showConfirmButton: false });
+                if (typeof RET_fetchSearch === 'function') RET_fetchSearch(1);
+            } else {
+                Swal.fire({ icon: 'error', title: 'Error', text: json.mensaje || 'No se pudo enviar el correo.' });
+            }
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Error de conexión al enviar el correo.' });
+        }
     };
 
     // ── LÍNEAS DE RETENCIÓN ───────────────────────────────────────────────────────
@@ -406,6 +585,7 @@
         lineasData.splice(idx, 1);
         renderLineas();
         calcTotales();
+        autollenarDocSustento();
     };
 
     let searchTimer;
@@ -443,6 +623,7 @@
         }
 
         calcTotales();
+        if (campo === 'base_imponible' || campo === 'codigo_impuesto') autollenarDocSustento();
     };
 
     window.RET_buscarCodigoSri = async (idx, tipoBusqueda) => {
@@ -557,6 +738,15 @@
         setTimeout(() => document.addEventListener('click', closeDrop), 10);
     }
 
+    // Nombre del impuesto a partir del código SRI (1=Renta, 2=IVA, 6=ISD)
+    function nombreImpuesto(cod) {
+        const c = String(cod || '').toUpperCase();
+        if (c === '1' || c === 'RENTA') return 'Renta';
+        if (c === '2' || c === 'IVA')   return 'IVA';
+        if (c === '6' || c === 'ISD')   return 'ISD';
+        return c || '—';
+    }
+
     function renderLineas() {
         const tbody = document.getElementById('ret_lineas_body');
         if (!tbody) return;
@@ -588,7 +778,7 @@
             <!-- Impuesto -->
             <td class="p-0 align-middle text-center">
                 <span class="small fw-bold ${(l.codigo_impuesto == '2' || l.codigo_impuesto == 'IVA') ? 'text-primary' : 'text-success'}">
-                    ${l.codigo_impuesto}
+                    ${nombreImpuesto(l.codigo_impuesto)}
                 </span>
             </td>
             <!-- Base Imponible -->
@@ -657,6 +847,53 @@
         set('ret_total_retenido', totalRet.toFixed(2));
     }
 
+    // Autollena la tarjeta "Documento sustento" desde las líneas cuando el documento
+    // NO está vinculado a una compra/liquidación (captura manual): el Subtotal se toma
+    // de la base de las líneas de Renta y el IVA de la base de las líneas de IVA.
+    function autollenarDocSustento() {
+        const idCompra = (document.getElementById('ret_id_compra') || {}).value || '';
+        const idLiq    = (document.getElementById('ret_id_liquidacion') || {}).value || '';
+        if (idCompra || idLiq) return; // vinculado → los valores vienen del documento
+
+        let subtotal = 0, iva = 0;
+        lineasData.forEach(l => {
+            const base = parseFloat(l.base_imponible || 0) || 0;
+            const cod  = String(l.codigo_impuesto || '').toUpperCase();
+            if (cod === '1' || cod === 'RENTA')    subtotal += base;
+            else if (cod === '2' || cod === 'IVA') iva += base;
+        });
+
+        const elSub = document.getElementById('ret_doc_subtotal');
+        const elIva = document.getElementById('ret_doc_iva');
+        if (elSub) elSub.value = subtotal > 0 ? subtotal.toFixed(2) : '';
+        if (elIva) elIva.value = iva > 0 ? iva.toFixed(2) : '';
+        if (typeof window.RET_calcTotalSustento === 'function') window.RET_calcTotalSustento();
+    }
+
+    // Filtra el catálogo de sustento tributario según el Tipo de Documento
+    // (columna tipo_comprobante, igual que en compras).
+    window.RET_filtrarSustentos = (tipo, selectedId = null) => {
+        const el = document.getElementById('ret_id_sustento_tributario');
+        if (!el || !Array.isArray(window.RET_SUSTENTOS)) return;
+        tipo = String(tipo || '').padStart(2, '0');
+        if (selectedId == null) selectedId = el.value || null; // conservar selección actual
+
+        const opts = window.RET_SUSTENTOS.filter(s => {
+            const tipos = String(s.tipo_comprobante || '').split(',').map(t => t.trim());
+            return !tipo || tipos.includes(tipo);
+        });
+
+        el.innerHTML = '<option value="">-- Seleccione --</option>' + opts.map(s =>
+            `<option value="${s.id}" ${String(selectedId) === String(s.id) ? 'selected' : ''}>${escHtml(s.codigo)} - ${escHtml(s.nombre)}</option>`
+        ).join('');
+
+        // Si la selección previa ya no aplica, preseleccionar 01 (Crédito Tributario IVA) si existe
+        if (!el.value) {
+            const cred = opts.find(s => s.codigo === '01');
+            if (cred) el.value = cred.id;
+        }
+    };
+
     // ── SECUENCIAL ───────────────────────────────────────────────────────────────
 
     window.RET_cargarSecuencial = async () => {
@@ -670,7 +907,7 @@
             const res  = await fetch(`${BASE}/getSecuencialAjax?id_punto_emision=${sel.value}`);
             const data = await res.json();
             if (data.ok) {
-                if (!retIdActual && inputSec) {
+                if (!retBloquearSecuencial && inputSec) {
                     inputSec.value = data.formateado || String(data.secuencial).padStart(9, '0');
                     
                     // Indicador visual de gap (como en facturación)
@@ -696,10 +933,12 @@
         
         const lblRuc = document.getElementById('ret_lbl_proveedor_ruc');
         const lblDir = document.getElementById('ret_lbl_proveedor_direccion');
-        
+        const lblEmail = document.getElementById('ret_lbl_proveedor_email');
+
         if (lblRuc) lblRuc.textContent = item.identificacion || item.ruc || '—';
         if (lblDir) lblDir.textContent = item.direccion || '—';
-        
+        if (lblEmail) lblEmail.textContent = item.email || item.correo || '—';
+
         el.classList.remove('d-none');
     }
 
@@ -710,15 +949,18 @@
         if (el) el.value = `${m}/${y}`;
     };
 
-    window.abrirModalProveedorCrear = () => {
-        if (typeof window.abrirModalCrearProveedor === 'function') {
-            window.abrirModalCrearProveedor();
-        } else if (typeof window.getModal === 'function') {
-            window.getModal();
-        } else {
-            console.error('No se encontró la función para crear proveedor.');
-        }
-    };
+    // Solo definir un fallback si el modal compartido de proveedores no cargó su
+    // propia función (proveedores_modal.js define window.PROV_abrirModalCrear /
+    // window.abrirModalProveedorCrear). No sobrescribir esa función correcta.
+    if (typeof window.abrirModalProveedorCrear !== 'function') {
+        window.abrirModalProveedorCrear = () => {
+            if (typeof window.PROV_abrirModalCrear === 'function') {
+                window.PROV_abrirModalCrear();
+            } else {
+                console.error('No se encontró la función para crear proveedor.');
+            }
+        };
+    }
 
 
 
@@ -733,6 +975,11 @@
         set('ret_num_doc_sustento', cab.num_doc_sustento || '');
         set('ret_fecha_emision_doc_sustento', cab.fecha_emision_doc_sustento || '');
         set('ret_num_aut_sustento', cab.numero_autorizacion_sustento || '');
+        set('ret_doc_subtotal', cab.doc_sustento_subtotal != null ? cab.doc_sustento_subtotal : '');
+        set('ret_doc_iva',      cab.doc_sustento_iva      != null ? cab.doc_sustento_iva      : '');
+        set('ret_doc_total',    cab.doc_sustento_total    != null ? cab.doc_sustento_total    : '');
+        // Filtrar sustento según el tipo de documento y seleccionar el guardado
+        window.RET_filtrarSustentos(cab.tipo_doc_sustento || '01', cab.id_sustento_tributario || null);
         set('ret_observaciones', cab.observaciones || '');
         set('ret_id_proveedor', cab.id_proveedor || '');
         set('ret_id_compra', cab.id_compra || '');
@@ -755,8 +1002,10 @@
         // Proveedor labels
         const lblRuc = document.getElementById('ret_lbl_proveedor_ruc');
         const lblDir = document.getElementById('ret_lbl_proveedor_direccion');
+        const lblEmail = document.getElementById('ret_lbl_proveedor_email');
         if (lblRuc) lblRuc.textContent = cab.proveedor_identificacion || '—';
         if (lblDir) lblDir.textContent = cab.proveedor_direccion || '—';
+        if (lblEmail) lblEmail.textContent = cab.proveedor_email || '—';
         const infoProv = document.getElementById('ret_proveedor_info');
         if (infoProv) infoProv.classList.remove('d-none');
 
@@ -808,28 +1057,132 @@
     }
 
     async function cargarHistorialSri(id) {
-        if (!id) return;
-        const el = document.getElementById('ret-sri-historial');
-        if (!el) return;
+        const tbody = document.getElementById('ret-sri-tbody-historial');
+        if (!tbody || !id) return;
+
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-2 text-muted small"><span class="spinner-border spinner-border-sm me-1"></span>Cargando...</td></tr>';
+
         try {
             const res  = await fetch(`${BASE}/getHistorialSriAjax?id=${id}`);
-            const data = await res.json();
-            if (data.ok && data.data && data.data.length > 0) {
-                el.innerHTML = `<table class="table table-sm mb-0 small">
-                    <thead><tr><th>Fecha</th><th>Acción</th><th>Estado SRI</th><th>Mensaje</th></tr></thead>
-                    <tbody>${data.data.map(r => `
-                        <tr>
-                            <td class="text-nowrap">${escHtml(r.created_at || '')}</td>
-                            <td><span class="badge bg-secondary bg-opacity-10 text-secondary border">${escHtml(r.accion || '')}</span></td>
-                            <td>${escHtml(r.estado_sri || '')}</td>
-                            <td class="text-truncate" style="max-width:200px;">${escHtml(r.mensaje || '')}</td>
-                        </tr>`).join('')}
-                    </tbody></table>`;
-            } else {
-                el.innerHTML = '<span class="text-muted">Sin historial de envíos.</span>';
+            const json = await res.json();
+
+            if (!json.ok || !json.data || !json.data.length) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted small">Sin historial de envíos.</td></tr>';
+                return;
+            }
+
+            const accionMap = {
+                'enviando':         ['bg-primary', 'bi-cloud-arrow-up',      'Enviando'],
+                'recibida':         ['bg-info',    'bi-check-circle',        'Recibida'],
+                'devuelta':         ['bg-danger',  'bi-x-circle',            'Devuelta'],
+                'autorizada':       ['bg-success', 'bi-patch-check-fill',    'Autorizada'],
+                'autorizado':       ['bg-success', 'bi-patch-check-fill',    'Autorizado'],
+                'no_autorizada':    ['bg-danger',  'bi-patch-minus',         'No autorizada'],
+                'no_autorizado':    ['bg-danger',  'bi-patch-minus',         'No autorizado'],
+                'en_procesamiento': ['bg-warning', 'bi-hourglass-split',     'En proceso'],
+                'anulada':          ['bg-danger',  'bi-slash-circle',        'Anulada'],
+                'error':            ['bg-danger',  'bi-exclamation-triangle','Error'],
+            };
+
+            tbody.innerHTML = json.data.map(row => {
+                const [bgCls, icon, lbl] = accionMap[row.accion] ?? ['bg-secondary', 'bi-question', row.accion || ''];
+                const cls = bgCls.replace('bg-', '');
+                const esPruebas = row.tipo_ambiente === '1';
+                const ambienteLbl = esPruebas
+                    ? '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.65rem;">PRUEBAS</span>'
+                    : '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:0.65rem;">PRODUCCIÓN</span>';
+
+                // Detalle: mensaje + errores del json (incluye informacionAdicional)
+                let detalle = escHtml(row.mensaje || '');
+                if (row.detalle_json) {
+                    try {
+                        const errs = JSON.parse(row.detalle_json);
+                        if (Array.isArray(errs) && errs.length) {
+                            detalle += '<ul class="mb-0 ps-3 mt-1" style="font-size:0.7rem;">';
+                            errs.forEach(e => {
+                                detalle += `<li><strong>[${escHtml(e.tipo || e.id || '')}]</strong> ${escHtml(e.mensaje || '')}${e.info ? '<br><em class="text-muted">' + escHtml(e.info) + '</em>' : ''}</li>`;
+                            });
+                            detalle += '</ul>';
+                        }
+                    } catch (e) {}
+                }
+                if (row.numero_autorizacion && (row.accion === 'autorizada' || row.accion === 'autorizado')) {
+                    detalle += `<div class="font-monospace mt-1" style="font-size:0.65rem;word-break:break-all;">${escHtml(row.numero_autorizacion)}</div>`;
+                }
+
+                return `<tr>
+                    <td class="ps-2 py-1 text-nowrap" style="font-size:0.72rem;">${escHtml(row.created_at || '')}</td>
+                    <td class="py-1">${ambienteLbl}</td>
+                    <td class="py-1"><span class="badge ${bgCls} bg-opacity-10 text-${cls} border border-${cls} border-opacity-25" style="font-size:0.65rem;"><i class="bi ${icon} me-1"></i>${lbl}</span></td>
+                    <td class="py-1" style="font-size:0.72rem;">${detalle}</td>
+                </tr>`;
+            }).join('');
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-2 text-danger small">Error al cargar historial.</td></tr>';
+        }
+    }
+
+    // ── Pestaña Asiento Contable (mismo modelo que retención de venta) ──────────
+    async function cargarAsientoContable(id) {
+        const tbody   = document.getElementById('ret_asiento_body');
+        const tdDebe  = document.getElementById('ret_asiento_total_debe');
+        const tdHaber = document.getElementById('ret_asiento_total_haber');
+        const aviso   = document.getElementById('ret_asiento_aviso');
+        if (!tbody) return;
+
+        const setTot = (d, h) => {
+            if (tdDebe)  tdDebe.textContent  = d.toFixed(2);
+            if (tdHaber) tdHaber.textContent = h.toFixed(2);
+        };
+
+        if (!id) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Guarde la retención para generar el asiento contable.</td></tr>';
+            setTot(0, 0);
+            if (aviso) aviso.innerHTML = '';
+            return;
+        }
+
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Cargando asiento...</td></tr>';
+        try {
+            const res  = await fetch(`${BASE}/getAsientoContableAjax?id=${id}`);
+            const resp = await res.json();
+            const dets = (resp.ok && resp.detalles) ? resp.detalles : [];
+
+            if (!dets.length) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Sin asiento. Configure las cuentas contables de retenciones en Configuración Contable.</td></tr>';
+                setTot(0, 0);
+                if (aviso) aviso.innerHTML = '';
+                return;
+            }
+
+            let totDebe = 0, totHaber = 0;
+            tbody.innerHTML = dets.map(d => {
+                const debe  = parseFloat(d.debe  || 0);
+                const haber = parseFloat(d.haber || 0);
+                totDebe += debe; totHaber += haber;
+                return `<tr>
+                    <td class="ps-3 small"><code class="text-secondary">${escHtml(d.cuenta_codigo || '')}</code></td>
+                    <td class="small">${escHtml(d.cuenta_nombre || '')}</td>
+                    <td class="small text-end">${debe  > 0 ? debe.toFixed(2)  : ''}</td>
+                    <td class="small text-end pe-3">${haber > 0 ? haber.toFixed(2) : ''}</td>
+                </tr>`;
+            }).join('');
+            setTot(totDebe, totHaber);
+
+            if (aviso) {
+                const descuadre = Math.abs(totDebe - totHaber) > 0.001;
+                if (descuadre) {
+                    aviso.innerHTML = '<span class="text-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>El asiento está descuadrado. Revise la configuración de cuentas contables de retenciones.</span>';
+                } else if (resp.registrado) {
+                    const num = resp.numero ? ` N° ${escHtml(resp.numero)}` : '';
+                    aviso.innerHTML = `<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i>Asiento registrado en contabilidad${num}.</span>`;
+                } else {
+                    aviso.innerHTML = '<span class="text-warning"><i class="fa-solid fa-circle-info me-1"></i>Asiento sugerido (configure las cuentas para registrarlo).</span>';
+                }
             }
         } catch (e) {
-            el.innerHTML = '<span class="text-muted">Error al cargar historial.</span>';
+            console.error(e);
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">Error al cargar el asiento contable.</td></tr>';
         }
     }
 
@@ -841,8 +1194,8 @@
         });
         window.RET_FECHA_EMISION = null;
         window.RET_PROVEEDOR_RUC = '';
-        const h = document.getElementById('ret-sri-historial');
-        if (h) h.innerHTML = '<p class="text-muted text-center mb-0 py-3 small">Sin historial.</p>';
+        const h = document.getElementById('ret-sri-tbody-historial');
+        if (h) h.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted small">Sin historial de envíos.</td></tr>';
         actualizarBadgeSriEstado('borrador');
     }
 
@@ -853,6 +1206,7 @@
         const btnSri      = document.getElementById('ret-btn-sri');
         const btnPdf      = document.getElementById('ret-btn-pdf');
         const btnXml      = document.getElementById('ret-btn-xml');
+        const btnCorreo   = document.getElementById('ret-btn-correo');
         const btnEliminar = document.getElementById('ret-btn-eliminar');
         const btnAnular   = document.getElementById('ret-btn-anular');
 
@@ -863,6 +1217,7 @@
         }
         if (btnPdf) btnPdf.disabled = !tieneId;
         if (btnXml) btnXml.disabled = !tieneId;
+        if (btnCorreo) btnCorreo.disabled = !(tieneId && cab.estado === 'autorizada');
 
         if (btnEliminar) {
             const puedeEliminar = tieneId && ['borrador', 'no_autorizada'].includes(cab.estado);
@@ -918,9 +1273,13 @@
             id_compra:                      get('ret_id_compra') || null,
             id_liquidacion:                 get('ret_id_liquidacion') || null,
             tipo_doc_sustento:              get('ret_tipo_doc_sustento'),
+            id_sustento_tributario:         get('ret_id_sustento_tributario') || null,
             num_doc_sustento:               get('ret_num_doc_sustento'),
             fecha_emision_doc_sustento:     get('ret_fecha_emision_doc_sustento'),
             numero_autorizacion_sustento:   get('ret_num_aut_sustento'),
+            doc_sustento_subtotal:          get('ret_doc_subtotal') || 0,
+            doc_sustento_iva:               get('ret_doc_iva') || 0,
+            doc_sustento_total:             get('ret_doc_total') || 0,
             observaciones:                  '', // Eliminado del modal según solicitud previa
             total_retenido_renta:           get('ret_total_renta'),
             total_retenido_iva:             get('ret_total_iva'),
@@ -929,6 +1288,13 @@
             lineas: lineasData,
         };
     }
+
+    // Total del documento sustento = subtotal + IVA
+    window.RET_calcTotalSustento = () => {
+        const get = (id) => parseFloat((document.getElementById(id) || {}).value) || 0;
+        const el = document.getElementById('ret_doc_total');
+        if (el) el.value = (get('ret_doc_subtotal') + get('ret_doc_iva')).toFixed(2);
+    };
 
     function resetForm() {
         const form = document.getElementById('formRetencion');
@@ -951,8 +1317,10 @@
         
         const lblRuc = document.getElementById('ret_lbl_proveedor_ruc');
         const lblDir = document.getElementById('ret_lbl_proveedor_direccion');
+        const lblEmail = document.getElementById('ret_lbl_proveedor_email');
         if (lblRuc) lblRuc.textContent = '';
         if (lblDir) lblDir.textContent = '';
+        if (lblEmail) lblEmail.textContent = '';
 
 
 
@@ -1080,6 +1448,13 @@
 
                 const selectTipo = document.getElementById('ret_tipo_doc_sustento');
                 if (selectTipo) selectTipo.value = '03'; // Liquidación de compra
+
+                // Totales del documento sustento (desde la liquidación)
+                const elSub = document.getElementById('ret_doc_subtotal');
+                const elIva = document.getElementById('ret_doc_iva');
+                if (elSub) elSub.value = subtotal;
+                if (elIva) elIva.value = totalIva;
+                if (typeof window.RET_calcTotalSustento === 'function') window.RET_calcTotalSustento();
             }, 300);
         }
     };

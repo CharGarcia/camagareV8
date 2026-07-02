@@ -4,8 +4,8 @@
     // ── Estado ──────────────────────────────────────────────────────────────────
     let modalRetV;
     let lineasData   = [];
-    let currentSort  = 'fecha_emision';
-    let currentDir   = 'DESC';
+    let currentSort  = (typeof window.RETV_ordenCol !== 'undefined' && window.RETV_ordenCol) ? window.RETV_ordenCol : 'fecha_emision';
+    let currentDir   = (typeof window.RETV_ordenDir !== 'undefined' && window.RETV_ordenDir) ? window.RETV_ordenDir : 'DESC';
     let retvIdActual = 0;
     let retvHasXml   = false;
     let comprobantesAutorizados = [];
@@ -141,6 +141,9 @@
     window.RETV_ordenar = (col) => {
         currentDir  = (currentSort === col && currentDir === 'ASC') ? 'DESC' : 'ASC';
         currentSort = col;
+        if (typeof window.guardarOrdenacionVista === 'function') {
+            window.guardarOrdenacionVista('retenciones_ventas', currentSort, currentDir);
+        }
         window.RETV_fetchSearch(1);
     };
 

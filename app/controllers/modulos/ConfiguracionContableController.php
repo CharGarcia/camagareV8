@@ -309,6 +309,8 @@ class ConfiguracionContableController extends BaseModuloController
 
             if ($tipoAsiento === 'retenciones_venta') {
                 $reglas = $this->repository->getReglasRetencionesVenta($idEmpresa);
+            } elseif ($tipoAsiento === 'retenciones_compra') {
+                $reglas = $this->repository->getReglasRetencionesCompra($idEmpresa);
             } else {
                 $reglas = $this->repository->getReglasGeneralesPorConcepto($idEmpresa, $tipoAsiento);
 
@@ -387,12 +389,12 @@ class ConfiguracionContableController extends BaseModuloController
                     $idProgramado = $this->service->registrar($dataInsert, $idEmpresa, $idUsuario);
                     $msg = 'Configuración contable registrada correctamente.';
                 }
-            } elseif ($tipoReferencia === 'retenciones_venta_debe' || $tipoReferencia === 'retenciones_venta_haber') {
+            } elseif (in_array($tipoReferencia, ['retenciones_venta_debe', 'retenciones_venta_haber', 'retenciones_compra_debe', 'retenciones_compra_haber'], true)) {
                 if ($idReferencia <= 0) {
                     echo json_encode(['ok' => false, 'error' => 'ID de referencia de retención SRI inválido.']);
                     exit;
                 }
-                // Verificar si ya existe una regla para esta retención en venta (según tipo Debe o Haber)
+                // Verificar si ya existe una regla para esta retención (venta/compra, según tipo Debe o Haber)
                 $db = Database::getConnection();
                 $stCheck = $db->prepare("SELECT id FROM asientos_programados 
                                          WHERE id_empresa = ? AND id_referencia = ? AND tipo_referencia = ? AND eliminado = false");
@@ -481,9 +483,9 @@ class ConfiguracionContableController extends BaseModuloController
                                          WHERE id_empresa = ? AND id_referencia = ? AND tipo_referencia = ? AND eliminado = false LIMIT 1");
                 $stCheck->execute([$idEmpresa, $idReferencia, $tipoReferencia]);
                 $reglaExistente = $stCheck->fetch(PDO::FETCH_ASSOC) ?: null;
-            } elseif ($tipoReferencia === 'retenciones_venta_debe' || $tipoReferencia === 'retenciones_venta_haber') {
+            } elseif (in_array($tipoReferencia, ['retenciones_venta_debe', 'retenciones_venta_haber', 'retenciones_compra_debe', 'retenciones_compra_haber'], true)) {
                 $db = Database::getConnection();
-                $stCheck = $db->prepare("SELECT id FROM asientos_programados 
+                $stCheck = $db->prepare("SELECT id FROM asientos_programados
                                          WHERE id_empresa = ? AND id_referencia = ? AND tipo_referencia = ? AND eliminado = false LIMIT 1");
                 $stCheck->execute([$idEmpresa, $idReferencia, $tipoReferencia]);
                 $reglaExistente = $stCheck->fetch(PDO::FETCH_ASSOC) ?: null;

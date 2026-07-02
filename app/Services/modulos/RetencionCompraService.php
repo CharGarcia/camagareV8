@@ -80,6 +80,9 @@ class RetencionCompraService
         // Generar secuencial y clave de acceso
         $data = $this->prepararSecuencialYClaveAcceso($data);
 
+        // Validar que el secuencial no esté duplicado (igual que factura de venta)
+        $this->validarSecuencial($data);
+
         $db = Database::getConnection();
         $managed = !$db->inTransaction();
         if ($managed) $db->beginTransaction();
@@ -134,6 +137,9 @@ class RetencionCompraService
         $codigoNumerico = ClaveAccesoService::extraerCodigoNumerico($cabecera['clave_acceso'] ?? '');
         $data = $this->prepararSecuencialYClaveAcceso($data, $codigoNumerico);
 
+        // Validar que el secuencial no esté duplicado, excluyendo la propia retención
+        $this->validarSecuencial($data, $id);
+
         $db = Database::getConnection();
         $managed = !$db->inTransaction();
         if ($managed) $db->beginTransaction();
@@ -175,8 +181,21 @@ class RetencionCompraService
         if (($cabecera['estado'] ?? '') === 'anulada') {
             throw new \Exception('La retención ya está anulada.');
         }
-        if (($cabecera['estado'] ?? '') === 'autorizada') {
-            throw new \Exception('No se puede anular una retención ya autorizada por el SRI.');
+
+        // Verificación SRI (igual que factura de venta): si la retención está autorizada,
+        // solo se puede anular internamente cuando el SRI ya NO la reporta como AUTORIZADO,
+        // es decir, cuando ya se anuló en el portal del SRI.
+        $claveAcceso = trim((string)($cabecera['clave_acceso'] ?? ''));
+        if (($cabecera['estado'] ?? '') === 'autorizada' && $claveAcceso !== '') {
+            $tipoAmbiente = (string)($cabecera['tipo_ambiente'] ?? '1');
+            $envioSri = new \App\Services\Sri\SriEnvioService();
+            $consulta = $envioSri->verificarAutorizacion($claveAcceso, $tipoAmbiente);
+            if (strtoupper($consulta['estado'] ?? '') === 'AUTORIZADO') {
+                throw new \Exception(
+                    'No se puede anular: el comprobante sigue AUTORIZADO en el SRI. ' .
+                    'Primero debe anularlo en el portal del SRI; cuando deje de estar autorizado podrá anularlo aquí.'
+                );
+            }
         }
 
         $db = Database::getConnection();
@@ -353,6 +372,27 @@ class RetencionCompraService
         }
     }
 
+    /**
+     * Valida que el secuencial no esté duplicado para el punto de emisión
+     * (mismo criterio que FacturaVentaService::validarSecuencial).
+     */
+    private function validarSecuencial(array $data, ?int $excluirId = null): void
+    {
+        if (empty($data['secuencial']) || empty($data['id_punto_emision'])) {
+            return;
+        }
+        if ($this->repository->existeSecuencial(
+            (int) $data['id_empresa'],
+            (int) ($data['id_establecimiento'] ?? 0),
+            (int) $data['id_punto_emision'],
+            (string) $data['secuencial'],
+            (string) ($data['tipo_ambiente'] ?? '1'),
+            $excluirId
+        )) {
+            throw new \Exception('El número de secuencial ya existe para este punto de emisión. Recargue e intente nuevamente.');
+        }
+    }
+
     private function validarUnicidadDocSustento(int $idEmpresa, array $data, ?int $excluirId = null): void
     {
         $existe = $this->repository->existeRetencionParaDocSustento(
@@ -397,7 +437,9 @@ class RetencionCompraService
                 } catch (\Throwable) {}
             }
 
-            $xml = (new XmlRetencionCompraService())->generar($cabecera, $lineas, $empresa, $dirEstablecimiento);
+            $docSustento = $this->repository->getDatosDocSustento($cabecera);
+
+            $xml = (new XmlRetencionCompraService())->generar($cabecera, $lineas, $empresa, $dirEstablecimiento, $docSustento);
             $this->repository->updateDetalleXml($idRetencion, $xml);
         } catch (\Throwable $e) {
             error_log('[Retencion] Error generando XML para retención #' . $idRetencion . ': ' . $e->getMessage());
@@ -472,5 +514,95 @@ class RetencionCompraService
                 ]);
             }
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ASIENTO CONTABLE (mismo modelo que retención de venta / factura)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Asiento contable sugerido para una retención (líneas debe/haber). */
+    public function obtenerAsientoSugerido(int $idEmpresa, int $idRetencion): array
+    {
+        return (new \App\Services\modulos\AsientoBuilderService())->generarAsientoRetencionCompra($idEmpresa, $idRetencion);
+    }
+
+    /** Devuelve el asiento contable ya REGISTRADO (cabecera + detalles) por su id. */
+    public function getAsientoRegistrado(int $idAsiento, int $idEmpresa): array
+    {
+        return $this->asientoContableService()->getDetalleAsiento($idAsiento, $idEmpresa);
+    }
+
+    private function asientoContableService(): \App\Services\modulos\AsientoContableService
+    {
+        return new \App\Services\modulos\AsientoContableService(
+            new \App\repositories\modulos\AsientoContableRepository(),
+            new \App\Rules\modulos\AsientoContableRules(),
+            $this->logService
+        );
+    }
+
+    /**
+     * Genera (o regenera) y guarda el asiento contable de la retención y enlaza
+     * id_asiento_contable en la cabecera. No hace nada si el asiento queda vacío.
+     */
+    public function procesarAsientoContable(int $idRetencion, array $data): void
+    {
+        $idEmpresa = (int) $data['id_empresa'];
+        $idUsuario = (int) ($data['id_usuario'] ?? 0);
+        $fecha     = $data['fecha_emision'] ?? date('Y-m-d');
+
+        $detallesSugeridos = $this->obtenerAsientoSugerido($idEmpresa, $idRetencion);
+        if (empty($detallesSugeridos)) {
+            return;
+        }
+
+        $num = ($data['establecimiento'] ?? '') . '-' . ($data['punto_emision'] ?? '') . '-' . ($data['secuencial'] ?? '');
+
+        $detalles = [];
+        foreach ($detallesSugeridos as $det) {
+            $detalles[] = [
+                'id_cuenta_contable'   => $det['id_cuenta_contable'],
+                'debe'                 => $det['debe'],
+                'haber'                => $det['haber'],
+                'referencia_detalle'   => $det['referencia_detalle'] ?: "Retención # $num",
+                'documento_referencia' => "Retención # $num",
+                'id_entidad'           => (int) ($data['id_proveedor'] ?? 0),
+                'tipo_entidad'         => 'proveedor',
+            ];
+        }
+
+        $asientoService = $this->asientoContableService();
+        $asientoPrevio  = $asientoService->getAsientoPorOrigen('retencion_compra', $idRetencion, $idEmpresa);
+        $idAsiento      = $asientoPrevio ? (int) $asientoPrevio['id'] : 0;
+
+        $cabeceraData = [
+            'id'                   => $idAsiento > 0 ? $idAsiento : null,
+            'fecha_asiento'        => $fecha,
+            'tipo_comprobante'     => 'compras',
+            'numero_comprobante'   => '',
+            'concepto'             => "Retención # $num",
+            'estado'               => 'contabilizado',
+            'modulo_origen'        => 'retencion_compra',
+            'id_referencia_origen' => $idRetencion,
+            'observaciones'        => null,
+        ];
+
+        $idAsientoGenerado = $asientoService->guardarAsiento($cabeceraData, $detalles, $idEmpresa, $idUsuario);
+        $this->repository->updateAsientoContable($idRetencion, $idAsientoGenerado);
+    }
+
+    /**
+     * Genera el asiento de una retención de compra por sincronización masiva (estados financieros).
+     * Toma los datos desde la cabecera guardada. Propaga la excepción si no se puede generar
+     * (descuadre / cuentas faltantes) para que el sincronizador lo contabilice como pendiente.
+     */
+    public function procesarAsientoContablePorSincronizacion(int $idRetencion): void
+    {
+        $cabecera = $this->repository->getPorId($idRetencion);
+        if (!$cabecera) {
+            return;
+        }
+        $cabecera['id_usuario'] = (int) ($cabecera['updated_by'] ?? $cabecera['created_by'] ?? 0);
+        $this->procesarAsientoContable($idRetencion, $cabecera);
     }
 }

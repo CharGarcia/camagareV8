@@ -88,9 +88,13 @@
             th.addEventListener('click', () => {
                 const sort = th.dataset.sort;
                 const urlParams = new URLSearchParams(window.location.search);
-                const currentSort = urlParams.get('sort') || 'fecha_emision';
-                const currentDir = urlParams.get('dir') || 'DESC';
+                // Preferencia inicial desde el servidor; si no, parámetros de URL; si no, defaults
+                const currentSort = window.LC_ordenCol || urlParams.get('sort') || 'fecha_emision';
+                const currentDir  = window.LC_ordenDir || urlParams.get('dir') || 'DESC';
                 let dir = (sort === currentSort && currentDir === 'ASC') ? 'DESC' : 'ASC';
+                if (typeof window.guardarOrdenacionVista === 'function') {
+                    window.guardarOrdenacionVista('liquidacion_compra', sort, dir);
+                }
                 fetchSearchFn(1, sort, dir);
             });
         });
@@ -132,7 +136,7 @@
     function lcResetearYMostrar() {
         liquidacionActual = null;
         detalles = [];
-        const defaultPago = document.getElementById('liq-pago-fav') ? document.getElementById('liq-pago-fav').value : '01';
+        const defaultPago = document.getElementById('liq-pago-fav') ? document.getElementById('liq-pago-fav').value : '';
         pagos = [{ id: Date.now(), id_forma_pago: defaultPago, total: 0 }];
         infoAdicional = [];
 
@@ -765,13 +769,14 @@
     // --- Auxiliary Renders ---
     function agregarPagoFn() {
         const id = Date.now();
-        const defaultPago = document.getElementById('liq-pago-fav') ? document.getElementById('liq-pago-fav').value : '01';
+        const defaultPago = document.getElementById('liq-pago-fav') ? document.getElementById('liq-pago-fav').value : '';
         const container = document.getElementById('container-pagos');
         const div = document.createElement('div');
         div.className = 'row g-2 mb-2 align-items-center row-pago';
         div.innerHTML = `
             <div class="col-8">
                 <select class="form-select form-select-sm input-pago-id">
+                    <option value="">-- Seleccione forma de pago --</option>
                     ${(window.FORMAS_PAGO_SRI || []).map(f => `<option value="${f.codigo}" ${f.codigo == defaultPago ? 'selected' : ''}>${f.nombre}</option>`).join('')}
                 </select>
             </div>
@@ -798,6 +803,7 @@
                         <div class="d-flex align-items-center gap-1">
                             ${isFirst ? (window.STAR_PAGO_HTML || '') : ''}
                             <select class="form-select form-select-sm input-pago-id" ${isFirst ? 'id="liq-pago-fav"' : ''}>
+                                <option value="">-- Seleccione forma de pago --</option>
                                 ${(window.FORMAS_PAGO_SRI || []).map(f => `<option value="${f.codigo}" ${p.id_forma_pago == f.codigo ? 'selected' : ''}>${f.nombre}</option>`).join('')}
                             </select>
                         </div>
@@ -890,6 +896,13 @@
                 total: div.querySelector('.input-pago-total').value
             });
         });
+
+        // Con placeholder, un monto sin forma de pago seleccionada no es válido.
+        if (pagosDom.some(p => parseFloat(p.total || 0) > 0 && !p.id_forma_pago)) {
+            if (typeof Swal !== 'undefined') Swal.fire('Atención', 'Seleccione la forma de pago SRI para cada monto ingresado.', 'warning');
+            else alert('Seleccione la forma de pago SRI para cada monto ingresado.');
+            return;
+        }
 
         // Recolectar info adicional
         const infoDom = [];

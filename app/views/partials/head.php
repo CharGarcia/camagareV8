@@ -15,6 +15,10 @@
 <link href="<?= rtrim(BASE_URL ?? '', '/') ?>/css/app.css?v=<?= time() ?>" rel="stylesheet">
 <link href="<?= rtrim(BASE_URL ?? '', '/') ?>/css/theme.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
+<!-- favoritos.js se carga en <head> para que CMG_initSort/guardarOrdenacionVista estén
+     disponibles antes de los scripts inline de las vistas (que se ejecutan al parsear el body).
+     Solo define funciones al cargar; su inicialización corre en DOMContentLoaded. -->
+<script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/favoritos.js?v=<?= time() ?>"></script>
 <style>
     /* Prevent horizontal scrolling ("floating paper" effect on mobile) */
     html, body {

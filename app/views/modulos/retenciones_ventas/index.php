@@ -217,6 +217,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <script>
     window.RETV_rutaBase = '<?= $urlBase ?>';
     window.RETV_perm = <?= json_encode($perm) ?>;
+    // Estado inicial de ordenamiento (desde la preferencia persistida en el servidor)
+    window.RETV_ordenCol = '<?= $ordenCol ?>';
+    window.RETV_ordenDir = '<?= $ordenDir ?>';
 </script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/clientes_modal.js?v=<?= time() ?>" defer></script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/retenciones_ventas.js?v=<?= time() ?>" defer></script>

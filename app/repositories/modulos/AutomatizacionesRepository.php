@@ -7,7 +7,7 @@ use App\repositories\BaseRepository;
 
 class AutomatizacionesRepository extends BaseRepository
 {
-    public const COLUMNAS_ORDEN = ['nombre', 'modulo', 'accion', 'frecuencia_tipo', 'proxima_ejecucion', 'ultima_ejecucion', 'estado', 'created_at'];
+    public const COLUMNAS_ORDEN = ['nombre', 'modulo', 'accion', 'frecuencia_tipo', 'proxima_ejecucion', 'ultima_ejecucion', 'ultimo_resultado', 'estado', 'created_at'];
 
     public function __construct()
     {

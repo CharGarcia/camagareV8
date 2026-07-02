@@ -210,6 +210,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     g_ordenDir = 'ASC';
                 }
                 actualizarIconosOrden(col, g_ordenDir, 'tablaConsignaciones');
+                if (typeof window.guardarOrdenacionVista === 'function') {
+                    window.guardarOrdenacionVista('consignaciones_ventas', g_ordenCol, g_ordenDir);
+                }
                 cargarGrid();
             });
         });

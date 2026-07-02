@@ -86,6 +86,7 @@ class RetencionesComprasController extends BaseModuloController
             'empresa'          => $empresaData,
             'establecimientos' => $establecimientos,
             'puntos'           => $puntos,
+            'sustentos'        => $this->repository->getSustentosTributarios(),
             'fullWidth'        => true,
         ]);
     }
@@ -135,15 +136,28 @@ class RetencionesComprasController extends BaseModuloController
                 };
                 $estadoBadge = '<span class="badge ' . $estadoClass . ' border border-opacity-25">' . ucfirst(str_replace('_', ' ', $estado)) . '</span>';
 
+                $estadoCorreo = $r['estado_correo'] ?? 'pendiente';
+                $correoClass  = $estadoCorreo === 'enviado'
+                    ? 'bg-success bg-opacity-10 text-success border-success'
+                    : 'bg-secondary bg-opacity-10 text-secondary border-secondary';
+                $correoBadge  = '<span class="badge ' . $correoClass . ' border border-opacity-25">' . ucfirst($estadoCorreo) . '</span>';
+
+                $tipoDocNombre = match ((string)($r['tipo_doc_sustento'] ?? '01')) {
+                    '01' => 'Factura', '03' => 'Liquidación', '05' => 'Nota débito',
+                    default => (string)($r['tipo_doc_sustento'] ?? '—'),
+                };
+
                 echo '<tr class="ret-row" role="button" tabindex="0" data-row=\'' . $rowData . '\' onclick="window.RET_abrirModal(this)">
-                        <td class="ps-3"><code>' . htmlspecialchars($numero) . '</code></td>
-                        <td>' . $fecha . '</td>
-                        <td class="fw-medium text-truncate" style="max-width:200px">' . htmlspecialchars($r['proveedor_nombre'] ?? '—') . '</td>
-                        <td><small class="text-muted">' . htmlspecialchars($r['proveedor_ruc'] ?? '—') . '</small></td>
-                        <td><small class="text-muted">' . htmlspecialchars($r['num_doc_sustento'] ?? '—') . '</small></td>
-                        <td><small class="text-muted">' . htmlspecialchars($r['periodo_fiscal'] ?? '—') . '</small></td>
-                        <td class="text-end fw-bold">$' . number_format((float)($r['total_retenido'] ?? 0), 2) . '</td>
-                        <td class="text-center pe-3">' . $estadoBadge . '</td>
+                        <td class="ps-3" data-col="numero"><code>' . htmlspecialchars($numero) . '</code></td>
+                        <td data-col="fecha_emision">' . $fecha . '</td>
+                        <td class="fw-medium text-truncate" data-col="proveedor_nombre" style="max-width:200px">' . htmlspecialchars($r['proveedor_nombre'] ?? '—') . '</td>
+                        <td data-col="proveedor_ruc"><small class="text-muted">' . htmlspecialchars($r['proveedor_ruc'] ?? '—') . '</small></td>
+                        <td data-col="tipo_doc_sustento"><small class="text-muted">' . htmlspecialchars($tipoDocNombre) . '</small></td>
+                        <td data-col="num_doc_sustento"><small class="text-muted">' . htmlspecialchars($r['num_doc_sustento'] ?? '—') . '</small></td>
+                        <td data-col="periodo_fiscal"><small class="text-muted">' . htmlspecialchars($r['periodo_fiscal'] ?? '—') . '</small></td>
+                        <td class="text-end fw-bold" data-col="total_retenido">$' . number_format((float)($r['total_retenido'] ?? 0), 2) . '</td>
+                        <td class="text-center" data-col="estado_correo">' . $correoBadge . '</td>
+                        <td class="text-center pe-3" data-col="estado">' . $estadoBadge . '</td>
                       </tr>';
             }
         }
@@ -340,7 +354,28 @@ class RetencionesComprasController extends BaseModuloController
 
             $lineas = $this->repository->getDetalle($id);
 
-            $empresa = (new Empresa())->getPorId($idEmpresa) ?? [];
+            $empresaModel = new Empresa();
+            $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+
+            // El logo y las direcciones viven en empresa_establecimiento, no en empresas.
+            // Enriquecer $empresa con los datos del establecimiento de la retención (mismo criterio que factura).
+            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+            $est = null;
+            if (!empty($cabecera['id_establecimiento'])) {
+                foreach ($establecimientos as $e) {
+                    if ((int)$e['id'] === (int)$cabecera['id_establecimiento']) { $est = $e; break; }
+                }
+            }
+            if ($est === null && !empty($establecimientos)) {
+                $est = $establecimientos[0];
+            }
+            if ($est) {
+                if (!empty($est['logo_ruta'])) {
+                    $empresa['logo_ruta'] = $est['logo_ruta'];
+                }
+                $empresa['direccion_matriz']          = $empresa['direccion'] ?? '';
+                $empresa['direccion_establecimiento'] = $est['direccion'] ?? '';
+            }
 
             $pdfService = new \App\Services\modulos\RetencionCompraPdfService();
             $pdfService->generar($cabecera, $lineas, $empresa);
@@ -366,18 +401,195 @@ class RetencionesComprasController extends BaseModuloController
                 die('Retención no encontrada');
             }
 
+            $numero = ($cabecera['establecimiento'] ?? '001') . '-' . ($cabecera['punto_emision'] ?? '001') . '-' . str_pad((string)$cabecera['secuencial'], 9, '0', STR_PAD_LEFT);
+
+            // Servir el XML autorizado ya persistido si existe (igual que factura de venta).
+            if (!empty($cabecera['detalle_xml'])) {
+                header('Content-Type: application/xml; charset=UTF-8');
+                header('Content-Disposition: attachment; filename="ret_' . $numero . '.xml"');
+                echo $cabecera['detalle_xml'];
+                exit;
+            }
+
+            // Fallback: regenerar el XML (comprobante aún no autorizado).
             $lineas  = $this->repository->getDetalle($id);
             $empresa = (new Empresa())->getPorId($idEmpresa) ?? [];
 
-            $xmlService = new \App\Services\Xml\XmlRetencionCompraService();
-            $xmlString  = $xmlService->generar($cabecera, $lineas, $empresa);
+            $docSustento        = $this->repository->getDatosDocSustento($cabecera);
+            $dirEstablecimiento = $cabecera['estab_direccion'] ?? $cabecera['punto_direccion'] ?? null;
 
-            $numero = ($cabecera['establecimiento'] ?? '001') . '-' . ($cabecera['punto_emision'] ?? '001') . '-' . str_pad((string)$cabecera['secuencial'], 9, '0', STR_PAD_LEFT);
+            $xmlService = new \App\Services\Xml\XmlRetencionCompraService();
+            $xmlString  = $xmlService->generar($cabecera, $lineas, $empresa, $dirEstablecimiento, $docSustento);
+
             header('Content-Type: application/xml; charset=UTF-8');
             header('Content-Disposition: attachment; filename="ret_' . $numero . '.xml"');
             echo $xmlString;
         } catch (\Throwable $e) {
             die('Error al generar XML: ' . $e->getMessage());
+        }
+        exit;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // AJAX — enviar / reenviar por correo (igual que factura de venta)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function reenviarCorreoAjax(): void
+    {
+        ob_start();
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) {
+            while (ob_get_level() > 0) ob_end_clean();
+            echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
+            exit;
+        }
+
+        try {
+            $cabecera = $this->repository->getPorIdSri($id, $idEmpresa);
+            if (!$cabecera || (int)($cabecera['id_empresa'] ?? 0) !== $idEmpresa) {
+                while (ob_get_level() > 0) ob_end_clean();
+                echo json_encode(['ok' => false, 'mensaje' => 'Retención no encontrada.']);
+                exit;
+            }
+
+            if (($cabecera['estado'] ?? '') !== 'autorizada') {
+                while (ob_get_level() > 0) ob_end_clean();
+                echo json_encode(['ok' => false, 'mensaje' => 'La retención debe estar autorizada para enviar el correo.']);
+                exit;
+            }
+
+            $lineas = $this->repository->getDetalle($id);
+
+            $empresaModel = new Empresa();
+            $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+
+            // Enriquecer con logo/direcciones del establecimiento (igual que exportPdfDoc)
+            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+            $est = null;
+            if (!empty($cabecera['id_establecimiento'])) {
+                foreach ($establecimientos as $e) {
+                    if ((int)$e['id'] === (int)$cabecera['id_establecimiento']) { $est = $e; break; }
+                }
+            }
+            if ($est === null && !empty($establecimientos)) $est = $establecimientos[0];
+            if ($est) {
+                if (!empty($est['logo_ruta'])) $empresa['logo_ruta'] = $est['logo_ruta'];
+                $empresa['direccion_matriz']          = $empresa['direccion'] ?? '';
+                $empresa['direccion_establecimiento'] = $est['direccion'] ?? '';
+            }
+
+            // PDF de la retención
+            $pdfService = new \App\Services\modulos\RetencionCompraPdfService();
+            $pdfString  = $pdfService->generarBytes($cabecera, $lineas, $empresa);
+
+            // XML: usar el autorizado guardado; si no existe, regenerar
+            $xmlString = $cabecera['detalle_xml'] ?? '';
+            $numAut    = $cabecera['numero_autorizacion'] ?? '';
+            if (empty($xmlString)) {
+                $docSustento = $this->repository->getDatosDocSustento($cabecera);
+                $dirEst      = $cabecera['estab_direccion'] ?? $cabecera['punto_direccion'] ?? null;
+                $xmlString   = (new \App\Services\Xml\XmlRetencionCompraService())
+                    ->generar($cabecera, $lineas, $empresa, $dirEst, $docSustento);
+                try { $this->repository->updateDetalleXml($id, $xmlString); } catch (\Throwable $e) {}
+            }
+
+            // Nombre del destinatario para el cuerpo del correo
+            if (empty($cabecera['proveedor_nombre'])) {
+                $cabecera['proveedor_nombre'] = $cabecera['proveedor_razon_social'] ?? '';
+            }
+
+            $correosDestino = trim($_POST['correos'] ?? '');
+
+            $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+            $enviado  = $emailSvc->enviarSiAplica($idEmpresa, 'retencion_compra', $cabecera, $xmlString, $pdfString, $numAut, true, $correosDestino);
+
+            while (ob_get_level() > 0) ob_end_clean();
+
+            if ($enviado) {
+                $db = \App\core\Database::getConnection();
+                $db->prepare("UPDATE retencion_compra_cabecera SET estado_correo = 'enviado', updated_at = NOW() WHERE id = ?")->execute([$id]);
+                echo json_encode(['ok' => true, 'mensaje' => 'Correo enviado correctamente.']);
+            } else {
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración o el correo del destinatario.']);
+            }
+        } catch (\Throwable $e) {
+            while (ob_get_level() > 0) ob_end_clean();
+            echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // AJAX — asiento contable de la retención (pestaña Asiento Contable)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function getAsientoContableAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $id        = (int) ($_GET['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+
+            if (!$id) {
+                echo json_encode(['ok' => false, 'mensaje' => 'ID requerido']);
+                exit;
+            }
+
+            $cabecera = $this->repository->getPorId($id, $idEmpresa);
+            if (!$cabecera) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Retención no encontrada']);
+                exit;
+            }
+
+            $idAsiento = (int) ($cabecera['id_asiento_contable'] ?? 0);
+            $asiento   = $idAsiento > 0 ? $this->service->getAsientoRegistrado($idAsiento, $idEmpresa) : [];
+
+            // Si no hay asiento vigente (no existe o está anulado), generarlo y enlazarlo ahora.
+            if (empty($asiento) || ($asiento['estado'] ?? '') === 'anulado') {
+                try {
+                    $dataAsiento = $cabecera;
+                    $dataAsiento['id_usuario'] = (int) $_SESSION['id_usuario'];
+                    $this->service->procesarAsientoContable($id, $dataAsiento);
+
+                    $cabecera  = $this->repository->getPorId($id, $idEmpresa);
+                    $idAsiento = (int) ($cabecera['id_asiento_contable'] ?? 0);
+                    $asiento   = $idAsiento > 0 ? $this->service->getAsientoRegistrado($idAsiento, $idEmpresa) : [];
+                } catch (\Throwable $e) {
+                    error_log('[RetencionCompra] Asiento no generado al consultar: ' . $e->getMessage());
+                }
+            }
+
+            // Mostrar el asiento REGISTRADO (relación por id_asiento_contable).
+            if (!empty($asiento)) {
+                $detalles = array_map(static fn($d) => [
+                    'cuenta_codigo' => $d['codigo_cuenta'] ?? '',
+                    'cuenta_nombre' => $d['nombre_cuenta'] ?? '',
+                    'debe'          => (float) ($d['debe'] ?? 0),
+                    'haber'         => (float) ($d['haber'] ?? 0),
+                ], $asiento['detalles'] ?? []);
+
+                echo json_encode([
+                    'ok'         => true,
+                    'registrado' => true,
+                    'numero'     => $asiento['numero_comprobante'] ?? '',
+                    'estado'     => $asiento['estado'] ?? '',
+                    'detalles'   => $detalles,
+                ]);
+                exit;
+            }
+
+            // No se pudo registrar (faltan cuentas / descuadre): mostrar el sugerido como referencia.
+            $detalles = $this->service->obtenerAsientoSugerido($idEmpresa, $id);
+            echo json_encode(['ok' => true, 'registrado' => false, 'detalles' => $detalles]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
     }
@@ -509,8 +721,10 @@ class RetencionesComprasController extends BaseModuloController
                 }
             }
 
+            $docSustento = $this->repository->getDatosDocSustento($retencion);
+
             $xml = (new \App\Services\Xml\XmlRetencionCompraService())
-                ->generar($retencion, $lineas, $empresa, $dirEstablecimiento);
+                ->generar($retencion, $lineas, $empresa, $dirEstablecimiento, $docSustento);
 
             $this->repository->updateDetalleXml($id, $xml);
 

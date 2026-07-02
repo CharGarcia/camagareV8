@@ -9,8 +9,10 @@ use PDO;
 class ProductoRepository extends BaseRepository
 {
     public const COLUMNAS_ORDEN = [
-        'codigo', 'nombre', 'precio_base', 'status', 'tipo_produccion', 
-        'nombre_categoria', 'nombre_marca', 'codigo_auxiliar', 'codigo_barras'
+        'codigo', 'nombre', 'precio_base', 'status', 'tipo_produccion',
+        'nombre_categoria', 'nombre_marca', 'codigo_auxiliar', 'codigo_barras',
+        'nombre_medida', 'nombre_tarifa_iva', 'valor_iva', 'pvp',
+        'inventariable', 'stock_minimo', 'stock_maximo', 'valor_ice'
     ];
 
     public function __construct()

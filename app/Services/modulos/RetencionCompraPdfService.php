@@ -50,7 +50,7 @@ class RetencionCompraPdfService
         $this->dibujarEncabezado($pdf, $cabecera, $empresa);
         $this->dibujarProveedorSustento($pdf, $cabecera);
         $this->dibujarLineas($pdf, $lineas);
-        $this->dibujarTotales($pdf, $cabecera);
+        $this->dibujarTotales($pdf, $cabecera, $lineas);
 
         if (!empty($cabecera['observaciones'])) {
             $this->dibujarObservaciones($pdf, $cabecera['observaciones']);
@@ -59,102 +59,251 @@ class RetencionCompraPdfService
         return $pdf;
     }
 
-    // ── Encabezado: empresa + datos comprobante ──────────────────
+    // ── Encabezado: empresa + datos comprobante (mismo diseño que factura) ──
 
     private function dibujarEncabezado(\TCPDF $pdf, array $cab, array $emp): void
     {
-        $pageW  = $pdf->getPageWidth() - 2 * self::MARGEN_H;
-        $colL   = $pageW * 0.55;  // caja empresa (izquierda)
-        $colR   = $pageW * 0.43;  // caja SRI (derecha)
-        $startX = self::MARGEN_H;
-        $startY = self::MARGEN_H;
+        $mL       = self::MARGEN_H;
+        $contentW = $pdf->getPageWidth() - 2 * self::MARGEN_H; // 190mm
+        $izqW     = 85;
+        $derW     = $contentW - $izqW - 2;   // 103mm
+        $derX     = $mL + $izqW + 2;
 
-        // Caja izquierda: logo + datos empresa
-        $pdf->SetXY($startX, $startY);
-        $logoPath = MVC_ROOT . '/storage/' . ($emp['logo_ruta'] ?? '');
-        if (!empty($emp['logo_ruta']) && file_exists($logoPath)) {
-            $pdf->Image($logoPath, $startX + 1, $startY + 2, 25, 0, '', '', '', false, 150);
-            $pdf->SetXY($startX + 27, $startY + 2);
+        $yTop           = 8;
+        $yLogo          = $yTop;
+        $boxHeight      = 73.5;
+        $logoAreaHeight = $boxHeight * 0.40;
+
+        // Resolver ruta del logo (mismo criterio que factura)
+        $logoPath = '';
+        $rutasPosibles = [];
+        if (!empty($emp['logo_ruta'])) $rutasPosibles[] = $emp['logo_ruta'];
+        if (!empty($emp['logo']))      $rutasPosibles[] = $emp['logo'];
+
+        foreach ($rutasPosibles as $ruta) {
+            $cleanRuta = ltrim($ruta, '/');
+            if (strpos($cleanRuta, 'sistema/public/') === 0) {
+                $cleanRuta = substr($cleanRuta, strlen('sistema/public/'));
+            } elseif (strpos($cleanRuta, 'sistema/') === 0) {
+                $cleanRuta = substr($cleanRuta, strlen('sistema/'));
+            }
+            if (strpos($cleanRuta, 'public/') === 0) {
+                $cleanRuta = substr($cleanRuta, strlen('public/'));
+            }
+            $candidatos = [
+                \MVC_ROOT . '/public/' . $cleanRuta,
+                \MVC_ROOT . '/' . $cleanRuta,
+            ];
+            foreach ($candidatos as $testPath) {
+                if (file_exists($testPath)) { $logoPath = $testPath; break 2; }
+            }
+        }
+
+        $pdf->SetLineWidth(0.3);
+        $pdf->SetDrawColor(0, 0, 0);
+
+        if ($logoPath) {
+            $pdf->Image($logoPath, $mL + 2, $yLogo + 2, $izqW - 4, $logoAreaHeight - 4, '', '', '', false, 300, '', false, false, 0, 'CM');
         } else {
-            $pdf->SetXY($startX + 2, $startY + 2);
+            $pdf->SetFont(self::FUENTE, 'B', 18);
+            $pdf->SetTextColor(160, 160, 160);
+            $pdf->SetXY($mL + 2, $yLogo + ($logoAreaHeight / 2) - 5);
+            $pdf->Cell($izqW - 4, 15, 'SIN LOGO', 0, 1, 'C');
+            $pdf->SetTextColor(0, 0, 0);
         }
 
-        $pdf->SetFont(self::FUENTE, 'B', 9);
-        $pdf->MultiCell($colL - 4, 4, mb_strtoupper($emp['nombre'] ?? '', 'UTF-8'), 0, 'L');
-        $pdf->SetFont(self::FUENTE, '', 7);
-        if (!empty($emp['nombre_comercial'])) {
-            $pdf->SetX($startX + 2);
-            $pdf->MultiCell($colL - 4, 3.5, $emp['nombre_comercial'], 0, 'L');
+        $yTopIzqBox = $yLogo + $logoAreaHeight;
+
+        // ── Caja izquierda (contenido) ───────────────────────────────────────
+        $yIzq = $yTopIzqBox + 3;
+
+        $nomComercial = trim($emp['nombre_comercial'] ?? '');
+        $nomRazon     = trim($emp['nombre'] ?? '');
+        if ($nomComercial) {
+            $pdf->SetFont(self::FUENTE, 'B', 9);
+            $pdf->SetXY($mL + 2, $yIzq);
+            $pdf->MultiCell($izqW - 4, 5, $nomComercial, 0, 'L', false, 1);
+            $yIzq = $pdf->GetY();
         }
-        $pdf->SetX($startX + 2);
-        $pdf->MultiCell($colL - 4, 3.5,
-            'Dirección: ' . ($emp['direccion'] ?? ''), 0, 'L');
-        $pdf->SetX($startX + 2);
-        $pdf->MultiCell($colL - 4, 3.5,
-            'Teléfono: ' . ($emp['telefono'] ?? '') . '   Correo: ' . ($emp['email'] ?? ''), 0, 'L');
+        if ($nomRazon && $nomRazon !== $nomComercial) {
+            $pdf->SetFont(self::FUENTE, '', 8);
+            $pdf->SetXY($mL + 2, $yIzq);
+            $pdf->MultiCell($izqW - 4, 4.5, $nomRazon, 0, 'L', false, 1);
+            $yIzq = $pdf->GetY();
+        }
 
-        $altoCajaL = $pdf->GetY() - $startY + 2;
+        // Dirección Matriz
+        $dirMat = trim($emp['direccion_matriz'] ?? $emp['direccion'] ?? '');
+        if ($dirMat) {
+            $pdf->SetXY($mL + 2, $yIzq);
+            $pdf->SetFont(self::FUENTE, 'B', 7);
+            $pdf->Cell(22, 4, 'Dirección Matriz:', 0, 0, 'L');
+            $pdf->SetFont(self::FUENTE, '', 7);
+            $pdf->MultiCell($izqW - 26, 4, $dirMat, 0, 'L', false, 1);
+            $yIzq = $pdf->GetY();
+        }
 
-        // Caja derecha: datos SRI
-        $xR = $startX + $colL + $pageW * 0.02;
-        $yR = $startY;
+        // Dirección Sucursal
+        $dirSuc = trim($emp['direccion_establecimiento'] ?? $emp['direccion_sucursal'] ?? '');
+        if (empty($dirSuc)) $dirSuc = trim($cab['estab_direccion'] ?? $cab['punto_direccion'] ?? '');
+        if (empty($dirSuc)) $dirSuc = trim($emp['direccion'] ?? '');
+        if ($dirSuc) {
+            $yBefore = $pdf->GetY();
+            $pdf->SetXY($mL + 2, $yBefore);
+            $pdf->SetFont(self::FUENTE, 'B', 7);
+            $pdf->MultiCell(20, 3.5, "Dirección\nSucursal:", 0, 'L', false, 1);
+            $yAfterLabel = $pdf->GetY();
+            $pdf->SetXY($mL + 22, $yBefore);
+            $pdf->SetFont(self::FUENTE, '', 7);
+            $pdf->MultiCell($izqW - 24, 3.5, $dirSuc, 0, 'L', false, 1);
+            $yIzq = max($yAfterLabel, $pdf->GetY());
+        }
 
-        $pdf->SetXY($xR, $yR);
+        // Contribuyente Especial
+        $resCont = trim($emp['resolucion_contribuyente'] ?? '');
+        if ($resCont) {
+            $pdf->SetXY($mL + 2, $yIzq);
+            $pdf->SetFont(self::FUENTE, '', 7.5);
+            $pdf->Cell(30, 4.5, 'Contribuyente Especial', 0, 0, 'L');
+            $pdf->SetFont(self::FUENTE, 'B', 7.5);
+            $pdf->Cell($izqW - 32, 4.5, $resCont, 0, 1, 'L');
+            $yIzq = $pdf->GetY();
+        }
+
+        // Obligado a llevar contabilidad
+        $oblStr  = strtoupper(trim((string)($emp['obligado_contabilidad'] ?? 'NO')));
+        $oblabel = ($oblStr === 'SI' || $oblStr === '1' || $oblStr === 'TRUE') ? 'SI' : 'NO';
+        $pdf->SetXY($mL + 2, $yIzq);
+        $pdf->SetFont(self::FUENTE, '', 7.5);
+        $pdf->Cell(55, 4.5, 'OBLIGADO A LLEVAR CONTABILIDAD', 0, 0, 'L');
         $pdf->SetFont(self::FUENTE, 'B', 7.5);
-        $pdf->Cell($colR, 5, 'RUC: ' . ($emp['ruc'] ?? ''), 1, 1, 'C');
-        $pdf->SetX($xR);
-        $pdf->SetFont(self::FUENTE, 'B', 8);
-        $pdf->Cell($colR, 5, 'COMPROBANTE DE RETENCIÓN', 1, 1, 'C');
-        $pdf->SetX($xR);
-        $pdf->SetFont(self::FUENTE, 'B', 8);
-        $num = ($cab['establecimiento'] ?? '001') . '-'
-             . ($cab['punto_emision']   ?? '001') . '-'
-             . str_pad($cab['secuencial'] ?? '', 9, '0', STR_PAD_LEFT);
-        $pdf->Cell($colR, 5, 'No. ' . $num, 1, 1, 'C');
+        $pdf->Cell($izqW - 57, 4.5, $oblabel, 0, 1, 'L');
+        $yIzq = $pdf->GetY() + 1;
 
-        $pdf->SetX($xR);
-        $pdf->SetFont(self::FUENTE, '', 6.5);
-        $pdf->Cell($colR, 4, 'NÚMERO DE AUTORIZACIÓN', 1, 1, 'C');
-        $pdf->SetX($xR);
-        $pdf->SetFont(self::FUENTE, '', 6.5);
-        $pdf->MultiCell($colR, 4, $cab['numero_autorizacion'] ?? 'PENDIENTE', 1, 'C');
-
-        $pdf->SetX($xR);
-        $pdf->SetFont(self::FUENTE, '', 6.5);
-        $fa = $cab['fecha_autorizacion']
-            ? date('d/m/Y H:i:s', strtotime($cab['fecha_autorizacion']))
-            : 'PENDIENTE';
-        $pdf->Cell($colR, 4, 'Fecha y Hora de Autorización: ' . $fa, 1, 1, 'L');
-
-        $ambLabel = ($cab['tipo_ambiente'] ?? '1') === '2' ? 'PRODUCCIÓN' : 'PRUEBAS';
-        $pdf->SetX($xR);
-        $pdf->Cell($colR, 4, 'Ambiente: ' . $ambLabel, 1, 1, 'L');
-
-        $emisionLabel = ($cab['tipo_emision'] ?? '1') === '1' ? 'NORMAL' : 'CONTINGENCIA';
-        $pdf->SetX($xR);
-        $pdf->Cell($colR, 4, 'Emisión: ' . $emisionLabel, 1, 1, 'L');
-
-        $altoCajaR = $pdf->GetY() - $yR;
-        $altoTotal = max($altoCajaL, $altoCajaR) + 1;
-
-        // Dibujar borde caja izquierda
-        $pdf->Rect($startX, $startY, $colL, $altoTotal);
-
-        // Clave de acceso (barcode)
-        if (!empty($cab['clave_acceso'])) {
-            $pdf->SetXY($startX, $startY + $altoTotal + 1);
-            $pdf->SetFont(self::FUENTE, 'B', 6.5);
-            $pdf->Cell($pageW, 4, 'CLAVE DE ACCESO', 0, 1, 'C');
-            $pdf->SetX($startX);
-            $pdf->write1DBarcode($cab['clave_acceso'], 'C128', $startX, $pdf->GetY(), $pageW, 10, 0.4, ['stretch' => true, 'fitwidth' => true]);
-            $pdf->Ln(11);
-            $pdf->SetFont(self::FUENTE, '', 6);
-            $pdf->Cell($pageW, 3, $cab['clave_acceso'], 0, 1, 'C');
-        } else {
-            $pdf->Ln($altoTotal + 2);
+        // Agente de Retención
+        $agenteRet = trim((string)($emp['agente_retencion'] ?? ''));
+        if ($agenteRet !== '' && $agenteRet !== '0' && strtoupper($agenteRet) !== 'NO' && strtoupper($agenteRet) !== 'N/A') {
+            $pdf->SetXY($mL + 2, $yIzq);
+            $pdf->SetFont(self::FUENTE, '', 7.5);
+            $pdf->Cell(55, 4.5, 'Agente de Retención Resolución No.', 0, 0, 'L');
+            $pdf->SetFont(self::FUENTE, 'B', 7.5);
+            $pdf->Cell($izqW - 57, 4.5, $agenteRet, 0, 1, 'L');
+            $yIzq = $pdf->GetY() + 1;
         }
 
-        $pdf->Ln(2);
+        // Régimen RIMPE
+        $rimpe = trim($emp['regimen_rimpe'] ?? '');
+        if ($rimpe) {
+            $pdf->SetXY($mL + 2, $yIzq);
+            $pdf->SetFont(self::FUENTE, 'B', 7.5);
+            $pdf->MultiCell($izqW - 4, 4.5, $rimpe, 0, 'L', false, 1);
+            $yIzq = $pdf->GetY() + 1;
+        }
+
+        $yIzq += 2;
+
+        // ── Caja derecha ──────────────────────────────────────────────────────
+        $yDer = $yTop;
+
+        // R.U.C.
+        $pdf->SetFont(self::FUENTE, '', 8);
+        $pdf->SetXY($derX + 2, $yDer + 2);
+        $pdf->Cell(14, 5, 'R.U.C.:', 0, 0, 'L');
+        $pdf->SetFont(self::FUENTE, 'B', 8);
+        $pdf->Cell($derW - 16, 5, $emp['ruc'] ?? '', 0, 1, 'L');
+        $yDer += 8;
+
+        // Título del comprobante
+        $pdf->SetFont(self::FUENTE, 'B', 11);
+        $pdf->SetXY($derX + 2, $yDer);
+        $pdf->Cell($derW - 4, 7, 'COMPROBANTE DE RETENCIÓN', 0, 1, 'L');
+        $yDer += 7;
+
+        // Número
+        $num = str_pad((string)($cab['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT) . '-'
+             . str_pad((string)($cab['punto_emision']   ?? '001'), 3, '0', STR_PAD_LEFT) . '-'
+             . str_pad((string)($cab['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+        $pdf->SetFont(self::FUENTE, '', 8);
+        $pdf->SetXY($derX + 2, $yDer);
+        $pdf->Cell(7, 5, 'No.', 0, 0, 'L');
+        $pdf->Cell($derW - 9, 5, $num, 0, 1, 'L');
+        $yDer += 6;
+
+        // NÚMERO DE AUTORIZACIÓN
+        $pdf->SetFont(self::FUENTE, '', 7.5);
+        $pdf->SetXY($derX + 2, $yDer);
+        $pdf->Cell($derW - 4, 4.5, 'NÚMERO DE AUTORIZACIÓN', 0, 1, 'L');
+        $yDer += 5;
+
+        // Clave de acceso como texto
+        $claveAcceso = trim($cab['clave_acceso'] ?? '');
+        if ($claveAcceso) {
+            $pdf->SetFont(self::FUENTE, '', 7);
+            $pdf->SetXY($derX + 2, $yDer);
+            $pdf->MultiCell($derW - 4, 4, $claveAcceso, 0, 'L', false, 1);
+            $yDer = $pdf->GetY() + 1;
+        }
+
+        // Fecha y hora de autorización
+        if (!empty($cab['fecha_autorizacion'])) {
+            $fa = date('d/m/Y H:i:s', strtotime($cab['fecha_autorizacion']));
+            $pdf->SetXY($derX + 2, $yDer);
+            $pdf->SetFont(self::FUENTE, '', 7.5);
+            $pdf->Cell(32, 4.5, 'FECHA Y HORA DE', 0, 0, 'L');
+            $pdf->Cell($derW - 34, 4.5, $fa, 0, 1, 'L');
+            $yDer += 4.5;
+            $pdf->SetXY($derX + 2, $yDer);
+            $pdf->Cell(32, 4.5, 'AUTORIZACIÓN:', 0, 1, 'L');
+            $yDer += 4.5;
+        }
+
+        // Ambiente
+        $tipoAmb  = (string)($cab['tipo_ambiente'] ?? $emp['tipo_ambiente'] ?? '1');
+        $ambiente = ($tipoAmb === '2') ? 'PRODUCCIÓN' : 'PRUEBAS';
+        $pdf->SetXY($derX + 2, $yDer);
+        $pdf->SetFont(self::FUENTE, '', 7.5);
+        $pdf->Cell(22, 4.5, 'AMBIENTE:', 0, 0, 'L');
+        $pdf->SetFont(self::FUENTE, 'B', 7.5);
+        $pdf->Cell($derW - 24, 4.5, $ambiente, 0, 1, 'L');
+        $yDer += 4.5;
+
+        // Emisión
+        $pdf->SetXY($derX + 2, $yDer);
+        $pdf->SetFont(self::FUENTE, '', 7.5);
+        $pdf->Cell(22, 4.5, 'EMISIÓN:', 0, 0, 'L');
+        $pdf->SetFont(self::FUENTE, 'B', 7.5);
+        $pdf->Cell($derW - 24, 4.5, 'NORMAL', 0, 1, 'L');
+        $yDer += 5;
+
+        // CLAVE DE ACCESO (etiqueta)
+        $pdf->SetFont(self::FUENTE, '', 7.5);
+        $pdf->SetXY($derX + 2, $yDer);
+        $pdf->Cell($derW - 4, 4.5, 'CLAVE DE ACCESO', 0, 1, 'L');
+        $yDer += 5;
+
+        // Código de barras
+        if ($claveAcceso) {
+            $barcodeH = 12;
+            $pdf->write1DBarcode(
+                $claveAcceso, 'C128', $derX + 2, $yDer, $derW - 1, $barcodeH, 0.4,
+                ['position' => 'R', 'text' => false, 'stretcharray' => '', 'stretch' => true], 'N'
+            );
+            $yDer += $barcodeH + 1;
+            $pdf->SetFont(self::FUENTE, '', 5.5);
+            $pdf->SetXY($derX + 2, $yDer);
+            $pdf->Cell($derW - 4, 3.5, $claveAcceso, 0, 1, 'C');
+            $yDer += 4;
+        }
+
+        $yDer += 2;
+
+        // ── Bordes (alineados al fondo) ───────────────────────────────────────
+        $yBottom = max($yIzq, $yDer);
+        $pdf->RoundedRect($mL, $yTopIzqBox, $izqW, $yBottom - $yTopIzqBox, 3, '1111', 'D');
+        $pdf->RoundedRect($derX, $yTop, $derW, $yBottom - $yTop, 3, '1111', 'D');
+
+        // Dejar el cursor debajo del encabezado para el siguiente bloque
+        $pdf->SetXY($mL, $yBottom + 3);
     }
 
     // ── Proveedor y documento sustento ───────────────────────────
@@ -274,29 +423,42 @@ class RetencionCompraPdfService
 
     // ── Totales ──────────────────────────────────────────────────
 
-    private function dibujarTotales(\TCPDF $pdf, array $cab): void
+    private function dibujarTotales(\TCPDF $pdf, array $cab, array $lineas = []): void
     {
         $pageW = $pdf->getPageWidth() - 2 * self::MARGEN_H;
         $x     = self::MARGEN_H;
-        $labelW = $pageW * 0.60;
-        $valorW = $pageW * 0.40;
 
-        $pdf->SetX($x + $labelW - $pageW * 0.30);
-        $pdf->SetFont(self::FUENTE, 'B', 8);
+        // Calcular totales por tipo de impuesto desde las líneas (fuente confiable).
+        $totRenta = 0.0; $totIva = 0.0; $totIsd = 0.0;
+        foreach ($lineas as $l) {
+            $codImp = strtoupper((string)($l['codigo_impuesto'] ?? ''));
+            $val    = (float)($l['valor_retenido'] ?? 0);
+            if ($codImp === '1' || $codImp === 'RENTA')     $totRenta += $val;
+            elseif ($codImp === '2' || $codImp === 'IVA')   $totIva   += $val;
+            elseif ($codImp === '6' || $codImp === 'ISD')   $totIsd   += $val;
+        }
+        $totalGeneral = $totRenta + $totIva + $totIsd;
+        if ($totalGeneral <= 0) {
+            // Respaldo: usar el total guardado en cabecera si no hay líneas cargadas.
+            $totalGeneral = (float)($cab['total_retenido'] ?? 0);
+        }
 
-        $items = [
-            ['Total Retenido Renta (IR):',  (float)($cab['total_retenido_renta'] ?? 0)],
-            ['Total Retenido IVA:',          (float)($cab['total_retenido_iva']   ?? 0)],
-            ['TOTAL RETENIDO:',              (float)($cab['total_retenido']       ?? 0)],
-        ];
+        // Cuadro angosto alineado a la derecha.
+        $labelW = $pageW * 0.22;
+        $valorW = $pageW * 0.13;
+        $boxW   = $labelW + $valorW;         // ~35% del ancho
+        $boxX   = $x + $pageW - $boxW;        // pegado al margen derecho
+
+        $items = [['Total Retenido Renta (IR):', $totRenta], ['Total Retenido IVA:', $totIva]];
+        if ($totIsd > 0) $items[] = ['Total Retenido ISD:', $totIsd];
+        $items[] = ['TOTAL RETENIDO:', $totalGeneral];
 
         foreach ($items as $idx => [$label, $valor]) {
             $esTotal = $idx === count($items) - 1;
-            $pdf->SetX($x + $pageW * 0.50);
-            if ($esTotal) $pdf->SetFont(self::FUENTE, 'B', 8.5);
-            else $pdf->SetFont(self::FUENTE, '', 7.5);
-            $pdf->Cell($pageW * 0.30, 5, $label, 'LTB', 0, 'R');
-            $pdf->Cell($pageW * 0.20, 5, '$' . number_format($valor, 2), 'TBR', 1, 'R');
+            $pdf->SetX($boxX);
+            $pdf->SetFont(self::FUENTE, $esTotal ? 'B' : '', $esTotal ? 8 : 7);
+            $pdf->Cell($labelW, 4.5, $label, 'LTB', 0, 'R');
+            $pdf->Cell($valorW, 4.5, '$' . number_format($valor, 2), 'TBR', 1, 'R');
         }
 
         $pdf->Ln(3);

@@ -216,15 +216,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             } catch (e) { console.error(e); }
         };
 
-        document.querySelectorAll('.sortable-header').forEach(h => {
-            h.addEventListener('click', () => {
-                const f = h.dataset.sort;
-                if (window.currentSort === f) window.currentDir = (window.currentDir.toLowerCase() === 'asc') ? 'DESC' : 'ASC';
-                else { window.currentSort = f; window.currentDir = 'ASC'; }
-                if (typeof window.guardarOrdenacionVista === 'function') window.guardarOrdenacionVista('clientes', window.currentSort, window.currentDir);
-                fetchSearch(1);
-            });
-        });
+        // Ordenamiento (motor global: persiste __ordenCol__/__ordenDir__ y pinta el ícono activo)
+        window.CMG_initSort('clientes', (col, dir) => {
+            window.currentSort = col;
+            window.currentDir = dir;
+            fetchSearch(1);
+        }, { col: window.currentSort, dir: window.currentDir });
 
         if (inputBuscar) inputBuscar.addEventListener('input', debounce(() => fetchSearch(1), 400));
     })();

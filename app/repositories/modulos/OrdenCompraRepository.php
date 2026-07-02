@@ -11,7 +11,7 @@ class OrdenCompraRepository extends BaseRepository
     public const COLUMNAS_ORDEN = [
         'numero_orden', 'fecha_orden', 'fecha_recepcion',
         'proveedor_nombre', 'proveedor_identificacion',
-        'estado', 'created_at'
+        'estado', 'observaciones', 'created_at'
     ];
 
     public function __construct()

@@ -177,6 +177,13 @@ function FP_sort(col){
         currentSort = col;
         currentDir = 'ASC';
     }
+    // Persistir el orden antes de navegar (sendBeacon sobrevive a la recarga)
+    if (navigator.sendBeacon && typeof APP_VISTAS_URL !== 'undefined') {
+        const fd = new FormData();
+        fd.append('modulo', 'formas_cobros_pagos');
+        fd.append('vistaPayload', JSON.stringify({ __ordenCol__: currentSort, __ordenDir__: currentDir }));
+        navigator.sendBeacon(APP_VISTAS_URL, fd);
+    }
     FP_buscar(1);
 }
 </script>

@@ -380,8 +380,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         now.setHours(now.getHours() + 1);
         document.getElementById('cons_hora_entrega_hasta').value = padZero(now.getHours()) + ':' + padZero(now.getMinutes());
 
-        cargarCatalogosConsignacion();
-        
+        cargarCatalogosConsignacion().then(() => {
+            // Pre-cargar favoritos una vez que los catálogos (punto de emisión es asíncrono) están listos
+            if (typeof window.aplicarFavoritosModal === 'function') {
+                window.aplicarFavoritosModal('#modalConsignacion');
+                const selPunto = document.getElementById('cons_id_punto_emision');
+                if (selPunto && selPunto.value && typeof syncSerieConsignacion === 'function') {
+                    syncSerieConsignacion(selPunto.value);
+                }
+            }
+        });
+
         if (typeof EMPRESA_CONFIG !== 'undefined') {
             if (EMPRESA_CONFIG.obligatorio_lotes) {
                 document.querySelectorAll('.th-lote').forEach(e => e.classList.remove('d-none'));

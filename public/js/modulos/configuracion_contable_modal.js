@@ -95,8 +95,9 @@
                 tbody.innerHTML = '';
 
                 // Layout: ventas/compras y demás conceptos de naturaleza fija → dos columnas (Debe | Haber).
-                // retenciones_venta conserva la tabla clásica (doble cuenta por fila).
-                const usaDosColumnas = (tipoAsiento !== 'retenciones_venta');
+                // Las retenciones (venta y compra) conservan la tabla clásica (doble cuenta por fila).
+                const esRetenciones = (tipoAsiento === 'retenciones_venta' || tipoAsiento === 'retenciones_compra');
+                const usaDosColumnas = !esRetenciones;
                 const dosColCont = document.getElementById('dosColumnasGeneral');
                 const tablaWrap  = document.getElementById('tablaGeneralWrap');
                 const colDebe    = document.getElementById('colDebeGeneral');
@@ -111,7 +112,7 @@
                 // Actualizar dinámicamente la cabecera thead de la tabla general
                 const thead = document.getElementById('theadConfiguracionGeneral');
                 if (thead) {
-                    if (tipoAsiento === 'retenciones_venta') {
+                    if (esRetenciones) {
                         thead.innerHTML = `
                             <tr>
                                 <th class="ps-4 py-2" style="width: 20%">Concepto</th>
@@ -148,7 +149,16 @@
                     res.data.forEach(item => {
                         const tr = document.createElement('tr');
                         
-                        if (tipoAsiento === 'retenciones_venta') {
+                        if (esRetenciones) {
+                            // Compra: retención = pasivo (Debe: Cuentas por Pagar · Haber: Retención por pagar).
+                            // Venta: retención = activo (Debe: Retención · Haber: Cuentas por Cobrar).
+                            const esCompraRet = (tipoAsiento === 'retenciones_compra');
+                            const retPrefix = esCompraRet ? 'retenciones_compra' : 'retenciones_venta';
+                            const retTipoCuenta = esCompraRet ? 'pasivo' : 'activo';
+                            const retBadge = esCompraRet
+                                ? '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2 m-1 small">Pasivo</span>'
+                                : '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2 m-1 small">Activo</span>';
+
                             const rvdSuffix = `rvd_${item.id_referencia}`;
                             const inputDebeId = `cuenta_search_${rvdSuffix}`;
                             const hiddenDebeId = `cuenta_hidden_${rvdSuffix}`;
@@ -158,7 +168,7 @@
                             const inputHaberId = `cuenta_search_${rvhSuffix}`;
                             const hiddenHaberId = `cuenta_hidden_${rvhSuffix}`;
                             const sugHaberId = `sug_${rvhSuffix}`;
-                            
+
                             const cuentaDebeVal = item.id_cuenta ? `${item.cuenta_codigo} - ${item.cuenta_nombre}` : '';
                             const idCuentaDebeVal = item.id_cuenta || '';
 
@@ -171,7 +181,7 @@
                             tr.innerHTML = `
                                 <td class="ps-4 fw-bold text-dark">${item.concepto}</td>
                                 <td class="small text-muted">${item.detalle || 'Sin descripción.'}</td>
-                                <td><span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2 m-1 small">Activo</span></td>
+                                <td>${retBadge}</td>
                                 <td class="autocomplete-celda">
                                     <input type="text" class="form-control form-control-sm ${borderClassDebe}" id="${inputDebeId}" placeholder="Cuenta Debe..." value="${cuentaDebeVal}" autocomplete="off">
                                     <input type="hidden" id="${hiddenDebeId}" value="${idCuentaDebeVal}">
@@ -183,14 +193,14 @@
                                     <div class="list-group sugerencias-flotantes" id="${sugHaberId}" style="display: none;"></div>
                                 </td>
                                 <td class="text-center">
-                                    <button type="button" class="btn btn-link text-danger p-0 border-0" onclick="ASIENTOPROG_eliminarAlVuelo(0, '${inputDebeId}', '${hiddenDebeId}', 'retenciones_venta_debe', ${item.id_referencia}); ASIENTOPROG_eliminarAlVuelo(0, '${inputHaberId}', '${hiddenHaberId}', 'retenciones_venta_haber', ${item.id_referencia})" title="Limpiar Cuentas">
+                                    <button type="button" class="btn btn-link text-danger p-0 border-0" onclick="ASIENTOPROG_eliminarAlVuelo(0, '${inputDebeId}', '${hiddenDebeId}', '${retPrefix}_debe', ${item.id_referencia}); ASIENTOPROG_eliminarAlVuelo(0, '${inputHaberId}', '${hiddenHaberId}', '${retPrefix}_haber', ${item.id_referencia})" title="Limpiar Cuentas">
                                         <i class="bi bi-trash fs-5"></i>
                                     </button>
                                 </td>
                             `;
                             tbody.appendChild(tr);
-                            ASIENTOPROG_vincularAutocomplete(0, inputDebeId, hiddenDebeId, sugDebeId, 'activo', 'retenciones_venta_debe', item.id_referencia);
-                            ASIENTOPROG_vincularAutocomplete(0, inputHaberId, hiddenHaberId, sugHaberId, 'activo', 'retenciones_venta_haber', item.id_referencia);
+                            ASIENTOPROG_vincularAutocomplete(0, inputDebeId, hiddenDebeId, sugDebeId, retTipoCuenta, `${retPrefix}_debe`, item.id_referencia);
+                            ASIENTOPROG_vincularAutocomplete(0, inputHaberId, hiddenHaberId, sugHaberId, retTipoCuenta, `${retPrefix}_haber`, item.id_referencia);
                         } else {
                             const safeSuffix = (item.tipo_referencia === 'iva_ventas_factura' || item.tipo_referencia === 'iva_compras_factura') ? `iva_${item.id_referencia}` : `at_${item.id_asiento_tipo}`;
                             const inputId = `cuenta_search_${safeSuffix}`;
@@ -328,7 +338,13 @@
      * Registra o actualiza al vuelo una regla general de cuenta contable.
      */
     window.ASIENTOPROG_guardarAlVuelo = async function (idAsientoTipo, idCuenta, inputElement, tipoReferencia = '', idReferencia = 0) {
-        if ((!idAsientoTipo && tipoReferencia !== 'iva_ventas_factura' && tipoReferencia !== 'iva_compras_factura' && tipoReferencia !== 'retenciones_venta' && tipoReferencia !== 'retenciones_venta_debe' && tipoReferencia !== 'retenciones_venta_haber') || !idCuenta) return;
+        // Tipos que se guardan sin id_asiento_tipo base (IVA por tarifa y retenciones venta/compra).
+        const sinAsientoBase = [
+            'iva_ventas_factura', 'iva_compras_factura',
+            'retenciones_venta', 'retenciones_venta_debe', 'retenciones_venta_haber',
+            'retenciones_compra', 'retenciones_compra_debe', 'retenciones_compra_haber'
+        ];
+        if ((!idAsientoTipo && !sinAsientoBase.includes(tipoReferencia)) || !idCuenta) return;
 
         // Añadir indicador visual de carga corta
         inputElement.classList.add('is-valid');
@@ -389,7 +405,12 @@
      * Elimina al vuelo de forma dinámica una regla general de cuenta.
      */
     window.ASIENTOPROG_eliminarAlVuelo = async function (idAsientoTipo, inputId, hiddenId, tipoReferencia = '', idReferencia = 0) {
-        if (!idAsientoTipo && tipoReferencia !== 'iva_ventas_factura' && tipoReferencia !== 'iva_compras_factura' && tipoReferencia !== 'retenciones_venta' && tipoReferencia !== 'retenciones_venta_debe' && tipoReferencia !== 'retenciones_venta_haber') return;
+        const sinAsientoBase = [
+            'iva_ventas_factura', 'iva_compras_factura',
+            'retenciones_venta', 'retenciones_venta_debe', 'retenciones_venta_haber',
+            'retenciones_compra', 'retenciones_compra_debe', 'retenciones_compra_haber'
+        ];
+        if (!idAsientoTipo && !sinAsientoBase.includes(tipoReferencia)) return;
 
         const input = document.getElementById(inputId);
         const hidden = document.getElementById(hiddenId);

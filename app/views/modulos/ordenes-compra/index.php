@@ -218,20 +218,12 @@ if (ocInputBuscar) {
     });
 }
 
-// ── Ordenamiento ──────────────────────────────────────────────────────────────
-document.querySelectorAll('.sortable-header').forEach(th => {
-    th.addEventListener('click', function() {
-        const field = this.dataset.sort;
-        if (!field) return;
-        if (ocCurrentSort === field) {
-            ocCurrentDir = ocCurrentDir === 'ASC' ? 'DESC' : 'ASC';
-        } else {
-            ocCurrentSort = field;
-            ocCurrentDir  = 'ASC';
-        }
-        ocBuscar(1);
-    });
-});
+// ── Ordenamiento (motor global: persiste __ordenCol__/__ordenDir__) ────────────
+window.CMG_initSort('ordenes-compra', (col, dir) => {
+    ocCurrentSort = col;
+    ocCurrentDir  = dir;
+    ocBuscar(1);
+}, { col: ocCurrentSort, dir: ocCurrentDir });
 
 // ── Paginación ────────────────────────────────────────────────────────────────
 window.ocCambiarPagina = function(page) { ocBuscar(page); };
