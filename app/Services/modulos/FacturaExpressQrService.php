@@ -448,13 +448,16 @@ class FacturaExpressQrService
                 'descuento'                 => 0,
                 'precio_total_sin_impuesto' => $base,
                 'porcentaje_iva'            => $porcentajeIva,
-                'impuestos'                 => $porcentajeIva > 0 ? [[
+                // El SRI exige SIEMPRE una línea de impuesto IVA por detalle, incluso
+                // con tarifa 0% (código '0', valor 0). Omitirla deja 'totalConImpuestos'
+                // vacío y el comprobante es rechazado por estructura XML inválida.
+                'impuestos'                 => [[
                     'codigo_impuesto'   => '2',
                     'codigo_porcentaje' => \App\Helpers\SriIvaHelper::codigoPorcentaje($porcentajeIva),
                     'tarifa'            => $porcentajeIva,
                     'base_imponible'    => $base,
                     'valor'             => $iva,
-                ]] : [],
+                ]],
             ];
         }
 
