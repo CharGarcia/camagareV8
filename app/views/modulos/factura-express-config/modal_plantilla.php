@@ -190,9 +190,9 @@ $formasPago       = $formasPago       ?? [];
                                     <table class="table table-sm table-detalle mb-0 text-nowrap">
                                         <thead>
                                             <tr class="table-light border-bottom">
-                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:35%;">Descripción / Servicio</th>
-                                                <th class="py-2 small fw-bold text-muted text-end" style="width:12%;">Precio Unit.</th>
-                                                <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">IVA</th>
+                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:30%;">Descripción / Servicio</th>
+                                                <th class="py-2 small fw-bold text-muted text-end" style="width:11%;">Precio Unit.</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width:16%;">IVA</th>
                                                 <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">Cant. default</th>
                                                 <th class="py-2 small fw-bold text-muted text-center" style="width:12%;">Cant. editable</th>
                                                 <th class="py-2 small fw-bold text-muted text-center" style="width:12%;">Preseleccionado</th>
@@ -408,6 +408,15 @@ $formasPago       = $formasPago       ?? [];
     }
 
     // Rellena la fila del input activo con los datos del producto elegido
+    // Etiqueta de IVA a mostrar: el nombre de la tarifa (ej. "Exento de IVA",
+    // "No objeto de impuesto", "15%"); si no hay nombre, cae al porcentaje.
+    function fexqrIvaLabel(nombre, pct) {
+        return (nombre != null && String(nombre).trim() !== '')
+            ? String(nombre)
+            : (parseFloat(pct ?? 0).toFixed(0) + '%');
+    }
+    const fexqrEscHtml = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
     window.fexqrAplicarProductoAFila = function(input, p) {
         const tr = input.closest('tr');
         if (!tr) return;
@@ -415,7 +424,7 @@ $formasPago       = $formasPago       ?? [];
         const idProd = tr.querySelector('[name*="id_producto"]');   if (idProd) idProd.value = p.id ?? '';
         const precio = tr.querySelector('[name*="precio_unitario"]'); if (precio) precio.value = parseFloat(p.precio_unitario ?? 0).toFixed(2);
         const ivaHid = tr.querySelector('[name*="porcentaje_iva"]');  if (ivaHid) ivaHid.value = parseFloat(p.porcentaje_iva ?? 0).toFixed(2);
-        const ivaBdg = tr.querySelector('.fexqr-iva-badge');          if (ivaBdg) ivaBdg.textContent = parseFloat(p.porcentaje_iva ?? 0).toFixed(0) + '%';
+        const ivaBdg = tr.querySelector('.fexqr-iva-badge');          if (ivaBdg) ivaBdg.textContent = fexqrIvaLabel(p.nombre_iva, p.porcentaje_iva);
     };
 
     // ── Contador de ítems ─────────────────────────────────────────────────────
@@ -440,8 +449,8 @@ $formasPago       = $formasPago       ?? [];
             </td>
             <td><input type="number" class="input-detalle text-end" name="items[${idx}][precio_unitario]"
                 value="${parseFloat(item.precio_unitario ?? 0).toFixed(2)}" min="0" step="0.01"></td>
-            <td class="text-center">
-                <span class="badge bg-light text-dark border fexqr-iva-badge" title="El IVA lo define el producto/servicio y no se puede editar aquí.">${parseFloat(item.porcentaje_iva ?? 0).toFixed(0)}%</span>
+            <td class="text-center" style="white-space:normal;">
+                <span class="badge bg-light text-dark border fexqr-iva-badge" title="El IVA lo define el producto/servicio y no se puede editar aquí.">${fexqrEscHtml(fexqrIvaLabel(item.nombre_iva, item.porcentaje_iva))}</span>
                 <input type="hidden" name="items[${idx}][porcentaje_iva]" value="${parseFloat(item.porcentaje_iva ?? 0).toFixed(2)}">
             </td>
             <td class="text-center"><input type="number" class="input-detalle text-center" name="items[${idx}][cantidad_default]"

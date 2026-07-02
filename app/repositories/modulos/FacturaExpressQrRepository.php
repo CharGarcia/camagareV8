@@ -160,7 +160,8 @@ class FacturaExpressQrRepository extends BaseRepository
     {
         $st = $this->db->prepare(
             "SELECT i.*, p.nombre AS nombre_producto,
-                    ti.porcentaje_iva AS producto_iva_actual
+                    ti.porcentaje_iva AS producto_iva_actual,
+                    ti.tarifa         AS nombre_iva
              FROM factura_express_items i
              LEFT JOIN productos p ON p.id = i.id_producto
              LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
@@ -175,7 +176,8 @@ class FacturaExpressQrRepository extends BaseRepository
     {
         $st = $this->db->prepare(
             "SELECT i.*, p.nombre AS nombre_producto,
-                    ti.porcentaje_iva AS producto_iva_actual
+                    ti.porcentaje_iva AS producto_iva_actual,
+                    ti.tarifa         AS nombre_iva
              FROM factura_express_items i
              LEFT JOIN productos p ON p.id = i.id_producto
              LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva

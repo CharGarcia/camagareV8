@@ -259,7 +259,8 @@ class FacturaExpressConfigController extends BaseModuloController
                        p.codigo,
                        p.nombre,
                        p.precio_base                                              AS precio_unitario,
-                       COALESCE(ti.porcentaje_iva, 0)                            AS porcentaje_iva
+                       COALESCE(ti.porcentaje_iva, 0)                            AS porcentaje_iva,
+                       ti.tarifa                                                 AS nombre_iva
                 FROM productos p
                 LEFT JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
                 WHERE p.id_empresa = :emp

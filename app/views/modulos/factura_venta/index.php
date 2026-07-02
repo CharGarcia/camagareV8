@@ -4627,31 +4627,28 @@ $totalPages = $totalPagesOriginal;
                     }
                 }
 
-                // Tarifa IVA desde impuestos del detalle
+                // Tarifa IVA: se prioriza el codigoPorcentaje del SRI porque 0%, "No
+                // objeto" (6) y "Exento" (7) comparten tarifa 0 y no se distinguen por
+                // el porcentaje. Respaldos: id_tarifa_iva y, por último, el porcentaje.
+                // Se selecciona la OPCIÓN exacta (opt.selected), no por .value: ante
+                // varias opciones con el mismo valor, .value elegiría siempre la primera.
                 const selIva = tr.querySelector('.input-iva');
-                let ivaAsignado = false;
-                if (d.impuestos && d.impuestos.length > 0) {
-                    const ivaTarifa = d.impuestos.find(i => i.codigo_impuesto == '2');
-                    if (ivaTarifa && selIva) {
-                        // Comparar numÃ©ricamente: "15.00" (DB) debe coincidir con value="15" (select)
-                        const pct = parseFloat(ivaTarifa.tarifa);
-                        const opt = Array.from(selIva.options).find(o => Math.abs(parseFloat(o.value) - pct) < 0.001);
-                        if (opt) { selIva.value = opt.value; ivaAsignado = true; }
-                    }
-                }
-                // Respaldo: facturas creadas por automatización pueden no tener filas
-                // de impuestos. Restaurar la tarifa desde id_tarifa_iva o porcentaje_iva
-                // de la línea para no perder el IVA al re-guardar.
-                if (!ivaAsignado && selIva) {
+                if (selIva) {
+                    const opts = Array.from(selIva.options);
+                    const ivaTarifa = (d.impuestos || []).find(i => i.codigo_impuesto == '2');
                     let opt = null;
-                    if (d.id_tarifa_iva) {
-                        opt = Array.from(selIva.options).find(o => o.dataset.id == d.id_tarifa_iva);
+                    if (ivaTarifa && ivaTarifa.codigo_porcentaje != null && ivaTarifa.codigo_porcentaje !== '') {
+                        opt = opts.find(o => o.dataset.codigo == ivaTarifa.codigo_porcentaje);
                     }
-                    if (!opt && d.porcentaje_iva != null && d.porcentaje_iva !== '') {
-                        const pct = parseFloat(d.porcentaje_iva);
-                        opt = Array.from(selIva.options).find(o => Math.abs(parseFloat(o.value) - pct) < 0.001);
+                    if (!opt && d.id_tarifa_iva) {
+                        opt = opts.find(o => o.dataset.id == d.id_tarifa_iva);
                     }
-                    if (opt) selIva.value = opt.value;
+                    if (!opt) {
+                        const pct = ivaTarifa ? parseFloat(ivaTarifa.tarifa)
+                                  : (d.porcentaje_iva != null && d.porcentaje_iva !== '' ? parseFloat(d.porcentaje_iva) : null);
+                        if (pct != null) opt = opts.find(o => Math.abs(parseFloat(o.value) - pct) < 0.001);
+                    }
+                    if (opt) opt.selected = true;
                 }
 
                 // Carga de Precios y Variantes
