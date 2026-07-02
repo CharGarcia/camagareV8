@@ -107,7 +107,12 @@ class FacturaExpressPublicoController extends Controller
             $items     = $plantilla ? $this->repo->getItemsActivosPorPlantilla((int)$plantilla['id']) : [];
             $config    = json_decode($plantilla['campos_config'] ?? '{}', true) ?: [];
             $this->renderFormulario($plantilla, $items, $config, $formData, $e->getMessage());
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            // Registrar el detalle real para diagnóstico; al cliente se le muestra un
+            // mensaje genérico. Antes esta excepción se tragaba sin dejar rastro.
+            error_log('[FacturaExpressPublico] Error al procesar solicitud (token=' . $token . '): '
+                . get_class($e) . ': ' . $e->getMessage()
+                . ' @ ' . $e->getFile() . ':' . $e->getLine());
             $this->renderError('Ocurrió un error al procesar tu solicitud. Por favor intenta nuevamente.');
         }
     }

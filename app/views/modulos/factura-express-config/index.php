@@ -232,7 +232,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         window._fexqrEditando = null;
         document.getElementById('fexqrModalTitulo').textContent = 'Nueva Plantilla QR';
         document.getElementById('formFexqr').reset();
-        document.getElementById('fexqrTbodyItems').innerHTML = '';
+        document.getElementById('fexqrTbodyItems').innerHTML =
+            '<tr id="fexqrItemsVacioRow"><td colspan="7" class="text-center text-muted py-3 small">' +
+            '<i class="bi bi-box-seam me-1"></i>Agregue los productos o servicios que aparecerán en el formulario</td></tr>';
+        window.fexqrActualizarContador && window.fexqrActualizarContador();
         document.getElementById('btnEliminarFexqr')?.classList.add('d-none');
         document.getElementById('fexqrChkActivo').checked     = true;
         document.getElementById('fexqrChkAprobacion').checked = true;
@@ -289,6 +292,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
             document.getElementById('fexqrTbodyItems').innerHTML = '';
             (p.items ?? []).forEach(item => fexqrAgregarItemFila(item));
+            if (!(p.items ?? []).length) {
+                document.getElementById('fexqrTbodyItems').innerHTML =
+                    '<tr id="fexqrItemsVacioRow"><td colspan="7" class="text-center text-muted py-3 small">' +
+                    '<i class="bi bi-box-seam me-1"></i>Agregue los productos o servicios que aparecerán en el formulario</td></tr>';
+            }
+            window.fexqrActualizarContador && window.fexqrActualizarContador();
 
             document.getElementById('btnEliminarFexqr')?.classList.remove('d-none');
         } catch(e) {

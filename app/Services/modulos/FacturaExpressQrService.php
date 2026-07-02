@@ -180,9 +180,12 @@ class FacturaExpressQrService
         try {
             $idSolicitud = $this->repo->insertSolicitud($data);
 
-            // Si la plantilla NO requiere aprobación, facturar directo
+            // Si la plantilla NO requiere aprobación, facturar directo. El flujo es
+            // público (sin sesión), así que la operación se atribuye al dueño que creó
+            // la plantilla; usar id 0 viola la FK de auditoría (created_by → usuarios).
             if (!$plantilla['requiere_aprobacion']) {
-                $this->_facturarSolicitud($idSolicitud, (int)$plantilla['id_empresa'], 0, $plantilla);
+                $idUsuarioSistema = (int) ($plantilla['created_by'] ?? 0);
+                $this->_facturarSolicitud($idSolicitud, (int)$plantilla['id_empresa'], $idUsuarioSistema, $plantilla);
             }
 
             $this->repo->commit();

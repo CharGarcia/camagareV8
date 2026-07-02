@@ -9,14 +9,15 @@ $puntosEmision    = $puntosEmision    ?? [];
 $formasPago       = $formasPago       ?? [];
 ?>
 <style>
-    .modal-fexqr .table-items th { font-size: .70rem !important; padding: 4px 6px !important; background:#f8f9fa; text-transform:uppercase; }
-    .modal-fexqr .table-items td { padding: 0 !important; vertical-align: middle; }
-    .modal-fexqr .inp-item       { height:28px !important; font-size:.80rem !important; padding:2px 5px !important; border:none; background:transparent; width:100%; }
-    .modal-fexqr .inp-item:focus { background:#fff; box-shadow:inset 0 0 0 1px #0d6efd; outline:none; }
-    .row-item:hover               { background:rgba(13,110,253,.03); }
-    .row-item .btn-del-item       { opacity:0; transition:opacity .2s; }
-    .row-item:hover .btn-del-item { opacity:1; }
-    #fexqrDdProd                  { z-index:9999 !important; position:fixed; max-height:220px; overflow-y:auto; min-width:350px; }
+    /* Grilla de ítems con el mismo diseño que la factura de venta (.table-detalle) */
+    .modal-fexqr .table-detalle th       { font-size: .7rem !important; padding: 4px 8px !important; text-transform: uppercase; background-color: #f8f9fa; }
+    .modal-fexqr .table-detalle td       { padding: 0 !important; vertical-align: middle; }
+    .modal-fexqr .input-detalle          { height: 30px !important; font-size: .82rem !important; padding: 2px 8px !important; border: none; background: transparent; width: 100%; }
+    .modal-fexqr .input-detalle:focus    { background: #fff; box-shadow: inset 0 0 0 1px #0d6efd; outline: none; }
+    .modal-fexqr .row-detalle:hover      { background-color: rgba(13,110,253,.03); }
+    .modal-fexqr .remove-row             { color: #dc3545; opacity: 0; transition: opacity .2s; }
+    .modal-fexqr .row-detalle:hover .remove-row { opacity: 1; }
+    #fexqrDdProd                         { z-index:9999 !important; position:fixed; max-height:220px; overflow-y:auto; min-width:350px; }
 </style>
 
 <div class="modal fade modal-fexqr" id="modalFexqr" tabindex="-1" data-bs-backdrop="static" style="z-index:1060">
@@ -185,16 +186,16 @@ $formasPago       = $formasPago       ?? [];
                         <!-- ── Pestaña 2: Ítems ──────────────────────────── -->
                         <div class="tab-pane fade p-3" id="pane-fexqr-items">
                             <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
-                                <div class="table-responsive" style="max-height:320px;">
-                                    <table class="table table-sm table-items mb-0 text-nowrap">
+                                <div class="table-responsive" style="max-height:350px;">
+                                    <table class="table table-sm table-detalle mb-0 text-nowrap">
                                         <thead>
                                             <tr class="table-light border-bottom">
-                                                <th class="ps-2" style="width:35%;">Descripción / Servicio</th>
-                                                <th style="width:12%;" class="text-end">Precio Unit.</th>
-                                                <th style="width:10%;" class="text-center">IVA %</th>
-                                                <th style="width:10%;" class="text-center">Cant. default</th>
-                                                <th style="width:12%;" class="text-center">Cant. editable</th>
-                                                <th style="width:12%;" class="text-center">Preseleccionado</th>
+                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:35%;">Descripción / Servicio</th>
+                                                <th class="py-2 small fw-bold text-muted text-end" style="width:12%;">Precio Unit.</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">IVA</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">Cant. default</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width:12%;">Cant. editable</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width:12%;">Preseleccionado</th>
                                                 <th style="width:40px;"></th>
                                             </tr>
                                         </thead>
@@ -207,12 +208,13 @@ $formasPago       = $formasPago       ?? [];
                                         </tbody>
                                     </table>
                                 </div>
-                                <!-- Buscador de productos -->
-                                <div class="border-top p-2 bg-light d-flex align-items-center gap-2">
-                                    <div class="input-group input-group-sm" style="max-width:350px;">
-                                        <span class="input-group-text bg-white border-end-0 text-primary"><i class="bi bi-search"></i></span>
-                                        <input type="text" class="form-control border-start-0 shadow-none"
-                                               id="fexqrSearchProd" placeholder="Buscar producto del catálogo..." autocomplete="off">
+                                <!-- Agregar línea + contador -->
+                                <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center">
+                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="fexqrAgregarItemFila({})">
+                                        <i class="bi bi-plus-circle me-1"></i> Agregar línea
+                                    </button>
+                                    <div class="small fw-bold text-muted pe-3">
+                                        Items: <span id="fexqrCountItems">0</span>
                                     </div>
                                 </div>
                             </div>
@@ -311,9 +313,7 @@ $formasPago       = $formasPago       ?? [];
     selEst.addEventListener('change', () => filtrarPuntosEmision(selEst.value));
     selPe.addEventListener('change',  actualizarSerie);
 
-    // ── Buscador de productos del catálogo ────────────────────────────────────
-    const inpProd = document.getElementById('fexqrSearchProd');
-
+    // ── Buscador predictivo de productos (desde el input de descripción) ───────
     // Dropdown global anclado al body (igual que factura de venta)
     let ddProd = document.getElementById('fexqrDdProd');
     if (!ddProd) {
@@ -323,24 +323,55 @@ $formasPago       = $formasPago       ?? [];
         ddProd.style.cssText = 'z-index:9999;min-width:400px;max-height:250px;overflow-y:auto;background:#fff;';
         document.body.appendChild(ddProd);
     }
+    let fexqrActiveInput = null; // input de descripción que disparó la búsqueda
 
-    function posicionarDd() {
-        const rect = inpProd.getBoundingClientRect();
+    function posicionarDd(input) {
+        const rect = input.getBoundingClientRect();
         ddProd.style.top   = (rect.bottom + 2) + 'px';
         ddProd.style.left  = rect.left + 'px';
-        ddProd.style.width = Math.max(rect.width, 400) + 'px';
+        ddProd.style.width = Math.max(rect.width, 350) + 'px';
     }
 
-    inpProd.addEventListener('input', () => {
+    // Delegación: se busca mientras se escribe en la descripción de cualquier fila
+    const tbodyItems = document.getElementById('fexqrTbodyItems');
+    tbodyItems.addEventListener('input', (e) => {
+        const input = e.target.closest('.fexqr-desc-search');
+        if (!input) return;
+        fexqrActiveInput = input;
         clearTimeout(timerProd);
-        const q = inpProd.value.trim();
+        const q = input.value.trim();
         if (q.length < 2) { ddProd.classList.add('d-none'); return; }
         timerProd = setTimeout(() => buscarProductos(q), 300);
     });
-    inpProd.addEventListener('blur', () => setTimeout(() => ddProd.classList.add('d-none'), 200));
+    tbodyItems.addEventListener('focusout', (e) => {
+        if (e.target.closest('.fexqr-desc-search')) {
+            setTimeout(() => ddProd.classList.add('d-none'), 200);
+        }
+    });
+
+    // Delete / Retroceso en la descripción: si la línea está enlazada a un producto,
+    // limpia toda la fila para poder buscar de nuevo (en texto libre se edita normal).
+    tbodyItems.addEventListener('keydown', (e) => {
+        if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+        const input = e.target.closest('.fexqr-desc-search');
+        if (!input) return;
+        const tr     = input.closest('tr');
+        const idProd = tr.querySelector('[name*="id_producto"]');
+        if (idProd && idProd.value) {
+            e.preventDefault();
+            input.value  = '';
+            idProd.value = '';
+            const precio = tr.querySelector('[name*="precio_unitario"]'); if (precio) precio.value = '0.00';
+            const ivaHid = tr.querySelector('[name*="porcentaje_iva"]');  if (ivaHid) ivaHid.value = '0.00';
+            const ivaBdg = tr.querySelector('.fexqr-iva-badge');          if (ivaBdg) ivaBdg.textContent = '0%';
+            ddProd.classList.add('d-none');
+            input.focus();
+        }
+    });
 
     async function buscarProductos(q) {
-        posicionarDd();
+        if (!fexqrActiveInput) return;
+        posicionarDd(fexqrActiveInput);
         ddProd.innerHTML = '<div class="list-group-item small text-muted py-1 px-2">Buscando...</div>';
         ddProd.classList.remove('d-none');
         try {
@@ -366,18 +397,9 @@ $formasPago       = $formasPago       ?? [];
                             $${parseFloat(p.precio_unitario ?? 0).toFixed(2)}
                         </span>
                     </div>`;
-                btn.onmousedown = (e) => {
-                    e.preventDefault();
-                    fexqrAgregarItemFila({
-                        id_producto:          p.id,
-                        descripcion:          p.nombre ?? '',
-                        precio_unitario:      parseFloat(p.precio_unitario ?? 0),
-                        porcentaje_iva:       parseFloat(p.porcentaje_iva ?? 0),
-                        cantidad_default:     1,
-                        cantidad_editable:    false,
-                        seleccionado_default: true,
-                    });
-                    inpProd.value = '';
+                btn.onmousedown = (ev) => {
+                    ev.preventDefault();
+                    fexqrAplicarProductoAFila(fexqrActiveInput, p);
                     ddProd.classList.add('d-none');
                 };
                 ddProd.appendChild(btn);
@@ -385,37 +407,56 @@ $formasPago       = $formasPago       ?? [];
         } catch(e) { console.error(e); ddProd.classList.add('d-none'); }
     }
 
+    // Rellena la fila del input activo con los datos del producto elegido
+    window.fexqrAplicarProductoAFila = function(input, p) {
+        const tr = input.closest('tr');
+        if (!tr) return;
+        input.value = p.nombre ?? '';
+        const idProd = tr.querySelector('[name*="id_producto"]');   if (idProd) idProd.value = p.id ?? '';
+        const precio = tr.querySelector('[name*="precio_unitario"]'); if (precio) precio.value = parseFloat(p.precio_unitario ?? 0).toFixed(2);
+        const ivaHid = tr.querySelector('[name*="porcentaje_iva"]');  if (ivaHid) ivaHid.value = parseFloat(p.porcentaje_iva ?? 0).toFixed(2);
+        const ivaBdg = tr.querySelector('.fexqr-iva-badge');          if (ivaBdg) ivaBdg.textContent = parseFloat(p.porcentaje_iva ?? 0).toFixed(0) + '%';
+    };
+
+    // ── Contador de ítems ─────────────────────────────────────────────────────
+    window.fexqrActualizarContador = function() {
+        const n = document.querySelectorAll('#fexqrTbodyItems tr.row-detalle').length;
+        const el = document.getElementById('fexqrCountItems');
+        if (el) el.textContent = n;
+    };
+
     // ── Agregar fila de ítem ──────────────────────────────────────────────────
     window.fexqrAgregarItemFila = function(item = {}) {
         document.getElementById('fexqrItemsVacioRow')?.remove();
         const idx = itemIdx++;
         const tr  = document.createElement('tr');
-        tr.className = 'row-item';
+        tr.className = 'row-detalle';
         tr.innerHTML = `
-            <td class="ps-2">
+            <td class="ps-3">
                 <input type="hidden" name="items[${idx}][id_producto]" value="${item.id_producto ?? ''}">
-                <input type="text" class="inp-item w-100" name="items[${idx}][descripcion]"
-                       value="${(item.descripcion ?? '').replace(/"/g,'&quot;')}"
-                       placeholder="Descripción del servicio..." style="min-width:160px;">
+                <input type="text" class="input-detalle fexqr-desc-search" name="items[${idx}][descripcion]"
+                       value="${(item.descripcion ?? '').replace(/"/g,'&quot;')}" autocomplete="off"
+                       placeholder="Escriba para buscar producto/servicio..." style="min-width:160px;">
             </td>
-            <td><input type="number" class="inp-item text-end" name="items[${idx}][precio_unitario]"
-                value="${parseFloat(item.precio_unitario ?? 0).toFixed(2)}" min="0" step="0.01" style="width:90px;"></td>
+            <td><input type="number" class="input-detalle text-end" name="items[${idx}][precio_unitario]"
+                value="${parseFloat(item.precio_unitario ?? 0).toFixed(2)}" min="0" step="0.01"></td>
             <td class="text-center">
-                <span class="badge bg-light text-dark border" title="El IVA lo define el producto/servicio y no se puede editar aquí.">${parseFloat(item.porcentaje_iva ?? 0).toFixed(0)}%</span>
+                <span class="badge bg-light text-dark border fexqr-iva-badge" title="El IVA lo define el producto/servicio y no se puede editar aquí.">${parseFloat(item.porcentaje_iva ?? 0).toFixed(0)}%</span>
                 <input type="hidden" name="items[${idx}][porcentaje_iva]" value="${parseFloat(item.porcentaje_iva ?? 0).toFixed(2)}">
             </td>
-            <td class="text-center"><input type="number" class="inp-item text-center" name="items[${idx}][cantidad_default]"
-                value="${parseFloat(item.cantidad_default ?? 1)}" min="0.001" step="0.001" style="width:60px;"></td>
+            <td class="text-center"><input type="number" class="input-detalle text-center" name="items[${idx}][cantidad_default]"
+                value="${parseFloat(item.cantidad_default ?? 1)}" min="0.001" step="0.001"></td>
             <td class="text-center"><input type="checkbox" class="form-check-input" name="items[${idx}][cantidad_editable]"
                 value="1" ${item.cantidad_editable ? 'checked' : ''}></td>
             <td class="text-center"><input type="checkbox" class="form-check-input" name="items[${idx}][seleccionado_default]"
                 value="1" ${item.seleccionado_default !== false ? 'checked' : ''}></td>
             <td class="text-center">
-                <button type="button" class="btn btn-sm btn-del-item px-1 py-0" onclick="this.closest('tr').remove()" title="Quitar">
-                    <i class="bi bi-x-lg text-danger"></i>
+                <button type="button" class="btn btn-sm remove-row px-1 py-0" onclick="this.closest('tr').remove(); fexqrActualizarContador();" title="Quitar">
+                    <i class="bi bi-x-lg"></i>
                 </button>
             </td>`;
         document.getElementById('fexqrTbodyItems').appendChild(tr);
+        fexqrActualizarContador();
     };
 
     // ── Guardar (crear / actualizar) ──────────────────────────────────────────
@@ -449,7 +490,7 @@ $formasPago       = $formasPago       ?? [];
 
         // Recoger ítems
         const items = [];
-        document.querySelectorAll('#fexqrTbodyItems tr.row-item').forEach(tr => {
+        document.querySelectorAll('#fexqrTbodyItems tr.row-detalle').forEach(tr => {
             items.push({
                 id_producto:          tr.querySelector('[name*="id_producto"]')?.value || null,
                 descripcion:          tr.querySelector('[name*="descripcion"]')?.value ?? '',
