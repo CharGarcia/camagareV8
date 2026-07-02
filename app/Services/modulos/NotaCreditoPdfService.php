@@ -20,6 +20,10 @@ class NotaCreditoPdfService
     private float $marginR  = 10;
     private float $contentW = 190;
 
+    /** Decimales configurados por la empresa (cantidad y precio unitario). */
+    private int $decCantidad = 2;
+    private int $decPrecio   = 2;
+
     /**
      * @param string $outputDest Destino TCPDF: 'D' descarga, 'I' inline, 'S' string.
      */
@@ -42,6 +46,10 @@ class NotaCreditoPdfService
 
     private function renderizar(array $nc, array $detalles, array $infoAdicional, array $empresa): void
     {
+        // Decimales configurados por la empresa (igual que en el sistema/UI).
+        $this->decCantidad = max(0, (int)($empresa['decimales_cantidad'] ?? 2));
+        $this->decPrecio   = max(0, (int)($empresa['decimales_precio']   ?? 2));
+
         $this->pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $this->pdf->SetCreator('Sistema');
         $this->pdf->SetAuthor($empresa['nombre'] ?? '');
@@ -190,7 +198,8 @@ class NotaCreditoPdfService
             $yIzq = $pdf->GetY() + 1;
         }
 
-        $rimpe = trim($empresa['regimen_rimpe'] ?? '');
+        // Régimen RIMPE (solo emprendedor / negocio popular; el general no se muestra)
+        $rimpe = \App\Helpers\SriEmisorHelper::regimenRimpeLeyenda($empresa);
         if ($rimpe) {
             $pdf->SetXY($mL + 2, $yIzq);
             $pdf->SetFont('helvetica', 'B', 7.5);
@@ -442,10 +451,10 @@ class NotaCreditoPdfService
             $vals = [
                 'codp' => $d['codigo_principal'] ?? '',
                 'coda' => $d['codigo_auxiliar']  ?? '',
-                'cant' => number_format((float)($d['cantidad'] ?? 0), 2),
+                'cant' => number_format((float)($d['cantidad'] ?? 0), $this->decCantidad),
                 'desc' => $d['descripcion'] ?? '',
                 'deta' => $d['info_adicional'] ?? ($d['detalle_adicional'] ?? ''),
-                'pu'   => number_format($pu, 2),
+                'pu'   => number_format($pu, $this->decPrecio),
                 'dcto' => number_format($dcto, 2),
                 'ptot' => number_format($ptot, 2),
             ];

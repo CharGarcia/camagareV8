@@ -191,8 +191,8 @@ class RetencionCompraPdfService
             $yIzq = $pdf->GetY() + 1;
         }
 
-        // Régimen RIMPE
-        $rimpe = trim($emp['regimen_rimpe'] ?? '');
+        // Régimen RIMPE (solo emprendedor / negocio popular; el general no se muestra)
+        $rimpe = \App\Helpers\SriEmisorHelper::regimenRimpeLeyenda($emp);
         if ($rimpe) {
             $pdf->SetXY($mL + 2, $yIzq);
             $pdf->SetFont(self::FUENTE, 'B', 7.5);

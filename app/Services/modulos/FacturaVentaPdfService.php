@@ -14,6 +14,10 @@ class FacturaVentaPdfService
     private float $pageW    = 210;
     private float $contentW = 190;
 
+    /** Decimales configurados por la empresa (cantidad y precio unitario). */
+    private int $decCantidad = 2;
+    private int $decPrecio   = 2;
+
     public function generar(array $cabecera, array $detalles, array $pagos, array $infoAdicional, array $empresa, string $outputDest = 'D')
     {
         $this->renderizar($cabecera, $detalles, $pagos, $infoAdicional, $empresa);
@@ -33,6 +37,10 @@ class FacturaVentaPdfService
 
     private function renderizar(array $cabecera, array $detalles, array $pagos, array $infoAdicional, array $empresa): void
     {
+        // Decimales configurados por la empresa (igual que en el sistema/UI).
+        $this->decCantidad = max(0, (int)($empresa['decimales_cantidad'] ?? 2));
+        $this->decPrecio   = max(0, (int)($empresa['decimales_precio']   ?? 2));
+
         $this->pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $this->pdf->SetCreator('Sistema');
         $this->pdf->SetAuthor($empresa['nombre'] ?? '');
@@ -208,8 +216,8 @@ class FacturaVentaPdfService
             $yIzq = $pdf->GetY() + 1;
         }
 
-        // Regimen RIMPE
-        $rimpe = trim($empresa['regimen_rimpe'] ?? '');
+        // Régimen RIMPE (solo emprendedor / negocio popular; el general no se muestra)
+        $rimpe = \App\Helpers\SriEmisorHelper::regimenRimpeLeyenda($empresa);
         if ($rimpe) {
             $pdf->SetXY($mL + 2, $yIzq);
             $pdf->SetFont('helvetica', 'B', 7.5);
@@ -466,12 +474,12 @@ class FacturaVentaPdfService
             $vals = [
                 'codp' => $d['codigo_principal'] ?? '',
                 'coda' => $d['codigo_auxiliar']  ?? '',
-                'cant' => number_format((float)($d['cantidad'] ?? 0), 2),
+                'cant' => number_format((float)($d['cantidad'] ?? 0), $this->decCantidad),
                 'desc' => $d['descripcion'] ?? '',
                 'deta' => $d['info_adicional'] ?? ($d['detalle_adicional'] ?? ''),
-                'pu'   => number_format($pu, 2),
-                'sub'  => number_format($subsidio, 2),
-                'pss'  => number_format($pss, 2),
+                'pu'   => number_format($pu, $this->decPrecio),
+                'sub'  => number_format($subsidio, $this->decPrecio),
+                'pss'  => number_format($pss, $this->decPrecio),
                 'dcto' => number_format($dcto, 2),
                 'ptot' => number_format($ptot, 2),
             ];

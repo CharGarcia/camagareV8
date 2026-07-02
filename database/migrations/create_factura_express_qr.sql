@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS factura_express_items (
     porcentaje_iva      NUMERIC(5,2)   NOT NULL DEFAULT 0,
     cantidad_default    NUMERIC(18,6)  NOT NULL DEFAULT 1,
     cantidad_editable   BOOLEAN        NOT NULL DEFAULT false,
+    precio_editable     BOOLEAN        NOT NULL DEFAULT false,
     seleccionado_default BOOLEAN       NOT NULL DEFAULT true,
     orden               INTEGER        NOT NULL DEFAULT 0,
     activo              BOOLEAN        NOT NULL DEFAULT true,

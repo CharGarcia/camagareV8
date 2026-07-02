@@ -34,4 +34,10 @@ return [
     // no resolver el captcha de forma automática y evitar bloqueos del usuario en el SRI.
     // Palanca reversible: poner en false para reactivar el modo automático.
     'sri_descarga_auto_suspendida' => true,
+
+    // Binario de PHP CLI para lanzar el worker de envío en lote al SRI en segundo
+    // plano (scripts/procesar_lote_sri.php). Vacío = autodetección
+    // (Windows: C:\xampp\php\php.exe si existe; en otro caso 'php' del PATH).
+    // Si el worker no arranca solo, indique aquí la ruta absoluta al ejecutable.
+    'sri_lote_php_bin' => '',
 ];

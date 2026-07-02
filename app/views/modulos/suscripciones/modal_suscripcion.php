@@ -311,6 +311,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
     const urlCli   = '<?= $urlBaseClientes ?>';
     const urlProd  = '<?= $urlBaseProductos ?>';
     const tarifasIva = <?= json_encode($tarifasIva ?? []) ?>;
+    // Decimales configurados en el módulo empresa (precio unitario y cantidad).
+    const SUSC_DEC_PRECIO = <?= (int) ($decimalesPrecio ?? 2) ?>;
+    const SUSC_DEC_CANT   = <?= (int) ($decimalesCantidad ?? 2) ?>;
+    const suscStepDec = (d) => d > 0 ? '0.' + '0'.repeat(d - 1) + '1' : '1';
     let suscDetLineIdx = 0;
 
     /* ── Buscador de clientes ─────────────────────────────────────────────────── */
@@ -399,10 +403,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
             if (!lista.length) { ddProd.innerHTML = '<div class="list-group-item text-muted small py-1 px-2">Sin resultados</div>'; ddProd.classList.remove('d-none'); return; }
             ddProd.innerHTML = lista.slice(0, 10).map(p => {
                 const nombre  = (p.nombre ?? '').replace(/</g, '&lt;');
-                const precio  = parseFloat(p.precio_base ?? p.precio_unitario ?? 0).toFixed(2);
+                const precio  = parseFloat(p.precio_base ?? p.precio_unitario ?? 0);
                 const iva     = parseFloat(p.porcentaje_iva_final ?? p.porcentaje_iva ?? p.iva ?? 0).toFixed(2);
                 const enc     = encodeURIComponent(JSON.stringify({id: p.id, n: nombre, p: precio, i: iva, tid: p.tarifa_iva ?? null}));
-                return `<button type="button" class="list-group-item list-group-item-action py-1 px-2 small" onclick='suscAsignarProductoFila("${enc}")'><strong>${nombre}</strong> - $${precio}</button>`;
+                return `<button type="button" class="list-group-item list-group-item-action py-1 px-2 small" onclick='suscAsignarProductoFila("${enc}")'><strong>${nombre}</strong> - $${precio.toFixed(SUSC_DEC_PRECIO)}</button>`;
             }).join('');
             ddProd.classList.remove('d-none');
         } catch (e) { console.error(e); }
@@ -415,7 +419,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         
         tr.querySelector('.det-id-prod').value = p.id;
         tr.querySelector('.det-desc').value = p.n;
-        tr.querySelector('.det-price').value = p.p;
+        tr.querySelector('.det-price').value = parseFloat(p.p ?? 0).toFixed(SUSC_DEC_PRECIO);
         
         let selectIva = tr.querySelector('.det-iva');
         if (p.tid) {
@@ -466,11 +470,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
             </td>
             <td class="text-center">
                 <input type="number" class="form-control form-control-sm input-detalle text-center det-qty" name="detalle[${idx}][cantidad]"
-                       value="${item.cantidad ?? 1}" min="0.001" step="0.001" oninput="suscRecalcFila(this)">
+                       value="${parseFloat(item.cantidad ?? 1).toFixed(SUSC_DEC_CANT)}" min="0" step="${suscStepDec(SUSC_DEC_CANT)}"
+                       oninput="suscRecalcFila(this)" onblur="this.value=parseFloat(this.value||0).toFixed(SUSC_DEC_CANT)">
             </td>
             <td class="text-end">
                 <input type="number" class="form-control form-control-sm input-detalle text-end det-price" name="detalle[${idx}][precio_unitario]"
-                       value="${parseFloat(item.precio_unitario ?? 0).toFixed(2)}" min="0" step="0.01" oninput="suscRecalcFila(this)">
+                       value="${parseFloat(item.precio_unitario ?? 0).toFixed(SUSC_DEC_PRECIO)}" min="0" step="${suscStepDec(SUSC_DEC_PRECIO)}"
+                       oninput="suscRecalcFila(this)" onblur="this.value=parseFloat(this.value||0).toFixed(SUSC_DEC_PRECIO)">
             </td>
             <td class="text-center align-middle">
                 <input type="hidden" class="det-porcentaje-iva" name="detalle[${idx}][porcentaje_iva]" value="${parseFloat(item.porcentaje_iva ?? 0)}">

@@ -216,9 +216,21 @@ class LiquidacionCompraController extends BaseModuloController
             $data['id_empresa'] = (int) $_SESSION['id_empresa'];
             $data['id_usuario'] = (int) $_SESSION['id_usuario'];
 
-            // Cargar configuración de la empresa para que el service pueda usarla
+            // Cargar configuración de la empresa para que el service pueda usarla.
+            // Fusionar la config del establecimiento (decimales, etc.) para que el
+            // XML use los mismos decimales que el sistema.
             $empresaModel = new \App\models\Empresa();
             $empresaData  = $empresaModel->getPorId($data['id_empresa']) ?? [];
+            try {
+                $establecimientos = $empresaModel->getEstablecimientos($data['id_empresa']);
+                if (!empty($establecimientos)) {
+                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
+                    if ($estConfig) {
+                        $empresaData = array_merge($empresaData, $estConfig);
+                    }
+                }
+            } catch (\Throwable $e) {}
             $data['empresa_config'] = $empresaData;
 
             // Procesar impuestos para cada detalle

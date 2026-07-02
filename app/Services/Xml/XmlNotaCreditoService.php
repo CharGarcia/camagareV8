@@ -9,6 +9,10 @@ namespace App\Services\Xml;
  */
 class XmlNotaCreditoService
 {
+    /** Decimales configurados por la empresa (cantidad y precio unitario). */
+    private int $decCantidad = 2;
+    private int $decPrecio   = 2;
+
     public function generar(
         array $cabecera,
         array $detalles,
@@ -16,6 +20,10 @@ class XmlNotaCreditoService
         array $empresa,
         ?string $dirEstablecimiento = null
     ): string {
+        // Decimales configurados por la empresa (acotados al rango SRI 0..6).
+        $this->decCantidad = max(0, min(6, (int)($empresa['decimales_cantidad'] ?? 2)));
+        $this->decPrecio   = max(0, min(6, (int)($empresa['decimales_precio']   ?? 2)));
+
         $dom = new \DOMDocument('1.0', 'UTF-8');
         $dom->formatOutput = false;
 
@@ -51,6 +59,17 @@ class XmlNotaCreditoService
         $this->txt($dom, $el, 'ptoEmi',          $cab['punto_emision']  ?? '001');
         $this->txt($dom, $el, 'secuencial',      str_pad((string)($cab['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT));
         $this->txt($dom, $el, 'dirMatriz',       $emp['direccion'] ?? '');
+
+        // Agente de retención (nº resolución) y régimen RIMPE, al final de
+        // infoTributaria (después de dirMatriz), según el XSD del SRI.
+        $agente = \App\Helpers\SriEmisorHelper::agenteRetencionNumero($emp);
+        if ($agente !== '') {
+            $this->txt($dom, $el, 'agenteRetencion', $agente);
+        }
+        $regimen = \App\Helpers\SriEmisorHelper::regimenRimpeLeyenda($emp);
+        if ($regimen !== '') {
+            $this->txt($dom, $el, 'contribuyenteRimpe', $regimen);
+        }
 
         return $el;
     }
@@ -181,8 +200,8 @@ class XmlNotaCreditoService
                 $this->txt($dom, $det, 'codigoAdicional', $codAdic);
             }
             $this->txt($dom, $det, 'descripcion',   $d['descripcion'] ?? '');
-            $this->txt($dom, $det, 'cantidad',      $this->dec6($d['cantidad']      ?? 0));
-            $this->txt($dom, $det, 'precioUnitario', $this->dec6($d['precio_unitario'] ?? 0));
+            $this->txt($dom, $det, 'cantidad',      $this->decConfig($d['cantidad']      ?? 0, $this->decCantidad));
+            $this->txt($dom, $det, 'precioUnitario', $this->decConfig($d['precio_unitario'] ?? 0, $this->decPrecio));
             $this->txt($dom, $det, 'descuento',      $this->dec2($d['descuento']     ?? 0));
             $this->txt($dom, $det, 'precioTotalSinImpuesto', $this->dec2($d['precio_total_sin_impuesto'] ?? 0));
 
@@ -231,4 +250,18 @@ class XmlNotaCreditoService
 
     private function dec2($val): string { return number_format((float)$val, 2, '.', ''); }
     private function dec6($val): string { return number_format((float)$val, 6, '.', ''); }
+
+    /**
+     * Formatea con los decimales configurados por la empresa, pero nunca por
+     * debajo de la precisión real del valor (tope 6). Evita perder precisión y
+     * "ERROR EN DIFERENCIAS" del SRI si algún dato tuviera más decimales.
+     */
+    private function decConfig(float|string $val, int $decConfig): string
+    {
+        $decConfig = max(0, min(6, $decConfig));
+        $limpio  = rtrim(rtrim(number_format((float)$val, 6, '.', ''), '0'), '.');
+        $pos     = strpos($limpio, '.');
+        $realDec = $pos === false ? 0 : strlen($limpio) - $pos - 1;
+        return number_format((float)$val, max($decConfig, $realDec), '.', '');
+    }
 }

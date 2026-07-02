@@ -190,18 +190,19 @@ $formasPago       = $formasPago       ?? [];
                                     <table class="table table-sm table-detalle mb-0 text-nowrap">
                                         <thead>
                                             <tr class="table-light border-bottom">
-                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:30%;">Descripción / Servicio</th>
-                                                <th class="py-2 small fw-bold text-muted text-end" style="width:11%;">Precio Unit.</th>
-                                                <th class="py-2 small fw-bold text-muted text-center" style="width:16%;">IVA</th>
-                                                <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">Cant. default</th>
-                                                <th class="py-2 small fw-bold text-muted text-center" style="width:12%;">Cant. editable</th>
-                                                <th class="py-2 small fw-bold text-muted text-center" style="width:12%;">Preseleccionado</th>
+                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:26%;">Descripción / Servicio</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width:9%;">Cant. default</th>
+                                                <th class="py-2 small fw-bold text-muted text-end" style="width:10%;">Precio Unit.</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width:10%;">Cant. editable</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width:9%;">Precio edit.</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width:11%;">Preseleccionado</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width:15%;">IVA</th>
                                                 <th style="width:40px;"></th>
                                             </tr>
                                         </thead>
                                         <tbody id="fexqrTbodyItems">
                                             <tr id="fexqrItemsVacioRow">
-                                                <td colspan="7" class="text-center text-muted py-3 small">
+                                                <td colspan="8" class="text-center text-muted py-3 small">
                                                     <i class="bi bi-box-seam me-1"></i>Agregue los productos o servicios que aparecerán en el formulario
                                                 </td>
                                             </tr>
@@ -447,18 +448,20 @@ $formasPago       = $formasPago       ?? [];
                        value="${(item.descripcion ?? '').replace(/"/g,'&quot;')}" autocomplete="off"
                        placeholder="Escriba para buscar producto/servicio..." style="min-width:160px;">
             </td>
+            <td class="text-center"><input type="number" class="input-detalle text-center" name="items[${idx}][cantidad_default]"
+                value="${parseFloat(item.cantidad_default ?? 1)}" min="0.001" step="0.001"></td>
             <td><input type="number" class="input-detalle text-end" name="items[${idx}][precio_unitario]"
                 value="${parseFloat(item.precio_unitario ?? 0).toFixed(2)}" min="0" step="0.01"></td>
+            <td class="text-center"><input type="checkbox" class="form-check-input" name="items[${idx}][cantidad_editable]"
+                value="1" ${item.cantidad_editable ? 'checked' : ''}></td>
+            <td class="text-center"><input type="checkbox" class="form-check-input" name="items[${idx}][precio_editable]"
+                value="1" ${item.precio_editable ? 'checked' : ''}></td>
+            <td class="text-center"><input type="checkbox" class="form-check-input" name="items[${idx}][seleccionado_default]"
+                value="1" ${item.seleccionado_default !== false ? 'checked' : ''}></td>
             <td class="text-center" style="white-space:normal;">
                 <span class="badge bg-light text-dark border fexqr-iva-badge" title="El IVA lo define el producto/servicio y no se puede editar aquí.">${fexqrEscHtml(fexqrIvaLabel(item.nombre_iva, item.porcentaje_iva))}</span>
                 <input type="hidden" name="items[${idx}][porcentaje_iva]" value="${parseFloat(item.porcentaje_iva ?? 0).toFixed(2)}">
             </td>
-            <td class="text-center"><input type="number" class="input-detalle text-center" name="items[${idx}][cantidad_default]"
-                value="${parseFloat(item.cantidad_default ?? 1)}" min="0.001" step="0.001"></td>
-            <td class="text-center"><input type="checkbox" class="form-check-input" name="items[${idx}][cantidad_editable]"
-                value="1" ${item.cantidad_editable ? 'checked' : ''}></td>
-            <td class="text-center"><input type="checkbox" class="form-check-input" name="items[${idx}][seleccionado_default]"
-                value="1" ${item.seleccionado_default !== false ? 'checked' : ''}></td>
             <td class="text-center">
                 <button type="button" class="btn btn-sm remove-row px-1 py-0" onclick="this.closest('tr').remove(); fexqrActualizarContador();" title="Quitar">
                     <i class="bi bi-x-lg"></i>
@@ -504,6 +507,7 @@ $formasPago       = $formasPago       ?? [];
                 id_producto:          tr.querySelector('[name*="id_producto"]')?.value || null,
                 descripcion:          tr.querySelector('[name*="descripcion"]')?.value ?? '',
                 precio_unitario:      tr.querySelector('[name*="precio_unitario"]')?.value ?? 0,
+                precio_editable:      tr.querySelector('[name*="precio_editable"]')?.checked ? 1 : 0,
                 porcentaje_iva:       tr.querySelector('[name*="porcentaje_iva"]')?.value ?? 0,
                 cantidad_default:     tr.querySelector('[name*="cantidad_default"]')?.value ?? 1,
                 cantidad_editable:    tr.querySelector('[name*="cantidad_editable"]')?.checked ? 1 : 0,

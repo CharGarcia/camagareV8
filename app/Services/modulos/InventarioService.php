@@ -368,7 +368,7 @@ class InventarioService
         return $this->repo->find($id, $idEmpresa);
     }
 
-    public function eliminarMovimiento(int $id, int $idEmpresa, int $idUsuario, bool $ignorarRestriccion = false, ?int $idUsuarioNivel = null): void
+    public function eliminarMovimiento(int $id, int $idEmpresa, int $idUsuario, bool $ignorarRestriccion = false, ?int $idUsuarioNivel = null, bool $permitirNegativo = false): void
     {
         $mov = $this->repo->find($id, $idEmpresa);
         if (!$mov) throw new \Exception("Movimiento no encontrado.");
@@ -386,7 +386,13 @@ class InventarioService
             $nuevoStock  = $stockActual - (float)$mov['cantidad'];
 
             if ($nuevoStock < 0) {
-                throw new \Exception("No se puede eliminar el movimiento porque el stock resultante sería negativo ({$nuevoStock}).");
+                if (!$permitirNegativo) {
+                    throw new \Exception("No se puede eliminar el movimiento porque el stock resultante sería negativo ({$nuevoStock}).");
+                }
+                // Modo tolerante (p. ej. al eliminar/anular una NC): no bloquear la
+                // operación; el stock que no alcanza a revertirse se ajusta a 0.
+                error_log("[Inventario] Revert con stock insuficiente (mov #{$id}, prod {$mov['id_producto']}, bodega {$mov['id_bodega']}): resultante {$nuevoStock} → 0.");
+                $nuevoStock = 0.0;
             }
 
             // Actualizar stock en bodega
@@ -458,10 +464,10 @@ class InventarioService
         $this->repo->actualizarStock($idProducto, $idBodega, $idEmpresa, $stockPost, $idUsuario);
     }
 
-    public function revertirMovimientosPorReferencia(string $tipoRef, int $idRef, int $idEmpresa, int $idUsuario): void
+    public function revertirMovimientosPorReferencia(string $tipoRef, int $idRef, int $idEmpresa, int $idUsuario, bool $permitirNegativo = false): void
     {
-        $sql = "SELECT id FROM inventario_kardex 
-                WHERE referencia_tipo = :tipo AND referencia_id = :id 
+        $sql = "SELECT id FROM inventario_kardex
+                WHERE referencia_tipo = :tipo AND referencia_id = :id
                   AND id_empresa = :e AND eliminado = false";
         $db = \App\core\Database::getConnection();
         $st = $db->prepare($sql);
@@ -469,7 +475,7 @@ class InventarioService
         $movs = $st->fetchAll(\PDO::FETCH_ASSOC);
 
         foreach ($movs as $m) {
-            $this->eliminarMovimiento((int)$m['id'], $idEmpresa, $idUsuario, true);
+            $this->eliminarMovimiento((int)$m['id'], $idEmpresa, $idUsuario, true, null, $permitirNegativo);
         }
     }
 

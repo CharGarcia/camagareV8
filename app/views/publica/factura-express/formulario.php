@@ -146,18 +146,29 @@
                         </thead>
                         <tbody>
                             <?php foreach ($items as $idx => $it): ?>
-                            <tr class="item-row" data-precio="<?= (float)$it['precio_unitario'] ?>" data-iva="<?= (float)$it['porcentaje_iva'] ?>">
+                            <tr class="item-row" data-precio="<?= (float)$it['precio_unitario'] ?>" data-iva="<?= (float)$it['porcentaje_iva'] ?>" data-iva-nombre="<?= htmlspecialchars($it['nombre_iva'] ?? '', ENT_QUOTES) ?>">
                                 <td class="ps-3 text-center">
                                     <input type="checkbox" name="items[<?= $idx ?>][id_item]" value="<?= (int)$it['id'] ?>"
                                            class="form-check-input item-check"
                                            <?= !empty($it['seleccionado_default']) ? 'checked' : '' ?>>
                                     <input type="hidden" name="items[<?= $idx ?>][id_producto]" value="<?= (int)($it['id_producto'] ?? 0) ?>">
                                     <input type="hidden" name="items[<?= $idx ?>][descripcion]" value="<?= htmlspecialchars($it['descripcion'], ENT_QUOTES) ?>">
+                                    <?php if (empty($it['precio_editable'])): ?>
                                     <input type="hidden" name="items[<?= $idx ?>][precio_unitario]" value="<?= (float)$it['precio_unitario'] ?>">
+                                    <?php endif; ?>
                                     <input type="hidden" name="items[<?= $idx ?>][porcentaje_iva]" value="<?= (float)$it['porcentaje_iva'] ?>">
                                 </td>
                                 <td><?= htmlspecialchars($it['descripcion']) ?></td>
-                                <td class="text-end">$<?= number_format((float)$it['precio_unitario'], 2) ?></td>
+                                <td class="text-end">
+                                    <?php if (!empty($it['precio_editable'])): ?>
+                                        <input type="number" name="items[<?= $idx ?>][precio_unitario]"
+                                               class="form-control form-control-sm text-end item-precio p-0"
+                                               style="width:80px;margin-left:auto;height:26px;font-size:.82rem"
+                                               value="<?= (float)$it['precio_unitario'] ?>" min="0" step="0.01">
+                                    <?php else: ?>
+                                        $<?= number_format((float)$it['precio_unitario'], 2) ?>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="text-center">
                                     <?php if (!empty($it['cantidad_editable'])): ?>
                                         <input type="number" name="items[<?= $idx ?>][cantidad]"
@@ -227,6 +238,12 @@
     const baseUrl = '<?= rtrim(BASE_URL, '/') ?>';
     const token   = '<?= htmlspecialchars($plantilla['token'] ?? '', ENT_QUOTES) ?>';
 
+    // Precio de la fila: del input editable si existe, si no del data-precio fijo.
+    function precioDeFila(row) {
+        const inp = row.querySelector('.item-precio');
+        return inp ? (parseFloat(inp.value) || 0) : (parseFloat(row.dataset.precio) || 0);
+    }
+
     function recalcTotales() {
         let subtotal = 0;
         const gruposIva = {}; // { '15': { base: 0, iva: 0 }, '0': { base: 0, iva: 0 }, ... }
@@ -234,7 +251,7 @@
         document.querySelectorAll('.item-row').forEach(row => {
             const chk   = row.querySelector('.item-check');
             if (!chk?.checked) return;
-            const precio = parseFloat(row.dataset.precio) || 0;
+            const precio = precioDeFila(row);
             const ivaP   = parseFloat(row.dataset.iva)   || 0;
             const cantEl = row.querySelector('.item-cantidad');
             const cant   = cantEl
@@ -242,22 +259,27 @@
                 : parseFloat(row.querySelector('input[type=hidden][name*=cantidad]')?.value || 1);
             const base   = precio * cant;
             subtotal += base;
-            const key = ivaP.toFixed(0);
-            if (!gruposIva[key]) gruposIva[key] = { base: 0, iva: 0, pct: ivaP };
-            gruposIva[key].base += base;
-            gruposIva[key].iva  += base * (ivaP / 100);
+            // Agrupar por CONCEPTO de tarifa (nombre), igual que la factura de venta:
+            // así "Exento de IVA", "No objeto de impuesto" y "0%" (todos con tarifa 0)
+            // aparecen como subtotales separados, no mezclados en "0%".
+            const label = row.dataset.ivaNombre && row.dataset.ivaNombre.trim() !== ''
+                ? row.dataset.ivaNombre
+                : (ivaP.toFixed(0) + '%');
+            if (!gruposIva[label]) gruposIva[label] = { base: 0, iva: 0, pct: ivaP, label };
+            gruposIva[label].base += base;
+            gruposIva[label].iva  += base * (ivaP / 100);
         });
 
         // Subtotal general
         document.getElementById('fexprSubtotal').textContent = subtotal.toFixed(2);
 
-        // Subtotales por tarifa IVA
+        // Subtotales por concepto de tarifa IVA
         const elSubs = document.getElementById('fexprSubtotalesIva');
         elSubs.innerHTML = '';
-        Object.entries(gruposIva).forEach(([key, g]) => {
+        Object.values(gruposIva).forEach(g => {
             const div = document.createElement('div');
             div.className = 'd-flex justify-content-between align-items-center mb-1';
-            div.innerHTML = `<span class="text-muted">Subtotal ${key}%</span><span class="fw-medium">${g.base.toFixed(2)}</span>`;
+            div.innerHTML = `<span class="text-muted">Subtotal ${g.label}</span><span class="fw-medium">${g.base.toFixed(2)}</span>`;
             elSubs.appendChild(div);
         });
 
@@ -265,12 +287,12 @@
         const elIvas = document.getElementById('fexprIvasGrupo');
         elIvas.innerHTML = '';
         let totalIva = 0;
-        Object.entries(gruposIva).forEach(([key, g]) => {
+        Object.values(gruposIva).forEach(g => {
             if (g.pct <= 0) return;
             totalIva += g.iva;
             const div = document.createElement('div');
             div.className = 'd-flex justify-content-between align-items-center mb-1';
-            div.innerHTML = `<span class="text-muted">(+) IVA ${key}%</span><span class="fw-medium">${g.iva.toFixed(2)}</span>`;
+            div.innerHTML = `<span class="text-muted">(+) IVA ${g.pct.toFixed(0)}%</span><span class="fw-medium">${g.iva.toFixed(2)}</span>`;
             elIvas.appendChild(div);
         });
 
@@ -278,18 +300,22 @@
         document.getElementById('fexprTotal').textContent = total.toFixed(2);
     }
 
-    document.querySelectorAll('.item-check, .item-cantidad').forEach(el => {
-        el.addEventListener('change', function() {
-            // Actualizar subtotal de la fila
-            const row  = this.closest('.item-row');
-            const chk  = row.querySelector('.item-check');
-            const precio  = parseFloat(row.dataset.precio) || 0;
-            const cantEl  = row.querySelector('.item-cantidad');
-            const cant    = cantEl ? parseFloat(cantEl.value) || 0 : parseFloat(row.querySelector('input[type=hidden][name*=cantidad]')?.value || 1);
-            const sub     = chk?.checked ? precio * cant : 0;
-            row.querySelector('.item-subtotal').textContent = '$' + sub.toFixed(2);
-            recalcTotales();
-        });
+    function actualizarFila(el) {
+        const row  = el.closest('.item-row');
+        const chk  = row.querySelector('.item-check');
+        const precio  = precioDeFila(row);
+        const cantEl  = row.querySelector('.item-cantidad');
+        const cant    = cantEl ? parseFloat(cantEl.value) || 0 : parseFloat(row.querySelector('input[type=hidden][name*=cantidad]')?.value || 1);
+        const sub     = chk?.checked ? precio * cant : 0;
+        row.querySelector('.item-subtotal').textContent = '$' + sub.toFixed(2);
+        recalcTotales();
+    }
+
+    document.querySelectorAll('.item-check, .item-cantidad, .item-precio').forEach(el => {
+        el.addEventListener('change', function() { actualizarFila(this); });
+        if (el.classList.contains('item-cantidad') || el.classList.contains('item-precio')) {
+            el.addEventListener('input', function() { actualizarFila(this); });
+        }
     });
 
     recalcTotales();

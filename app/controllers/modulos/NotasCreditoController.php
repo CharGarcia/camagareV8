@@ -370,7 +370,20 @@ class NotasCreditoController extends BaseModuloController
             $data['id_usuario'] = (int) $_SESSION['id_usuario'];
 
             $empresaModel = new Empresa();
-            $data['empresa_config'] = $empresaModel->getPorId($data['id_empresa']) ?? [];
+            $empresaData  = $empresaModel->getPorId($data['id_empresa']) ?? [];
+            // Fusionar config del establecimiento (decimales, etc.) para que el XML
+            // use los mismos decimales que el sistema.
+            try {
+                $establecimientos = $empresaModel->getEstablecimientos($data['id_empresa']);
+                if (!empty($establecimientos)) {
+                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
+                    if ($estConfig) {
+                        $empresaData = array_merge($empresaData, $estConfig);
+                    }
+                }
+            } catch (\Throwable $e) {}
+            $data['empresa_config'] = $empresaData;
 
             if (!empty($data['id_punto_emision'])) {
                 $db = \App\core\Database::getConnection();

@@ -210,11 +210,11 @@ class FacturaExpressQrRepository extends BaseRepository
         $st = $this->db->prepare(
             "INSERT INTO factura_express_items
              (id_plantilla, id_empresa, id_producto, descripcion, precio_unitario,
-              porcentaje_iva, cantidad_default, cantidad_editable, seleccionado_default,
+              porcentaje_iva, cantidad_default, cantidad_editable, precio_editable, seleccionado_default,
               orden, activo, created_at, created_by)
              VALUES
              (:id_plantilla, :id_empresa, :id_producto, :descripcion, :precio_unitario,
-              :porcentaje_iva, :cantidad_default, :cantidad_editable, :seleccionado_default,
+              :porcentaje_iva, :cantidad_default, :cantidad_editable, :precio_editable, :seleccionado_default,
               :orden, :activo, NOW(), :created_by)
              RETURNING id"
         );
@@ -227,6 +227,7 @@ class FacturaExpressQrRepository extends BaseRepository
             ':porcentaje_iva'      => (float) ($data['porcentaje_iva'] ?? 0),
             ':cantidad_default'    => (float) ($data['cantidad_default'] ?? 1),
             ':cantidad_editable'   => isset($data['cantidad_editable']) && $data['cantidad_editable'] ? 'true' : 'false',
+            ':precio_editable'     => isset($data['precio_editable']) && $data['precio_editable'] ? 'true' : 'false',
             ':seleccionado_default'=> isset($data['seleccionado_default']) && $data['seleccionado_default'] ? 'true' : 'false',
             ':orden'               => (int) ($data['orden'] ?? 0),
             ':activo'              => 'true',

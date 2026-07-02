@@ -48,6 +48,46 @@ class FacturaVentaRepository extends BaseRepository
             $params[':buscar'] = "%$textoLibre%";
         }
 
+        // ── Filtro especial: estado de pago (campo CALCULADO, no es columna) ──────
+        // Sintaxis: pago:pendiente | pago:abonada | pago:pagada (acepta sinónimos
+        // y lista, p. ej. pago:pendiente,abonada). Se resuelve con las mismas
+        // sumatorias (cobros + notas de crédito + retenciones) que la columna.
+        $pagoFiltro = $filtros['estado_pago'] ?? $filtros['pago'] ?? null;
+        unset($filtros['estado_pago'], $filtros['pago']);
+        if ($pagoFiltro !== null) {
+            $sqlAbonos =
+                "((SELECT COALESCE(SUM(ind.monto_cobrado),0) FROM ingresos_detalle ind "
+                . "INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id "
+                . "WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' "
+                . "AND inc.estado != 'anulado' AND inc.eliminado = false) "
+                . "+ (SELECT COALESCE(SUM(nc.importe_total),0) FROM notas_credito_cabecera nc "
+                . "WHERE nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) "
+                . "AND nc.id_empresa = v.id_empresa AND nc.estado != 'anulado' AND nc.eliminado = false) "
+                . "+ (SELECT COALESCE(SUM(r.total_renta + r.total_iva + r.total_isd),0) FROM retencion_venta_cabecera r "
+                . "WHERE r.eliminado = false AND r.id_empresa = v.id_empresa AND (r.id_venta = v.id "
+                . "OR EXISTS (SELECT 1 FROM retencion_venta_detalle rd WHERE rd.id_retencion = r.id "
+                . "AND rd.num_doc_sustento = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)))))";
+            $saldo = "(v.importe_total - $sqlAbonos)";
+
+            $valores = is_array($pagoFiltro['valor']) ? $pagoFiltro['valor'] : [$pagoFiltro['valor']];
+            $conds = [];
+            foreach ($valores as $val) {
+                $v2 = strtolower(trim((string)$val));
+                if (in_array($v2, ['pagada', 'pagado', 'pagadas', 'cobrada', 'cobrado'], true)) {
+                    $conds[] = "$saldo <= 0.01";
+                } elseif (in_array($v2, ['abonada', 'abonado', 'abonadas', 'parcial', 'abono'], true)) {
+                    $conds[] = "($saldo > 0.01 AND $sqlAbonos > 0)";
+                } elseif (in_array($v2, ['pendiente', 'pendientes', 'falta', 'sinpago', 'impaga', 'impagada'], true)) {
+                    $conds[] = "($saldo > 0.01 AND $sqlAbonos <= 0)";
+                }
+            }
+            if ($conds) {
+                $cond = '(' . implode(' OR ', $conds) . ')';
+                if (!empty($pagoFiltro['neg'])) $cond = "NOT $cond";
+                $where .= " AND $cond";
+            }
+        }
+
         // Aplicar filtros estructurados usando el helper genérico
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [
             'texto' => [
@@ -61,11 +101,18 @@ class FacturaVentaRepository extends BaseRepository
                 'usuario'        => 'u.nombre',
                 'obs'            => 'v.observaciones',
                 'observacion'    => 'v.observaciones',
+                'autorizacion'   => 'v.numero_autorizacion',
+                'clave'          => 'v.clave_acceso',
+                'clave_acceso'   => 'v.clave_acceso',
             ],
             'exacto' => [
-                'estado'        => 'v.estado',
-                'estado_correo' => 'v.estado_correo',
-                'correo'        => 'v.estado_correo',
+                'estado'         => 'v.estado',
+                'estado_correo'  => 'v.estado_correo',
+                'correo'         => 'v.estado_correo',
+                'estab'          => 'v.establecimiento',
+                'establecimiento' => 'v.establecimiento',
+                'punto'          => 'v.punto_emision',
+                'punto_emision'  => 'v.punto_emision',
             ],
             'fecha' => [
                 'fecha'         => 'v.fecha_emision',
@@ -76,6 +123,8 @@ class FacturaVentaRepository extends BaseRepository
                 'total'     => 'v.importe_total',
                 'subtotal'  => 'v.total_sin_impuestos',
                 'descuento' => 'v.total_descuento',
+                'ice'       => 'COALESCE(v.total_ice,0)',
+                'propina'   => 'COALESCE(v.propina,0)',
                 'iva'       => '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
             ],
         ]);

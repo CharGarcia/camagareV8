@@ -80,9 +80,9 @@ if (!defined('LEAFLET_LOADED')) {
                         <div class="ms-auto pb-1">
                             <?php
                             $pestanasConfigCli = [
-                                'tab-comercial'  => 'Comercial',
-                                'tab-cobros'     => 'Cobros',
-                                'tab-ubicacion'  => 'Ubicación',
+                                'tab-comercial-btn'  => 'Comercial',
+                                'tab-cobros-btn'     => 'Cobros',
+                                'tab-ubicacion-btn'  => 'Ubicación',
                             ];
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigCli, $vistaConfigCli ?? [], 'clientes');
                             ?>

@@ -68,6 +68,23 @@ class SuscripcionesController extends BaseModuloController
             $puntos = $empresaModel->getPuntosEmision((int) $establecimientos[0]['id']);
         }
 
+        // Los decimales se configuran a nivel de establecimiento (no en la tabla empresas),
+        // igual que en la factura de venta.
+        $decimalesPrecio   = 2;
+        $decimalesCantidad = 2;
+        if (!empty($establecimientos)) {
+            try {
+                $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
+                if ($estConfig) {
+                    $decimalesPrecio   = (int) ($estConfig['decimales_precio']   ?? 2);
+                    $decimalesCantidad = (int) ($estConfig['decimales_cantidad'] ?? 2);
+                }
+            } catch (\Throwable $e) {
+                // Migración pendiente — se usan valores por defecto (2).
+            }
+        }
+
         $this->viewWithLayout('layouts.main', 'modulos.suscripciones.index', [
             'titulo'         => 'Suscripciones',
             'perm'           => $perm,
@@ -84,6 +101,8 @@ class SuscripcionesController extends BaseModuloController
             'periodicidades' => $periodicidades,
             'tarifasIva'     => $tarifasIva,
             'puntos'         => $puntos,
+            'decimalesPrecio'   => $decimalesPrecio,
+            'decimalesCantidad' => $decimalesCantidad,
             'fullWidth'      => true,
         ]);
     }

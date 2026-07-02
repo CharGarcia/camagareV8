@@ -90,6 +90,17 @@ class XmlRetencionCompraService
         $this->addChild($dom, $node, 'secuencial',      str_pad((string)($cab['secuencial']      ?? '000000001'), 9, '0', STR_PAD_LEFT));
         $this->addChild($dom, $node, 'dirMatriz',       (string)($emp['direccion'] ?? ''));
 
+        // Agente de retención (nº resolución) y régimen RIMPE, al final de
+        // infoTributaria (después de dirMatriz), según el XSD del SRI.
+        $agente = \App\Helpers\SriEmisorHelper::agenteRetencionNumero($emp);
+        if ($agente !== '') {
+            $this->addChild($dom, $node, 'agenteRetencion', $agente);
+        }
+        $regimen = \App\Helpers\SriEmisorHelper::regimenRimpeLeyenda($emp);
+        if ($regimen !== '') {
+            $this->addChild($dom, $node, 'contribuyenteRimpe', $regimen);
+        }
+
         return $node;
     }
 

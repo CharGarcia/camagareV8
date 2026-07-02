@@ -16,6 +16,10 @@ class PlantillasPdfRendererService
     private array $datos = [];
     private PlantillasPdfRepository $repo;
 
+    /** Decimales configurados por la empresa (cantidad y precio unitario). */
+    private int $decCantidad = 2;
+    private int $decPrecio   = 2;
+
     public function __construct()
     {
         $this->repo = new PlantillasPdfRepository();
@@ -59,6 +63,10 @@ class PlantillasPdfRendererService
             'A5'     => 'A5',
             default  => 'A4',
         };
+
+        // Decimales configurados por la empresa (igual que en el sistema/UI).
+        $this->decCantidad = max(0, (int)($empresa['decimales_cantidad'] ?? 2));
+        $this->decPrecio   = max(0, (int)($empresa['decimales_precio']   ?? 2));
 
         $totales      = $this->calcularTotales($detalles, $cabecera);
         $this->datos  = $this->construirDatos($cabecera, $empresa, $totales);
@@ -284,7 +292,14 @@ class PlantillasPdfRendererService
                 $key = $col['key'] === 'detalle_adicional' ? 'info_adicional' : $col['key'];
                 $v   = (string)($d[$key] ?? $d[$col['key']] ?? '');
                 if (in_array($col['key'], $numericKeys)) {
-                    $v = number_format((float)$v, 2);
+                    // cantidad y precio unitario usan los decimales configurados;
+                    // descuento y total van a 2 (montos).
+                    $dec = match ($col['key']) {
+                        'cantidad'        => $this->decCantidad,
+                        'precio_unitario' => $this->decPrecio,
+                        default           => 2,
+                    };
+                    $v = number_format((float)$v, $dec);
                 }
                 $vals[] = $v;
             }

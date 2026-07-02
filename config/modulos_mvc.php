@@ -80,6 +80,13 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // Envío en lote de comprobantes electrónicos al SRI.
+    // Submódulo en submodulos_menu.ruta = 'modulos/envio-lote-sri' (módulo 11, Documentos).
+    'modulos/envio-lote-sri' => [
+        'id_submodulo' => 190,
+        'legacy_rutas' => [],
+    ],
+
     'modulos/transportistas' => [
         'id_submodulo' => 177,
         'legacy_rutas' => [],
