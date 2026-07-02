@@ -19,6 +19,33 @@ if (!function_exists('asset')) {
     }
 }
 
+if (!function_exists('url_absoluta')) {
+    /**
+     * URL absoluta (con esquema y dominio) para usar en correos u otros contextos
+     * externos donde una URL relativa no sirve. Usa APP_URL (config/local.php) si
+     * está definido; si no, la deriva del request actual ($_SERVER).
+     */
+    function url_absoluta(string $path = ''): string
+    {
+        $root = (defined('APP_URL') && APP_URL !== '') ? rtrim(APP_URL, '/') : '';
+
+        if ($root === '') {
+            $https  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+                   || (($_SERVER['SERVER_PORT'] ?? '') == 443)
+                   || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+            $scheme = $https ? 'https' : 'http';
+            $host   = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? '';
+            if ($host !== '') {
+                $root = $scheme . '://' . $host;
+            }
+        }
+
+        $full = $root . rtrim(BASE_URL ?? '', '/');
+        $path = ltrim($path, '/');
+        return $path !== '' ? "{$full}/{$path}" : $full;
+    }
+}
+
 if (!function_exists('iconoClase')) {
     function iconoClase(?string $nombre): string
     {

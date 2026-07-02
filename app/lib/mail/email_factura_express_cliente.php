@@ -9,7 +9,7 @@
 $solicitud    = $data['solicitud'] ?? [];
 $items        = json_decode($solicitud['items_json'] ?? '[]', true) ?: [];
 $tokenCliente = $solicitud['token_cliente'] ?? '';
-$urlEstado    = $tokenCliente ? rtrim(BASE_URL, '/') . '/factura-express/' . $tokenCliente . '/estado' : '';
+$urlEstado    = $tokenCliente ? url_absoluta('factura-express/' . $tokenCliente . '/estado') : '';
 ?>
 <table align="center" cellpadding="0" cellspacing="0" width="100%"
        style="max-width:600px;margin:40px auto;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,.05);border:1px solid #e2e8f0;">
