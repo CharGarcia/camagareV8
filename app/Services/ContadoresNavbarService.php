@@ -60,6 +60,9 @@ class ContadoresNavbarService
     /** Umbral BASE en días para avisar que la suscripción está por vencer (semestral/anual/manual). */
     private const UMBRAL_VIGENCIA_DIAS = 15;
 
+    /** Umbral en días para avisar que la firma electrónica está por caducar (incluye caducadas). */
+    private const UMBRAL_FIRMA_DIAS = 5;
+
     /**
      * Umbral de aviso ESCALADO según la periodicidad de la suscripción.
      * Evita que una suscripción mensual mantenga el badge encendido todo el mes
@@ -149,6 +152,12 @@ class ContadoresNavbarService
         } catch (\Throwable $e) {
             $datos['__vigencia'] = null;
         }
+        // Estado de la firma electrónica (['sin_firma'=>true] | ['dias'=>int] | null).
+        try {
+            $datos['__firma'] = $this->repo->getEstadoFirma($idEmpresa);
+        } catch (\Throwable $e) {
+            $datos['__firma'] = null;
+        }
         Cache::set(self::claveEmpresa($idEmpresa), $datos, self::TTL_CONTADORES);
         return $datos;
     }
@@ -236,6 +245,20 @@ class ContadoresNavbarService
                         $out['suscripcion'] = [
                             'dias'   => $dias,
                             'estado' => $dias < 0 ? 'vencida' : 'por_vencer',
+                        ];
+                    }
+                }
+
+                // Firma electrónica: avisar si no hay firma vigente, o si está por caducar/caducada.
+                $firma = $empresa['__firma'] ?? null;
+                if (is_array($firma)) {
+                    if (!empty($firma['sin_firma'])) {
+                        $out['firma'] = ['dias' => null, 'estado' => 'sin_firma'];
+                    } elseif (isset($firma['dias']) && (int) $firma['dias'] <= self::UMBRAL_FIRMA_DIAS) {
+                        $dias = (int) $firma['dias'];
+                        $out['firma'] = [
+                            'dias'   => $dias,
+                            'estado' => $dias < 0 ? 'caducada' : 'por_caducar',
                         ];
                     }
                 }

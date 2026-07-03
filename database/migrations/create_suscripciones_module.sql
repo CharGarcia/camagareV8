@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS suscripciones_detalle (
     id_producto      INTEGER        NOT NULL,
     descripcion      VARCHAR(300),
     cantidad         NUMERIC(18,6)  NOT NULL DEFAULT 1,
-    precio_unitario  NUMERIC(14,2)  NOT NULL DEFAULT 0,
+    precio_unitario  NUMERIC(18,6)  NOT NULL DEFAULT 0,
     porcentaje_iva   NUMERIC(5,2)   NOT NULL DEFAULT 0,
     orden            INTEGER        NOT NULL DEFAULT 0,
 

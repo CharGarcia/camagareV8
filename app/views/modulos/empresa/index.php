@@ -372,13 +372,63 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                 <?php endif; ?>
                                             <?php endforeach; ?>
                                         <?php else: ?>
-                                            <div class="alert alert-info d-flex align-items-center py-2 px-3 mb-0" style="font-size: 0.72rem;">
+                                            <div class="alert alert-info d-flex align-items-center py-2 px-3 mb-3" style="font-size: 0.72rem;">
                                                 <i class="bi bi-info-circle me-2"></i>
                                                 <div>
                                                     No hay ninguna <strong>suscripción asociada</strong> a la empresa actual (RUC <strong><?= htmlspecialchars($empresa['ruc'] ?? '') ?></strong>).
                                                     <?php if (empty($suscripcion_controladora)): ?>
                                                         <br><span class="text-muted">No se ha definido la empresa que controla las suscripciones. Configúrala en <em>Empresas del sistema</em>.</span>
                                                     <?php endif; ?>
+                                                    <br><span class="text-muted">Se muestran los datos manuales de vigencia.</span>
+                                                </div>
+                                            </div>
+                                            <div class="row g-3 align-items-center">
+                                                <div class="col-md-2">
+                                                    <div class="text-muted mb-1" style="font-size: 0.65rem;">Costo de Suscripción</div>
+                                                    <div class="fw-bold text-dark" style="font-size: 0.8rem;">$ <?= number_format((float)($empresa['valor_cobro'] ?? 0), 2) ?></div>
+                                                </div>
+                                                <div class="col-md-3 border-start ps-3">
+                                                    <div class="form-check form-switch">
+                                                        <input class="form-check-input" type="checkbox" name="cancelar_renovacion" id="cancelar_renovacion" <?= ($empresa['cancelar_renovacion'] ?? false) ? 'checked' : '' ?>>
+                                                        <label class="form-check-label fw-bold text-danger" for="cancelar_renovacion" style="font-size: 0.7rem;">CANCELAR RENOVACIÓN</label>
+                                                    </div>
+                                                    <div class="text-muted mt-1" style="font-size: 0.6rem;">No renovar automáticamente</div>
+                                                </div>
+                                                <div class="col-md-2 border-start ps-3">
+                                                    <div class="text-muted mb-1" style="font-size: 0.65rem;">Estado de Pago</div>
+                                                    <?php $estP = strtolower($empresa['estado_pago'] ?? 'pendiente'); ?>
+                                                    <span class="badge bg-<?= ($estP === 'pagado') ? 'success' : 'warning' ?> bg-opacity-10 text-<?= ($estP === 'pagado') ? 'success' : 'warning' ?> rounded-pill" style="font-size: 0.65rem;">
+                                                        <i class="bi bi-circle-fill me-1" style="font-size: 0.4rem;"></i> <?= strtoupper($estP) ?>
+                                                    </span>
+                                                </div>
+                                                <div class="col-md-5 border-start ps-4">
+                                                    <?php
+                                                    $desde = $empresa['periodo_vigencia_desde'] ?? null;
+                                                    $hasta = $empresa['periodo_vigencia_hasta'] ?? null;
+                                                    $porcentaje = 0;
+                                                    $diasRestantes = 0;
+                                                    $colorBar = 'primary';
+                                                    if ($desde && $hasta) {
+                                                        $t1 = strtotime($desde);
+                                                        $t2 = strtotime($hasta);
+                                                        $now = time();
+                                                        $total = $t2 - $t1;
+                                                        if ($total > 0) {
+                                                            $transcurrido = $now - $t1;
+                                                            $porcentaje = min(100, max(0, round(($transcurrido / $total) * 100)));
+                                                            $diasRestantes = ceil(($t2 - $now) / 86400);
+                                                            if ($diasRestantes < 15) $colorBar = 'danger';
+                                                            elseif ($diasRestantes < 30) $colorBar = 'warning';
+                                                        }
+                                                    }
+                                                    ?>
+                                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                                        <div class="text-muted" style="font-size: 0.65rem;">Vigencia: <span class="text-dark fw-bold"><?= $desde ? date('d-m-Y', strtotime($desde)) : '-' ?></span> al <span class="text-dark fw-bold"><?= $hasta ? date('d-m-Y', strtotime($hasta)) : '-' ?></span></div>
+                                                        <div class="fw-bold text-<?= $colorBar ?>" style="font-size: 0.65rem;"><?= max(0, $diasRestantes) ?> días restantes</div>
+                                                    </div>
+                                                    <div class="progress" style="height: 6px; background: #e2e8f0;">
+                                                        <div class="progress-bar bg-<?= $colorBar ?> progress-bar-striped progress-bar-animated" role="progressbar" style="width: <?= 100 - $porcentaje ?>%"></div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         <?php endif; ?>

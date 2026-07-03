@@ -206,4 +206,49 @@ class ContadoresNavbarRepository
             'meses' => $meses,
         ];
     }
+
+    /**
+     * Estado de la FIRMA ELECTRÓNICA vigente (es_activo) de la empresa activa.
+     *
+     * Usa la misma firma que el sistema emplea para firmar (empresa_firma con
+     * es_activo = true, la de expiración más lejana si hubiera varias).
+     *
+     * @return array{sin_firma:bool}|array{dias:int}|null
+     *   - ['sin_firma' => true]  → no hay ninguna firma vigente instalada.
+     *   - ['dias' => int]        → hay firma vigente; días restantes (negativo = caducada).
+     *   - null                   → firma vigente sin fecha de expiración, o tabla no disponible
+     *                              (no se puede/ no procede avisar).
+     */
+    public function getEstadoFirma(int $idEmpresa): ?array
+    {
+        try {
+            $st = $this->db->prepare(
+                "SELECT fecha_expiracion
+                 FROM empresa_firma
+                 WHERE id_empresa = :e AND es_activo = TRUE AND eliminado = FALSE
+                 ORDER BY fecha_expiracion DESC NULLS LAST, created_at DESC
+                 LIMIT 1"
+            );
+            $st->execute([':e' => $idEmpresa]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            return null; // tabla/columnas no disponibles → no avisar
+        }
+
+        // Sin firma vigente instalada (ninguna es_activo).
+        if ($row === false) {
+            return ['sin_firma' => true];
+        }
+
+        $fecha = $row['fecha_expiracion'] ?? null;
+        if (empty($fecha)) {
+            return null; // firma activa sin fecha → no se puede calcular
+        }
+        $t2 = strtotime((string) $fecha);
+        if ($t2 === false) {
+            return null;
+        }
+
+        return ['dias' => (int) ceil(($t2 - time()) / 86400)];
+    }
 }

@@ -292,6 +292,12 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-suscripcion-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
             </a>
 
+            <!-- Firma electrónica por caducar / caducada (empresa activa) -->
+            <a href="<?= $base ?>/modulos/empresa" class="text-white text-decoration-none position-relative me-2 d-none cmg-firma-wrap" title="Firma electrónica">
+                <i class="bi bi-file-earmark-lock-fill" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-firma-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
+
             <a id="tareas-alertas-link" href="<?= $base ?>/config/tareas-obligaciones" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update tareas-alertas-link" title="Tareas pendientes/vencidas" data-navbar-link="true">
                 <i class="bi bi-bell-fill" style="font-size: 1.1rem;"></i>
                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger tareas-alertas-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
@@ -395,6 +401,11 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                     <i class="bi bi-shield-exclamation text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-suscripcion-badge">0</span>
                     <small>Suscrip.</small>
+                </a>
+                <a class="cmg-firma-wrap d-none" href="<?= $base ?>/modulos/empresa">
+                    <i class="bi bi-file-earmark-lock-fill text-danger"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-firma-badge">0</span>
+                    <small>Firma</small>
                 </a>
                 <a class="cmg-icon-update tareas-alertas-link d-none" href="<?= $base ?>/config/tareas-obligaciones">
                     <i class="bi bi-bell-fill"></i>
@@ -616,6 +627,34 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                     suscWraps.forEach(function(w) { w.classList.remove('d-none'); w.setAttribute('title', titulo); });
                 } else {
                     suscWraps.forEach(function(w) { w.classList.add('d-none'); });
+                }
+
+                // Firma electrónica (empresa activa): sin firma / por caducar / caducada
+                const firma = c.firma || null;
+                const firmaWraps = document.querySelectorAll('.cmg-firma-wrap');
+                if (firma) {
+                    let txt, esUrgente, titulo;
+                    if (firma.estado === 'sin_firma') {
+                        txt = '!'; esUrgente = true;
+                        titulo = 'No hay firma electrónica configurada — clic para instalarla';
+                    } else {
+                        const dias = parseInt(firma.dias, 10);
+                        const caducada = firma.estado === 'caducada' || dias < 0;
+                        esUrgente = caducada || dias < 15; // rojo si <15 días o caducada
+                        txt = caducada ? '!' : String(dias);
+                        titulo = caducada
+                            ? 'Firma electrónica CADUCADA — clic para renovarla'
+                            : ('Firma electrónica por caducar en ' + dias + (dias === 1 ? ' día' : ' días') + ' — clic para ver el detalle');
+                    }
+                    document.querySelectorAll('.cmg-firma-badge').forEach(function(b) {
+                        b.textContent = txt;
+                        b.classList.remove('bg-warning', 'text-dark', 'bg-danger', 'text-white');
+                        if (esUrgente) { b.classList.add('bg-danger', 'text-white'); }
+                        else { b.classList.add('bg-warning', 'text-dark'); }
+                    });
+                    firmaWraps.forEach(function(w) { w.classList.remove('d-none'); w.setAttribute('title', titulo); });
+                } else {
+                    firmaWraps.forEach(function(w) { w.classList.add('d-none'); });
                 }
             } catch (e) {}
             finally { CMG_contadoresEnVuelo = false; }

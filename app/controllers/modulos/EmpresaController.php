@@ -154,9 +154,8 @@ class EmpresaController extends BaseModuloController
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
-        
+
         $output = ob_get_clean();
-        file_put_contents(MVC_ROOT . '/scratch/last_ajax_response.txt', $output);
         echo $output;
         exit;
     }
