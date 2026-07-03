@@ -55,7 +55,6 @@ class AsientosContablesController extends BaseModuloController
         $this->viewWithLayout('layouts.main', 'modulos.asientos_contables.index', [
             'titulo'     => 'Libro Diario / Asientos',
             'perm'       => $perm,
-            'warnings'   => $warnings,
             'rutaModulo' => self::RUTA_MODULO,
             'rows'       => $rows,
             'total'      => $total,
