@@ -178,7 +178,8 @@ class ComprobanteCajaPdfService
         $pdf->SetXY($mL + 2, $y + 2);
         $pdf->Cell(28, 5, $cfg['sujeto_label'] . ':', 0, 0, 'L');
         $pdf->SetFont('helvetica', '', 9);
-        $pdf->Cell(90, 5, $cfg['sujeto_nombre'], 0, 0, 'L');
+        // Ajustar el nombre al ancho disponible (90mm) para no invadir la columna Fecha.
+        $pdf->Cell(90, 5, $this->ajustarTexto((string)$cfg['sujeto_nombre'], 90), 0, 0, 'L');
 
         $pdf->SetFont('helvetica', 'B', 8);
         $pdf->Cell(18, 5, 'Fecha:', 0, 0, 'R');
@@ -388,13 +389,15 @@ class ComprobanteCajaPdfService
         foreach ($firmas as $f) {
             $pdf->Cell($colW, 4, $f[0], 0, 0, 'C');
         }
-        $pdf->Ln();
+
+        // Nombres (envuelven dentro de su columna para no desbordar)
         $pdf->SetFont('helvetica', '', 7.5);
-        $pdf->SetX($mL);
-        foreach ($firmas as $f) {
-            $pdf->Cell($colW, 4, $f[1] !== '' ? $f[1] : ' ', 0, 0, 'C');
+        $yName = $y + 17;
+        foreach ($firmas as $i => $f) {
+            $x = $mL + $i * $colW;
+            $pdf->SetXY($x + 3, $yName);
+            $pdf->MultiCell($colW - 6, 3.4, $f[1] !== '' ? $f[1] : ' ', 0, 'C', false, 0, '', '', true, 0, false, true, 0, 'T');
         }
-        $pdf->Ln();
     }
 
     private function dibujarPie(): void
@@ -430,6 +433,19 @@ class ComprobanteCajaPdfService
             }
         }
         return '';
+    }
+
+    /** Recorta un texto (con …) para que quepa en $ancho mm con la fuente actual. */
+    private function ajustarTexto(string $txto, float $ancho): string
+    {
+        $txto = trim($txto);
+        if ($txto === '' || $this->pdf->GetStringWidth($txto) <= $ancho) {
+            return $txto;
+        }
+        while ($txto !== '' && $this->pdf->GetStringWidth($txto . '…') > $ancho) {
+            $txto = mb_substr($txto, 0, -1);
+        }
+        return rtrim($txto) . '…';
     }
 
     private function montoEnLetras(float $monto): string

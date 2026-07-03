@@ -1454,7 +1454,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const id = document.getElementById('eg-input-id').value;
         if (!id) return;
         const a = document.createElement('a');
-        a.href = `${EGR_URL}/pdf?id=${id}`;
+        a.href = `${EGR_URL}/pdf?id=${id}&_=${Date.now()}`;
         a.download = '';
         document.body.appendChild(a);
         a.click();
