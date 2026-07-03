@@ -263,7 +263,6 @@ function CXC_renderAgrupado(filas) {
             <td class="text-center p-1"><i class="bi ${chev} text-success"></i></td>
             <td colspan="5" class="fw-bold" style="font-size:.82rem;">
                 ${esc(g.nombre)}
-                ${g.ruc ? `<small class="text-muted fw-normal ms-1">${esc(g.ruc)}</small>` : ''}
                 <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2 fw-normal">${g.items.length} doc${g.items.length !== 1 ? 's' : ''}</span>
             </td>
             <td class="text-end fw-semibold" style="font-size:.8rem;">$${CXC_fmt(g.total)}</td>

@@ -216,7 +216,6 @@ function CXP_filaHtml(r) {
             <!-- Proveedor -->
             <td title="${cxpEsc(r.proveedor_nombre)}" style="font-size:.8rem;">
                 ${cxpEsc(r.proveedor_nombre)}
-                ${r.proveedor_ruc ? `<br><small class="text-muted" style="font-size:.68rem;">${cxpEsc(r.proveedor_ruc)}</small>` : ''}
             </td>
 
             <!-- F.Emisión -->
@@ -297,7 +296,6 @@ function CXP_renderAgrupado(filas) {
             <td colspan="5" class="ps-2 fw-bold" style="font-size:.82rem;">
                 <i class="bi ${chev} text-primary me-1"></i>
                 ${cxpEsc(g.nombre)}
-                ${g.ruc ? `<small class="text-muted fw-normal ms-1">${cxpEsc(g.ruc)}</small>` : ''}
                 <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-2 fw-normal">${g.items.length} doc${g.items.length !== 1 ? 's' : ''}</span>
             </td>
             <td class="text-end fw-semibold" style="font-size:.8rem;">$${CXP_fmt(g.total)}</td>

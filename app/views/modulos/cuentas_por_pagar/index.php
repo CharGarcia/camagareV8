@@ -4,7 +4,7 @@
 <style>
     .cxp-header { flex-shrink: 0; }
     /* Tabla principal */
-    .cxp-scroll { max-height: calc(100vh - 390px); min-height: 220px; overflow-y: auto; overflow-x: auto; }
+    .cxp-scroll { max-height: calc(100vh - 230px); min-height: 320px; overflow-y: auto; overflow-x: auto; }
     .cxp-scroll thead th {
         position: sticky; top: 0; z-index: 10;
         background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6;
