@@ -42,6 +42,14 @@ class LogSistemaService
             ':ip'   => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
             ':ua'   => $_SERVER['HTTP_USER_AGENT'] ?? 'CLI'
         ]);
+
+        // Invalidar la caché de contadores del navbar si la tabla es relevante.
+        // Envuelto en try/catch: la invalidación de caché JAMÁS debe afectar la auditoría.
+        try {
+            \App\Services\ContadoresNavbarService::invalidarPorTabla($tabla, $idEmpresa);
+        } catch (\Throwable $e) {
+            // Silencioso a propósito.
+        }
     }
 
     /**

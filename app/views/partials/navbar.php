@@ -438,169 +438,9 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
             document.body.appendChild(offcanvasMenu);
         }
     });
-    window.updateGuiasRemisionBorradorBadge = async function() {
-        const icons = document.querySelectorAll('.guias-remision-borrador-icon');
-        const badges = document.querySelectorAll('.guias-remision-borrador-badge');
-        if (icons.length === 0 || badges.length === 0) return;
-        try {
-            const resp = await fetch('<?= $base ?>/modulos/guias_remision/countBorradoresAjax');
-            const data = await resp.json();
-            if (data.ok && data.count > 0) {
-                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
-                icons.forEach(i => i.classList.remove('d-none'));
-            } else {
-                icons.forEach(i => i.classList.add('d-none'));
-            }
-        } catch (e) {}
-    };
-
-    window.updateNotasCreditoBorradorBadge = async function() {
-        const icons = document.querySelectorAll('.notas-credito-borrador-icon');
-        const badges = document.querySelectorAll('.notas-credito-borrador-badge');
-        if (icons.length === 0 || badges.length === 0) return;
-        try {
-            const resp = await fetch('<?= $base ?>/modulos/notas_credito/countBorradoresAjax');
-            const data = await resp.json();
-            if (data.ok && data.count > 0) {
-                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
-                icons.forEach(i => i.classList.remove('d-none'));
-            } else {
-                icons.forEach(i => i.classList.add('d-none'));
-            }
-        } catch (e) {}
-    };
-
-    window.updateRetencionesComprasBorradorBadge = async function() {
-        const icons = document.querySelectorAll('.retenciones-compras-borrador-icon');
-        const badges = document.querySelectorAll('.retenciones-compras-borrador-badge');
-        if (icons.length === 0 || badges.length === 0) return;
-        try {
-            const resp = await fetch('<?= $base ?>/modulos/retenciones_compras/countBorradoresAjax');
-            const data = await resp.json();
-            if (data.ok && data.count > 0) {
-                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
-                icons.forEach(i => i.classList.remove('d-none'));
-            } else {
-                icons.forEach(i => i.classList.add('d-none'));
-            }
-        } catch (e) {}
-    };
-
-    window.updateLiquidacionesBorradorBadge = async function() {
-        const icons = document.querySelectorAll('.liquidaciones-borrador-icon');
-        const badges = document.querySelectorAll('.liquidaciones-borrador-badge');
-        if (icons.length === 0 || badges.length === 0) return;
-        try {
-            const resp = await fetch('<?= $base ?>/modulos/liquidacion-compra/countBorradoresAjax');
-            const data = await resp.json();
-            if (data.ok && data.count > 0) {
-                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
-                icons.forEach(i => i.classList.remove('d-none'));
-            } else {
-                icons.forEach(i => i.classList.add('d-none'));
-            }
-        } catch (e) {}
-    };
-
-    window.updateFacturasBorradorBadge = async function() {
-        const icons = document.querySelectorAll('.facturas-borrador-icon');
-        const badges = document.querySelectorAll('.facturas-borrador-badge');
-        if (icons.length === 0 || badges.length === 0) return;
-        try {
-            const resp = await fetch('<?= $base ?>/modulos/factura-venta/countBorradoresAjax');
-            const data = await resp.json();
-            if (data.ok && data.count > 0) {
-                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
-                icons.forEach(i => i.classList.remove('d-none'));
-            } else {
-                icons.forEach(i => i.classList.add('d-none'));
-            }
-        } catch (e) {}
-    };
-
-    window.updateOrdenesCompraBorradorBadge = async function() {
-        const icons = document.querySelectorAll('.ordenes-compra-borrador-icon');
-        const badges = document.querySelectorAll('.ordenes-compra-borrador-badge');
-        if (icons.length === 0 || badges.length === 0) return;
-        try {
-            const resp = await fetch('<?= $base ?>/modulos/ordenes-compra/countBorradoresAjax');
-            const data = await resp.json();
-            if (data.ok && data.count > 0) {
-                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
-                icons.forEach(i => i.classList.remove('d-none'));
-            } else {
-                icons.forEach(i => i.classList.add('d-none'));
-            }
-        } catch (e) {}
-    };
-
-    window.updateFacturaExpressPendientesBadge = async function() {
-        const icons = document.querySelectorAll('.factura-express-pendientes-icon');
-        const badges = document.querySelectorAll('.factura-express-pendientes-badge');
-        if (icons.length === 0 || badges.length === 0) return;
-        try {
-            const resp = await fetch('<?= $base ?>/modulos/factura-express-solicitudes/countPendientesAjax');
-            const data = await resp.json();
-            if (data.ok && data.count > 0) {
-                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
-                icons.forEach(i => i.classList.remove('d-none'));
-            } else {
-                icons.forEach(i => i.classList.add('d-none'));
-            }
-        } catch (e) {}
-    };
-
-    window.updatePedidosPendientesBadge = async function() {
-        const icons = document.querySelectorAll('.pedidos-pendientes-icon');
-        const badges = document.querySelectorAll('.pedidos-pendientes-badge');
-        if (icons.length === 0 || badges.length === 0) return;
-        try {
-            const resp = await fetch('<?= $base ?>/modulos/pedidos/countPendientesAjax');
-            const data = await resp.json();
-            if (data.ok && data.count > 0) {
-                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
-                icons.forEach(i => i.classList.remove('d-none'));
-            } else {
-                icons.forEach(i => i.classList.add('d-none'));
-            }
-        } catch (e) {}
-    };
-
-    window.updateTareasBadge = async function() {
-        const links = document.querySelectorAll('.tareas-alertas-link');
-        const badges = document.querySelectorAll('.tareas-alertas-badge');
-        if (badges.length === 0 || links.length === 0) return;
-        try {
-            const response = await fetch('<?= $base ?>/config/tareas-obligaciones?action=tareas-alertas-count');
-            const data = await response.json();
-            if (data.ok && data.count > 0) {
-                // Mostrar el enlace y actualizar el badge
-                links.forEach(l => l.classList.remove('d-none'));
-                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
-            } else {
-                // Ocultar el enlace cuando no hay avisos
-                links.forEach(l => l.classList.add('d-none'));
-            }
-        } catch (error) {
-            console.error('Error al obtener alertas de tareas:', error);
-        }
-    };
-
-    window.updateWhatsappUnreadBadge = async function() {
-        const icons = document.querySelectorAll('.whatsapp-unread-icon');
-        const badges = document.querySelectorAll('.whatsapp-unread-badge');
-        if (icons.length === 0 || badges.length === 0) return;
-        try {
-            const resp = await fetch('<?= $base ?>/modulos/whatsapp-chat/countUnreadAjax');
-            const data = await resp.json();
-            if (data.ok && data.count > 0) {
-                badges.forEach(b => b.textContent = data.count > 99 ? '99+' : data.count);
-                icons.forEach(i => i.classList.remove('d-none'));
-            } else {
-                icons.forEach(i => i.classList.add('d-none'));
-            }
-        } catch (e) {}
-    };
+    // Las funciones de contadores del navbar viven ahora UNIFICADAS dentro del
+    // DOMContentLoaded de más abajo (window.CMG_refreshContadores + alias de
+    // compatibilidad). Ya no hay 10 fetch/setInterval separados.
 
     // Actualizar botón de favorito cuando cambia la empresa seleccionada
     function actualizarBtnFavorito() {
@@ -633,27 +473,72 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         // Actualizar al cargar la página
         actualizarBtnFavorito();
 
-        window.updateTareasBadge();
-        window.updatePedidosPendientesBadge();
-        window.updateFacturasBorradorBadge();
-        window.updateLiquidacionesBorradorBadge();
-        window.updateRetencionesComprasBorradorBadge();
-        window.updateNotasCreditoBorradorBadge();
-        window.updateGuiasRemisionBorradorBadge();
-        window.updateFacturaExpressPendientesBadge();
-        window.updateOrdenesCompraBorradorBadge();
-        window.updateWhatsappUnreadBadge();
-        // Actualizar cada 1 minuto
-        setInterval(window.updateTareasBadge, 60000);
-        setInterval(window.updatePedidosPendientesBadge, 60000);
-        setInterval(window.updateFacturasBorradorBadge, 60000);
-        setInterval(window.updateLiquidacionesBorradorBadge, 60000);
-        setInterval(window.updateRetencionesComprasBorradorBadge, 60000);
-        setInterval(window.updateNotasCreditoBorradorBadge, 60000);
-        setInterval(window.updateGuiasRemisionBorradorBadge, 60000);
-        setInterval(window.updateFacturaExpressPendientesBadge, 60000);
-        setInterval(window.updateOrdenesCompraBorradorBadge, 60000);
-        setInterval(window.updateWhatsappUnreadBadge, 15000); // 15s para Whatsapp
+        // ===== Contadores del navbar: endpoint UNIFICADO + caché (APCu) + refresco por foco/evento =====
+        // Mapa: clave JSON del contador => selectores del icono/enlace y de su badge.
+        const CMG_CONTADORES_MAP = {
+            tareas_alertas:               { icon: '.tareas-alertas-link',               badge: '.tareas-alertas-badge' },
+            pedidos_pendientes:           { icon: '.pedidos-pendientes-icon',           badge: '.pedidos-pendientes-badge' },
+            facturas_borrador:            { icon: '.facturas-borrador-icon',            badge: '.facturas-borrador-badge' },
+            liquidaciones_borrador:       { icon: '.liquidaciones-borrador-icon',       badge: '.liquidaciones-borrador-badge' },
+            retenciones_compras_borrador: { icon: '.retenciones-compras-borrador-icon', badge: '.retenciones-compras-borrador-badge' },
+            notas_credito_borrador:       { icon: '.notas-credito-borrador-icon',       badge: '.notas-credito-borrador-badge' },
+            guias_remision_borrador:      { icon: '.guias-remision-borrador-icon',      badge: '.guias-remision-borrador-badge' },
+            factura_express_pendientes:   { icon: '.factura-express-pendientes-icon',   badge: '.factura-express-pendientes-badge' },
+            ordenes_compra_borrador:      { icon: '.ordenes-compra-borrador-icon',      badge: '.ordenes-compra-borrador-badge' },
+            whatsapp_unread:              { icon: '.whatsapp-unread-icon',              badge: '.whatsapp-unread-badge' }
+        };
+
+        let CMG_contadoresEnVuelo = false;
+        window.CMG_refreshContadores = async function() {
+            if (CMG_contadoresEnVuelo) return; // evita solapar peticiones
+            CMG_contadoresEnVuelo = true;
+            try {
+                const resp = await fetch('<?= $base ?>/contadores/navbarAjax', { headers: { 'Accept': 'application/json' } });
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (!data || !data.ok || !data.contadores) return;
+                const c = data.contadores;
+                Object.keys(CMG_CONTADORES_MAP).forEach(function(key) {
+                    const sel    = CMG_CONTADORES_MAP[key];
+                    const count  = parseInt(c[key] || 0, 10);
+                    const icons  = document.querySelectorAll(sel.icon);
+                    const badges = document.querySelectorAll(sel.badge);
+                    if (count > 0) {
+                        badges.forEach(function(b){ b.textContent = count > 99 ? '99+' : count; });
+                        icons.forEach(function(i){ i.classList.remove('d-none'); });
+                    } else {
+                        icons.forEach(function(i){ i.classList.add('d-none'); });
+                    }
+                });
+            } catch (e) {}
+            finally { CMG_contadoresEnVuelo = false; }
+        };
+
+        // Compatibilidad: las funciones antiguas ahora refrescan TODO vía el endpoint unificado.
+        window.updateTareasBadge =
+        window.updatePedidosPendientesBadge =
+        window.updateFacturasBorradorBadge =
+        window.updateLiquidacionesBorradorBadge =
+        window.updateRetencionesComprasBorradorBadge =
+        window.updateNotasCreditoBorradorBadge =
+        window.updateGuiasRemisionBorradorBadge =
+        window.updateFacturaExpressPendientesBadge =
+        window.updateOrdenesCompraBorradorBadge =
+        window.updateWhatsappUnreadBadge = window.CMG_refreshContadores;
+
+        // Carga inicial
+        window.CMG_refreshContadores();
+        // Un solo ciclo de sondeo, SOLO con la pestaña visible (ahorra peticiones en pestañas de fondo)
+        setInterval(function() {
+            if (document.visibilityState === 'visible') window.CMG_refreshContadores();
+        }, 20000);
+        // Refresco inmediato al volver a la pestaña / ventana
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') window.CMG_refreshContadores();
+        });
+        window.addEventListener('focus', window.CMG_refreshContadores);
+        // Refresco tras acciones del usuario: document.dispatchEvent(new Event('cmg:contadores'))
+        document.addEventListener('cmg:contadores', window.CMG_refreshContadores);
 
                 const btnMobileSearchToggle = document.getElementById('btn-mobile-search-toggle');
         const searchWrap = document.getElementById('cmg-nav-search-wrap');
