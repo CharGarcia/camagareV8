@@ -588,4 +588,52 @@ class IngresosController extends BaseModuloController
         }
         exit;
     }
+
+    /**
+     * Genera el PDF (Comprobante de Ingreso). Si la empresa tiene una plantilla
+     * activa para 'ingreso' se usa el diseñador; si no, el modelo general.
+     */
+    public function pdf(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $ingreso = $this->service->getPorId($id, $idEmpresa);
+            if (!$ingreso) { http_response_code(404); echo 'Ingreso no encontrado'; exit; }
+
+            $empresa   = $this->cargarEmpresaParaPdf($idEmpresa);
+            $detalles  = $ingreso['detalles'] ?? [];
+            $pagos     = $ingreso['pagos'] ?? [];
+
+            // Fase 2 (personalización): renderer si hay plantilla activa 'ingreso'.
+            $renderer  = new \App\Services\PlantillasPdfRendererService();
+            $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'ingreso');
+            if ($plantilla) {
+                $renderer->generar($plantilla, $ingreso, $detalles, $pagos, [], $empresa, 'I');
+            } else {
+                (new \App\Services\modulos\ComprobanteCajaPdfService())
+                    ->generarIngreso($ingreso, $detalles, $pagos, $empresa, 'I');
+            }
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            echo 'Error al generar PDF: ' . $e->getMessage();
+        }
+        exit;
+    }
+
+    /** Datos de la empresa (con logo del establecimiento) para el PDF. */
+    private function cargarEmpresaParaPdf(int $idEmpresa): array
+    {
+        $empresaModel = new Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+        if (!empty($establecimientos[0]['logo_ruta'])) {
+            $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+        }
+        return $empresa;
+    }
 }

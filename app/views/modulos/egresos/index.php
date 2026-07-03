@@ -282,6 +282,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.modalCrearEmpleado ? window.modalCrearEmpleado() : Swal.fire('Módulo en desarrollo','','info')" title="Registrar nuevo Empleado">
                         <i class="bi bi-person-lines-fill fs-6"></i>
                     </button>
+                    <button type="button" class="btn btn-outline-danger btn-sm px-2 d-none" id="btnPdfEgreso" onclick="abrirPdfEgreso()" title="Generar PDF del comprobante">
+                        <i class="bi bi-file-earmark-pdf fs-6"></i>
+                    </button>
                     <!-- Conceptos de egreso (derecha): los relacionados con un módulo van como botón; el resto en un selector -->
                     <?php
                         $conceptosBoton  = array_values(array_filter($conceptos, fn($c) => ($c['comportamiento'] ?? 'GENERAL') !== 'GENERAL'));
@@ -1297,6 +1300,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         setPagosControlesHabilitados(true);
 
         document.getElementById('eg-footer-ver-extra').classList.add('d-none');
+        document.getElementById('btnPdfEgreso').classList.add('d-none');
         document.getElementById('eg-input-fecha').value = new Date().toISOString().slice(0,10);
         
         // Resetear controles dinámicos de pagos
@@ -1446,6 +1450,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         });
     }
 
+    function abrirPdfEgreso() {
+        const id = document.getElementById('eg-input-id').value;
+        if (!id) return;
+        window.open(`${EGR_URL}/pdf?id=${id}`, '_blank');
+    }
+
     function abrirModalEgresoVer(id) {
         fetch(`${EGR_URL}/getEgresoAjax?id=${id}`).then(r=>r.json()).then(res => {
             if(!res.ok) return alert(res.mensaje);
@@ -1453,6 +1463,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             abrirModalEgreso(false);
             document.getElementById('modalEgresoTitulo').textContent = `Ver Egreso #${e.numero_egreso}`;
             document.getElementById('eg-input-id').value = e.id;
+            document.getElementById('btnPdfEgreso').classList.remove('d-none');
             document.getElementById('eg-input-fecha').value = e.fecha_emision;
             // Mostrar la serie (punto) original del documento, sin disparar el cálculo del siguiente secuencial
             if (e.id_punto_emision) {

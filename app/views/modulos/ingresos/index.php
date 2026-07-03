@@ -283,6 +283,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.abrirModalClienteCrear ? window.abrirModalClienteCrear() : Swal.fire('Módulo en desarrollo','','info')" title="Registrar nuevo cliente">
                         <i class="bi bi-person-plus fs-6"></i>
                     </button>
+                    <button type="button" class="btn btn-outline-danger btn-sm px-2 d-none" id="btnPdfIngreso" onclick="abrirPdfIngreso()" title="Generar PDF del comprobante">
+                        <i class="bi bi-file-earmark-pdf fs-6"></i>
+                    </button>
                     <!-- Conceptos de ingreso (derecha): los relacionados con un módulo van como botón; el resto en un selector -->
                     <?php
                         $conceptosBoton  = array_values(array_filter($conceptos, fn($c) => ($c['comportamiento'] ?? 'GENERAL') !== 'GENERAL'));
@@ -1512,6 +1515,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         document.getElementById('btnGuardarIngreso').classList.remove('d-none');
         document.getElementById('m-container-footer-ver').classList.add('d-none');
+        document.getElementById('btnPdfIngreso').classList.add('d-none');
 
         document.getElementById('m-input-fecha').value = new Date().toISOString().slice(0, 10);
 
@@ -1716,6 +1720,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             });
     }
 
+    function abrirPdfIngreso() {
+        const id = document.getElementById('m-input-id').value;
+        if (!id) return;
+        window.open(`<?= BASE_URL ?>/<?= $rutaModulo ?>/pdf?id=${id}`, '_blank');
+    }
+
     function abrirModalIngresoVer(id) {
         fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/getIngresoAjax?id=${id}`)
             .then(r => r.json())
@@ -1736,6 +1746,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 if (iconEl) iconEl.className = esAnulado ? 'bi bi-eye text-primary me-2' : 'bi bi-pencil-square text-primary me-2';
                 
                 document.getElementById('m-input-id').value = ing.id;
+                document.getElementById('btnPdfIngreso').classList.remove('d-none');
                 document.getElementById('m-input-fecha').value = ing.fecha_emision;
                 // Mostrar la serie (punto) original del documento, sin disparar el cálculo del siguiente secuencial
                 if (ing.id_punto_emision) {
