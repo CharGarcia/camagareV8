@@ -30,7 +30,7 @@ class ClienteRepository extends BaseRepository
     /**
      * Obtiene el listado de clientes con filtros, paginación y joins.
      */
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, bool $soloActivos = false): array
     {
         if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
             $ordenCol = 'nombre';
@@ -63,9 +63,15 @@ class ClienteRepository extends BaseRepository
                 'provincia'      => 'p.nombre',
                 'vendedor'       => 'v.nombre',
             ],
-            'exacto'   => [ 'estado' => 'c.estado', 'tipo' => 'c.tipo_id' ],
+            'exacto'   => [ 'estado' => 'c.status', 'status' => 'c.status', 'tipo' => 'c.tipo_id' ],
             'numerico' => [ 'plazo'  => 'c.plazo' ],
         ]);
+
+        // Selección de cliente para OPERACIONES: excluir inactivos (status = 0).
+        // La lista/CRUD de clientes NO pasa este flag, así que ahí sí se ven.
+        if ($soloActivos) {
+            $where .= " AND c.status = 1";
+        }
 
         $joins = "LEFT JOIN vendedores v ON v.id = c.id_vendedor
                   LEFT JOIN identificador_comprador_vendedor icv ON icv.codigo = c.tipo_id

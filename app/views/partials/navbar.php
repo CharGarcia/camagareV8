@@ -540,6 +540,36 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         // Refresco tras acciones del usuario: document.dispatchEvent(new Event('cmg:contadores'))
         document.addEventListener('cmg:contadores', window.CMG_refreshContadores);
 
+        // Hook GLOBAL (todos los módulos): tras cualquier petición de ESCRITURA que
+        // termine OK (guardar/anular/eliminar/procesar/…), refresca los avisos.
+        // Así el badge aparece/desaparece al instante sin tocar el JS de cada módulo.
+        (function() {
+            if (window.__cmgFetchHook) return;
+            window.__cmgFetchHook = true;
+            const _fetch = window.fetch;
+            const RE_ESCRITURA = /(guardar|anular|eliminar|borrar|procesar|aprobar|rechazar|autorizar|emitir|reactivar|cambiarestado)/i;
+            const RE_EXCLUIR   = /(preferencia|favorit|guardarvista|navbarajax|contadores)/i;
+            let deb = null;
+            window.fetch = function() {
+                const args = arguments;
+                const p = _fetch.apply(this, args);
+                try {
+                    const url = (typeof args[0] === 'string') ? args[0] : (args[0] && args[0].url) || '';
+                    if (RE_ESCRITURA.test(url) && !RE_EXCLUIR.test(url)) {
+                        p.then(function(resp) {
+                            if (resp && resp.ok) {
+                                clearTimeout(deb);
+                                deb = setTimeout(function() {
+                                    document.dispatchEvent(new Event('cmg:contadores'));
+                                }, 400); // debounce: agrupa ráfagas de guardados
+                            }
+                        }).catch(function() {});
+                    }
+                } catch (e) {}
+                return p;
+            };
+        })();
+
                 const btnMobileSearchToggle = document.getElementById('btn-mobile-search-toggle');
         const searchWrap = document.getElementById('cmg-nav-search-wrap');
         const searchInputEl = document.getElementById('cmg-nav-search');

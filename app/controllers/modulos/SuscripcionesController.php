@@ -338,7 +338,8 @@ class SuscripcionesController extends BaseModuloController
         $buscar = trim($_GET['q'] ?? '');
 
         $repo = new \App\repositories\modulos\ClienteRepository();
-        $result = $repo->getListado($idEmpresa, $buscar, 1, 12, 'nombre', 'ASC');
+        // soloActivos = true: excluir clientes inactivos en la selección.
+        $result = $repo->getListado($idEmpresa, $buscar, 1, 12, 'nombre', 'ASC', null, true);
 
         echo json_encode(['ok' => true, 'rows' => $result['rows']]);
         exit;

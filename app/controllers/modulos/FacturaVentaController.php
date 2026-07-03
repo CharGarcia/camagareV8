@@ -926,7 +926,8 @@ class FacturaVentaController extends BaseModuloController
         $buscar = trim($_GET['q'] ?? '');
 
         $repo = new \App\repositories\modulos\ClienteRepository();
-        $result = $repo->getListado($idEmpresa, $buscar, 1, 10, 'nombre', 'ASC');
+        // soloActivos = true: no ofrecer clientes inactivos al facturar.
+        $result = $repo->getListado($idEmpresa, $buscar, 1, 10, 'nombre', 'ASC', null, true);
 
         echo json_encode(['ok' => true, 'data' => $result['rows']]);
         exit;
