@@ -83,8 +83,7 @@ class ComprobanteCajaPdfService
         $y = $this->dibujarTablaPagos($cfg, $pagos, $y + 3);
         $y = $this->dibujarTotales($cabecera, $y + 3);
         $y = $this->dibujarAsiento($asiento, $y + 4);
-        $this->dibujarFirmas($cfg, $cabecera, $y + 10);
-        $this->dibujarPie();
+        $this->dibujarFirmas($cfg, $cabecera, $y);
 
         $nombre = $cfg['file_prefix'] . '_' . ($cfg['numero'] !== '' ? $cfg['numero'] : 'comprobante') . '.pdf';
         if ($outputDest === 'S') {
@@ -442,10 +441,9 @@ class ComprobanteCajaPdfService
         $mL  = $this->marginL;
         $colW = $this->contentW / 3;
 
-        // Colocar las firmas con buen espacio: si el contenido es corto, bajarlas;
-        // si es largo, fluyen tras el contenido sin invadir el pie.
-        if ($y < 215) { $y = 215; }
-        if ($y > 255) { $y = 255; }
+        // Espacio moderado (~2 cm) sobre la línea para firmar, tras el contenido.
+        $yLinea = $y + 20;
+        if ($yLinea > 272) { $yLinea = 272; } // no invadir el pie de página
 
         $firmas = [
             ['Realizado por', trim((string)($cabecera['usuario_nombre'] ?? ''))],
@@ -453,22 +451,21 @@ class ComprobanteCajaPdfService
             [$cfg['recibi_label'], (string)$cfg['sujeto_nombre']],
         ];
 
-        $pdf->SetY($y);
         // Líneas de firma
         foreach ($firmas as $i => $f) {
             $x = $mL + $i * $colW;
-            $pdf->Line($x + 6, $y + 12, $x + $colW - 6, $y + 12);
+            $pdf->Line($x + 6, $yLinea, $x + $colW - 6, $yLinea);
         }
         // Etiquetas
         $pdf->SetFont('helvetica', 'B', 8);
-        $pdf->SetXY($mL, $y + 13);
+        $pdf->SetXY($mL, $yLinea + 1);
         foreach ($firmas as $f) {
             $pdf->Cell($colW, 4, $f[0], 0, 0, 'C');
         }
 
         // Nombres (envuelven dentro de su columna para no desbordar)
         $pdf->SetFont('helvetica', '', 7.5);
-        $yName = $y + 17;
+        $yName = $yLinea + 5;
         foreach ($firmas as $i => $f) {
             $x = $mL + $i * $colW;
             $pdf->SetXY($x + 3, $yName);
@@ -476,19 +473,7 @@ class ComprobanteCajaPdfService
         }
     }
 
-    private function dibujarPie(): void
-    {
-        $pdf = $this->pdf;
-        // Escribir dentro del margen inferior sin disparar un salto de página.
-        $pdf->SetAutoPageBreak(false);
-        $pdf->SetY(-12);
-        $pdf->SetFont('helvetica', 'I', 6.5);
-        $pdf->SetTextColor(120, 120, 120);
-        $pdf->Cell(0, 4, 'Documento interno de control — no constituye comprobante autorizado por el SRI.', 0, 0, 'C');
-        $pdf->SetTextColor(0, 0, 0);
-    }
-
-    /** Resuelve la ruta en disco del logo (maneja el prefijo web /sistema/public). */
+/** Resuelve la ruta en disco del logo (maneja el prefijo web /sistema/public). */
     private function resolverLogo(array $empresa): string
     {
         $rutas = array_filter([$empresa['logo_ruta'] ?? '', $empresa['logo'] ?? '']);
