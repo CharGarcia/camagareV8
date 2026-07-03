@@ -18,6 +18,8 @@ let CXC_seleccionados = new Set(); // ids de facturas seleccionadas
 let CXC_catalogos = { puntos: [], conceptos: [], formas: [] };
 let CXC_catalogosCargados = false;
 let CXC_cobroOrigen = 'FACTURA'; // origen del documento en el modal de cobro
+let CXC_agrupado    = false;           // vista agrupada por cliente
+const CXC_gruposAbiertos = new Set();  // claves de grupos expandidos
 
 /* ════════════════════════════════════════════════════
    INICIALIZACIÓN
@@ -138,9 +140,9 @@ function CXC_dibujarAging(ag) {
 function CXC_renderTabla(filas) {
     const tbody = document.getElementById('cxc-tbody');
     const label = document.getElementById('cxc-count-label');
-    label.textContent = filas.length + ' registros';
 
     if (!filas.length) {
+        label.textContent = '0 registros';
         tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-muted">
             <i class="bi bi-wallet2 fs-3 d-block mb-2 text-success opacity-40"></i>
             No se encontraron cuentas por cobrar con los filtros aplicados.
@@ -148,36 +150,45 @@ function CXC_renderTabla(filas) {
         return;
     }
 
+    if (CXC_agrupado) { CXC_renderAgrupado(filas); return; }
+
+    label.textContent = filas.length + ' registros';
     let html = '';
-    for (const r of filas) {
-        const dias     = parseInt(r.dias_vencido) || 0;
-        const saldo    = parseFloat(r.saldo);
-        const selec    = CXC_seleccionados.has(r.id);
+    for (const r of filas) html += CXC_filaHtml(r);
+    tbody.innerHTML = html;
+}
 
-        let badgeHtml, rowClass = '';
-        if (saldo <= 0) {
-            badgeHtml = `<span class="badge badge-pagada rounded-pill small px-2">Pagada</span>`;
-        } else if (dias > 90) {
-            badgeHtml = `<span class="badge badge-vencida rounded-pill small px-2">+90d vencida</span>`;
-            rowClass  = 'table-danger';
-        } else if (dias > 30) {
-            badgeHtml = `<span class="badge badge-vencida rounded-pill small px-2">Vencida ${dias}d</span>`;
-            rowClass  = 'table-warning';
-        } else if (dias > 0) {
-            badgeHtml = `<span class="badge badge-proxima rounded-pill small px-2">Vencida ${dias}d</span>`;
-        } else {
-            const proximos = -dias; // días que restan para vencer
-            badgeHtml = `<span class="badge badge-vigente rounded-pill small px-2">Vigente (${proximos}d)</span>`;
-        }
+/* Construye una fila <tr> de detalle (11 columnas). Reutilizada por la vista
+   detallada y por la vista agrupada (para las facturas dentro de cada cliente). */
+function CXC_filaHtml(r) {
+    const dias     = parseInt(r.dias_vencido) || 0;
+    const saldo    = parseFloat(r.saldo);
+    const selec    = CXC_seleccionados.has(r.id);
 
-        const fEmision   = CXC_fmtFecha(r.fecha_emision);
-        const fVenc      = CXC_fmtFecha(r.fecha_vencimiento);
-        const esSaldo    = r.origen === 'SALDO_INICIAL';
-        const origenBadge = esSaldo
-            ? `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 small px-2" title="Saldo inicial de apertura">Saldo inicial</span>`
-            : `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 small px-2">Factura</span>`;
+    let badgeHtml, rowClass = '';
+    if (saldo <= 0) {
+        badgeHtml = `<span class="badge badge-pagada rounded-pill small px-2">Pagada</span>`;
+    } else if (dias > 90) {
+        badgeHtml = `<span class="badge badge-vencida rounded-pill small px-2">+90d vencida</span>`;
+        rowClass  = 'table-danger';
+    } else if (dias > 30) {
+        badgeHtml = `<span class="badge badge-vencida rounded-pill small px-2">Vencida ${dias}d</span>`;
+        rowClass  = 'table-warning';
+    } else if (dias > 0) {
+        badgeHtml = `<span class="badge badge-proxima rounded-pill small px-2">Vencida ${dias}d</span>`;
+    } else {
+        const proximos = -dias; // días que restan para vencer
+        badgeHtml = `<span class="badge badge-vigente rounded-pill small px-2">Vigente (${proximos}d)</span>`;
+    }
 
-        html += `
+    const fEmision   = CXC_fmtFecha(r.fecha_emision);
+    const fVenc      = CXC_fmtFecha(r.fecha_vencimiento);
+    const esSaldo    = r.origen === 'SALDO_INICIAL';
+    const origenBadge = esSaldo
+        ? `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 small px-2" title="Saldo inicial de apertura">Saldo inicial</span>`
+        : `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 small px-2">Factura</span>`;
+
+    return `
         <tr class="${rowClass}" data-id="${r.id}" data-origen="${r.origen}" data-cliente="${esc(r.cliente_nombre)}" data-factura="${esc(r.numero_factura)}">
             <td class="text-center p-1">
                 <input class="form-check-input cxc-chk" type="checkbox" value="${r.id}"
@@ -216,8 +227,76 @@ function CXC_renderTabla(filas) {
                 </div>
             </td>
         </tr>`;
+}
+
+/* ════════════════════════════════════════════════════
+   VISTA AGRUPADA POR CLIENTE
+════════════════════════════════════════════════════ */
+function CXC_renderAgrupado(filas) {
+    const tbody = document.getElementById('cxc-tbody');
+    const label = document.getElementById('cxc-count-label');
+
+    // Agrupar por cliente (RUC como clave; si falta, por nombre)
+    const mapa = new Map();
+    for (const r of filas) {
+        const key = (r.cliente_ruc && String(r.cliente_ruc).trim()) || r.cliente_nombre || 'Sin cliente';
+        let g = mapa.get(key);
+        if (!g) {
+            g = { key, nombre: r.cliente_nombre || 'Sin cliente', ruc: r.cliente_ruc || '', items: [], total: 0, cobrado: 0, saldo: 0 };
+            mapa.set(key, g);
+        }
+        g.items.push(r);
+        g.total   += parseFloat(r.total)         || 0;
+        g.cobrado += parseFloat(r.total_cobrado) || 0;
+        g.saldo   += parseFloat(r.saldo)         || 0;
+    }
+    const grupos = [...mapa.values()].sort((a, b) => b.saldo - a.saldo);
+
+    label.textContent = `${filas.length} docs · ${grupos.length} cliente${grupos.length !== 1 ? 's' : ''}`;
+
+    let html = '';
+    for (const g of grupos) {
+        const abierto = CXC_gruposAbiertos.has(g.key);
+        const chev = abierto ? 'bi-chevron-down' : 'bi-chevron-right';
+        html += `
+        <tr class="cxc-grp-row" data-gkey="${esc(g.key)}" onclick="CXC_toggleGrupo(this)" style="cursor:pointer;background:#eafaf1;">
+            <td class="text-center p-1"><i class="bi ${chev} text-success"></i></td>
+            <td colspan="5" class="fw-bold" style="font-size:.82rem;">
+                ${esc(g.nombre)}
+                ${g.ruc ? `<small class="text-muted fw-normal ms-1">${esc(g.ruc)}</small>` : ''}
+                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2 fw-normal">${g.items.length} doc${g.items.length !== 1 ? 's' : ''}</span>
+            </td>
+            <td class="text-end fw-semibold" style="font-size:.8rem;">$${CXC_fmt(g.total)}</td>
+            <td class="text-end fw-semibold text-success" style="font-size:.8rem;">$${CXC_fmt(g.cobrado)}</td>
+            <td class="text-end fw-bold pe-3" style="font-size:.82rem;color:${g.saldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(g.saldo)}</td>
+            <td colspan="2"></td>
+        </tr>`;
+        if (abierto) {
+            for (const r of g.items) html += CXC_filaHtml(r);
+        }
     }
     tbody.innerHTML = html;
+}
+
+function CXC_toggleGrupo(el) {
+    const k = el.getAttribute('data-gkey');
+    if (CXC_gruposAbiertos.has(k)) CXC_gruposAbiertos.delete(k);
+    else CXC_gruposAbiertos.add(k);
+    CXC_renderTabla(CXC_filtradoLocal);
+}
+
+/* Cambia entre vista detallada y agrupada (llamado desde los botones de la vista). */
+function CXC_setVista(modo) {
+    CXC_agrupado = (modo === 'agrupado');
+    const bDet = document.getElementById('cxc-btn-detalle');
+    const bGrp = document.getElementById('cxc-btn-agrupado');
+    if (bDet && bGrp) {
+        bDet.classList.toggle('btn-success',         !CXC_agrupado);
+        bDet.classList.toggle('btn-outline-success',  CXC_agrupado);
+        bGrp.classList.toggle('btn-success',          CXC_agrupado);
+        bGrp.classList.toggle('btn-outline-success', !CXC_agrupado);
+    }
+    CXC_renderTabla(CXC_filtradoLocal);
 }
 
 /* ════════════════════════════════════════════════════

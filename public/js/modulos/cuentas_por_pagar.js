@@ -13,6 +13,8 @@ let CXP_filtradoLocal = [];   // filas tras filtro local de texto
 let CXP_agingChart    = null;
 let CXP_catalogos     = { puntos: [], conceptos: [], formas: [] };
 let CXP_catalogosCargados = false;
+let CXP_agrupado      = false;          // vista agrupada por proveedor
+const CXP_gruposAbiertos = new Set();   // claves de grupos expandidos
 
 /* ════════════════════════════════════════════════════
    INICIALIZACIÓN
@@ -126,9 +128,9 @@ function CXP_dibujarAging(ag) {
 function CXP_renderTabla(filas) {
     const tbody = document.getElementById('cxp-tbody');
     const label = document.getElementById('cxp-count-label');
-    label.textContent = filas.length + ' registros';
 
     if (!filas.length) {
+        label.textContent = '0 registros';
         tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-muted">
             <i class="bi bi-credit-card fs-3 d-block mb-2 text-primary opacity-40"></i>
             No se encontraron cuentas por pagar con los filtros aplicados.
@@ -136,8 +138,17 @@ function CXP_renderTabla(filas) {
         return;
     }
 
+    if (CXP_agrupado) { CXP_renderAgrupado(filas); return; }
+
+    label.textContent = filas.length + ' registros';
     let html = '';
-    for (const r of filas) {
+    for (const r of filas) html += CXP_filaHtml(r);
+    tbody.innerHTML = html;
+}
+
+/* Construye una fila <tr> de detalle (11 columnas). Reutilizada por la vista
+   detallada y por la vista agrupada (para los documentos dentro de cada proveedor). */
+function CXP_filaHtml(r) {
         const dias    = parseInt(r.dias_vencido) || 0;
         const saldo   = parseFloat(r.saldo);
         const nc      = parseFloat(r.total_nc      || 0);
@@ -190,7 +201,7 @@ function CXP_renderTabla(filas) {
                </a>`
             : `<small class="text-muted">—</small>`;
 
-        html += `
+        return `
         <tr class="${rowClass}" data-id="${r.id}" data-tipo="${cxpEsc(r.tipo_fuente)}"
             data-proveedor="${cxpEsc(r.proveedor_nombre)}" data-doc="${cxpEsc(r.numero_documento)}">
 
@@ -246,8 +257,81 @@ function CXP_renderTabla(filas) {
                 </div>
             </td>
         </tr>`;
+}
+
+/* ════════════════════════════════════════════════════
+   VISTA AGRUPADA POR PROVEEDOR
+════════════════════════════════════════════════════ */
+function CXP_renderAgrupado(filas) {
+    const tbody = document.getElementById('cxp-tbody');
+    const label = document.getElementById('cxp-count-label');
+
+    // Agrupar por proveedor (RUC como clave; si falta, por nombre)
+    const mapa = new Map();
+    for (const r of filas) {
+        const key = (r.proveedor_ruc && String(r.proveedor_ruc).trim()) || r.proveedor_nombre || 'Sin proveedor';
+        let g = mapa.get(key);
+        if (!g) {
+            g = { key, nombre: r.proveedor_nombre || 'Sin proveedor', ruc: r.proveedor_ruc || '', items: [], total: 0, pagado: 0, ncret: 0, saldo: 0 };
+            mapa.set(key, g);
+        }
+        const nc  = parseFloat(r.total_nc       || 0);
+        const nd  = parseFloat(r.total_nd       || 0);
+        const ret = parseFloat(r.total_retenido || 0);
+        g.items.push(r);
+        g.total  += parseFloat(r.total)        || 0;
+        g.pagado += parseFloat(r.total_pagado) || 0;
+        g.ncret  += (nc + ret - nd);
+        g.saldo  += parseFloat(r.saldo)        || 0;
+    }
+    const grupos = [...mapa.values()].sort((a, b) => b.saldo - a.saldo);
+
+    label.textContent = `${filas.length} docs · ${grupos.length} proveedor${grupos.length !== 1 ? 'es' : ''}`;
+
+    let html = '';
+    for (const g of grupos) {
+        const abierto = CXP_gruposAbiertos.has(g.key);
+        const chev = abierto ? 'bi-chevron-down' : 'bi-chevron-right';
+        html += `
+        <tr class="cxp-grp-row" data-gkey="${cxpEsc(g.key)}" onclick="CXP_toggleGrupo(this)" style="cursor:pointer;background:#eaf1fb;">
+            <td colspan="5" class="ps-2 fw-bold" style="font-size:.82rem;">
+                <i class="bi ${chev} text-primary me-1"></i>
+                ${cxpEsc(g.nombre)}
+                ${g.ruc ? `<small class="text-muted fw-normal ms-1">${cxpEsc(g.ruc)}</small>` : ''}
+                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-2 fw-normal">${g.items.length} doc${g.items.length !== 1 ? 's' : ''}</span>
+            </td>
+            <td class="text-end fw-semibold" style="font-size:.8rem;">$${CXP_fmt(g.total)}</td>
+            <td class="text-end fw-semibold text-success" style="font-size:.8rem;">${g.pagado > 0 ? '$' + CXP_fmt(g.pagado) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end" style="font-size:.78rem;">${g.ncret > 0.001 ? '$' + CXP_fmt(g.ncret) : '<span class="text-muted">—</span>'}</td>
+            <td class="text-end pe-2 fw-bold" style="font-size:.82rem;color:${g.saldo > 0.001 ? '#dc3545' : '#198754'};">$${CXP_fmt(g.saldo > 0 ? g.saldo : 0)}</td>
+            <td colspan="2"></td>
+        </tr>`;
+        if (abierto) {
+            for (const r of g.items) html += CXP_filaHtml(r);
+        }
     }
     tbody.innerHTML = html;
+}
+
+function CXP_toggleGrupo(el) {
+    const k = el.getAttribute('data-gkey');
+    if (CXP_gruposAbiertos.has(k)) CXP_gruposAbiertos.delete(k);
+    else CXP_gruposAbiertos.add(k);
+    CXP_renderTabla(CXP_filtradoLocal);
+}
+
+/* Cambia entre vista detallada y agrupada (llamado desde los botones de la vista). */
+function CXP_setVista(modo) {
+    CXP_agrupado = (modo === 'agrupado');
+    const bDet = document.getElementById('cxp-btn-detalle');
+    const bGrp = document.getElementById('cxp-btn-agrupado');
+    if (bDet && bGrp) {
+        bDet.classList.toggle('btn-primary',         !CXP_agrupado);
+        bDet.classList.toggle('btn-outline-primary',  CXP_agrupado);
+        bGrp.classList.toggle('btn-primary',          CXP_agrupado);
+        bGrp.classList.toggle('btn-outline-primary', !CXP_agrupado);
+    }
+    CXP_renderTabla(CXP_filtradoLocal);
 }
 
 /* ════════════════════════════════════════════════════

@@ -478,7 +478,15 @@ if (!function_exists('enviar_correo_factura_express_dueno')) {
             }
 
             $mail->setFrom($base['emisor'], $base['empresa']);
-            $mail->addAddress($base['emisor'], $base['empresa']);
+
+            // La notificación va al correo de la EMPRESA que generó la factura express.
+            // Si la empresa no tiene correo válido configurado, se usa la cuenta SMTP
+            // como respaldo para no perder el aviso.
+            $correoEmpresa = trim((string) ($resultado['plantilla']['empresa_mail'] ?? ''));
+            $destinoDueno  = filter_var($correoEmpresa, FILTER_VALIDATE_EMAIL) ? $correoEmpresa : $base['emisor'];
+            $nombreEmpresa = $resultado['plantilla']['empresa_nombre'] ?? $base['empresa'];
+            $mail->addAddress($destinoDueno, $nombreEmpresa);
+
             $solicitudData = $resultado['data'] ?? $resultado['solicitud'] ?? $resultado;
             $solicitudData['nombre_plantilla'] = $resultado['plantilla']['nombre'] ?? ($solicitudData['nombre_plantilla'] ?? '');
             $solicitudData['token_cliente']    = $resultado['token_cliente'] ?? ($solicitudData['token_cliente'] ?? '');

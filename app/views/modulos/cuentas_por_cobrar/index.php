@@ -178,6 +178,14 @@
                             <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                         </button>
                     </div>
+                    <div class="btn-group btn-group-sm ms-1" role="group" aria-label="Vista de tabla">
+                        <button type="button" id="cxc-btn-detalle" class="btn btn-success" onclick="CXC_setVista('detalle')" title="Ver todas las facturas en lista">
+                            <i class="bi bi-list-ul"></i> Detallado
+                        </button>
+                        <button type="button" id="cxc-btn-agrupado" class="btn btn-outline-success" onclick="CXC_setVista('agrupado')" title="Agrupar facturas por cliente">
+                            <i class="bi bi-people"></i> Por cliente
+                        </button>
+                    </div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
                     <small class="text-muted fw-medium" id="cxc-count-label"></small>

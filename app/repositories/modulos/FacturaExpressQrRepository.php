@@ -60,7 +60,7 @@ class FacturaExpressQrRepository extends BaseRepository
     public function getPlantillaByToken(string $token): ?array
     {
         $st = $this->db->prepare(
-            "SELECT p.*, e.nombre AS empresa_nombre, e.ruc AS empresa_ruc
+            "SELECT p.*, e.nombre AS empresa_nombre, e.ruc AS empresa_ruc, e.mail AS empresa_mail
              FROM factura_express_plantillas p
              JOIN empresas e ON e.id = p.id_empresa
              WHERE p.token = :token AND p.eliminado = false AND p.activo = true"

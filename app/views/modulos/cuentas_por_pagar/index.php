@@ -193,6 +193,14 @@
                             <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                         </button>
                     </div>
+                    <div class="btn-group btn-group-sm ms-1" role="group" aria-label="Vista de tabla">
+                        <button type="button" id="cxp-btn-detalle" class="btn btn-primary" onclick="CXP_setVista('detalle')" title="Ver todos los documentos en lista">
+                            <i class="bi bi-list-ul"></i> Detallado
+                        </button>
+                        <button type="button" id="cxp-btn-agrupado" class="btn btn-outline-primary" onclick="CXP_setVista('agrupado')" title="Agrupar documentos por proveedor">
+                            <i class="bi bi-people"></i> Por proveedor
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Derecha: contador + buscador -->
