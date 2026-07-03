@@ -106,14 +106,24 @@
 
         const invTab = document.getElementById('tab-inventario-btn')?.closest('.nav-item');
         const compTab = document.getElementById('tab-componentes-btn')?.closest('.nav-item');
+        const varTab = document.getElementById('tab-variantes-btn')?.closest('.nav-item');
         const homolTab = document.getElementById('tab-homologaciones-btn')?.closest('.nav-item');
 
         if (!isBien) {
             invTab?.classList.add('d-none');
             compTab?.classList.add('d-none');
+            varTab?.classList.add('d-none');
             homolTab?.classList.add('d-none');
+
+            // Si estábamos parados en Variantes y se oculta, volver a General
+            const activeTab = document.querySelector('#modalProductoTabs .nav-link.active');
+            if (activeTab && activeTab.id === 'tab-variantes-btn') {
+                const genBtn = document.getElementById('prod-tab-general-btn');
+                if (genBtn && typeof bootstrap !== 'undefined') (bootstrap.Tab.getInstance(genBtn) || new bootstrap.Tab(genBtn)).show();
+            }
         } else {
             invTab?.classList.remove('d-none');
+            varTab?.classList.remove('d-none');
             homolTab?.classList.remove('d-none');
             window.toggleInventariableTabs();
         }
@@ -141,7 +151,7 @@
             // Si estábamos en Componentes y se oculta, volver a General
             const activeTab = document.querySelector('#modalProductoTabs .nav-link.active');
             if (activeTab && activeTab.id === 'tab-componentes-btn') {
-                const genBtn = document.getElementById('tab-general-btn');
+                const genBtn = document.getElementById('prod-tab-general-btn');
                 if (genBtn && typeof bootstrap !== 'undefined') (bootstrap.Tab.getInstance(genBtn) || new bootstrap.Tab(genBtn)).show();
             }
         }
@@ -557,7 +567,7 @@
 
     // ─── Tab / restricciones ──────────────────────────────────────────────────
     function activarTabGeneral() {
-        const genBtn = document.getElementById('tab-general-btn');
+        const genBtn = document.getElementById('prod-tab-general-btn');
         if (genBtn && typeof bootstrap !== 'undefined') {
             (bootstrap.Tab.getInstance(genBtn) || new bootstrap.Tab(genBtn)).show();
         }

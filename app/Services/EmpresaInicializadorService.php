@@ -26,6 +26,8 @@ class EmpresaInicializadorService
     {
         $this->crearClienteConsumidorFinal($idEmpresa, $idUsuario);
         $this->crearFormaPagoEfectivo($idEmpresa, $idUsuario);
+        $this->crearAnticiposDefault($idEmpresa, $idUsuario);
+        $this->crearOpcionesIngresoEgresoDefault($idEmpresa, $idUsuario);
         $this->configurarCorreo($idEmpresa, $idUsuario);
         $idEst = $this->obtenerOCrearEstablecimientoPrincipal($idEmpresa, $idUsuario);
         if ($idEst > 0) {
@@ -114,6 +116,105 @@ class EmpresaInicializadorService
             ':id_empresa' => $idEmpresa,
             ':created_by' => $idUsuario,
         ]);
+    }
+
+    /**
+     * Crea las dos formas de pago tipo ANTICIPO por defecto (si no existen):
+     *   - "Anticipos clientes"    → aplica_en INGRESO
+     *   - "Anticipos Proveedores" → aplica_en EGRESO
+     * Cada una se verifica de forma independiente por (tipo ANTICIPO + aplica_en).
+     */
+    private function crearAnticiposDefault(int $idEmpresa, int $idUsuario): void
+    {
+        $anticipos = [
+            ['nombre' => 'Anticipos clientes',    'aplica_en' => 'INGRESO'],
+            ['nombre' => 'Anticipos Proveedores', 'aplica_en' => 'EGRESO'],
+        ];
+
+        $check = $this->db->prepare(
+            "SELECT 1 FROM empresa_formas_pago
+             WHERE id_empresa = :id_empresa AND tipo = 'ANTICIPO' AND aplica_en = :aplica_en
+               AND eliminado = false
+             LIMIT 1"
+        );
+        $insert = $this->db->prepare(
+            "INSERT INTO empresa_formas_pago (
+                id_empresa, nombre, tipo, aplica_en, activo, created_by, created_at, eliminado
+             ) VALUES (
+                :id_empresa, :nombre, 'ANTICIPO', :aplica_en, true, :created_by, CURRENT_TIMESTAMP, false
+             )"
+        );
+
+        foreach ($anticipos as $a) {
+            $check->execute([':id_empresa' => $idEmpresa, ':aplica_en' => $a['aplica_en']]);
+            if ($check->fetchColumn()) {
+                continue;
+            }
+            $insert->execute([
+                ':id_empresa' => $idEmpresa,
+                ':nombre'     => $a['nombre'],
+                ':aplica_en'  => $a['aplica_en'],
+                ':created_by' => $idUsuario,
+            ]);
+        }
+    }
+
+    /**
+     * Crea las opciones de ingreso/egreso por defecto (si no existen), una por cada
+     * comportamiento ligado a un módulo del sistema:
+     *   - "Facturas compras"      → COMPRA            (egreso)
+     *   - "Liquidaciones compras" → LIQUIDACION       (egreso)
+     *   - "Facturas ventas"       → FACTURA_VENTA     (ingreso)
+     *   - "Recibos de venta"      → RECIBO_VENTA      (ingreso)
+     *   - "Anticipos Clientes"    → ANTICIPO_CLIENTE  (ingreso)
+     *   - "Anticipos Proveedores" → ANTICIPO_PROVEEDOR (egreso)
+     * Cada una se verifica de forma independiente por comportamiento.
+     */
+    private function crearOpcionesIngresoEgresoDefault(int $idEmpresa, int $idUsuario): void
+    {
+        $opciones = [
+            ['nombre' => 'Facturas compras',      'comportamiento' => 'COMPRA',            'ingresos' => 'false', 'egresos' => 'true'],
+            ['nombre' => 'Liquidaciones compras', 'comportamiento' => 'LIQUIDACION',       'ingresos' => 'false', 'egresos' => 'true'],
+            ['nombre' => 'Facturas ventas',       'comportamiento' => 'FACTURA_VENTA',     'ingresos' => 'true',  'egresos' => 'false'],
+            ['nombre' => 'Recibos de venta',      'comportamiento' => 'RECIBO_VENTA',      'ingresos' => 'true',  'egresos' => 'false'],
+            ['nombre' => 'Anticipos Clientes',    'comportamiento' => 'ANTICIPO_CLIENTE',   'ingresos' => 'true',  'egresos' => 'false'],
+            ['nombre' => 'Anticipos Proveedores', 'comportamiento' => 'ANTICIPO_PROVEEDOR', 'ingresos' => 'false', 'egresos' => 'true'],
+        ];
+
+        try {
+            // Asegura que la tabla exista (su repositorio la crea de forma perezosa).
+            new \App\repositories\modulos\OpcionIngresoEgresoRepository();
+
+            $check = $this->db->prepare(
+                "SELECT 1 FROM empresa_opciones_ingreso_egreso
+                 WHERE id_empresa = :id_empresa AND comportamiento = :comp AND eliminado = false
+                 LIMIT 1"
+            );
+            $insert = $this->db->prepare(
+                "INSERT INTO empresa_opciones_ingreso_egreso (
+                    id_empresa, nombre, aplica_ingresos, aplica_egresos, comportamiento, estado, created_by, created_at, eliminado
+                 ) VALUES (
+                    :id_empresa, :nombre, :ingresos, :egresos, :comp, 'ACTIVO', :created_by, CURRENT_TIMESTAMP, false
+                 )"
+            );
+
+            foreach ($opciones as $o) {
+                $check->execute([':id_empresa' => $idEmpresa, ':comp' => $o['comportamiento']]);
+                if ($check->fetchColumn()) {
+                    continue;
+                }
+                $insert->execute([
+                    ':id_empresa' => $idEmpresa,
+                    ':nombre'     => $o['nombre'],
+                    ':ingresos'   => $o['ingresos'],
+                    ':egresos'    => $o['egresos'],
+                    ':comp'       => $o['comportamiento'],
+                    ':created_by' => $idUsuario,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            // No bloquear la inicialización si el módulo/tabla aún no está disponible.
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────

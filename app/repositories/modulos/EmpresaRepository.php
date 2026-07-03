@@ -13,7 +13,7 @@ class EmpresaRepository extends BaseModel
                        resolucion_contribuyente, id_tipo_regimen, tipo_ambiente, agente_retencion, tipo_emision,
                        nom_rep_legal, ced_rep_legal, nombre_contador, ruc_contador, cod_prov, cod_ciudad,
                        tipo, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, estado,
-                       cancelar_renovacion, obligado_contabilidad, id_empresa_suscripciones,
+                       cancelar_renovacion, obligado_contabilidad, id_empresa_suscripciones, id_empresa_facturada,
                        COALESCE(max_usuarios, 3) AS max_usuarios
                 FROM empresas
                 WHERE id = {$id} AND eliminado = false";
@@ -26,6 +26,15 @@ class EmpresaRepository extends BaseModel
         $ruc = $this->escape($ruc);
         $sql = "SELECT id, ruc, nombre FROM empresas WHERE ruc = '{$ruc}' AND eliminado = false";
         return $this->query($sql);
+    }
+
+    /** RUC de una empresa por id (para resolver la empresa facturada). */
+    public function getRucPorId(int $id): ?string
+    {
+        $id = (int) $id;
+        if ($id <= 0) return null;
+        $r = $this->query("SELECT ruc FROM empresas WHERE id = {$id} AND eliminado = false");
+        return $r[0]['ruc'] ?? null;
     }
 
     /**

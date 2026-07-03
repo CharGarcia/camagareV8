@@ -34,24 +34,48 @@ class EmpresaService
             }
         }
 
-        // Suscripción del sistema: se relaciona SIEMPRE por RUC (no por establecimiento).
-        // La empresa controladora se resuelve por RUC (vínculo directo, empresa hermana
-        // con el mismo RUC, o administradora por defecto).
+        // Suscripción del sistema — prioridad de resolución:
+        //   1) Empresa controladora + relación DIRECTA por RUC propio (con montos y detalle).
+        //   2) Si no hay, empresa de reventa (id_empresa_facturada): se cruza por el RUC de
+        //      ESA empresa y la tarjeta muestra solo estado/periodicidad/vigencia (sin montos).
+        //   3) Si tampoco, la vista cae al fallback manual (datos de la tabla empresas).
+        // La controladora se resuelve por RUC (vínculo directo, empresa hermana con el mismo
+        // RUC, o administradora por defecto).
         $suscripcionInfo = [];
         $rucEmpresa = trim((string) ($empresa['ruc'] ?? ''));
         $idControladora = 0;
+        $sinValores = false;
         if ($rucEmpresa !== '') {
             try {
                 $idDirecto = isset($empresa['id_empresa_suscripciones']) && (int) $empresa['id_empresa_suscripciones'] > 0
                     ? (int) $empresa['id_empresa_suscripciones'] : null;
                 $idControladora = (int) ($this->repository->resolverEmpresaControladoraSuscripciones($rucEmpresa, $idDirecto) ?? 0);
+
                 if ($idControladora > 0) {
-                    $suscripcionInfo = (new SuscripcionesRepository())
-                        ->getResumenPorControladoraYRuc($idControladora, $rucEmpresa);
+                    $suscRepo = new SuscripcionesRepository();
+
+                    // 1) Prioridad: relación directa por RUC propio (con montos y detalle).
+                    $suscripcionInfo = $suscRepo->getResumenPorControladoraYRuc($idControladora, $rucEmpresa);
+
+                    // 2) Si no hay, empresa de reventa (por su RUC, modo sin valores).
+                    if (empty($suscripcionInfo)) {
+                        $idFacturada = isset($empresa['id_empresa_facturada']) && (int) $empresa['id_empresa_facturada'] > 0
+                            ? (int) $empresa['id_empresa_facturada'] : 0;
+                        if ($idFacturada > 0) {
+                            $rucFact = $this->repository->getRucPorId($idFacturada);
+                            if ($rucFact !== null && trim($rucFact) !== '') {
+                                $suscripcionInfo = $suscRepo->getResumenPorControladoraYRuc($idControladora, trim($rucFact));
+                                if (!empty($suscripcionInfo)) {
+                                    $sinValores = true;
+                                }
+                            }
+                        }
+                    }
                 }
             } catch (\Throwable $e) {
                 // Módulo de suscripciones o migración no disponible: se usa el fallback manual.
                 $suscripcionInfo = [];
+                $sinValores = false;
             }
         }
 
@@ -59,6 +83,7 @@ class EmpresaService
             'empresa'               => $empresa,
             'suscripcion_info'      => $suscripcionInfo,
             'suscripcion_controladora' => $idControladora,
+            'suscripcion_sin_valores'  => $sinValores,
             'correo'                => $this->repository->getCorreoConfig($idEmpresa),
             'firmas'                => $this->repository->getFirmas($idEmpresa),
             'establecimientos'      => $establecimientos,

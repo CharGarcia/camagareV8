@@ -172,6 +172,7 @@ function estadoPagoBadge($estado) {
                         data-max-usuarios="<?= (int)($r['max_usuarios'] ?? 3) ?>"
                         data-id-empresa-suscripciones="<?= (int)($r['id_empresa_suscripciones'] ?? 0) ?>"
                         data-es-administradora="<?= !empty($r['es_administradora_suscripciones']) ? '1' : '0' ?>"
+                        data-id-empresa-facturada="<?= (int)($r['id_empresa_facturada'] ?? 0) ?>"
                         data-usuarios="<?= count($usuarios) ?>">
                         <td><?= htmlspecialchars($r['nombre'] ?? '-') ?></td>
                         <td><?= htmlspecialchars($r['nombre_comercial'] ?? '-') ?></td>
@@ -299,6 +300,18 @@ function estadoPagoBadge($estado) {
                                 <input class="form-check-input" type="checkbox" role="switch" id="crear-es-administradora" name="es_administradora_suscripciones" value="1">
                                 <label class="form-check-label small" for="crear-es-administradora">Es la empresa administradora (por defecto)</label>
                             </div>
+                        </div>
+                        <div class="col-md-8">
+                            <label for="crear-empresa-facturada" class="form-label">Empresa a la que facturamos (reventa)</label>
+                            <select id="crear-empresa-facturada" name="id_empresa_facturada" class="form-select form-select-sm">
+                                <option value="">— No aplica (relación por RUC propio) —</option>
+                                <?php foreach (($empresasLista ?? []) as $emp): ?>
+                                    <option value="<?= (int) $emp['id'] ?>">
+                                        <?= htmlspecialchars(($emp['nombre_comercial'] ?: $emp['nombre']) . ' — ' . ($emp['ruc'] ?? '')) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text">Si la suscripción se factura a otra empresa (reventa), la ficha mostrará solo estado, periodicidad y vigencia (sin montos).</div>
                         </div>
                         <input type="hidden" name="tipo" value="01">
                         <input type="hidden" name="nom_rep_legal" value="">
@@ -498,6 +511,18 @@ function estadoPagoBadge($estado) {
                                     </div>
                                 </div>
                                 <div class="col-12">
+                                    <label for="edit-empresa-facturada" class="form-label">Empresa a la que facturamos (reventa)</label>
+                                    <select id="edit-empresa-facturada" name="id_empresa_facturada" class="form-select form-select-sm">
+                                        <option value="">— No aplica (relación por RUC propio) —</option>
+                                        <?php foreach (($empresasLista ?? []) as $emp): ?>
+                                            <option value="<?= (int) $emp['id'] ?>">
+                                                <?= htmlspecialchars(($emp['nombre_comercial'] ?: $emp['nombre']) . ' — ' . ($emp['ruc'] ?? '')) ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text">Para casos de reventa: la suscripción se relaciona con esta empresa (no con el RUC propio) y la ficha muestra solo estado, periodicidad y vigencia (sin montos).</div>
+                                </div>
+                                <div class="col-12">
                                     <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg"></i> Guardar cambios</button>
                                 </div>
                             </div>
@@ -686,6 +711,8 @@ function estadoPagoBadge($estado) {
         if (selSusc) selSusc.value = (el.dataset.idEmpresaSuscripciones && el.dataset.idEmpresaSuscripciones !== '0') ? el.dataset.idEmpresaSuscripciones : '';
         var chkAdmin = document.getElementById('edit-es-administradora');
         if (chkAdmin) chkAdmin.checked = (el.dataset.esAdministradora === '1');
+        var selFact = document.getElementById('edit-empresa-facturada');
+        if (selFact) selFact.value = (el.dataset.idEmpresaFacturada && el.dataset.idEmpresaFacturada !== '0') ? el.dataset.idEmpresaFacturada : '';
         document.getElementById('tab-empresas-general').click();
         cargarUsuarios();
         cargarUsuariosDisponibles();

@@ -193,6 +193,78 @@ $estadoClases = [
 <?php include 'modal_generar_documentos.php'; ?>
 <?php include 'modal_pagos.php'; ?>
 
+<?php // Modales compartidos para crear cliente / producto desde la suscripción ?>
+<?php include dirname(__DIR__) . '/clientes/modal_cliente.php'; ?>
+<?php include dirname(__DIR__) . '/productos/modal.php'; ?>
+<style>
+    /* Los modales de Cliente/Producto se abren anidados sobre el de Suscripción.
+       En esta página el body usa app-shell (overflow oculto), por lo que un modal
+       alto se recortaba (p. ej. la pestaña "Información" solo mostraba un pedazo).
+       Acotamos la altura y damos scroll interno al contenido de cada pestaña,
+       manteniendo visibles cabecera, pestañas y pie. Scoped a estos modales. */
+    #modalProducto .modal-content,
+    #modalCliente  .modal-content { max-height: calc(100vh - 1rem); }
+    #modalProducto .tab-content,
+    #modalCliente  .tab-content { max-height: 60vh; overflow-y: auto; }
+
+    /* Pestañas en varias filas: por defecto un CSS global fuerza una sola fila
+       con scroll horizontal (barra oculta), lo que esconde pestañas. Las dejamos
+       envolver en dos/más filas para que todas queden visibles, y anclamos el
+       dropdown de "configurar pestañas" arriba-derecha para que ninguna pestaña
+       (p. ej. "Información") quede debajo del icono. */
+    #modalProducto .d-flex:has(> #modalProductoTabs),
+    #modalCliente  .d-flex:has(> #tabsCliente) {
+        position: relative;
+        align-items: flex-start !important;
+    }
+    #modalProducto .d-flex:has(> #modalProductoTabs) > div:last-child,
+    #modalCliente  .d-flex:has(> #tabsCliente) > div:last-child {
+        position: absolute;
+        top: .4rem;
+        right: 1rem;
+        z-index: 2;
+    }
+    #modalProducto #modalProductoTabs,
+    #modalCliente  #tabsCliente {
+        flex-wrap: wrap !important;
+        overflow-x: visible !important;
+        width: 100%;
+        padding-right: 2.75rem; /* espacio reservado para el icono de configuración */
+    }
+    #modalProducto #modalProductoTabs .nav-link,
+    #modalCliente  #tabsCliente .nav-link { white-space: nowrap; }
+</style>
+<script src="<?= BASE_URL ?>/js/modulos/clientes_modal.js?v=<?= time() ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/productos_modal.js?v=<?= time() ?>"></script>
+
+<script>
+    // Modales anidados (Cliente/Producto abiertos sobre el modal de Suscripción):
+    // el modal de suscripción tiene z-index 1060 fijo, igual que los hijos. Al abrir
+    // un modal encima de otro ya visible, lo elevamos (y a su backdrop) para que quede
+    // por completo delante y se vean todas sus pestañas.
+    document.addEventListener('show.bs.modal', function (e) {
+        const abiertos = document.querySelectorAll('.modal.show').length;
+        if (abiertos < 1) return; // primer modal: conserva su z-index natural
+        const z = 1060 + abiertos * 20;
+        e.target.style.zIndex = z;
+        setTimeout(() => {
+            const backdrops = document.querySelectorAll('.modal-backdrop:not([data-nested])');
+            const ultimo = backdrops[backdrops.length - 1];
+            if (ultimo) {
+                ultimo.style.zIndex = z - 1;
+                ultimo.setAttribute('data-nested', '1');
+            }
+        }, 0);
+    });
+
+    // Al cerrar un modal secundario, si aún queda otro abierto, mantener el scroll bloqueado.
+    document.addEventListener('hidden.bs.modal', function () {
+        if (document.querySelectorAll('.modal.show').length > 0) {
+            document.body.classList.add('modal-open');
+        }
+    });
+</script>
+
 <script>
 (function () {
     'use strict';

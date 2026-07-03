@@ -277,9 +277,11 @@ class FormaPagoRepository extends BaseRepository
     }
 
     /**
-     * Saldo de un anticipo para un tercero concreto (cliente o proveedor):
-     *   saldo = saldo_inicial_anticipo (saldos_iniciales_anticipos por forma + tercero)
-     *           − Σ aplicado (pagos que usan esta forma de anticipo para ese tercero)
+     * Saldo de un anticipo a favor de un tercero (cliente o proveedor):
+     *   saldo = saldo_inicial (saldos_iniciales_anticipos por forma + tercero)
+     *         + generado  (anticipos registrados con una OPCIÓN de comportamiento
+     *                      ANTICIPO_CLIENTE en ingresos / ANTICIPO_PROVEEDOR en egresos)
+     *         − aplicado  (pagos que usan esta forma de anticipo para ese tercero)
      * La dirección (cliente/proveedor) la define el aplica_en de la forma.
      */
     public function getSaldoAnticipo(int $idEmpresa, int $idForma, int $idTercero): float
@@ -305,7 +307,32 @@ class FormaPagoRepository extends BaseRepository
         $stI->execute([':e' => $idEmpresa, ':forma' => $idForma, ':t' => $idTercero]);
         $inicial = (float)$stI->fetchColumn();
 
-        // Aplicado: pagos que consumen este anticipo para ese tercero (flujo Fase 3; hoy 0)
+        // Generado: anticipos registrados vía una OPCIÓN de ingreso/egreso con
+        // comportamiento ANTICIPO_CLIENTE (ingresos) / ANTICIPO_PROVEEDOR (egresos)
+        // para ese tercero. Es la fuente principal del saldo a favor.
+        if ($esEgreso) {
+            $stG = $this->db->prepare(
+                "SELECT COALESCE(SUM(ec.monto_total), 0)
+                 FROM egresos_cabecera ec
+                 INNER JOIN empresa_opciones_ingreso_egreso o ON o.id = ec.id_egreso_concepto
+                 WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado'
+                   AND o.comportamiento = 'ANTICIPO_PROVEEDOR'
+                   AND ec.id_proveedor = :t"
+            );
+        } else {
+            $stG = $this->db->prepare(
+                "SELECT COALESCE(SUM(ic.monto_total), 0)
+                 FROM ingresos_cabecera ic
+                 INNER JOIN empresa_opciones_ingreso_egreso o ON o.id = ic.id_ingreso_concepto
+                 WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado'
+                   AND o.comportamiento = 'ANTICIPO_CLIENTE'
+                   AND COALESCE(ic.id_cliente, ic.id_recibo_cliente) = :t"
+            );
+        }
+        $stG->execute([':e' => $idEmpresa, ':t' => $idTercero]);
+        $generado = (float)$stG->fetchColumn();
+
+        // Aplicado: pagos que consumen este anticipo (forma tipo ANTICIPO) para ese tercero.
         if ($esEgreso) {
             $stA = $this->db->prepare(
                 "SELECT COALESCE(SUM(ep.monto), 0)
@@ -329,7 +356,7 @@ class FormaPagoRepository extends BaseRepository
         $stA->execute([':e' => $idEmpresa, ':forma' => $idForma, ':t' => $idTercero]);
         $aplicado = (float)$stA->fetchColumn();
 
-        return round($inicial - $aplicado, 2);
+        return round($inicial + $generado - $aplicado, 2);
     }
 
     public function estaUsado(int $id, int $idEmpresa): bool

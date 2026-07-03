@@ -36,6 +36,18 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
 }
 ?>
 
+<style>
+/* En pantallas donde el modal NO es fullscreen (≥768px), dejar que las pestañas
+   envuelvan a una segunda línea en lugar de recortarse (y quedar "bajo" el ícono
+   de configurar pestañas). En móvil se conserva el scroll horizontal global. */
+@media (min-width: 768px) {
+    #modalProductoTabs.nav-tabs {
+        flex-wrap: wrap !important;
+        overflow-x: visible !important;
+    }
+}
+</style>
+
 <!-- Modal Producto -->
 <div class="modal fade" id="modalProducto" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">
     <div class="modal-dialog modal-lg">
@@ -54,7 +66,7 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="modalProductoTabs" role="tablist">
                             <li class="nav-item">
-                                <a class="nav-link active py-2 small" id="tab-general-btn" data-bs-toggle="tab" href="#pane-general" role="tab">
+                                <a class="nav-link active py-2 small" id="prod-tab-general-btn" data-bs-toggle="tab" href="#pane-prod-general" role="tab">
                                     <i class="bi bi-card-text me-1"></i> General
                                 </a>
                             </li>
@@ -113,7 +125,7 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
 
                     <div class="tab-content border-top px-3 py-3">
                         <!-- TAB GENERAL -->
-                        <div class="tab-pane fade show active" id="pane-general" role="tabpanel">
+                        <div class="tab-pane fade show active" id="pane-prod-general" role="tabpanel">
                             <div class="row g-3">
                                 <!-- Fila 0: Opciones de uso (Compra / Venta) - extensible a futuro -->
                                 <div class="col-12">

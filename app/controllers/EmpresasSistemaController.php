@@ -107,6 +107,7 @@ class EmpresasSistemaController extends Controller
             'max_usuarios' => (int) ($_POST['max_usuarios'] ?? 3),
             'id_empresa_suscripciones' => $_POST['id_empresa_suscripciones'] ?? null,
             'es_administradora_suscripciones' => !empty($_POST['es_administradora_suscripciones']) ? '1' : '0',
+            'id_empresa_facturada' => $_POST['id_empresa_facturada'] ?? null,
         ];
 
         $esAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
@@ -180,7 +181,7 @@ class EmpresasSistemaController extends Controller
             }
         }
 
-        $allKeys = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones'];
+        $allKeys = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_empresa_facturada'];
         $data = [];
         foreach ($allKeys as $k) {
             if (array_key_exists($k, $_POST)) {

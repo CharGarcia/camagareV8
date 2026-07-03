@@ -285,6 +285,36 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                     elseif ($diasRestantes < 30) $colorBar = 'warning';
                                                 }
                                                 ?>
+                                                <?php if (!empty($suscripcion_sin_valores)): ?>
+                                                    <!-- Modo reventa: solo estado, periodicidad y vigencia (sin montos ni detalles) -->
+                                                    <div class="row g-3 align-items-center <?= $idx > 0 ? 'border-top pt-3 mt-1' : '' ?>">
+                                                        <div class="col-md-3">
+                                                            <div class="text-muted mb-1" style="font-size: 0.65rem;">Periodicidad</div>
+                                                            <?php if (!empty($s['periodicidad'])): ?>
+                                                                <span class="badge bg-info text-white rounded-pill" style="font-size: 0.65rem;">
+                                                                    <i class="bi bi-arrow-repeat me-1" style="font-size: 0.55rem;"></i> <?= htmlspecialchars($s['periodicidad']) ?>
+                                                                </span>
+                                                            <?php else: ?>
+                                                                <span class="text-muted" style="font-size: 0.65rem;">—</span>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                        <div class="col-md-3 border-start ps-3">
+                                                            <div class="text-muted mb-1" style="font-size: 0.65rem;">Estado suscripción</div>
+                                                            <span class="badge bg-<?= $colSusc ?> bg-opacity-10 text-<?= $colSusc ?> rounded-pill" style="font-size: 0.65rem;">
+                                                                <i class="bi bi-circle-fill me-1" style="font-size: 0.4rem;"></i> <?= strtoupper($estadoSusc ?: '—') ?>
+                                                            </span>
+                                                        </div>
+                                                        <div class="col-md-6 border-start ps-4">
+                                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                                <div class="text-muted" style="font-size: 0.65rem;">Vigencia: <span class="text-dark fw-bold"><?= $ini ? date('d-m-Y', strtotime($ini)) : '-' ?></span> — próximo cobro <span class="text-dark fw-bold"><?= $prox ? date('d-m-Y', strtotime($prox)) : '-' ?></span></div>
+                                                                <div class="fw-bold text-<?= $colorBar ?>" style="font-size: 0.65rem;"><?= max(0, $diasRestantes) ?> días</div>
+                                                            </div>
+                                                            <div class="progress" style="height: 6px; background: #e2e8f0;">
+                                                                <div class="progress-bar bg-<?= $colorBar ?> progress-bar-striped progress-bar-animated" role="progressbar" style="width: <?= 100 - $porcentaje ?>%"></div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                <?php else: ?>
                                                 <div class="row g-3 align-items-center <?= $idx > 0 ? 'border-top pt-3 mt-1' : '' ?>">
                                                     <div class="col-md-2">
                                                         <div class="text-muted mb-1" style="font-size: 0.65rem;">Monto suscripción</div>
@@ -369,6 +399,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                             </table>
                                                         </div>
                                                     </div>
+                                                <?php endif; ?>
                                                 <?php endif; ?>
                                             <?php endforeach; ?>
                                         <?php else: ?>

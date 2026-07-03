@@ -73,15 +73,21 @@ class CuentasPorCobrarRepository extends BaseRepository
     /**
      * CTE que calcula el total de notas de crédito aplicadas hasta una fecha de corte opcional.
      */
-    private function getCteNC(?string $fechaHasta = null): string
+    private function getCteNC(int $idEmpresa, ?string $fechaHasta = null): string
     {
         $filtroFecha = $fechaHasta ? "AND nc.fecha_emision <= :nc_hasta" : '';
+        // $idEmpresa es int validado → interpolación segura. Se filtra por empresa
+        // (multiempresa, §4) y por el ambiente actual de la empresa, tolerando NC
+        // legacy sin tipo_ambiente (NULL) para no perderlas del cálculo.
         return "
             SELECT nc.num_doc_modificado,
                    SUM(nc.importe_total) AS total_nc
             FROM notas_credito_cabecera nc
             WHERE nc.estado   != 'anulado'
               AND nc.eliminado = false
+              AND nc.id_empresa = {$idEmpresa}
+              AND (nc.tipo_ambiente IS NULL
+                   OR nc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = {$idEmpresa}))
               {$filtroFecha}
             GROUP BY nc.num_doc_modificado
         ";
@@ -113,7 +119,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         $sql = "
             WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
                  retenido AS (" . $this->getCteRetenido($fh) . "),
-                 nc_aplic AS (" . $this->getCteNC($fh) . ")
+                 nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . ")
             SELECT
                 v.id,
                 v.fecha_emision,
@@ -158,7 +164,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         $sql = "
             WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
                  retenido AS (" . $this->getCteRetenido($fh) . "),
-                 nc_aplic AS (" . $this->getCteNC($fh) . ")
+                 nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . ")
             SELECT
                 COUNT(v.id) AS total_facturas,
                 SUM(v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) AS total_saldo,
@@ -281,7 +287,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         $sql = "
             WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
                  retenido AS (" . $this->getCteRetenido($fh) . "),
-                 nc_aplic AS (" . $this->getCteNC($fh) . ")
+                 nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . ")
             SELECT
                 SUM(CASE WHEN dias_vencido BETWEEN 1 AND 30
                     THEN saldo ELSE 0 END) AS tramo_1_30,
@@ -434,7 +440,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         $sql = "
             WITH cobrado  AS (" . $this->getCteCobrado() . "),
                  retenido AS (" . $this->getCteRetenido() . "),
-                 nc_aplic AS (" . $this->getCteNC() . ")
+                 nc_aplic AS (" . $this->getCteNC($idEmpresa) . ")
             SELECT
                 v.*,
                 c.nombre         AS cliente_nombre,
@@ -634,7 +640,7 @@ class CuentasPorCobrarRepository extends BaseRepository
         $sql = "
             WITH cobrado  AS (" . $this->getCteCobrado() . "),
                  retenido AS (" . $this->getCteRetenido() . "),
-                 nc_aplic AS (" . $this->getCteNC() . ")
+                 nc_aplic AS (" . $this->getCteNC($idEmpresa) . ")
             SELECT
                 v.id,
                 v.id_cliente,

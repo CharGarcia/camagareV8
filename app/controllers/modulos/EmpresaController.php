@@ -47,6 +47,7 @@ class EmpresaController extends BaseModuloController
             'empresa' => $data['empresa'],
             'suscripcion_info' => $data['suscripcion_info'] ?? [],
             'suscripcion_controladora' => $data['suscripcion_controladora'] ?? 0,
+            'suscripcion_sin_valores' => $data['suscripcion_sin_valores'] ?? false,
             'correo' => $data['correo'],
             'firmas' => $data['firmas'],
             'puntos' => $data['puntos'],

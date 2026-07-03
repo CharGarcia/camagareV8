@@ -165,8 +165,10 @@ class DashboardService
 
     private function getCxcTotal(int $e, string $ta, string $d, string $h): float
     {
+        // Saldo neto = importe − cobrado − retenido − NC (igual que el módulo CxC).
+        // $e es int validado → interpolación segura en los subqueries.
         $st = $this->db->prepare(
-            "SELECT COALESCE(SUM(v.importe_total - COALESCE(c.tc, 0)), 0)
+            "SELECT COALESCE(SUM(v.importe_total - COALESCE(c.tc, 0) - COALESCE(rt.tr, 0) - COALESCE(ncv.tnc, 0)), 0)
              FROM ventas_cabecera v
              LEFT JOIN (
                  SELECT d.id_referencia_documento, SUM(d.monto_cobrado) AS tc
@@ -175,11 +177,23 @@ class DashboardService
                  WHERE ic.eliminado = false AND ic.estado != 'anulado'
                  GROUP BY d.id_referencia_documento
              ) c ON c.id_referencia_documento = v.id
+             LEFT JOIN (
+                 SELECT r.id_venta, SUM(r.total_renta + r.total_iva + r.total_isd) AS tr
+                 FROM retencion_venta_cabecera r
+                 WHERE r.eliminado = false AND r.id_venta IS NOT NULL
+                 GROUP BY r.id_venta
+             ) rt ON rt.id_venta = v.id
+             LEFT JOIN (
+                 SELECT nc.num_doc_modificado, SUM(nc.importe_total) AS tnc
+                 FROM notas_credito_cabecera nc
+                 WHERE nc.eliminado = false AND nc.estado != 'anulado' AND nc.id_empresa = {$e}
+                 GROUP BY nc.num_doc_modificado
+             ) ncv ON ncv.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)
              WHERE v.id_empresa = ? AND v.eliminado = false
                AND v.estado NOT IN ('anulado', 'pagado')
                AND COALESCE(v.tipo_ambiente, '1') = ?
                AND CAST(v.fecha_emision AS DATE) BETWEEN ? AND ?
-               AND (v.importe_total - COALESCE(c.tc, 0)) > 0"
+               AND (v.importe_total - COALESCE(c.tc, 0) - COALESCE(rt.tr, 0) - COALESCE(ncv.tnc, 0)) > 0"
         );
         $st->execute([$e, $ta, $d, $h]);
         $total = (float) $st->fetchColumn();
@@ -220,8 +234,13 @@ class DashboardService
 
     private function getCxpTotal(int $e, string $ta, string $d, string $h): float
     {
+        // Saldo neto = importe − pagado − retenido − NC(04) + ND(05), solo sobre
+        // facturas de compra (tipo_comprobante '01'). Antes se sumaban las propias
+        // NC/ND (04/05) como documentos por pagar y no se restaban de la factura.
+        // $e es int validado → interpolación segura en los subqueries.
         $st = $this->db->prepare(
-            "SELECT COALESCE(SUM(c.importe_total - COALESCE(p.tp, 0)), 0)
+            "SELECT COALESCE(SUM(c.importe_total - COALESCE(p.tp, 0) - COALESCE(r.tr, 0)
+                                 - COALESCE(nn.tnc, 0) + COALESCE(nn.tnd, 0)), 0)
              FROM compras_cabecera c
              LEFT JOIN (
                  SELECT ed.id_referencia_documento, SUM(ed.monto_pagado) AS tp
@@ -230,10 +249,29 @@ class DashboardService
                  WHERE ed.eliminado = false AND ec.eliminado = false AND ec.estado != 'anulado'
                  GROUP BY ed.id_referencia_documento
              ) p ON p.id_referencia_documento = c.id
+             LEFT JOIN (
+                 SELECT rc.id_compra, SUM(rc.total_retenido) AS tr
+                 FROM retencion_compra_cabecera rc
+                 WHERE rc.eliminado = false
+                   AND UPPER(rc.estado) NOT IN ('ANULADO', 'BORRADOR', 'PENDIENTE')
+                   AND rc.id_compra IS NOT NULL
+                 GROUP BY rc.id_compra
+             ) r ON r.id_compra = c.id
+             LEFT JOIN (
+                 SELECT nc.id_empresa, nc.id_proveedor, nc.documento_modificado,
+                        SUM(CASE WHEN nc.tipo_comprobante = '04' THEN nc.importe_total ELSE 0 END) AS tnc,
+                        SUM(CASE WHEN nc.tipo_comprobante = '05' THEN nc.importe_total ELSE 0 END) AS tnd
+                 FROM compras_cabecera nc
+                 WHERE nc.tipo_comprobante IN ('04', '05') AND nc.eliminado = false AND nc.id_empresa = {$e}
+                 GROUP BY nc.id_empresa, nc.id_proveedor, nc.documento_modificado
+             ) nn ON nn.id_empresa = c.id_empresa AND nn.id_proveedor = c.id_proveedor
+                 AND nn.documento_modificado = CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov)
              WHERE c.id_empresa = ? AND c.eliminado = false
+               AND c.tipo_comprobante = '01'
                AND COALESCE(c.tipo_ambiente::text, '1') = ?
                AND CAST(c.fecha_emision AS DATE) BETWEEN ? AND ?
-               AND (c.importe_total - COALESCE(p.tp, 0)) > 0"
+               AND (c.importe_total - COALESCE(p.tp, 0) - COALESCE(r.tr, 0)
+                    - COALESCE(nn.tnc, 0) + COALESCE(nn.tnd, 0)) > 0"
         );
         $st->execute([$e, $ta, $d, $h]);
         $total = (float) $st->fetchColumn();
@@ -341,8 +379,9 @@ class DashboardService
     /**
      * Saldo global de anticipos por dirección (sin depender de un tercero):
      *   saldo = Σ saldo_inicial (saldos_iniciales_anticipos del tipo)
-     *           − Σ aplicado (pagos que consumen formas de anticipo de esa dirección)
-     * Hoy el aplicado es 0 (consumo de anticipos es Fase 3); la fórmula queda lista.
+     *         + Σ generado (ingresos/egresos con opción ANTICIPO_CLIENTE/PROVEEDOR)
+     *         − Σ aplicado (pagos que consumen formas de anticipo de esa dirección)
+     * Misma lógica que FormaPagoRepository::getSaldoAnticipo pero agregada (todos los terceros).
      */
     private function getAnticipoGlobal(int $e, string $tipo): float
     {
@@ -353,6 +392,27 @@ class DashboardService
         );
         $ini->execute([':e' => $e, ':t' => $tipo]);
         $inicial = (float) $ini->fetchColumn();
+
+        // Generado: anticipos registrados con una opción ANTICIPO_CLIENTE/PROVEEDOR.
+        if ($tipo === 'PROVEEDOR') {
+            $gen = $this->db->prepare(
+                "SELECT COALESCE(SUM(ec.monto_total), 0)
+                 FROM egresos_cabecera ec
+                 INNER JOIN empresa_opciones_ingreso_egreso o ON o.id = ec.id_egreso_concepto
+                 WHERE ec.id_empresa = :e AND ec.eliminado = FALSE AND ec.estado <> 'anulado'
+                   AND o.comportamiento = 'ANTICIPO_PROVEEDOR'"
+            );
+        } else {
+            $gen = $this->db->prepare(
+                "SELECT COALESCE(SUM(ic.monto_total), 0)
+                 FROM ingresos_cabecera ic
+                 INNER JOIN empresa_opciones_ingreso_egreso o ON o.id = ic.id_ingreso_concepto
+                 WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado'
+                   AND o.comportamiento = 'ANTICIPO_CLIENTE'"
+            );
+        }
+        $gen->execute([':e' => $e]);
+        $generado = (float) $gen->fetchColumn();
 
         if ($tipo === 'PROVEEDOR') {
             $apl = $this->db->prepare(
@@ -377,7 +437,7 @@ class DashboardService
         $apl->execute([':e' => $e]);
         $aplicado = (float) $apl->fetchColumn();
 
-        return round($inicial - $aplicado, 2);
+        return round($inicial + $generado - $aplicado, 2);
     }
 
     // ── Tablas recientes ──────────────────────────────────────────────────────
@@ -463,7 +523,7 @@ class DashboardService
                 SELECT cl.nombre AS cliente,
                        CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) AS comprobante,
                        v.fecha_emision AS fecha,
-                       (v.importe_total - COALESCE(c.tc, 0)) AS saldo,
+                       (v.importe_total - COALESCE(c.tc, 0) - COALESCE(rt.tr, 0) - COALESCE(ncv.tnc, 0)) AS saldo,
                        (CURRENT_DATE - CAST(v.fecha_emision AS DATE)) AS dias_vencido
                 FROM ventas_cabecera v
                 INNER JOIN clientes cl ON cl.id = v.id_cliente
@@ -474,10 +534,22 @@ class DashboardService
                     WHERE ic.eliminado = false AND ic.estado != 'anulado'
                     GROUP BY d.id_referencia_documento
                 ) c ON c.id_referencia_documento = v.id
+                LEFT JOIN (
+                    SELECT r.id_venta, SUM(r.total_renta + r.total_iva + r.total_isd) AS tr
+                    FROM retencion_venta_cabecera r
+                    WHERE r.eliminado = false AND r.id_venta IS NOT NULL
+                    GROUP BY r.id_venta
+                ) rt ON rt.id_venta = v.id
+                LEFT JOIN (
+                    SELECT nc.num_doc_modificado, SUM(nc.importe_total) AS tnc
+                    FROM notas_credito_cabecera nc
+                    WHERE nc.eliminado = false AND nc.estado != 'anulado' AND nc.id_empresa = {$e}
+                    GROUP BY nc.num_doc_modificado
+                ) ncv ON ncv.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)
                 WHERE v.id_empresa = :e AND v.eliminado = false
                   AND v.estado NOT IN ('anulado', 'pagado')
                   AND COALESCE(v.tipo_ambiente, '1') = :ta
-                  AND (v.importe_total - COALESCE(c.tc, 0)) > 0
+                  AND (v.importe_total - COALESCE(c.tc, 0) - COALESCE(rt.tr, 0) - COALESCE(ncv.tnc, 0)) > 0
                   AND (CURRENT_DATE - CAST(v.fecha_emision AS DATE)) > COALESCE(cl.plazo, 0)
 
                 UNION ALL
@@ -532,7 +604,7 @@ class DashboardService
                 SELECT p.razon_social AS proveedor,
                        CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) AS comprobante,
                        c.fecha_emision AS fecha,
-                       (c.importe_total - COALESCE(pg.tp, 0)) AS saldo,
+                       (c.importe_total - COALESCE(pg.tp, 0) - COALESCE(r.tr, 0) - COALESCE(nn.tnc, 0) + COALESCE(nn.tnd, 0)) AS saldo,
                        (CURRENT_DATE - CAST(c.fecha_emision AS DATE)) AS dias_vencido
                 FROM compras_cabecera c
                 INNER JOIN proveedores p ON p.id = c.id_proveedor
@@ -543,9 +615,27 @@ class DashboardService
                     WHERE ed.eliminado = false AND ec.eliminado = false AND ec.estado != 'anulado'
                     GROUP BY ed.id_referencia_documento
                 ) pg ON pg.id_referencia_documento = c.id
+                LEFT JOIN (
+                    SELECT rc.id_compra, SUM(rc.total_retenido) AS tr
+                    FROM retencion_compra_cabecera rc
+                    WHERE rc.eliminado = false
+                      AND UPPER(rc.estado) NOT IN ('ANULADO', 'BORRADOR', 'PENDIENTE')
+                      AND rc.id_compra IS NOT NULL
+                    GROUP BY rc.id_compra
+                ) r ON r.id_compra = c.id
+                LEFT JOIN (
+                    SELECT nc.id_empresa, nc.id_proveedor, nc.documento_modificado,
+                           SUM(CASE WHEN nc.tipo_comprobante = '04' THEN nc.importe_total ELSE 0 END) AS tnc,
+                           SUM(CASE WHEN nc.tipo_comprobante = '05' THEN nc.importe_total ELSE 0 END) AS tnd
+                    FROM compras_cabecera nc
+                    WHERE nc.tipo_comprobante IN ('04', '05') AND nc.eliminado = false AND nc.id_empresa = {$e}
+                    GROUP BY nc.id_empresa, nc.id_proveedor, nc.documento_modificado
+                ) nn ON nn.id_empresa = c.id_empresa AND nn.id_proveedor = c.id_proveedor
+                    AND nn.documento_modificado = CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov)
                 WHERE c.id_empresa = :e AND c.eliminado = false
+                  AND c.tipo_comprobante = '01'
                   AND COALESCE(c.tipo_ambiente::text, '1') = :ta
-                  AND (c.importe_total - COALESCE(pg.tp, 0)) > 0
+                  AND (c.importe_total - COALESCE(pg.tp, 0) - COALESCE(r.tr, 0) - COALESCE(nn.tnc, 0) + COALESCE(nn.tnd, 0)) > 0
                   AND (CURRENT_DATE - CAST(c.fecha_emision AS DATE)) > COALESCE(p.plazo, 0)
 
                 UNION ALL
