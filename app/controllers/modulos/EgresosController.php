@@ -475,6 +475,7 @@ class EgresosController extends BaseModuloController
             $empresa  = $this->cargarEmpresaParaPdf($idEmpresa);
             $detalles = $egreso['detalles'] ?? [];
             $pagos    = $egreso['pagos'] ?? [];
+            $asiento  = $this->service->getAsientoContable($id, $idEmpresa);
 
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'egreso');
@@ -482,7 +483,7 @@ class EgresosController extends BaseModuloController
                 $renderer->generar($plantilla, $egreso, $detalles, $pagos, [], $empresa, 'D');
             } else {
                 (new \App\Services\modulos\ComprobanteCajaPdfService())
-                    ->generarEgreso($egreso, $detalles, $pagos, $empresa, 'D');
+                    ->generarEgreso($egreso, $detalles, $pagos, $empresa, 'D', $asiento);
             }
         } catch (\Throwable $e) {
             http_response_code(500);

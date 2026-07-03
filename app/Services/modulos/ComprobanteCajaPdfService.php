@@ -26,7 +26,7 @@ class ComprobanteCajaPdfService
     private float $contentW = 186; // 210 - 12 - 12
 
     /** Genera el PDF de un INGRESO (Recibo de Cobro). */
-    public function generarIngreso(array $cabecera, array $detalles, array $pagos, array $empresa, string $outputDest = 'I')
+    public function generarIngreso(array $cabecera, array $detalles, array $pagos, array $empresa, string $outputDest = 'I', ?array $asiento = null)
     {
         $sujeto = trim((string)($cabecera['recibo_de'] ?? $cabecera['cliente_nombre'] ?? $cabecera['recibo_cliente_nombre'] ?? ''));
         return $this->render([
@@ -41,11 +41,11 @@ class ComprobanteCajaPdfService
             'forma_key'      => 'forma_cobro_nombre',
             'recibi_label'   => 'Recibí conforme',
             'file_prefix'    => 'Ingreso',
-        ], $cabecera, $detalles, $pagos, $empresa, $outputDest);
+        ], $cabecera, $detalles, $pagos, $empresa, $outputDest, $asiento);
     }
 
     /** Genera el PDF de un EGRESO (Recibo de Pago). */
-    public function generarEgreso(array $cabecera, array $detalles, array $pagos, array $empresa, string $outputDest = 'I')
+    public function generarEgreso(array $cabecera, array $detalles, array $pagos, array $empresa, string $outputDest = 'I', ?array $asiento = null)
     {
         return $this->render([
             'flujo'          => 'egreso',
@@ -59,12 +59,12 @@ class ComprobanteCajaPdfService
             'forma_key'      => 'forma_pago_nombre',
             'recibi_label'   => 'Recibí conforme',
             'file_prefix'    => 'Egreso',
-        ], $cabecera, $detalles, $pagos, $empresa, $outputDest);
+        ], $cabecera, $detalles, $pagos, $empresa, $outputDest, $asiento);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
 
-    private function render(array $cfg, array $cabecera, array $detalles, array $pagos, array $empresa, string $outputDest)
+    private function render(array $cfg, array $cabecera, array $detalles, array $pagos, array $empresa, string $outputDest, ?array $asiento = null)
     {
         $this->pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $this->pdf->SetCreator('Sistema');
@@ -82,6 +82,7 @@ class ComprobanteCajaPdfService
         $y = $this->dibujarTablaDetalle($cfg, $detalles, $y + 3);
         $y = $this->dibujarTablaPagos($cfg, $pagos, $y + 3);
         $y = $this->dibujarTotales($cabecera, $y + 3);
+        $y = $this->dibujarAsiento($asiento, $y + 4);
         $this->dibujarFirmas($cfg, $cabecera, $y + 10);
         $this->dibujarPie();
 
@@ -362,14 +363,89 @@ class ComprobanteCajaPdfService
         return max($pdf->GetY(), $y + 8);
     }
 
+    /**
+     * Dibuja el asiento contable bajo las formas de pago, SOLO si viene y está
+     * cuadrado (Σ debe = Σ haber y al menos una línea). Si no, no dibuja nada.
+     * Devuelve la Y final (o la de entrada si no se dibujó).
+     */
+    private function dibujarAsiento(?array $asiento, float $y): float
+    {
+        $lineas = $asiento['detalles'] ?? [];
+        if (empty($lineas)) {
+            return $y;
+        }
+
+        $sumDebe = 0.0; $sumHaber = 0.0;
+        foreach ($lineas as $d) {
+            $sumDebe  += (float)($d['debe'] ?? 0);
+            $sumHaber += (float)($d['haber'] ?? 0);
+        }
+        // Debe estar cuadrado (y no ser un asiento vacío en ceros).
+        if (round(abs($sumDebe - $sumHaber), 2) > 0.01 || round($sumDebe, 2) <= 0.0) {
+            return $y;
+        }
+
+        $pdf = $this->pdf;
+        $mL  = $this->marginL;
+
+        $wCod = 26; $wDebe = 28; $wHaber = 28;
+        $wCta = $this->contentW - $wCod - $wDebe - $wHaber; // 104
+
+        // Barra de título
+        $pdf->SetXY($mL, $y);
+        $pdf->SetFont('helvetica', 'B', 7.5);
+        $pdf->SetFillColor(60, 70, 90);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetDrawColor(60, 70, 90);
+        $pdf->SetLineWidth(0.2);
+        $titulo = 'ASIENTO CONTABLE';
+        if (!empty($asiento['numero_comprobante'])) {
+            $titulo .= '  ·  N.° ' . $asiento['numero_comprobante'];
+        }
+        $pdf->Cell($this->contentW, 5.5, $titulo, 1, 1, 'C', true);
+
+        // Encabezado de columnas
+        $pdf->SetX($mL);
+        $pdf->SetFont('helvetica', 'B', 7);
+        $pdf->Cell($wCod, 5, 'Código', 1, 0, 'L', true);
+        $pdf->Cell($wCta, 5, 'Cuenta', 1, 0, 'L', true);
+        $pdf->Cell($wDebe, 5, 'Debe', 1, 0, 'R', true);
+        $pdf->Cell($wHaber, 5, 'Haber', 1, 1, 'R', true);
+
+        // Filas
+        $pdf->SetFont('helvetica', '', 7);
+        $pdf->SetTextColor(0, 0, 0);
+        foreach ($lineas as $d) {
+            $debe  = (float)($d['debe'] ?? 0);
+            $haber = (float)($d['haber'] ?? 0);
+            $pdf->SetX($mL);
+            $pdf->Cell($wCod, 4.6, (string)($d['codigo_cuenta'] ?? ''), 1, 0, 'L');
+            $pdf->Cell($wCta, 4.6, $this->ajustarTexto((string)($d['nombre_cuenta'] ?? ''), $wCta - 2), 1, 0, 'L');
+            $pdf->Cell($wDebe, 4.6, $debe > 0 ? number_format($debe, 2) : '', 1, 0, 'R');
+            $pdf->Cell($wHaber, 4.6, $haber > 0 ? number_format($haber, 2) : '', 1, 1, 'R');
+        }
+
+        // Totales
+        $pdf->SetX($mL);
+        $pdf->SetFont('helvetica', 'B', 7);
+        $pdf->SetFillColor(235, 238, 242);
+        $pdf->Cell($wCod + $wCta, 5, 'TOTALES', 1, 0, 'R', true);
+        $pdf->Cell($wDebe, 5, number_format($sumDebe, 2), 1, 0, 'R', true);
+        $pdf->Cell($wHaber, 5, number_format($sumHaber, 2), 1, 1, 'R', true);
+
+        return $pdf->GetY();
+    }
+
     private function dibujarFirmas(array $cfg, array $cabecera, float $y): void
     {
         $pdf = $this->pdf;
         $mL  = $this->marginL;
         $colW = $this->contentW / 3;
 
-        // Evitar que las firmas queden pegadas al pie
-        if ($y > 250) { $y = 250; }
+        // Colocar las firmas con buen espacio: si el contenido es corto, bajarlas;
+        // si es largo, fluyen tras el contenido sin invadir el pie.
+        if ($y < 215) { $y = 215; }
+        if ($y > 255) { $y = 255; }
 
         $firmas = [
             ['Realizado por', trim((string)($cabecera['usuario_nombre'] ?? ''))],

@@ -609,6 +609,7 @@ class IngresosController extends BaseModuloController
             $empresa   = $this->cargarEmpresaParaPdf($idEmpresa);
             $detalles  = $ingreso['detalles'] ?? [];
             $pagos     = $ingreso['pagos'] ?? [];
+            $asiento   = $this->service->getAsientoContable($id, $idEmpresa);
 
             // Fase 2 (personalización): renderer si hay plantilla activa 'ingreso'.
             $renderer  = new \App\Services\PlantillasPdfRendererService();
@@ -617,7 +618,7 @@ class IngresosController extends BaseModuloController
                 $renderer->generar($plantilla, $ingreso, $detalles, $pagos, [], $empresa, 'D');
             } else {
                 (new \App\Services\modulos\ComprobanteCajaPdfService())
-                    ->generarIngreso($ingreso, $detalles, $pagos, $empresa, 'D');
+                    ->generarIngreso($ingreso, $detalles, $pagos, $empresa, 'D', $asiento);
             }
         } catch (\Throwable $e) {
             http_response_code(500);
