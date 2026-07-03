@@ -126,4 +126,84 @@ class ContadoresNavbarRepository
 
         return $row;
     }
+
+    /**
+     * Días restantes de vigencia de la suscripción del sistema de la empresa ACTIVA.
+     *
+     * Mismo criterio que la tarjeta "Suscripción y Vigencia" de modulos/empresa:
+     * usa `proximo_cobro` de la suscripción vinculada (cruce por RUC contra la empresa
+     * controladora); si no hay suscripción vinculada, cae a `periodo_vigencia_hasta`.
+     *
+     * @return array{dias:int,meses:?int}|null  Días restantes (negativo = vencida) y los
+     *         meses de periodicidad de la suscripción (null = fallback manual, sin periodicidad).
+     *         null si no hay dato/columnas.
+     */
+    public function getDiasVigenciaSuscripcion(int $idEmpresa): ?array
+    {
+        // Datos de la empresa (defensivo: las columnas pueden no existir si falta la migración).
+        try {
+            $st = $this->db->prepare(
+                "SELECT ruc, id_empresa_suscripciones, periodo_vigencia_hasta
+                 FROM empresas WHERE id = :e"
+            );
+            $st->execute([':e' => $idEmpresa]);
+            $emp = $st->fetch(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            return null;
+        }
+        if (!$emp) {
+            return null;
+        }
+
+        $fechaObjetivo = null;
+        $meses         = null;
+
+        // 1) Suscripción vinculada: la de próximo cobro más cercano (activa) en la controladora,
+        //    con su periodicidad para poder escalar el umbral del aviso.
+        $idCtrl = (int) ($emp['id_empresa_suscripciones'] ?? 0);
+        $ruc    = trim((string) ($emp['ruc'] ?? ''));
+        if ($idCtrl > 0 && $ruc !== '') {
+            try {
+                $s = $this->db->prepare(
+                    "SELECT s.proximo_cobro, per.meses AS meses
+                     FROM suscripciones s
+                     JOIN clientes c ON c.id = s.id_cliente
+                     LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
+                     WHERE s.id_empresa = :ctrl AND s.eliminado = false AND c.eliminado = false
+                       AND c.identificacion = :ruc AND s.estado = 'activo' AND s.proximo_cobro IS NOT NULL
+                     ORDER BY s.proximo_cobro ASC
+                     LIMIT 1"
+                );
+                $s->execute([':ctrl' => $idCtrl, ':ruc' => $ruc]);
+                $row = $s->fetch(PDO::FETCH_ASSOC);
+                if ($row && !empty($row['proximo_cobro'])) {
+                    $fechaObjetivo = (string) $row['proximo_cobro'];
+                    $meses = isset($row['meses']) && $row['meses'] !== null ? (int) $row['meses'] : null;
+                }
+            } catch (\Throwable $e) {
+                // Módulo de suscripciones no disponible: se intenta el fallback.
+            }
+        }
+
+        // 2) Fallback manual: periodo_vigencia_hasta de la empresa (sin periodicidad).
+        if ($fechaObjetivo === null && !empty($emp['periodo_vigencia_hasta'])) {
+            $fechaObjetivo = (string) $emp['periodo_vigencia_hasta'];
+            $meses = null;
+        }
+
+        if ($fechaObjetivo === null) {
+            return null;
+        }
+
+        $t2 = strtotime($fechaObjetivo);
+        if ($t2 === false) {
+            return null;
+        }
+
+        return [
+            // Mismo cálculo que la vista (ceil de la diferencia contra "ahora").
+            'dias'  => (int) ceil(($t2 - time()) / 86400),
+            'meses' => $meses,
+        ];
+    }
 }

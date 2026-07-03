@@ -170,6 +170,8 @@ function estadoPagoBadge($estado) {
                         data-estado-pago="<?= htmlspecialchars($r['estado_pago'] ?? 'pendiente') ?>"
                         data-obligado-contabilidad="<?= htmlspecialchars($r['obligado_contabilidad'] ?? 'NO') ?>"
                         data-max-usuarios="<?= (int)($r['max_usuarios'] ?? 3) ?>"
+                        data-id-empresa-suscripciones="<?= (int)($r['id_empresa_suscripciones'] ?? 0) ?>"
+                        data-es-administradora="<?= !empty($r['es_administradora_suscripciones']) ? '1' : '0' ?>"
                         data-usuarios="<?= count($usuarios) ?>">
                         <td><?= htmlspecialchars($r['nombre'] ?? '-') ?></td>
                         <td><?= htmlspecialchars($r['nombre_comercial'] ?? '-') ?></td>
@@ -277,6 +279,26 @@ function estadoPagoBadge($estado) {
                         <div class="col-md-4">
                             <label for="crear-telefono" class="form-label">Teléfono</label>
                             <input type="text" id="crear-telefono" name="telefono" class="form-control form-control-sm" placeholder="Teléfono">
+                        </div>
+                        <div class="col-md-8">
+                            <label for="crear-empresa-suscripciones" class="form-label">Empresa que controla las suscripciones</label>
+                            <select id="crear-empresa-suscripciones" name="id_empresa_suscripciones" class="form-select form-select-sm">
+                                <option value="">— Sin vínculo —</option>
+                                <?php foreach (($empresasLista ?? []) as $emp): ?>
+                                    <option value="<?= (int) $emp['id'] ?>" <?= ((int) $emp['id'] === (int) ($idAdminSuscripciones ?? 0)) ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars(($emp['nombre_comercial'] ?: $emp['nombre']) . ' — ' . ($emp['ruc'] ?? '')) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text">Empresa cuyas suscripciones se cruzarán por RUC para esta nueva empresa.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label d-block">Administradora</label>
+                            <input type="hidden" name="es_administradora_suscripciones" value="0">
+                            <div class="form-check form-switch mt-1">
+                                <input class="form-check-input" type="checkbox" role="switch" id="crear-es-administradora" name="es_administradora_suscripciones" value="1">
+                                <label class="form-check-label small" for="crear-es-administradora">Es la empresa administradora (por defecto)</label>
+                            </div>
                         </div>
                         <input type="hidden" name="tipo" value="01">
                         <input type="hidden" name="nom_rep_legal" value="">
@@ -453,6 +475,27 @@ function estadoPagoBadge($estado) {
                                 <div class="col-md-6">
                                     <label for="edit-vigencia-hasta" class="form-label">Periodo vigencia hasta</label>
                                     <input type="date" id="edit-vigencia-hasta" name="periodo_vigencia_hasta" class="form-control form-control-sm" placeholder="YYYY-MM-DD">
+                                </div>
+                                <div class="col-12"><hr class="my-1"><small class="text-muted fw-bold"><i class="bi bi-arrow-repeat"></i> Suscripción del sistema</small></div>
+                                <div class="col-md-8">
+                                    <label for="edit-empresa-suscripciones" class="form-label">Empresa que controla las suscripciones</label>
+                                    <select id="edit-empresa-suscripciones" name="id_empresa_suscripciones" class="form-select form-select-sm">
+                                        <option value="">— Sin vínculo —</option>
+                                        <?php foreach (($empresasLista ?? []) as $emp): ?>
+                                            <option value="<?= (int) $emp['id'] ?>">
+                                                <?= htmlspecialchars(($emp['nombre_comercial'] ?: $emp['nombre']) . ' — ' . ($emp['ruc'] ?? '')) ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text">Se cruza por RUC contra los clientes de esa empresa para mostrar la suscripción real.</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label d-block">Administradora</label>
+                                    <input type="hidden" name="es_administradora_suscripciones" value="0">
+                                    <div class="form-check form-switch mt-1">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="edit-es-administradora" name="es_administradora_suscripciones" value="1">
+                                        <label class="form-check-label small" for="edit-es-administradora">Es la empresa administradora (por defecto)</label>
+                                    </div>
                                 </div>
                                 <div class="col-12">
                                     <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg"></i> Guardar cambios</button>
@@ -639,6 +682,10 @@ function estadoPagoBadge($estado) {
         document.getElementById('edit-vigencia-desde').value = el.dataset.periodoVigenciaDesde || '';
         document.getElementById('edit-vigencia-hasta').value = el.dataset.periodoVigenciaHasta || '';
         document.getElementById('edit-estado-pago').value = el.dataset.estadoPago || 'pendiente';
+        var selSusc = document.getElementById('edit-empresa-suscripciones');
+        if (selSusc) selSusc.value = (el.dataset.idEmpresaSuscripciones && el.dataset.idEmpresaSuscripciones !== '0') ? el.dataset.idEmpresaSuscripciones : '';
+        var chkAdmin = document.getElementById('edit-es-administradora');
+        if (chkAdmin) chkAdmin.checked = (el.dataset.esAdministradora === '1');
         document.getElementById('tab-empresas-general').click();
         cargarUsuarios();
         cargarUsuariosDisponibles();

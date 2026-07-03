@@ -286,6 +286,12 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                 </ul>
             </div>
 
+            <!-- Suscripción del sistema por vencer / vencida (empresa activa) -->
+            <a href="<?= $base ?>/modulos/empresa" class="text-white text-decoration-none position-relative me-2 d-none cmg-suscripcion-wrap" title="Suscripción del sistema">
+                <i class="bi bi-shield-exclamation" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-suscripcion-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
+
             <a id="tareas-alertas-link" href="<?= $base ?>/config/tareas-obligaciones" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update tareas-alertas-link" title="Tareas pendientes/vencidas" data-navbar-link="true">
                 <i class="bi bi-bell-fill" style="font-size: 1.1rem;"></i>
                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger tareas-alertas-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
@@ -384,6 +390,11 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                     <i class="bi bi-truck text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-guias_remision">0</span>
                     <small>Guía SRI</small>
+                </a>
+                <a class="cmg-suscripcion-wrap d-none" href="<?= $base ?>/modulos/empresa">
+                    <i class="bi bi-shield-exclamation text-danger"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-suscripcion-badge">0</span>
+                    <small>Suscrip.</small>
                 </a>
                 <a class="cmg-icon-update tareas-alertas-link d-none" href="<?= $base ?>/config/tareas-obligaciones">
                     <i class="bi bi-bell-fill"></i>
@@ -585,6 +596,27 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                 document.querySelectorAll('.cmg-novedad-sri-wrap').forEach(function(w){
                     if (totalNov > 0) w.classList.remove('d-none'); else w.classList.add('d-none');
                 });
+
+                // Suscripción del sistema (empresa activa): por vencer / vencida
+                const susc = c.suscripcion || null;
+                const suscWraps = document.querySelectorAll('.cmg-suscripcion-wrap');
+                if (susc) {
+                    const dias = parseInt(susc.dias, 10);
+                    const vencida = susc.estado === 'vencida' || dias < 0;
+                    const esUrgente = vencida || dias < 15; // rojo si <15 días o vencida
+                    document.querySelectorAll('.cmg-suscripcion-badge').forEach(function(b) {
+                        b.textContent = vencida ? '!' : String(dias);
+                        b.classList.remove('bg-warning', 'text-dark', 'bg-danger', 'text-white');
+                        if (esUrgente) { b.classList.add('bg-danger', 'text-white'); }
+                        else { b.classList.add('bg-warning', 'text-dark'); }
+                    });
+                    const titulo = vencida
+                        ? 'Suscripción del sistema VENCIDA — clic para ver el detalle'
+                        : ('Suscripción por vencer en ' + dias + (dias === 1 ? ' día' : ' días') + ' — clic para ver el detalle');
+                    suscWraps.forEach(function(w) { w.classList.remove('d-none'); w.setAttribute('title', titulo); });
+                } else {
+                    suscWraps.forEach(function(w) { w.classList.add('d-none'); });
+                }
             } catch (e) {}
             finally { CMG_contadoresEnVuelo = false; }
         };

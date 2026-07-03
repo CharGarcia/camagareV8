@@ -64,6 +64,7 @@ class Empresa extends BaseModel
         $sql = "SELECT DISTINCT e.id, e.nombre, e.nombre_comercial, e.ruc, e.establecimiento, e.direccion, e.telefono, e.mail,
                 e.cod_prov, e.cod_ciudad, e.estado, e.valor_cobro, e.periodo_vigencia_desde, e.periodo_vigencia_hasta, e.estado_pago,
                 e.obligado_contabilidad, COALESCE(e.max_usuarios, 3) AS max_usuarios,
+                e.id_empresa_suscripciones, COALESCE(e.es_administradora_suscripciones, false) AS es_administradora_suscripciones,
                 p.nombre AS nombre_provincia, c.nombre AS nombre_ciudad
             FROM {$from} {$joinProv} {$joinCiud} {$where}
             ORDER BY {$col} {$dir}
@@ -84,6 +85,34 @@ class Empresa extends BaseModel
         if ($id <= 0) return null;
         $r = $this->query("SELECT * FROM empresas WHERE id = {$id}");
         return $r[0] ?? null;
+    }
+
+    /**
+     * Lista simple de empresas activas para poblar selectores
+     * (p. ej. "empresa que controla las suscripciones").
+     */
+    public function getListaParaSelect(): array
+    {
+        return $this->query(
+            "SELECT id, nombre, nombre_comercial, ruc,
+                    COALESCE(es_administradora_suscripciones, false) AS es_administradora_suscripciones
+             FROM empresas
+             WHERE eliminado = false
+             ORDER BY nombre_comercial, nombre"
+        );
+    }
+
+    /**
+     * Id de la empresa administradora de suscripciones por defecto (o null).
+     */
+    public function getIdAdministradoraSuscripciones(): ?int
+    {
+        $r = $this->query(
+            "SELECT id FROM empresas
+             WHERE es_administradora_suscripciones = true AND eliminado = false
+             ORDER BY id LIMIT 1"
+        );
+        return isset($r[0]['id']) ? (int) $r[0]['id'] : null;
     }
 
     /**
@@ -190,8 +219,21 @@ class Empresa extends BaseModel
 
         $estEsc = $this->escape($establecimiento);
         $obligadoCont = strtoupper(trim($data['obligado_contabilidad'] ?? 'NO')) === 'SI' ? 'SI' : 'NO';
-        $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, obligado_contabilidad, max_usuarios)
-            VALUES ('{$nombre}', '{$nombreComercial}', '{$ruc}', '{$estEsc}', '{$direccion}', '{$telefono}', '{$tipo}', '{$nomRepLegal}', '{$cedRepLegal}', '{$mail}', '{$codProv}', '{$codCiudad}', '{$estado}', NOW(), '{$idUsuario}', '{$nombreContador}', '{$rucContador}', {$valCobroSql}, {$vigenciaDesde}, {$vigenciaHasta}, {$estadoPago}, '{$obligadoCont}', {$maxUsuarios})";
+
+        // Empresa que controla la suscripción (FK lógica a empresas.id) y flag de administradora.
+        $idEmpSusc = isset($data['id_empresa_suscripciones']) && $data['id_empresa_suscripciones'] !== '' && (int) $data['id_empresa_suscripciones'] > 0
+            ? (int) $data['id_empresa_suscripciones'] : null;
+        $idEmpSuscSql = $idEmpSusc !== null ? (string) $idEmpSusc : 'NULL';
+        $esAdminSusc = $this->esValorVerdadero($data['es_administradora_suscripciones'] ?? null);
+
+        // Solo una empresa puede ser administradora por defecto.
+        if ($esAdminSusc) {
+            $this->execute("UPDATE empresas SET es_administradora_suscripciones = false WHERE es_administradora_suscripciones = true");
+        }
+        $esAdminSql = $esAdminSusc ? 'true' : 'false';
+
+        $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, obligado_contabilidad, max_usuarios, id_empresa_suscripciones, es_administradora_suscripciones)
+            VALUES ('{$nombre}', '{$nombreComercial}', '{$ruc}', '{$estEsc}', '{$direccion}', '{$telefono}', '{$tipo}', '{$nomRepLegal}', '{$cedRepLegal}', '{$mail}', '{$codProv}', '{$codCiudad}', '{$estado}', NOW(), '{$idUsuario}', '{$nombreContador}', '{$rucContador}', {$valCobroSql}, {$vigenciaDesde}, {$vigenciaHasta}, {$estadoPago}, '{$obligadoCont}', {$maxUsuarios}, {$idEmpSuscSql}, {$esAdminSql})";
         $this->execute($sql);
         $id = $this->lastInsertId('empresas_id_seq');
 
@@ -245,8 +287,13 @@ class Empresa extends BaseModel
             $data['establecimiento'] = ($estActual !== '') ? $estActual : $this->obtenerEstablecimientoDisponible($ruc, $id);
         }
 
+        // Si se marca como administradora por defecto, desmarcar a las demás.
+        if (array_key_exists('es_administradora_suscripciones', $data) && $this->esValorVerdadero($data['es_administradora_suscripciones'])) {
+            $this->execute("UPDATE empresas SET es_administradora_suscripciones = false WHERE es_administradora_suscripciones = true AND id != {$id}");
+        }
+
         $sets = [];
-        $campos = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios'];
+        $campos = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones'];
         foreach ($campos as $c) {
             if (array_key_exists($c, $data)) {
                 if (in_array($c, ['valor_cobro'], true)) {
@@ -255,6 +302,11 @@ class Empresa extends BaseModel
                 } elseif ($c === 'max_usuarios') {
                     $v = (int) ($data[$c] ?? 3);
                     $sets[] = "{$c} = " . ($v > 0 ? $v : 3);
+                } elseif ($c === 'id_empresa_suscripciones') {
+                    $v = $data[$c];
+                    $sets[] = "{$c} = " . ($v === '' || $v === null || (int) $v <= 0 ? 'NULL' : (int) $v);
+                } elseif ($c === 'es_administradora_suscripciones') {
+                    $sets[] = "{$c} = " . ($this->esValorVerdadero($data[$c]) ? 'true' : 'false');
                 } elseif (in_array($c, ['periodo_vigencia_desde', 'periodo_vigencia_hasta'], true)) {
                     $v = trim($data[$c] ?? '');
                     $sets[] = "{$c} = " . ($v === '' ? 'NULL' : "'" . $this->escape($v) . "'");
@@ -269,6 +321,16 @@ class Empresa extends BaseModel
         if (empty($sets)) return true;
         $sql = 'UPDATE empresas SET ' . implode(', ', $sets) . ' WHERE id = ' . $id;
         return $this->execute($sql);
+    }
+
+    /**
+     * Normaliza distintas representaciones de "verdadero" (checkbox, texto, número).
+     */
+    private function esValorVerdadero($v): bool
+    {
+        if (is_bool($v)) return $v;
+        $s = strtolower(trim((string) $v));
+        return in_array($s, ['1', 'true', 'si', 'sí', 'on', 't', 'yes'], true);
     }
 
     public function getEstablecimientos(int $idEmpresa): array

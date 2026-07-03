@@ -52,6 +52,9 @@ class EmpresasSistemaController extends Controller
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
 
+        $empresasLista = $this->model->getListaParaSelect();
+        $idAdminSuscripciones = $this->model->getIdAdministradoraSuscripciones();
+
         $this->viewWithLayout('layouts.main', 'empresasSistema.index', [
             'titulo' => 'Empresas del sistema',
             'fullWidth' => true,
@@ -64,6 +67,8 @@ class EmpresasSistemaController extends Controller
             'nivel' => $nivel,
             'ordenCol' => $ordenCol,
             'ordenDir' => $ordenDir,
+            'empresasLista' => $empresasLista,
+            'idAdminSuscripciones' => $idAdminSuscripciones,
         ]);
     }
 
@@ -100,6 +105,8 @@ class EmpresasSistemaController extends Controller
             'periodo_vigencia_hasta' => trim($_POST['periodo_vigencia_hasta'] ?? ''),
             'estado_pago' => trim($_POST['estado_pago'] ?? 'pendiente'),
             'max_usuarios' => (int) ($_POST['max_usuarios'] ?? 3),
+            'id_empresa_suscripciones' => $_POST['id_empresa_suscripciones'] ?? null,
+            'es_administradora_suscripciones' => !empty($_POST['es_administradora_suscripciones']) ? '1' : '0',
         ];
 
         $esAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
@@ -173,7 +180,7 @@ class EmpresasSistemaController extends Controller
             }
         }
 
-        $allKeys = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios'];
+        $allKeys = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones'];
         $data = [];
         foreach ($allKeys as $k) {
             if (array_key_exists($k, $_POST)) {

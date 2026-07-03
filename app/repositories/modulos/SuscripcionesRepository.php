@@ -89,6 +89,177 @@ class SuscripcionesRepository extends BaseRepository
         return ['rows' => $rows, 'total' => $total];
     }
 
+    /**
+     * Resumen de suscripciones de una empresa controladora cuyo cliente coincide
+     * por RUC/identificación. Alimenta la tarjeta "Suscripción y Vigencia" de la
+     * ficha de empresa. Devuelve monto, periodicidad, próximo cobro, estado y el
+     * último pago registrado (suscripciones_pagos).
+     */
+    public function getResumenPorControladoraYRuc(int $idControladora, string $ruc): array
+    {
+        $ruc = preg_replace('/\D/', '', (string) $ruc);
+        if ($idControladora <= 0 || $ruc === '') {
+            return [];
+        }
+
+        $sql = "SELECT s.id,
+                       s.estado,
+                       s.fecha_inicio,
+                       s.fecha_fin,
+                       s.proximo_cobro,
+                       s.forma_cobro,
+                       s.tipo_comprobante,
+                       c.nombre         AS nombre_cliente,
+                       c.identificacion AS identificacion_cliente,
+                       per.nombre       AS periodicidad,
+                       per.meses        AS periodicidad_meses,
+                       COALESCE((SELECT SUM(d.cantidad * d.precio_unitario * (1 + d.porcentaje_iva / 100))
+                                 FROM suscripciones_detalle d
+                                 WHERE d.id_suscripcion = s.id AND d.eliminado = false), 0) AS monto,
+                       (SELECT p.estado FROM suscripciones_pagos p
+                         WHERE p.id_suscripcion = s.id AND p.eliminado = false
+                         ORDER BY p.fecha_cobro DESC, p.id DESC LIMIT 1) AS ultimo_pago_estado,
+                       (SELECT p.fecha_cobro FROM suscripciones_pagos p
+                         WHERE p.id_suscripcion = s.id AND p.eliminado = false
+                         ORDER BY p.fecha_cobro DESC, p.id DESC LIMIT 1) AS ultimo_pago_fecha,
+                       (SELECT p.id_factura FROM suscripciones_pagos p
+                         WHERE p.id_suscripcion = s.id AND p.eliminado = false
+                         ORDER BY p.fecha_cobro DESC, p.id DESC LIMIT 1) AS ultimo_pago_id_factura
+                FROM suscripciones s
+                JOIN clientes c ON c.id = s.id_cliente
+                LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
+                WHERE s.id_empresa = :ctrl
+                  AND s.eliminado = false
+                  AND c.eliminado = false
+                  AND regexp_replace(c.identificacion, '[^0-9]', '', 'g') = :ruc
+                ORDER BY (s.estado = 'activo') DESC, s.proximo_cobro ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':ctrl' => $idControladora, ':ruc' => $ruc]);
+        $suscripciones = $st->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($suscripciones)) {
+            return [];
+        }
+
+        // Ítems (detalle) de cada suscripción en una sola consulta.
+        $ids = array_map(static fn($s) => (int) $s['id'], $suscripciones);
+        $ph  = implode(',', array_fill(0, count($ids), '?'));
+        $sqlItems = "SELECT d.id_suscripcion,
+                            d.descripcion,
+                            d.cantidad,
+                            d.precio_unitario,
+                            d.porcentaje_iva,
+                            (d.cantidad * d.precio_unitario * (1 + d.porcentaje_iva / 100)) AS subtotal,
+                            p.nombre AS nombre_producto
+                     FROM suscripciones_detalle d
+                     LEFT JOIN productos p ON p.id = d.id_producto
+                     WHERE d.id_suscripcion IN ($ph) AND d.eliminado = false
+                     ORDER BY d.id_suscripcion, d.orden, d.id";
+        $stItems = $this->db->prepare($sqlItems);
+        $stItems->execute($ids);
+
+        $itemsPorSusc = [];
+        foreach ($stItems->fetchAll(PDO::FETCH_ASSOC) as $it) {
+            $itemsPorSusc[(int) $it['id_suscripcion']][] = $it;
+        }
+        foreach ($suscripciones as &$s) {
+            $s['items'] = $itemsPorSusc[(int) $s['id']] ?? [];
+        }
+        unset($s);
+
+        // Estado REAL de pago de la factura del último período (aislado por id_factura,
+        // no por cliente, para no confundir con otras facturas de la misma empresa).
+        $idsFactura = array_values(array_unique(array_filter(array_map(
+            static fn($s) => (int) ($s['ultimo_pago_id_factura'] ?? 0),
+            $suscripciones
+        ))));
+        $estadoFacturas = $this->getEstadoFacturas($idsFactura, $idControladora);
+        foreach ($suscripciones as &$s) {
+            $idf = (int) ($s['ultimo_pago_id_factura'] ?? 0);
+            $s['pago_real'] = ($idf > 0 && isset($estadoFacturas[$idf])) ? $estadoFacturas[$idf] : null;
+        }
+        unset($s);
+
+        return $suscripciones;
+    }
+
+    /**
+     * Estado de cobro de un conjunto de facturas (ventas_cabecera), aislado por id.
+     * Saldo = importe_total − cobrado (ingresos activos) − retenido − notas de crédito.
+     * Devuelve mapa: id_factura => ['total','cobrado','retenido','nota_credito','saldo','estado'].
+     * estado ∈ pagado | parcial | pendiente.
+     */
+    public function getEstadoFacturas(array $idsFactura, int $idEmpresa): array
+    {
+        $idsFactura = array_values(array_filter(array_map('intval', $idsFactura)));
+        if (empty($idsFactura)) {
+            return [];
+        }
+        $ph = implode(',', array_fill(0, count($idsFactura), '?'));
+
+        $sql = "SELECT v.id AS id_factura,
+                       v.importe_total AS total,
+                       COALESCE(cob.total_cobrado, 0)  AS cobrado,
+                       COALESCE(ret.total_retenido, 0) AS retenido,
+                       COALESCE(nc.total_nc, 0)        AS nota_credito
+                FROM ventas_cabecera v
+                LEFT JOIN (
+                    SELECT d.id_referencia_documento AS id_factura, SUM(d.monto_cobrado) AS total_cobrado
+                    FROM ingresos_detalle d
+                    INNER JOIN ingresos_cabecera i ON i.id = d.id_ingreso
+                    WHERE d.tipo_documento = 'FACTURA'
+                      AND i.estado != 'anulado' AND i.eliminado = false
+                      AND d.id_referencia_documento IN ($ph)
+                    GROUP BY d.id_referencia_documento
+                ) cob ON cob.id_factura = v.id
+                LEFT JOIN (
+                    SELECT id_venta, SUM(total_renta + total_iva + total_isd) AS total_retenido
+                    FROM retencion_venta_cabecera
+                    WHERE eliminado = false AND id_venta IS NOT NULL AND id_empresa = ?
+                    GROUP BY id_venta
+                ) ret ON ret.id_venta = v.id
+                LEFT JOIN (
+                    SELECT num_doc_modificado, SUM(importe_total) AS total_nc
+                    FROM notas_credito_cabecera
+                    WHERE estado != 'anulado' AND eliminado = false AND id_empresa = ?
+                    GROUP BY num_doc_modificado
+                ) nc ON nc.num_doc_modificado = CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)
+                WHERE v.id IN ($ph) AND v.eliminado = false";
+
+        // Params: cobrado IN, retenido id_empresa, nc id_empresa, WHERE IN
+        $params = array_merge($idsFactura, [$idEmpresa, $idEmpresa], $idsFactura);
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $total    = (float) $r['total'];
+            $cobrado  = (float) $r['cobrado'];
+            $retenido = (float) $r['retenido'];
+            $nc       = (float) $r['nota_credito'];
+            $saldo    = round($total - $cobrado - $retenido - $nc, 2);
+            $aplicado = $cobrado + $retenido + $nc;
+
+            if ($total > 0 && $saldo <= 0.005) {
+                $estado = 'pagado';
+            } elseif ($aplicado > 0.005) {
+                $estado = 'parcial';
+            } else {
+                $estado = 'pendiente';
+            }
+
+            $out[(int) $r['id_factura']] = [
+                'total'        => $total,
+                'cobrado'      => $cobrado,
+                'retenido'     => $retenido,
+                'nota_credito' => $nc,
+                'saldo'        => max(0, $saldo),
+                'estado'       => $estado,
+            ];
+        }
+        return $out;
+    }
+
     // ── CRUD suscripción ──────────────────────────────────────────────────────
 
     public function create(array $data): int

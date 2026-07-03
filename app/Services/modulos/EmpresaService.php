@@ -3,6 +3,7 @@
 namespace App\services\modulos;
 
 use App\repositories\modulos\EmpresaRepository;
+use App\repositories\modulos\SuscripcionesRepository;
 
 class EmpresaService
 {
@@ -33,8 +34,31 @@ class EmpresaService
             }
         }
 
+        // Suscripción del sistema: se relaciona SIEMPRE por RUC (no por establecimiento).
+        // La empresa controladora se resuelve por RUC (vínculo directo, empresa hermana
+        // con el mismo RUC, o administradora por defecto).
+        $suscripcionInfo = [];
+        $rucEmpresa = trim((string) ($empresa['ruc'] ?? ''));
+        $idControladora = 0;
+        if ($rucEmpresa !== '') {
+            try {
+                $idDirecto = isset($empresa['id_empresa_suscripciones']) && (int) $empresa['id_empresa_suscripciones'] > 0
+                    ? (int) $empresa['id_empresa_suscripciones'] : null;
+                $idControladora = (int) ($this->repository->resolverEmpresaControladoraSuscripciones($rucEmpresa, $idDirecto) ?? 0);
+                if ($idControladora > 0) {
+                    $suscripcionInfo = (new SuscripcionesRepository())
+                        ->getResumenPorControladoraYRuc($idControladora, $rucEmpresa);
+                }
+            } catch (\Throwable $e) {
+                // Módulo de suscripciones o migración no disponible: se usa el fallback manual.
+                $suscripcionInfo = [];
+            }
+        }
+
         return [
             'empresa'               => $empresa,
+            'suscripcion_info'      => $suscripcionInfo,
+            'suscripcion_controladora' => $idControladora,
             'correo'                => $this->repository->getCorreoConfig($idEmpresa),
             'firmas'                => $this->repository->getFirmas($idEmpresa),
             'establecimientos'      => $establecimientos,

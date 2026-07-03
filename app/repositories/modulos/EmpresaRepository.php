@@ -13,7 +13,7 @@ class EmpresaRepository extends BaseModel
                        resolucion_contribuyente, id_tipo_regimen, tipo_ambiente, agente_retencion, tipo_emision,
                        nom_rep_legal, ced_rep_legal, nombre_contador, ruc_contador, cod_prov, cod_ciudad,
                        tipo, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, estado,
-                       cancelar_renovacion, obligado_contabilidad,
+                       cancelar_renovacion, obligado_contabilidad, id_empresa_suscripciones,
                        COALESCE(max_usuarios, 3) AS max_usuarios
                 FROM empresas
                 WHERE id = {$id} AND eliminado = false";
@@ -26,6 +26,44 @@ class EmpresaRepository extends BaseModel
         $ruc = $this->escape($ruc);
         $sql = "SELECT id, ruc, nombre FROM empresas WHERE ruc = '{$ruc}' AND eliminado = false";
         return $this->query($sql);
+    }
+
+    /**
+     * Resuelve la empresa que controla las suscripciones de la empresa actual,
+     * relacionando SIEMPRE por RUC (no por establecimiento):
+     *   1) el vínculo directo de la fila actual (id_empresa_suscripciones), si existe;
+     *   2) el vínculo de cualquier empresa hermana con el mismo RUC (otro establecimiento);
+     *   3) la empresa administradora por defecto (es_administradora_suscripciones = true).
+     * Devuelve el id de la controladora o null si no hay ninguna.
+     */
+    public function resolverEmpresaControladoraSuscripciones(string $ruc, ?int $idDirecto): ?int
+    {
+        if ($idDirecto !== null && $idDirecto > 0) {
+            return $idDirecto;
+        }
+
+        $rucNorm = preg_replace('/\D/', '', $ruc);
+        if ($rucNorm !== '') {
+            $rucEsc = $this->escape($rucNorm);
+            $r = $this->query(
+                "SELECT id_empresa_suscripciones
+                 FROM empresas
+                 WHERE regexp_replace(ruc, '[^0-9]', '', 'g') = '{$rucEsc}'
+                   AND id_empresa_suscripciones IS NOT NULL
+                   AND eliminado = false
+                 ORDER BY id LIMIT 1"
+            );
+            if (!empty($r[0]['id_empresa_suscripciones'])) {
+                return (int) $r[0]['id_empresa_suscripciones'];
+            }
+        }
+
+        $g = $this->query(
+            "SELECT id FROM empresas
+             WHERE es_administradora_suscripciones = true AND eliminado = false
+             ORDER BY id LIMIT 1"
+        );
+        return isset($g[0]['id']) ? (int) $g[0]['id'] : null;
     }
 
     public function updateEmpresa(int $idEmpresa, array $data): bool

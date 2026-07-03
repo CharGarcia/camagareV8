@@ -54,6 +54,31 @@ class ContadoresNavbarService
         'guias_remision'      => 'modulos/guias_remision',
     ];
 
+    /** Ruta MVC del módulo de empresa (aviso de suscripción/vigencia del sistema). */
+    public const RUTA_EMPRESA = 'modulos/empresa';
+
+    /** Umbral BASE en días para avisar que la suscripción está por vencer (semestral/anual/manual). */
+    private const UMBRAL_VIGENCIA_DIAS = 15;
+
+    /**
+     * Umbral de aviso ESCALADO según la periodicidad de la suscripción.
+     * Evita que una suscripción mensual mantenga el badge encendido todo el mes
+     * (su próximo cobro siempre está a ≤ ~30 días).
+     */
+    private function umbralVigencia(?int $meses): int
+    {
+        if ($meses === null) {
+            return self::UMBRAL_VIGENCIA_DIAS; // manual / sin periodicidad
+        }
+        if ($meses <= 1) {
+            return 5;   // mensual → avisar solo en los últimos 5 días (o vencida)
+        }
+        if ($meses <= 3) {
+            return 10;  // trimestral
+        }
+        return self::UMBRAL_VIGENCIA_DIAS; // semestral / anual → 15
+    }
+
     /** Tablas que, al cambiar, invalidan la caché de contadores de una empresa. */
     private const TABLAS_INVALIDAN = [
         'ventas_cabecera',
@@ -118,6 +143,12 @@ class ContadoresNavbarService
         } catch (\Throwable $e) {
             $datos['__novedad_sri'] = [];
         }
+        // Vigencia de la suscripción del sistema (null si no aplica / columnas sin migrar).
+        try {
+            $datos['__vigencia'] = $this->repo->getDiasVigenciaSuscripcion($idEmpresa);
+        } catch (\Throwable $e) {
+            $datos['__vigencia'] = null;
+        }
         Cache::set(self::claveEmpresa($idEmpresa), $datos, self::TTL_CONTADORES);
         return $datos;
     }
@@ -148,7 +179,8 @@ class ContadoresNavbarService
         }
         $rutas = array_unique(array_merge(
             array_values(self::RUTAS_MODULO),
-            array_values(self::NOVEDAD_RUTAS)
+            array_values(self::NOVEDAD_RUTAS),
+            [self::RUTA_EMPRESA]
         ));
         $perms = [];
         foreach ($rutas as $ruta) {
@@ -191,6 +223,22 @@ class ContadoresNavbarService
             }
             if (!empty($novedad)) {
                 $out['novedad_sri'] = $novedad;
+            }
+
+            // Suscripción del sistema: avisar si está por vencer (≤ umbral escalado por
+            // periodicidad) o vencida. Así una suscripción mensual no queda siempre encendida.
+            if (!empty($permRuta[self::RUTA_EMPRESA])) {
+                $vig = $empresa['__vigencia'] ?? null;
+                if (is_array($vig) && isset($vig['dias'])) {
+                    $dias   = (int) $vig['dias'];
+                    $umbral = $this->umbralVigencia($vig['meses'] ?? null);
+                    if ($dias <= $umbral) {
+                        $out['suscripcion'] = [
+                            'dias'   => $dias,
+                            'estado' => $dias < 0 ? 'vencida' : 'por_vencer',
+                        ];
+                    }
+                }
             }
         }
 

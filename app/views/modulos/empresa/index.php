@@ -240,60 +240,148 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                 </div>
                             </div>
 
-                            <!-- Cobro y Vigencia (Solo Lectura) -->
+                            <!-- Cobro y Vigencia -->
                             <div class="col-12">
                                 <div class="card bg-light border-0 mt-3">
                                     <div class="card-body p-3">
-                                        <h6 class="fw-bold mb-3 small text-primary"><i class="bi bi-shield-check me-2"></i>Suscripción y Vigencia del Sistema</h6>
-                                        <div class="row g-3 align-items-center">
-                                            <div class="col-md-2">
-                                                <div class="text-muted mb-1" style="font-size: 0.65rem;">Costo de Suscripción</div>
-                                                <div class="fw-bold text-dark" style="font-size: 0.8rem;">$ <?= number_format((float)($empresa['valor_cobro'] ?? 0), 2) ?></div>
-                                            </div>
-                                            <div class="col-md-3 border-start ps-3">
-                                                <div class="form-check form-switch">
-                                                    <input class="form-check-input" type="checkbox" name="cancelar_renovacion" id="cancelar_renovacion" <?= ($empresa['cancelar_renovacion'] ?? false) ? 'checked' : '' ?>>
-                                                    <label class="form-check-label fw-bold text-danger" for="cancelar_renovacion" style="font-size: 0.7rem;">CANCELAR RENOVACIÓN</label>
-                                                </div>
-                                                <div class="text-muted mt-1" style="font-size: 0.6rem;">No renovar automáticamente</div>
-                                            </div>
-                                            <div class="col-md-2 border-start ps-3">
-                                                <div class="text-muted mb-1" style="font-size: 0.65rem;">Estado de Pago</div>
-                                                <?php $estP = strtolower($empresa['estado_pago'] ?? 'pendiente'); ?>
-                                                <span class="badge bg-<?= ($estP === 'pagado') ? 'success' : 'warning' ?> bg-opacity-10 text-<?= ($estP === 'pagado') ? 'success' : 'warning' ?> rounded-pill" style="font-size: 0.65rem;">
-                                                    <i class="bi bi-circle-fill me-1" style="font-size: 0.4rem;"></i> <?= strtoupper($estP) ?>
-                                                </span>
-                                            </div>
-                                            <div class="col-md-5 border-start ps-4">
+                                        <?php $tieneSusc = !empty($suscripcion_info); ?>
+                                        <div class="d-flex align-items-center justify-content-between mb-3">
+                                            <h6 class="fw-bold mb-0 small text-primary"><i class="bi bi-shield-check me-2"></i>Suscripción y Vigencia del Sistema</h6>
+                                            <?php if ($tieneSusc): ?>
+                                                <a href="<?= rtrim(BASE_URL, '/') ?>/modulos/suscripciones" class="badge bg-success bg-opacity-10 text-success text-decoration-none" style="font-size: 0.62rem;" title="Ver en el módulo de suscripciones">
+                                                    <i class="bi bi-link-45deg"></i> Vinculada a suscripción
+                                                </a>
+                                            <?php else: ?>
+                                                <span class="badge bg-secondary bg-opacity-10 text-secondary" style="font-size: 0.62rem;"><i class="bi bi-pencil"></i> Datos manuales</span>
+                                            <?php endif; ?>
+                                        </div>
+
+                                        <?php if ($tieneSusc): ?>
+                                            <?php
+                                            $mapEstadoSusc = ['activo' => 'success', 'pausado' => 'warning', 'suspendido' => 'danger', 'cancelado' => 'secondary'];
+                                            $mapEstadoPago = ['exitoso' => 'success', 'pendiente' => 'warning', 'fallido' => 'danger'];
+                                            ?>
+                                            <?php foreach ($suscripcion_info as $idx => $s): ?>
                                                 <?php
-                                                $desde = $empresa['periodo_vigencia_desde'] ?? null;
-                                                $hasta = $empresa['periodo_vigencia_hasta'] ?? null;
+                                                $estadoSusc = strtolower($s['estado'] ?? '');
+                                                $colSusc = $mapEstadoSusc[$estadoSusc] ?? 'secondary';
+                                                $estadoPago = strtolower($s['ultimo_pago_estado'] ?? '');
+                                                $colPago = $mapEstadoPago[$estadoPago] ?? 'secondary';
+                                                $ini  = $s['fecha_inicio'] ?? null;
+                                                $prox = $s['proximo_cobro'] ?? null;
                                                 $porcentaje = 0;
                                                 $diasRestantes = 0;
-                                                $colorBar = 'primary';
-                                                if ($desde && $hasta) {
-                                                    $t1 = strtotime($desde);
-                                                    $t2 = strtotime($hasta);
+                                                $colorBar = 'success';
+                                                if ($ini && $prox) {
+                                                    $t1 = strtotime($ini);
+                                                    $t2 = strtotime($prox);
                                                     $now = time();
                                                     $total = $t2 - $t1;
                                                     if ($total > 0) {
-                                                        $transcurrido = $now - $t1;
-                                                        $porcentaje = min(100, max(0, round(($transcurrido / $total) * 100)));
-                                                        $diasRestantes = ceil(($t2 - $now) / 86400);
-                                                        if ($diasRestantes < 15) $colorBar = 'danger';
-                                                        elseif ($diasRestantes < 30) $colorBar = 'warning';
+                                                        $porcentaje = min(100, max(0, round((($now - $t1) / $total) * 100)));
                                                     }
+                                                    $diasRestantes = ceil(($t2 - $now) / 86400);
+                                                    if ($diasRestantes < 15) $colorBar = 'danger';
+                                                    elseif ($diasRestantes < 30) $colorBar = 'warning';
                                                 }
                                                 ?>
-                                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                                    <div class="text-muted" style="font-size: 0.65rem;">Vigencia: <span class="text-dark fw-bold"><?= $desde ? date('d-m-Y', strtotime($desde)) : '-' ?></span> al <span class="text-dark fw-bold"><?= $hasta ? date('d-m-Y', strtotime($hasta)) : '-' ?></span></div>
-                                                    <div class="fw-bold text-<?= $colorBar ?>" style="font-size: 0.65rem;"><?= max(0, $diasRestantes) ?> días restantes</div>
+                                                <div class="row g-3 align-items-center <?= $idx > 0 ? 'border-top pt-3 mt-1' : '' ?>">
+                                                    <div class="col-md-2">
+                                                        <div class="text-muted mb-1" style="font-size: 0.65rem;">Monto suscripción</div>
+                                                        <div class="fw-bold text-dark" style="font-size: 0.8rem;">$ <?= number_format((float)($s['monto'] ?? 0), 2) ?></div>
+                                                        <?php if (!empty($s['periodicidad'])): ?>
+                                                            <span class="badge bg-info text-white rounded-pill mt-1" style="font-size: 0.65rem;">
+                                                                <i class="bi bi-arrow-repeat me-1" style="font-size: 0.55rem;"></i> <?= htmlspecialchars($s['periodicidad']) ?>
+                                                            </span>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <div class="col-md-2 border-start ps-3">
+                                                        <div class="text-muted mb-1" style="font-size: 0.65rem;">Estado suscripción</div>
+                                                        <span class="badge bg-<?= $colSusc ?> bg-opacity-10 text-<?= $colSusc ?> rounded-pill" style="font-size: 0.65rem;">
+                                                            <i class="bi bi-circle-fill me-1" style="font-size: 0.4rem;"></i> <?= strtoupper($estadoSusc ?: '—') ?>
+                                                        </span>
+                                                    </div>
+                                                    <div class="col-md-3 border-start ps-3">
+                                                        <div class="text-muted mb-1" style="font-size: 0.65rem;">Estado de pago (último período)</div>
+                                                        <?php
+                                                        $pagoReal = $s['pago_real'] ?? null;
+                                                        $mapPagoReal = ['pagado' => 'success', 'parcial' => 'warning', 'pendiente' => 'danger'];
+                                                        ?>
+                                                        <?php if ($pagoReal): ?>
+                                                            <?php $colReal = $mapPagoReal[$pagoReal['estado']] ?? 'secondary'; ?>
+                                                            <span class="badge bg-<?= $colReal ?> bg-opacity-10 text-<?= $colReal ?> rounded-pill" style="font-size: 0.65rem;">
+                                                                <i class="bi bi-circle-fill me-1" style="font-size: 0.4rem;"></i> <?= strtoupper($pagoReal['estado']) ?>
+                                                            </span>
+                                                            <div class="text-muted mt-1" style="font-size: 0.6rem;">
+                                                                Cobrado $ <?= number_format((float)$pagoReal['cobrado'], 2) ?> / $ <?= number_format((float)$pagoReal['total'], 2) ?>
+                                                                <?php if ((float)$pagoReal['saldo'] > 0): ?><br>Saldo $ <?= number_format((float)$pagoReal['saldo'], 2) ?><?php endif; ?>
+                                                                <?php if ((float)$pagoReal['retenido'] > 0): ?><br>Retención $ <?= number_format((float)$pagoReal['retenido'], 2) ?><?php endif; ?>
+                                                            </div>
+                                                        <?php elseif ($estadoPago): ?>
+                                                            <span class="badge bg-<?= $colPago ?> bg-opacity-10 text-<?= $colPago ?> rounded-pill" style="font-size: 0.65rem;"><?= strtoupper($estadoPago) ?></span>
+                                                            <div class="text-muted mt-1" style="font-size: 0.6rem;">Sin factura vinculada</div>
+                                                        <?php else: ?>
+                                                            <span class="text-muted" style="font-size: 0.65rem;">Sin pagos registrados</span>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <div class="col-md-5 border-start ps-4">
+                                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                                            <div class="text-muted" style="font-size: 0.65rem;">Próximo cobro: <span class="text-dark fw-bold"><?= $prox ? date('d-m-Y', strtotime($prox)) : '-' ?></span></div>
+                                                            <div class="fw-bold text-<?= $colorBar ?>" style="font-size: 0.65rem;"><?= max(0, $diasRestantes) ?> días</div>
+                                                        </div>
+                                                        <div class="progress" style="height: 6px; background: #e2e8f0;">
+                                                            <div class="progress-bar bg-<?= $colorBar ?> progress-bar-striped progress-bar-animated" role="progressbar" style="width: <?= 100 - $porcentaje ?>%"></div>
+                                                        </div>
+                                                        <div class="text-muted mt-1" style="font-size: 0.6rem;">Cliente: <?= htmlspecialchars($s['nombre_cliente'] ?? '') ?></div>
+                                                    </div>
                                                 </div>
-                                                <div class="progress" style="height: 6px; background: #e2e8f0;">
-                                                    <div class="progress-bar bg-<?= $colorBar ?> progress-bar-striped progress-bar-animated" role="progressbar" style="width: <?= 100 - $porcentaje ?>%"></div>
+                                                <?php if (!empty($s['items'])): ?>
+                                                    <div class="mt-2">
+                                                        <div class="text-muted mb-1" style="font-size: 0.62rem;"><i class="bi bi-list-ul me-1"></i>Ítems de la suscripción</div>
+                                                        <div class="table-responsive">
+                                                            <table class="table table-sm mb-0 align-middle" style="font-size: 0.68rem;">
+                                                                <thead>
+                                                                    <tr class="text-muted">
+                                                                        <th class="fw-normal">Descripción</th>
+                                                                        <th class="fw-normal text-end" style="width: 70px;">Cant.</th>
+                                                                        <th class="fw-normal text-end" style="width: 90px;">P. Unit.</th>
+                                                                        <th class="fw-normal text-end" style="width: 55px;">IVA %</th>
+                                                                        <th class="fw-normal text-end" style="width: 100px;">Subtotal</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    <?php foreach ($s['items'] as $it): ?>
+                                                                        <tr>
+                                                                            <td><?= htmlspecialchars($it['descripcion'] ?: ($it['nombre_producto'] ?? '—')) ?></td>
+                                                                            <td class="text-end"><?= rtrim(rtrim(number_format((float)($it['cantidad'] ?? 0), 2), '0'), '.') ?></td>
+                                                                            <td class="text-end">$ <?= number_format((float)($it['precio_unitario'] ?? 0), 2) ?></td>
+                                                                            <td class="text-end"><?= number_format((float)($it['porcentaje_iva'] ?? 0), 0) ?></td>
+                                                                            <td class="text-end fw-bold">$ <?= number_format((float)($it['subtotal'] ?? 0), 2) ?></td>
+                                                                        </tr>
+                                                                    <?php endforeach; ?>
+                                                                </tbody>
+                                                                <tfoot>
+                                                                    <tr class="border-top">
+                                                                        <td colspan="4" class="text-end fw-bold text-muted">Total</td>
+                                                                        <td class="text-end fw-bold text-dark">$ <?= number_format((float)($s['monto'] ?? 0), 2) ?></td>
+                                                                    </tr>
+                                                                </tfoot>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                <?php endif; ?>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <div class="alert alert-info d-flex align-items-center py-2 px-3 mb-0" style="font-size: 0.72rem;">
+                                                <i class="bi bi-info-circle me-2"></i>
+                                                <div>
+                                                    No hay ninguna <strong>suscripción asociada</strong> a la empresa actual (RUC <strong><?= htmlspecialchars($empresa['ruc'] ?? '') ?></strong>).
+                                                    <?php if (empty($suscripcion_controladora)): ?>
+                                                        <br><span class="text-muted">No se ha definido la empresa que controla las suscripciones. Configúrala en <em>Empresas del sistema</em>.</span>
+                                                    <?php endif; ?>
                                                 </div>
                                             </div>
-                                        </div>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </div>
