@@ -35,6 +35,13 @@ class ContadoresController extends Controller
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
 
+        // Liberar el lock de sesión cuanto antes: este endpoint solo LEE la sesión
+        // (nunca escribe) y se consulta con alta frecuencia (polling del navbar).
+        // Los valores de $_SESSION siguen siendo legibles tras cerrar la escritura.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         try {
             $contadores = $this->service->getContadores(
                 $idEmpresa,

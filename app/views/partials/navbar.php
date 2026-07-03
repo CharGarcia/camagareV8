@@ -606,7 +606,7 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         // Un solo ciclo de sondeo, SOLO con la pestaña visible (ahorra peticiones en pestañas de fondo)
         setInterval(function() {
             if (document.visibilityState === 'visible') window.CMG_refreshContadores();
-        }, 20000);
+        }, 5000);
         // Refresco inmediato al volver a la pestaña / ventana
         document.addEventListener('visibilitychange', function() {
             if (document.visibilityState === 'visible') window.CMG_refreshContadores();
