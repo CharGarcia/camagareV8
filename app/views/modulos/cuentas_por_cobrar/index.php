@@ -11,7 +11,7 @@
     .badge-pagada   { background:rgba(108,117,125,.12);color:#6c757d; border:1px solid rgba(108,117,125,.25); }
 </style>
 
-<div class="container-fluid py-4 px-0 px-md-3" id="modulo-<?php echo $idModulo; ?>">
+<div class="container-fluid pt-2 pb-3 px-0 px-md-3" id="modulo-<?php echo $idModulo; ?>">
 
     <!-- ── Cabecera ── -->
     <div class="cxc-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">

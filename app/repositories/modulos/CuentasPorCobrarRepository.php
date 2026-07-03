@@ -236,7 +236,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COUNT(*) FILTER (WHERE sub.pend > 0 AND sub.fecha_vencimiento IS NOT NULL AND sub.fecha_vencimiento < CURRENT_DATE) AS vencidas
             FROM (
                 SELECT s.fecha_vencimiento,
-                       (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0)) AS pend
+                       (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0)) AS pend
                 FROM saldos_iniciales_cxc s
                 LEFT JOIN LATERAL (
                     SELECT SUM(rd.valor_retenido) AS retenido
@@ -257,7 +257,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                             AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
                                 = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
                       )
-                ) ret ON true
+                ) ret ON true"
+                . $this->lateralNcSaldoInicial() . "
                 WHERE {$where}
             ) sub
         ";
@@ -357,7 +358,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(SUM(CASE WHEN dv BETWEEN 61 AND 90 THEN pend ELSE 0 END), 0) AS tramo_61_90,
                 COALESCE(SUM(CASE WHEN dv > 90            THEN pend ELSE 0 END), 0) AS tramo_mas_90
             FROM (
-                SELECT (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0)) AS pend,
+                SELECT (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0)) AS pend,
                        CASE WHEN s.fecha_vencimiento IS NULL THEN 0
                             ELSE (CURRENT_DATE - s.fecha_vencimiento)::int END AS dv
                 FROM saldos_iniciales_cxc s
@@ -380,7 +381,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                             AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
                                 = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
                       )
-                ) ret ON true
+                ) ret ON true"
+                . $this->lateralNcSaldoInicial() . "
                 WHERE {$where}
             ) sub
             WHERE sub.pend > 0
@@ -701,13 +703,40 @@ class CuentasPorCobrarRepository extends BaseRepository
     // SALDOS INICIALES CXC
     // ─────────────────────────────────────────────────────────────────────
 
+    /**
+     * JOIN LATERAL que suma las notas de crédito aplicadas a un saldo inicial CxC
+     * (match por número de documento normalizado). Alias `ncsi`, columna `nc_total`.
+     * La guarda NOT EXISTS evita duplicar el descuento cuando el número también
+     * corresponde a una factura real (esa NC ya la resta el listado de facturas).
+     */
+    private function lateralNcSaldoInicial(): string
+    {
+        return "
+                LEFT JOIN LATERAL (
+                    SELECT SUM(ncc.importe_total) AS nc_total
+                    FROM notas_credito_cabecera ncc
+                    WHERE ncc.eliminado  = false
+                      AND ncc.estado    != 'anulado'
+                      AND ncc.id_empresa = s.id_empresa
+                      AND regexp_replace(ncc.num_doc_modificado, '[^0-9]', '', 'g')
+                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ventas_cabecera vc
+                          WHERE vc.id_empresa = s.id_empresa
+                            AND vc.eliminado = false
+                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      )
+                ) ncsi ON true";
+    }
+
     public function getSaldosInicialesCxc(int $idEmpresa, array $filtros = []): array
     {
-        // Pendiente real = saldo_inicial - cobrado - retenido. Lo retenido se
-        // calcula al vuelo desde las retenciones de venta (igual que en las
-        // facturas normales); no se almacena en el saldo inicial.
-        $pend     = '(s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0))';
-        $aplicado = '(s.monto_cobrado + COALESCE(ret.retenido, 0))';
+        // Pendiente real = saldo_inicial - cobrado - retenido - NC. Lo retenido y
+        // las NC se calculan al vuelo (igual que en las facturas normales); no se
+        // almacenan en el saldo inicial.
+        $pend     = '(s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0))';
+        $aplicado = '(s.monto_cobrado + COALESCE(ret.retenido, 0) + COALESCE(ncsi.nc_total, 0))';
 
         $where  = "s.id_empresa = :id_empresa AND s.eliminado = false";
         $params = [':id_empresa' => $idEmpresa];
@@ -743,6 +772,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                     CAST(s.saldo_inicial          AS NUMERIC(16,2)) AS saldo_inicial,
                     CAST(s.monto_cobrado          AS NUMERIC(16,2)) AS monto_cobrado,
                     CAST(COALESCE(ret.retenido,0) AS NUMERIC(16,2)) AS monto_retenido,
+                    CAST(COALESCE(ncsi.nc_total,0) AS NUMERIC(16,2)) AS monto_nc,
                     CAST({$pend}                  AS NUMERIC(16,2)) AS saldo_pendiente,
                     CASE
                         WHEN {$pend} <= 0     THEN 'PAGADO'
@@ -772,7 +802,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                             AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
                                 = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
                       )
-                ) ret ON true
+                ) ret ON true"
+                . $this->lateralNcSaldoInicial() . "
                 WHERE {$where}
                 ORDER BY s.fecha_emision ASC, s.nro_documento ASC";
 

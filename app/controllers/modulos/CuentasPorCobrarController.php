@@ -146,7 +146,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 'total'             => $s['saldo_inicial'],
                 'total_cobrado'     => $s['monto_cobrado'],
                 'total_retenido'    => $s['monto_retenido'] ?? 0,
-                'total_nc'          => 0,
+                'total_nc'          => $s['monto_nc'] ?? 0,
                 'saldo'             => $s['saldo_pendiente'],
                 'dias_vencido'      => (int)($s['dias_vencido'] ?? 0),
             ];

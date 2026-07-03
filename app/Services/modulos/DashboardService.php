@@ -202,7 +202,7 @@ class DashboardService
         // descuenta lo retenido, igual que el módulo).
         $si = $this->db->prepare(
             "SELECT COALESCE(SUM(t.pend), 0) FROM (
-                SELECT (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0)) AS pend
+                SELECT (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0)) AS pend
                 FROM saldos_iniciales_cxc s
                 LEFT JOIN LATERAL (
                     SELECT SUM(rd.valor_retenido) AS retenido
@@ -224,6 +224,22 @@ class DashboardService
                                 = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
                       )
                 ) ret ON true
+                LEFT JOIN LATERAL (
+                    SELECT SUM(ncc.importe_total) AS nc_total
+                    FROM notas_credito_cabecera ncc
+                    WHERE ncc.eliminado  = false
+                      AND ncc.estado    != 'anulado'
+                      AND ncc.id_empresa = s.id_empresa
+                      AND regexp_replace(ncc.num_doc_modificado, '[^0-9]', '', 'g')
+                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ventas_cabecera vc
+                          WHERE vc.id_empresa = s.id_empresa
+                            AND vc.eliminado = false
+                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      )
+                ) ncsi ON true
                 WHERE s.id_empresa = ? AND s.eliminado = false
                   AND s.fecha_emision BETWEEN ? AND ?
             ) t WHERE t.pend > 0"
@@ -557,7 +573,7 @@ class DashboardService
                 SELECT s.nombre_cliente AS cliente,
                        s.nro_documento AS comprobante,
                        s.fecha_emision AS fecha,
-                       (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0)) AS saldo,
+                       (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0)) AS saldo,
                        (CURRENT_DATE - s.fecha_vencimiento)::int AS dias_vencido
                 FROM saldos_iniciales_cxc s
                 LEFT JOIN LATERAL (
@@ -580,10 +596,26 @@ class DashboardService
                                 = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
                       )
                 ) ret ON true
+                LEFT JOIN LATERAL (
+                    SELECT SUM(ncc.importe_total) AS nc_total
+                    FROM notas_credito_cabecera ncc
+                    WHERE ncc.eliminado  = false
+                      AND ncc.estado    != 'anulado'
+                      AND ncc.id_empresa = s.id_empresa
+                      AND regexp_replace(ncc.num_doc_modificado, '[^0-9]', '', 'g')
+                          = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ventas_cabecera vc
+                          WHERE vc.id_empresa = s.id_empresa
+                            AND vc.eliminado = false
+                            AND regexp_replace(CONCAT(vc.establecimiento, '-', vc.punto_emision, '-', vc.secuencial), '[^0-9]', '', 'g')
+                                = regexp_replace(s.nro_documento, '[^0-9]', '', 'g')
+                      )
+                ) ncsi ON true
                 WHERE s.id_empresa = :e2 AND s.eliminado = false
                   AND s.fecha_vencimiento IS NOT NULL
                   AND s.fecha_vencimiento < CURRENT_DATE
-                  AND (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0)) > 0
+                  AND (s.saldo_inicial - s.monto_cobrado - COALESCE(ret.retenido, 0) - COALESCE(ncsi.nc_total, 0)) > 0
             ) u
             ORDER BY dias_vencido DESC
             LIMIT :lim"
