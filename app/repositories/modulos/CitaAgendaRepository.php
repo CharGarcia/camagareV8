@@ -302,7 +302,7 @@ class CitaAgendaRepository extends BaseRepository
         $stmt = $this->db->prepare("
             SELECT id, nombre, identificacion, email, telefono
             FROM clientes
-            WHERE id_empresa = :ie AND eliminado = false
+            WHERE id_empresa = :ie AND eliminado = false AND status = 1
               AND (nombre ILIKE :q OR identificacion ILIKE :q OR email ILIKE :q)
             ORDER BY nombre
             LIMIT 20

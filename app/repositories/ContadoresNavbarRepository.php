@@ -73,4 +73,57 @@ class ContadoresNavbarRepository
 
         return $row;
     }
+
+    /**
+     * Documentos con NOVEDAD del SRI (devueltos / no autorizados / con error) por tipo.
+     *
+     * Fuente de verdad: la tabla `sri_envio_log` (la misma que alimenta el seguimiento
+     * de la pestaña SRI). Se toma el ÚLTIMO `accion` por comprobante (en el ambiente
+     * actual de la empresa); si ese estado es de fallo y el documento sigue vigente
+     * (no eliminado), cuenta. Así, un documento corregido y reautorizado deja de contar.
+     *
+     * Los valores de tipo_comprobante y tabla son constantes internas (no entrada de
+     * usuario), por lo que interpolarlos en el SQL es seguro.
+     *
+     * @return array<string,int>  claves: facturas, liquidaciones, retenciones_compras, notas_credito, guias_remision
+     */
+    public function getNovedadesSri(int $idEmpresa): array
+    {
+        $tipos = [
+            'facturas'            => ['tipo' => 'factura_venta',      'tabla' => 'ventas_cabecera'],
+            'liquidaciones'       => ['tipo' => 'liquidacion_compra', 'tabla' => 'liquidaciones_cabecera'],
+            'retenciones_compras' => ['tipo' => 'retencion_compra',   'tabla' => 'retencion_compra_cabecera'],
+            'notas_credito'       => ['tipo' => 'nota_credito',       'tabla' => 'notas_credito_cabecera'],
+            'guias_remision'      => ['tipo' => 'guia_remision',      'tabla' => 'guias_remision_cabecera'],
+            // Futuro (cuando exista el módulo): 'notas_debito' => ['tipo' => 'nota_debito', 'tabla' => 'notas_debito_cabecera'],
+        ];
+
+        $selects = [];
+        foreach ($tipos as $key => $cfg) {
+            $tipo  = $cfg['tipo'];   // constante interna
+            $tabla = $cfg['tabla'];  // constante interna
+            $selects[] = "
+              (SELECT COUNT(*) FROM (
+                  SELECT DISTINCT ON (l.id_comprobante) l.id_comprobante, l.accion
+                  FROM sri_envio_log l
+                  WHERE l.id_empresa = :e AND l.tipo_comprobante = '$tipo' AND l.tipo_ambiente = (SELECT t FROM amb)
+                  ORDER BY l.id_comprobante, l.id DESC
+               ) u
+               JOIN $tabla d ON d.id = u.id_comprobante AND d.eliminado = false
+               WHERE u.accion IN ('devuelta','no_autorizado','no_autorizada','error')) AS $key";
+        }
+
+        $sql = "WITH amb AS (SELECT CAST(tipo_ambiente AS VARCHAR(1)) AS t FROM empresas WHERE id = :e)
+                SELECT " . implode(",\n", $selects);
+
+        $st = $this->db->prepare($sql);
+        $st->execute([':e' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        foreach ($row as $k => $v) {
+            $row[$k] = (int) $v;
+        }
+
+        return $row;
+    }
 }

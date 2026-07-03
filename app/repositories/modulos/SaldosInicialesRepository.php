@@ -759,7 +759,7 @@ class SaldosInicialesRepository extends BaseRepository
                    icv.nombre AS tipo_nombre
             FROM clientes c
             LEFT JOIN identificador_comprador_vendedor icv ON icv.codigo = c.tipo_id
-            WHERE c.id_empresa = :ie AND c.eliminado = false
+            WHERE c.id_empresa = :ie AND c.eliminado = false AND c.status = 1
               AND (c.identificacion ILIKE :q OR c.nombre ILIKE :q)
             ORDER BY c.nombre ASC
             LIMIT {$limit}

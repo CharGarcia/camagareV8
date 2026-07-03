@@ -236,7 +236,7 @@ class OrdenesCompraController extends BaseModuloController
             $db  = Database::getConnection();
             $sql = "SELECT id, codigo, nombre AS descripcion, precio_base AS precio_unitario
                     FROM productos
-                    WHERE id_empresa = :id_empresa AND eliminado = false
+                    WHERE id_empresa = :id_empresa AND eliminado = false AND status = 1
                       AND (nombre ILIKE :b OR codigo ILIKE :b)
                     ORDER BY nombre ASC
                     LIMIT 20";

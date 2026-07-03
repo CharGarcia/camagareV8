@@ -9,6 +9,7 @@ use App\core\Database;
 class SincronizadorAsientosService
 {
     private array $warnings = [];
+    private int $generados = 0;
 
     public function sincronizar(int $idEmpresa, int $idUsuario): void
     {
@@ -315,6 +316,7 @@ class SincronizadorAsientosService
         foreach ($ids as $id) {
             try {
                 $service->procesarAsientoContablePorSincronizacion((int)$id);
+                $this->generados++;
             } catch (\Exception $e) {
                 $errorCount++;
             }
@@ -328,5 +330,11 @@ class SincronizadorAsientosService
     public function getWarnings(): array
     {
         return $this->warnings;
+    }
+
+    /** Cantidad de asientos efectivamente generados en la última corrida de sincronizar(). */
+    public function getGenerados(): int
+    {
+        return $this->generados;
     }
 }

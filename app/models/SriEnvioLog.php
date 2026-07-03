@@ -38,6 +38,14 @@ class SriEnvioLog
             $data['fecha_autorizacion']  ?? null,
             $data['created_by']          ?? 0,
         ]);
+
+        // Invalidar la caché de contadores del navbar: cualquier acción SRI cambia
+        // las "novedades" (y a veces los borradores). Nunca debe romper el registro.
+        try {
+            \App\Services\ContadoresNavbarService::invalidarPorTabla('sri_envio_log', (int) ($data['id_empresa'] ?? 0));
+        } catch (\Throwable $e) {
+            // Silencioso a propósito.
+        }
     }
 
     /** Devuelve todos los logs de un comprobante, ordenados del más reciente al más antiguo. */

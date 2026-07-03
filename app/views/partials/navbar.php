@@ -253,6 +253,39 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         <!-- 5. Iconos, Usuario, Config, Logout (Desktop: order 5, Mobile: hidden) -->
         <div class="d-none d-lg-flex flex-row align-items-center gap-2 order-lg-5 ms-lg-3">
             <span class="navbar-text text-white-50 small me-2" id="navbar-mensajes">&nbsp;</span>
+
+            <!-- Novedad SRI: documentos devueltos / no autorizados / con error (badge de alerta + desglose) -->
+            <div class="dropdown d-none cmg-novedad-sri-wrap me-2">
+                <a class="text-white text-decoration-none position-relative" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Documentos con novedad del SRI">
+                    <i class="bi bi-exclamation-octagon-fill text-warning" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger cmg-novedad-sri-total" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 270px; z-index: 5065;">
+                    <li><h6 class="dropdown-header text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Documentos con novedad del SRI</h6></li>
+                    <li><hr class="dropdown-divider my-1"></li>
+                    <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="facturas" href="<?= $base ?>/modulos/factura-venta">
+                        <span><i class="bi bi-receipt me-2 text-muted"></i>Facturas de venta</span>
+                        <span class="badge bg-danger rounded-pill cmg-nov-badge-facturas">0</span>
+                    </a>
+                    <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="liquidaciones" href="<?= $base ?>/modulos/liquidacion-compra">
+                        <span><i class="bi bi-file-earmark-text me-2 text-muted"></i>Liquidaciones de compra</span>
+                        <span class="badge bg-danger rounded-pill cmg-nov-badge-liquidaciones">0</span>
+                    </a>
+                    <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="retenciones_compras" href="<?= $base ?>/modulos/retenciones_compras">
+                        <span><i class="bi bi-percent me-2 text-muted"></i>Retenciones de compra</span>
+                        <span class="badge bg-danger rounded-pill cmg-nov-badge-retenciones_compras">0</span>
+                    </a>
+                    <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="notas_credito" href="<?= $base ?>/modulos/notas_credito">
+                        <span><i class="bi bi-file-earmark-minus me-2 text-muted"></i>Notas de crédito</span>
+                        <span class="badge bg-danger rounded-pill cmg-nov-badge-notas_credito">0</span>
+                    </a>
+                    <a class="dropdown-item d-none d-flex justify-content-between align-items-center cmg-nov-item" data-nov="guias_remision" href="<?= $base ?>/modulos/guias_remision">
+                        <span><i class="bi bi-truck me-2 text-muted"></i>Guías de remisión</span>
+                        <span class="badge bg-danger rounded-pill cmg-nov-badge-guias_remision">0</span>
+                    </a>
+                </ul>
+            </div>
+
             <a id="tareas-alertas-link" href="<?= $base ?>/config/tareas-obligaciones" class="text-white text-decoration-none position-relative me-2 d-none cmg-icon-update tareas-alertas-link" title="Tareas pendientes/vencidas" data-navbar-link="true">
                 <i class="bi bi-bell-fill" style="font-size: 1.1rem;"></i>
                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger tareas-alertas-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
@@ -327,6 +360,31 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
 
             <label class="form-label small fw-bold text-muted mb-2">Notificaciones y Tareas</label>
             <div class="cmg-mobile-icons-grid mb-3">
+                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="facturas" href="<?= $base ?>/modulos/factura-venta">
+                    <i class="bi bi-receipt text-danger"></i>
+                    <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-facturas">0</span>
+                    <small>Fact. SRI</small>
+                </a>
+                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="liquidaciones" href="<?= $base ?>/modulos/liquidacion-compra">
+                    <i class="bi bi-file-earmark-text text-danger"></i>
+                    <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-liquidaciones">0</span>
+                    <small>Liq. SRI</small>
+                </a>
+                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="retenciones_compras" href="<?= $base ?>/modulos/retenciones_compras">
+                    <i class="bi bi-percent text-danger"></i>
+                    <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-retenciones_compras">0</span>
+                    <small>Ret. SRI</small>
+                </a>
+                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="notas_credito" href="<?= $base ?>/modulos/notas_credito">
+                    <i class="bi bi-file-earmark-minus text-danger"></i>
+                    <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-notas_credito">0</span>
+                    <small>N/C SRI</small>
+                </a>
+                <a class="cmg-icon-update cmg-nov-item d-none" data-nov="guias_remision" href="<?= $base ?>/modulos/guias_remision">
+                    <i class="bi bi-truck text-danger"></i>
+                    <span class="position-absolute badge rounded-pill bg-danger cmg-nov-badge-guias_remision">0</span>
+                    <small>Guía SRI</small>
+                </a>
                 <a class="cmg-icon-update tareas-alertas-link d-none" href="<?= $base ?>/config/tareas-obligaciones">
                     <i class="bi bi-bell-fill"></i>
                     <span class="position-absolute badge rounded-pill bg-danger tareas-alertas-badge">0</span>
@@ -510,6 +568,23 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                         icons.forEach(function(i){ i.classList.add('d-none'); });
                     }
                 });
+
+                // Novedad SRI (documentos devueltos/no autorizados/con error): total + desglose por tipo
+                const nov = c.novedad_sri || {};
+                const tiposNov = ['facturas', 'liquidaciones', 'retenciones_compras', 'notas_credito', 'guias_remision'];
+                let totalNov = 0;
+                tiposNov.forEach(function(tipo) {
+                    const n = parseInt(nov[tipo] || 0, 10);
+                    totalNov += n;
+                    document.querySelectorAll('.cmg-nov-badge-' + tipo).forEach(function(b){ b.textContent = n > 99 ? '99+' : n; });
+                    document.querySelectorAll('.cmg-nov-item[data-nov="' + tipo + '"]').forEach(function(it){
+                        if (n > 0) it.classList.remove('d-none'); else it.classList.add('d-none');
+                    });
+                });
+                document.querySelectorAll('.cmg-novedad-sri-total').forEach(function(b){ b.textContent = totalNov > 99 ? '99+' : totalNov; });
+                document.querySelectorAll('.cmg-novedad-sri-wrap').forEach(function(w){
+                    if (totalNov > 0) w.classList.remove('d-none'); else w.classList.add('d-none');
+                });
             } catch (e) {}
             finally { CMG_contadoresEnVuelo = false; }
         };
@@ -547,7 +622,7 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
             if (window.__cmgFetchHook) return;
             window.__cmgFetchHook = true;
             const _fetch = window.fetch;
-            const RE_ESCRITURA = /(guardar|anular|eliminar|borrar|procesar|aprobar|rechazar|autorizar|emitir|reactivar|cambiarestado)/i;
+            const RE_ESCRITURA = /(guardar|anular|eliminar|borrar|procesar|aprobar|rechazar|autorizar|emitir|enviar|reactivar|cambiarestado)/i;
             const RE_EXCLUIR   = /(preferencia|favorit|guardarvista|navbarajax|contadores)/i;
             let deb = null;
             window.fetch = function() {

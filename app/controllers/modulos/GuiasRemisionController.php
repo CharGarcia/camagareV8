@@ -403,8 +403,8 @@ class GuiasRemisionController extends BaseModuloController
         $buscar    = trim($_GET['q'] ?? '');
 
         $repo = new \App\repositories\modulos\ProductoRepository();
-        // Solo tipo_produccion = '01' (productos físicos, no servicios tipo '02')
-        $data = $repo->searchSimple($idEmpresa, $buscar, 20, '01');
+        // Solo tipo_produccion = '01' (productos físicos, no servicios tipo '02') y solo activos
+        $data = $repo->searchSimple($idEmpresa, $buscar, 20, '01', 0, true);
         // Mapear campos para compatibilidad con el JS del módulo
         $rows = array_map(fn($p) => [
             'id'     => $p['id'],

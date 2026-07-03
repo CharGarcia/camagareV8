@@ -42,6 +42,18 @@ class ContadoresNavbarService
         'whatsapp_unread'              => 'modulos/whatsapp-chat',
     ];
 
+    /**
+     * Tipo de novedad SRI => ruta MVC del módulo (para permiso 'ver').
+     * Las claves coinciden con las que devuelve ContadoresNavbarRepository::getNovedadesSri().
+     */
+    public const NOVEDAD_RUTAS = [
+        'facturas'            => 'modulos/factura-venta',
+        'liquidaciones'       => 'modulos/liquidacion-compra',
+        'retenciones_compras' => 'modulos/retenciones_compras',
+        'notas_credito'       => 'modulos/notas_credito',
+        'guias_remision'      => 'modulos/guias_remision',
+    ];
+
     /** Tablas que, al cambiar, invalidan la caché de contadores de una empresa. */
     private const TABLAS_INVALIDAN = [
         'ventas_cabecera',
@@ -53,6 +65,7 @@ class ContadoresNavbarService
         'pedidos_cabecera',
         'factura_express_solicitudes',
         'whatsapp_chats',
+        'sri_envio_log', // cualquier acción SRI (devuelta/autorizado/…) cambia las novedades
     ];
 
     private ContadoresNavbarRepository $repo;
@@ -91,7 +104,7 @@ class ContadoresNavbarService
         }
     }
 
-    /** Contadores por empresa (con caché compartida por empresa). @return array<string,int> */
+    /** Contadores por empresa (con caché compartida por empresa). @return array<string,mixed> */
     private function contadoresEmpresa(int $idEmpresa): array
     {
         $cache = Cache::get(self::claveEmpresa($idEmpresa));
@@ -99,6 +112,12 @@ class ContadoresNavbarService
             return $cache;
         }
         $datos = $this->repo->getConteosEmpresa($idEmpresa);
+        // Novedades SRI: si la tabla/columna no existe en algún ambiente, no debe romper el resto.
+        try {
+            $datos['__novedad_sri'] = $this->repo->getNovedadesSri($idEmpresa);
+        } catch (\Throwable $e) {
+            $datos['__novedad_sri'] = [];
+        }
         Cache::set(self::claveEmpresa($idEmpresa), $datos, self::TTL_CONTADORES);
         return $datos;
     }
@@ -116,9 +135,10 @@ class ContadoresNavbarService
     }
 
     /**
-     * Permisos 'ver' del navbar por módulo (con caché por empresa+usuario).
+     * Permiso 'ver' por RUTA MVC (con caché por empresa+usuario). Evalúa la unión de
+     * rutas de contadores + novedades (rara vez cambian → TTL más largo).
      * @param callable(string):bool $puedeVer  Recibe la ruta MVC y responde si tiene permiso 'ver'.
-     * @return array<string,bool>
+     * @return array<string,bool>  ruta => bool
      */
     private function permisosNavbar(int $idEmpresa, int $idUsuario, callable $puedeVer): array
     {
@@ -126,9 +146,13 @@ class ContadoresNavbarService
         if (is_array($cache)) {
             return $cache;
         }
+        $rutas = array_unique(array_merge(
+            array_values(self::RUTAS_MODULO),
+            array_values(self::NOVEDAD_RUTAS)
+        ));
         $perms = [];
-        foreach (self::RUTAS_MODULO as $clave => $ruta) {
-            $perms[$clave] = $puedeVer($ruta) === true;
+        foreach ($rutas as $ruta) {
+            $perms[$ruta] = $puedeVer($ruta) === true;
         }
         Cache::set(self::clavePermisos($idEmpresa, $idUsuario), $perms, self::TTL_PERMISOS);
         return $perms;
@@ -138,7 +162,7 @@ class ContadoresNavbarService
      * Contadores que el usuario puede ver, listos para el navbar.
      *
      * @param callable(string):bool $puedeVer  Evalúa permiso 'ver' por ruta MVC.
-     * @return array<string,int>
+     * @return array<string,mixed>
      */
     public function getContadores(int $idEmpresa, int $idUsuario, callable $puedeVer): array
     {
@@ -146,12 +170,27 @@ class ContadoresNavbarService
 
         if ($idEmpresa > 0) {
             $empresa = $this->contadoresEmpresa($idEmpresa);
-            $perms   = $this->permisosNavbar($idEmpresa, $idUsuario, $puedeVer);
+            $permRuta = $this->permisosNavbar($idEmpresa, $idUsuario, $puedeVer);
+
+            // Contadores de borrador/pendiente/whatsapp
             foreach (self::RUTAS_MODULO as $clave => $ruta) {
-                if (empty($perms[$clave])) {
+                if (empty($permRuta[$ruta])) {
                     continue;
                 }
                 $out[$clave] = (int) ($empresa[$clave] ?? 0);
+            }
+
+            // Novedades SRI por tipo (solo módulos permitidos)
+            $novData = is_array($empresa['__novedad_sri'] ?? null) ? $empresa['__novedad_sri'] : [];
+            $novedad = [];
+            foreach (self::NOVEDAD_RUTAS as $tipo => $ruta) {
+                if (empty($permRuta[$ruta])) {
+                    continue;
+                }
+                $novedad[$tipo] = (int) ($novData[$tipo] ?? 0);
+            }
+            if (!empty($novedad)) {
+                $out['novedad_sri'] = $novedad;
             }
         }
 

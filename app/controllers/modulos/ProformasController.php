@@ -268,7 +268,8 @@ class ProformasController extends BaseModuloController
         $q         = trim($_GET['q'] ?? '');
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $repo      = new \App\repositories\modulos\ClienteRepository();
-        $result    = $repo->getListado($idEmpresa, $q, 1, 10, 'nombre', 'ASC');
+        // soloActivos = true: excluir clientes inactivos en la selección.
+        $result    = $repo->getListado($idEmpresa, $q, 1, 10, 'nombre', 'ASC', null, true);
         echo json_encode(['ok' => true, 'data' => $result['rows']]);
         exit;
     }

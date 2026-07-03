@@ -36,14 +36,11 @@ class AsientosContablesController extends BaseModuloController
 
         $perm      = $this->getPermisos();
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idUsuario = (int) $_SESSION['id_usuario'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
 
-        // Sincronizar asientos pendientes automáticamente
-        $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
-        $sincronizador->sincronizar($idEmpresa, $idUsuario);
-        $warnings = $sincronizador->getWarnings();
-
+        // La generación de asientos pendientes NO se hace aquí (bloquearía la carga cuando hay
+        // muchos por generar). La dispara la vista en segundo plano vía sincronizarAjax() y,
+        // si se generan asientos nuevos, refresca el listado.
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_asiento');
@@ -71,6 +68,40 @@ class AsientosContablesController extends BaseModuloController
             'vistaConfig'=> $prefsVista,
             'fullWidth'  => true,
         ]);
+    }
+
+    /**
+     * Genera en segundo plano los asientos contables pendientes (documentos sin asiento).
+     * Se invoca por AJAX desde la vista al cargar, para no bloquear la carga del listado
+     * cuando hay muchos documentos pendientes. Devuelve los avisos y cuántos se generaron
+     * (si es > 0, la vista refresca la tabla para mostrar los nuevos asientos).
+     */
+    public function sincronizarAjax(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+
+            // Liberar el lock de sesión para no bloquear otras peticiones del usuario
+            // mientras dura la generación, y ampliar el tiempo máximo de ejecución.
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            @set_time_limit(300);
+
+            $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
+            $sincronizador->sincronizar($idEmpresa, $idUsuario);
+
+            echo json_encode([
+                'success'   => true,
+                'warnings'  => $sincronizador->getWarnings(),
+                'generados' => $sincronizador->getGenerados(),
+            ]);
+        } catch (\Throwable $th) {
+            echo json_encode(['success' => false, 'error' => $th->getMessage()]);
+        }
     }
 
     public function searchAjax(): void

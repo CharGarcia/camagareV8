@@ -67,7 +67,8 @@ class ProductoRepository extends BaseRepository
                 'medida'        => 'um.nombre',
             ],
             'exacto'   => [
-                'estado'       => 'p.estado',
+                'estado'       => 'p.status',
+                'status'       => 'p.status',
                 'tipo'         => 'p.tipo_produccion',
                 'inventariable' => 'p.inventariable',
             ],
@@ -755,17 +756,21 @@ class ProductoRepository extends BaseRepository
         return $prefijo . str_pad((string)$numero, 3, '0', STR_PAD_LEFT);
     }
 
-    public function searchSimple(int $idEmpresa, string $q, int $limit = 10, string $tipo = '', int $exclude = 0): array
+    public function searchSimple(int $idEmpresa, string $q, int $limit = 10, string $tipo = '', int $exclude = 0, bool $soloActivos = false): array
     {
         $db = \App\core\Database::getConnection();
         $params = [$idEmpresa, "%$q%", "%$q%"];
         $whereSql = "";
-        
+
         if ($tipo !== '') {
             $whereSql .= " AND p.tipo_produccion = ? ";
             $params[] = $tipo;
         }
-        
+
+        if ($soloActivos) {
+            $whereSql .= " AND p.status = 1 ";
+        }
+
         if ($exclude > 0) {
             $whereSql .= " AND p.id != ? ";
             $params[] = $exclude;

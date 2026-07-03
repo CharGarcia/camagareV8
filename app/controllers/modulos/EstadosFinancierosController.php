@@ -47,16 +47,11 @@ class EstadosFinancierosController extends BaseModuloController
         $fechaFin = date('Y-12-31');
         
         $perm = $this->getPermisos();
-        $idUsuario = (int) $_SESSION['id_usuario'];
 
-        // Sincronizar asientos pendientes automáticamente
-        $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
-        $sincronizador->sincronizar($idEmpresa, $idUsuario);
-        $warnings = $sincronizador->getWarnings();
-        
+        // La generación de asientos pendientes NO se hace aquí (bloquearía la carga cuando hay
+        // muchos por generar). La dispara la vista en segundo plano vía sincronizarAjax().
         $this->viewWithLayout('layouts.main', 'modulos.estados_financieros.index', [
             'titulo' => 'Estados Financieros',
-            'warnings' => $warnings,
             'fechaInicio' => $fechaInicio,
             'fechaFin' => $fechaFin,
             'aniosDisponibles' => $aniosDisponibles,
@@ -66,6 +61,36 @@ class EstadosFinancierosController extends BaseModuloController
             'perm' => $perm,
             'fullWidth' => true
         ]);
+    }
+
+    /**
+     * Genera en segundo plano los asientos contables pendientes (documentos sin asiento).
+     * Se invoca por AJAX desde la vista al cargar, para que la página no quede bloqueada
+     * mientras se generan (puede tardar cuando hay muchos documentos pendientes).
+     * Devuelve los avisos de configuración recolectados por el sincronizador.
+     */
+    public function sincronizarAjax(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+
+            // Liberar el lock de sesión para no bloquear otras peticiones del usuario
+            // mientras dura la generación, y ampliar el tiempo máximo de ejecución.
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            @set_time_limit(300);
+
+            $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
+            $sincronizador->sincronizar($idEmpresa, $idUsuario);
+
+            echo json_encode(['success' => true, 'warnings' => $sincronizador->getWarnings()]);
+        } catch (\Throwable $th) {
+            echo json_encode(['success' => false, 'error' => $th->getMessage()]);
+        }
     }
 
     public function generarEstadoResultados(): void

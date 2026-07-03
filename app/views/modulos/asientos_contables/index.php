@@ -44,17 +44,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
 
-<?php if (!empty($warnings)): ?>
-    <div class="alert alert-warning alert-dismissible fade show shadow-sm mb-3" role="alert">
-        <strong><i class="bi bi-exclamation-triangle-fill me-2"></i> Atención:</strong>
-        <ul class="mb-0 mt-2">
-            <?php foreach ($warnings as $w): ?>
-                <li><?= htmlspecialchars($w) ?></li>
-            <?php endforeach; ?>
-        </ul>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-<?php endif; ?>
+<!-- Estado de la generación de asientos pendientes (se completa en segundo plano vía JS) -->
+<div id="ef-sync-status" class="alert alert-info d-flex align-items-center shadow-sm mb-3" role="alert">
+    <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+    <span>Verificando y generando asientos contables pendientes, espere un momento…</span>
+</div>
+<div id="ef-warnings"></div>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i> <?= htmlspecialchars($titulo) ?></h5>
@@ -238,5 +233,50 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 window.fetchSearch(1);
             });
         });
+
+        // ── Generación de asientos pendientes en segundo plano ──────────────────────
+        // El listado ya cargó; disparamos la sincronización sin bloquearlo y mostramos el
+        // avance en #ef-sync-status. Al terminar: mostramos avisos y, si se generaron
+        // asientos nuevos, refrescamos la tabla para que aparezcan.
+        (function sincronizarAsientosPendientes() {
+            const box = document.getElementById('ef-sync-status');
+            const warnBox = document.getElementById('ef-warnings');
+            if (!box) return;
+
+            const escapeHtml = (s) => String(s).replace(/[&<>"']/g,
+                c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+            fetch(`${urlBase}/sincronizarAjax`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(r => r.json())
+                .then(json => {
+                    box.remove();
+                    if (json && json.success && Array.isArray(json.warnings) && json.warnings.length) {
+                        const items = json.warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('');
+                        warnBox.innerHTML =
+                            `<div class="alert alert-warning alert-dismissible fade show shadow-sm mb-3" role="alert">
+                                <strong><i class="bi bi-exclamation-triangle-fill me-2"></i> Atención:</strong>
+                                <ul class="mb-0 mt-2">${items}</ul>
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>`;
+                    } else if (json && !json.success) {
+                        warnBox.innerHTML =
+                            `<div class="alert alert-danger alert-dismissible fade show shadow-sm mb-3" role="alert">
+                                <i class="bi bi-x-octagon-fill me-2"></i> No se pudieron generar los asientos pendientes: ${escapeHtml(json.error || 'error')}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>`;
+                    }
+                    // Si se generaron asientos nuevos, refrescar el listado para mostrarlos.
+                    if (json && json.success && json.generados > 0 && typeof window.fetchSearch === 'function') {
+                        window.fetchSearch(window.currentPage || 1);
+                    }
+                })
+                .catch(() => {
+                    const sp = box.querySelector('.spinner-border'); if (sp) sp.remove();
+                    box.classList.remove('alert-info');
+                    box.classList.add('alert-danger');
+                    box.querySelector('span').textContent =
+                        'No se pudo completar la generación de asientos. Recargue la página para reintentar.';
+                });
+        })();
     })();
 </script>
