@@ -1723,7 +1723,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function abrirPdfIngreso() {
         const id = document.getElementById('m-input-id').value;
         if (!id) return;
-        window.open(`<?= BASE_URL ?>/<?= $rutaModulo ?>/pdf?id=${id}`, '_blank');
+        const a = document.createElement('a');
+        a.href = `<?= BASE_URL ?>/<?= $rutaModulo ?>/pdf?id=${id}`;
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
     }
 
     function abrirModalIngresoVer(id) {

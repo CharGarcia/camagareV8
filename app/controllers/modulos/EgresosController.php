@@ -479,10 +479,10 @@ class EgresosController extends BaseModuloController
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'egreso');
             if ($plantilla) {
-                $renderer->generar($plantilla, $egreso, $detalles, $pagos, [], $empresa, 'I');
+                $renderer->generar($plantilla, $egreso, $detalles, $pagos, [], $empresa, 'D');
             } else {
                 (new \App\Services\modulos\ComprobanteCajaPdfService())
-                    ->generarEgreso($egreso, $detalles, $pagos, $empresa, 'I');
+                    ->generarEgreso($egreso, $detalles, $pagos, $empresa, 'D');
             }
         } catch (\Throwable $e) {
             http_response_code(500);

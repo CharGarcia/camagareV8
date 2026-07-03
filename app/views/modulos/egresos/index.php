@@ -1453,7 +1453,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function abrirPdfEgreso() {
         const id = document.getElementById('eg-input-id').value;
         if (!id) return;
-        window.open(`${EGR_URL}/pdf?id=${id}`, '_blank');
+        const a = document.createElement('a');
+        a.href = `${EGR_URL}/pdf?id=${id}`;
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
     }
 
     function abrirModalEgresoVer(id) {
