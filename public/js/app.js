@@ -181,16 +181,18 @@
             }
         });
 
+        // Escape cierra el dropdown. Backspace/Delete se dejan en su
+        // comportamiento nativo (borrado carácter por carácter) para poder
+        // limpiar/editar la búsqueda con normalidad.
         input.addEventListener('keydown', function(e) {
-            if (e.key === 'Backspace' || e.key === 'Delete') {
-                input.value = '';
-                filterItems();
-                e.preventDefault();
+            if (e.key === 'Escape') {
+                hideDropdown();
+                input.blur();
             }
         });
         input.addEventListener('focus', showDropdown);
-        input.addEventListener('input', function() { 
-            if (!isOpening) filterItems(false); 
+        input.addEventListener('input', function() {
+            if (!isOpening) filterItems(false);
         });
         input.addEventListener('click', showDropdown);
         
@@ -214,8 +216,11 @@
             var currentInputValue = (input.value || '').trim();
             var currentIdValue = (idInput && idInput.value) || '';
 
-            // Si el input está vacío pero hay un valor guardado, RESTAURAR INMEDIATAMENTE
-            if (currentInputValue === '' && storedText && storedId) {
+            // Si el input está vacío pero hay un valor guardado, RESTAURAR.
+            // Excepción: NO restaurar mientras el usuario está escribiendo/buscando
+            // (input enfocado), para que pueda limpiar el campo y filtrar sin que
+            // el monitor lo vuelva a llenar solo.
+            if (currentInputValue === '' && storedText && storedId && document.activeElement !== input) {
                 input.value = storedText;
                 if (idInput) idInput.value = storedId;
                 console.log('[CaMaGaRe] Empresa restaurada desde sessionStorage: ' + storedText);
