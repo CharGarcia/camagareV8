@@ -181,11 +181,15 @@
             }
         });
 
-        // Escape cierra el dropdown. Backspace/Delete se dejan en su
-        // comportamiento nativo (borrado carácter por carácter) para poder
-        // limpiar/editar la búsqueda con normalidad.
+        // Backspace/Delete limpian TODO el input de una vez para empezar una
+        // búsqueda nueva (el monitor ya no lo rellena mientras está enfocado).
+        // Escape cierra el dropdown.
         input.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
+            if (e.key === 'Backspace' || e.key === 'Delete') {
+                e.preventDefault();
+                input.value = '';
+                filterItems(false);
+            } else if (e.key === 'Escape') {
                 hideDropdown();
                 input.blur();
             }
