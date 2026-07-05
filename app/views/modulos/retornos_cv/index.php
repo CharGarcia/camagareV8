@@ -152,7 +152,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <script>
     window.RUTA_MODULO_RETORNO = '<?= $urlBaseRet ?>';
     window.EMPRESA_CONFIG = {
-        facturacion_inventario: <?= (($empresa['facturacion_inventario'] ?? true) === 'true' || ($empresa['facturacion_inventario'] ?? true) === true) ? true : false ?>,
+        facturacion_inventario: <?= (($empresa['facturacion_inventario'] ?? true) === 'true' || ($empresa['facturacion_inventario'] ?? true) === true) ? 'true' : 'false' ?>,
         decimales_precio: <?= (int) ($empresa['decimales_precio'] ?? 2) ?>,
         decimales_cantidad: <?= (int) ($empresa['decimales_cantidad'] ?? 2) ?>
     };
