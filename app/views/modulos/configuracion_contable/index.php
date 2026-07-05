@@ -87,6 +87,7 @@ $base = BASE_URL;
                     <!-- Oculto hasta crear el módulo de Ventas con Recibo:
                     <option value="ventas_recibo">Ventas con Recibo (Recibos no autorizados)</option>
                     -->
+                    <option value="consignacion_venta">Consignaciones en Ventas (Reclasificación de inventario a costo)</option>
                     <option value="adquisiciones_compras">Adquisiciones de Compras/Servicios (Documentos recibidos)</option>
                     <option value="retenciones_venta">Retenciones en Venta</option>
                     <option value="retenciones_compra">Retenciones en Compra</option>

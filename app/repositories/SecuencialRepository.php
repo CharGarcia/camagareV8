@@ -25,6 +25,7 @@ class SecuencialRepository
      */
     private const DOCUMENT_MAP = [
         'Facturas de venta'                    => ['tabla' => 'ventas_cabecera',        'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
+        'Recibos de venta'                     => ['tabla' => 'recibos_venta_cabecera', 'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Nota de crédito'                      => ['tabla' => 'notas_credito_cabecera',  'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Nota de débito'                       => ['tabla' => 'notas_debito_cabecera',   'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Retenciones de compras'               => ['tabla' => 'retencion_compra_cabecera', 'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
@@ -36,6 +37,9 @@ class SecuencialRepository
         'Pedidos'                              => ['tabla' => 'pedidos_cabecera',        'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Órdenes de compra'                    => ['tabla' => 'ordenes_compra',           'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Consignaciones ventas'                => ['tabla' => 'consignaciones_ventas',   'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
+        'Retornos consignaciones ventas'       => ['tabla' => 'retornos_cv',             'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
+        'Facturacion consignaciones ventas'    => ['tabla' => 'consignaciones_facturas', 'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
+        'Ordenes car-wash'                     => ['tabla' => 'carwash_ordenes',         'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
     ];
 
     public function __construct()

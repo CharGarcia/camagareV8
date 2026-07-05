@@ -26,6 +26,7 @@ class SincronizadorAsientosService
             $db->exec("ALTER TABLE retencion_compra_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
             $db->exec("ALTER TABLE ingresos_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
             $db->exec("ALTER TABLE egresos_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
+            $db->exec("ALTER TABLE consignaciones_ventas ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
         } catch (\Throwable $e) {
             // Ignorar errores si no tiene permisos o ya existen
         }
@@ -182,9 +183,30 @@ class SincronizadorAsientosService
             'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)'
         );
 
+        // 7b. Consignaciones en Ventas (reclasificación de inventario a costo).
+        //     Se generan las que tengan las cuentas configuradas; el resto se avisa abajo.
+        $this->sincronizarModulo(
+            $db,
+            "SELECT id FROM consignaciones_ventas WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'Anulada'",
+            [$idEmpresa],
+            function() {
+                return new \App\Services\modulos\ConsignacionVentaService(
+                    new \App\repositories\modulos\ConsignacionVentaRepository(),
+                    new \App\Rules\modulos\ConsignacionVentaRules(),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'Consignaciones en Ventas',
+            'Configuración Contable (Consignaciones en Ventas)'
+        );
+
         // 8. Verificación proactiva: conceptos y formas SIN cuenta contable configurada
         //    (avisa aunque todavía no existan documentos pendientes).
         $this->verificarConfiguracionCuentas($db, $idEmpresa);
+
+        // 8b. Consignaciones con costo en Kardex que no se pueden contabilizar por falta
+        //     de la cuenta «Mercadería en Consignación» configurada.
+        $this->verificarConsignacionesPendientes($db, $idEmpresa);
 
         // 9. Verificación proactiva: facturas con costo en Kardex que no se puede contabilizar
         //    porque faltan las cuentas de Costo de Ventas e Inventario.
@@ -282,6 +304,66 @@ class SincronizadorAsientosService
                 $this->warnings[] = "Hay {$n} factura(s) de venta con productos cuyo costo de venta no se está contabilizando. "
                     . "Configure las cuentas de Costo de Ventas e Inventario en Configuración Contable (tipo de asiento de Ventas); "
                     . "al volver a abrir Estados Financieros, los asientos se completarán automáticamente.";
+            }
+        } catch (\Throwable $e) {
+            // Tabla/columna inexistente (migración pendiente): omitir sin romper.
+        }
+    }
+
+    /**
+     * Subconsulta que devuelve los id_cuenta configurados para el concepto de Consignaciones
+     * cuyo asiento_tipo (código o referencia) contiene la palabra clave dada (p. ej. 'CONSIGNACION').
+     * Lleva un parámetro posicional (?) que debe enlazarse a id_empresa.
+     */
+    private function sqlCuentaConsignacionPorPalabra(string $palabra): string
+    {
+        $kw = strtoupper(preg_replace('/[^A-Za-z]/', '', $palabra));
+        return "SELECT ap.id_cuenta
+                FROM asientos_tipo at
+                JOIN asientos_programados ap
+                  ON ap.id_asiento_tipo = at.id
+                 AND ap.id_empresa = ?
+                 AND ap.id_referencia = at.id
+                 AND (ap.tipo_referencia = 'asientos tipo' OR ap.tipo_referencia = at.tipo_asiento)
+                 AND ap.eliminado = false
+                WHERE at.tipo_asiento = 'consignacion_venta' AND at.eliminado = false
+                  AND ap.id_cuenta IS NOT NULL
+                  AND (UPPER(COALESCE(at.codigo, '')) LIKE '%{$kw}%'
+                       OR UPPER(COALESCE(at.referencia, '')) LIKE '%{$kw}%')";
+    }
+
+    /**
+     * Avisa si hay consignaciones en venta con costo en el Kardex (costo_total > 0) cuyo asiento
+     * de reclasificación no se puede generar porque falta configurar la cuenta «Mercadería en
+     * Consignación» en el tipo de asiento «Consignaciones en Ventas». No se reprocesan aquí:
+     * solo se cuentan para avisar. Al configurar la cuenta se generarán automáticamente.
+     */
+    private function verificarConsignacionesPendientes(\PDO $db, int $idEmpresa): void
+    {
+        try {
+            $subMercaderia = $this->sqlCuentaConsignacionPorPalabra('CONSIGNACION');
+
+            $sql = "SELECT COUNT(*)
+                    FROM consignaciones_ventas cv
+                    WHERE cv.id_empresa = ?
+                      AND cv.eliminado = false
+                      AND cv.estado <> 'Anulada'
+                      AND cv.id_asiento_contable IS NULL
+                      AND EXISTS (SELECT 1 FROM inventario_kardex k
+                                  WHERE k.referencia_tipo = 'CONSIGNACION_VENTA'
+                                    AND k.referencia_id   = cv.id
+                                    AND k.tipo_movimiento = 'salida'
+                                    AND k.eliminado       = false
+                                    AND k.costo_total      > 0)
+                      AND NOT EXISTS ($subMercaderia)";
+            $st = $db->prepare($sql);
+            $st->execute([$idEmpresa, $idEmpresa]);
+            $n = (int) $st->fetchColumn();
+            if ($n > 0) {
+                $this->warnings[] = "Hay {$n} consignación(es) en venta sin asiento contable. "
+                    . "Configure la cuenta «Mercadería en Consignación» (y su contrapartida de Inventario) en "
+                    . "Configuración Contable (tipo de asiento «Consignaciones en Ventas»); al volver a abrir "
+                    . "Estados Financieros, los asientos se generarán automáticamente.";
             }
         } catch (\Throwable $e) {
             // Tabla/columna inexistente (migración pendiente): omitir sin romper.

@@ -144,6 +144,7 @@ class AsientoContableRepository
             'retenciones_ventas'  => 'RV',
             'retenciones_compras' => 'RC',
             'nomina'              => 'NO',
+            'consignacion'        => 'CV',
         ];
         $prefijo = $prefijos[$tipoComprobante] ?? 'DI';
 

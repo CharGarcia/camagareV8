@@ -45,8 +45,26 @@ class ConsignacionVentaService
         }
         unset($d);
 
-        $cabecera['detalles'] = $detalles;
+        $cabecera['detalles']      = $detalles;
+        $cabecera['tiene_factura'] = $this->tieneFacturaAsociada($id, $idEmpresa);
         return $cabecera;
+    }
+
+    /**
+     * ¿La consignación tiene una factura de venta activa asociada?
+     *
+     * El vínculo vive en la tabla puente `consignaciones_facturas` (una fila activa por
+     * factura generada desde la consignación). RESILIENTE: si la tabla no existe todavía
+     * (migración pendiente), devuelve false y no restringe la edición.
+     */
+    public function tieneFacturaAsociada(int $id, int $idEmpresa): bool
+    {
+        try {
+            $facturaRepo = new \App\repositories\modulos\ConsignacionFacturaRepository();
+            return !empty($facturaRepo->getFacturadoPorConsignacion($id, $idEmpresa));
+        } catch (\Throwable $e) {
+            return false; // aún no existe el vínculo → no restringe
+        }
     }
 
     public function crear(array $data): int
@@ -151,6 +169,10 @@ class ConsignacionVentaService
                 $stockActual = $this->inventarioRepo->getStockActual((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
                 $nuevoStock = $stockActual - $det['cantidad'];
 
+                // Costo promedio actual → se registra en el kardex para el asiento de reclasificación.
+                $costoUnitCons  = (float) $this->inventarioRepo->getCostoPromedio((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
+                $costoTotalCons = round($costoUnitCons * (float)$det['cantidad'], 2);
+
                 $this->inventarioRepo->registrarMovimiento([
                     'id_empresa' => $idEmpresa,
                     'id_producto' => $det['id_producto'],
@@ -159,6 +181,8 @@ class ConsignacionVentaService
                     'referencia_tipo' => 'CONSIGNACION_VENTA',
                     'referencia_id' => $idConsignacion,
                     'cantidad' => -$det['cantidad'], // negativo para salidas
+                    'costo_unitario' => $costoUnitCons,
+                    'costo_total' => $costoTotalCons,
                     'stock_anterior' => $stockActual,
                     'stock_posterior' => $nuevoStock,
                     'numero_lote' => (isset($det['lote']) && $det['lote'] !== '') ? $det['lote'] : null,
@@ -176,6 +200,11 @@ class ConsignacionVentaService
             $this->reconciliarPedidosAfectados($db, $idEmpresa);
 
             $db->commit();
+
+            // El asiento se genera FUERA de la transacción: un fallo contable no debe
+            // revertir la consignación ya guardada.
+            $this->procesarAsientoSeguro($idConsignacion, $data);
+
             return $idConsignacion;
         } catch (Exception $e) {
             $db->rollBack();
@@ -192,8 +221,11 @@ class ConsignacionVentaService
         if (!$cabecera) {
             throw new Exception("Consignación no encontrada.");
         }
-        if ($cabecera['estado'] !== 'Emitida') {
-            throw new Exception("Solo se pueden actualizar consignaciones en estado Emitida.");
+        if ($cabecera['estado'] !== 'Borrador') {
+            throw new Exception("Solo se pueden editar consignaciones en estado Borrador. Cambie el estado a Borrador para editar.");
+        }
+        if ($this->tieneFacturaAsociada($id, $idEmpresa)) {
+            throw new Exception("No se puede editar: la consignación tiene una factura asociada.");
         }
 
         $db = Database::getConnection();
@@ -291,6 +323,10 @@ class ConsignacionVentaService
                 $stockActual = $this->inventarioRepo->getStockActual((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
                 $nuevoStock = $stockActual - $det['cantidad'];
 
+                // Costo promedio actual → se registra en el kardex para el asiento de reclasificación.
+                $costoUnitCons  = (float) $this->inventarioRepo->getCostoPromedio((int)$det['id_producto'], (int)$det['id_bodega'], $idEmpresa);
+                $costoTotalCons = round($costoUnitCons * (float)$det['cantidad'], 2);
+
                 $this->inventarioRepo->registrarMovimiento([
                     'id_empresa' => $idEmpresa,
                     'id_producto' => $det['id_producto'],
@@ -299,6 +335,8 @@ class ConsignacionVentaService
                     'referencia_tipo' => 'CONSIGNACION_VENTA',
                     'referencia_id' => $id,
                     'cantidad' => -$det['cantidad'], // negativo para salidas
+                    'costo_unitario' => $costoUnitCons,
+                    'costo_total' => $costoTotalCons,
                     'stock_anterior' => $stockActual,
                     'stock_posterior' => $nuevoStock,
                     'numero_lote' => (isset($det['lote']) && $det['lote'] !== '') ? $det['lote'] : null,
@@ -331,6 +369,8 @@ class ConsignacionVentaService
                 'observaciones' => empty($data['observaciones']) ? null : trim($data['observaciones']),
                 'subtotal' => $subtotal,
                 'total' => $total,
+                // Al actualizar un Borrador, la consignación pasa (de vuelta) a Emitida.
+                'estado' => 'Emitida',
                 'updated_by' => $idUsuario,
                 'updated_at' => date('Y-m-d H:i:s')
             ];
@@ -342,6 +382,9 @@ class ConsignacionVentaService
             $this->reconciliarPedidosAfectados($db, $idEmpresa);
 
             $db->commit();
+
+            // Regenerar el asiento con los valores actualizados (fuera de la transacción).
+            $this->procesarAsientoSeguro($id, $data);
         } catch (Exception $e) {
             $db->rollBack();
             throw $e;
@@ -398,10 +441,202 @@ class ConsignacionVentaService
             $this->reconciliarPedidosAfectados($db, $idEmpresa);
 
             $db->commit();
+
+            // Anular el asiento contable de la consignación (si existe), fuera de la transacción.
+            $idAsiento = (int) ($cabecera['id_asiento_contable'] ?? 0);
+            if ($idAsiento > 0) {
+                try {
+                    $asientoService = new \App\Services\modulos\AsientoContableService(
+                        new \App\repositories\modulos\AsientoContableRepository(),
+                        new \App\Rules\modulos\AsientoContableRules(),
+                        $this->logService
+                    );
+                    $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
+                } catch (\Throwable $e) {
+                    error_log("[Consignacion] No se pudo anular el asiento $idAsiento: " . $e->getMessage());
+                }
+            }
         } catch (Exception $e) {
             $db->rollBack();
             throw $e;
         }
+    }
+
+    /** Cabecera de la consignación (incluye id_asiento_contable). */
+    public function getPorId(int $id, int $idEmpresa): ?array
+    {
+        return $this->repository->find($id, $idEmpresa);
+    }
+
+    /**
+     * Cambia el estado de la consignación (Borrador | Entregada | Anulada).
+     * Solo actualiza el estado; NO reversa inventario ni anula el asiento (eso se maneja
+     * en el flujo de eliminar / retornos, aún por definir para "Anulada").
+     */
+    public function cambiarEstado(int $id, int $idEmpresa, int $idUsuario, string $nuevoEstado): void
+    {
+        $permitidos = ['Emitida', 'Borrador', 'Entregada', 'Anulada'];
+        if (!in_array($nuevoEstado, $permitidos, true)) {
+            throw new Exception("Estado no válido.");
+        }
+
+        $cab = $this->repository->find($id, $idEmpresa);
+        if (!$cab) {
+            throw new Exception("Consignación no encontrada.");
+        }
+        if (($cab['estado'] ?? '') === $nuevoEstado) {
+            return; // sin cambios
+        }
+        if ($this->tieneFacturaAsociada($id, $idEmpresa)) {
+            throw new Exception("No se puede cambiar el estado: la consignación tiene una factura asociada.");
+        }
+
+        $db = Database::getConnection();
+        try {
+            $db->beginTransaction();
+            $this->repository->updateEstado($id, $idEmpresa, $nuevoEstado, $idUsuario);
+            $this->logService->registrar(
+                $idUsuario, $idEmpresa, 'CAMBIAR_ESTADO_CONSIGNACION', 'consignaciones_ventas', $id,
+                ['estado' => $cab['estado'] ?? null], ['estado' => $nuevoEstado]
+            );
+            $db->commit();
+        } catch (Exception $e) {
+            $db->rollBack();
+            throw $e;
+        }
+    }
+
+    /** Punto de entrada del Sincronizador de Asientos (Estados Financieros). */
+    public function procesarAsientoContablePorSincronizacion(int $id): void
+    {
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        if ($idEmpresa <= 0) return;
+        if (!$this->repository->find($id, $idEmpresa)) return;
+
+        $this->procesarAsientoContable($id, [
+            'id_empresa' => $idEmpresa,
+            'id_usuario' => $idUsuario,
+        ]);
+    }
+
+    /** Cantidad retornada por línea de consignación: [id_consignacion_detalle => cantidad]. */
+    public function getRetornadoPorLinea(int $idConsignacion, int $idEmpresa): array
+    {
+        try {
+            $retornoRepo = new \App\repositories\modulos\RetornoCvRepository();
+            return $retornoRepo->getRetornadoPorConsignacion($idConsignacion, $idEmpresa);
+        } catch (\Throwable $e) {
+            // Tabla de retornos inexistente (migración pendiente): sin datos de retorno.
+            return [];
+        }
+    }
+
+    /** Retornos (líneas de devolución) asociados a esta consignación, para la pestaña Retornos. */
+    public function getRetornosDeConsignacion(int $idConsignacion, int $idEmpresa): array
+    {
+        // Validar que la consignación pertenezca a la empresa antes de listar sus retornos.
+        if (!$this->repository->find($idConsignacion, $idEmpresa)) {
+            return [];
+        }
+        $retornoRepo = new \App\repositories\modulos\RetornoCvRepository();
+        return $retornoRepo->getPorConsignacion($idConsignacion, $idEmpresa);
+    }
+
+    /** Asiento sugerido (reclasificación de inventario a costo) para la pestaña. */
+    public function obtenerAsientoSugerido(int $idEmpresa, int $idConsignacion): array
+    {
+        $builder = new \App\Services\modulos\AsientoBuilderService();
+        return $builder->generarAsientoConsignacion($idEmpresa, $idConsignacion);
+    }
+
+    /** Genera/actualiza el asiento sin propagar errores (no debe tumbar el guardado). */
+    private function procesarAsientoSeguro(int $idConsignacion, array $data): void
+    {
+        try {
+            $this->procesarAsientoContable($idConsignacion, $data);
+        } catch (\Throwable $e) {
+            error_log("[Consignacion] Asiento no generado para $idConsignacion: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Persiste el asiento de reclasificación de la consignación. Prioriza el asiento
+     * editado por el usuario en la pestaña (si viene COMPLETO); si no, usa la sugerencia
+     * automática. Solo se persiste cuando está completo (todas las líneas con cuenta) y
+     * cuadrado; en caso contrario se omite y el usuario podrá completarlo al reabrir.
+     */
+    public function procesarAsientoContable(int $idConsignacion, array $data): void
+    {
+        $idEmpresa = (int) $data['id_empresa'];
+        $idUsuario = (int) $data['id_usuario'];
+
+        $cab = $this->repository->find($idConsignacion, $idEmpresa);
+        if (!$cab) return;
+
+        $numDoc = ($cab['serie'] ?? '') . '-' . ($cab['secuencial'] ?? '');
+        $fecha  = $data['fecha_emision'] ?? ($cab['fecha_emision'] ?? date('Y-m-d'));
+
+        // 1. Fuente: asiento manual del frontend si viene completo; si no, la sugerencia.
+        $fuente = (!empty($data['asiento_detalles']) && is_array($data['asiento_detalles']))
+            ? $data['asiento_detalles']
+            : [];
+        $manualCompleto = !empty($fuente);
+        foreach ($fuente as $f) {
+            if ((int) ($f['id_cuenta_contable'] ?? 0) <= 0) { $manualCompleto = false; break; }
+        }
+        if (!$manualCompleto) {
+            $fuente = $this->obtenerAsientoSugerido($idEmpresa, $idConsignacion);
+        }
+
+        // 2. Normalizar y validar (todas las líneas con cuenta; cuadre exacto).
+        $detalles = [];
+        $totDebe = 0.0; $totHaber = 0.0;
+        foreach ($fuente as $d) {
+            $idCuenta = (int) ($d['id_cuenta_contable'] ?? 0);
+            if ($idCuenta <= 0) { $detalles = []; break; } // incompleto → no persistir aún
+            $debe  = round((float) ($d['debe'] ?? 0), 2);
+            $haber = round((float) ($d['haber'] ?? 0), 2);
+            $totDebe += $debe; $totHaber += $haber;
+            $detalles[] = [
+                'id_cuenta_contable'   => $idCuenta,
+                'debe'                 => $debe,
+                'haber'                => $haber,
+                'referencia_detalle'   => ($d['referencia_detalle'] ?? '') ?: ('Consignación # ' . $numDoc),
+                'documento_referencia' => 'Consignación # ' . $numDoc,
+                'id_entidad'           => (int) ($cab['id_cliente'] ?? 0),
+                'tipo_entidad'         => 'cliente',
+            ];
+        }
+
+        if (empty($detalles) || abs($totDebe - $totHaber) >= 0.005 || ($totDebe <= 0 && $totHaber <= 0)) {
+            return; // incompleto o descuadrado: no se persiste el asiento
+        }
+
+        $asientoService = new \App\Services\modulos\AsientoContableService(
+            new \App\repositories\modulos\AsientoContableRepository(),
+            new \App\Rules\modulos\AsientoContableRules(),
+            $this->logService
+        );
+
+        $previo = $asientoService->getAsientoPorOrigen('consignacion_venta', $idConsignacion, $idEmpresa);
+        $idAsiento = $previo ? (int) $previo['id'] : 0;
+
+        $clienteNombre = $cab['cliente_nombre'] ?? 'Cliente';
+        $cabeceraData = [
+            'id'                   => $idAsiento > 0 ? $idAsiento : null,
+            'fecha_asiento'        => $fecha,
+            'tipo_comprobante'     => 'consignacion',
+            'numero_comprobante'   => '',
+            'concepto'             => 'Consignación # ' . $numDoc . ' - Cliente: ' . $clienteNombre,
+            'estado'               => 'contabilizado',
+            'modulo_origen'        => 'consignacion_venta',
+            'id_referencia_origen' => $idConsignacion,
+            'observaciones'        => $data['observaciones'] ?? ($cab['observaciones'] ?? null),
+        ];
+
+        $idGenerado = $asientoService->guardarAsiento($cabeceraData, $detalles, $idEmpresa, $idUsuario);
+        $this->repository->updateAsientoContable($idConsignacion, $idEmpresa, $idGenerado);
     }
 
     private function reconciliarPedidosAfectados(\PDO $db, int $idEmpresa): void

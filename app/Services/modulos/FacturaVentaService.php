@@ -875,6 +875,10 @@ class FacturaVentaService
             // 6. Revertir inventario
             $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $id, $idEmpresa, $idUsuario);
 
+            // 6.1 Si la factura provino de una consignación, deshacer el reingreso y
+            //     liberar el saldo facturable (reversión automática).
+            $this->reversarConsignacionSiAplica($id, $idEmpresa, $idUsuario);
+
             // 6.5 Limpiar casilleros de declaracion 104
             $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
             $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'facturas de venta', $id);
@@ -926,6 +930,9 @@ class FacturaVentaService
             // Revertir inventario si existiera algo (aunque en borrador no deberÃ­a haber kardex, pero por seguridad)
             $this->getInventarioService()->revertirMovimientosPorReferencia('factura_venta', $id, $idEmpresa, $idUsuario);
 
+            // Si la factura provino de una consignación, deshacer el reingreso y liberar el saldo.
+            $this->reversarConsignacionSiAplica($id, $idEmpresa, $idUsuario);
+
             $this->logService->registrar(
                 $idUsuario,
                 $idEmpresa,
@@ -941,6 +948,22 @@ class FacturaVentaService
             if ($managedTransaction && $db->inTransaction()) $db->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Reversión automática cuando la factura provino de una consignación:
+     * deshace el reingreso de inventario y libera el saldo facturable. No hace
+     * nada si la factura es normal (sin vínculo de consignación). Participa en la
+     * transacción activa de anular/eliminar.
+     */
+    private function reversarConsignacionSiAplica(int $idFactura, int $idEmpresa, int $idUsuario): void
+    {
+        $consFacturaService = new \App\Services\modulos\ConsignacionFacturaService(
+            new \App\repositories\modulos\ConsignacionFacturaRepository(),
+            new \App\Rules\modulos\ConsignacionFacturaRules(),
+            $this->logService
+        );
+        $consFacturaService->reversarPorFactura($idFactura, $idEmpresa, $idUsuario);
     }
 
     public function obtenerAsientoSugerido(int $idEmpresa, array $invoiceData): array

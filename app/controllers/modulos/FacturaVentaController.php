@@ -917,6 +917,68 @@ class FacturaVentaController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Genera un RECIBO DE VENTA a partir de una factura.
+     *  - Factura autorizada: no se toca; solo se emite el recibo.
+     *  - Factura borrador: $accion = 'eliminar' (borra la factura) | 'dejar'.
+     */
+    public function generarReciboAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_POST['id'] ?? 0);
+        $accion    = trim((string) ($_POST['accion'] ?? 'dejar')); // 'dejar' | 'eliminar'
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        if (!$id) {
+            echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
+            exit;
+        }
+        if ($accion === 'eliminar') {
+            $this->requireEliminar();
+        }
+
+        try {
+            // empresa_config fusionada con el establecimiento (decimales/config).
+            $empresaModel = new \App\models\Empresa();
+            $empresaData  = $empresaModel->getPorId($idEmpresa) ?? [];
+            try {
+                $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+                if (!empty($establecimientos)) {
+                    $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                    $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
+                    if ($estConfig) {
+                        $empresaData = array_merge($empresaData, $estConfig);
+                    }
+                }
+            } catch (\Throwable $e) {}
+
+            $reciboService = new \App\Services\modulos\ReciboVentaService(
+                new \App\repositories\modulos\ReciboVentaRepository(),
+                new \App\Rules\modulos\ReciboVentaRules(),
+                new \App\Services\LogSistemaService()
+            );
+            $res = $reciboService->generarReciboDesdeFactura($id, $idEmpresa, $idUsuario, $empresaData, $accion);
+
+            $msg = !empty($res['factura_eliminada'])
+                ? "Se emitió el recibo de venta {$res['numero_recibo']} y la factura en borrador fue eliminada."
+                : "Se ha emitido el recibo de venta {$res['numero_recibo']}.";
+
+            echo json_encode([
+                'ok'                => true,
+                'mensaje'           => $msg,
+                'numero_recibo'     => $res['numero_recibo'],
+                'id_recibo'         => $res['id_recibo'],
+                'factura_eliminada' => (bool) $res['factura_eliminada'],
+            ]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo generar el recibo: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function getClientesAjax(): void
     {
         $this->requireLeer();

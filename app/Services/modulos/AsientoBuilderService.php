@@ -106,6 +106,285 @@ class AsientoBuilderService
     }
 
     /**
+     * Asiento de RECLASIFICACIÓN de inventario para una consignación de venta.
+     *
+     * Una consignación NO es una venta (no transfiere propiedad): la mercadería entregada
+     * se reclasifica desde Inventario hacia "Mercadería en consignación / poder de terceros",
+     * SIEMPRE a COSTO (nunca a precio de venta).
+     *
+     *   Debe : Mercadería en consignación (poder de terceros)   = costo total
+     *   Haber: Inventario                                        = costo total
+     *
+     * El costo se toma del kardex (salidas de la consignación). Las cuentas se resuelven desde
+     * asientos_programados (concepto 'consignacion_venta'); si la empresa aún no las configuró,
+     * la cuenta de inventario cae a la de 'ventas_factura' y la de consignación queda vacía
+     * (id 0) para que el usuario la seleccione en la pestaña Asiento contable.
+     *
+     * @return array<int,array> Líneas del asiento o [] si la consignación no tiene costo.
+     */
+    public function generarAsientoConsignacion(int $idEmpresa, int $idConsignacion): array
+    {
+        $db = \App\core\Database::getConnection();
+
+        // 1. Costo total desde el kardex (salidas de esta consignación).
+        $stCosto = $db->prepare(
+            "SELECT COALESCE(SUM(costo_total), 0)
+             FROM inventario_kardex
+             WHERE referencia_tipo = 'CONSIGNACION_VENTA'
+               AND referencia_id   = ?
+               AND tipo_movimiento = 'salida'
+               AND eliminado       = false"
+        );
+        $stCosto->execute([$idConsignacion]);
+        $costo = round((float) $stCosto->fetchColumn(), 2);
+        if ($costo <= 0) {
+            return [];
+        }
+
+        // 2. Cuentas del concepto propio 'consignacion_venta' (si está configurado).
+        $cuentaConsignacion = null; // Debe
+        $cuentaInventario   = null; // Haber
+        foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'consignacion_venta') as $r) {
+            if (empty($r['id_cuenta'])) continue;
+            $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']   ?? '');
+            $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '');
+            $cuenta = [
+                'id_cuenta'     => (int) $r['id_cuenta'],
+                'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+                'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+            ];
+            if (str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario')) {
+                $cuentaInventario = $cuenta;
+            } elseif (str_contains($codigo, 'CONSIGNACION') || str_contains($codigo, 'MERCADERIA') || str_contains($concepto, 'consignaci')) {
+                $cuentaConsignacion = $cuenta;
+            }
+        }
+
+        // 3. Fallback de la cuenta de Inventario: reutilizar la de 'ventas_factura'.
+        if ($cuentaInventario === null) {
+            foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'ventas_factura') as $r) {
+                if (empty($r['id_cuenta'])) continue;
+                $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']   ?? '');
+                $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '');
+                if (str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario')) {
+                    $cuentaInventario = [
+                        'id_cuenta'     => (int) $r['id_cuenta'],
+                        'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+                        'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+                    ];
+                    break;
+                }
+            }
+        }
+
+        // 4. Dos líneas al costo. La cuenta que no esté configurada queda con id 0 para
+        //    que el usuario la seleccione manualmente en la pestaña.
+        return [
+            [
+                'id_cuenta_contable' => $cuentaConsignacion['id_cuenta']     ?? 0,
+                'cuenta_codigo'      => $cuentaConsignacion['cuenta_codigo'] ?? '',
+                'cuenta_nombre'      => $cuentaConsignacion['cuenta_nombre'] ?? '',
+                'debe'               => $costo,
+                'haber'              => 0.0,
+                'referencia_detalle' => 'Mercadería en consignación (poder de terceros)',
+            ],
+            [
+                'id_cuenta_contable' => $cuentaInventario['id_cuenta']     ?? 0,
+                'cuenta_codigo'      => $cuentaInventario['cuenta_codigo'] ?? '',
+                'cuenta_nombre'      => $cuentaInventario['cuenta_nombre'] ?? '',
+                'debe'               => 0.0,
+                'haber'              => $costo,
+                'referencia_detalle' => 'Inventario',
+            ],
+        ];
+    }
+
+    /**
+     * Asiento de REINGRESO por facturación desde consignación: es el INVERSO de la
+     * consignación por las cantidades a facturar. La mercadería vuelve del "poder de
+     * terceros" al Inventario (a costo) para que la Factura de Venta la descargue de
+     * forma normal.
+     *   DEBE  : Inventario
+     *   HABER : Mercadería en Consignación
+     * El costo se valora al mismo costo que la consignación de origen (kardex de la salida).
+     *
+     * @return array<int,array> Líneas del asiento o [] si no hay costo.
+     */
+    public function generarAsientoReingresoFacturacion(int $idEmpresa, int $idConsignacionFactura): array
+    {
+        $db = \App\core\Database::getConnection();
+
+        // 1. Costo reingresado = cantidad de cada línea × costo unitario de la consignación de origen.
+        $stCosto = $db->prepare(
+            "SELECT COALESCE(SUM(
+                cfd.cantidad * (
+                    SELECT COALESCE(SUM(k.costo_total), 0) / NULLIF(SUM(ABS(k.cantidad)), 0)
+                    FROM inventario_kardex k
+                    WHERE k.referencia_tipo = 'CONSIGNACION_VENTA'
+                      AND k.referencia_id   = cfd.id_consignacion
+                      AND k.id_producto     = cfd.id_producto
+                      AND k.tipo_movimiento = 'salida'
+                      AND k.eliminado       = false
+                )
+             ), 0)
+             FROM consignaciones_facturas_detalles cfd
+             WHERE cfd.id_consignacion_factura = ? AND cfd.eliminado = false"
+        );
+        $stCosto->execute([$idConsignacionFactura]);
+        $costo = round((float) $stCosto->fetchColumn(), 2);
+        if ($costo <= 0) {
+            return [];
+        }
+
+        // 2. Mismas cuentas que la consignación (concepto 'consignacion_venta'), con
+        //    fallback de Inventario a 'ventas_factura'.
+        $cuentaConsignacion = null;
+        $cuentaInventario   = null;
+        foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'consignacion_venta') as $r) {
+            if (empty($r['id_cuenta'])) continue;
+            $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']   ?? '');
+            $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '');
+            $cuenta = [
+                'id_cuenta'     => (int) $r['id_cuenta'],
+                'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+                'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+            ];
+            if (str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario')) {
+                $cuentaInventario = $cuenta;
+            } elseif (str_contains($codigo, 'CONSIGNACION') || str_contains($codigo, 'MERCADERIA') || str_contains($concepto, 'consignaci')) {
+                $cuentaConsignacion = $cuenta;
+            }
+        }
+        if ($cuentaInventario === null) {
+            foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'ventas_factura') as $r) {
+                if (empty($r['id_cuenta'])) continue;
+                $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']   ?? '');
+                $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '');
+                if (str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario')) {
+                    $cuentaInventario = [
+                        'id_cuenta'     => (int) $r['id_cuenta'],
+                        'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+                        'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+                    ];
+                    break;
+                }
+            }
+        }
+
+        // 3. INVERSO de la consignación: Debe Inventario / Haber Mercadería en consignación.
+        return [
+            [
+                'id_cuenta_contable' => $cuentaInventario['id_cuenta']     ?? 0,
+                'cuenta_codigo'      => $cuentaInventario['cuenta_codigo'] ?? '',
+                'cuenta_nombre'      => $cuentaInventario['cuenta_nombre'] ?? '',
+                'debe'               => $costo,
+                'haber'              => 0.0,
+                'referencia_detalle' => 'Inventario (reingreso por facturación de consignación)',
+            ],
+            [
+                'id_cuenta_contable' => $cuentaConsignacion['id_cuenta']     ?? 0,
+                'cuenta_codigo'      => $cuentaConsignacion['cuenta_codigo'] ?? '',
+                'cuenta_nombre'      => $cuentaConsignacion['cuenta_nombre'] ?? '',
+                'debe'               => 0.0,
+                'haber'              => $costo,
+                'referencia_detalle' => 'Mercadería en consignación (facturación)',
+            ],
+        ];
+    }
+
+    /**
+     * Asiento de un RETORNO de consignación: es el INVERSO exacto del asiento de la consignación.
+     * La mercadería vuelve del "poder de terceros" al Inventario, a costo.
+     *   DEBE  : Inventario
+     *   HABER : Mercadería en Consignación
+     * El costo se valora al mismo costo que la consignación de origen (kardex de la salida).
+     *
+     * @return array<int,array> Líneas del asiento o [] si no hay costo.
+     */
+    public function generarAsientoRetornoCv(int $idEmpresa, int $idRetorno): array
+    {
+        $db = \App\core\Database::getConnection();
+
+        // 1. Costo devuelto = cantidad de cada línea × costo unitario de la consignación de origen.
+        $stCosto = $db->prepare(
+            "SELECT COALESCE(SUM(
+                rcd.cantidad * (
+                    SELECT COALESCE(SUM(k.costo_total), 0) / NULLIF(SUM(ABS(k.cantidad)), 0)
+                    FROM inventario_kardex k
+                    WHERE k.referencia_tipo = 'CONSIGNACION_VENTA'
+                      AND k.referencia_id   = rcd.id_consignacion
+                      AND k.id_producto     = rcd.id_producto
+                      AND k.tipo_movimiento = 'salida'
+                      AND k.eliminado       = false
+                )
+             ), 0)
+             FROM retornos_cv_detalles rcd
+             WHERE rcd.id_retorno = ? AND rcd.eliminado = false"
+        );
+        $stCosto->execute([$idRetorno]);
+        $costo = round((float) $stCosto->fetchColumn(), 2);
+        if ($costo <= 0) {
+            return [];
+        }
+
+        // 2. Mismas cuentas que la consignación (concepto 'consignacion_venta').
+        $cuentaConsignacion = null;
+        $cuentaInventario   = null;
+        foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'consignacion_venta') as $r) {
+            if (empty($r['id_cuenta'])) continue;
+            $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']   ?? '');
+            $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '');
+            $cuenta = [
+                'id_cuenta'     => (int) $r['id_cuenta'],
+                'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+                'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+            ];
+            if (str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario')) {
+                $cuentaInventario = $cuenta;
+            } elseif (str_contains($codigo, 'CONSIGNACION') || str_contains($codigo, 'MERCADERIA') || str_contains($concepto, 'consignaci')) {
+                $cuentaConsignacion = $cuenta;
+            }
+        }
+
+        // 3. Fallback de la cuenta de Inventario: reutilizar la de 'ventas_factura'.
+        if ($cuentaInventario === null) {
+            foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'ventas_factura') as $r) {
+                if (empty($r['id_cuenta'])) continue;
+                $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']   ?? '');
+                $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '');
+                if (str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario')) {
+                    $cuentaInventario = [
+                        'id_cuenta'     => (int) $r['id_cuenta'],
+                        'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+                        'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+                    ];
+                    break;
+                }
+            }
+        }
+
+        // 4. INVERSO de la consignación: Debe Inventario / Haber Mercadería en consignación.
+        return [
+            [
+                'id_cuenta_contable' => $cuentaInventario['id_cuenta']     ?? 0,
+                'cuenta_codigo'      => $cuentaInventario['cuenta_codigo'] ?? '',
+                'cuenta_nombre'      => $cuentaInventario['cuenta_nombre'] ?? '',
+                'debe'               => $costo,
+                'haber'              => 0.0,
+                'referencia_detalle' => 'Inventario (retorno de consignación)',
+            ],
+            [
+                'id_cuenta_contable' => $cuentaConsignacion['id_cuenta']     ?? 0,
+                'cuenta_codigo'      => $cuentaConsignacion['cuenta_codigo'] ?? '',
+                'cuenta_nombre'      => $cuentaConsignacion['cuenta_nombre'] ?? '',
+                'debe'               => 0.0,
+                'haber'              => $costo,
+                'referencia_detalle' => 'Mercadería en consignación (devolución)',
+            ],
+        ];
+    }
+
+    /**
      * Lee el id de la entidad (cliente/proveedor) de la cabecera del documento. $tabla y $columna son
      * constantes internas (no entrada de usuario), por lo que es seguro interpolarlas.
      */

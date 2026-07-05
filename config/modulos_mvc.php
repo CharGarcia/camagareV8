@@ -62,8 +62,24 @@ return [
         ],
     ],
 
+    // Recibos de venta (comprobante interno, NO electrónico / NO SRI).
+    // Actualizar id_submodulo con el id real que retorne database/recibos_venta_tablas.sql
+    // (SELECT id FROM submodulos_menu WHERE ruta = 'modulos/recibo-venta';).
+    'modulos/recibo-venta' => [
+        'id_submodulo' => 50,
+        'legacy_rutas' => [],
+    ],
+
     'modulos/proformas' => [
         'id_submodulo' => 0, // Actualizar con el id real tras ejecutar la migración 20260619_create_proformas.sql
+        'legacy_rutas' => [],
+    ],
+
+    // Servicio Car-Wash (órdenes de lavado de vehículos).
+    // Actualizar id_submodulo con el id real que retorne 20260705_menu_carwash.sql
+    // (SELECT id FROM submodulos_menu WHERE ruta = 'modulos/car-wash';).
+    'modulos/car-wash' => [
+        'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],
 

@@ -80,9 +80,11 @@ class ConsignacionVentaRepository extends BaseRepository
     public function getDetalles(int $idConsignacion, int $idEmpresa): array
     {
         $sql = "
-            SELECT d.*, p.nombre as producto_nombre, p.codigo as producto_codigo, p.tipo_produccion, p.inventariable, p.precio_base as precio_base
+            SELECT d.*, p.nombre as producto_nombre, p.codigo as producto_codigo, p.tipo_produccion, p.inventariable, p.precio_base as precio_base,
+                   b.nombre as bodega_nombre
             FROM consignaciones_ventas_detalles d
             INNER JOIN productos p ON p.id = d.id_producto
+            LEFT JOIN bodegas b ON b.id = d.id_bodega
             WHERE d.id_consignacion = :id AND d.id_empresa = :e AND (d.eliminado = false OR d.eliminado IS NULL)
             ORDER BY d.id ASC
         ";
@@ -109,12 +111,38 @@ class ConsignacionVentaRepository extends BaseRepository
         return (int) $st->fetchColumn();
     }
 
+    public function updateEstado(int $id, int $idEmpresa, string $estado, int $idUsuario): void
+    {
+        $sql = "UPDATE consignaciones_ventas
+                   SET estado = :est, updated_by = :u, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :id AND id_empresa = :e";
+        $st = $this->db->prepare($sql);
+        $st->execute([':est' => $estado, ':u' => $idUsuario, ':id' => $id, ':e' => $idEmpresa]);
+    }
+
+    public function updateAsientoContable(int $id, int $idEmpresa, ?int $idAsiento): void
+    {
+        $sql = "UPDATE consignaciones_ventas
+                   SET id_asiento_contable = :a, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :id AND id_empresa = :e";
+        $st = $this->db->prepare($sql);
+        $st->bindValue(':a', $idAsiento, $idAsiento === null ? \PDO::PARAM_NULL : \PDO::PARAM_INT);
+        $st->bindValue(':id', $id, \PDO::PARAM_INT);
+        $st->bindValue(':e', $idEmpresa, \PDO::PARAM_INT);
+        $st->execute();
+    }
+
     public function find(int $id, int $idEmpresa): ?array
     {
-        $sql = "SELECT cv.*, 
-                       c.nombre as cliente_nombre, c.identificacion as cliente_identificacion, c.direccion as cliente_direccion
+        $sql = "SELECT cv.*,
+                       c.nombre as cliente_nombre, c.identificacion as cliente_identificacion, c.direccion as cliente_direccion,
+                       c.email as cliente_email,
+                       v.nombre as vendedor_nombre,
+                       rt.nombre as responsable_traslado_nombre
                 FROM consignaciones_ventas cv
                 INNER JOIN clientes c ON c.id = cv.id_cliente
+                LEFT JOIN vendedores v ON v.id = cv.id_vendedor
+                LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
                 WHERE cv.id = :id AND cv.id_empresa = :e AND cv.eliminado = false";
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $id, ':e' => $idEmpresa]);

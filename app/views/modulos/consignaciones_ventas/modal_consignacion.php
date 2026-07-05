@@ -5,7 +5,7 @@ $moduloBase = basename($rutaModulo ?? 'consignaciones-ventas');
 $vistaConfigConsignaciones = \App\Helpers\PreferenciasHelper::getPreferenciasVista($moduloBase);
 echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigConsignaciones, 'estiloVistaPestanasConsignaciones');
 ?>
-<div class="modal fade" id="modalConsignacion" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">
+<div class="modal fade" id="modalConsignacion" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-focus="false" style="z-index: 1060;">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
             <form id="formConsignacion" onsubmit="event.preventDefault(); guardarConsignacion();" novalidate>
@@ -61,6 +61,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 <a class="nav-link active" id="cons-tab-general-btn" data-bs-toggle="tab" href="#cons-tab-general" role="tab" title="General"><i class="bi bi-info-circle me-1"></i> General</a>
                             </li>
                             <li class="nav-item" role="presentation">
+                                <a class="nav-link" id="cons-tab-asiento-btn" data-bs-toggle="tab" href="#cons-tab-asiento" role="tab" title="Asiento Contable"><i class="bi bi-calculator me-1"></i> Asiento contable</a>
+                            </li>
+                            <li class="nav-item" role="presentation">
                                 <a class="nav-link" id="cons-tab-retornos-btn" data-bs-toggle="tab" href="#cons-tab-retornos" role="tab" title="Retornos"><i class="bi bi-arrow-return-left me-1"></i> Retornos</a>
                             </li>
                             <li class="nav-item" role="presentation">
@@ -72,14 +75,19 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link" id="cons-tab-pedidos-btn" data-bs-toggle="tab" href="#cons-tab-pedidos" role="tab" title="Pedidos"><i class="bi bi-cart3 me-1"></i> Pedidos</a>
                             </li>
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link" id="cons-tab-entrega-btn" data-bs-toggle="tab" href="#cons-tab-entrega" role="tab" title="Entrega"><i class="bi bi-geo-alt me-1"></i> Entrega</a>
+                            </li>
                         </ul>
                         <div class="pb-1 flex-shrink-0">
                             <?php
                             $pestanasConfigCons = [
+                                'cons-tab-asiento'     => 'Asiento contable',
                                 'cons-tab-retornos'    => 'Retornos',
                                 'cons-tab-facturacion' => 'Facturación',
                                 'cons-tab-guias'       => 'Guías Remisión',
-                                'cons-tab-pedidos'     => 'Pedidos'
+                                'cons-tab-pedidos'     => 'Pedidos',
+                                'cons-tab-entrega'     => 'Entrega'
                             ];
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigCons, $vistaConfigConsignaciones ?? [], $moduloBase);
                             ?>
@@ -113,6 +121,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 <button type="button" class="btn btn-sm btn-outline-success px-2 py-1" onclick="whatsappConsignacion()" title="Enviar por WhatsApp">
                                     <i class="bi bi-whatsapp"></i>
                                 </button>
+
+                                <!-- Estado (solo tras crear la consignación) -->
+                                <div class="ms-auto d-flex align-items-center gap-2 d-none" id="cons_estado_wrapper">
+                                    <label class="form-label small fw-bold mb-0 text-muted">Estado:</label>
+                                    <select class="form-select form-select-sm fw-bold" id="cons_estado_selector" style="width:auto;" onchange="cambiarEstadoConsignacion(this.value)">
+                                        <option value="Emitida">Emitida</option>
+                                        <option value="Borrador">Borrador</option>
+                                        <option value="Entregada">Entregada</option>
+                                        <option value="Facturada" disabled>Facturada</option>
+                                        <option value="Anulada">Anulada</option>
+                                    </select>
+                                </div>
                             </div>
                             <hr class="text-muted my-3 opacity-25">
 
@@ -245,7 +265,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                         </tbody>
                                     </table>
                                 <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center">
-                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="agregarFilaConsignacion()">
+                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" id="btnConsAgregarLinea" onclick="agregarFilaConsignacion()">
                                         <i class="bi bi-plus-circle me-1"></i> Agregar línea
                                     </button>
                                     <div class="small fw-bold text-muted pe-3">
@@ -255,21 +275,102 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                             </div>
                         </div>
 
-                        <!-- Pestaña Retornos -->
-                        <div class="tab-pane fade" id="cons-tab-retornos" role="tabpanel">
-                            <div class="p-4 text-center text-muted">
-                                <i class="bi bi-arrow-return-left fs-1 text-secondary mb-3 opacity-50"></i>
-                                <h5>Módulo de Retornos</h5>
-                                <p>El historial y registro de productos devueltos o mermas aparecerá aquí.</p>
+                        <!-- Pestaña Asiento Contable -->
+                        <div class="tab-pane fade p-3" id="cons-tab-asiento" role="tabpanel">
+                            <div class="alert alert-light border small d-flex align-items-center gap-2 mb-2 py-2">
+                                <i class="bi bi-info-circle text-primary"></i>
+                                <span>Reclasificación de inventario <strong>a costo</strong> (la consignación no es una venta): <em>Mercadería en consignación</em> contra <em>Inventario</em>.</span>
+                            </div>
+                            <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+                                <div class="table-responsive" style="max-height: 320px;">
+                                    <table class="table table-sm table-detalle mb-0 text-nowrap" id="cons-table-asiento">
+                                        <thead>
+                                            <tr class="table-light border-bottom">
+                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width: 45%;">Cuenta Contable</th>
+                                                <th class="py-2 small fw-bold text-muted text-end pe-3" style="width: 20%;">D&eacute;bito / Debe</th>
+                                                <th class="py-2 small fw-bold text-muted text-end pe-3" style="width: 20%;">Cr&eacute;dito / Haber</th>
+                                                <th class="py-2 small fw-bold text-muted" style="width: 15%;">Referencia</th>
+                                                <th style="width: 40px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="cons-tbody-asiento">
+                                            <tr><td colspan="5" class="text-center py-4 text-muted">Cargando asiento contable...</td></tr>
+                                        </tbody>
+                                        <tfoot class="bg-light fw-bold border-top">
+                                            <tr>
+                                                <td class="text-end py-2">Totales:</td>
+                                                <td class="text-end pe-3 py-2 text-primary" id="cons-asiento-total-debe">0.00</td>
+                                                <td class="text-end pe-3 py-2 text-primary" id="cons-asiento-total-haber">0.00</td>
+                                                <td colspan="2" class="py-2">
+                                                    <div class="d-flex align-items-center gap-2 justify-content-end pe-3">
+                                                        <span class="x-small text-muted">Diferencia: <span id="cons-asiento-diferencia">0.00</span></span>
+                                                        <span id="cons-asiento-badge-cuadre" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2">Cuadrado</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                                <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center">
+                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="consAgregarLineaAsiento()">
+                                        <i class="bi bi-plus-circle me-1"></i> Agregar línea
+                                    </button>
+                                    <div class="small fw-bold text-muted pe-3">
+                                        Líneas: <span id="cons-asiento-count">0</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Pestaña Facturación -->
-                        <div class="tab-pane fade" id="cons-tab-facturacion" role="tabpanel">
-                            <div class="p-4 text-center text-muted">
-                                <i class="bi bi-receipt fs-1 text-secondary mb-3 opacity-50"></i>
-                                <h5>Historial de Facturación</h5>
-                                <p>Las facturas emitidas a partir de los cortes de esta consignación se listarán aquí.</p>
+                        <!-- Pestaña Retornos -->
+                        <div class="tab-pane fade p-3" id="cons-tab-retornos" role="tabpanel">
+                            <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+                                <div class="table-responsive" style="max-height: 340px;">
+                                    <table class="table table-sm table-hover mb-0 text-nowrap">
+                                        <thead>
+                                            <tr class="table-light border-bottom">
+                                                <th class="ps-3 py-2 small fw-bold text-muted">Retorno</th>
+                                                <th class="py-2 small fw-bold text-muted">Fecha</th>
+                                                <th class="py-2 small fw-bold text-muted">Producto</th>
+                                                <th class="py-2 small fw-bold text-muted text-end">Cantidad</th>
+                                                <th class="py-2 small fw-bold text-muted">Lote</th>
+                                                <th class="py-2 small fw-bold text-muted">Bodega</th>
+                                                <th class="py-2 small fw-bold text-muted text-center pe-3">Estado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="cons_retornos_body">
+                                            <tr><td colspan="7" class="text-center py-4 text-muted">Cargando retornos...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="p-2 border-top bg-light small text-muted d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-info-circle me-1"></i> Devoluciones del cliente asociadas a esta consignación.</span>
+                                    <span>Total devuelto: <span class="fw-bold" id="cons_retornos_total_cant">0.00</span></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pestaña Facturación (solo lectura: historial). La generación vive en el módulo "Facturación de consignaciones". -->
+                        <div class="tab-pane fade p-3" id="cons-tab-facturacion" role="tabpanel">
+                            <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+                                <div class="table-responsive" style="max-height: 340px;">
+                                    <table class="table table-sm table-hover mb-0 text-nowrap">
+                                        <thead>
+                                            <tr class="table-light border-bottom">
+                                                <th class="ps-3 py-2 small fw-bold text-muted">Factura</th>
+                                                <th class="py-2 small fw-bold text-muted">Fecha</th>
+                                                <th class="py-2 small fw-bold text-muted text-end">Total</th>
+                                                <th class="py-2 small fw-bold text-muted text-center pe-3">Estado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="cons_fact_hist_body">
+                                            <tr><td colspan="4" class="text-center py-4 text-muted">Cargando facturas...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="p-2 border-top bg-light small text-muted">
+                                    <i class="bi bi-info-circle me-1"></i> Facturas generadas desde esta consignación. Para facturar, use el módulo <b>Facturación de consignaciones</b>.
+                                </div>
                             </div>
                         </div>
 
@@ -288,6 +389,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 <i class="bi bi-cart3 fs-1 text-secondary mb-3 opacity-50"></i>
                                 <h5>Pedidos Asociados</h5>
                                 <p>Detalle de los pedidos que fueron generados y despachados desde esta consignación.</p>
+                            </div>
+                        </div>
+
+                        <!-- Pestaña Entrega -->
+                        <div class="tab-pane fade" id="cons-tab-entrega" role="tabpanel">
+                            <div class="p-4 text-center text-muted">
+                                <i class="bi bi-geo-alt fs-1 text-secondary mb-3 opacity-50"></i>
+                                <h5>Ubicación de Entrega</h5>
+                                <p>Aquí se mostrará el mapa con el lugar donde se entregó la mercadería.</p>
+                                <p class="small">Se implementará junto con el módulo de <strong>responsables de traslado</strong>.</p>
                             </div>
                         </div>
 
@@ -363,6 +474,17 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         
         document.getElementById('cons_detalles_body').innerHTML = '';
         agregarFilaConsignacion(); // Empieza con una línea vacía
+
+        // El selector de estado solo aparece tras crear la consignación (nace como Borrador).
+        const wrapEstado = document.getElementById('cons_estado_wrapper');
+        if (wrapEstado) wrapEstado.classList.add('d-none');
+        window._CONS_TIENE_FACTURA = false;
+        const selEstadoNueva = document.getElementById('cons_estado_selector');
+        if (selEstadoNueva) { selEstadoNueva.value = 'Borrador'; selEstadoNueva.dataset.prev = 'Borrador'; selEstadoNueva.disabled = false; selEstadoNueva.title = ''; }
+
+        consSetFormEditable(true); // nueva consignación: todo editable
+
+        if (typeof consCargarAsiento === 'function') consCargarAsiento(0); // aún sin costo
         
         // Asignar fechas y horas actuales
         const now = new Date();
@@ -404,7 +526,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         }
         
         const modalEl = document.getElementById('modalConsignacion');
-        const modal = new bootstrap.Modal(modalEl);
+        const modal = new bootstrap.Modal(modalEl, { focus: false });
         
         modalEl.addEventListener('shown.bs.modal', function onModalShown() {
             if (window._CONS_BORRADOR_PENDIENTE) {
@@ -429,11 +551,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         document.getElementById('tituloModalConsignacion').textContent = 'Consignación en Ventas: ' + row.serie + '-' + row.secuencial;
         document.getElementById('cons_estado_badge').classList.add('d-none');
         
-        if (row.estado === 'Emitida' || row.estado === 'Nueva') {
-            document.getElementById('btnEliminarConsignacion').classList.remove('d-none');
-        } else {
-            document.getElementById('btnEliminarConsignacion').classList.add('d-none');
-        }
+        // La visibilidad de Guardar/Eliminar y el bloqueo del formulario se aplican con
+        // consAplicarEditable() más abajo (una vez cargado el estado).
 
         // Cargar campos básicos
         if(row.fecha_emision) {
@@ -466,16 +585,31 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (row.id_bodega) document.getElementById('cons_id_bodega').value = row.id_bodega;
         if (row.id_responsable_traslado) document.getElementById('cons_id_responsable_traslado').value = row.id_responsable_traslado;
 
-        // Controlar si se puede editar (solo si está Emitida)
-        const btnGuardar = document.getElementById('btnGuardarConsignacion');
-        if (row.estado === 'Emitida') {
-            btnGuardar.classList.remove('d-none');
-            btnGuardar.innerHTML = '<i class="bi bi-save me-1"></i> Actualizar';
-        } else {
-            btnGuardar.classList.add('d-none');
-        }
-        
         await cargarDetallesCons(row.id);
+
+        // Selector de estado: visible al ver una consignación existente. Los estados legado
+        // ('Emitida'/'Nueva') se muestran como 'Borrador' en el selector.
+        const wrapEstado = document.getElementById('cons_estado_wrapper');
+        const selEstado  = document.getElementById('cons_estado_selector');
+        if (selEstado) {
+            const estOpts = ['Emitida', 'Borrador', 'Entregada', 'Anulada'];
+            const estActual = estOpts.includes(row.estado) ? row.estado : 'Emitida';
+            selEstado.value = estActual;
+            selEstado.dataset.prev = estActual;
+        }
+        if (wrapEstado) wrapEstado.classList.remove('d-none');
+
+        // Si la consignación tiene una factura asociada, no se puede cambiar el estado.
+        if (selEstado) {
+            const conFactura = !!window._CONS_TIENE_FACTURA;
+            selEstado.disabled = conFactura;
+            selEstado.title = conFactura ? 'La consignación tiene una factura asociada: no se puede cambiar el estado.' : '';
+        }
+
+        // Modo edición/lectura y visibilidad de botones según el estado (editable solo en Borrador).
+        consAplicarEditable(row.estado);
+
+        if (typeof consCargarAsiento === 'function') consCargarAsiento(row.id);
 
         await cargarCatalogosConsignacion();
         
@@ -496,7 +630,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             }
         }
 
-        new bootstrap.Modal(document.getElementById('modalConsignacion')).show();
+        new bootstrap.Modal(document.getElementById('modalConsignacion'), { focus: false }).show();
     }
 
     async function cargarCatalogosConsignacion() {
@@ -590,6 +724,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             try {
                 const res = await fetch(`${RUTA_MODULO_CONSIGNACION}/getDetalleAjax?id=${id}`);
                 const data = await res.json();
+                window._CONS_TIENE_FACTURA = !!(data.data && data.data.tiene_factura);
+                window._CONS_CLIENTE_EMAIL = (data.data && data.data.cliente_email) ? data.data.cliente_email : '';
                 if(data.ok && data.data && data.data.detalles) {
                     const tbody = document.getElementById('cons_detalles_body');
                     tbody.innerHTML = '';
@@ -1297,7 +1433,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                 subtotal: parseFloat(tr.querySelector('.subtotal-line').textContent) || 0,
                 id_pedido_detalle: tr.querySelector('.input-id-pedido-detalle') ? tr.querySelector('.input-id-pedido-detalle').value : '',
                 id_bodega: tr.dataset.idBodega || document.getElementById('cons_id_bodega').value || ''
-            }))
+            })),
+            asiento_detalles: (typeof consCapturarDetallesAsiento === 'function') ? consCapturarDetallesAsiento() : []
         };
 
         try {
@@ -1355,6 +1492,90 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             }
         }
     }
+
+    // Bloquea/desbloquea los campos de la consignación (solo editable en Borrador).
+    // El selector de estado y los botones de acción (PDF/correo/WhatsApp) permanecen activos.
+    window.consSetFormEditable = function(editable) {
+        const cont = document.getElementById('cons-tab-general');
+        if (!cont) return;
+        cont.querySelectorAll('input, select, textarea').forEach(el => {
+            if (el.id === 'cons_estado_selector') return; // el estado siempre se puede cambiar
+            el.disabled = !editable;
+        });
+        // Botones de agregar/quitar líneas de detalle
+        const btnAdd = document.getElementById('btnConsAgregarLinea');
+        if (btnAdd) btnAdd.classList.toggle('d-none', !editable);
+        document.querySelectorAll('#cons_detalles_body .row-detalle-cons button').forEach(b => {
+            b.classList.toggle('d-none', !editable);
+        });
+    };
+
+    // Determina si una consignación es editable según su estado (solo Borrador).
+    window.consEsEditable = function(estado) {
+        return estado === 'Borrador';
+    };
+
+    // Aplica el modo edición/lectura a TODO el modal según el estado (campos + botones).
+    // Editable solo en Borrador. Eliminar disponible en Borrador y Emitida (no entregada/anulada).
+    window.consAplicarEditable = function(estado) {
+        // Con factura asociada la consignación queda de solo lectura (no se edita ni se elimina).
+        const conFactura = !!window._CONS_TIENE_FACTURA;
+        const editable = consEsEditable(estado) && !conFactura;
+        consSetFormEditable(editable);
+
+        const btnGuardar = document.getElementById('btnGuardarConsignacion');
+        if (btnGuardar) {
+            btnGuardar.classList.toggle('d-none', !editable);
+            btnGuardar.innerHTML = '<i class="bi bi-save me-1"></i> Actualizar';
+            btnGuardar.disabled = false;
+        }
+        const btnEliminar = document.getElementById('btnEliminarConsignacion');
+        if (btnEliminar) {
+            const puedeEliminar = (estado === 'Borrador' || estado === 'Emitida' || estado === 'Nueva') && !conFactura;
+            btnEliminar.classList.toggle('d-none', !puedeEliminar);
+        }
+    };
+
+    // Cambia el estado de la consignación (Borrador | Entregada | Anulada) vía endpoint dedicado.
+    window.cambiarEstadoConsignacion = async function(nuevo) {
+        const sel  = document.getElementById('cons_estado_selector');
+        const id   = document.getElementById('cons_id').value;
+        const prev = (sel && sel.dataset.prev) ? sel.dataset.prev : 'Borrador';
+        if (!id || !sel) return;
+        if (nuevo === prev) return;
+
+        if (nuevo === 'Anulada') {
+            const c = await Swal.fire({
+                title: '¿Anular consignación?',
+                text: 'La consignación quedará marcada como Anulada.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, anular',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!c.isConfirmed) { sel.value = prev; return; }
+        }
+
+        try {
+            const fd = new FormData();
+            fd.append('id', id);
+            fd.append('estado', nuevo);
+            const res  = await fetch(`${RUTA_MODULO_CONSIGNACION}/cambiarEstadoAjax`, { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data.ok) {
+                sel.dataset.prev = nuevo;
+                consAplicarEditable(nuevo); // bloquea/desbloquea campos y botones según el nuevo estado
+                if (typeof cargarGrid === 'function') cargarGrid();
+                Swal.fire({ icon: 'success', title: 'Estado actualizado', timer: 1200, showConfirmButton: false });
+            } else {
+                sel.value = prev;
+                Swal.fire('Error', data.error || 'No se pudo cambiar el estado.', 'error');
+            }
+        } catch (e) {
+            sel.value = prev;
+            Swal.fire('Error', 'No se pudo cambiar el estado.', 'error');
+        }
+    };
 
     let consBuscarPedidoModal = null;
 
@@ -1820,12 +2041,39 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
     function pdfConsignacion() {
         const id = document.getElementById('cons_id').value;
         if (!id) return Swal.fire('Atención', 'Debe guardar la consignación primero', 'warning');
-        Swal.fire('Info', 'Generando PDF...', 'info');
+        window.open(`${RUTA_MODULO_CONSIGNACION}/pdf?id=${id}`, '_blank');
     }
-    function emailConsignacion() {
+    async function emailConsignacion() {
         const id = document.getElementById('cons_id').value;
         if (!id) return Swal.fire('Atención', 'Debe guardar la consignación primero', 'warning');
-        Swal.fire('Info', 'Enviando por correo...', 'info');
+
+        const { value: correos, isConfirmed } = await Swal.fire({
+            title: 'Enviar por correo',
+            input: 'text',
+            inputLabel: 'Correo(s) destino, separados por coma.',
+            inputValue: window._CONS_CLIENTE_EMAIL || '',
+            inputPlaceholder: 'cliente@correo.com',
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-envelope me-1"></i> Enviar',
+            cancelButtonText: 'Cancelar'
+        });
+        if (!isConfirmed) return;
+
+        Swal.fire({ title: 'Enviando correo...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        try {
+            const fd = new FormData();
+            fd.append('id', id);
+            fd.append('correos', correos || '');
+            const res = await fetch(`${RUTA_MODULO_CONSIGNACION}/enviarCorreoAjax`, { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data.ok) {
+                Swal.fire('Enviado', data.mensaje || 'Correo enviado correctamente.', 'success');
+            } else {
+                Swal.fire('Error', data.mensaje || 'No se pudo enviar el correo.', 'error');
+            }
+        } catch (e) {
+            Swal.fire('Error', 'No se pudo enviar el correo.', 'error');
+        }
     }
     function whatsappConsignacion() {
         const id = document.getElementById('cons_id').value;
@@ -2132,6 +2380,289 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             const debouncedGuardar = debounce(consAutoGuardar, 800);
             form.addEventListener('input', debouncedGuardar);
             form.addEventListener('change', debouncedGuardar);
+        }
+    });
+
+    // =====================================================================
+    // PESTAÑA ASIENTO CONTABLE (reclasificación de inventario a costo)
+    // Mismo diseño y mecánica que la pestaña Asiento de Factura de Venta.
+    // =====================================================================
+    const CONS_BASE_URL = '<?= rtrim(defined("BASE_URL") ? BASE_URL : "", "/") ?>';
+
+    /** Recalcula totales, diferencia y badge de cuadre del asiento. */
+    window.consRecalcularTotalesAsiento = function() {
+        let totalDebe = 0, totalHaber = 0, faltanCuentas = false;
+        document.querySelectorAll('#cons-tbody-asiento .cons-asiento-row').forEach(tr => {
+            const debe  = parseFloat(tr.querySelector('.input-debe').value)  || 0;
+            const haber = parseFloat(tr.querySelector('.input-haber').value) || 0;
+            const idCta = parseInt(tr.querySelector('.input-id-cuenta-contable')?.value) || 0;
+            totalDebe  += debe;
+            totalHaber += haber;
+            if (idCta <= 0 && (debe > 0 || haber > 0)) faltanCuentas = true;
+        });
+
+        const lblDebe  = document.getElementById('cons-asiento-total-debe');
+        const lblHaber = document.getElementById('cons-asiento-total-haber');
+        const lblDiff  = document.getElementById('cons-asiento-diferencia');
+        const badge    = document.getElementById('cons-asiento-badge-cuadre');
+
+        if (lblDebe)  lblDebe.textContent  = totalDebe.toFixed(2);
+        if (lblHaber) lblHaber.textContent = totalHaber.toFixed(2);
+
+        const diff = Math.abs(totalDebe - totalHaber);
+        if (lblDiff) {
+            lblDiff.textContent = diff.toFixed(2);
+            lblDiff.classList.toggle('text-danger', diff >= 0.005);
+            lblDiff.classList.toggle('text-success', diff < 0.005);
+        }
+        if (badge) {
+            if (faltanCuentas) {
+                badge.className = 'badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 px-2';
+                badge.textContent = 'Faltan cuentas';
+                badge.title = 'Hay líneas con importe pero sin cuenta contable. Configúrelas en Configuración de Asientos → Consignaciones en Ventas, o selecciónelas aquí. El asiento no se guardará hasta completarlas.';
+            } else if (diff < 0.005 && (totalDebe > 0 || totalHaber > 0)) {
+                badge.className = 'badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2';
+                badge.textContent = 'Cuadrado';
+                badge.title = '';
+            } else {
+                badge.className = 'badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2';
+                badge.textContent = 'Descuadrado';
+                badge.title = '';
+            }
+        }
+        const count = document.getElementById('cons-asiento-count');
+        if (count) count.textContent = document.querySelectorAll('#cons-tbody-asiento .cons-asiento-row').length;
+    };
+
+    /** Agrega una línea editable al asiento (con autocompletado de cuenta contable). */
+    window.consAgregarLineaAsiento = function(idCuenta = '', codigo = '', nombre = '', debe = 0, haber = 0, referencia = '') {
+        const tbody = document.getElementById('cons-tbody-asiento');
+        if (!tbody) return;
+        if (tbody.querySelector('td[colspan="5"]')) tbody.innerHTML = '';
+
+        const tr = document.createElement('tr');
+        tr.className = 'cons-asiento-row';
+        const dv = parseFloat(debe  || 0), hv = parseFloat(haber || 0);
+        tr.innerHTML = `
+            <td class="ps-3 position-relative align-middle p-0">
+                <input type="text" class="form-control border-0 bg-transparent input-cuenta-nombre" placeholder="Escriba código o cuenta contable..." value="${nombre ? (codigo ? codigo + ' - ' + nombre : nombre) : ''}" style="padding:0 4px;height:20px;font-size:0.78rem;">
+                <input type="hidden" class="input-id-cuenta-contable" value="${idCuenta || ''}">
+                <div class="list-group position-absolute w-100 shadow rounded-3 d-none cons-cuenta-dropdown" style="z-index: 1070; max-height: 200px; overflow-y: auto;"></div>
+            </td>
+            <td class="align-middle p-0"><input type="number" step="0.01" class="form-control text-end border-0 bg-transparent fw-medium input-debe text-primary" placeholder="0.00" value="${dv.toFixed(2) === '0.00' ? '' : dv.toFixed(2)}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
+            <td class="align-middle p-0"><input type="number" step="0.01" class="form-control text-end border-0 bg-transparent fw-medium input-haber text-primary" placeholder="0.00" value="${hv.toFixed(2) === '0.00' ? '' : hv.toFixed(2)}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
+            <td class="align-middle p-0"><input type="text" class="form-control border-0 bg-transparent input-referencia text-muted fst-italic" placeholder="Referencia" value="${referencia || ''}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
+            <td class="text-center p-0 align-middle" style="width: 40px;">
+                <button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="this.closest('tr').remove(); window.consRecalcularTotalesAsiento();" title="Eliminar línea">
+                    <i class="bi bi-trash3 fs-6"></i>
+                </button>
+            </td>`;
+        tbody.appendChild(tr);
+
+        const inpCuenta = tr.querySelector('.input-cuenta-nombre');
+        const hidden    = tr.querySelector('.input-id-cuenta-contable');
+        const dropdown  = tr.querySelector('.cons-cuenta-dropdown');
+        const inpDebe   = tr.querySelector('.input-debe');
+        const inpHaber  = tr.querySelector('.input-haber');
+
+        inpCuenta.addEventListener('input', debounce(async (e) => {
+            const q = e.target.value.trim();
+            hidden.value = ''; // al reescribir se invalida la cuenta hasta elegir de la lista
+            if (q.length < 2) { dropdown.classList.add('d-none'); return; }
+            try {
+                const resp = await fetch(`${CONS_BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas?q=${encodeURIComponent(q)}`);
+                const json = await resp.json();
+                dropdown.innerHTML = '';
+                if (json.data && json.data.length > 0) {
+                    json.data.forEach(cuenta => {
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'list-group-item list-group-item-action py-1 px-2 border-0 small text-start';
+                        btn.innerHTML = `<code class="text-secondary me-2">${cuenta.codigo}</code> <span class="fw-medium">${cuenta.nombre}</span>`;
+                        btn.onmousedown = (evt) => {
+                            evt.preventDefault();
+                            inpCuenta.value = cuenta.codigo + ' - ' + cuenta.nombre;
+                            hidden.value = cuenta.id;
+                            dropdown.classList.add('d-none');
+                        };
+                        dropdown.appendChild(btn);
+                    });
+                    dropdown.classList.remove('d-none');
+                } else {
+                    dropdown.classList.add('d-none');
+                }
+            } catch (err) { console.error('Error buscando cuentas:', err); }
+        }, 300));
+
+        inpCuenta.addEventListener('blur', () => setTimeout(() => dropdown.classList.add('d-none'), 200));
+        inpDebe.addEventListener('input',  window.consRecalcularTotalesAsiento);
+        inpHaber.addEventListener('input', window.consRecalcularTotalesAsiento);
+
+        window.consRecalcularTotalesAsiento();
+        return tr;
+    };
+
+    /** Carga el asiento guardado o la sugerencia (reclasificación por costo). */
+    window.consCargarAsiento = async function(idConsignacion = 0) {
+        const tbody = document.getElementById('cons-tbody-asiento');
+        if (!tbody) return;
+
+        if (!idConsignacion) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> Guarda la consignación para generar el asiento (se calcula a costo).</td></tr>';
+            window.consRecalcularTotalesAsiento();
+            return;
+        }
+
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Cargando asiento contable...</td></tr>';
+        try {
+            const resp = await fetch(`${RUTA_MODULO_CONSIGNACION}/getAsientoSugeridoAjax?id=${idConsignacion}`);
+            const json = await resp.json();
+            if (json.ok && json.detalles && json.detalles.length > 0) {
+                tbody.innerHTML = '';
+                json.detalles.forEach(det => window.consAgregarLineaAsiento(
+                    det.id_cuenta_contable,
+                    det.cuenta_codigo || '',
+                    det.cuenta_nombre || '',
+                    parseFloat(det.debe || 0),
+                    parseFloat(det.haber || 0),
+                    det.referencia_detalle || det.documento_referencia || ''
+                ));
+                window.consRecalcularTotalesAsiento();
+            } else {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> Sin asiento: guarda o actualiza la consignación para generarlo.</td></tr>';
+                window.consRecalcularTotalesAsiento();
+            }
+        } catch (err) {
+            console.error('Error al cargar asiento contable:', err);
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i> Error al cargar el asiento contable.</td></tr>';
+        }
+    };
+
+    /** Serializa las líneas del asiento para enviarlas al guardar. */
+    window.consCapturarDetallesAsiento = function() {
+        const detalles = [];
+        document.querySelectorAll('#cons-tbody-asiento .cons-asiento-row').forEach(tr => {
+            const idCuenta = parseInt(tr.querySelector('.input-id-cuenta-contable').value) || 0;
+            if (idCuenta <= 0) return;
+            detalles.push({
+                id_cuenta_contable: idCuenta,
+                debe:  parseFloat(tr.querySelector('.input-debe').value)  || 0,
+                haber: parseFloat(tr.querySelector('.input-haber').value) || 0,
+                referencia_detalle: tr.querySelector('.input-referencia').value || ''
+            });
+        });
+        return detalles;
+    };
+
+    // ── Pestaña Retornos: devoluciones del cliente asociadas a esta consignación ──
+    window.consEscHtml = function(s) {
+        return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    };
+    window.consFmtFechaRetorno = function(f) {
+        if (!f) return '';
+        const s = String(f).substring(0, 10);
+        const p = s.split('-');
+        return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : s;
+    };
+    window.consBadgeRetorno = function(estado) {
+        if (estado === 'Anulada') return '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulada</span>';
+        return '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">' + consEscHtml(estado || 'Emitida') + '</span>';
+    };
+
+    window.consCargarRetornos = async function(id) {
+        const tb = document.getElementById('cons_retornos_body');
+        const totEl = document.getElementById('cons_retornos_total_cant');
+        if (!tb) return;
+        if (!id) {
+            tb.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">Guarde la consignación para ver sus retornos.</td></tr>';
+            if (totEl) totEl.textContent = '0.00';
+            return;
+        }
+        tb.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">Cargando retornos...</td></tr>';
+        try {
+            const res = await fetch(`${RUTA_MODULO_CONSIGNACION}/getRetornosAjax?id=${id}`);
+            const data = await res.json();
+            if (data.ok && data.data && data.data.length) {
+                let totalCant = 0;
+                tb.innerHTML = data.data.map(r => {
+                    const cant = parseFloat(r.cantidad || 0);
+                    totalCant += cant;
+                    return `<tr>
+                        <td class="ps-3 fw-bold text-primary">${consEscHtml((r.serie || '') + '-' + (r.secuencial || ''))}</td>
+                        <td>${consFmtFechaRetorno(r.fecha_retorno)}</td>
+                        <td class="text-truncate" style="max-width:220px" title="${consEscHtml(r.producto_nombre || '')}">${consEscHtml(r.producto_nombre || '')}</td>
+                        <td class="text-end">${cant.toFixed(2)}</td>
+                        <td>${consEscHtml(r.lote || '—')}</td>
+                        <td class="text-truncate" style="max-width:140px" title="${consEscHtml(r.bodega_nombre || '')}">${consEscHtml(r.bodega_nombre || '—')}</td>
+                        <td class="text-center pe-3">${consBadgeRetorno(r.estado)}</td>
+                    </tr>`;
+                }).join('');
+                if (totEl) totEl.textContent = totalCant.toFixed(2);
+            } else {
+                tb.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted"><i class="bi bi-arrow-return-left me-1"></i> Esta consignación no tiene retornos registrados.</td></tr>';
+                if (totEl) totEl.textContent = '0.00';
+            }
+        } catch (e) {
+            tb.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">Error al cargar los retornos.</td></tr>';
+        }
+    };
+
+    // Carga perezosa: al mostrar la pestaña Retornos, trae los retornos de la consignación actual.
+    document.addEventListener('DOMContentLoaded', () => {
+        const btnTab = document.getElementById('cons-tab-retornos-btn');
+        if (btnTab) {
+            btnTab.addEventListener('shown.bs.tab', () => {
+                consCargarRetornos(document.getElementById('cons_id').value);
+            });
+        }
+    });
+
+    // ── Pestaña Facturación (solo lectura): historial de facturas de la consignación ──
+    window.consBadgeFactura = function(f) {
+        const ok = 'bg-success bg-opacity-10 text-success border border-success border-opacity-25';
+        const dn = 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25';
+        if (f.factura_eliminada === true || f.factura_eliminada === 't' || f.estado_factura === 'anulado') {
+            return `<span class="badge ${dn}">${consEscHtml(f.estado_factura === 'anulado' ? 'Anulada' : 'Eliminada')}</span>`;
+        }
+        return `<span class="badge ${ok}">${consEscHtml(f.estado_factura || 'Generada')}</span>`;
+    };
+
+    window.consCargarFacturacion = async function(id) {
+        const histEl = document.getElementById('cons_fact_hist_body');
+        if (!histEl) return;
+        if (!id) {
+            histEl.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Guarde la consignación para ver sus facturas.</td></tr>';
+            return;
+        }
+        histEl.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Cargando facturas...</td></tr>';
+        try {
+            const res  = await fetch(`${RUTA_MODULO_CONSIGNACION}/getFacturasAjax?id=${id}`);
+            const data = await res.json();
+            if (data.ok && data.data && data.data.length) {
+                histEl.innerHTML = data.data.map(f => {
+                    const total = parseFloat(f.importe_total || f.total || 0);
+                    return `<tr>
+                        <td class="ps-3 fw-bold text-primary">${consEscHtml(f.numero_factura || ('#' + f.id_factura))}</td>
+                        <td>${consEscHtml(f.fecha_emision || f.created_at || '')}</td>
+                        <td class="text-end">${total.toFixed(2)}</td>
+                        <td class="text-center pe-3">${consBadgeFactura(f)}</td>
+                    </tr>`;
+                }).join('');
+            } else {
+                histEl.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted"><i class="bi bi-receipt me-1"></i> Esta consignación aún no tiene facturas.</td></tr>';
+            }
+        } catch (e) {
+            histEl.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">Error al cargar las facturas.</td></tr>';
+        }
+    };
+
+    // Carga perezosa: al mostrar la pestaña Facturación.
+    document.addEventListener('DOMContentLoaded', () => {
+        const btnTabF = document.getElementById('cons-tab-facturacion-btn');
+        if (btnTabF) {
+            btnTabF.addEventListener('shown.bs.tab', () => {
+                consCargarFacturacion(document.getElementById('cons_id').value);
+            });
         }
     });
 </script>

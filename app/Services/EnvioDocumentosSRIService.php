@@ -385,6 +385,62 @@ class EnvioDocumentosSRIService
         return $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $cuerpoHtml, 'aviso', '', '');
     }
 
+    /**
+     * Envía un correo con SOLO un PDF adjunto (sin XML), usando la misma resolución de
+     * credenciales SMTP que el envío de comprobantes. Útil para documentos no electrónicos
+     * (p. ej. Consignaciones en Ventas).
+     */
+    public function enviarPdfSimple(
+        int    $idEmpresa,
+        string $emailDestino,
+        string $nombreDestino,
+        string $asunto,
+        string $cuerpoHtml,
+        string $pdfString,
+        string $baseName,
+        string $empresaNombre = ''
+    ): bool {
+        $empresaRepo  = new EmpresaRepository();
+        $correoConfig = $empresaRepo->getCorreoConfig($idEmpresa);
+
+        $listaDestinos = [];
+        foreach (preg_split('/[\s,;]+/', $emailDestino) as $c) {
+            $c = trim($c);
+            if (filter_var($c, FILTER_VALIDATE_EMAIL)) {
+                $listaDestinos[] = $c;
+            }
+        }
+        if (empty($listaDestinos)) {
+            return false;
+        }
+
+        // Credenciales SMTP (misma lógica que enviarSiAplica / enviarAvisoSimple)
+        $tipoCorreo = $correoConfig['tipo_correo'] ?? 'camagare';
+        if ($tipoCorreo === 'camagare') {
+            $smtpData = EmailConfigService::getPhpMailerConfig('envio_documentos_sri');
+            if (!$smtpData) {
+                error_log("[Correo PDF] Falta config 'envio_documentos_sri'.");
+                return false;
+            }
+            if ($empresaNombre !== '') {
+                $smtpData['fromName'] = $empresaNombre;
+            }
+        } else {
+            $enc = !empty($correoConfig['ssl_habilitado']) ? 'tls' : '';
+            $smtpData = [
+                'host'       => $correoConfig['host'] ?? '',
+                'port'       => (int)($correoConfig['puerto'] ?? 587),
+                'username'   => $correoConfig['correo_emisor'] ?? '',
+                'password'   => $correoConfig['password_correo_emisor'] ?? '',
+                'from'       => $correoConfig['correo_emisor'] ?? '',
+                'fromName'   => $empresaNombre !== '' ? $empresaNombre : 'Notificaciones',
+                'smtpSecure' => $enc,
+            ];
+        }
+
+        return $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $cuerpoHtml, $baseName, '', $pdfString);
+    }
+
     private function enviarPhpMailer(array $smtpData, array $toEmails, string $toName, string $subject, string $bodyHtml, string $baseName, string $xmlString, string $pdfString): bool
     {
         $docMailDir = MVC_APP . '/lib/mail';

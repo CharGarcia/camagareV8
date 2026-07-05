@@ -35,12 +35,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <style>
     .x-small { font-size: 0.75rem; }
     /* Estilos para el listado */
-    .fv-scroll {
+    .recibos-scroll {
         max-height: calc(100dvh - 240px);
         overflow-y: auto;
     }
 
-    .fv-scroll thead th {
+    .recibos-scroll thead th {
         position: sticky;
         top: 0;
         z-index: 1;
@@ -197,7 +197,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i><?= htmlspecialchars($titulo) ?></h5>
     <?php if ($perm['crear']): ?>
         <button type="button" class="btn btn-primary btn-sm px-3" onclick="abrirModalFactura()">
-            <i class="bi bi-plus-lg"></i> Nueva
+            <i class="bi bi-plus-lg"></i> Nuevo
         </button>
     <?php endif; ?>
 </div>
@@ -216,11 +216,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     new FiltrosBusqueda({
                         containerId:   'fbBuscadorFV',
                         hiddenInputId: 'buscarFactura',
-                        placeholder:   'Buscar facturas...',
+                        placeholder:   'Buscar recibos...',
                         fields: [
                             { key: 'cliente',   label: 'Cliente',       icon: 'bi-person',          type: 'text' },
                             { key: 'ruc',       label: 'RUC / Cédula',  icon: 'bi-card-text',       type: 'text' },
-                            { key: 'numero',    label: 'Nº Factura',    icon: 'bi-hash',            type: 'text' },
+                            { key: 'numero',    label: 'Nº Recibo',     icon: 'bi-hash',            type: 'text' },
                             { key: 'vendedor',  label: 'Vendedor',      icon: 'bi-person-badge',    type: 'text' },
                             { key: 'usuario',   label: 'Usuario',       icon: 'bi-person-circle',   type: 'text' },
                             { key: 'obs',       label: 'Observaciones', icon: 'bi-chat-left-text',  type: 'text' },
@@ -241,10 +241,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 { v: 'abonada',   l: 'Abonada' },
                                 { v: 'pagada',    l: 'Pagada' },
                             ]},
-                            { key: 'correo',    label: 'Correo',        icon: 'bi-envelope',        type: 'select', options: [
-                                { v: 'enviado',   l: 'Enviado' },
-                                { v: 'pendiente', l: 'Pendiente' },
-                            ]},
                         ],
                         quickFilters: [
                             { id: 'qf_borrador',   label: 'Borrador',    mk: () => ({ key: 'estado', op: '=', value: 'borrador',   display: 'Borrador' }) },
@@ -253,13 +249,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             { id: 'qf_pago_pend',  label: 'Pago pendiente', mk: () => ({ key: 'pago', op: '=', value: 'pendiente', display: 'Pendiente' }) },
                             { id: 'qf_pago_abon',  label: 'Abonadas',    mk: () => ({ key: 'pago', op: '=', value: 'abonada',  display: 'Abonada' }) },
                             { id: 'qf_pago_pag',   label: 'Pagadas',     mk: () => ({ key: 'pago', op: '=', value: 'pagada',   display: 'Pagada' }) },
-                            { id: 'qf_correo_pend', label: 'Sin correo', mk: () => ({ key: 'correo', op: '=', value: 'pendiente', display: 'Correo pendiente' }) },
                             { id: 'qf_hoy',        label: 'Hoy',         mk: () => FiltrosBusqueda.helpers.hoyMismo('fecha') },
                             { id: 'qf_mes',        label: 'Este mes',    mk: () => FiltrosBusqueda.helpers.esteMes('fecha') },
                             { id: 'qf_mes_pasado', label: 'Mes pasado',  mk: () => FiltrosBusqueda.helpers.mesPasado('fecha') },
                             { id: 'qf_anio',       label: 'Este año',    mk: () => FiltrosBusqueda.helpers.esteAnio('fecha') },
                         ],
-                        onApply: () => window.FV_fetchSearch && window.FV_fetchSearch(1),
+                        onApply: () => window.RV_fetchSearch && window.RV_fetchSearch(1),
                     }).init();
                 });
             </script>
@@ -267,10 +262,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             <div class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
-                    'numero'              => 'Nº Factura',
+                    'numero'              => 'Número',
                     'fecha_emision'       => 'Fecha',
                     'cliente_nombre'      => 'Cliente',
                     'cliente_ruc'         => 'Identificación',
+                    'impuestos'           => 'Impuestos',
                     'total_sin_impuestos' => 'Subtotal',
                     'total_descuento'     => 'Descuento',
                     'iva'                 => 'IVA',
@@ -280,8 +276,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'vendedor_nombre'     => 'Vendedor',
                     'observaciones'       => 'Observaciones',
                     'usuario_nombre'      => 'Usuario',
-                    'estado_correo'       => 'Estado correo',
-                    'estado_pago'         => 'Estado pago',
+                    'estado_pago'         => 'Estado de pago',
                     'estado'              => 'Estado',
                 ];
                 ?>
@@ -304,68 +299,68 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <?php if ($page <= 1): ?>
                     <button type="button" class="btn btn-outline-secondary" disabled><i class="bi bi-chevron-left"></i></button>
                 <?php else: ?>
-                    <button type="button" class="btn btn-outline-secondary" onclick="window.FV_cambiarPaginaAjax(<?= $page - 1 ?>)"><i class="bi bi-chevron-left"></i></button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="window.RV_cambiarPaginaAjax(<?= $page - 1 ?>)"><i class="bi bi-chevron-left"></i></button>
                 <?php endif; ?>
                 <?php if ($page >= $totalPages): ?>
                     <button type="button" class="btn btn-outline-secondary" disabled><i class="bi bi-chevron-right"></i></button>
                 <?php else: ?>
-                    <button type="button" class="btn btn-outline-secondary" onclick="window.FV_cambiarPaginaAjax(<?= $page + 1 ?>)"><i class="bi bi-chevron-right"></i></button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="window.RV_cambiarPaginaAjax(<?= $page + 1 ?>)"><i class="bi bi-chevron-right"></i></button>
                 <?php endif; ?>
             </div>
         </div>
     </div>
 
     <div class="card-body p-0">
-        <div class="fv-scroll w-100">
+        <div class="recibos-scroll w-100">
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-3 sortable-header" role="button" data-sort="secuencial" data-col="numero" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Nº Factura <i class="bi <?= $ordenCol === 'secuencial' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        <th class="ps-3 sortable-header" role="button" data-sort="secuencial" data-col="numero" onclick="window.RV_ordenar(this.dataset.sort)">
+                            Número <i class="bi <?= $ordenCol === 'secuencial' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="sortable-header" role="button" data-sort="fecha_emision" data-col="fecha_emision" onclick="window.FV_ordenar(this.dataset.sort)">
+                        <th class="sortable-header" role="button" data-sort="fecha_emision" data-col="fecha_emision" onclick="window.RV_ordenar(this.dataset.sort)">
                             Fecha <i class="bi <?= $ordenCol === 'fecha_emision' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="sortable-header" role="button" data-sort="cliente_nombre" data-col="cliente_nombre" onclick="window.FV_ordenar(this.dataset.sort)">
+                        <th class="sortable-header" role="button" data-sort="cliente_nombre" data-col="cliente_nombre" onclick="window.RV_ordenar(this.dataset.sort)">
                             Cliente <i class="bi <?= $ordenCol === 'cliente_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="sortable-header" role="button" data-sort="cliente_ruc" data-col="cliente_ruc" onclick="window.FV_ordenar(this.dataset.sort)">
+                        <th class="sortable-header" role="button" data-sort="cliente_ruc" data-col="cliente_ruc" onclick="window.RV_ordenar(this.dataset.sort)">
                             Identificación <i class="bi <?= $ordenCol === 'cliente_ruc' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="sortable-header text-end" role="button" data-sort="total_sin_impuestos" data-col="total_sin_impuestos" onclick="window.FV_ordenar(this.dataset.sort)">
+                        <th class="text-center sortable-header" role="button" data-sort="impuestos" data-col="impuestos" onclick="window.RV_ordenar(this.dataset.sort)">
+                            Impuestos <i class="bi <?= $ordenCol === 'impuestos' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                        </th>
+                        <th class="sortable-header text-end" role="button" data-sort="total_sin_impuestos" data-col="total_sin_impuestos" onclick="window.RV_ordenar(this.dataset.sort)">
                             Subtotal <i class="bi <?= $ordenCol === 'total_sin_impuestos' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="sortable-header text-end" role="button" data-sort="total_descuento" data-col="total_descuento" onclick="window.FV_ordenar(this.dataset.sort)">
+                        <th class="sortable-header text-end" role="button" data-sort="total_descuento" data-col="total_descuento" onclick="window.RV_ordenar(this.dataset.sort)">
                             Descuento <i class="bi <?= $ordenCol === 'total_descuento' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="sortable-header text-end" role="button" data-sort="iva" data-col="iva" onclick="window.FV_ordenar(this.dataset.sort)">
+                        <th class="sortable-header text-end" role="button" data-sort="iva" data-col="iva" onclick="window.RV_ordenar(this.dataset.sort)">
                             IVA <i class="bi <?= $ordenCol === 'iva' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="sortable-header text-end" role="button" data-sort="total_ice" data-col="total_ice" onclick="window.FV_ordenar(this.dataset.sort)">
+                        <th class="sortable-header text-end" role="button" data-sort="total_ice" data-col="total_ice" onclick="window.RV_ordenar(this.dataset.sort)">
                             ICE <i class="bi <?= $ordenCol === 'total_ice' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="sortable-header text-end" role="button" data-sort="propina" data-col="propina" onclick="window.FV_ordenar(this.dataset.sort)">
+                        <th class="sortable-header text-end" role="button" data-sort="propina" data-col="propina" onclick="window.RV_ordenar(this.dataset.sort)">
                             Propina <i class="bi <?= $ordenCol === 'propina' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="sortable-header text-end" role="button" data-sort="importe_total" data-col="importe_total" onclick="window.FV_ordenar(this.dataset.sort)">
+                        <th class="sortable-header text-end" role="button" data-sort="importe_total" data-col="importe_total" onclick="window.RV_ordenar(this.dataset.sort)">
                             Total <i class="bi <?= $ordenCol === 'importe_total' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="sortable-header" role="button" data-sort="vendedor_nombre" data-col="vendedor_nombre" onclick="window.FV_ordenar(this.dataset.sort)">
+                        <th class="sortable-header" role="button" data-sort="vendedor_nombre" data-col="vendedor_nombre" onclick="window.RV_ordenar(this.dataset.sort)">
                             Vendedor <i class="bi <?= $ordenCol === 'vendedor_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="sortable-header" role="button" data-sort="observaciones" data-col="observaciones" onclick="window.FV_ordenar(this.dataset.sort)">
+                        <th class="sortable-header" role="button" data-sort="observaciones" data-col="observaciones" onclick="window.RV_ordenar(this.dataset.sort)">
                             Observaciones <i class="bi <?= $ordenCol === 'observaciones' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="sortable-header" role="button" data-sort="usuario_nombre" data-col="usuario_nombre" onclick="window.FV_ordenar(this.dataset.sort)">
+                        <th class="sortable-header" role="button" data-sort="usuario_nombre" data-col="usuario_nombre" onclick="window.RV_ordenar(this.dataset.sort)">
                             Usuario <i class="bi <?= $ordenCol === 'usuario_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="text-center sortable-header" role="button" data-sort="estado_correo" data-col="estado_correo" onclick="window.FV_ordenar(this.dataset.sort)">
-                            Correo <i class="bi <?= $ordenCol === 'estado_correo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
-                        </th>
                         <th class="text-center sortable-header" role="button" data-col="estado_pago">
-                            Pago
+                            Estado de pago
                         </th>
-                        <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado" onclick="window.FV_ordenar(this.dataset.sort)">
+                        <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado" onclick="window.RV_ordenar(this.dataset.sort)">
                             Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
                     </tr>
@@ -373,7 +368,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <tbody id="tbodyFacturas">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="16" class="text-center py-5 text-muted"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No se encontraron facturas.</td>
+                            <td colspan="16" class="text-center py-5 text-muted"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No se encontraron recibos.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
@@ -404,12 +399,20 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             } else {
                                 $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Pendiente</span>';
                             }
+
+                            // Badge de impuestos: interpreta con_impuestos (t/f/1/0/true/false)
+                            $conImpRaw = $r['con_impuestos'] ?? true;
+                            $conImp = !($conImpRaw === false || $conImpRaw === 0 || $conImpRaw === '0' || $conImpRaw === 'f' || $conImpRaw === 'false' || $conImpRaw === 'F');
+                            $impuestosBadge = $conImp
+                                ? '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Con impuestos</span>'
+                                : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Sin impuestos</span>';
                             ?>
                             <tr class="factura-row" role="button" tabindex="0" data-row='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8') ?>' onclick="abrirModalFacturaVer(this)">
                                 <td class="ps-3" data-col="numero"><code class="text-secondary"><?= htmlspecialchars(($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '')) ?></code></td>
                                 <td data-col="fecha_emision"><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
                                 <td class="fw-medium text-truncate" data-col="cliente_nombre" style="max-width:200px"><?= htmlspecialchars($r['cliente_nombre'] ?? '-') ?></td>
                                 <td data-col="cliente_ruc"><small class="text-muted"><?= htmlspecialchars($r['cliente_ruc'] ?? '-') ?></small></td>
+                                <td class="text-center" data-col="impuestos"><?= $impuestosBadge ?></td>
                                 <td class="text-end" data-col="total_sin_impuestos">$<?= number_format((float)($r['total_sin_impuestos'] ?? 0), 2) ?></td>
                                 <td class="text-end text-danger" data-col="total_descuento">$<?= number_format((float)($r['total_descuento'] ?? 0), 2) ?></td>
                                 <td class="text-end" data-col="iva">$<?= number_format($ivaCalc, 2) ?></td>
@@ -419,9 +422,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td data-col="vendedor_nombre"><?= htmlspecialchars($r['vendedor_nombre'] ?? '-') ?></td>
                                 <td data-col="observaciones" class="text-truncate" style="max-width:180px"><?= htmlspecialchars($r['observaciones'] ?? '') ?></td>
                                 <td data-col="usuario_nombre"><?= htmlspecialchars($r['usuario_nombre'] ?? '-') ?></td>
-                                <td class="text-center" data-col="estado_correo">
-                                    <span class="badge <?= $correoClass ?> border border-opacity-25"><?= ucfirst($estadoCorreo) ?></span>
-                                </td>
                                 <td class="text-center" data-col="estado_pago"><?= $estadoPagoBadge ?></td>
                                 <td class="text-center pe-3" data-col="estado">
                                     <span class="badge <?= $estadoClass ?> border border-opacity-25"><?= ucfirst($estado) ?></span>
@@ -435,12 +435,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     </div>
 </div>
 
-<!-- Modal para nueva factura (XL) -->
+<!-- Modal para nuevo recibo (XL) -->
 <div class="modal fade modal-factura" id="modalNuevaFactura" data-bs-backdrop="static">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-receipt-cutoff me-2"></i>Nueva factura de venta</h5>
+                <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-receipt-cutoff me-2"></i>Nuevo recibo de venta</h5>
                 <span id="fv-badge-estado-modal" class="badge d-none ms-2" style="font-size:0.72rem;vertical-align:middle;"></span>
                 <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -449,43 +449,40 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <form id="formFacturaModal">
                     <!-- Barra de Acciones Superior -->
                     <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap">
-                        <button id="m-btn-sri" type="button" class="btn btn-outline-primary btn-sm" onclick="enviarAlSri()"><i class="bi bi-cloud-arrow-up me-1"></i>Enviar al SRI</button>
                         <button id="m-btn-duplicar" type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="duplicarFactura()" title="Duplicar"><i class="bi bi-copy"></i></button>
-                        <button id="m-btn-recibo" type="button" class="btn btn-outline-secondary btn-sm" onclick="generarReciboVenta()" title="Generar recibo de venta"><i class="bi bi-receipt me-1"></i>Recibo</button>
+                        <button id="m-btn-generar-factura" type="button" class="btn btn-outline-success btn-sm px-2 d-none" onclick="generarFacturaDesdeRecibo()" title="Generar factura de venta"><i class="bi bi-file-earmark-medical me-1"></i>Facturar</button>
                         <div class="vr mx-1"></div>
                         <button id="m-btn-pdf" type="button" class="btn btn-outline-danger btn-sm px-2" onclick="exportarPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
-                        <button id="m-btn-xml" type="button" class="btn btn-outline-success btn-sm px-2" onclick="exportarXml()" title="Exportar XML"><i class="bi bi-file-earmark-code"></i></button>
-                        <button id="m-btn-correo" type="button" class="btn btn-outline-info btn-sm px-2" onclick="enviarPorCorreo()" title="Enviar por correo"><i class="bi bi-envelope"></i></button>
-                        <button id="m-btn-whatsapp" type="button" class="btn btn-outline-success btn-sm px-2" onclick="FV_abrirModalWhatsapp()" title="Enviar por WhatsApp"><i class="bi bi-whatsapp"></i></button>
                         <button id="m-btn-ticket" type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="imprimirTicket()" title="Imprimir ticket / tirilla"><i class="bi bi-receipt"></i></button>
-                        <button id="btnAnularFacturaModal" type="button" class="btn btn-outline-warning btn-sm d-none" title="Anular Factura"><i class="bi bi-slash-circle me-1"></i>Anular</button>
+                        <button id="btnAnularFacturaModal" type="button" class="btn btn-outline-warning btn-sm d-none" title="Anular Recibo"><i class="bi bi-slash-circle me-1"></i>Anular</button>
                         <div class="vr mx-1"></div>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalClienteCrear()" title="Registrar nuevo cliente"><i class="bi bi-person-plus fs-6"></i></button>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalProductoCrear()" title="Registrar nuevo producto"><i class="bi bi-box-seam fs-6"></i></button>
+                        <div class="form-check form-switch d-flex align-items-center mb-0 ms-auto pe-1" title="Con impuestos / Sin impuestos">
+                            <input class="form-check-input" type="checkbox" role="switch" id="rec-con-impuestos" checked onchange="calcTotales()">
+                            <!-- Espejo del switch para el servicio de favoritos (guarda 1/0 como valor por defecto del usuario) -->
+                            <input type="hidden" id="rec-con-impuestos-fav" value="1">
+                            <label class="form-check-label small text-muted ms-2 mb-0" for="rec-con-impuestos" style="white-space: nowrap;">
+                                <i class="bi bi-percent me-1"></i><span id="rec-con-impuestos-lbl">Con impuestos</span>
+                            </label>
+                            <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rec-con-impuestos-fav', 'con_impuestos') ?>
+                        </div>
                     </div>
 
                     <!-- Pestañas -->
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="tabsFacturaVenta" role="tablist">
-                            <li class="nav-item"><a class="nav-link active py-2 small" id="tab-fv-venta-btn" data-bs-toggle="tab" href="#m-tab-detalle" role="tab" style="white-space: nowrap;"><i class="bi bi-receipt me-1"></i> Factura de venta</a></li>
+                            <li class="nav-item"><a class="nav-link active py-2 small" id="tab-fv-venta-btn" data-bs-toggle="tab" href="#m-tab-detalle" role="tab" style="white-space: nowrap;"><i class="bi bi-receipt me-1"></i> Recibo de venta</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-asiento-btn" data-bs-toggle="tab" href="#m-tab-contable" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-pagos-btn" data-bs-toggle="tab" href="#m-tab-pagos-historial" role="tab" style="white-space: nowrap;"><i class="bi bi-cash-coin me-1"></i> Pagos</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-retenciones-btn" data-bs-toggle="tab" href="#m-tab-retenciones" role="tab" style="white-space: nowrap;"><i class="bi bi-percent me-1"></i> Retenciones</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-notas-btn" data-bs-toggle="tab" href="#m-tab-notas" role="tab" style="white-space: nowrap;"><i class="bi bi-file-earmark-minus me-1"></i> Notas de crédito</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-guias-btn" data-bs-toggle="tab" href="#m-tab-guias" role="tab" style="white-space: nowrap;"><i class="bi bi-truck me-1"></i> Guías de remisión</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-sri-btn" data-bs-toggle="tab" href="#m-tab-respuestas-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
                             $pestanasConfig = [
                                 'tab-fv-asiento-btn' => 'Asiento contable',
                                 'tab-fv-pagos-btn' => 'Pagos',
-                                'tab-fv-retenciones-btn' => 'Retenciones',
-                                'tab-fv-notas-btn' => 'Notas de crédito',
-                                'tab-fv-guias-btn' => 'Guías de remisión',
-                                'tab-fv-sri-btn' => 'SRI'
                             ];
-                            echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfig ?? [], 'modulos/factura-venta');
+                            echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfig ?? [], 'modulos/recibo-venta');
                             ?>
                         </div>
                     </div>
@@ -645,12 +642,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             <li class="nav-item">
                                                 <button class="nav-link active py-1 small" data-bs-toggle="tab" data-bs-target="#m-subtab-info" type="button">Info. Adicional</button>
                                             </li>
-                                            <li class="nav-item">
-                                                <button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#m-subtab-pagos" type="button">Formas de pago SRI</button>
-                                            </li>
-                                            <li class="nav-item">
-                                                <button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#m-subtab-sri" type="button">Crédito</button>
-                                            </li>
                                         </ul>
                                         <div class="tab-content bg-white border p-2 rounded-bottom" style="min-height: 120px;">
                                             <!-- Info Adicional -->
@@ -672,50 +663,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                         <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="agregarInfoAdicional()">
                                                             <i class="bi bi-plus-circle me-1"></i> Agregar línea
                                                         </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <!-- Formas de Pago -->
-                                            <div class="tab-pane fade" id="m-subtab-pagos" role="tabpanel">
-                                                <div id="m-container-pagos">
-                                                    <div class="row g-2 align-items-center mb-1 row-pago">
-                                                        <div class="col-7">
-                                                            <div class="d-flex align-items-center gap-1">
-                                                                <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'm-select-pago-sri', 'id_forma_pago_sri') ?>
-                                                                <select class="form-select form-select-sm border-0 bg-light" name="f_pago_id[]" id="m-select-pago-sri">
-                                                                    <option value="" data-id="">-- Seleccione forma de pago --</option>
-                                                                    <?php foreach ($formasPago as $fp): ?>
-                                                                        <option value="<?= $fp['codigo'] ?>" data-id="<?= $fp['id'] ?>"><?= htmlspecialchars($fp['nombre']) ?></option>
-                                                                    <?php endforeach; ?>
-                                                                </select>
-                                                            </div>
-                                                        </div>
-                                                        <div class="col-4">
-                                                            <input type="number" class="form-control form-control-sm text-end border-0 bg-light fw-bold" name="f_pago_valor[]" step="0.01" value="0.00">
-                                                        </div>
-                                                        <div class="col-1 text-center">
-                                                            <span></span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none small mt-1" onclick="agregarFormaPago()"><i class="bi bi-plus-circle me-1"></i>Añadir pago</button>
-                                            </div>
-                                            <!-- Crédito SRI -->
-                                            <div class="tab-pane fade" id="m-subtab-sri" role="tabpanel">
-                                                <div class="p-2">
-                                                    <div class="row g-2">
-                                                        <div class="col-md-6">
-                                                            <label class="x-small text-muted mb-1">Días de crédito</label>
-                                                            <input type="number" class="form-control form-control-sm" name="sri_dias_credito" id="m-input-dias-credito" value="0">
-                                                        </div>
-                                                        <div class="col-md-6">
-                                                            <label class="x-small text-muted mb-1">Plazo</label>
-                                                            <select class="form-select form-select-sm" name="sri_plazo">
-                                                                <option value="dias">Días</option>
-                                                                <option value="meses">Meses</option>
-                                                                <option value="anios">Años</option>
-                                                            </select>
-                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -761,7 +708,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                                             <hr class="my-1 opacity-25">
 
-                                            <!-- Total Factura -->
+                                            <!-- Total Recibo -->
                                             <div class="d-flex justify-content-between align-items-center bg-light border py-1 px-2 rounded">
                                                 <span class="fw-bold text-dark" style="font-size:0.8rem;">TOTAL</span>
                                                 <span class="fw-bold text-dark" style="font-size:1rem;" id="m-lbl-total">0.00</span>
@@ -824,7 +771,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <div class="row g-2 mb-3">
                                     <div class="col">
                                         <div class="border rounded-3 p-2 bg-white text-center shadow-sm border-secondary-subtle">
-                                            <div class="text-muted mb-0 fw-semibold text-nowrap" style="font-size: 0.72rem;">Total Factura</div>
+                                            <div class="text-muted mb-0 fw-semibold text-nowrap" style="font-size: 0.72rem;">Total Recibo</div>
                                             <div class="fw-bold text-dark mb-0" style="font-size: 1.1rem;">$ <span id="fvPagoTotalFactura">0.00</span></div>
                                         </div>
                                     </div>
@@ -906,6 +853,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                                     <!-- Derecha: Formulario -->
                                     <div class="col-md-5">
+                                        <!-- Aviso: recibo sin validez (facturado/anulado): no admite cobros -->
+                                        <div class="alert alert-secondary border-0 small d-none" id="fvPagoAlertaBloqueado">
+                                            <i class="bi bi-lock me-1"></i><span id="fvPagoAlertaBloqueadoTxt">Este recibo no admite cobros.</span>
+                                        </div>
                                         <!-- Card de registro -->
                                         <div class="card border border-primary border-opacity-25 bg-primary bg-opacity-10 shadow-sm rounded-3 overflow-hidden d-none" id="fvPagoCardRegistro">
                                             <div class="card-header bg-primary bg-opacity-25 border-0 py-2 d-flex align-items-center">
@@ -934,7 +885,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                                     id="fvPagoConcepto"
                                                                     style="pointer-events:none;cursor:default;"
                                                                     tabindex="-1"
-                                                                    title="El concepto se define automáticamente para cobros de factura de venta.">
+                                                                    title="El concepto se define automáticamente para cobros de recibo de venta.">
                                                                 <option value="">Cargando…</option>
                                                             </select>
                                                         </div>
@@ -982,208 +933,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <!-- Factura completamente pagada -->
                                         <div class="alert alert-success border-success border-opacity-25 text-center py-4 shadow-sm mb-0 d-none" id="fvPagoAlertaPagada">
                                             <i class="bi bi-check-circle-fill fs-2 mb-2 text-success d-block"></i>
-                                            <h6 class="fw-bold mb-1 text-success">¡Factura Completamente Cobrada!</h6>
-                                            <p class="text-muted mb-0" style="font-size: 0.75rem;">El saldo pendiente de esta factura es de $0.00.</p>
+                                            <h6 class="fw-bold mb-1 text-success">¡Recibo Completamente Cobrado!</h6>
+                                            <p class="text-muted mb-0" style="font-size: 0.75rem;">El saldo pendiente de este recibo es de $0.00.</p>
                                         </div>
 
                                         <!-- Factura nueva (sin ID aún) -->
                                         <div class="alert alert-secondary bg-light border-secondary-subtle text-center py-4 shadow-sm mb-0" id="fvPagoAlertaNueva">
                                             <i class="bi bi-cash-coin fs-2 mb-2 text-muted d-block opacity-50"></i>
                                             <h6 class="fw-bold mb-1 text-secondary">Nuevo Registro</h6>
-                                            <p class="text-muted mb-0" style="font-size: 0.75rem;">Guarda la factura primero para poder registrar cobros.</p>
+                                            <p class="text-muted mb-0" style="font-size: 0.75rem;">Guarda el recibo primero para poder registrar cobros.</p>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Pestaña: Retenciones -->
-                        <div class="tab-pane fade p-3" id="m-tab-retenciones" role="tabpanel">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h6 class="fw-bold mb-0 small text-primary"><i class="bi bi-percent me-1"></i> Retenciones asociadas</h6>
-                            </div>
-                            <div class="table-responsive border rounded">
-                                <table class="table table-sm small mb-0 table-hover">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th class="ps-3 py-2">Fecha</th>
-                                            <th>Nº Retención</th>
-                                            <th>Origen</th>
-                                            <th class="text-end pe-3">Total Retenido</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="m-tbody-retenciones">
-                                        <tr>
-                                            <td colspan="4" class="text-center py-5 text-muted">
-                                                <i class="bi bi-info-circle me-1"></i> No se han encontrado retenciones para esta factura.
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <!-- Pestaña: Notas de Crédito -->
-                        <div class="tab-pane fade p-3" id="m-tab-notas" role="tabpanel">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h6 class="fw-bold mb-0 small text-primary"><i class="bi bi-file-earmark-minus me-1"></i> Notas de crédito asociadas</h6>
-                                <?php if ($permNC['crear']): ?>
-                                    <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 shadow-none border-0" style="font-size: 0.75rem;" id="btnNuevaNCDesdeFactura" onclick="abrirModalNuevaNCDesdeFV()"><i class="bi bi-plus-lg me-1"></i> Crear nota de crédito</button>
-                                <?php endif; ?>
-                            </div>
-                            <div class="table-responsive border rounded">
-                                <table class="table table-sm small mb-0 table-hover">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th class="ps-3 py-2">Fecha</th>
-                                            <th>Nº Nota de Crédito</th>
-                                            <th>Motivo</th>
-                                            <th>Estado</th>
-                                            <th class="text-end pe-3">Total</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="m-tbody-notas-credito">
-                                        <tr>
-                                            <td colspan="5" class="text-center py-5 text-muted">
-                                                <i class="bi bi-info-circle me-1"></i> No se han encontrado notas de crédito para esta factura.
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <!-- Pestaña: Guías de Remisión -->
-                        <div class="tab-pane fade p-3" id="m-tab-guias" role="tabpanel">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h6 class="fw-bold mb-0 small text-primary"><i class="bi bi-truck me-1"></i> Guías de remisión asociadas</h6>
-                                <?php if ($permGR['crear']): ?>
-                                    <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 shadow-none border-0" style="font-size: 0.75rem;" id="btnNuevaGRDesdeFactura" onclick="abrirModalNuevaGRDesdeFV()"><i class="bi bi-plus-lg me-1"></i> Crear guía de remisión</button>
-                                <?php endif; ?>
-                            </div>
-                            <div class="table-responsive border rounded">
-                                <table class="table table-sm small mb-0 table-hover">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th class="ps-3 py-2">Fecha</th>
-                                            <th>Nº Guía de Remisión</th>
-                                            <th>Transportista</th>
-                                            <th>Estado</th>
-                                            <th class="pe-3">Placa</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="m-tbody-guias-remision">
-                                        <tr>
-                                            <td colspan="5" class="text-center py-5 text-muted">
-                                                <i class="bi bi-info-circle me-1"></i> No se han encontrado guías de remisión para esta factura.
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <!-- Pestaña: Respuestas SRI -->
-                        <div class="tab-pane fade p-3" id="m-tab-respuestas-sri" role="tabpanel">
-                            <div class="row g-3">
-                                <!-- Estado de autorización -->
-                                <div class="col-12">
-                                    <div class="d-flex align-items-center gap-2 mb-2">
-                                        <span class="fw-bold small text-muted">Estado de autorización:</span>
-                                        <span id="sri-badge-estado" class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2">Sin enviar</span>
-                                    </div>
-                                </div>
-                                <!-- Reglas SRI para anulación -->
-                                <div class="col-12">
-                                    <div class="border rounded-2 bg-warning bg-opacity-10 border-warning border-opacity-25 p-2">
-                                        <div class="d-flex align-items-center gap-2 mb-2">
-                                            <i class="bi bi-info-circle-fill text-warning"></i>
-                                            <span class="fw-bold small text-warning-emphasis">Plazos permitidos para anular una factura</span>
-                                        </div>
-                                        <ul class="mb-0 ps-3 small text-muted" style="line-height:1.6;">
-                                            <li><strong>Tiempo límite:</strong> Hasta el día <strong>7 del mes siguiente</strong> a la fecha de emisión del documento.</li>
-                                            <li><strong>Excepciones:</strong> Si el día 7 cae en fin de semana o feriado, el plazo se extiende al siguiente día hábil.</li>
-                                            <li class="text-danger-emphasis"><strong>Facturas a Consumidor Final:</strong> Las facturas emitidas a Consumidor Final <strong>no se pueden anular</strong> ni tampoco se les puede emitir una nota de crédito una vez transmitidas.</li>
-                                        </ul>
-                                    </div>
-                                </div>
-                                <!-- Fila 1: Clave de Acceso + Número de Autorización -->
-                                <div class="col-md-6">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-key me-1"></i>Clave de Acceso</label>
-                                    <div class="input-group input-group-sm">
-                                        <input type="text" id="sri-clave-acceso" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="- sin clave de acceso -" value="">
-                                        <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copiarClaveAcceso()" title="Copiar clave de acceso">
-                                            <i class="bi bi-clipboard"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-hash me-1"></i>Número de Autorización</label>
-                                    <input type="text" id="sri-numero-autorizacion" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="- pendiente -" value="">
-                                </div>
-                                <!-- Fila 2: Tipo de Ambiente + Tipo de Emisión + Fecha de Autorización + Tipo de Documento -->
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-building me-1"></i>Tipo de Ambiente</label>
-                                    <input type="text" id="sri-ambiente" class="form-control form-control-sm bg-light" readonly placeholder="- pendiente -" value="">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-broadcast me-1"></i>Tipo de Emisión</label>
-                                    <input type="text" id="sri-tipo-emision" class="form-control form-control-sm bg-light" readonly placeholder="- pendiente -" value="">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-calendar-check me-1"></i>Fecha de Autorización</label>
-                                    <input type="text" id="sri-fecha-autorizacion" class="form-control form-control-sm bg-light" readonly placeholder="- pendiente -" value="">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-file-earmark-text me-1"></i>Tipo de Documento</label>
-                                    <input type="text" id="sri-tipo-documento" class="form-control form-control-sm bg-light" readonly value="Factura">
-                                </div>
-                                <!-- Fila 3: Número de Documento + Número de Identificación + Correo del Cliente -->
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-receipt me-1"></i>Número de Documento</label>
-                                    <input type="text" id="sri-numero-documento" class="form-control form-control-sm font-monospace bg-light" readonly placeholder="000-000-000000000" value="">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-person-vcard me-1"></i>Número de Identificación</label>
-                                    <div class="input-group input-group-sm">
-                                        <input type="text" id="sri-identificacion-cliente" class="form-control form-control-sm bg-light" readonly placeholder="- sin identificación -" value="">
-                                        <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copiarCampoSri('sri-identificacion-cliente')" title="Copiar identificación">
-                                            <i class="bi bi-clipboard"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-envelope me-1"></i>Correo del Cliente</label>
-                                    <div class="input-group input-group-sm">
-                                        <input type="text" id="sri-correo-cliente" class="form-control form-control-sm bg-light" readonly placeholder="- sin correo -" value="">
-                                        <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copiarCampoSri('sri-correo-cliente')" title="Copiar correo">
-                                            <i class="bi bi-clipboard"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                                <!-- Historial de envíos SRI -->
-                                <div class="col-12">
-                                    <label class="small fw-bold text-muted mb-1"><i class="bi bi-clock-history me-1"></i>Historial de Envíos</label>
-                                    <div class="border rounded-2 overflow-hidden">
-                                        <table class="table table-sm small mb-0">
-                                            <thead class="table-light">
-                                                <tr>
-                                                    <th class="ps-2 py-1 text-muted" style="width:140px">Fecha / Hora</th>
-                                                    <th class="py-1 text-muted" style="width:80px">Ambiente</th>
-                                                    <th class="py-1 text-muted" style="width:110px">Acción / Estado</th>
-                                                    <th class="py-1 text-muted">Mensaje / Detalle</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="sri-tbody-historial">
-                                                <tr>
-                                                    <td colspan="5" class="text-center py-3 text-muted">Sin historial de envíos.</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
 
 
 
@@ -1278,12 +1042,13 @@ $totalPages = $totalPagesOriginal;
 
     const B_URL = '<?= $base ?>';
     const RUTA_MODULO = '<?= $rutaModulo ?>';
-    // ID de la factura actualmente abierta en el modal (0 = nueva)
-    let FV_ID_ACTIVO = 0;
-    let FV_FECHA_EMISION = null; // 'YYYY-MM-DD' de la factura activa; null si es nueva
-    let FV_CLIENTE_RUC  = '';   // RUC/cédula del cliente activo (9999999999999 = Consumidor Final)
+    // ID del recibo actualmente abierta en el modal (0 = nueva)
+    let RV_ID_ACTIVO = 0;
+    let RV_ESTADO_ACTIVO = ''; // estado del recibo activo: borrador/anulado/facturado
+    let RV_FECHA_EMISION = null; // 'YYYY-MM-DD' del recibo activa; null si es nueva
+    let RV_CLIENTE_RUC  = '';   // RUC/cédula del cliente activo (9999999999999 = Consumidor Final)
     // Cuando es true, cargarSecuencial no sobreescribe el campo (modo edición de factura existente)
-    let FV_BLOQUEAR_SECUENCIAL = false;
+    let RV_BLOQUEAR_SECUENCIAL = false;
     const TARIFAS_IVA = <?= json_encode($tarifasIva) ?>;
     const UNIDADES = <?= json_encode($unidades) ?>;
     const EMPRESA_CONFIG = {
@@ -1324,17 +1089,17 @@ $totalPages = $totalPagesOriginal;
     let modalMain = null;
 
     // Estado del listado AJAX (con fallbacks para asegurar ordenamiento)
-    window.FV_currentSort = '<?= $ordenCol ?>' || 'fecha_emision';
-    window.FV_currentDir = '<?= $ordenDir ?>' || 'DESC';
-    window.FV_currentPage = <?= (int)($page ?? 1) ?>;
+    window.RV_currentSort = '<?= $ordenCol ?>' || 'fecha_emision';
+    window.RV_currentDir = '<?= $ordenDir ?>' || 'DESC';
+    window.RV_currentPage = <?= (int)($page ?? 1) ?>;
 
     // ── AJAX: buscar / paginar / ordenar ─────────────────────────────────────
 
-    window.FV_fetchSearch = async function(page = 1) {
-        window.FV_currentPage = page;
+    window.RV_fetchSearch = async function(page = 1) {
+        window.RV_currentPage = page;
         const buscar  = document.getElementById('buscarFactura')?.value || '';
-        const sort    = window.FV_currentSort || 'fecha_emision';
-        const dir     = window.FV_currentDir  || 'DESC';
+        const sort    = window.RV_currentSort || 'fecha_emision';
+        const dir     = window.RV_currentDir  || 'DESC';
         const url     = `${B_URL}/${RUTA_MODULO}/searchAjax?b=${encodeURIComponent(buscar)}&page=${page}&sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(dir)}`;
         try {
             const resp = await fetch(url);
@@ -1362,24 +1127,24 @@ $totalPages = $totalPagesOriginal;
                 }
             });
         } catch (e) {
-            console.error('FV_fetchSearch error:', e);
+            console.error('RV_fetchSearch error:', e);
         }
     };
 
-    window.FV_cambiarPaginaAjax = function(page) {
-        window.FV_fetchSearch(page);
+    window.RV_cambiarPaginaAjax = function(page) {
+        window.RV_fetchSearch(page);
     };
 
-    window.FV_ordenar = function(col) {
+    window.RV_ordenar = function(col) {
         if (!col) return;
-        const dir = (window.FV_currentSort === col && window.FV_currentDir === 'ASC') ? 'DESC' : 'ASC';
-        window.FV_currentSort = col;
-        window.FV_currentDir  = dir;
+        const dir = (window.RV_currentSort === col && window.RV_currentDir === 'ASC') ? 'DESC' : 'ASC';
+        window.RV_currentSort = col;
+        window.RV_currentDir  = dir;
         // Guardar preferencia de ordenamiento (persiste entre sesiones)
         if (typeof window.guardarOrdenacionVista === 'function') {
-            window.guardarOrdenacionVista('factura-venta', col, dir);
+            window.guardarOrdenacionVista('recibo-venta', col, dir);
         }
-        window.FV_fetchSearch(1);
+        window.RV_fetchSearch(1);
     };
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1389,9 +1154,9 @@ $totalPages = $totalPagesOriginal;
 
         // Al mostrar el modal: cargar secuencial solo para facturas nuevas, y enfocar buscador
         document.getElementById('modalNuevaFactura').addEventListener('shown.bs.modal', function() {
-            // Solo cargar el siguiente secuencial cuando es una factura NUEVA (FV_ID_ACTIVO === 0)
+            // Solo cargar el siguiente secuencial cuando es un recibo NUEVA (RV_ID_ACTIVO === 0)
             // Para facturas existentes el secuencial ya fue seteado y no debe sobreescribirse
-            if (FV_ID_ACTIVO === 0) {
+            if (RV_ID_ACTIVO === 0) {
                 const selectPto = document.getElementById('m-select-puntos');
                 if (selectPto && selectPto.value) {
                     cargarSecuencial(selectPto.value);
@@ -1417,7 +1182,7 @@ $totalPages = $totalPagesOriginal;
             }
         });
 
-        // Listener para anular factura
+        // Listener para anular recibo
         const btnAnular = document.getElementById('btnAnularFacturaModal');
         if (btnAnular) btnAnular.addEventListener('click', () => {
             if (typeof window.anularFactura === 'function') {
@@ -1515,7 +1280,7 @@ $totalPages = $totalPagesOriginal;
         if (totalFactura < 0) return Swal.fire({
             icon: 'warning',
             title: 'Atención',
-            text: 'El total de la factura no puede ser negativo.'
+            text: 'El total del recibo no puede ser negativo.'
         });
 
         // ”€”€ Recolectar ítems ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
@@ -1652,23 +1417,28 @@ $totalPages = $totalPagesOriginal;
             }
         });
 
-        if (pagoSinForma) return Swal.fire({
-            icon: 'warning',
-            title: 'Forma de pago requerida',
-            text: 'Seleccione la forma de pago SRI para cada monto ingresado.'
-        });
-
-        if (pagos.length === 0) return Swal.fire({
-            icon: 'warning',
-            title: 'Atención',
-            text: 'Debe especificar al menos una forma de pago.'
-        });
-        if (Math.abs(sumPagos - totalFactura) > 0.001) {
-            return Swal.fire({
+        // El recibo de venta no gestiona formas de pago SRI en la UI (subtab eliminado).
+        // Solo se validan pagos/descuadre si el contenedor de pagos existe en el DOM.
+        const hayContenedorPagos = !!document.getElementById('m-container-pagos');
+        if (hayContenedorPagos) {
+            if (pagoSinForma) return Swal.fire({
                 icon: 'warning',
-                title: 'Descuadre en Pagos',
-                text: `La suma de formas de pago ($${sumPagos.toFixed(2)}) no coincide con el total de la factura ($${totalFactura.toFixed(2)}).`
+                title: 'Forma de pago requerida',
+                text: 'Seleccione la forma de pago SRI para cada monto ingresado.'
             });
+
+            if (pagos.length === 0) return Swal.fire({
+                icon: 'warning',
+                title: 'Atención',
+                text: 'Debe especificar al menos una forma de pago.'
+            });
+            if (Math.abs(sumPagos - totalFactura) > 0.001) {
+                return Swal.fire({
+                    icon: 'warning',
+                    title: 'Descuadre en Pagos',
+                    text: `La suma de formas de pago ($${sumPagos.toFixed(2)}) no coincide con el total del recibo ($${totalFactura.toFixed(2)}).`
+                });
+            }
         }
 
         // ”€”€ Validar límite consumidor final ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
@@ -1679,7 +1449,7 @@ $totalPages = $totalPagesOriginal;
             return Swal.fire({
                 icon: 'warning',
                 title: 'Límite Consumidor Final',
-                text: `El total de la factura ($${totalFactura.toFixed(2)}) supera el límite permitido para Consumidor Final ($${limiteConsumidor.toFixed(2)}).\n\nPara montos mayores debe identificar al cliente con RUC o cédula.`
+                text: `El total del recibo ($${totalFactura.toFixed(2)}) supera el límite permitido para Consumidor Final ($${limiteConsumidor.toFixed(2)}).\n\nPara montos mayores debe identificar al cliente con RUC o cédula.`
             });
         }
 
@@ -1695,9 +1465,24 @@ $totalPages = $totalPagesOriginal;
         });
 
         // ”€”€ Leer totales y códigos ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
-        const iceTotal = document.getElementById('m-lbl-ice-row')?.classList.contains('d-none') ?
+        let iceTotal = document.getElementById('m-lbl-ice-row')?.classList.contains('d-none') ?
             0 : r2(parseFloat(document.getElementById('m-lbl-ice')?.textContent) || 0);
         const propina = r2(parseFloat(document.getElementById('m-input-propina')?.value) || 0);
+
+        // ”€”€ Toggle Con/Sin impuestos: si el recibo va SIN impuestos, poner IVA e ICE en 0 ”€”€”€
+        const conImpuestos = RV_conImpuestos();
+        if (!conImpuestos) {
+            iceTotal = 0;
+            detalles.forEach(d => {
+                d.porcentaje_iva = 0;
+                d.ice_valor = '0.00';
+                d.impuestos = (d.impuestos || []).map(imp => ({
+                    ...imp,
+                    tarifa: imp.codigo_impuesto === '2' ? 0 : imp.tarifa,
+                    valor: '0.00'
+                })).filter(imp => imp.codigo_impuesto === '2'); // dejar solo IVA (a 0), quitar filas ICE
+            });
+        }
         const selPto = document.getElementById('m-select-puntos');
         const selOpt = selPto?.options[selPto.selectedIndex];
         const codEst = selOpt?.dataset.codEst || '';
@@ -1705,8 +1490,8 @@ $totalPages = $totalPagesOriginal;
 
         // ”€”€ Construir payload ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
         const payload = {
-            ...(FV_ID_ACTIVO > 0 ? {
-                id: FV_ID_ACTIVO
+            ...(RV_ID_ACTIVO > 0 ? {
+                id: RV_ID_ACTIVO
             } : {}),
             id_cliente: idCliente,
             id_establecimiento: document.getElementById('m-id-establecimiento').value,
@@ -1718,6 +1503,7 @@ $totalPages = $totalPagesOriginal;
             id_vendedor: document.getElementById('m-select-vendedor')?.value || '',
             dias_credito: diasCred,
             plazo: diasCred,
+            con_impuestos: conImpuestos ? '1' : '0',
             total_sin_impuestos: totalSinImpuestos.toFixed(2),
             total_descuento: totalDescuento.toFixed(2),
             total_ice: iceTotal.toFixed(2),
@@ -1777,7 +1563,7 @@ $totalPages = $totalPagesOriginal;
             if (json.ok) {
                 _guardadoOk = true;
                 // Capturar antes de cualquier limpieza: distingue crear vs actualizar.
-                const esActualizacion = FV_ID_ACTIVO > 0;
+                const esActualizacion = RV_ID_ACTIVO > 0;
                 fvLimpiarBorrador();
                 modalMain.hide();
 
@@ -1786,8 +1572,8 @@ $totalPages = $totalPagesOriginal;
                 if (json.asiento_warning) {
                     await Swal.fire({
                         icon: 'warning',
-                        title: 'Factura guardada — asiento pendiente',
-                        html: `La factura se guardó correctamente, pero el asiento contable no pudo generarse:<br><br><small class="text-muted">${json.asiento_warning}</small>`,
+                        title: 'Recibo guardado — asiento pendiente',
+                        html: `El recibo se guardó correctamente, pero el asiento contable no pudo generarse:<br><br><small class="text-muted">${json.asiento_warning}</small>`,
                         confirmButtonText: 'Entendido'
                     });
                 } else {
@@ -1796,30 +1582,30 @@ $totalPages = $totalPagesOriginal;
                         toast: true,
                         position: 'top-end',
                         icon: 'success',
-                        title: esActualizacion ? 'Factura actualizada' : 'Factura guardada',
+                        title: esActualizacion ? 'Factura actualizada' : 'Recibo guardado',
                         showConfirmButton: false,
                         timer: 2500,
                         timerProgressBar: true
                     });
                 }
 
-                if (FV_ID_ACTIVO > 0 && json.rowHtml) {
+                if (RV_ID_ACTIVO > 0 && json.rowHtml) {
                     let rowReplaced = false;
                     document.querySelectorAll('tr.factura-row').forEach(tr => {
                         try {
                             const dataRow = JSON.parse(tr.dataset.row);
-                            if (dataRow.id == FV_ID_ACTIVO) {
+                            if (dataRow.id == RV_ID_ACTIVO) {
                                 tr.outerHTML = json.rowHtml;
                                 rowReplaced = true;
                             }
                         } catch (e) {}
                     });
-                    if (!rowReplaced && typeof window.FV_fetchSearch === 'function') {
-                        window.FV_fetchSearch(window.FV_currentPage || 1);
+                    if (!rowReplaced && typeof window.RV_fetchSearch === 'function') {
+                        window.RV_fetchSearch(window.RV_currentPage || 1);
                     }
                 } else {
-                    if (typeof window.FV_fetchSearch === 'function') {
-                        window.FV_fetchSearch(1);
+                    if (typeof window.RV_fetchSearch === 'function') {
+                        window.RV_fetchSearch(1);
                     } else {
                         location.reload();
                     }
@@ -1848,7 +1634,7 @@ $totalPages = $totalPagesOriginal;
     // =====================================================================
     // LOCAL STORAGE - Auto-guardado de borrador de factura
     // =====================================================================
-    const FV_STORAGE_KEY = 'fv_borrador_<?= (int)($_SESSION['id_empresa'] ?? 0) ?>_<?= (int)($_SESSION['id_usuario'] ?? 0) ?>';
+    const RV_STORAGE_KEY = 'rv_borrador_<?= (int)($_SESSION['id_empresa'] ?? 0) ?>_<?= (int)($_SESSION['id_usuario'] ?? 0) ?>';
 
     /** Serializa el estado actual del modal a un objeto plano (sin secuencial). */
     function fvCapturarEstado() {
@@ -1926,10 +1712,10 @@ $totalPages = $totalPagesOriginal;
             const estado = fvCapturarEstado();
             // Solo guardar si hay algo significativo (cliente o al menos un ítem con producto)
             if (!estado.id_cliente && !estado.detalles.length) {
-                localStorage.removeItem(FV_STORAGE_KEY);
+                localStorage.removeItem(RV_STORAGE_KEY);
                 return;
             }
-            localStorage.setItem(FV_STORAGE_KEY, JSON.stringify(estado));
+            localStorage.setItem(RV_STORAGE_KEY, JSON.stringify(estado));
         } catch (e) {
             /* localStorage puede estar lleno o deshabilitado */
         }
@@ -1938,7 +1724,7 @@ $totalPages = $totalPagesOriginal;
     /** Elimina el borrador guardado. */
     function fvLimpiarBorrador() {
         try {
-            localStorage.removeItem(FV_STORAGE_KEY);
+            localStorage.removeItem(RV_STORAGE_KEY);
         } catch (e) {}
     }
 
@@ -2072,7 +1858,7 @@ $totalPages = $totalPagesOriginal;
     }
 
     async function cargarSecuencial(idPunto) {
-        if (!idPunto || FV_BLOQUEAR_SECUENCIAL) return;
+        if (!idPunto || RV_BLOQUEAR_SECUENCIAL) return;
         const inputSec = document.getElementById('m-input-secuencial');
         if (inputSec) inputSec.placeholder = 'Cargando...';
         try {
@@ -2120,10 +1906,10 @@ $totalPages = $totalPagesOriginal;
     }
 
     /**
-     * Activa o desactiva los botones de acción según el estado de la factura.
+     * Activa o desactiva los botones de acción según el estado del recibo.
      */
     function fvActualizarEstadoBotones(estado = 'nuevo') {
-        const idActivo = parseInt(FV_ID_ACTIVO) || 0;
+        const idActivo = parseInt(RV_ID_ACTIVO) || 0;
 
         // ── Badge de estado en el header del modal ─────────────────────────────
         const badgeModal = document.getElementById('fv-badge-estado-modal');
@@ -2137,6 +1923,7 @@ $totalPages = $totalPagesOriginal;
                 'recibida':         ['bg-info    bg-opacity-10 text-info    border border-info    border-opacity-25',   'Recibida'],
                 'borrador':         ['bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25', 'Borrador'],
                 'anulado':          ['bg-danger  bg-opacity-10 text-danger  border border-danger  border-opacity-25',   'Anulado'],
+                'facturado':        ['bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25',   'Facturado'],
             };
             if (st === 'nuevo' || idActivo === 0) {
                 badgeModal.className = 'badge d-none ms-2';
@@ -2151,26 +1938,26 @@ $totalPages = $totalPagesOriginal;
 
         const btnSri = document.getElementById('m-btn-sri');
         const btnDuplicar  = document.getElementById('m-btn-duplicar');
-        const btnRecibo    = document.getElementById('m-btn-recibo');
         const btnPdf       = document.getElementById('m-btn-pdf');
         const btnXml       = document.getElementById('m-btn-xml');
         const btnCorreo    = document.getElementById('m-btn-correo');
         const btnWhatsapp  = document.getElementById('m-btn-whatsapp');
         const btnTicket    = document.getElementById('m-btn-ticket');
         const btnAnular    = document.getElementById('btnAnularFacturaModal');
+        const btnGenFac    = document.getElementById('m-btn-generar-factura');
         const vrs = document.querySelectorAll('.modal-body .vr'); // Separadores visuales
 
-        // Si es nueva factura (ID 0), ocultar todo
+        // Si es nuevo recibo (ID 0), ocultar todo
         if (idActivo === 0) {
             if (btnSri) btnSri.classList.add('d-none');
             if (btnDuplicar) btnDuplicar.classList.add('d-none');
-            if (btnRecibo) btnRecibo.classList.add('d-none');
             if (btnPdf) btnPdf.classList.add('d-none');
             if (btnXml) btnXml.classList.add('d-none');
             if (btnCorreo) btnCorreo.classList.add('d-none');
             if (btnWhatsapp) btnWhatsapp.classList.add('d-none');
             if (btnTicket) btnTicket.classList.add('d-none');
             if (btnAnular) btnAnular.classList.add('d-none');
+            if (btnGenFac) btnGenFac.classList.add('d-none');
             vrs.forEach(v => v.classList.add('d-none'));
             return;
         }
@@ -2178,7 +1965,6 @@ $totalPages = $totalPagesOriginal;
         // Mostrar botones base (ID existente)
         if (btnSri) btnSri.classList.remove('d-none');
         if (btnDuplicar) btnDuplicar.classList.remove('d-none');
-        if (btnRecibo) btnRecibo.classList.remove('d-none');
         if (btnPdf) btnPdf.classList.remove('d-none');
         if (btnXml) btnXml.classList.remove('d-none');
         if (btnCorreo) btnCorreo.classList.remove('d-none');
@@ -2189,12 +1975,8 @@ $totalPages = $totalPagesOriginal;
         // Lógica de habilitación y visibilidad específica por Estado
         const st = (estado || '').toLowerCase().trim();
         const esAutorizado = st.includes('autorizado') || st.includes('autorizada');
-        // Guardar el estado del documento activo para acciones (p. ej. generar recibo).
-        window.FV_ESTADO_ACTIVO = st;
 
         if (btnDuplicar) btnDuplicar.disabled = false;
-        // Recibo: disponible en cualquier factura guardada salvo anulada.
-        if (btnRecibo) btnRecibo.disabled = st.includes('anulad');
         if (btnPdf) btnPdf.disabled = false;
         if (btnCorreo) btnCorreo.disabled = !esAutorizado;
         if (btnWhatsapp) btnWhatsapp.disabled = !esAutorizado;
@@ -2210,17 +1992,25 @@ $totalPages = $totalPagesOriginal;
             }
         }
 
-        // Botón Anular: SOLO en estado autorizado y con permiso de actualizar (Centralizado)
+        // Botón Anular y Generar factura: disponibles mientras el recibo esté activo
+        // (no anulado ni facturado) y con permiso de actualizar.
+        const esFinalTop = (st === 'anulado' || st === 'facturado');
         if (btnAnular) {
-            // Permitimos 'autorizado' o 'autorizada' para cubrir variaciones locales
-            if (esAutorizado && PERM_ACTUALIZAR) {
+            if (!esFinalTop && PERM_ACTUALIZAR) {
                 btnAnular.classList.remove('d-none');
             } else {
                 btnAnular.classList.add('d-none');
             }
         }
+        if (btnGenFac) {
+            if (!esFinalTop && PERM_ACTUALIZAR) {
+                btnGenFac.classList.remove('d-none');
+            } else {
+                btnGenFac.classList.add('d-none');
+            }
+        }
 
-        // PDF: habilitado si hay cliente e ítems en la factura
+        // PDF: habilitado si hay cliente e ítems en el recibo
         if (btnPdf) {
             const tieneCliente = !!(document.getElementById('m-id-cliente')?.value);
             const tieneItems = document.querySelectorAll('#m-tbodyDetalle tr.row-detalle').length > 0;
@@ -2234,7 +2024,7 @@ $totalPages = $totalPagesOriginal;
             btnXml.title = btnXml.disabled ? 'Se requiere cliente e ítems para exportar XML' : 'Exportar XML';
         }
 
-        // ”€”€ Lógica de Solo Lectura para la pestaña Factura de Venta ”€”€
+        // ”€”€ Lógica de Solo Lectura para la pestaña Recibo de Venta ”€”€
         const esBorrador = st === 'borrador';
         const tabDetalle = document.getElementById('m-tab-detalle');
         if (tabDetalle) {
@@ -2280,7 +2070,7 @@ $totalPages = $totalPagesOriginal;
     function fvLimpiarTrazabilidad() {
         // Historial de Cobros
         const tbodyPagos = document.getElementById('fvPagoTbodyHistorial');
-        if (tbodyPagos) tbodyPagos.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> No se han registrado cobros para esta factura.</td></tr>';
+        if (tbodyPagos) tbodyPagos.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> No se han registrado cobros para este recibo.</td></tr>';
 
         const elTotalFact = document.getElementById('fvPagoTotalFactura');
         if (elTotalFact) elTotalFact.textContent = '0.00';
@@ -2328,6 +2118,8 @@ $totalPages = $totalPagesOriginal;
     function fvResetearModal() {
         window.ASIENTO_MANUAL = false;
         document.getElementById('formFacturaModal').reset();
+        RV_ESTADO_ACTIVO = ''; // recibo nuevo: sin estado hasta guardar
+        RV_setConImpuestos(RV_favImpuestos()); // Nuevo recibo: usa el favorito del usuario (o CON impuestos por defecto)
         document.getElementById('m-tbodyDetalle').innerHTML = '';
         document.getElementById('m-id-cliente').value = '';
         const _tipoCl = document.getElementById('m-tipo-id-cliente');
@@ -2351,7 +2143,7 @@ $totalPages = $totalPagesOriginal;
         agregarFila();
         calcTotales();
 
-        // Solo mostrar la pestaña de Venta en nueva factura
+        // Solo mostrar la pestaña de Venta en nuevo recibo
         document.querySelectorAll('#tabsFacturaVenta .nav-item').forEach((li, idx) => {
             if (idx === 0) li.classList.remove('d-none'); // Venta
             else li.classList.add('d-none'); // Otros
@@ -2373,7 +2165,7 @@ $totalPages = $totalPagesOriginal;
         if (_badgeEstadoModal) { _badgeEstadoModal.className = 'badge d-none ms-2'; _badgeEstadoModal.textContent = ''; }
 
         // Limpiar estado de factura activa y controles del footer
-        FV_ID_ACTIVO = 0;
+        RV_ID_ACTIVO = 0;
         const _btnElim = document.getElementById('btnEliminarFacturaModal');
         const _btnGuardar = document.getElementById('btnGuardarFacturaModal');
         if (_btnElim) {
@@ -2403,23 +2195,23 @@ $totalPages = $totalPagesOriginal;
 
         // Restablecer título por defecto
         const tituloEl = document.querySelector('#modalNuevaFactura .modal-title');
-        if (tituloEl) tituloEl.innerHTML = '<i class="bi bi-receipt-cutoff me-2"></i>Nueva factura de venta';
+        if (tituloEl) tituloEl.innerHTML = '<i class="bi bi-receipt-cutoff me-2"></i>Nuevo recibo de venta';
 
         // Actualizar estado de botones superiores
         fvActualizarEstadoBotones('nuevo');
     }
 
     function abrirModalFactura() {
-        // Nueva factura: asegurar ID en cero y permitir carga normal del consecutivo
-        FV_ID_ACTIVO = 0;
-        FV_FECHA_EMISION = null;
-        FV_CLIENTE_RUC   = '';
-        FV_BLOQUEAR_SECUENCIAL = false;
+        // Nuevo recibo: asegurar ID en cero y permitir carga normal del consecutivo
+        RV_ID_ACTIVO = 0;
+        RV_FECHA_EMISION = null;
+        RV_CLIENTE_RUC   = '';
+        RV_BLOQUEAR_SECUENCIAL = false;
 
         // Verificar si hay un borrador guardado
         let borrador = null;
         try {
-            const raw = localStorage.getItem(FV_STORAGE_KEY);
+            const raw = localStorage.getItem(RV_STORAGE_KEY);
             if (raw) borrador = JSON.parse(raw);
         } catch (e) {}
 
@@ -2432,12 +2224,12 @@ $totalPages = $totalPagesOriginal;
                 <div class="bg-white rounded-3 shadow-lg p-4" style="max-width:420px;width:90%;">
                     <div class="d-flex align-items-center gap-2 mb-3">
                         <i class="bi bi-exclamation-triangle-fill text-warning fs-4"></i>
-                        <h6 class="fw-bold mb-0">Factura sin guardar</h6>
+                        <h6 class="fw-bold mb-0">Recibo sin guardar</h6>
                     </div>
-                    <p class="small text-muted mb-4">Hay una factura en borrador del cliente <strong>${clienteName}</strong> que no fue guardada. ¿Qué desea hacer?</p>
+                    <p class="small text-muted mb-4">Hay un recibo en borrador del cliente <strong>${clienteName}</strong> que no fue guardada. ¿Qué desea hacer?</p>
                     <div class="d-flex gap-2 justify-content-end">
                         <button class="btn btn-sm btn-outline-secondary" id="fv-aviso-nueva">
-                            <i class="bi bi-file-earmark-plus me-1"></i> Nueva factura
+                            <i class="bi bi-file-earmark-plus me-1"></i> Nuevo recibo
                         </button>
                         <button class="btn btn-sm btn-primary" id="fv-aviso-restaurar">
                             <i class="bi bi-arrow-counterclockwise me-1"></i> Cargar borrador
@@ -2467,7 +2259,7 @@ $totalPages = $totalPagesOriginal;
         fvResetearModal();
         modalMain.show();
 
-        // Aplicar favoritos para nueva factura
+        // Aplicar favoritos para nuevo recibo
         if (typeof aplicarFavoritosModal === 'function') {
             setTimeout(() => {
                 aplicarFavoritosModal('#modalNuevaFactura');
@@ -2490,15 +2282,15 @@ $totalPages = $totalPagesOriginal;
 
     // --- ACCIONES BARRA ---
     async function enviarAlSri() {
-        const id = parseInt(FV_ID_ACTIVO) || 0;
+        const id = parseInt(RV_ID_ACTIVO) || 0;
         if (!id) return;
 
         // Validar fecha de emisión antes de continuar
         const dateLocal = new Date();
         const hoy = new Date(dateLocal.getTime() - dateLocal.getTimezoneOffset() * 60000)
                         .toISOString().split('T')[0];
-        if (FV_FECHA_EMISION && FV_FECHA_EMISION !== hoy) {
-            const fechaFmt = FV_FECHA_EMISION.split('-').reverse().join('-');
+        if (RV_FECHA_EMISION && RV_FECHA_EMISION !== hoy) {
+            const fechaFmt = RV_FECHA_EMISION.split('-').reverse().join('-');
             const hoyFmt   = hoy.split('-').reverse().join('-');
             await Swal.fire({
                 icon: 'warning',
@@ -2622,16 +2414,16 @@ $totalPages = $totalPagesOriginal;
             // refrescar, y armamos el refresco en el evento de cierre del modal:
             // así cubre tanto el cierre automático tras autorizar como el cierre
             // manual tras un rechazo. Se arma una sola vez por intento (once + dedupe).
-            const _fvSortPrev = window.FV_currentSort || 'fecha_emision';
-            const _fvDirPrev  = window.FV_currentDir  || 'DESC';
-            const _fvPagePrev = window.FV_currentPage || 1;
+            const _fvSortPrev = window.RV_currentSort || 'fecha_emision';
+            const _fvDirPrev  = window.RV_currentDir  || 'DESC';
+            const _fvPagePrev = window.RV_currentPage || 1;
             const _fvModalEl  = document.getElementById('modalNuevaFactura');
             const refrescarPreservandoOrden = () => {
                 // Re-aplicar el orden capturado por si algún flujo lo hubiera alterado
-                window.FV_currentSort = _fvSortPrev;
-                window.FV_currentDir  = _fvDirPrev;
-                if (typeof window.FV_fetchSearch === 'function') {
-                    window.FV_fetchSearch(_fvPagePrev);
+                window.RV_currentSort = _fvSortPrev;
+                window.RV_currentDir  = _fvDirPrev;
+                if (typeof window.RV_fetchSearch === 'function') {
+                    window.RV_fetchSearch(_fvPagePrev);
                 }
             };
             if (_fvModalEl) {
@@ -2822,7 +2614,7 @@ $totalPages = $totalPagesOriginal;
             });
             const json = await resp.json();
             if (json.ok) {
-                fvCargarHistorialSri(FV_ID_ACTIVO);
+                fvCargarHistorialSri(RV_ID_ACTIVO);
             } else {
                 Swal.fire({
                     icon: 'error',
@@ -2841,93 +2633,10 @@ $totalPages = $totalPagesOriginal;
 
     // ”€”€ fin Historial SRI ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
 
-    async function generarReciboVenta() {
-        const id = parseInt(FV_ID_ACTIVO) || 0;
-        if (!id) return;
-
-        const modalEl  = document.getElementById('modalNuevaFactura');
-        const estado   = (window.FV_ESTADO_ACTIVO || '').toLowerCase();
-        const esBorrador = estado.includes('borrador');
-        let accion = 'dejar';
-
-        if (esBorrador) {
-            // Borrador: preguntar si eliminar la factura o dejarla en borrador.
-            const r = await Swal.fire({
-                icon: 'question',
-                title: 'Generar recibo de venta',
-                html: 'Esta factura está en <strong>borrador</strong>.<br>Al emitir el recibo, ¿qué deseas hacer con la factura?',
-                showDenyButton: true,
-                showCancelButton: true,
-                confirmButtonText: '<i class="bi bi-trash me-1"></i> Eliminar factura',
-                denyButtonText: 'Dejar en borrador',
-                cancelButtonText: 'Cancelar',
-                confirmButtonColor: '#dc3545',
-                denyButtonColor: '#6c757d',
-                target: modalEl,
-            });
-            if (r.isDismissed) return;                 // Cancelar
-            accion = r.isConfirmed ? 'eliminar' : 'dejar';
-        } else {
-            // Autorizada u otro estado: confirmar; la factura no se modifica.
-            const r = await Swal.fire({
-                icon: 'question',
-                title: 'Generar recibo de venta',
-                html: 'Se emitirá un <strong>recibo de venta</strong> a partir de esta factura.<br><small class="text-muted">La factura no se modifica.</small>',
-                showCancelButton: true,
-                confirmButtonText: '<i class="bi bi-receipt me-1"></i> Emitir recibo',
-                cancelButtonText: 'Cancelar',
-                confirmButtonColor: '#0d6efd',
-                target: modalEl,
-            });
-            if (!r.isConfirmed) return;
-        }
-
-        Swal.fire({
-            title: 'Generando recibo...',
-            allowOutsideClick: false,
-            target: modalEl,
-            didOpen: () => Swal.showLoading(),
-        });
-
-        try {
-            const fd = new FormData();
-            fd.append('id', id);
-            fd.append('accion', accion);
-            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/generarReciboAjax`, { method: 'POST', body: fd });
-            const json = await resp.json();
-
-            if (json.ok) {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Recibo emitido',
-                    text: json.mensaje,
-                    confirmButtonColor: '#0d6efd',
-                    target: modalEl,
-                }).then(() => {
-                    // Si se eliminó la factura, cerrar el modal y refrescar preservando el orden.
-                    if (json.factura_eliminada) {
-                        const modalInst = bootstrap.Modal.getInstance(modalEl);
-                        const refrescar = () => { if (typeof window.FV_fetchSearch === 'function') window.FV_fetchSearch(window.FV_currentPage || 1); };
-                        if (modalInst) {
-                            modalEl.addEventListener('hidden.bs.modal', refrescar, { once: true });
-                            modalInst.hide();
-                        } else {
-                            refrescar();
-                        }
-                    }
-                });
-            } else {
-                Swal.fire({ icon: 'error', title: 'No se pudo generar', text: json.mensaje || 'Error al generar el recibo.', target: modalEl });
-            }
-        } catch (e) {
-            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.', target: modalEl });
-        }
-    }
-
     function duplicarFactura() {
-        if (!FV_ID_ACTIVO) return;
+        if (!RV_ID_ACTIVO) return;
 
-        // Obtener el número de la factura actual antes de limpiar o resetear
+        // Obtener el número del recibo actual antes de limpiar o resetear
         const inputSec = document.getElementById('m-input-secuencial');
         const secuencialActual = inputSec ? inputSec.value : '';
         const selPunto = document.getElementById('m-select-puntos');
@@ -2947,11 +2656,12 @@ $totalPages = $totalPagesOriginal;
         const numeroFacturaCompleto = (serieActual + secuencialActual) || 'actual';
 
         const ejecutarDuplicacion = () => {
-            // 1. Resetear ID para que sea una nueva factura
-            FV_ID_ACTIVO = 0;
+            // 1. Resetear ID para que sea un nuevo recibo
+            RV_ID_ACTIVO = 0;
+            RV_ESTADO_ACTIVO = ''; // el duplicado nace como recibo nuevo (no hereda facturado/anulado)
 
-            // 2. Permitir carga de secuencial para la nueva factura
-            FV_BLOQUEAR_SECUENCIAL = false;
+            // 2. Permitir carga de secuencial para la nuevo recibo
+            RV_BLOQUEAR_SECUENCIAL = false;
 
             // 3. Cambiar fecha a hoy
             const fechaInput = document.querySelector('#formFacturaModal [name="fecha_emision"]');
@@ -2963,7 +2673,7 @@ $totalPages = $totalPagesOriginal;
             // 4. Cambiar título del modal para reflejar duplicación
             const tituloEl = document.querySelector('#modalNuevaFactura .modal-title');
             if (tituloEl) {
-                tituloEl.innerHTML = `<i class="bi bi-copy me-2 text-warning"></i>Nueva factura <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 ms-2">Duplicada de ${numeroFacturaCompleto}</span>`;
+                tituloEl.innerHTML = `<i class="bi bi-copy me-2 text-warning"></i>Nuevo recibo <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 ms-2">Duplicado de ${numeroFacturaCompleto}</span>`;
             }
 
             // 5. Cargar nuevo secuencial para el punto de emisión seleccionado
@@ -2997,7 +2707,7 @@ $totalPages = $totalPagesOriginal;
                 bootstrap.Tab.getInstance(triggerEl)?.show() || new bootstrap.Tab(triggerEl).show();
             }
 
-            // 9. Habilitar todos los campos del formulario como una nueva factura normal
+            // 9. Habilitar todos los campos del formulario como un nuevo recibo normal
             const tabDetalle = document.getElementById('m-tab-detalle');
             if (tabDetalle) {
                 const controles = tabDetalle.querySelectorAll('input:not([type="hidden"]), select, textarea');
@@ -3041,15 +2751,15 @@ $totalPages = $totalPagesOriginal;
                 });
                 Toast.fire({
                     icon: 'success',
-                    title: 'Factura lista como nueva duplicación.'
+                    title: 'Recibo listo como nueva duplicación.'
                 });
             }
         };
 
         if (window.Swal) {
             Swal.fire({
-                title: '¿Duplicar Factura?',
-                text: `Se va a duplicar la información de la factura ${numeroFacturaCompleto} en una nueva factura normal. Los campos se habilitarán para su edición.`,
+                title: '¿Duplicar Recibo?',
+                text: `Se va a duplicar la información del recibo ${numeroFacturaCompleto} en un nuevo recibo normal. Los campos se habilitarán para su edición.`,
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#3085d6',
@@ -3062,28 +2772,28 @@ $totalPages = $totalPagesOriginal;
                 }
             });
         } else {
-            if (confirm(`¿Desea duplicar la información de la factura ${numeroFacturaCompleto} en una nueva factura?`)) {
+            if (confirm(`¿Desea duplicar la información del recibo ${numeroFacturaCompleto} en un nuevo recibo?`)) {
                 ejecutarDuplicacion();
             }
         }
     }
 
     function exportarPdf() {
-        const id = parseInt(FV_ID_ACTIVO) || 0;
+        const id = parseInt(RV_ID_ACTIVO) || 0;
         if (!id) return;
         const url = `${B_URL}/${RUTA_MODULO}/exportar-pdf-ajax?id=${id}`;
         window.open(url, '_blank');
     }
 
     function exportarXml() {
-        const id = parseInt(FV_ID_ACTIVO) || 0;
+        const id = parseInt(RV_ID_ACTIVO) || 0;
         if (!id) return;
         const url = `${B_URL}/${RUTA_MODULO}/exportar-xml-ajax?id=${id}`;
         window.open(url, '_blank');
     }
 
     async function imprimirTicket() {
-        const id = parseInt(FV_ID_ACTIVO) || 0;
+        const id = parseInt(RV_ID_ACTIVO) || 0;
         if (!id) return;
 
         try {
@@ -3093,7 +2803,7 @@ $totalPages = $totalPagesOriginal;
                 Swal.fire({
                     icon: 'error',
                     title: 'Error',
-                    text: json.error || 'No se pudo cargar la factura.'
+                    text: json.error || 'No se pudo cargar el recibo.'
                 });
                 return;
             }
@@ -3187,7 +2897,7 @@ $totalPages = $totalPagesOriginal;
                     ${EMPRESA_INFO.telefono  ? `<h3>Tel: ${esc(EMPRESA_INFO.telefono)}</h3>` : ''}
                 </div>
                 <hr class="sep">
-                <div class="center bold" style="font-size:10px;">FACTURA DE VENTA</div>
+                <div class="center bold" style="font-size:10px;">RECIBO DE VENTA</div>
                 <div class="center">No. ${esc(num)}</div>
                 <div class="center">Fecha: ${esc(fecha)}</div>
                 <hr class="sep">
@@ -3236,7 +2946,7 @@ $totalPages = $totalPagesOriginal;
     }
 
     async function enviarPorCorreo() {
-        const id = parseInt(FV_ID_ACTIVO) || 0;
+        const id = parseInt(RV_ID_ACTIVO) || 0;
         if (!id) return;
 
         // Obtener el correo actual del cliente de la interfaz
@@ -3307,8 +3017,8 @@ $totalPages = $totalPagesOriginal;
                 });
                 // Refrescar la tabla (preservando el orden) para que el badge
                 // "Correo" refleje el nuevo estado 'enviado' al cerrar el modal.
-                if (typeof window.FV_fetchSearch === 'function') {
-                    window.FV_fetchSearch(window.FV_currentPage || 1);
+                if (typeof window.RV_fetchSearch === 'function') {
+                    window.RV_fetchSearch(window.RV_currentPage || 1);
                 }
             } else {
                 Swal.fire({
@@ -3900,7 +3610,7 @@ $totalPages = $totalPagesOriginal;
         const selCad = row.querySelector('.input-caducidad');
         const lblSaldo = row.querySelector('.lbl-saldo-valor');
         const contSaldo = row.querySelector('.span-saldo-info');
-        const idVenta = FV_ID_ACTIVO || 0;
+        const idVenta = RV_ID_ACTIVO || 0;
 
         if (!idProd || !idBod) return;
 
@@ -4089,7 +3799,7 @@ $totalPages = $totalPagesOriginal;
 
         // Resaltar la fila visualmente como "libre"
         row.classList.add('table-warning');
-        row.title = 'Servicio libre - se creará en el catálogo al guardar la factura';
+        row.title = 'Servicio libre - se creará en el catálogo al guardar el recibo';
 
         // Mover foco al precio
         const inputPrecio = row.querySelector('.input-precio');
@@ -4153,6 +3863,58 @@ $totalPages = $totalPagesOriginal;
         tr.querySelector('.subtotal-line').textContent = subtotalNeto.toFixed(2);
         calcTotales();
     }
+
+    // ── Toggle Con/Sin impuestos ──────────────────────────────────────────────
+    // Devuelve true si el recibo se emite CON impuestos (switch marcado).
+    function RV_conImpuestos() {
+        const chk = document.getElementById('rec-con-impuestos');
+        return chk ? chk.checked : true;
+    }
+
+    // Ajusta la etiqueta visible del switch según su estado.
+    function RV_actualizarLabelImpuestos() {
+        const lbl = document.getElementById('rec-con-impuestos-lbl');
+        if (lbl) lbl.textContent = RV_conImpuestos() ? 'Con impuestos' : 'Sin impuestos';
+    }
+
+    // Fija el estado del switch (usado al abrir un recibo existente). Acepta t/f/1/0/true/false.
+    function RV_setConImpuestos(valor) {
+        const chk = document.getElementById('rec-con-impuestos');
+        if (!chk) return;
+        const on = !(valor === false || valor === 0 || valor === '0' || valor === 'f' || valor === 'false' || valor === 'F' || valor === null || valor === undefined);
+        chk.checked = on;
+        RV_actualizarLabelImpuestos();
+        RV_syncFavImpuestos();
+    }
+
+    // Mantiene el input oculto (#rec-con-impuestos-fav) en sincronía con el switch,
+    // para que el servicio de favoritos guarde/lea 1/0 y actualice su estrella.
+    function RV_syncFavImpuestos() {
+        const h = document.getElementById('rec-con-impuestos-fav');
+        if (!h) return;
+        h.value = RV_conImpuestos() ? '1' : '0';
+        h.dispatchEvent(new Event('change'));
+    }
+
+    // Valor por defecto del switch para un recibo nuevo: el favorito del usuario si existe.
+    function RV_favImpuestos() {
+        if (typeof APP_FAVORITOS !== 'undefined' && APP_FAVORITOS['con_impuestos'] !== undefined && APP_FAVORITOS['con_impuestos'] !== '') {
+            return APP_FAVORITOS['con_impuestos'];
+        }
+        return true;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const chk = document.getElementById('rec-con-impuestos');
+        if (chk) {
+            chk.addEventListener('change', () => {
+                RV_actualizarLabelImpuestos();
+                RV_syncFavImpuestos();
+                calcTotales();
+            });
+            RV_actualizarLabelImpuestos();
+        }
+    });
 
     function calcTotales() {
         const modoIva = EMPRESA_CONFIG.calculo_iva ?? 'linea_linea';
@@ -4221,6 +3983,14 @@ $totalPages = $totalPagesOriginal;
             ivaTotal = r2(ivaTotal + g.iva);
         });
 
+        // ── Toggle "Sin impuestos": forzar IVA e ICE a 0 sin alterar subtotal/descuentos ──
+        const conImpuestos = RV_conImpuestos();
+        if (!conImpuestos) {
+            Object.values(grupos).forEach(g => { g.iva = 0; });
+            ivaTotal = 0;
+            iceTotal = 0;
+        }
+
         const propina = r2(parseFloat(document.getElementById('m-input-propina')?.value) || 0);
         const totalFactura = r2((subtotalGeneral - descuentoTotal) + ivaTotal + iceTotal + propina);
 
@@ -4282,7 +4052,7 @@ $totalPages = $totalPagesOriginal;
         const pagosValores = document.querySelectorAll('input[name="f_pago_valor[]"]');
         if (pagosValores.length === 1) pagosValores[0].value = totalFactura.toFixed(2);
 
-        // Regenerar asiento contable con los valores actuales de la factura (siempre, con debounce)
+        // Regenerar asiento contable con los valores actuales del recibo (siempre, con debounce)
         if (typeof window.fvDebouncedRecalcularAsiento === 'function') {
             window.fvDebouncedRecalcularAsiento();
         }
@@ -4434,11 +4204,12 @@ $totalPages = $totalPagesOriginal;
         const id = parseInt(data.id) || 0;
 
         // Bloquear cargarSecuencial ANTES del reset para que ninguna llamada asÃ­ncrona lo sobreescriba
-        FV_BLOQUEAR_SECUENCIAL = true;
+        RV_BLOQUEAR_SECUENCIAL = true;
         fvResetearModal();
-        FV_ID_ACTIVO = id;
-        FV_FECHA_EMISION = (data.fecha_emision || '').split(' ')[0].split('T')[0] || null;
-        FV_CLIENTE_RUC   = (data.cliente_ruc || '').trim();
+        RV_ID_ACTIVO = id;
+        RV_ESTADO_ACTIVO = (data.estado || '').toLowerCase().trim();
+        RV_FECHA_EMISION = (data.fecha_emision || '').split(' ')[0].split('T')[0] || null;
+        RV_CLIENTE_RUC   = (data.cliente_ruc || '').trim();
 
         // TÃ­tulo con nÃºmero de factura
         const tituloEl = document.querySelector('#modalNuevaFactura .modal-title');
@@ -4449,10 +4220,10 @@ $totalPages = $totalPagesOriginal;
         const padSec = (data.secuencial || '').toString().padStart(9, '0');
         
         // Solo actualizar el tÃ­tulo si tenemos datos reales o si no hay tÃ­tulo puesto
-        if (data.establecimiento || data.secuencial || (tituloEl && tituloEl.textContent.includes('Nueva factura'))) {
+        if (data.establecimiento || data.secuencial || (tituloEl && tituloEl.textContent.includes('Nuevo recibo'))) {
             const num = padEst + '-' + padPunto + '-' + padSec;
             const nombreCliente = data.cliente_nombre ? ' - ' + data.cliente_nombre : '';
-            if (tituloEl) tituloEl.innerHTML = '<i class="bi bi-receipt-cutoff me-2"></i>Factura: ' + num + nombreCliente;
+            if (tituloEl) tituloEl.innerHTML = '<i class="bi bi-receipt-cutoff me-2"></i>Recibo: ' + num + nombreCliente;
         }
 
 
@@ -4476,12 +4247,12 @@ $totalPages = $totalPagesOriginal;
             }
         }
 
-        // Secuencial: mostrar el de la factura cargada, no el siguiente consecutivo
+        // Secuencial: mostrar el del recibo cargada, no el siguiente consecutivo
         const inputSec = document.getElementById('m-input-secuencial');
         if (inputSec) {
             inputSec.value = data.secuencial || '';
             inputSec.classList.remove('border-warning');
-            inputSec.title = 'Secuencial original de la factura';
+            inputSec.title = 'Secuencial original del recibo';
         }
 
         // Cliente bÃ¡sico (datos del listado para mostrar mientras carga el AJAX)
@@ -4497,11 +4268,15 @@ $totalPages = $totalPagesOriginal;
         // BotÃ³n eliminar: solo visible para borradores con permiso
         const btnElim = document.getElementById('btnEliminarFacturaModal');
         const btnAnular = document.getElementById('btnAnularFacturaModal');
+        const btnGenFac = document.getElementById('m-btn-generar-factura');
         const esBorrador = (data.estado || '') === 'borrador';
         const esAnulado = (data.estado || '') === 'anulado';
+        const esFacturado = (data.estado || '') === 'facturado';
+        const esFinal = esAnulado || esFacturado; // estados sin edición
 
         if (btnElim) {
-            if (esBorrador && <?= !empty($perm['eliminar']) ? 'true' : 'false' ?>) {
+            // Eliminar (borrado lógico, libera la numeración) disponible mientras el recibo esté activo.
+            if (!esFinal && <?= !empty($perm['eliminar']) ? 'true' : 'false' ?>) {
                 btnElim.classList.remove('d-none');
             } else {
                 btnElim.classList.add('d-none');
@@ -4509,26 +4284,33 @@ $totalPages = $totalPagesOriginal;
         }
 
         if (btnAnular) {
-            // Se puede anular solo si el estado es autorizado (insensible a mayÃºsculas y flexible)
-            const stTrim = (data.estado || '').toLowerCase().trim();
-            const esAutorizado = stTrim.includes('autorizado') || stTrim.includes('autorizada');
-
-            if (esAutorizado && PERM_ACTUALIZAR) {
+            // Anular (deja sin validez pero visible, conserva número) disponible mientras el recibo esté activo.
+            if (!esFinal && PERM_ACTUALIZAR) {
                 btnAnular.classList.remove('d-none');
             } else {
                 btnAnular.classList.add('d-none');
             }
         }
-        // BotÃ³n guardar: en borrador dice "Guardar", en autorizado dice "Actualizar Vendedor"
+
+        if (btnGenFac) {
+            // Generar factura de venta: disponible mientras el recibo esté activo.
+            if (!esFinal && PERM_ACTUALIZAR) {
+                btnGenFac.classList.remove('d-none');
+            } else {
+                btnGenFac.classList.add('d-none');
+            }
+        }
+
+        // Botón guardar: en borrador dice "Guardar"; en estados finales se oculta.
         const btnGuardar = document.getElementById('btnGuardarFacturaModal');
         if (btnGuardar) {
             if (esBorrador) {
                 btnGuardar.classList.remove('d-none');
                 btnGuardar.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
-            } else if (!esAnulado && PERM_ACTUALIZAR) {
+            } else if (!esFinal && PERM_ACTUALIZAR) {
                 btnGuardar.classList.remove('d-none');
                 btnGuardar.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Actualizar';
-                btnGuardar.title = 'Actualizar datos de la factura y generar asiento si no lo tiene';
+                btnGuardar.title = 'Actualizar datos del recibo y generar asiento si no lo tiene';
             } else {
                 btnGuardar.classList.add('d-none');
             }
@@ -4560,12 +4342,15 @@ $totalPages = $totalPagesOriginal;
 
             const cab = json.cabecera;
 
+            // â”€â”€ Toggle Con/Sin impuestos: inicializar segÃºn el recibo cargado â”€â”€
+            RV_setConImpuestos(cab.con_impuestos);
+
             // Actualizar tÃ­tulo con datos reales completos (aplicando padding)
             const rEst = (cab.establecimiento || '').toString().padStart(3, '0');
             const rPunto = (cab.punto_emision || '').toString().padStart(3, '0');
             const rSec = (cab.secuencial || '').toString().padStart(9, '0');
             const numReal = rEst + '-' + rPunto + '-' + rSec;
-            if (tituloEl) tituloEl.innerHTML = '<i class="bi bi-receipt-cutoff me-2"></i>Factura: ' + numReal + ' - ' + (cab.cliente_nombre || '');
+            if (tituloEl) tituloEl.innerHTML = '<i class="bi bi-receipt-cutoff me-2"></i>Recibo: ' + numReal + ' - ' + (cab.cliente_nombre || '');
 
 
             // â”€â”€ Datos completos del cliente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -4586,7 +4371,7 @@ $totalPages = $totalPagesOriginal;
             if (inputSec && cab.secuencial) {
                 inputSec.value = cab.secuencial;
                 inputSec.classList.remove('border-warning');
-                inputSec.title = 'Secuencial original de la factura';
+                inputSec.title = 'Secuencial original del recibo';
             }
 
             // â”€â”€ Vendedor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -4910,15 +4695,15 @@ $totalPages = $totalPagesOriginal;
             fvCargarNotasCredito(numCompleto);
             fvCargarGuiasRemision(numCompleto);
 
-            // â”€â”€ Actualizar estado de botones segÃºn el estado de la factura â”€â”€
+            // â”€â”€ Actualizar estado de botones segÃºn el estado del recibo â”€â”€
             fvActualizarEstadoBotones(data.estado);
 
         } catch (err) {
-            console.error('Error cargando factura:', err);
+            console.error('Error cargando recibo:', err);
         } finally {
             // Liberar el bloqueo: a partir de aquÃ­ cualquier cambio manual de punto de emisiÃ³n
             // podrÃ¡ volver a cargar el siguiente consecutivo normalmente
-            FV_BLOQUEAR_SECUENCIAL = false;
+            RV_BLOQUEAR_SECUENCIAL = false;
         }
     };
 
@@ -5001,7 +4786,7 @@ $totalPages = $totalPagesOriginal;
                 });
                 tbody.innerHTML = html;
             } else {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-info-circle me-1"></i> No se han encontrado notas de crédito para esta factura.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-info-circle me-1"></i> No se han encontrado notas de crédito para este recibo.</td></tr>';
             }
         } catch (e) {
             console.error('Error al cargar notas de crédito:', e);
@@ -5027,7 +4812,7 @@ $totalPages = $totalPagesOriginal;
     }
 
     window.eliminarFacturaBorrador = async function() {
-        if (!FV_ID_ACTIVO) return;
+        if (!RV_ID_ACTIVO) return;
 
         const result = await Swal.fire({
             title: '¿Estas seguro?',
@@ -5053,7 +4838,7 @@ $totalPages = $totalPagesOriginal;
 
         try {
             const fd = new FormData();
-            fd.append('id', FV_ID_ACTIVO);
+            fd.append('id', RV_ID_ACTIVO);
             const resp = await fetch(`${B_URL}/${RUTA_MODULO}/eliminarAjax`, {
                 method: 'POST',
                 body: fd
@@ -5061,7 +4846,7 @@ $totalPages = $totalPagesOriginal;
             const json = await resp.json();
 
             if (json.ok) {
-                FV_ID_ACTIVO = 0; // Limpiar ID activo
+                RV_ID_ACTIVO = 0; // Limpiar ID activo
                 modalMain.hide();
 
                 const Toast = Swal.mixin({
@@ -5073,11 +4858,11 @@ $totalPages = $totalPagesOriginal;
                 });
                 Toast.fire({
                     icon: 'success',
-                    title: json.mensaje || 'Factura eliminada correctamente.'
+                    title: json.mensaje || 'Recibo eliminado correctamente.'
                 });
 
-                if (typeof window.FV_fetchSearch === 'function') {
-                    window.FV_fetchSearch(window.FV_currentPage || 1);
+                if (typeof window.RV_fetchSearch === 'function') {
+                    window.RV_fetchSearch(window.RV_currentPage || 1);
                 } else {
                     location.reload();
                 }
@@ -5122,56 +4907,118 @@ $totalPages = $totalPagesOriginal;
         return limite;
     }
 
-    window.anularFactura = async function() {
-        if (!FV_ID_ACTIVO) return;
-
-        // ── Regla 1: Consumidor Final ────────────────────────────────────────
-        const esConsumidorFinal = FV_CLIENTE_RUC === '9999999999999'
-            || document.getElementById('sri-identificacion-cliente')?.value?.trim() === '9999999999999';
-
-        if (esConsumidorFinal) {
-            await Swal.fire({
-                icon: 'error',
-                title: 'No se puede anular',
-                html: `Las facturas emitidas a <strong>Consumidor Final</strong> no se pueden anular<br>
-                       ni tampoco se les puede emitir una nota de crédito una vez transmitidas.<br>
-                       <small class="text-muted">(Normativa SRI)</small>`,
-                confirmButtonText: 'Entendido',
-                confirmButtonColor: '#dc3545'
-            });
+    window.generarFacturaDesdeRecibo = async function() {
+        if (!RV_ID_ACTIVO) {
+            Swal.fire('Atención', 'Primero guarde el recibo para poder facturarlo.', 'info');
             return;
         }
 
-        // ── Regla 2: Plazo del día 7 del mes siguiente ───────────────────────
-        if (FV_FECHA_EMISION) {
-            const hoy = new Date();
-            hoy.setHours(0, 0, 0, 0);
-            const limiteAnulacion = fvFechaLimiteAnulacion(FV_FECHA_EMISION);
-            limiteAnulacion.setHours(23, 59, 59, 999);
-
-            if (hoy > limiteAnulacion) {
-                const fmtLimite = limiteAnulacion.toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                await Swal.fire({
-                    icon: 'error',
-                    title: 'Fuera de plazo',
-                    html: `El plazo para anular esta factura venció el <strong>${fmtLimite}</strong>.<br>
-                           <small class="text-muted">El SRI permite anular hasta el día 7 del mes siguiente a la emisión<br>
-                           (o el siguiente día hábil si cae en fin de semana).</small>`,
-                    confirmButtonText: 'Entendido',
-                    confirmButtonColor: '#dc3545'
-                });
-                return;
+        // Revisar cobros (ingresos) vinculados para avisar que se anularán.
+        let avisoIngresos = '';
+        try {
+            const rc = await fetch(`${B_URL}/${RUTA_MODULO}/getCobrosVinculadosAjax?id=${RV_ID_ACTIVO}`);
+            const jc = await rc.json();
+            const cobros = (jc && jc.ok && Array.isArray(jc.cobros)) ? jc.cobros : [];
+            if (cobros.length > 0) {
+                const totalCob = cobros.reduce((s, c) => s + (parseFloat(c.monto_cobrado) || 0), 0);
+                avisoIngresos = `<div class="alert alert-warning border-0 small mt-3 mb-0 text-start">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                    Este recibo tiene <strong>${cobros.length}</strong> ingreso(s)/cobro(s) por
+                    <strong>$${totalCob.toFixed(2)}</strong> que serán <strong>ANULADOS</strong> al facturar.
+                </div>`;
             }
-        }
+        } catch (e) { /* si falla la consulta, se continúa con el aviso genérico */ }
 
         const result = await Swal.fire({
-            title: '¿Anular Factura?',
-            text: "Esta acción marcará la factura como ANULADA y reintegrará todo el stock al inventario. No se puede revertir.",
+            title: '¿Generar factura de venta?',
+            html: `Se creará una <strong>factura de venta con impuestos</strong> a partir de este recibo.<br>
+                   El recibo quedará <strong>FACTURADO</strong> (sin validez, pero visible y conservando su número);
+                   se revertirán su inventario, su asiento contable y sus cobros.` + avisoIngresos,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#198754',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: '<i class="bi bi-file-earmark-medical me-2"></i>Sí, generar factura',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true
+        });
+        if (!result.isConfirmed) return;
+
+        const btn = document.getElementById('m-btn-generar-factura');
+        const btnOriginalHtml = btn?.innerHTML;
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generando...';
+        }
+
+        Swal.fire({
+            title: 'Generando factura...',
+            html: 'Creando la factura de venta y facturando el recibo. Por favor espere.',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+
+        try {
+            const fd = new FormData();
+            fd.append('id', RV_ID_ACTIVO);
+            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/generarFacturaAjax`, { method: 'POST', body: fd });
+            const json = await resp.json();
+
+            if (json.ok) {
+                modalMain.hide();
+                const r = await Swal.fire({
+                    icon: 'success',
+                    title: 'Factura generada',
+                    html: `${json.mensaje || 'Factura generada correctamente.'}` +
+                          (json.numero_factura ? `<br><span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 mt-2">Factura ${json.numero_factura}</span>` : ''),
+                    showCancelButton: true,
+                    confirmButtonColor: '#0d6efd',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: '<i class="bi bi-box-arrow-up-right me-1"></i> Ver factura',
+                    cancelButtonText: 'Seguir en recibos',
+                    reverseButtons: true
+                });
+                if (r.isConfirmed) {
+                    // Ir al módulo de facturas (la factura recién generada queda arriba, como borrador).
+                    window.location.href = `${B_URL}/modulos/factura-venta`;
+                    return;
+                }
+                if (typeof window.RV_fetchSearch === 'function') {
+                    window.RV_fetchSearch(window.RV_currentPage || 1);
+                } else {
+                    location.reload();
+                }
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'No se pudo generar la factura',
+                    text: json.mensaje || 'No se pudo completar la operación.',
+                    confirmButtonColor: '#d33'
+                });
+            }
+        } catch (err) {
+            console.error(err);
+            Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'Intente nuevamente.', confirmButtonColor: '#d33' });
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = btnOriginalHtml;
+            }
+        }
+    };
+
+    window.anularFactura = async function() {
+        if (!RV_ID_ACTIVO) return;
+
+        const result = await Swal.fire({
+            title: '¿Anular Recibo?',
+            text: "El recibo quedará ANULADO (sin validez) pero seguirá visible en la lista y conservará su número. Se reintegrará el stock y se anularán los cobros y el asiento asociados.",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#f59e0b',
             cancelButtonColor: '#6c757d',
-            confirmButtonText: '<i class="bi bi-slash-circle me-2"></i>Sí, anular factura',
+            confirmButtonText: '<i class="bi bi-slash-circle me-2"></i>Sí, anular recibo',
             cancelButtonText: 'Cancelar',
             reverseButtons: true
         });
@@ -5185,18 +5032,9 @@ $totalPages = $totalPagesOriginal;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Anulando...';
         }
 
-        // Mensaje de progreso mientras se procesa la anulación (verificación SRI + cascada)
-        Swal.fire({
-            title: 'Procesando anulación...',
-            html: 'Estamos <strong>verificando el estado en el SRI</strong> y anulando el documento.<br>Esto puede tardar unos segundos, por favor espere.',
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            didOpen: () => { Swal.showLoading(); }
-        });
-
         try {
             const fd = new FormData();
-            fd.append('id', FV_ID_ACTIVO);
+            fd.append('id', RV_ID_ACTIVO);
             const resp = await fetch(`${B_URL}/${RUTA_MODULO}/anularAjax`, {
                 method: 'POST',
                 body: fd
@@ -5209,12 +5047,12 @@ $totalPages = $totalPagesOriginal;
                 Swal.fire({
                     icon: 'success',
                     title: 'Anulada',
-                    text: json.mensaje || 'Factura anulada e inventario actualizado.',
+                    text: json.mensaje || 'Recibo anulado e inventario actualizado.',
                     timer: 3000
                 });
 
-                if (typeof window.FV_fetchSearch === 'function') {
-                    window.FV_fetchSearch(window.FV_currentPage || 1);
+                if (typeof window.RV_fetchSearch === 'function') {
+                    window.RV_fetchSearch(window.RV_currentPage || 1);
                 } else {
                     location.reload();
                 }
@@ -5389,12 +5227,12 @@ $totalPages = $totalPagesOriginal;
     });
 
     /**
-     * Puente entre Factura de Venta y Notas de Crédito
+     * Puente entre Recibo de Venta y Notas de Crédito
      */
     async function abrirModalNuevaNCDesdeFV() {
-        if (!FV_ID_ACTIVO) return;
+        if (!RV_ID_ACTIVO) return;
         
-        // Obtener datos de la factura actual desde el formulario
+        // Obtener datos del recibo actual desde el formulario
         const idCliente = document.getElementById('m-id-cliente').value;
         const nombreCliente = document.getElementById('m-search-cliente').value;
         const rucCliente = document.getElementById('m-lbl-cliente-ruc').textContent;
@@ -5405,7 +5243,7 @@ $totalPages = $totalPagesOriginal;
         const importeTotal = parseFloat(document.getElementById('m-lbl-total').textContent.replace(/[^0-9.]/g, '')) || 0;
         const estadoFactura = document.getElementById('sri-badge-estado').textContent.toLowerCase();
 
-        // Solo permitir si la factura estÃ¡ autorizada
+        // Solo permitir si el recibo estÃ¡ autorizada
         if (estadoFactura !== 'autorizado') {
             return Swal.fire('Atención', 'Solo se pueden generar notas de crédito para facturas en estado "autorizado".', 'warning');
         }
@@ -5424,7 +5262,7 @@ $totalPages = $totalPagesOriginal;
         });
 
         if (sumaNC >= importeTotal) {
-            return Swal.fire('Atención', 'La suma de las notas de crédito ya cubre el total de la factura.', 'warning');
+            return Swal.fire('Atención', 'La suma de las notas de crédito ya cubre el total del recibo.', 'warning');
         }
 
         // Abrir modal de NC
@@ -5435,7 +5273,7 @@ $totalPages = $totalPagesOriginal;
             setTimeout(() => {
                 window.NC_seleccionarCliente({ id: idCliente, nombre: nombreCliente, identificacion: rucCliente });
                 window.NC_seleccionarFactura({
-                    id: FV_ID_ACTIVO,
+                    id: RV_ID_ACTIVO,
                     establecimiento: establecimiento,
                     punto_emision: puntoEmision,
                     secuencial: secuencial,
@@ -5457,23 +5295,23 @@ $totalPages = $totalPagesOriginal;
         }
     }
 
-    // Sobrescribir el cierre del modal de NC para refrescar la pestaÃ±a de NC en la factura
+    // Sobrescribir el cierre del modal de NC para refrescar la pestaÃ±a de NC en el recibo
     const modalNCEl = document.getElementById('modalNC');
     window.fvRefrescarDatosModal = function() {
-        if (FV_ID_ACTIVO) {
-            // Refrescar los datos de la factura en el modal (totales, saldos, notas de crÃ©dito, etc.)
+        if (RV_ID_ACTIVO) {
+            // Refrescar los datos del recibo en el modal (totales, saldos, notas de crÃ©dito, etc.)
             // Enviamos un objeto que mantenga el ID actual
-            const mockRow = { dataset: { row: JSON.stringify({ id: FV_ID_ACTIVO }) } };
+            const mockRow = { dataset: { row: JSON.stringify({ id: RV_ID_ACTIVO }) } };
             window.abrirModalFacturaVer(mockRow);
 
             // Refrescar tambiÃ©n el listado de facturas en el fondo
-            if (typeof window.FV_fetchSearch === 'function') {
-                window.FV_fetchSearch(window.FV_currentPage || 1);
+            if (typeof window.RV_fetchSearch === 'function') {
+                window.RV_fetchSearch(window.RV_currentPage || 1);
             }
         }
     }
 
-    // Sobrescribir el cierre del modal de NC para refrescar la factura
+    // Sobrescribir el cierre del modal de NC para refrescar el recibo
     if (modalNCEl) {
         modalNCEl.addEventListener('hidden.bs.modal', function () {
             window.fvRefrescarDatosModal();
@@ -5511,7 +5349,7 @@ $totalPages = $totalPagesOriginal;
                 });
                 tbody.innerHTML = html;
             } else {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-info-circle me-1"></i> No se han encontrado guías de remisión para esta factura.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-info-circle me-1"></i> No se han encontrado guías de remisión para este recibo.</td></tr>';
             }
         } catch (e) {
             console.error('Error al cargar guías:', e);
@@ -5520,7 +5358,7 @@ $totalPages = $totalPagesOriginal;
     }
 
     async function abrirModalNuevaGRDesdeFV() {
-        if (!FV_ID_ACTIVO) return;
+        if (!RV_ID_ACTIVO) return;
         
         const idCliente = document.getElementById('m-id-cliente').value;
         const nombreCliente = document.getElementById('m-search-cliente').value;
@@ -5532,7 +5370,7 @@ $totalPages = $totalPagesOriginal;
         const numAutorizacion = document.getElementById('sri-numero-autorizacion').value;
         const estadoFactura = document.getElementById('sri-badge-estado').textContent.toLowerCase();
 
-        // Solo permitir si la factura estÃ¡ autorizada (aunque las guÃ­as a veces se pueden emitir antes, seguimos el concepto de NC si el usuario lo pidiÃ³ asÃ­)
+        // Solo permitir si el recibo estÃ¡ autorizada (aunque las guÃ­as a veces se pueden emitir antes, seguimos el concepto de NC si el usuario lo pidiÃ³ asÃ­)
         if (estadoFactura !== 'autorizado') {
             return Swal.fire('Atención', 'Solo se pueden generar guías de remisión para facturas en estado "autorizado".', 'warning');
         }
@@ -5562,7 +5400,7 @@ $totalPages = $totalPagesOriginal;
 
                 // Cargar detalles si es posible
                 if (typeof window.GR_cargarDetallesDesdeFactura === 'function') {
-                    window.GR_cargarDetallesDesdeFactura(FV_ID_ACTIVO);
+                    window.GR_cargarDetallesDesdeFactura(RV_ID_ACTIVO);
                 }
             }, 500);
         }
@@ -5574,7 +5412,7 @@ $totalPages = $totalPagesOriginal;
         }
     }
 
-    // Sobrescribir el cierre del modal de GR para refrescar la factura
+    // Sobrescribir el cierre del modal de GR para refrescar el recibo
     const modalGREl = document.getElementById('modalGuiaRemision');
     if (modalGREl) {
         modalGREl.addEventListener('hidden.bs.modal', function () {
@@ -5593,11 +5431,11 @@ $totalPages = $totalPagesOriginal;
         };
     }
 
-    // Regenera el asiento con los valores actuales de la factura (debounced para no spamear).
+    // Regenera el asiento con los valores actuales del recibo (debounced para no spamear).
     // Se llama desde calcTotales() cada vez que cambian productos, precios o cantidades.
     window.fvDebouncedRecalcularAsiento = debounce(function() {
         window.ASIENTO_MANUAL = false;
-        window.fvCargarAsiento(window.FV_ID_ACTIVO || 0, false, true);
+        window.fvCargarAsiento(window.RV_ID_ACTIVO || 0, false, true);
     }, 600);
 
     window.fvAgregarLineaAsiento = function(idCuenta = '', codigo = '', nombre = '', debe = 0, haber = 0, referencia = '') {
@@ -5619,7 +5457,7 @@ $totalPages = $totalPagesOriginal;
             </td>
             <td class="align-middle p-0"><input type="number" step="0.01" class="form-control text-end border-0 bg-transparent fw-medium input-debe text-primary" placeholder="0.00" value="${parseFloat(debe || 0).toFixed(2) === '0.00' ? '' : parseFloat(debe || 0).toFixed(2)}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
             <td class="align-middle p-0"><input type="number" step="0.01" class="form-control text-end border-0 bg-transparent fw-medium input-haber text-primary" placeholder="0.00" value="${parseFloat(haber || 0).toFixed(2) === '0.00' ? '' : parseFloat(haber || 0).toFixed(2)}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
-            <td class="align-middle p-0"><input type="text" class="form-control border-0 bg-transparent input-referencia text-muted fst-italic" placeholder="Ej: Factura # 001-001-000000001" value="${referencia}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
+            <td class="align-middle p-0"><input type="text" class="form-control border-0 bg-transparent input-referencia text-muted fst-italic" placeholder="Ej: Recibo # 001-001-000000001" value="${referencia}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
             <td class="text-center p-0 align-middle" style="width: 40px;">
                 <button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="this.closest('tr').remove(); window.ASIENTO_MANUAL = true; window.fvRecalcularTotalesAsiento();" title="Eliminar línea">
                     <i class="bi bi-trash3 fs-6"></i>
@@ -5753,11 +5591,11 @@ $totalPages = $totalPagesOriginal;
         if (!tbody) return;
 
         // Si ya está marcado como manual por edición del usuario, respetar y no sobreescribir.
-        // forceRecalculate=true se usa cuando cambian valores de la factura: siempre regenerar.
+        // forceRecalculate=true se usa cuando cambian valores del recibo: siempre regenerar.
         if (window.ASIENTO_MANUAL && !forceRecalculate) return;
 
         try {
-            // Hot values de la factura para propuesta en caliente
+            // Hot values del recibo para propuesta en caliente
             const subtotal = parseFloat(document.getElementById('m-lbl-subtotal')?.textContent) || 0;
             const desc = parseFloat(document.getElementById('m-lbl-descuento')?.textContent) || 0;
             const total = parseFloat(document.getElementById('m-lbl-total')?.textContent) || 0;
@@ -5842,7 +5680,7 @@ $totalPages = $totalPagesOriginal;
     // ─── Pestaña Pagos / Cobros ────────────────────────────────────────────────
     let _fvIngresoDeps        = null;
     let _fvIngresoDepsCargas  = false;
-    let _fvSaldoPendiente     = 0;          // saldo disponible de la factura activa
+    let _fvSaldoPendiente     = 0;          // saldo disponible del recibo activa
     const _fvAjaxHeaders = { 'X-Requested-With': 'XMLHttpRequest' };
 
     function _fvSetTarjetas(totalFact, totalCob, totalRet, totalNC, saldo) {
@@ -5854,7 +5692,7 @@ $totalPages = $totalPagesOriginal;
     }
 
     async function fvCargarCobrosTab() {
-        const idFact = parseInt(FV_ID_ACTIVO) || 0;
+        const idFact = parseInt(RV_ID_ACTIVO) || 0;
 
         const alertaNueva  = document.getElementById('fvPagoAlertaNueva');
         const alertaPagada = document.getElementById('fvPagoAlertaPagada');
@@ -5872,7 +5710,7 @@ $totalPages = $totalPagesOriginal;
         if (!idFact) {
             _fvSetTarjetas(0, 0, 0, 0, 0);
             tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">'
-                + 'Guarda la factura primero para registrar cobros.</td></tr>';
+                + 'Guarda el recibo primero para registrar cobros.</td></tr>';
             return;
         }
 
@@ -6082,7 +5920,7 @@ $totalPages = $totalPagesOriginal;
                     });
                 } else {
                     tbodyRet.innerHTML = '<tr><td colspan="4" class="text-center py-5 text-muted">'
-                        + '<i class="bi bi-info-circle me-1"></i> No se han encontrado retenciones para esta factura.</td></tr>';
+                        + '<i class="bi bi-info-circle me-1"></i> No se han encontrado retenciones para este recibo.</td></tr>';
                 }
             }
 
@@ -6093,10 +5931,26 @@ $totalPages = $totalPagesOriginal;
             _fvSetTarjetas(totalFactura, totalCobrado, totalRetenciones, totalNC, saldo);
 
             // Panel derecho
-            if (saldo < 0.01) {
+            const esFinalRecibo = (RV_ESTADO_ACTIVO === 'facturado' || RV_ESTADO_ACTIVO === 'anulado');
+            const alertaBloq = document.getElementById('fvPagoAlertaBloqueado');
+            const alertaBloqTxt = document.getElementById('fvPagoAlertaBloqueadoTxt');
+
+            if (esFinalRecibo) {
+                // Recibo sin validez (facturado/anulado): no se permiten cobros.
+                alertaPagada.classList.add('d-none');
+                cardReg.classList.add('d-none');
+                if (alertaBloq) {
+                    if (alertaBloqTxt) alertaBloqTxt.textContent = (RV_ESTADO_ACTIVO === 'facturado')
+                        ? 'Este recibo fue facturado: los cobros se gestionan en la factura generada.'
+                        : 'Este recibo está anulado: no admite cobros.';
+                    alertaBloq.classList.remove('d-none');
+                }
+            } else if (saldo < 0.01) {
+                if (alertaBloq) alertaBloq.classList.add('d-none');
                 alertaPagada.classList.remove('d-none');
                 cardReg.classList.add('d-none');
             } else {
+                if (alertaBloq) alertaBloq.classList.add('d-none');
                 alertaPagada.classList.add('d-none');
                 cardReg.classList.remove('d-none');
                 const elMonto = document.getElementById('fvPagoMonto');
@@ -6109,7 +5963,7 @@ $totalPages = $totalPagesOriginal;
                     const n = (jCob.factura.establecimiento || '') + '-'
                             + (jCob.factura.punto_emision   || '') + '-'
                             + (jCob.factura.secuencial      || '');
-                    elObs.value = `Cobro de factura ${n}`;
+                    elObs.value = `Cobro de recibo ${n}`;
                 }
             }
         } catch (err) {
@@ -6147,6 +6001,10 @@ $totalPages = $totalPagesOriginal;
 
     // Decide el flujo del botón según el tipo de forma de cobro seleccionada
     window.fvAccionCobro = function() {
+        if (RV_ESTADO_ACTIVO === 'facturado' || RV_ESTADO_ACTIVO === 'anulado') {
+            Swal.fire('No permitido', 'Este recibo está ' + RV_ESTADO_ACTIVO + '; no admite cobros.', 'info');
+            return;
+        }
         const sel = document.getElementById('fvPagoFormaCobro');
         const fp = (_fvIngresoDeps?.formas_cobro || []).find(x => x.id == (sel ? sel.value : ''));
         const tipo = fp ? (fp.tipo || '').toUpperCase() : '';
@@ -6186,7 +6044,7 @@ $totalPages = $totalPagesOriginal;
     }
 
     async function fvRegistrarCobro() {
-        const idFact = parseInt(FV_ID_ACTIVO) || 0;
+        const idFact = parseInt(RV_ID_ACTIVO) || 0;
         if (!idFact) return;
 
         const btn = document.getElementById('fvPagoBtnRegistrar');
@@ -6238,7 +6096,7 @@ $totalPages = $totalPagesOriginal;
             if (res.ok) {
                 Swal.fire({ icon: 'success', title: 'Éxito', text: res.msg, timer: 2000, showConfirmButton: false });
                 fvCargarCobrosTab();
-                if (typeof fetchSearchFn === 'function') fetchSearchFn(window.FV_currentPage || 1);
+                if (typeof fetchSearchFn === 'function') fetchSearchFn(window.RV_currentPage || 1);
             } else {
                 throw new Error(res.mensaje || res.error || 'Error desconocido.');
             }
@@ -6255,189 +6113,20 @@ $totalPages = $totalPagesOriginal;
     });
 
     document.getElementById('tab-fv-asiento-btn')?.addEventListener('shown.bs.tab', function() {
-        fvCargarAsiento(FV_ID_ACTIVO);
+        fvCargarAsiento(RV_ID_ACTIVO);
     });
 
 </script>
-<?php 
-$permNCRespaldo = $perm;
-$perm = $permNC;
-include_once MVC_APP . '/views/modulos/notas_credito/modal_nc.php'; 
-
-$perm = $permGR;
-include_once MVC_APP . '/views/modulos/guias_remision/modal_gr.php';
-// Re-incluir modal de transportistas ya que GR lo necesita
-include_once MVC_APP . '/views/modulos/transportistas/modal_transportista.php';
-
-$perm = $permNCRespaldo;
-?>
-<script src="<?= BASE_URL ?>/js/modulos/transportistas_modal.js?v=<?= time() ?>"></script>
-<script src="<?= BASE_URL ?>/js/modulos/guias_remision_modal.js?v=<?= time() ?>"></script>
-<script src="<?= BASE_URL ?>/js/modulos/notas_credito.js?v=<?= time() ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/clientes_modal.js?v=<?= time() ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/productos_modal.js?v=<?= time() ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/categorias_modal.js?v=<?= time() ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/marcas_modal.js?v=<?= time() ?>"></script>
 <script src="<?= BASE_URL ?>/js/modulos/unidades_medida_modal.js?v=<?= time() ?>"></script>
 <script>
-// ── Descargar XML Original de Factura de Venta (detalle_xml de ventas_cabecera) ──
-</script>
-
-<!-- Modal Enviar WhatsApp -->
-<div class="modal fade" id="modalEnviarWhatsappFactura" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header border-bottom-0 pb-0">
-                <h5 class="modal-title fw-bold"><i class="bi bi-whatsapp text-success me-2"></i>Enviar Factura por WhatsApp</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form id="formEnviarWhatsappFactura">
-                <div class="modal-body pt-3">
-                    <input type="hidden" name="id_factura" id="waIdFactura">
-                    
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <label class="form-label small fw-bold mb-0">Plantilla de WhatsApp <span class="text-danger">*</span></label>
-                            <i class="bi bi-star text-muted btn-favorito" role="button" title="Guardar favorito" data-modulo="factura_venta" data-campo="plantilla_whatsapp" data-target="#waSelectPlantilla"></i>
-                        </div>
-                        <select name="id_plantilla" id="waSelectPlantilla" class="form-select form-select-sm" required>
-                            <option value="">Cargando plantillas...</option>
-                        </select>
-                        <div class="form-text">Solo se muestran plantillas aprobadas por Meta.</div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold">Teléfono del Cliente <span class="text-danger">*</span></label>
-                        <div class="input-group input-group-sm">
-                            <span class="input-group-text"><i class="bi bi-telephone"></i></span>
-                            <input type="text" name="telefono" id="waTelefonoCliente" class="form-control" placeholder="Ej: 59398000000" required>
-                        </div>
-                        <div class="form-text">Código de país + número (sin +). Si está vacío, ingresa el número.</div>
-                    </div>
-                </div>
-                <div class="modal-footer bg-light border-top-0 rounded-bottom-3">
-                    <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success btn-sm px-4" id="btnEnviarWhatsappFactura">
-                        <i class="bi bi-send me-1"></i> Enviar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    // Manejador del formulario
-    const formWa = document.getElementById('formEnviarWhatsappFactura');
-    if (formWa) {
-        formWa.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const btn = document.getElementById('btnEnviarWhatsappFactura');
-            const originalHtml = btn.innerHTML;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Enviando...';
-            btn.disabled = true;
-
-            fetch(`${B_URL}/${RUTA_MODULO}/enviarWhatsappAjax`, {
-                method: 'POST',
-                body: new FormData(formWa),
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.ok) {
-                    Swal.fire('¡Enviado!', data.mensaje, 'success');
-                    bootstrap.Modal.getInstance(document.getElementById('modalEnviarWhatsappFactura')).hide();
-                } else {
-                    Swal.fire('Error', data.error || 'Ocurrió un error al enviar por WhatsApp.', 'error');
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                Swal.fire('Error', 'Error de red al enviar el mensaje.', 'error');
-            })
-            .finally(() => {
-                btn.innerHTML = originalHtml;
-                btn.disabled = false;
-            });
-        });
-    }
-});
-
-function FV_abrirModalWhatsapp() {
-    const idFactura = parseInt(FV_ID_ACTIVO) || 0;
-    if (!idFactura) {
-        Swal.fire('Atención', 'No hay una factura seleccionada.', 'warning');
-        return;
-    }
-
-    const select = document.getElementById('waSelectPlantilla');
-    select.innerHTML = '<option value="">Cargando plantillas...</option>';
-
-    fetch(`${B_URL}/${RUTA_MODULO}/getPlantillasWhatsappAjax?id_factura=${idFactura}`, {
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.ok) {
-            if (data.configurado === false) {
-                Swal.fire({
-                    title: '<i class="bi bi-whatsapp text-success fs-1"></i><br>Activa WhatsApp API',
-                    html: `Parece que aún no tienes configurado el servicio oficial de <b>WhatsApp Business API</b> en tu cuenta.<br><br>
-                           Al activarlo podrás enviar facturas en PDF y notificaciones automáticas a tus clientes con un solo clic.<br><br>
-                           <b>¿Te gustaría activar este servicio?</b>`,
-                    showCancelButton: true,
-                    confirmButtonText: 'Sí, quiero activarlo',
-                    cancelButtonText: 'Más tarde',
-                    confirmButtonColor: '#25D366'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        Swal.fire('¡Excelente decisión!', 'Por favor comunícate con nuestro equipo de soporte técnico para iniciar el proceso de activación de WhatsApp Oficial para tu empresa.', 'info');
-                    }
-                });
-                return;
-            }
-
-            select.innerHTML = '<option value="">-- Seleccione una plantilla --</option>';
-            data.plantillas.forEach(p => {
-                select.innerHTML += `<option value="${p.id}">${p.nombre} (${p.idioma})</option>`;
-            });
-
-            // Seleccionar favorito si existe, o el default
-            if (typeof APP_FAVORITOS !== 'undefined' && APP_FAVORITOS['plantilla_whatsapp']) {
-                select.value = APP_FAVORITOS['plantilla_whatsapp'];
-            } else if (data.id_plantilla_default) {
-                select.value = data.id_plantilla_default;
-            }
-
-            // Actualizar estado visual de la estrella si existe
-            const estrella = document.querySelector('.btn-favorito[data-campo="plantilla_whatsapp"]');
-            if (estrella && typeof marcarEstrella === 'function') {
-                marcarEstrella(estrella, select.value == (APP_FAVORITOS?.plantilla_whatsapp || ''));
-            }
-
-            document.getElementById('waTelefonoCliente').value = data.telefono_cliente || '593';
-
-            document.getElementById('waIdFactura').value = idFactura;
-            const modal = new bootstrap.Modal(document.getElementById('modalEnviarWhatsappFactura'));
-            modal.show();
-
-        } else {
-            select.innerHTML = `<option value="">Error: ${data.error}</option>`;
-            Swal.fire('Error', data.error, 'error');
-        }
-    })
-    .catch(err => {
-        console.error(err);
-        select.innerHTML = `<option value="">Error de red</option>`;
-        Swal.fire('Error de Red', 'Hubo un problema de conexión al cargar las plantillas.', 'error');
-    });
-}
-
 // ─── PAGO CON TARJETA (envío por correo al cliente) ─────────────────────────
 
 window.fvEnviarCobroTarjeta = async function() {
-    var idFactura = parseInt(FV_ID_ACTIVO) || 0;
+    var idFactura = parseInt(RV_ID_ACTIVO) || 0;
     if (idFactura <= 0) return;
 
     // Forma de cobro (tipo TARJETA) y monto a cobrar
@@ -6466,7 +6155,7 @@ window.fvEnviarCobroTarjeta = async function() {
     // Modal de confirmación con correo editable
     var result = await Swal.fire({
         title: '<i class="bi bi-credit-card text-primary me-2"></i>Enviar cobro con tarjeta',
-        html: '<p class="text-muted small mb-3">Se enviará al cliente un enlace para pagar <strong>$' + monto.toFixed(2) + '</strong> con tarjeta de forma segura, junto con el PDF de la factura.</p>'
+        html: '<p class="text-muted small mb-3">Se enviará al cliente un enlace para pagar <strong>$' + monto.toFixed(2) + '</strong> con tarjeta de forma segura, junto con el PDF del recibo.</p>'
             + '<label class="form-label small fw-bold d-block text-start mb-1">Correo del cliente</label>'
             + '<input id="swal-correo-tarjeta" type="email" class="swal2-input mx-0 w-100" style="max-width:100%;font-size:.9rem;" placeholder="correo@cliente.com" value="' + correoActual + '">',
         showCancelButton: true,
@@ -6536,7 +6225,7 @@ window.fvReversarPagoTarjeta = function(ctid) {
     Swal.fire({
         icon: 'warning',
         title: '¿Reversar pago con tarjeta?',
-        html: 'Se solicitará a <strong>Payphone</strong> la devolución del dinero al cliente y se <strong>anulará el cobro</strong>. La factura quedará pendiente de pago.<br><br>'
+        html: 'Se solicitará a <strong>Payphone</strong> la devolución del dinero al cliente y se <strong>anulará el cobro</strong>. El recibo quedará pendiente de pago.<br><br>'
             + '<span class="text-muted small">Recuerda: Payphone solo permite reversos el mismo día antes de las 20:00.</span>',
         showCancelButton: true,
         confirmButtonText: '<i class="bi bi-arrow-counterclockwise me-1"></i>Sí, reversar',
@@ -6570,7 +6259,7 @@ window.fvReversarPagoTarjeta = function(ctid) {
                     target: document.getElementById('modalNuevaFactura')
                 });
                 fvCargarCobrosTab();
-                if (typeof fetchSearchFn === 'function') fetchSearchFn(window.FV_currentPage || 1);
+                if (typeof fetchSearchFn === 'function') fetchSearchFn(window.RV_currentPage || 1);
             })
             .catch(function() {
                 Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.', target: document.getElementById('modalNuevaFactura') });

@@ -78,6 +78,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 { key: 'vendedor',   label: 'Vendedor',          icon: 'bi-person-badge',   type: 'text' },
                                 { key: 'estado',     label: 'Estado',            icon: 'bi-flag',           type: 'select', options: [
                                     { v: 'Emitida',   l: 'Emitida' },
+                                    { v: 'Borrador',  l: 'Borrador' },
                                     { v: 'Entregada', l: 'Entregada' },
                                     { v: 'Anulada',   l: 'Anulada' },
                                 ]},
@@ -140,13 +141,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <?php else: ?>
                             <?php foreach ($rows as $r): 
                                 $dataJson = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
-                                $statusBadge = '';
-                                if ($r['estado'] === 'Emitida') {
-                                    $statusBadge = '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Emitida</span>';
-                                } elseif ($r['estado'] === 'Entregada') {
-                                    $statusBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Entregada</span>';
-                                } else {
-                                    $statusBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulada</span>';
+                                switch ($r['estado'] ?? 'Borrador') {
+                                    case 'Entregada':
+                                        $statusBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Entregada</span>';
+                                        break;
+                                    case 'Anulada':
+                                        $statusBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulada</span>';
+                                        break;
+                                    case 'Emitida': // legado
+                                        $statusBadge = '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Emitida</span>';
+                                        break;
+                                    default:
+                                        $statusBadge = '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Borrador</span>';
                                 }
                             ?>
                                 <tr class="consignacion-row" role="button" tabindex="0" data-row="<?= $dataJson ?>" onclick="abrirModalConsignacionVer(this)">

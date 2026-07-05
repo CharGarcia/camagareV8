@@ -203,6 +203,16 @@ class IngresoRepository extends BaseRepository
                       $excluirSql
                     GROUP BY id_referencia_documento
                 ),
+                cobrado_rec AS (
+                    SELECT id_referencia_documento, SUM(monto_cobrado) as total_cobrado
+                    FROM ingresos_detalle d
+                    INNER JOIN ingresos_cabecera i ON d.id_ingreso = i.id
+                    WHERE d.tipo_documento = 'RECIBO'
+                      AND i.estado != 'anulado'
+                      AND i.eliminado = FALSE
+                      $excluirSql
+                    GROUP BY id_referencia_documento
+                ),
                 retenido_fact AS (
                     SELECT id_venta, SUM(total_renta + total_iva + total_isd) AS total_retenido
                     FROM retencion_venta_cabecera
@@ -288,6 +298,25 @@ class IngresoRepository extends BaseRepository
                       AND s.id_empresa = :id_empresa
                       AND s.eliminado = FALSE
                       AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) > 0.01
+
+                    UNION ALL
+
+                    SELECT 'RECIBO'::varchar AS tipo_documento,
+                           r.id,
+                           CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial) AS numero_documento,
+                           r.fecha_emision,
+                           r.importe_total,
+                           COALESCE(cr.total_cobrado, 0) AS monto_cobrado,
+                           0 AS monto_retenido,
+                           (r.importe_total - COALESCE(cr.total_cobrado, 0)) AS saldo_pendiente
+                    FROM recibos_venta_cabecera r
+                    LEFT JOIN cobrado_rec cr ON r.id = cr.id_referencia_documento
+                    WHERE r.id_cliente = :id_cliente
+                      AND r.id_empresa = :id_empresa
+                      AND r.estado NOT IN ('anulado','facturado')
+                      AND r.eliminado = FALSE
+                      AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                      AND (r.importe_total - COALESCE(cr.total_cobrado, 0)) > 0.01
                 ) docs
                 ORDER BY fecha_emision ASC, id ASC";
 
@@ -492,6 +521,7 @@ class IngresoRepository extends BaseRepository
         $params     = [':id_empresa' => $idEmpresa];
         $excluirSql = '';
         $filtroBusq = '';
+        $filtroBusqRec = '';
 
         if ($excluirIngresoId !== null) {
             $excluirSql = " AND i.id <> :excluir";
@@ -501,6 +531,11 @@ class IngresoRepository extends BaseRepository
         if ($q !== '') {
             $filtroBusq = " AND (
                 CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) ILIKE :q
+                OR c.nombre          ILIKE :q
+                OR c.identificacion  ILIKE :q
+            )";
+            $filtroBusqRec = " AND (
+                CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial) ILIKE :q
                 OR c.nombre          ILIKE :q
                 OR c.identificacion  ILIKE :q
             )";
@@ -525,6 +560,16 @@ class IngresoRepository extends BaseRepository
                     FROM ingresos_detalle d
                     INNER JOIN ingresos_cabecera i ON d.id_ingreso = i.id
                     WHERE d.tipo_documento = 'FACTURA'
+                      AND i.estado != 'anulado'
+                      AND i.eliminado = FALSE
+                      $excluirSql
+                    GROUP BY id_referencia_documento
+                ),
+                cobrado_rec AS (
+                    SELECT id_referencia_documento, SUM(monto_cobrado) AS total_cobrado
+                    FROM ingresos_detalle d
+                    INNER JOIN ingresos_cabecera i ON d.id_ingreso = i.id
+                    WHERE d.tipo_documento = 'RECIBO'
                       AND i.estado != 'anulado'
                       AND i.eliminado = FALSE
                       $excluirSql
@@ -629,6 +674,31 @@ class IngresoRepository extends BaseRepository
                       AND s.eliminado = FALSE
                       AND (s.saldo_inicial - COALESCE(csi.total_cobrado, 0) - COALESCE(rsi.total_retenido, 0)) > 0.01
                       $filtroBusqCxc
+
+                    UNION ALL
+
+                    -- Recibos de venta pendientes (saldo = total - cobros)
+                    SELECT 'RECIBO'::varchar AS tipo_documento,
+                           r.id,
+                           CONCAT(r.establecimiento,'-',r.punto_emision,'-',r.secuencial) AS numero_documento,
+                           r.fecha_emision,
+                           r.dias_credito,
+                           r.importe_total,
+                           COALESCE(cr.total_cobrado, 0) AS monto_cobrado,
+                           0 AS monto_retenido,
+                           (r.importe_total - COALESCE(cr.total_cobrado, 0)) AS saldo_pendiente,
+                           c.id             AS id_cliente,
+                           c.nombre         AS cliente_nombre,
+                           c.identificacion AS cliente_ruc
+                    FROM recibos_venta_cabecera r
+                    INNER JOIN clientes c ON r.id_cliente = c.id
+                    LEFT  JOIN cobrado_rec cr ON r.id = cr.id_referencia_documento
+                    WHERE r.id_empresa = :id_empresa
+                      AND r.estado NOT IN ('anulado','facturado')
+                      AND r.eliminado = FALSE
+                      AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                      AND (r.importe_total - COALESCE(cr.total_cobrado, 0)) > 0.01
+                      $filtroBusqRec
                 ) docs
                 ORDER BY cliente_nombre ASC, fecha_emision ASC, id ASC
                 LIMIT 301";

@@ -63,7 +63,7 @@ class InventarioService
      * Solo aplica a productos inventariables.
      * Devuelve array con id_inventario_kardex por posición de ítem.
      */
-    public function procesarSalidaPorVenta(int $idVenta, array $detalles, int $idEstablecimiento, int $idEmpresa, int $idUsuario, string $obsPrefix = '', bool $esEdicion = false): array
+    public function procesarSalidaPorVenta(int $idVenta, array $detalles, int $idEstablecimiento, int $idEmpresa, int $idUsuario, string $obsPrefix = '', bool $esEdicion = false, string $refTipo = 'factura_venta'): array
     {
         $estConfig = $this->getEmpresaRepository()->getEstablecimientoConfig($idEstablecimiento);
         
@@ -146,8 +146,9 @@ class InventarioService
                         'nup'       => !empty($d['nup']) ? $d['nup'] : null,
                         'id_medida' => !empty($d['id_medida']) ? (int)$d['id_medida'] : (!empty($prodData['id_medida']) ? (int)$prodData['id_medida'] : null),
                         'obs'       => "Salida por $obsText",
+                        'referencia_tipo' => $refTipo,
                         'exclude_id'   => $esEdicion ? $idVenta : null,
-                        'exclude_tipo' => $esEdicion ? 'factura_venta' : null
+                        'exclude_tipo' => $esEdicion ? $refTipo : null
                     ]
                 );
             }
@@ -175,8 +176,9 @@ class InventarioService
                             'id_medida' => !empty($comp['id_medida']) ? (int)$comp['id_medida'] : null,
                             'componente_de' => $nombrePadre,
                             'obs'       => "Salida componente de '$nombrePadre' (#$idProducto) vía $obsText",
+                            'referencia_tipo' => $refTipo,
                             'exclude_id'   => $esEdicion ? $idVenta : null,
-                            'exclude_tipo' => $esEdicion ? 'factura_venta' : null
+                            'exclude_tipo' => $esEdicion ? $refTipo : null
                         ]
                     );
                 }
@@ -222,7 +224,7 @@ class InventarioService
             'id_producto'     => $idProducto,
             'id_bodega'       => $idBodega,
             'tipo_movimiento' => 'salida',
-            'referencia_tipo' => 'factura_venta',
+            'referencia_tipo' => $extra['referencia_tipo'] ?? 'factura_venta',
             'referencia_id'   => $idVenta,
             'cantidad'        => -$cantidad,
             'costo_unitario'  => $costoUnitario,
@@ -611,6 +613,7 @@ class InventarioService
             // Caso especial: Si el documento de origen ya está eliminado, permitimos la limpieza manual del inventario
             $tablaRef = match ($tipo) {
                 'factura_venta', 'nota_debito' => 'ventas_cabecera',
+                'recibo_venta' => 'recibos_venta_cabecera',
                 'compra', 'nota_credito_compra' => 'compras_cabecera',
                 'nota_credito' => 'ventas_notas_credito',
                 'ajuste_inventario' => 'inventario_ajustes',

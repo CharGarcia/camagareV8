@@ -95,6 +95,7 @@ class ConfiguracionContableController extends BaseModuloController
         $tiposTextos = [
             'ventas_factura' => 'Ventas con Factura',
             'ventas_recibo' => 'Ventas con Recibo',
+            'consignacion_venta' => 'Consignaciones en Ventas',
             'adquisiciones_compras' => 'Adquisiciones de Compras/Servicios',
             'retenciones_venta' => 'Retenciones en Venta',
             'retenciones_compra' => 'Retenciones en Compra',
