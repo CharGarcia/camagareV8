@@ -52,6 +52,14 @@ class AtsExcelService
         $hojaRet->setTitle('Retenciones');
         $this->llenarRetenciones($hojaRet, $datos['retenciones']);
 
+        $hojaVentas = $book->createSheet();
+        $hojaVentas->setTitle('Ventas');
+        $this->llenarVentas($hojaVentas, $datos['ventas'] ?? []);
+
+        $hojaAnul = $book->createSheet();
+        $hojaAnul->setTitle('Anulados');
+        $this->llenarAnulados($hojaAnul, $datos['anulados'] ?? []);
+
         $hojaResumen = $book->createSheet();
         $hojaResumen->setTitle('Resumen');
         $this->llenarResumen($hojaResumen, $datos);
@@ -175,6 +183,81 @@ class AtsExcelService
         $h->freezePane('A2');
     }
 
+    // ── Hoja Ventas ──────────────────────────────────────────────────────────
+
+    private function llenarVentas(Worksheet $h, array $ventas): void
+    {
+        $cols = [
+            '#', 'Tipo ID', 'Identificación', 'Cliente', 'Parte Rel.', 'Tipo Comp.', 'Emisión',
+            'Nº Comprob.', 'Base No Obj. IVA', 'Base 0%', 'Base Gravada', 'Monto IVA', 'Monto ICE',
+            'IVA Retenido', 'Renta Retenida',
+        ];
+        $this->cabecera($h, $cols);
+
+        $r = 2;
+        $i = 0;
+        foreach ($ventas as $v) {
+            $i++;
+            $h->setCellValue("A{$r}", $i);
+            $this->texto($h, "B{$r}", $v['tpIdCliente']);
+            $this->texto($h, "C{$r}", $v['idCliente']);
+            $h->setCellValue("D{$r}", $v['cliente'] ?? '');
+            $h->setCellValue("E{$r}", $v['parteRel']);
+            $this->texto($h, "F{$r}", $v['tipoComprobante']);
+            $h->setCellValue("G{$r}", $v['tipoEm'] === 'E' ? 'Electrónica' : 'Física');
+            $h->setCellValue("H{$r}", (int) $v['numeroComprobantes']);
+            $this->dinero($h, "I{$r}", $v['baseNoGraIva']);
+            $this->dinero($h, "J{$r}", $v['baseImponible']);
+            $this->dinero($h, "K{$r}", $v['baseImpGrav']);
+            $this->dinero($h, "L{$r}", $v['montoIva']);
+            $this->dinero($h, "M{$r}", $v['montoIce']);
+            $this->dinero($h, "N{$r}", $v['valorRetIva']);
+            $this->dinero($h, "O{$r}", $v['valorRetRenta']);
+            $r++;
+        }
+        if ($i > 0) {
+            $fin = $r - 1;
+            $h->setCellValue("A{$r}", 'TOTALES');
+            foreach (['I','J','K','L','M','N','O'] as $c) {
+                $h->setCellValue("{$c}{$r}", "=SUM({$c}2:{$c}{$fin})");
+                $h->getStyle("{$c}{$r}")->getNumberFormat()->setFormatCode(self::MONEY);
+            }
+            $h->getStyle("A{$r}:O{$r}")->getFont()->setBold(true);
+            $h->getStyle("A{$r}:O{$r}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB(self::GRIS);
+        } else {
+            $h->setCellValue('A2', 'Sin ventas autorizadas en el período.');
+        }
+        $this->autosize($h, $cols);
+        $h->freezePane('A2');
+    }
+
+    // ── Hoja Anulados ────────────────────────────────────────────────────────
+
+    private function llenarAnulados(Worksheet $h, array $anulados): void
+    {
+        $cols = ['#', 'Tipo Comp.', 'Establecimiento', 'Punto Emisión', 'Secuencial Desde', 'Secuencial Hasta', 'Autorización'];
+        $this->cabecera($h, $cols);
+
+        $r = 2;
+        $i = 0;
+        foreach ($anulados as $a) {
+            $i++;
+            $h->setCellValue("A{$r}", $i);
+            $this->texto($h, "B{$r}", $a['tipoComprobante']);
+            $this->texto($h, "C{$r}", $a['establecimiento']);
+            $this->texto($h, "D{$r}", $a['puntoEmision']);
+            $this->texto($h, "E{$r}", $a['secuencialInicio']);
+            $this->texto($h, "F{$r}", $a['secuencialFin']);
+            $this->texto($h, "G{$r}", $a['autorizacion']);
+            $r++;
+        }
+        if ($i === 0) {
+            $h->setCellValue('A2', 'Sin comprobantes anulados en el período.');
+        }
+        $this->autosize($h, $cols);
+        $h->freezePane('A2');
+    }
+
     // ── Hoja Resumen ─────────────────────────────────────────────────────────
 
     private function llenarResumen(Worksheet $h, array $datos): void
@@ -250,6 +333,48 @@ class AtsExcelService
                 $h->getStyle("B{$r}")->getNumberFormat()->setFormatCode(self::MONEY);
             } else {
                 $h->setCellValue("B{$r}", $v);
+            }
+            $r++;
+        }
+
+        // Totales de ventas
+        $ventas = $datos['ventas'] ?? [];
+        $anulados = $datos['anulados'] ?? [];
+        $vTot = ['b0' => 0.0, 'grav' => 0.0, 'noGra' => 0.0, 'iva' => 0.0, 'ice' => 0.0, 'retIva' => 0.0, 'retRenta' => 0.0, 'comp' => 0];
+        foreach ($ventas as $v) {
+            $vTot['b0']    += (float) $v['baseImponible'];
+            $vTot['grav']  += (float) $v['baseImpGrav'];
+            $vTot['noGra'] += (float) $v['baseNoGraIva'];
+            $vTot['iva']   += (float) $v['montoIva'];
+            $vTot['ice']   += (float) $v['montoIce'];
+            $vTot['retIva']   += (float) $v['valorRetIva'];
+            $vTot['retRenta'] += (float) $v['valorRetRenta'];
+            $vTot['comp']  += (int) $v['numeroComprobantes'];
+        }
+
+        $r += 1;
+        $h->setCellValue("A{$r}", 'TOTALES DE VENTAS');
+        $h->getStyle("A{$r}")->getFont()->setBold(true);
+        $h->getStyle("A{$r}:B{$r}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB(self::GRIS);
+        $r++;
+        $totVentas = [
+            ['Nº de clientes (registros de venta)', count($ventas), false],
+            ['Nº de comprobantes emitidos', $vTot['comp'], false],
+            ['Base No Objeto de IVA', $vTot['noGra'], true],
+            ['Base Tarifa 0%', $vTot['b0'], true],
+            ['Base Gravada (tarifa ≠ 0%)', $vTot['grav'], true],
+            ['Monto IVA', $vTot['iva'], true],
+            ['Monto ICE', $vTot['ice'], true],
+            ['IVA que le retuvieron', $vTot['retIva'], true],
+            ['Renta que le retuvieron', $vTot['retRenta'], true],
+            ['Total Ventas (totalVentas del ATS)', $vTot['noGra'] + $vTot['b0'] + $vTot['grav'], true],
+            ['Comprobantes anulados', count($anulados), false],
+        ];
+        foreach ($totVentas as [$k, $v, $money]) {
+            $h->setCellValue("A{$r}", $k);
+            $h->setCellValue("B{$r}", $v);
+            if ($money) {
+                $h->getStyle("B{$r}")->getNumberFormat()->setFormatCode(self::MONEY);
             }
             $r++;
         }

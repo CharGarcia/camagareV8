@@ -22,12 +22,20 @@ use DOMElement;
 class XmlAtsService
 {
     /**
-     * @param array $informante Claves: id_informante, razon_social, anio, mes,
-     *                          num_estab_ruc, regimen_microempresa (bool)
-     * @param array $documentos Lista de documentos normalizados (ver AtsService::mapearDocumento)
+     * @param array $informante  Claves: id_informante, razon_social, anio, mes,
+     *                           num_estab_ruc, total_ventas, regimen_microempresa (bool)
+     * @param array $documentos  Compras normalizadas (ver AtsService::mapearDocumento)
+     * @param array $ventas      Ventas agrupadas por cliente (detalleVentas)
+     * @param array $ventasEstab Totales por establecimiento (ventaEst)
+     * @param array $anulados    Comprobantes anulados (detalleAnulados)
      */
-    public function generar(array $informante, array $documentos): string
-    {
+    public function generar(
+        array $informante,
+        array $documentos,
+        array $ventas = [],
+        array $ventasEstab = [],
+        array $anulados = []
+    ): string {
         $dom = new DOMDocument('1.0', 'UTF-8');
         $dom->formatOutput = true;
         // standalone="no" como en el anexo del SRI
@@ -46,6 +54,41 @@ class XmlAtsService
             $iva->appendChild($compras);
         }
 
+        if ($ventas !== []) {
+            $nodo = $dom->createElement('ventas');
+            foreach ($ventas as $v) {
+                $nodo->appendChild($this->buildDetalleVenta($dom, $v));
+            }
+            $iva->appendChild($nodo);
+        }
+
+        if ($ventasEstab !== []) {
+            $nodo = $dom->createElement('ventasEstablecimiento');
+            foreach ($ventasEstab as $e) {
+                $ve = $dom->createElement('ventaEst');
+                $this->add($dom, $ve, 'codEstab', $e['codEstab']);
+                $this->add($dom, $ve, 'ventasEstab', $e['ventasEstab']);
+                $this->add($dom, $ve, 'ivaComp', $e['ivaComp']);
+                $nodo->appendChild($ve);
+            }
+            $iva->appendChild($nodo);
+        }
+
+        if ($anulados !== []) {
+            $nodo = $dom->createElement('anulados');
+            foreach ($anulados as $a) {
+                $da = $dom->createElement('detalleAnulados');
+                $this->add($dom, $da, 'tipoComprobante', $a['tipoComprobante']);
+                $this->add($dom, $da, 'establecimiento', $a['establecimiento']);
+                $this->add($dom, $da, 'puntoEmision', $a['puntoEmision']);
+                $this->add($dom, $da, 'secuencialInicio', $a['secuencialInicio']);
+                $this->add($dom, $da, 'secuencialFin', $a['secuencialFin']);
+                $this->add($dom, $da, 'autorizacion', $a['autorizacion']);
+                $nodo->appendChild($da);
+            }
+            $iva->appendChild($nodo);
+        }
+
         return $dom->saveXML();
     }
 
@@ -62,8 +105,35 @@ class XmlAtsService
             $this->add($dom, $iva, 'regimenMicroempresa', 'SI');
         }
         $this->add($dom, $iva, 'numEstabRuc', $inf['num_estab_ruc']);
-        $this->add($dom, $iva, 'totalVentas', '0.00');
+        $this->add($dom, $iva, 'totalVentas', $inf['total_ventas'] ?? '0.00');
         $this->add($dom, $iva, 'codigoOperativo', 'IVA');
+    }
+
+    // ── detalleVentas ────────────────────────────────────────────────────────
+
+    private function buildDetalleVenta(DOMDocument $dom, array $v): DOMElement
+    {
+        $n = $dom->createElement('detalleVentas');
+
+        $this->add($dom, $n, 'tpIdCliente', $v['tpIdCliente']);
+        $this->add($dom, $n, 'idCliente', $v['idCliente']);
+        $this->add($dom, $n, 'parteRelVtas', $v['parteRel']);
+        if (!empty($v['tipoCliente'])) {
+            $this->add($dom, $n, 'tipoCliente', $v['tipoCliente']);
+            $this->add($dom, $n, 'denoCli', $v['denoCli']);
+        }
+        $this->add($dom, $n, 'tipoComprobante', $v['tipoComprobante']);
+        $this->add($dom, $n, 'tipoEmision', $v['tipoEm']);
+        $this->add($dom, $n, 'numeroComprobantes', $v['numeroComprobantes']);
+        $this->add($dom, $n, 'baseNoGraIva', $v['baseNoGraIva']);
+        $this->add($dom, $n, 'baseImponible', $v['baseImponible']);
+        $this->add($dom, $n, 'baseImpGrav', $v['baseImpGrav']);
+        $this->add($dom, $n, 'montoIva', $v['montoIva']);
+        $this->add($dom, $n, 'montoIce', $v['montoIce']);
+        $this->add($dom, $n, 'valorRetIva', $v['valorRetIva']);
+        $this->add($dom, $n, 'valorRetRenta', $v['valorRetRenta']);
+
+        return $n;
     }
 
     // ── detalleCompras ───────────────────────────────────────────────────────

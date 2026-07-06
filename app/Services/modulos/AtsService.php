@@ -53,7 +53,13 @@ class AtsService
         $infXml     = $datos['informante'];
         $documentos = $datos['documentos'];
 
-        $contenido = $this->xml->generar($infXml, $documentos);
+        $contenido = $this->xml->generar(
+            $infXml,
+            $documentos,
+            $datos['ventas'],
+            $datos['ventas_estab'],
+            $datos['anulados']
+        );
 
         // Validación previa (reglas de la ficha técnica + XSD opcional)
         $validacion = $this->validator->validar($contenido);
@@ -166,24 +172,143 @@ class AtsService
             }
         }
 
+        // ── VENTAS (agrupadas por cliente + tipoComprobante + tipoEmisión) ──────
+        $ventasRaw = $this->repo->getVentas($idEmpresa, $desde, $hasta);
+        $retVenta  = $this->indexarRetVenta($this->repo->getRetencionesVenta($idEmpresa, array_column($ventasRaw, 'id')));
+
+        $grupos = [];
+        $ventasPorEstab = [];
+        $totalVentas = 0.0;
+        foreach ($ventasRaw as $v) {
+            $tpId = str_pad((string) $v['cli_tipo_id'], 2, '0', STR_PAD_LEFT);
+            $idCli = $tpId === '07' ? '9999999999999' : (string) $v['cli_identificacion'];
+            $tipoEm = !empty($v['clave_acceso']) ? 'E' : 'F';
+            $key = $tpId . '|' . $idCli . '|18|' . $tipoEm;
+
+            if (!isset($grupos[$key])) {
+                $grupos[$key] = [
+                    'tpIdCliente' => $tpId,
+                    'idCliente'   => $idCli,
+                    'cliente'     => (string) $v['cli_nombre'],
+                    'parteRel'    => 'NO',
+                    'tipoComprobante' => '18',
+                    'tipoEm'      => $tipoEm,
+                    'numeroComprobantes' => 0,
+                    'baseNoGraIva' => 0.0, 'baseImponible' => 0.0, 'baseImpGrav' => 0.0,
+                    'montoIva' => 0.0, 'montoIce' => 0.0,
+                    'valorRetIva' => 0.0, 'valorRetRenta' => 0.0,
+                ];
+            }
+            $g = &$grupos[$key];
+            $g['numeroComprobantes']++;
+            $g['baseNoGraIva'] += (float) $v['base_no_gra_iva'];
+            $g['baseImponible'] += (float) $v['base_imponible_0'];
+            $g['baseImpGrav']  += (float) $v['base_imponible_grav'];
+            $g['montoIva']     += (float) $v['monto_iva'];
+            $g['montoIce']     += (float) $v['monto_ice'];
+            $g['valorRetIva']  += $retVenta[$v['id']]['iva'] ?? 0.0;
+            $g['valorRetRenta']+= $retVenta[$v['id']]['renta'] ?? 0.0;
+            unset($g);
+
+            $baseVenta = (float) $v['base_no_gra_iva'] + (float) $v['base_imponible_0'] + (float) $v['base_imponible_grav'];
+            $totalVentas += $baseVenta;
+            $estab = str_pad(substr((string) $v['establecimiento'], 0, 3), 3, '0', STR_PAD_LEFT);
+            $ventasPorEstab[$estab] = ($ventasPorEstab[$estab] ?? 0.0) + $baseVenta;
+        }
+
+        $ventas = [];
+        foreach ($grupos as $g) {
+            $ventas[] = [
+                'tpIdCliente'        => $g['tpIdCliente'],
+                'idCliente'          => $g['idCliente'],
+                'cliente'            => $g['cliente'],
+                'parteRel'           => $g['parteRel'],
+                'tipoCliente'        => $g['tpIdCliente'] === '06' ? '01' : null,
+                'denoCli'            => $g['tpIdCliente'] === '06' ? $this->limpiar(mb_strtoupper($g['cliente'], 'UTF-8')) : null,
+                'tipoComprobante'    => $g['tipoComprobante'],
+                'tipoEm'             => $g['tipoEm'],
+                'numeroComprobantes' => (string) $g['numeroComprobantes'],
+                'baseNoGraIva'       => $this->money($g['baseNoGraIva']),
+                'baseImponible'      => $this->money($g['baseImponible']),
+                'baseImpGrav'        => $this->money($g['baseImpGrav']),
+                'montoIva'           => $this->money($g['montoIva']),
+                'montoIce'           => $this->money($g['montoIce']),
+                'valorRetIva'        => $this->money($g['valorRetIva']),
+                'valorRetRenta'      => $this->money($g['valorRetRenta']),
+            ];
+        }
+
+        // ventasEstablecimiento: un registro por establecimiento inscrito en el RUC
+        $codigosEstab = $this->repo->getEstablecimientos($idEmpresa);
+        foreach (array_keys($ventasPorEstab) as $e) {
+            if (!in_array($e, $codigosEstab, true)) {
+                $codigosEstab[] = $e; // establecimiento con ventas pero no listado
+            }
+        }
+        sort($codigosEstab);
+        $ventasEstab = [];
+        foreach ($codigosEstab as $cod) {
+            $ventasEstab[] = [
+                'codEstab'   => str_pad((string) $cod, 3, '0', STR_PAD_LEFT),
+                'ventasEstab'=> $this->money($ventasPorEstab[$cod] ?? 0.0),
+                'ivaComp'    => '0.00',
+            ];
+        }
+
+        // ── ANULADOS ────────────────────────────────────────────────────────────
+        $anulados = [];
+        foreach ($this->repo->getAnulados($idEmpresa, $desde, $hasta) as $a) {
+            $anulados[] = [
+                'tipoComprobante' => (string) $a['tipo_comprobante'],
+                'establecimiento' => str_pad(substr((string) $a['establecimiento'], 0, 3), 3, '0', STR_PAD_LEFT),
+                'puntoEmision'    => str_pad(substr((string) $a['punto_emision'], 0, 3), 3, '0', STR_PAD_LEFT),
+                'secuencialInicio'=> str_pad((string) (int) $a['secuencial'], 9, '0', STR_PAD_LEFT),
+                'secuencialFin'   => str_pad((string) (int) $a['secuencial'], 9, '0', STR_PAD_LEFT),
+                'autorizacion'    => (string) ($a['clave_acceso'] ?: '9999999999'),
+            ];
+        }
+
         $infXml = [
             'id_informante'        => substr((string) $informante['ruc'], 0, 10) . '001',
             'razon_social'         => $this->limpiar(mb_strtoupper((string) $informante['razon_social'], 'UTF-8')),
             'anio'                 => $anio,
             'mes'                  => $mes,
             'num_estab_ruc'        => str_pad((string) max(1, (int) $informante['num_establecimientos']), 3, '0', STR_PAD_LEFT),
+            'total_ventas'         => $this->money($totalVentas),
             'regimen_microempresa' => $semestral,
         ];
 
         return [
-            'ok'          => true,
-            'mes'         => $mes,
-            'anio'        => $anio,
-            'periodo'     => $mes . '/' . $anio,
-            'informante'  => $infXml,
-            'documentos'  => $documentos,
-            'retenciones' => $retenciones,
+            'ok'           => true,
+            'mes'          => $mes,
+            'anio'         => $anio,
+            'periodo'      => $mes . '/' . $anio,
+            'informante'   => $infXml,
+            'documentos'   => $documentos,
+            'retenciones'  => $retenciones,
+            'ventas'       => $ventas,
+            'ventas_estab' => $ventasEstab,
+            'anulados'     => $anulados,
         ];
+    }
+
+    /** Suma retenciones IVA/Renta que el cliente nos practicó, por id_venta. */
+    private function indexarRetVenta(array $filas): array
+    {
+        $idx = [];
+        foreach ($filas as $f) {
+            $id = (int) $f['id_venta'];
+            if (!isset($idx[$id])) {
+                $idx[$id] = ['iva' => 0.0, 'renta' => 0.0];
+            }
+            $cod = strtoupper((string) $f['codigo_impuesto']);
+            if ($cod === '2' || $cod === 'IVA') {
+                $idx[$id]['iva'] += (float) $f['valor_retenido'];
+            } elseif ($cod === '1' || $cod === 'RENTA') {
+                $idx[$id]['renta'] += (float) $f['valor_retenido'];
+            }
+        }
+        return $idx;
     }
 
     /** Devuelve la ruta absoluta de un archivo de salida ya generado (para descarga). */

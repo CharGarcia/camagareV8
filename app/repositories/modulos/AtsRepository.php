@@ -224,4 +224,106 @@ class AtsRepository extends BaseRepository
                 ORDER BY {$columnaFk}, id";
         return $this->query($sql, $params)->fetchAll();
     }
+
+    // ── VENTAS ───────────────────────────────────────────────────────────────
+
+    /**
+     * Ventas (facturas emitidas y autorizadas) del período, por fecha de emisión.
+     * Una fila por factura, con bases IVA/ICE agregadas desde ventas_detalle_impuestos.
+     * El Service las agrupa por cliente + tipoComprobante + tipoEmisión.
+     */
+    public function getVentas(int $idEmpresa, string $desde, string $hasta): array
+    {
+        $sql = "SELECT v.id,
+                       v.establecimiento, v.punto_emision, v.secuencial,
+                       v.clave_acceso, v.importe_total,
+                       c.tipo_id       AS cli_tipo_id,
+                       c.identificacion AS cli_identificacion,
+                       c.nombre        AS cli_nombre,
+                       imp.base_no_gra_iva, imp.base_imponible_0, imp.base_imponible_grav,
+                       imp.monto_iva, imp.monto_ice
+                FROM ventas_cabecera v
+                INNER JOIN clientes c ON c.id = v.id_cliente
+                LEFT  JOIN LATERAL (
+                    SELECT
+                        COALESCE(SUM(CASE WHEN di.codigo_impuesto = '2' AND di.codigo_porcentaje = '6' THEN di.base_imponible END), 0) AS base_no_gra_iva,
+                        COALESCE(SUM(CASE WHEN di.codigo_impuesto = '2' AND di.codigo_porcentaje = '0' THEN di.base_imponible END), 0) AS base_imponible_0,
+                        COALESCE(SUM(CASE WHEN di.codigo_impuesto = '2' AND di.codigo_porcentaje NOT IN ('0','6','7') THEN di.base_imponible END), 0) AS base_imponible_grav,
+                        COALESCE(SUM(CASE WHEN di.codigo_impuesto = '2' AND di.codigo_porcentaje NOT IN ('0','6','7') THEN di.valor END), 0) AS monto_iva,
+                        COALESCE(SUM(CASE WHEN di.codigo_impuesto = '3' THEN di.valor END), 0) AS monto_ice
+                    FROM ventas_detalle d
+                    INNER JOIN ventas_detalle_impuestos di ON di.id_venta_detalle = d.id
+                    WHERE d.id_venta = v.id
+                ) imp ON true
+                WHERE v.id_empresa = :id_empresa
+                  AND v.eliminado = false
+                  AND v.estado = 'autorizado'
+                  AND v.fecha_emision BETWEEN :desde AND :hasta
+                ORDER BY v.id";
+        return $this->query($sql, [
+            ':id_empresa' => $idEmpresa,
+            ':desde'      => $desde,
+            ':hasta'      => $hasta,
+        ])->fetchAll();
+    }
+
+    /**
+     * Retenciones que los clientes nos practicaron, por venta.
+     * @param int[] $idsVenta
+     * @return array Filas (id_venta, codigo_impuesto, valor_retenido)
+     */
+    public function getRetencionesVenta(int $idEmpresa, array $idsVenta): array
+    {
+        $idsVenta = array_values(array_unique(array_map('intval', $idsVenta)));
+        if ($idsVenta === []) {
+            return [];
+        }
+        $place = [];
+        $params = [':id_empresa' => $idEmpresa];
+        foreach ($idsVenta as $i => $idv) {
+            $ph = ":v{$i}";
+            $place[] = $ph;
+            $params[$ph] = $idv;
+        }
+        $inList = implode(',', $place);
+
+        $sql = "SELECT rc.id_venta, rd.codigo_impuesto, rd.valor_retenido
+                FROM retencion_venta_cabecera rc
+                INNER JOIN retencion_venta_detalle rd ON rd.id_retencion = rc.id
+                WHERE rc.id_empresa = :id_empresa
+                  AND rc.eliminado = false
+                  AND rc.id_venta IN ({$inList})";
+        return $this->query($sql, $params)->fetchAll();
+    }
+
+    /** Códigos de establecimiento activos del RUC (para ventasEstablecimiento). */
+    public function getEstablecimientos(int $idEmpresa): array
+    {
+        $sql = "SELECT codigo
+                FROM empresa_establecimiento
+                WHERE id_empresa = :id_empresa AND eliminado = false
+                ORDER BY codigo";
+        return array_column($this->query($sql, [':id_empresa' => $idEmpresa])->fetchAll(), 'codigo');
+    }
+
+    /**
+     * Comprobantes anulados del período (por fecha de emisión).
+     * Por ahora, facturas de venta con estado anulado (tipoComprobante 01).
+     */
+    public function getAnulados(int $idEmpresa, string $desde, string $hasta): array
+    {
+        $sql = "SELECT '01' AS tipo_comprobante,
+                       establecimiento, punto_emision, secuencial, clave_acceso
+                FROM ventas_cabecera
+                WHERE id_empresa = :id_empresa
+                  AND eliminado = false
+                  AND estado IN ('anulado','anulada')
+                  AND fecha_emision BETWEEN :desde AND :hasta
+                ORDER BY establecimiento, punto_emision, secuencial";
+        return $this->query($sql, [
+            ':id_empresa' => $idEmpresa,
+            ':desde'      => $desde,
+            ':hasta'      => $hasta,
+        ])->fetchAll();
+    }
 }

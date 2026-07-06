@@ -40,6 +40,8 @@ class AtsValidatorService
 
         $this->validarInformante($dom, $errores);
         $this->validarCompras($dom, $errores, $advertencias);
+        $this->validarVentas($dom, $errores);
+        $this->validarAnulados($dom, $errores);
         $this->validarConXsd($dom, $errores);
 
         return [
@@ -209,6 +211,79 @@ class AtsValidatorService
             // docModificado obligatorio en notas de crédito/débito
             if (in_array($tipoComp, ['04', '05'], true) && $this->hijo($d, 'docModificado') === null) {
                 $err[] = "{$p}: tipoComprobante {$tipoComp} (N/C o N/D) requiere los campos de documento modificado.";
+            }
+        }
+    }
+
+    // ── Ventas ───────────────────────────────────────────────────────────────
+
+    private function validarVentas(DOMDocument $dom, array &$err): void
+    {
+        $i = 0;
+        foreach ($dom->getElementsByTagName('detalleVentas') as $d) {
+            $i++;
+            if (!$d instanceof DOMElement) {
+                continue;
+            }
+            $p = "Venta #{$i}";
+
+            $tp = $this->texto($d, 'tpIdCliente');
+            if (!in_array($tp, ['04', '05', '06', '07'], true)) {
+                $err[] = "{$p}: tpIdCliente debe ser 04, 05, 06 o 07 (actual: '{$tp}').";
+            }
+            if ($this->texto($d, 'idCliente') === '') {
+                $err[] = "{$p}: idCliente es obligatorio.";
+            }
+            if (!in_array($this->texto($d, 'tipoEmision'), ['E', 'F'], true)) {
+                $err[] = "{$p}: tipoEmision debe ser E (electrónica) o F (física).";
+            }
+            if (!preg_match('/^\d{1,12}$/', $this->texto($d, 'numeroComprobantes'))) {
+                $err[] = "{$p}: numeroComprobantes debe ser numérico.";
+            }
+            foreach (['baseNoGraIva','baseImponible','baseImpGrav','montoIva','montoIce','valorRetIva','valorRetRenta'] as $campo) {
+                $v = $this->texto($d, $campo);
+                if (!$this->montoValido($v)) {
+                    $err[] = "{$p}: {$campo} con formato inválido (actual: '{$v}').";
+                }
+            }
+            if ((float) $this->texto($d, 'baseNoGraIva') <= 0
+                && (float) $this->texto($d, 'baseImponible') <= 0
+                && (float) $this->texto($d, 'baseImpGrav') <= 0) {
+                $err[] = "{$p}: al menos una base debe ser mayor a 0.00.";
+            }
+        }
+    }
+
+    // ── Anulados ─────────────────────────────────────────────────────────────
+
+    private function validarAnulados(DOMDocument $dom, array &$err): void
+    {
+        $i = 0;
+        foreach ($dom->getElementsByTagName('detalleAnulados') as $d) {
+            $i++;
+            if (!$d instanceof DOMElement) {
+                continue;
+            }
+            $p = "Anulado #{$i}";
+
+            if (!preg_match('/^\d{2,3}$/', $this->texto($d, 'tipoComprobante'))) {
+                $err[] = "{$p}: tipoComprobante inválido.";
+            }
+            if (!preg_match('/^\d{3}$/', $this->texto($d, 'establecimiento'))) {
+                $err[] = "{$p}: establecimiento debe tener 3 dígitos.";
+            }
+            if (!preg_match('/^\d{3}$/', $this->texto($d, 'puntoEmision'))) {
+                $err[] = "{$p}: puntoEmision debe tener 3 dígitos.";
+            }
+            if (!preg_match('/^\d{1,9}$/', $this->texto($d, 'secuencialInicio'))) {
+                $err[] = "{$p}: secuencialInicio debe ser numérico (1 a 9 dígitos).";
+            }
+            if (!preg_match('/^\d{1,9}$/', $this->texto($d, 'secuencialFin'))) {
+                $err[] = "{$p}: secuencialFin debe ser numérico (1 a 9 dígitos).";
+            }
+            $aut = $this->texto($d, 'autorizacion');
+            if (mb_strlen($aut) < 3 || mb_strlen($aut) > 49) {
+                $err[] = "{$p}: autorizacion debe tener entre 3 y 49 caracteres.";
             }
         }
     }
