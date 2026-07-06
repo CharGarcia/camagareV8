@@ -190,7 +190,7 @@ class AtsExcelService
         $cols = [
             '#', 'Tipo ID', 'Identificación', 'Cliente', 'Parte Rel.', 'Tipo Comp.', 'Emisión',
             'Nº Comprob.', 'Base No Obj. IVA', 'Base 0%', 'Base Gravada', 'Monto IVA', 'Monto ICE',
-            'IVA Retenido', 'Renta Retenida',
+            'IVA Retenido', 'Renta Retenida', 'Formas de Cobro',
         ];
         $this->cabecera($h, $cols);
 
@@ -202,7 +202,7 @@ class AtsExcelService
             $this->texto($h, "B{$r}", $v['tpIdCliente']);
             $this->texto($h, "C{$r}", $v['idCliente']);
             $h->setCellValue("D{$r}", $v['cliente'] ?? '');
-            $h->setCellValue("E{$r}", $v['parteRel']);
+            $h->setCellValue("E{$r}", $v['tpIdCliente'] === '07' ? '' : $v['parteRel']);
             $this->texto($h, "F{$r}", $v['tipoComprobante']);
             $h->setCellValue("G{$r}", $v['tipoEm'] === 'E' ? 'Electrónica' : 'Física');
             $h->setCellValue("H{$r}", (int) $v['numeroComprobantes']);
@@ -213,6 +213,7 @@ class AtsExcelService
             $this->dinero($h, "M{$r}", $v['montoIce']);
             $this->dinero($h, "N{$r}", $v['valorRetIva']);
             $this->dinero($h, "O{$r}", $v['valorRetRenta']);
+            $this->texto($h, "P{$r}", implode(', ', $v['formasDePago'] ?? []));
             $r++;
         }
         if ($i > 0) {

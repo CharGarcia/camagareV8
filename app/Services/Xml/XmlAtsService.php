@@ -117,7 +117,10 @@ class XmlAtsService
 
         $this->add($dom, $n, 'tpIdCliente', $v['tpIdCliente']);
         $this->add($dom, $n, 'idCliente', $v['idCliente']);
-        $this->add($dom, $n, 'parteRelVtas', $v['parteRel']);
+        // parteRelVtas solo aplica a cliente 04, 05 o 06 (no consumidor final 07)
+        if (in_array($v['tpIdCliente'], ['04', '05', '06'], true)) {
+            $this->add($dom, $n, 'parteRelVtas', $v['parteRel']);
+        }
         if (!empty($v['tipoCliente'])) {
             $this->add($dom, $n, 'tipoCliente', $v['tipoCliente']);
             $this->add($dom, $n, 'denoCli', $v['denoCli']);
@@ -132,6 +135,14 @@ class XmlAtsService
         $this->add($dom, $n, 'montoIce', $v['montoIce']);
         $this->add($dom, $n, 'valorRetIva', $v['valorRetIva']);
         $this->add($dom, $n, 'valorRetRenta', $v['valorRetRenta']);
+
+        if (!empty($v['formasDePago'])) {
+            $fp = $dom->createElement('formasDePago');
+            foreach ($v['formasDePago'] as $codigo) {
+                $this->add($dom, $fp, 'formaPago', $codigo);
+            }
+            $n->appendChild($fp);
+        }
 
         return $n;
     }

@@ -174,7 +174,9 @@ class AtsService
 
         // ── VENTAS (agrupadas por cliente + tipoComprobante + tipoEmisión) ──────
         $ventasRaw = $this->repo->getVentas($idEmpresa, $desde, $hasta);
-        $retVenta  = $this->indexarRetVenta($this->repo->getRetencionesVenta($idEmpresa, array_column($ventasRaw, 'id')));
+        $idsVenta  = array_column($ventasRaw, 'id');
+        $retVenta  = $this->indexarRetVenta($this->repo->getRetencionesVenta($idEmpresa, $idsVenta));
+        $pagoVenta = $this->indexarPagos($this->repo->getFormasPago('ventas_pagos', 'id_venta', $idsVenta));
 
         $grupos = [];
         $ventasPorEstab = [];
@@ -197,6 +199,7 @@ class AtsService
                     'baseNoGraIva' => 0.0, 'baseImponible' => 0.0, 'baseImpGrav' => 0.0,
                     'montoIva' => 0.0, 'montoIce' => 0.0,
                     'valorRetIva' => 0.0, 'valorRetRenta' => 0.0,
+                    'formasPago' => [],
                 ];
             }
             $g = &$grupos[$key];
@@ -208,6 +211,12 @@ class AtsService
             $g['montoIce']     += (float) $v['monto_ice'];
             $g['valorRetIva']  += $retVenta[$v['id']]['iva'] ?? 0.0;
             $g['valorRetRenta']+= $retVenta[$v['id']]['renta'] ?? 0.0;
+            foreach ($pagoVenta[$v['id']] ?? [] as $p) {
+                $cod = str_pad((string) (int) $p['forma_pago'], 2, '0', STR_PAD_LEFT);
+                if (!in_array($cod, $g['formasPago'], true)) {
+                    $g['formasPago'][] = $cod;
+                }
+            }
             unset($g);
 
             $baseVenta = (float) $v['base_no_gra_iva'] + (float) $v['base_imponible_0'] + (float) $v['base_imponible_grav'];
@@ -235,6 +244,8 @@ class AtsService
                 'montoIce'           => $this->money($g['montoIce']),
                 'valorRetIva'        => $this->money($g['valorRetIva']),
                 'valorRetRenta'      => $this->money($g['valorRetRenta']),
+                // Forma de cobro obligatoria desde jun-2016; '01' (sin sistema financiero) por defecto
+                'formasDePago'       => $g['formasPago'] !== [] ? $g['formasPago'] : ['01'],
             ];
         }
 

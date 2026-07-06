@@ -204,8 +204,8 @@ class AtsRepository extends BaseRepository
     {
         $ids = array_values(array_unique(array_map('intval', $ids)));
         if ($ids === []
-            || !in_array($tabla, ['compras_pagos', 'liquidaciones_pagos'], true)
-            || !in_array($columnaFk, ['id_compra', 'id_cabecera'], true)) {
+            || !in_array($tabla, ['compras_pagos', 'liquidaciones_pagos', 'ventas_pagos'], true)
+            || !in_array($columnaFk, ['id_compra', 'id_cabecera', 'id_venta'], true)) {
             return [];
         }
 
