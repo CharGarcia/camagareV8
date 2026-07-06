@@ -105,6 +105,48 @@ class PlanCuentaService
         }
     }
 
+    /**
+     * Elimina (lógicamente) el plan de cuentas completo de la empresa.
+     * Solo procede si ninguna cuenta tiene movimientos contables; de lo contrario
+     * lanza una excepción listando las cuentas que impiden el borrado.
+     * Devuelve el número de cuentas eliminadas.
+     */
+    public function eliminarPlanCompleto(int $idEmpresa, int $idUsuario): int
+    {
+        $usadas = $this->repository->getCuentasUsadas($idEmpresa);
+        if (!empty($usadas)) {
+            $ejemplos = array_slice($usadas, 0, 5);
+            $lista = implode(', ', array_map(
+                fn($c) => trim(($c['codigo'] ?? '') . ' ' . ($c['nombre'] ?? '')),
+                $ejemplos
+            ));
+            $restantes = count($usadas) - count($ejemplos);
+            $extra = $restantes > 0 ? " y {$restantes} más" : '';
+            throw new Exception("No se puede eliminar el plan de cuentas: hay cuentas con movimientos contables ({$lista}{$extra}).");
+        }
+
+        $this->repository->beginTransaction();
+        try {
+            $afectadas = $this->repository->eliminarTodasPorEmpresa($idEmpresa, $idUsuario);
+
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresa,
+                'ELIMINAR PLAN',
+                'plan_cuentas',
+                null,
+                null,
+                ['total_eliminadas' => $afectadas]
+            );
+
+            $this->repository->commit();
+            return $afectadas;
+        } catch (Exception $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+    }
+
     public static function getCuentasModeloArray(): array
     {
         return [

@@ -44,9 +44,14 @@ $proyectos  = $proyectos ?? [];
 <div class="pc-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div class="d-flex align-items-center">
         <h5 class="mb-0 fw-bold me-3 align-middle"><i class="bi bi-list-nested"></i> <?= htmlspecialchars($titulo) ?></h5>
-        <?php if ($perm['crear']): ?>
+        <?php if ($perm['crear'] && $conteoTotal === 0): ?>
             <button type="button" id="btnInitPlan" class="btn btn-primary shadow-sm btn-sm px-3" onclick="cargarPlanModelo()">
                 <i class="bi bi-magic"></i> Cargar Plan de Cuentas Modelo
+            </button>
+        <?php endif; ?>
+        <?php if (!empty($perm['eliminar']) && $conteoTotal > 0): ?>
+            <button type="button" id="btnEliminarPlan" class="btn btn-outline-danger shadow-sm btn-sm px-3" onclick="eliminarPlanCompleto()">
+                <i class="bi bi-trash3"></i> Eliminar Plan de Cuentas
             </button>
         <?php endif; ?>
     </div>
@@ -430,6 +435,32 @@ $proyectos  = $proyectos ?? [];
                     Swal.fire('¡Éxito!', json.msg, 'success').then(() => location.reload());
                 } else {
                     Swal.fire('Error', json.error, 'error');
+                }
+            } catch (e) {
+                Swal.fire('Error', 'Error de conexión', 'error');
+            }
+        };
+
+        window.eliminarPlanCompleto = async function() {
+            const result = await Swal.fire({
+                title: '¿Eliminar todo el plan de cuentas?',
+                html: 'Se eliminarán <b>todas</b> las cuentas de esta empresa.<br>Esta acción solo es posible si ninguna cuenta tiene movimientos contables.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar todo',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#dc3545'
+            });
+
+            if (!result.isConfirmed) return;
+
+            try {
+                const resp = await fetch(`${urlBase}/eliminarPlanAjax`, { method: 'POST' });
+                const json = await resp.json();
+                if (json.ok) {
+                    Swal.fire('Eliminado', json.msg, 'success').then(() => location.reload());
+                } else {
+                    Swal.fire('No se pudo eliminar', json.error, 'error');
                 }
             } catch (e) {
                 Swal.fire('Error', 'Error de conexión', 'error');

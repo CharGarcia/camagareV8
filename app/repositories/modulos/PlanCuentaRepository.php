@@ -266,6 +266,42 @@ class PlanCuentaRepository extends BaseRepository
         return ((int)$st->fetchColumn()) > 0;
     }
 
+    /**
+     * Devuelve las cuentas de la empresa que tienen movimientos contables registrados
+     * (referenciadas por un detalle de asiento activo). Se usan para bloquear el borrado
+     * completo del plan cuando alguna cuenta ya fue utilizada.
+     */
+    public function getCuentasUsadas(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT pc.codigo, pc.nombre
+                FROM {$this->table} pc
+                INNER JOIN asientos_contables_detalle acd
+                        ON acd.id_cuenta_contable = pc.id
+                       AND acd.id_empresa = pc.id_empresa
+                       AND acd.eliminado = false
+                WHERE pc.id_empresa = :id_e AND pc.eliminado = false
+                ORDER BY pc.codigo ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Elimina lógicamente TODAS las cuentas activas de la empresa (reset del plan).
+     * Devuelve el número de cuentas afectadas.
+     */
+    public function eliminarTodasPorEmpresa(int $idEmpresa, int $idUsuario): int
+    {
+        $sql = "UPDATE {$this->table} SET
+                    eliminado = true,
+                    deleted_by = :id_u,
+                    deleted_at = CURRENT_TIMESTAMP
+                WHERE id_empresa = :id_e AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_e' => $idEmpresa, ':id_u' => $idUsuario]);
+        return $st->rowCount();
+    }
+
     public function findByCodigo(string $codigo, int $idEmpresa): ?array
     {
         $sql = "SELECT id, codigo, nombre FROM {$this->table} WHERE codigo = :codigo AND id_empresa = :id_empresa AND eliminado = false LIMIT 1";

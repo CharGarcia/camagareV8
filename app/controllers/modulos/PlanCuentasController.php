@@ -276,8 +276,15 @@ class PlanCuentasController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
         $configurar = filter_var($_POST['configurar'] ?? 'false', FILTER_VALIDATE_BOOLEAN);
-        
+
         try {
+            // El plan modelo solo puede cargarse como estructura inicial:
+            // si la empresa ya tiene cuentas, se rechaza.
+            $repo = new PlanCuentaRepository();
+            if ($repo->contarPorEmpresa($idEmpresa) > 0) {
+                throw new \Exception('El plan de cuentas ya tiene cuentas cargadas; el plan modelo solo puede usarse como estructura inicial.');
+            }
+
             $resp = $this->service->cargarModelo($idEmpresa, $idUsuario, $configurar);
             echo json_encode(['ok' => true, 'msg' => $resp['message']]);
         } catch (\Throwable $e) {
@@ -354,6 +361,23 @@ class PlanCuentasController extends BaseModuloController
 
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Cuenta eliminada correctamente.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function eliminarPlanAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $afectadas = $this->service->eliminarPlanCompleto($idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'msg' => "Se eliminó el plan de cuentas correctamente ({$afectadas} cuentas)."]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -515,11 +539,12 @@ class PlanCuentasController extends BaseModuloController
             // Omitir cabecera (fila 0)
             for ($i = 1; $i < count($rows); $i++) {
                 $r = $rows[$i];
-                $codigo = trim((string)($r[0] ?? ''));
+                // Normalizar el código al formato del sistema (N4 => 2 dígitos, N5 => 3 dígitos)
+                $codigo = $this->normalizarCodigo((string)($r[0] ?? ''));
                 $nombre = trim((string)($r[1] ?? ''));
-                
-                if (empty($codigo) || empty($nombre)) continue;
-                
+
+                if ($codigo === '' || $nombre === '') continue;
+
                 // Calcular nivel
                 $nivel = count(explode('.', $codigo));
                 
@@ -609,6 +634,42 @@ class PlanCuentasController extends BaseModuloController
             echo "Error al generar Excel: " . $e->getMessage();
             exit;
         }
+    }
+
+    /**
+     * Normaliza un código de cuenta al formato del sistema (mismo del plan modelo):
+     *   N1=1, N2=1.1, N3=1.1.1, N4=1.1.1.01, N5=1.1.1.01.001
+     * Es decir: segmentos de nivel 1-3 sin relleno; nivel 4 con 2 dígitos; nivel 5 con 3 dígitos.
+     * Rellena con ceros a la izquierda cada segmento numérico según su posición y limpia
+     * espacios / formato numérico que Excel pueda introducir. Los segmentos no numéricos
+     * (casos atípicos) se conservan tal cual para no romper el código.
+     */
+    private function normalizarCodigo(string $codigo): string
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') return '';
+
+        // Anchos por posición (1-indexado). Posiciones no listadas: sin relleno.
+        $anchos = [1 => 1, 2 => 1, 3 => 1, 4 => 2, 5 => 3];
+
+        $partes = explode('.', $codigo);
+        $out = [];
+        foreach ($partes as $i => $parte) {
+            $parte = trim($parte);
+            $pos = $i + 1;
+
+            if ($parte === '' || !ctype_digit($parte)) {
+                // Segmento vacío o no numérico: se conserva sin tocar.
+                $out[] = $parte;
+                continue;
+            }
+
+            $num = (string)(int)$parte; // quita ceros o decimales espurios de Excel
+            $ancho = $anchos[$pos] ?? strlen($num);
+            $out[] = str_pad($num, $ancho, '0', STR_PAD_LEFT);
+        }
+
+        return implode('.', $out);
     }
 
     private function recogerDatosFormulario(): array
