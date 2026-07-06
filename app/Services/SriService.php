@@ -33,11 +33,11 @@ class SriService
 
         try {
             if (class_exists('SoapClient')) {
-                return $this->requestViaSoap($url, $claveAcceso);
+                $resp = $this->requestViaSoap($url, $claveAcceso);
             } elseif (function_exists('curl_init')) {
-                return $this->requestViaCurl($url, $claveAcceso);
+                $resp = $this->requestViaCurl($url, $claveAcceso);
             } else {
-                return $this->requestViaStream($url, $claveAcceso);
+                $resp = $this->requestViaStream($url, $claveAcceso);
             }
         } catch (Exception $e) {
             return [
@@ -46,6 +46,44 @@ class SriService
                 'mensaje' => 'Error de conexión con el SRI: ' . $e->getMessage()
             ];
         }
+
+        // 'xml' pasa a ser el SOBRE de autorización completo (copia TAL CUAL del SRI): estado +
+        // numeroAutorizacion + fechaAutorizacion + ambiente + el comprobante intacto dentro de CDATA.
+        // El comprobante crudo queda además en 'comprobante' por si se necesita por separado.
+        if (!empty($resp['ok']) && !empty($resp['xml'])) {
+            $resp['comprobante'] = $resp['xml'];
+            $resp['xml'] = $this->buildSobreAutorizacion(
+                (string)($resp['numero_autorizacion'] ?? $claveAcceso),
+                (string)($resp['fecha_autorizacion'] ?? ''),
+                ($ambienteDigit === '1') ? '1' : '2',
+                $resp['xml']
+            );
+        }
+
+        return $resp;
+    }
+
+    /**
+     * Construye el sobre de autorización del SRI (mismo formato que el flujo de emisión) para
+     * guardar TAL CUAL en detalle_xml: estado + numeroAutorizacion + fechaAutorizacion + ambiente
+     * + el comprobante intacto dentro de un CDATA.
+     */
+    private function buildSobreAutorizacion(string $numAut, string $fechaAut, string $tipoAmbiente, string $comprobante): string
+    {
+        $ambiente = $tipoAmbiente === '2' ? 'PRODUCCION' : 'PRUEBAS';
+        return implode("\n", [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<autorizaciones>',
+            '  <autorizacion>',
+            '    <estado>AUTORIZADO</estado>',
+            '    <numeroAutorizacion>' . htmlspecialchars($numAut, ENT_XML1, 'UTF-8') . '</numeroAutorizacion>',
+            '    <fechaAutorizacion>' . htmlspecialchars($fechaAut, ENT_XML1, 'UTF-8') . '</fechaAutorizacion>',
+            '    <ambiente>' . $ambiente . '</ambiente>',
+            '    <comprobante><![CDATA[' . $comprobante . ']]></comprobante>',
+            '    <mensajes/>',
+            '  </autorizacion>',
+            '</autorizaciones>',
+        ]);
     }
 
     private function requestViaSoap(string $url, string $claveAcceso): array

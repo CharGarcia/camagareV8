@@ -1215,16 +1215,24 @@
             });
             const data = await resp.json();
             if (data.ok) {
+                // Capturar antes de recargar (el reload resetea NC_ID_ACTIVO).
+                const idPrevio   = parseInt(window.NC_ID_ACTIVO) || 0;
+                const idGuardado = parseInt(data.id) || idPrevio;
                 window.NC_eliminarRespaldo();
-                Swal.fire('Éxito', data.mensaje, 'success');
-                modalNC.hide();
+
+                // NO se cierra el modal: el usuario lo cierra a mano (para corregir
+                // fecha y reenviar al SRI sin reabrir). Refrescar y recargar en edición.
                 window.NC_fetchSearch();
-                // Notificar al módulo padre si existe una función de refresco
+                if (idGuardado > 0 && typeof window.NC_abrirModalNC === 'function') {
+                    window.NC_abrirModalNC({ dataset: { row: JSON.stringify({ id: idGuardado }) } });
+                }
+                // Notificar al módulo padre si existe una función de refresco.
                 if (typeof window.fvRefrescarDatosModal === 'function') {
                     window.fvRefrescarDatosModal();
                 } else if (typeof window.refrescarDesdeModuloHijo === 'function') {
                     window.refrescarDesdeModuloHijo();
                 }
+                Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: data.mensaje || 'Guardado', showConfirmButton: false, timer: 2500, timerProgressBar: true });
             } else {
                 Swal.fire('Error', data.mensaje, 'error');
             }

@@ -220,6 +220,29 @@
 
 
 
+    // Id de tarifa por defecto para filas nuevas: 15% (vigente) si existe,
+    // de lo contrario la primera tarifa activa del catálogo. Evita el id 2 (12%,
+    // inactivo) que no está en el dropdown y hacía que el <select> cayera en 0%.
+    function ivaDefaultId() {
+        const tarifas = window.TARIFAS_IVA || [];
+        const t15 = tarifas.find(t => parseFloat(t.porcentaje_iva) === 15);
+        if (t15) return t15.id;
+        return tarifas.length ? tarifas[0].id : 0;
+    }
+
+    // Deriva el id de tarifa_iva (para el <select> de IVA) desde el impuesto
+    // guardado del detalle: primero por código SRI (distingue 0%/No Objeto/Exento),
+    // luego por porcentaje como respaldo.
+    function resolverIdTarifaIva(d) {
+        if (d.id_tarifa_iva) return d.id_tarifa_iva;
+        const imp = (Array.isArray(d.impuestos) && d.impuestos.length) ? d.impuestos[0] : null;
+        if (!imp) return 0;
+        const tarifas = window.TARIFAS_IVA || [];
+        let match = tarifas.find(t => String(t.codigo) === String(imp.codigo_porcentaje));
+        if (!match) match = tarifas.find(t => parseFloat(t.porcentaje_iva) === parseFloat(imp.tarifa));
+        return match ? match.id : 0;
+    }
+
     function abrirModalLiquidacionVerFn(row) {
         const data = JSON.parse(row.dataset.row);
         fetch(`${API_URL}/getLiquidacionAjax?id=${data.id}`)
@@ -230,7 +253,10 @@
                     detalles = res.detalles.map(d => ({
                         ...d,
                         id_temp: Date.now() + Math.random(),
-                        id_tarifa_iva: d.id_tarifa_iva || 0,
+                        // El IVA del ítem vive en la tabla de impuestos, no en el detalle.
+                        // Resolver el id de la tarifa desde el impuesto guardado para que
+                        // el <select> conserve el IVA real y no se resetee al abrir/guardar.
+                        id_tarifa_iva: resolverIdTarifaIva(d),
                         adicional: d.info_adicional || '',
                         total: (parseFloat(d.cantidad) * parseFloat(d.precio_unitario)) - parseFloat(d.descuento)
                     }));
@@ -314,6 +340,12 @@
         window.LC_FECHA_EMISION = (cab.fecha_emision || '').split(' ')[0].split('T')[0] || null;
         window.LC_PROVEEDOR_RUC = (cab.proveedor_ruc || '').trim();
 
+        // Datos para acciones de documento (correo / WhatsApp)
+        window.LC_PROVEEDOR_EMAIL    = (cab.proveedor_email    || '').trim();
+        window.LC_PROVEEDOR_TELEFONO = (cab.proveedor_telefono || '').trim();
+        window.LC_PROVEEDOR_NOMBRE   = (cab.proveedor_nombre   || '').trim();
+        window.LC_NRO_DOC = `${(cab.establecimiento||'001').toString().padStart(3,'0')}-${(cab.punto_emision||'001').toString().padStart(3,'0')}-${(cab.secuencial||'').toString().padStart(9,'0')}`;
+
         // Mostrar botón anular si el estado lo permite
         const btnAnular = document.getElementById('btnAnularLiq');
         if (btnAnular) {
@@ -371,7 +403,7 @@
         const cantidad = item ? (item.cantidad || 1) : 1;
         const p_unitario = item ? parseFloat(item.precio_unitario || 0) : 0;
         const descuento = item ? parseFloat(item.descuento || 0) : 0;
-        const id_tarifa = item ? (item.id_tarifa_iva || item.tarifa_iva || 2) : 2; 
+        const id_tarifa = item ? (item.id_tarifa_iva || item.tarifa_iva || ivaDefaultId()) : ivaDefaultId();
         const total = item ? parseFloat(item.total || 0) : 0;
 
         tr.innerHTML = `
@@ -957,11 +989,20 @@
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-save me-1"></i> Guardar';
             if (res.ok) {
+                // Capturar antes de recargar/limpiar (el reload cambia liq-id).
+                const idPrevio   = parseInt(document.getElementById('liq-id')?.value || '0');
+                const idGuardado = parseInt(res.id) || idPrevio;
                 lcLimpiarBorrador();
-                bootstrap.Modal.getInstance(document.getElementById('modalLiquidacion')).hide();
 
+                // NO se cierra el modal: el usuario lo cierra a mano. Así puede
+                // corregir la fecha y reenviar al SRI sin reabrir.
                 fetchSearchFn();
-                if (typeof Swal !== 'undefined') Swal.fire('Éxito', res.mensaje, 'success');
+                if (idGuardado > 0 && typeof window.abrirModalLiquidacionVer === 'function') {
+                    window.abrirModalLiquidacionVer({ dataset: { row: JSON.stringify({ id: idGuardado }) } });
+                }
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: res.mensaje || 'Guardado', showConfirmButton: false, timer: 2500, timerProgressBar: true });
+                }
             } else {
                 if (typeof Swal !== 'undefined') Swal.fire('Error', res.mensaje || "Error al guardar", 'error');
                 else alert(res.mensaje || "Error al guardar");
@@ -975,6 +1016,82 @@
     }
 
     // ── SRI ────────────────────────────────────────────────────────────────
+
+    // ── Acciones de documento: PDF / XML / Correo / WhatsApp ─────────────────
+
+    function liqIdGuardado() {
+        const id = parseInt(document.getElementById('liq-id')?.value || '0');
+        if (!id) {
+            Swal.fire({ icon: 'warning', title: 'Aviso', text: 'Primero guarda la liquidación.' });
+            return 0;
+        }
+        return id;
+    }
+
+    window.LC_exportarPdf = function() {
+        const id = liqIdGuardado();
+        if (!id) return;
+        window.open(`${API_URL}/exportarPdfDoc?id=${id}`, '_blank');
+    };
+
+    window.LC_exportarXml = function() {
+        const id = liqIdGuardado();
+        if (!id) return;
+        window.open(`${API_URL}/descargarXmlOriginalAjax?id=${id}`, '_blank');
+    };
+
+    window.LC_enviarCorreo = async function() {
+        const id = liqIdGuardado();
+        if (!id) return;
+
+        const { value: correos } = await Swal.fire({
+            title: 'Enviar por correo',
+            input: 'text',
+            inputLabel: 'Correo(s) del destinatario (separa con coma)',
+            inputValue: window.LC_PROVEEDOR_EMAIL || '',
+            inputPlaceholder: 'correo@ejemplo.com',
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-envelope me-1"></i> Enviar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#0dcaf0',
+            inputValidator: (v) => (!v || !v.trim()) ? 'Ingresa al menos un correo' : undefined,
+        });
+        if (!correos) return;
+
+        Swal.fire({ title: 'Enviando correo...', html: '<div class="spinner-border text-info" role="status"></div>', allowOutsideClick: false, showConfirmButton: false });
+        try {
+            const fd = new FormData();
+            fd.append('id', id);
+            fd.append('correos', correos.trim());
+            const resp = await fetch(`${API_URL}/reenviarCorreoAjax`, { method: 'POST', body: fd });
+            const json = await resp.json();
+            if (json.ok) {
+                Swal.fire({ icon: 'success', title: 'Enviado', text: json.mensaje || 'Correo enviado.', confirmButtonColor: '#0dcaf0' });
+            } else {
+                Swal.fire({ icon: 'error', title: 'No enviado', text: json.mensaje || 'No se pudo enviar el correo.', confirmButtonColor: '#dc3545' });
+            }
+        } catch (err) {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.' });
+        }
+    };
+
+    window.LC_enviarWhatsapp = function() {
+        const id = liqIdGuardado();
+        if (!id) return;
+
+        const tel = (window.LC_PROVEEDOR_TELEFONO || '').replace(/[^0-9]/g, '');
+        // Normalizar a formato internacional Ecuador (09xxxxxxxx -> 5939xxxxxxxx)
+        let destino = tel;
+        if (destino.startsWith('0')) destino = '593' + destino.substring(1);
+
+        const nro    = window.LC_NRO_DOC || '';
+        const mensaje = `Estimado/a ${window.LC_PROVEEDOR_NOMBRE || ''}, le compartimos su Liquidación de Compra N° ${nro}.`.trim();
+
+        const url = destino
+            ? `https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`
+            : `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
+        window.open(url, '_blank');
+    };
 
     window.enviarSri = async function() {
         const id = parseInt(document.getElementById('liq-id')?.value || '0');

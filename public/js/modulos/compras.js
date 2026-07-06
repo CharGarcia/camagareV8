@@ -279,15 +279,12 @@ function CMG_poblarModal(d) {
     // Bloquear campos si es electrónica
     mcActualizarBloqueoCampos();
 
-    // Mostrar/ocultar botón XML
+    // Mostrar/ocultar botones XML y PDF (ambos requieren XML del comprobante)
+    const tieneXml = !!(d.detalle_xml && d.detalle_xml.trim().length > 0);
     const btnXml = document.getElementById('mcBtnDescargarXml');
-    if (btnXml) {
-        if (d.detalle_xml && d.detalle_xml.trim().length > 0) {
-            btnXml.classList.remove('d-none');
-        } else {
-            btnXml.classList.add('d-none');
-        }
-    }
+    if (btnXml) btnXml.classList.toggle('d-none', !tieneXml);
+    const btnPdf = document.getElementById('mcBtnPdf');
+    if (btnPdf) btnPdf.classList.toggle('d-none', !tieneXml);
 }
 
 function mcActualizarBloqueoCampos() {
@@ -410,6 +407,10 @@ function CMG_resetModal() {
     // Ocultar botón XML
     const btnXml = document.getElementById('mcBtnDescargarXml');
     if (btnXml) btnXml.classList.add('d-none');
+
+    // Ocultar botón PDF (compra nueva / sin guardar)
+    const btnPdf = document.getElementById('mcBtnPdf');
+    if (btnPdf) btnPdf.classList.add('d-none');
     
     // Ir a primera pestaña
     const tabDetalle = document.getElementById('tab-detalle-tab') || document.getElementById('tab_compra');
@@ -2676,6 +2677,22 @@ window.mcDescargarXml = function () {
     const url = `${window.CMG_urlBase}/descargarXmlAjax?id=${id}`;
     const a = document.createElement('a');
     a.href = url;
+    a.download = '';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+};
+
+// Exportar (descargar) PDF de la compra (mismo formato que facturas de venta)
+window.mcExportarPdf = function () {
+    const id = document.getElementById('mcId')?.value || document.getElementById('modalCompra')?.dataset.id;
+    if (!id) {
+        Swal.fire('Atención', 'Guarde la compra primero para generar el PDF.', 'warning');
+        return;
+    }
+    const a = document.createElement('a');
+    a.href = `${window.CMG_urlBase}/exportar-pdf-ajax?id=${id}`;
     a.download = '';
     a.style.display = 'none';
     document.body.appendChild(a);

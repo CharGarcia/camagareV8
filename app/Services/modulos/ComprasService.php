@@ -100,6 +100,172 @@ class ComprasService
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // PARSEO DEL XML (para generar el PDF a partir del comprobante electrónico)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Nombres de formas de pago SRI (código => descripción). */
+    private const FORMAS_PAGO_SRI = [
+        '01' => 'Sin utilización del sistema financiero',
+        '15' => 'Compensación de deudas',
+        '16' => 'Tarjeta de débito',
+        '17' => 'Dinero electrónico',
+        '18' => 'Tarjeta prepago',
+        '19' => 'Tarjeta de crédito',
+        '20' => 'Otros con utilización del sistema financiero',
+        '21' => 'Endoso de títulos',
+    ];
+
+    /**
+     * Convierte el XML autorizado de un comprobante de compra en las estructuras
+     * que consume ComprasPdfService: cabecera, detalles, pagos, infoAdicional y
+     * los datos del adquirente (comprador). Lanza excepción si el XML es inválido.
+     */
+    public function parsearComprobanteXml(string $xmlString): array
+    {
+        $xmlString = trim($xmlString);
+        if ($xmlString === '') {
+            throw new \RuntimeException('El comprobante no tiene XML.');
+        }
+
+        // La fecha de autorización solo existe en el sobre <autorizacion> del SRI
+        // (no dentro del comprobante). Se captura ANTES de quitar el sobre.
+        $fechaAutorizacion = '';
+        if (strpos($xmlString, '<autorizacion>') !== false) {
+            if (preg_match('#<fechaAutorizacion>(.*?)</fechaAutorizacion>#s', $xmlString, $mfa)) {
+                $fechaAutorizacion = trim($mfa[1]);
+            }
+            // Quitar el sobre de autorización para quedarnos con el comprobante.
+            if (preg_match('/<comprobante><!\[CDATA\[(.*?)\]\]><\/comprobante>/s', $xmlString, $m)) {
+                $xmlString = $m[1];
+            } elseif (preg_match('/<comprobante>(.*?)<\/comprobante>/s', $xmlString, $m)) {
+                $xmlString = htmlspecialchars_decode($m[1]);
+            }
+        }
+
+        $prev = libxml_use_internal_errors(true);
+        $xml  = simplexml_load_string($xmlString);
+        libxml_use_internal_errors($prev);
+        if ($xml === false || !isset($xml->infoTributaria)) {
+            throw new \RuntimeException('El XML del comprobante no tiene un formato válido del SRI.');
+        }
+
+        $t      = $xml->infoTributaria;
+        $codDoc = (string) $t->codDoc;
+
+        // Nodo de información según tipo de documento.
+        $nodoInfo = match ($codDoc) {
+            '01'    => 'infoFactura',
+            '03'    => 'infoLiquidacionCompra',
+            '04'    => 'infoNotaCredito',
+            '05'    => 'infoNotaDebito',
+            default => 'infoFactura',
+        };
+        $info = $xml->$nodoInfo ?? null;
+        if ($info === null) {
+            // Buscar el primer nodo "info..." distinto de infoTributaria/infoAdicional.
+            foreach ($xml->children() as $child) {
+                $n = $child->getName();
+                if (str_starts_with($n, 'info') && $n !== 'infoTributaria' && $n !== 'infoAdicional') {
+                    $info = $child;
+                    break;
+                }
+            }
+        }
+        if ($info === null) {
+            throw new \RuntimeException('El XML no contiene la información del comprobante.');
+        }
+
+        // ── Cabecera (emisor = proveedor; número y autorización del documento) ──
+        $cabecera = [
+            'tipo_comprobante'         => $codDoc,
+            'establecimiento_prov'     => (string) $t->estab,
+            'punto_emision_prov'       => (string) $t->ptoEmi,
+            'secuencial_prov'          => (string) $t->secuencial,
+            'numero_autorizacion'      => (string) $t->claveAcceso,
+            'fecha_autorizacion'       => $fechaAutorizacion,
+            'tipo_ambiente'            => (string) $t->ambiente,
+            'fecha_emision'            => (string) ($info->fechaEmision ?? ''),
+            'proveedor_nombre'         => (string) $t->razonSocial,
+            'proveedor_ruc'            => (string) $t->ruc,
+            'proveedor_direccion'      => (string) ($t->dirMatriz ?? ''),
+            'proveedor_email'          => '',
+            'proveedor_nombre_tipo_id' => 'R.U.C.',
+            'total_sin_impuestos'      => (float) ($info->totalSinImpuestos ?? 0),
+            'importe_total'            => (float) ($info->importeTotal ?? $info->valorModificacion ?? 0),
+            'propina'                  => (float) ($info->propina ?? 0),
+        ];
+
+        // ── Adquirente (comprador / receptor) ─────────────────────────────────
+        $comprador = [
+            'nombre'    => (string) ($info->razonSocialComprador ?? ''),
+            'ruc'       => (string) ($info->identificacionComprador ?? ''),
+            'direccion' => (string) ($info->direccionComprador ?? ''),
+        ];
+
+        // ── Detalles ──────────────────────────────────────────────────────────
+        $detalles = [];
+        // El nodo de detalle puede ser <detalle> (factura) o venir bajo <detalles>.
+        $listaDet = $xml->detalles->detalle ?? [];
+        foreach ($listaDet as $d) {
+            $impuestos = [];
+            if (isset($d->impuestos->impuesto)) {
+                foreach ($d->impuestos->impuesto as $imp) {
+                    $impuestos[] = [
+                        'codigo_impuesto'   => (string) $imp->codigo,
+                        'codigo_porcentaje' => (string) $imp->codigoPorcentaje,
+                        'tarifa'            => (float) $imp->tarifa,
+                        'base_imponible'    => (float) $imp->baseImponible,
+                        'valor'             => (float) $imp->valor,
+                    ];
+                }
+            }
+            $detalles[] = [
+                'codigo_principal'          => (string) ($d->codigoPrincipal ?? ''),
+                'descripcion'               => (string) ($d->descripcion ?? ''),
+                'cantidad'                  => (float) ($d->cantidad ?? 0),
+                'precio_unitario'           => (float) ($d->precioUnitario ?? 0),
+                'descuento'                 => (float) ($d->descuento ?? 0),
+                'precio_total_sin_impuesto' => (float) ($d->precioTotalSinImpuesto ?? 0),
+                'impuestos'                 => $impuestos,
+            ];
+        }
+
+        // ── Pagos ─────────────────────────────────────────────────────────────
+        $pagos = [];
+        if (isset($info->pagos->pago)) {
+            foreach ($info->pagos->pago as $p) {
+                $codFp = (string) $p->formaPago;
+                $pagos[] = [
+                    'forma_pago'        => $codFp,
+                    'forma_pago_nombre' => self::FORMAS_PAGO_SRI[$codFp] ?? $codFp,
+                    'total'             => (float) $p->total,
+                    'plazo'             => (int) ($p->plazo ?? 0),
+                    'unidad_tiempo'     => (string) ($p->unidadTiempo ?? 'dias'),
+                ];
+            }
+        }
+
+        // ── Información adicional ──────────────────────────────────────────────
+        $infoAdicional = [];
+        if (isset($xml->infoAdicional->campoAdicional)) {
+            foreach ($xml->infoAdicional->campoAdicional as $campo) {
+                $infoAdicional[] = [
+                    'nombre' => (string) $campo['nombre'],
+                    'valor'  => (string) $campo,
+                ];
+            }
+        }
+
+        return [
+            'cabecera'      => $cabecera,
+            'detalles'      => $detalles,
+            'pagos'         => $pagos,
+            'infoAdicional' => $infoAdicional,
+            'comprador'     => $comprador,
+        ];
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // ASIENTO CONTABLE
     // ─────────────────────────────────────────────────────────────────────────
 

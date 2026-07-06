@@ -307,6 +307,16 @@
         window.open(`${BASE}/descargarXmlAjax?id=${retvIdActual}`, '_blank');
     };
 
+    // ── MODAL — DESCARGAR PDF ────────────────────────────────────────────────────
+
+    window.RETV_descargarPdf = () => {
+        if (!retvIdActual) {
+            mostrarAlerta('Guarde la retención antes de generar el PDF.', 'warning');
+            return;
+        }
+        window.open(`${BASE}/exportPdfDoc?id=${retvIdActual}`, '_blank');
+    };
+
     // ── MODAL — GUARDAR ─────────────────────────────────────────────────────────
 
     window.RETV_guardar = async () => {
@@ -724,6 +734,10 @@
         if (btnGuardar)  btnGuardar.classList.toggle('d-none', esElectronica);
         if (btnEliminar) btnEliminar.classList.toggle('d-none', !tieneId);
         if (btnNuevoCliente) btnNuevoCliente.classList.toggle('d-none', esElectronica);
+
+        // Botón PDF: disponible para cualquier retención ya guardada.
+        const btnPdf = document.getElementById('retv-btn-pdf');
+        if (btnPdf) btnPdf.classList.toggle('d-none', !tieneId);
 
         // Campos del encabezado
         const camposHeader = [

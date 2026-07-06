@@ -639,12 +639,18 @@
         .then(d => {
             if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar'; }
             if (d.ok) {
+                // Capturar antes de recargar (el reload resetea gr-id).
+                const idPrevio   = parseInt(document.getElementById('gr-id')?.value || '0');
+                const idGuardado = parseInt(d.id) || idPrevio;
                 window.GR_eliminarRespaldo();
-                const modalEl = document.getElementById('modalGuiaRemision');
-                if (modalEl) bootstrap.Modal.getInstance(modalEl).hide();
-                
+
+                // NO se cierra el modal: el usuario lo cierra a mano (para corregir
+                // fecha y reenviar al SRI sin reabrir). Refrescar y recargar en edición.
                 if (typeof window.GR_cargar === 'function') window.GR_cargar(window.GR_page || 1);
-                Swal.fire({ icon: 'success', title: '¡Guardado!', text: d.mensaje, timer: 2000, showConfirmButton: false });
+                if (idGuardado > 0 && typeof window.GR_abrirEditar === 'function') {
+                    window.GR_abrirEditar({ id: idGuardado });
+                }
+                Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: d.mensaje || 'Guardado', showConfirmButton: false, timer: 2500, timerProgressBar: true });
             } else {
                 Swal.fire({ icon: 'error', title: 'Error al guardar', text: d.mensaje || 'Error al guardar.' });
             }

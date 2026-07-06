@@ -692,5 +692,142 @@ class LiquidacionCompraController extends BaseModuloController
         }
         exit;
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PDF del documento
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function exportarPdfDoc(): void
+    {
+        $this->requireLeer();
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            $datos = $this->cargarDatosDocumento($id, $idEmpresa);
+            if (!$datos) { die('Liquidación no encontrada'); }
+
+            $pdfService = new \App\Services\modulos\LiquidacionCompraPdfService();
+            $pdfService->generar(
+                $datos['cabecera'], $datos['detalles'], $datos['pagos'], $datos['info_adicional'], $datos['empresa']
+            );
+        } catch (\Throwable $e) {
+            die('Error al generar PDF: ' . $e->getMessage());
+        }
+        exit;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Enviar / reenviar por correo (igual que factura de venta / retención)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function reenviarCorreoAjax(): void
+    {
+        ob_start();
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) {
+            while (ob_get_level() > 0) ob_end_clean();
+            echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
+            exit;
+        }
+
+        try {
+            $datos = $this->cargarDatosDocumento($id, $idEmpresa);
+            if (!$datos) {
+                while (ob_get_level() > 0) ob_end_clean();
+                echo json_encode(['ok' => false, 'mensaje' => 'Liquidación no encontrada.']);
+                exit;
+            }
+
+            $cabecera = $datos['cabecera'];
+
+            $pdfService = new \App\Services\modulos\LiquidacionCompraPdfService();
+            $pdfString  = $pdfService->generarBytes(
+                $cabecera, $datos['detalles'], $datos['pagos'], $datos['info_adicional'], $datos['empresa']
+            );
+
+            // XML autorizado ya persistido (o el generado como respaldo).
+            $xmlString = (string)($cabecera['detalle_xml'] ?? '');
+
+            $numAut = (string)($cabecera['numero_autorizacion'] ?? $cabecera['clave_acceso'] ?? '');
+
+            $correosDestino = trim($_POST['correos'] ?? '');
+
+            $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+            $enviado  = $emailSvc->enviarSiAplica(
+                $idEmpresa, 'liquidacion_compra', $cabecera, $xmlString, $pdfString, $numAut, true, $correosDestino
+            );
+
+            while (ob_get_level() > 0) ob_end_clean();
+            if ($enviado) {
+                $db = \App\core\Database::getConnection();
+                $db->prepare("UPDATE liquidaciones_cabecera SET estado_correo = 'enviado', updated_at = NOW() WHERE id = ? AND id_empresa = ?")
+                   ->execute([$id, $idEmpresa]);
+                echo json_encode(['ok' => true, 'mensaje' => 'Correo enviado correctamente.']);
+            } else {
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración o el correo del destinatario.']);
+            }
+        } catch (\Throwable $e) {
+            while (ob_get_level() > 0) ob_end_clean();
+            echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Carga la cabecera + detalles (con impuestos) + pagos + info adicional + empresa
+     * (enriquecida con logo/direcciones del establecimiento). Devuelve null si no existe
+     * o no pertenece a la empresa activa.
+     */
+    private function cargarDatosDocumento(int $id, int $idEmpresa): ?array
+    {
+        if (!$id) return null;
+
+        $cabecera = $this->repository->getPorId($id);
+        if (!$cabecera || (int)($cabecera['id_empresa'] ?? 0) !== $idEmpresa) {
+            return null;
+        }
+
+        $detalles = $this->repository->getDetalles($id);
+        foreach ($detalles as &$d) {
+            $d['impuestos'] = $this->repository->getImpuestosDetalle((int) $d['id']);
+        }
+        unset($d);
+
+        $empresaModel = new Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+
+        // El logo y las direcciones viven en el establecimiento (igual que factura/retención).
+        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+        $est = null;
+        if (!empty($cabecera['id_establecimiento'])) {
+            foreach ($establecimientos as $e) {
+                if ((int)$e['id'] === (int)$cabecera['id_establecimiento']) { $est = $e; break; }
+            }
+        }
+        if ($est === null && !empty($establecimientos)) {
+            $est = $establecimientos[0];
+        }
+        if ($est) {
+            if (!empty($est['logo_ruta'])) {
+                $empresa['logo_ruta'] = $est['logo_ruta'];
+            }
+            $empresa['direccion_matriz']          = $empresa['direccion'] ?? '';
+            $empresa['direccion_establecimiento'] = $est['direccion'] ?? '';
+        }
+
+        return [
+            'cabecera'       => $cabecera,
+            'detalles'       => $detalles,
+            'pagos'          => $this->repository->getPagos($id),
+            'info_adicional' => $this->repository->getInfoAdicional($id),
+            'empresa'        => $empresa,
+        ];
+    }
 }
 

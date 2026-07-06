@@ -385,6 +385,89 @@ class AsientoBuilderService
     }
 
     /**
+     * Asiento de un CAMBIO DE PRODUCTOS, a costo. Refleja el neto entre lo que
+     * REINGRESA (productos devueltos) y lo que SALE (productos entregados):
+     *   - reingreso de lo devuelto: Debe Inventario / Haber Costo de Ventas
+     *   - salida de lo entregado:   Debe Costo de Ventas / Haber Inventario
+     * Consolidado por cuenta (cuadra por construcción). Valorado al costo promedio
+     * del producto en su bodega (excluyendo los movimientos de este mismo cambio).
+     * Reutiliza las cuentas del concepto 'ventas_factura' (Inventario + Costo de Ventas).
+     *
+     * @return array<int,array> Líneas del asiento o [] si el neto es ~0 o faltan cuentas.
+     */
+    public function generarAsientoCambioProductoCv(int $idEmpresa, int $idCambio): array
+    {
+        $db = \App\core\Database::getConnection();
+
+        // 1. Costo de cada lado, al costo promedio del producto/bodega (sin este cambio).
+        $st = $db->prepare(
+            "SELECT
+                COALESCE(SUM(CASE WHEN cd.tipo_linea = 'devolucion' THEN cd.cantidad * cp.costo ELSE 0 END), 0) AS costo_dev,
+                COALESCE(SUM(CASE WHEN cd.tipo_linea = 'entrega'    THEN cd.cantidad * cp.costo ELSE 0 END), 0) AS costo_ent
+             FROM cambios_producto_cv_detalles cd
+             LEFT JOIN LATERAL (
+                SELECT CASE WHEN SUM(k.cantidad) > 0
+                            THEN SUM(k.costo_total)::numeric / NULLIF(SUM(k.cantidad), 0)
+                            ELSE 0 END AS costo
+                FROM inventario_kardex k
+                WHERE k.id_empresa = :e AND k.id_producto = cd.id_producto AND k.id_bodega = cd.id_bodega
+                  AND k.tipo_movimiento = 'entrada' AND k.eliminado = false
+                  AND NOT (k.referencia_tipo = 'CAMBIO_PRODUCTO_CV' AND k.referencia_id = :id)
+             ) cp ON true
+             WHERE cd.id_cambio = :id AND cd.eliminado = false"
+        );
+        $st->execute([':e' => $idEmpresa, ':id' => $idCambio]);
+        $row = $st->fetch(\PDO::FETCH_ASSOC) ?: ['costo_dev' => 0, 'costo_ent' => 0];
+
+        $invNet = round((float) $row['costo_dev'] - (float) $row['costo_ent'], 2);
+        if (abs($invNet) < 0.005) {
+            return [];
+        }
+
+        // 2. Cuentas del concepto 'ventas_factura': Inventario y Costo de Ventas.
+        $cuentaInventario = null;
+        $cuentaCosto      = null;
+        foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'ventas_factura') as $r) {
+            if (empty($r['id_cuenta'])) continue;
+            $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']   ?? '');
+            $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '');
+            $cuenta = [
+                'id_cuenta'     => (int) $r['id_cuenta'],
+                'cuenta_codigo' => $r['cuenta_codigo'] ?? '',
+                'cuenta_nombre' => $r['cuenta_nombre'] ?? '',
+            ];
+            if (str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario')) {
+                $cuentaInventario = $cuenta;
+            } elseif (str_contains($codigo, 'COSTO') || str_contains($concepto, 'costo')) {
+                $cuentaCosto = $cuenta;
+            }
+        }
+
+        // 3. Neto por cuenta (Inventario vs Costo de Ventas).
+        $invDebe  = max($invNet, 0.0);
+        $invHaber = max(-$invNet, 0.0);
+
+        return [
+            [
+                'id_cuenta_contable' => $cuentaInventario['id_cuenta']     ?? 0,
+                'cuenta_codigo'      => $cuentaInventario['cuenta_codigo'] ?? '',
+                'cuenta_nombre'      => $cuentaInventario['cuenta_nombre'] ?? '',
+                'debe'               => round($invDebe, 2),
+                'haber'              => round($invHaber, 2),
+                'referencia_detalle' => 'Inventario (cambio de productos)',
+            ],
+            [
+                'id_cuenta_contable' => $cuentaCosto['id_cuenta']     ?? 0,
+                'cuenta_codigo'      => $cuentaCosto['cuenta_codigo'] ?? '',
+                'cuenta_nombre'      => $cuentaCosto['cuenta_nombre'] ?? '',
+                'debe'               => round($invHaber, 2),
+                'haber'              => round($invDebe, 2),
+                'referencia_detalle' => 'Costo de ventas (cambio de productos)',
+            ],
+        ];
+    }
+
+    /**
      * Lee el id de la entidad (cliente/proveedor) de la cabecera del documento. $tabla y $columna son
      * constantes internas (no entrada de usuario), por lo que es seguro interpolarlas.
      */

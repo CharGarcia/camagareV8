@@ -43,6 +43,9 @@ class DocumentoAutomatedRegisterService
     private RetencionVentaRepository $retVentaRepo;
     private DocumentoIgnoradoRepository $ignoradoRepo;
 
+    /** XML recibido TAL CUAL (sobre de autorización del SRI); es lo que se guarda en detalle_xml. */
+    private ?string $xmlOriginal = null;
+
     public function __construct()
     {
         $this->clienteRepo = new ClienteRepository();
@@ -79,15 +82,24 @@ class DocumentoAutomatedRegisterService
     public function procesarYRegistrar(string $xmlString, int $idEmpresa, int $idUsuario): array
     {
         try {
+            // El XML recibido (sobre de autorización del SRI) se guarda TAL CUAL en detalle_xml.
+            $this->xmlOriginal = $xmlString;
+
             $xml = new SimpleXMLElement($xmlString);
-            
+
             $debugMsg = "[" . date('Y-m-d H:i:s') . "] XML Root Detected: " . $xml->getName() . "\n";
             file_put_contents(MVC_ROOT . '/storage/logs/debug_sri.log', $debugMsg, FILE_APPEND);
-            
-            // Si el XML viene envuelto en etiquetas de autorización del SRI
+
+            // Desenvolver el comprobante para procesarlo. El SRI lo entrega dentro del sobre de
+            // autorización (autorizaciones > autorizacion > comprobante); también se admite el
+            // comprobante como hijo directo por compatibilidad.
             if (isset($xml->comprobante)) {
                 $xml = new SimpleXMLElement((string)$xml->comprobante);
                 $debugMsg = "[" . date('Y-m-d H:i:s') . "] XML Root After Unwrapped: " . $xml->getName() . "\n";
+                file_put_contents(MVC_ROOT . '/storage/logs/debug_sri.log', $debugMsg, FILE_APPEND);
+            } elseif (isset($xml->autorizacion->comprobante)) {
+                $xml = new SimpleXMLElement((string)$xml->autorizacion->comprobante);
+                $debugMsg = "[" . date('Y-m-d H:i:s') . "] XML Root After Unwrapped (sobre): " . $xml->getName() . "\n";
                 file_put_contents(MVC_ROOT . '/storage/logs/debug_sri.log', $debugMsg, FILE_APPEND);
             }
 
@@ -311,7 +323,7 @@ class DocumentoAutomatedRegisterService
     {
         $it      = $xml->infoTributaria;
         $info    = $xml->infoFactura;
-        $xmlStr  = $xml->asXML();
+        $xmlStr  = ($this->xmlOriginal ?? $xml->asXML());
         
         $db = Database::getConnection();
         $db->beginTransaction();
@@ -415,7 +427,7 @@ class DocumentoAutomatedRegisterService
         $codDoc      = (string)$it->codDoc;
         $claveAcceso = (string)$it->claveAcceso;
         $secuencial  = (string)$it->secuencial;
-        $xmlStr      = $xml->asXML();
+        $xmlStr      = ($this->xmlOriginal ?? $xml->asXML());
         
         $info = null;
         $total = 0;
@@ -679,7 +691,7 @@ class DocumentoAutomatedRegisterService
     {
         $it     = $xml->infoTributaria;
         $info   = $xml->infoLiquidacionCompra;
-        $xmlStr = $xml->asXML();
+        $xmlStr = ($this->xmlOriginal ?? $xml->asXML());
         
         $db = Database::getConnection();
         $db->beginTransaction();
@@ -860,7 +872,7 @@ class DocumentoAutomatedRegisterService
         $it     = $xml->infoTributaria;
         $info   = $xml->infoNotaCredito;
         $db     = Database::getConnection();
-        $xmlStr = $xml->asXML();
+        $xmlStr = ($this->xmlOriginal ?? $xml->asXML());
         $db->beginTransaction();
         try {
             $idNC = $this->ncRepo->insertCabecera([
@@ -925,7 +937,7 @@ class DocumentoAutomatedRegisterService
         $it     = $xml->infoTributaria;
         $info   = $xml->infoNotaDebito;
         $db     = Database::getConnection();
-        $xmlStr = $xml->asXML();
+        $xmlStr = ($this->xmlOriginal ?? $xml->asXML());
         $db->beginTransaction();
         try {
             $idND = $this->ndRepo->insertCabecera([
@@ -1107,7 +1119,7 @@ class DocumentoAutomatedRegisterService
         $fechaEmision = $this->formatearFecha((string)$info->fechaEmision);
 
         // XML completo para auditoria
-        $xmlString = $xml->asXML();
+        $xmlString = ($this->xmlOriginal ?? $xml->asXML());
 
         // Helper: codigo de impuesto SRI -> nombre interno
         $mapImpuesto = static function (string $cod): string {

@@ -1778,20 +1778,35 @@ $totalPages = $totalPagesOriginal;
                 _guardadoOk = true;
                 // Capturar antes de cualquier limpieza: distingue crear vs actualizar.
                 const esActualizacion = FV_ID_ACTIVO > 0;
+                const idGuardado      = parseInt(json.id) || (esActualizacion ? FV_ID_ACTIVO : 0);
                 fvLimpiarBorrador();
-                modalMain.hide();
 
-                // Mostrar advertencia del asiento ANTES de refrescar la lista,
-                // con await para que el usuario la cierre antes de que cambie el DOM.
+                // NO se cierra el modal automáticamente: el usuario lo cierra a mano.
+                // Así, si el SRI pide corregir la fecha, se ajusta y se reenvía sin
+                // tener que reabrir el modal.
+
+                // Refrescar la tabla de fondo preservando el orden/página.
+                if (typeof window.FV_fetchSearch === 'function') {
+                    window.FV_fetchSearch(window.FV_currentPage || 1);
+                }
+
+                // Recargar la factura guardada DENTRO del modal ya abierto: queda en
+                // modo edición existente (id, fecha, secuencial bloqueado y botones
+                // SRI/duplicar/recibo listos). Reusa el flujo de abrir factura por id.
+                if (idGuardado > 0 && typeof window.abrirModalFacturaVer === 'function') {
+                    window.abrirModalFacturaVer({ dataset: { row: JSON.stringify({ id: idGuardado }) } });
+                }
+
+                // Aviso de asiento pendiente o confirmación breve (no bloqueante).
                 if (json.asiento_warning) {
-                    await Swal.fire({
+                    Swal.fire({
                         icon: 'warning',
                         title: 'Factura guardada — asiento pendiente',
                         html: `La factura se guardó correctamente, pero el asiento contable no pudo generarse:<br><br><small class="text-muted">${json.asiento_warning}</small>`,
-                        confirmButtonText: 'Entendido'
+                        confirmButtonText: 'Entendido',
+                        target: document.getElementById('modalNuevaFactura')
                     });
                 } else {
-                    // Confirmación breve y no bloqueante del guardado exitoso.
                     Swal.fire({
                         toast: true,
                         position: 'top-end',
@@ -1803,27 +1818,8 @@ $totalPages = $totalPagesOriginal;
                     });
                 }
 
-                if (FV_ID_ACTIVO > 0 && json.rowHtml) {
-                    let rowReplaced = false;
-                    document.querySelectorAll('tr.factura-row').forEach(tr => {
-                        try {
-                            const dataRow = JSON.parse(tr.dataset.row);
-                            if (dataRow.id == FV_ID_ACTIVO) {
-                                tr.outerHTML = json.rowHtml;
-                                rowReplaced = true;
-                            }
-                        } catch (e) {}
-                    });
-                    if (!rowReplaced && typeof window.FV_fetchSearch === 'function') {
-                        window.FV_fetchSearch(window.FV_currentPage || 1);
-                    }
-                } else {
-                    if (typeof window.FV_fetchSearch === 'function') {
-                        window.FV_fetchSearch(1);
-                    } else {
-                        location.reload();
-                    }
-                }
+                // Mantener el botón habilitado para seguir editando/guardando.
+                btn.disabled = false;
             } else {
                 const titulo = (json.mensaje || '').includes('Stock insuficiente') ? 'Stock Insuficiente' : 'Oops...';
                 Swal.fire({
@@ -1840,7 +1836,8 @@ $totalPages = $totalPagesOriginal;
                 text: 'No se pudo conectar con el servidor. Intente nuevamente.'
             });
         } finally {
-            // Rehabilitar siempre excepto cuando el guardado fue exitoso (modal ya cerrado)
+            // En éxito el botón ya se re-habilita arriba (el modal queda abierto);
+            // aquí cubrimos los casos de error/validación.
             if (!_guardadoOk) btn.disabled = false;
         }
     }
@@ -4559,6 +4556,12 @@ $totalPages = $totalPagesOriginal;
             if (!json.ok) return;
 
             const cab = json.cabecera;
+
+            // Sincronizar los globales con la cabecera autoritativa del servidor
+            // (importante cuando se recarga por id, p. ej. tras guardar: así el
+            // chequeo de fecha del SRI usa la fecha realmente guardada).
+            FV_FECHA_EMISION = (cab.fecha_emision || '').split(' ')[0].split('T')[0] || null;
+            FV_CLIENTE_RUC   = (cab.cliente_ruc || '').trim();
 
             // Actualizar tÃ­tulo con datos reales completos (aplicando padding)
             const rEst = (cab.establecimiento || '').toString().padStart(3, '0');

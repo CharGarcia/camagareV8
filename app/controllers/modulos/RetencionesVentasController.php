@@ -298,6 +298,40 @@ class RetencionesVentasController extends BaseModuloController
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // AJAX — exportar PDF del comprobante
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function exportPdfDoc(): void
+    {
+        $this->requireLeer();
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            $cabecera = $this->repository->getPorId($id, $idEmpresa);
+            if (!$cabecera) {
+                die('Retención no encontrada');
+            }
+
+            $pdfService = new \App\Services\modulos\RetencionVentaPdfService();
+
+            // Preferir el XML autorizado (documento oficial). Si no hay XML
+            // (retención manual), armar el PDF con los datos de BD.
+            $xml = trim($cabecera['detalle_xml'] ?? '');
+            if ($xml !== '') {
+                $pdfService->generarDesdeXml($xml);
+            } else {
+                $lineas  = $this->repository->getDetalle($id);
+                $empresa = (new Empresa())->getPorId($idEmpresa) ?? [];
+                $pdfService->generar($cabecera, $lineas, $empresa);
+            }
+        } catch (\Throwable $e) {
+            die('Error al generar PDF: ' . $e->getMessage());
+        }
+        exit;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // AJAX — guardar (crear/actualizar)
     // ─────────────────────────────────────────────────────────────────────────
 

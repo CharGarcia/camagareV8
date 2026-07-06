@@ -316,6 +316,67 @@ class ComprasController extends BaseModuloController
         exit;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // EXPORTAR PDF
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Genera el PDF de la compra a partir del XML del comprobante electrónico
+     * (mismo formato del RIDE de Facturas de Venta). Solo aplica a compras con
+     * XML almacenado; las compras físicas/manuales no tienen XML.
+     */
+    public function exportarPdfAjax(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $compra = $this->service->getPorId($id, $idEmpresa);
+            if (!$compra) { http_response_code(404); echo 'Compra no encontrada'; exit; }
+
+            $xmlComprobante = trim((string) ($compra['detalle_xml'] ?? ''));
+            if ($xmlComprobante === '') {
+                http_response_code(422);
+                echo 'Esta compra no tiene XML almacenado. El PDF solo está disponible para comprobantes electrónicos.';
+                exit;
+            }
+
+            // Datos del documento tomados EXCLUSIVAMENTE del XML.
+            $parsed = $this->service->parsearComprobanteXml($xmlComprobante);
+
+            $cabecera = $parsed['cabecera'];
+            // Metadatos internos de la compra (no forman parte del documento del proveedor).
+            $cabecera['observaciones']  = $compra['observaciones'] ?? '';
+            $cabecera['deducible']      = $compra['deducible'] ?? '';
+            $cabecera['fecha_registro'] = $compra['fecha_registro'] ?? '';
+
+            // Adquirente (comprador) = datos del receptor tomados del XML.
+            // Los decimales de presentación se toman de la config de la empresa.
+            $empresaModel = new \App\models\Empresa();
+            $empresaCfg   = $empresaModel->getPorId($idEmpresa) ?? [];
+            $empresa = [
+                'decimales_cantidad' => $empresaCfg['decimales_cantidad'] ?? 2,
+                'decimales_precio'   => $empresaCfg['decimales_precio']   ?? 2,
+                'nombre'             => $parsed['comprador']['nombre'],
+                'ruc'                => $parsed['comprador']['ruc'],
+                'direccion'          => $parsed['comprador']['direccion'],
+                'tipo_ambiente'      => $cabecera['tipo_ambiente'] ?? '1',
+            ];
+
+            $pdfService = new \App\Services\modulos\ComprasPdfService();
+            // 'D' = forzar descarga del archivo PDF.
+            $pdfService->generar($cabecera, $parsed['detalles'], $parsed['pagos'], $parsed['infoAdicional'], $empresa, 'D');
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            echo 'Error al generar PDF: ' . $e->getMessage();
+        }
+        exit;
+    }
+
 
     public function getEgresoDependenciesAjax(): void
     {

@@ -31,6 +31,12 @@
                                 <i class="fa-solid fa-user-plus"></i>
                             </button>
                         <?php endif; ?>
+                        <button type="button" id="retv-btn-pdf"
+                                class="btn btn-outline-danger btn-sm px-2 d-none"
+                                onclick="window.RETV_descargarPdf()"
+                                title="Descargar PDF">
+                            <i class="fa-solid fa-file-pdf me-1"></i> PDF
+                        </button>
                         <button type="button" id="retv-btn-descargar-xml"
                                 class="btn btn-outline-success btn-sm px-2 d-none"
                                 onclick="window.RETV_descargarXml()"

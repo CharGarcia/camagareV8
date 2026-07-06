@@ -276,17 +276,23 @@
             const data = await res.json();
             if (data.ok) {
                 mostrarAlerta(data.mensaje, 'success');
-                retIdActual = data.id || retIdActual;
-                
-                // Cerrar modal
-                if (modalRet) modalRet.hide();
-                
-                // Refrescar listado principal si existe
+                const idPrevio   = parseInt(retIdActual) || 0;
+                const idGuardado = parseInt(data.id) || idPrevio;
+                retIdActual = idGuardado;
+
+                // NO se cierra el modal: el usuario lo cierra a mano (para corregir
+                // fecha y reenviar al SRI sin reabrir).
+                // Refrescar listado principal si existe.
                 if (typeof RET_fetchSearch === 'function') setTimeout(() => RET_fetchSearch(1), 300);
-                
-                // Refrescar listado en el modal de compras si existe la función global
+
+                // Refrescar listado en el modal de compras si existe la función global.
                 if (typeof window.CMG_cargarRetencionesCompra === 'function') {
                     setTimeout(() => window.CMG_cargarRetencionesCompra(), 400);
+                }
+
+                // Recargar la retención guardada dentro del modal (modo edición).
+                if (idGuardado > 0 && typeof window.RET_abrirModal === 'function') {
+                    window.RET_abrirModal({ dataset: { row: JSON.stringify({ id: idGuardado }) } });
                 }
             } else {
                 mostrarAlerta(data.mensaje || 'Error al guardar.', 'danger');

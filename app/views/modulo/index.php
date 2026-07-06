@@ -1,17 +1,17 @@
 <?php
 /** @var string $titulo */
 /** @var string $tipo */
-/** @var array $rows */
-/** @var int $total */
-/** @var int $page */
-/** @var int $totalPages */
-/** @var string $buscar */
+/** @var array $rowsModulos */
+/** @var array $rowsSubmodulos */
+/** @var array $rowsIconos */
 /** @var array $modulos */
 /** @var array $iconos */
 $base = BASE_URL;
 $msg = $_SESSION['modulo_msg'] ?? null;
 unset($_SESSION['modulo_msg']);
 ?>
+<?php /* Hay filtros/pestañas encima de la tabla: se desactiva el app-shell para que la página no quede bloqueada. */ ?>
+<script>document.body.classList.add('cmg-no-app-shell');</script>
 <style>
 .cmg-modulo-icono-fila { display: flex; align-items: stretch; gap: 0.5rem; }
 .cmg-table-card .table-responsive thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; }
@@ -43,11 +43,9 @@ unset($_SESSION['modulo_msg']);
         <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNuevoSubmodulo">
             <i class="bi bi-plus-lg"></i> Nuevo submódulo
         </button>
-        <?php if ($tipo === 'iconos'): ?>
         <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNuevoIcono">
             <i class="bi bi-plus-lg"></i> Nuevo icono
         </button>
-        <?php endif; ?>
     </div>
 </div>
 
@@ -62,28 +60,22 @@ unset($_SESSION['modulo_msg']);
     <div class="card-body py-2">
         <div class="row g-2 align-items-center">
             <div class="col-auto">
-                <a href="<?= $base ?>/config/modulo?tipo=modulos" class="btn btn-sm <?= $tipo === 'modulos' ? 'btn-primary' : 'btn-outline-secondary' ?>">
+                <button type="button" class="btn btn-sm cmg-tab-btn <?= $tipo === 'modulos' ? 'btn-primary' : 'btn-outline-secondary' ?>" data-tab="modulos">
                     <i class="bi bi-folder"></i> Módulos
-                </a>
-                <a href="<?= $base ?>/config/modulo?tipo=submodulos" class="btn btn-sm <?= $tipo === 'submodulos' ? 'btn-primary' : 'btn-outline-secondary' ?>">
+                </button>
+                <button type="button" class="btn btn-sm cmg-tab-btn <?= $tipo === 'submodulos' ? 'btn-primary' : 'btn-outline-secondary' ?>" data-tab="submodulos">
                     <i class="bi bi-file-earmark"></i> Submódulos
-                </a>
-                <a href="<?= $base ?>/config/modulo?tipo=iconos" class="btn btn-sm <?= $tipo === 'iconos' ? 'btn-primary' : 'btn-outline-secondary' ?>">
+                </button>
+                <button type="button" class="btn btn-sm cmg-tab-btn <?= $tipo === 'iconos' ? 'btn-primary' : 'btn-outline-secondary' ?>" data-tab="iconos">
                     <i class="bi bi-emoji-smile"></i> Iconos
-                </a>
+                </button>
             </div>
             <div class="col-auto flex-grow-1">
-                <form method="GET" action="<?= $base ?>/config/modulo" class="d-flex gap-1">
-                    <input type="hidden" name="tipo" value="<?= htmlspecialchars($tipo) ?>">
-                    <input type="hidden" name="page" value="1">
-                    <div class="input-group input-group-sm">
-                        <input type="text" name="b" id="inputBuscarModulo" class="form-control" placeholder="Buscar..." value="<?= htmlspecialchars($buscar) ?>" style="max-width:220px" autocomplete="off">
-                        <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-search"></i></button>
-                        <?php if ($buscar !== ''): ?>
-                        <a href="<?= $base ?>/config/modulo?tipo=<?= urlencode($tipo) ?>" class="btn btn-outline-secondary" title="Limpiar búsqueda"><i class="bi bi-x-lg"></i></a>
-                        <?php endif; ?>
-                    </div>
-                </form>
+                <div class="input-group input-group-sm" style="max-width:260px">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" id="inputBuscarModulo" class="form-control" placeholder="Buscar..." autocomplete="off">
+                    <button type="button" id="btnLimpiarBuscarModulo" class="btn btn-outline-secondary" title="Limpiar búsqueda"><i class="bi bi-x-lg"></i></button>
+                </div>
             </div>
         </div>
     </div>
@@ -91,136 +83,106 @@ unset($_SESSION['modulo_msg']);
 
 <div class="card cmg-table-card">
     <div class="card-body p-0">
-        <?php if ($tipo === 'iconos'): ?>
-        <div class="table-responsive" style="max-height:calc(100dvh - 290px);overflow-y:auto;">
-            <table class="table table-hover table-sm mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Nombre</th>
-                        <th>Vista previa</th>
-                        <th class="text-end" style="width:80px">Opciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <tr>
-                        <td><code><?= htmlspecialchars($r['nombre_icono'] ?? '') ?></code></td>
-                        <td><i class="<?= htmlspecialchars(iconoClase($r['nombre_icono'] ?? null)) ?>"></i></td>
-                        <td class="text-end">
-                            <button type="button" class="btn btn-sm btn-outline-primary btn-editar-icono cmg-btn-table"
-                                data-id="<?= (int)($r['id'] ?? 0) ?>"
-                                data-nombre="<?= htmlspecialchars($r['nombre_icono'] ?? '') ?>">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+        <!-- Panel: Módulos -->
+        <div class="cmg-tabpanel" data-tabpanel="modulos" style="<?= $tipo === 'modulos' ? '' : 'display:none' ?>">
+            <div class="table-responsive" style="max-height:calc(100dvh - 290px);overflow-y:auto;">
+                <table class="table table-hover table-sm mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Icono</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rowsModulos as $r): ?>
+                        <tr class="btn-editar-modulo" style="cursor:pointer"
+                            data-id="<?= (int)($r['id_modulo'] ?? 0) ?>"
+                            data-nombre="<?= htmlspecialchars($r['nombre_modulo'] ?? '') ?>"
+                            data-icono="<?= (int)($r['id_icono'] ?? 0) ?>">
+                            <td><?= htmlspecialchars($r['nombre_modulo'] ?? '') ?></td>
+                            <td><i class="<?= htmlspecialchars(iconoClase($r['nombre_icono'] ?? null)) ?>"></i> <?= htmlspecialchars($r['nombre_icono'] ?? '') ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
-        <?php elseif ($tipo === 'modulos'): ?>
-        <div class="table-responsive" style="max-height:calc(100dvh - 290px);overflow-y:auto;">
-            <table class="table table-hover table-sm mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Nombre</th>
-                        <th>Icono</th>
-                        <th class="text-end" style="width:100px">Opciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($r['nombre_modulo'] ?? '') ?></td>
-                        <td><i class="<?= htmlspecialchars(iconoClase($r['nombre_icono'] ?? null)) ?>"></i> <?= htmlspecialchars($r['nombre_icono'] ?? '') ?></td>
-                        <td class="text-end">
-                            <button type="button" class="btn btn-sm btn-outline-primary cmg-btn-table" data-bs-toggle="modal" data-bs-target="#modalEditarModulo"
-                                data-id="<?= (int)($r['id_modulo'] ?? 0) ?>"
-                                data-nombre="<?= htmlspecialchars($r['nombre_modulo'] ?? '') ?>"
-                                data-icono="<?= (int)($r['id_icono'] ?? 0) ?>">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <form method="POST" action="<?= $base ?>/config/moduloDeleteModulo" class="d-inline" onsubmit="return confirm('¿Eliminar este módulo y todos sus submódulos?');">
-                                <input type="hidden" name="id" value="<?= (int)($r['id_modulo'] ?? 0) ?>">
-                                <button type="submit" class="btn btn-sm btn-outline-danger cmg-btn-table" title="Eliminar"><i class="bi bi-trash"></i></button>
-                            </form>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+
+        <!-- Panel: Submódulos -->
+        <div class="cmg-tabpanel" data-tabpanel="submodulos" style="<?= $tipo === 'submodulos' ? '' : 'display:none' ?>">
+            <div class="table-responsive" style="max-height:calc(100dvh - 290px);overflow-y:auto;">
+                <table class="table table-hover table-sm mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Módulo</th>
+                            <th>Submódulo</th>
+                            <th>Icono</th>
+                            <th>Ruta</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rowsSubmodulos as $r): ?>
+                        <?php $activo = (int)($r['status'] ?? 1) === 1; ?>
+                        <tr class="btn-editar-submodulo <?= $activo ? '' : 'table-secondary' ?>" style="cursor:pointer"
+                            data-id="<?= (int)($r['id_submodulo'] ?? 0) ?>"
+                            data-modulo="<?= (int)($r['id_modulo'] ?? 0) ?>"
+                            data-nombre="<?= htmlspecialchars($r['nombre_submodulo'] ?? '') ?>"
+                            data-ruta="<?= htmlspecialchars($r['ruta'] ?? '') ?>"
+                            data-icono="<?= (int)($r['id_icono'] ?? 0) ?>">
+                            <td><?= htmlspecialchars($r['nombre_modulo'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($r['nombre_submodulo'] ?? '') ?></td>
+                            <td><i class="<?= htmlspecialchars(iconoClase($r['nombre_icono'] ?? null)) ?>"></i></td>
+                            <td><code class="small"><?= htmlspecialchars($r['ruta'] ?? '') ?></code></td>
+                            <td>
+                                <form method="POST" action="<?= $base ?>/config/moduloToggleSubmoduloStatus" class="d-inline cmg-no-row-click">
+                                    <input type="hidden" name="id" value="<?= (int)($r['id_submodulo'] ?? 0) ?>">
+                                    <button type="submit" class="btn btn-sm cmg-btn-table <?= $activo ? 'btn-success' : 'btn-outline-secondary' ?>" title="<?= $activo ? 'Activo - clic para desactivar' : 'Inactivo - clic para activar' ?>">
+                                        <?= $activo ? 'Activo' : 'Inactivo' ?>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
-        <?php else: ?>
-        <div class="table-responsive" style="max-height:calc(100dvh - 290px);overflow-y:auto;">
-            <table class="table table-hover table-sm mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Módulo</th>
-                        <th>Submódulo</th>
-                        <th>Icono</th>
-                        <th>Ruta</th>
-                        <th>Estado</th>
-                        <th class="text-end" style="width:120px">Opciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($rows as $r): ?>
-                    <?php $activo = (int)($r['status'] ?? 1) === 1; ?>
-                    <tr class="<?= $activo ? '' : 'table-secondary' ?>">
-                        <td><?= htmlspecialchars($r['nombre_modulo'] ?? '') ?></td>
-                        <td><?= htmlspecialchars($r['nombre_submodulo'] ?? '') ?></td>
-                        <td><i class="<?= htmlspecialchars(iconoClase($r['nombre_icono'] ?? null)) ?>"></i></td>
-                        <td><code class="small"><?= htmlspecialchars($r['ruta'] ?? '') ?></code></td>
-                        <td>
-                            <form method="POST" action="<?= $base ?>/config/moduloToggleSubmoduloStatus" class="d-inline">
-                                <input type="hidden" name="id" value="<?= (int)($r['id_submodulo'] ?? 0) ?>">
-                                <button type="submit" class="btn btn-sm cmg-btn-table <?= $activo ? 'btn-success' : 'btn-outline-secondary' ?>" title="<?= $activo ? 'Activo - clic para desactivar' : 'Inactivo - clic para activar' ?>">
-                                    <?= $activo ? 'Activo' : 'Inactivo' ?>
-                                </button>
-                            </form>
-                        </td>
-                        <td class="text-end">
-                            <button type="button" class="btn btn-sm btn-outline-primary btn-editar-submodulo cmg-btn-table"
-                                data-id="<?= (int)($r['id_submodulo'] ?? 0) ?>"
-                                data-modulo="<?= (int)($r['id_modulo'] ?? 0) ?>"
-                                data-nombre="<?= htmlspecialchars($r['nombre_submodulo'] ?? '') ?>"
-                                data-ruta="<?= htmlspecialchars($r['ruta'] ?? '') ?>"
-                                data-icono="<?= (int)($r['id_icono'] ?? 0) ?>">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <form method="POST" action="<?= $base ?>/config/moduloDeleteSubmodulo" class="d-inline" onsubmit="return confirm('¿Eliminar este submódulo?');">
-                                <input type="hidden" name="id" value="<?= (int)($r['id_submodulo'] ?? 0) ?>">
-                                <button type="submit" class="btn btn-sm btn-outline-danger cmg-btn-table" title="Eliminar"><i class="bi bi-trash"></i></button>
-                            </form>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+
+        <!-- Panel: Iconos -->
+        <div class="cmg-tabpanel" data-tabpanel="iconos" style="<?= $tipo === 'iconos' ? '' : 'display:none' ?>">
+            <div class="table-responsive" style="max-height:calc(100dvh - 290px);overflow-y:auto;">
+                <table class="table table-hover table-sm mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Vista previa</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rowsIconos as $r): ?>
+                        <tr class="btn-editar-icono" style="cursor:pointer"
+                            data-id="<?= (int)($r['id'] ?? 0) ?>"
+                            data-nombre="<?= htmlspecialchars($r['nombre_icono'] ?? '') ?>">
+                            <td><code><?= htmlspecialchars($r['nombre_icono'] ?? '') ?></code></td>
+                            <td><i class="<?= htmlspecialchars(iconoClase($r['nombre_icono'] ?? null)) ?>"></i></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
-        <?php endif; ?>
 
     </div><!-- /.card-body -->
-    <?php if (empty($rows)): ?>
-    <div class="text-center py-5 text-muted">
-        <i class="bi bi-inbox" style="font-size:2rem"></i>
-        <p class="mb-0 mt-2">No hay registros<?= $buscar !== '' ? ' para "' . htmlspecialchars($buscar) . '"' : '' ?></p>
+    <div id="cmgModuloSinResultados" class="text-center py-5 text-muted" style="display:none">
+        <i class="bi bi-search" style="font-size:2rem"></i>
+        <p class="mb-0 mt-2">No hay coincidencias</p>
     </div>
-    <?php endif; ?>
-    <?php if ($totalPages > 1): ?>
-    <div class="card-footer py-2">
-        <nav>
-            <ul class="pagination pagination-sm mb-0 justify-content-center">
-                <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-                <li class="page-item <?= $i === $page ? 'active' : '' ?>">
-                    <a class="page-link" href="<?= $base ?>/config/modulo?tipo=<?= urlencode($tipo) ?>&page=<?= $i ?><?= $buscar !== '' ? '&b=' . urlencode($buscar) : '' ?>"><?= $i ?></a>
-                </li>
-                <?php endfor; ?>
-            </ul>
-        </nav>
+    <div class="card-footer py-2 small text-muted">
+        <span id="cmgModuloContador">0</span> registro(s)
     </div>
-    <?php endif; ?>
 </div>
+<input type="hidden" id="cmgModuloTabActiva" value="<?= htmlspecialchars($tipo) ?>">
 
 <!-- Modal Nuevo módulo -->
 <div class="modal fade" id="modalNuevoModulo" tabindex="-1">
@@ -265,6 +227,7 @@ unset($_SESSION['modulo_msg']);
         <div class="modal-content">
             <form method="POST" action="<?= $base ?>/config/moduloUpdateModulo">
                 <input type="hidden" name="mod_id_modulo" id="mod_id_modulo">
+                <input type="hidden" name="id" id="del_id_modulo">
                 <div class="modal-header">
                     <h5 class="modal-title"><i class="bi bi-pencil"></i> Editar módulo</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -288,6 +251,7 @@ unset($_SESSION['modulo_msg']);
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <button type="submit" class="btn btn-outline-danger me-auto" formaction="<?= $base ?>/config/moduloDeleteModulo" formnovalidate onclick="return confirm('¿Eliminar este módulo y todos sus submódulos?');"><i class="bi bi-trash"></i> Eliminar</button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
                     <button type="submit" class="btn btn-primary">Guardar</button>
                 </div>
@@ -352,6 +316,7 @@ unset($_SESSION['modulo_msg']);
         <div class="modal-content">
             <form method="POST" action="<?= $base ?>/config/moduloUpdateSubmodulo">
                 <input type="hidden" name="mod_id_submodulo" id="mod_id_submodulo">
+                <input type="hidden" name="id" id="del_id_submodulo">
                 <div class="modal-header">
                     <h5 class="modal-title"><i class="bi bi-pencil"></i> Editar submódulo</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -387,6 +352,7 @@ unset($_SESSION['modulo_msg']);
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <button type="submit" class="btn btn-outline-danger me-auto" formaction="<?= $base ?>/config/moduloDeleteSubmodulo" formnovalidate onclick="return confirm('¿Eliminar este submódulo?');"><i class="bi bi-trash"></i> Eliminar</button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
                     <button type="submit" class="btn btn-primary">Guardar</button>
                 </div>
@@ -397,6 +363,62 @@ unset($_SESSION['modulo_msg']);
 
 <script>
 (function() {
+    // --- Pestañas + búsqueda client-side (URL siempre limpia, sin recarga) ---
+    var inputBuscar = document.getElementById('inputBuscarModulo');
+    var btnLimpiar  = document.getElementById('btnLimpiarBuscarModulo');
+    var msgSinResultados = document.getElementById('cmgModuloSinResultados');
+    var contador    = document.getElementById('cmgModuloContador');
+    var tabActivaEl = document.getElementById('cmgModuloTabActiva');
+    var tabActiva   = tabActivaEl ? tabActivaEl.value : 'modulos';
+
+    function cmgPanelActivo() {
+        return document.querySelector('.cmg-tabpanel[data-tabpanel="' + tabActiva + '"]');
+    }
+
+    function cmgFiltrarTabla() {
+        var panel = cmgPanelActivo();
+        if (!panel) return;
+        var q = (inputBuscar ? inputBuscar.value : '').trim().toLowerCase();
+        var visibles = 0;
+        panel.querySelectorAll('tbody tr').forEach(function(tr) {
+            var match = q === '' || tr.textContent.toLowerCase().indexOf(q) !== -1;
+            tr.style.display = match ? '' : 'none';
+            if (match) visibles++;
+        });
+        if (msgSinResultados) msgSinResultados.style.display = (visibles === 0) ? '' : 'none';
+        if (contador) contador.textContent = visibles;
+    }
+
+    function cmgCambiarTab(tab) {
+        tabActiva = tab;
+        document.querySelectorAll('.cmg-tabpanel').forEach(function(p) {
+            p.style.display = (p.getAttribute('data-tabpanel') === tab) ? '' : 'none';
+        });
+        document.querySelectorAll('.cmg-tab-btn').forEach(function(b) {
+            var on = b.getAttribute('data-tab') === tab;
+            b.classList.toggle('btn-primary', on);
+            b.classList.toggle('btn-outline-secondary', !on);
+        });
+        cmgFiltrarTabla();
+    }
+
+    document.querySelectorAll('.cmg-tab-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() { cmgCambiarTab(this.getAttribute('data-tab')); });
+    });
+
+    if (inputBuscar) {
+        inputBuscar.addEventListener('input', cmgFiltrarTabla);
+        inputBuscar.focus();
+    }
+    if (btnLimpiar) {
+        btnLimpiar.addEventListener('click', function() {
+            if (inputBuscar) { inputBuscar.value = ''; cmgFiltrarTabla(); inputBuscar.focus(); }
+        });
+    }
+
+    // Contador inicial
+    cmgFiltrarTabla();
+
     function cmgIconoPreviewActualizar(select) {
         if (!select) return;
         var tid = select.getAttribute('data-preview-target');
@@ -424,21 +446,31 @@ unset($_SESSION['modulo_msg']);
         cmgIconoPreviewActualizar(document.getElementById('sel_icono_nuevo_submodulo'));
     });
 
-    document.getElementById('modalEditarModulo')?.addEventListener('show.bs.modal', function(e) {
-        var btn = e.relatedTarget;
-        if (btn) {
-            document.getElementById('mod_id_modulo').value = btn.dataset.id || '';
-            document.getElementById('mod_nombre_modulo').value = btn.dataset.nombre || '';
-            document.getElementById('mod_id_icono').value = btn.dataset.icono || '';
-        }
+    // Clic en la fila = abrir modal de edición (con Eliminar dentro).
+    // Se ignora si el clic viene de un control interactivo (botón de Estado).
+    function cmgClicFilaValido(e) {
+        return !e.target.closest('.cmg-no-row-click, a, button, input, select');
+    }
+
+    document.querySelectorAll('.btn-editar-modulo').forEach(function(fila) {
+        fila.addEventListener('click', function(e) {
+            if (!cmgClicFilaValido(e)) return;
+            document.getElementById('mod_id_modulo').value = this.dataset.id || '';
+            document.getElementById('del_id_modulo').value = this.dataset.id || '';
+            document.getElementById('mod_nombre_modulo').value = this.dataset.nombre || '';
+            document.getElementById('mod_id_icono').value = this.dataset.icono || '';
+            new bootstrap.Modal(document.getElementById('modalEditarModulo')).show();
+        });
     });
     document.getElementById('modalEditarModulo')?.addEventListener('shown.bs.modal', function() {
         cmgIconoPreviewActualizar(document.getElementById('mod_id_icono'));
     });
 
-    document.querySelectorAll('.btn-editar-submodulo').forEach(function(btn) {
-        btn.addEventListener('click', function() {
+    document.querySelectorAll('.btn-editar-submodulo').forEach(function(fila) {
+        fila.addEventListener('click', function(e) {
+            if (!cmgClicFilaValido(e)) return;
             document.getElementById('mod_id_submodulo').value = this.dataset.id || '';
+            document.getElementById('del_id_submodulo').value = this.dataset.id || '';
             document.getElementById('mod_id_modulo_sub').value = this.dataset.modulo || '';
             document.getElementById('mod_nombre_submodulo').value = this.dataset.nombre || '';
             document.getElementById('mod_ruta').value = this.dataset.ruta || '';
@@ -450,8 +482,9 @@ unset($_SESSION['modulo_msg']);
         cmgIconoPreviewActualizar(document.getElementById('mod_id_icono_sub'));
     });
 
-    document.querySelectorAll('.btn-editar-icono').forEach(function(btn) {
-        btn.addEventListener('click', function() {
+    document.querySelectorAll('.btn-editar-icono').forEach(function(fila) {
+        fila.addEventListener('click', function(e) {
+            if (!cmgClicFilaValido(e)) return;
             document.getElementById('edit_icono_id').value = this.dataset.id || '';
             document.getElementById('mod_nombre_icono').value = this.dataset.nombre || '';
             new bootstrap.Modal(document.getElementById('modalEditarIcono')).show();

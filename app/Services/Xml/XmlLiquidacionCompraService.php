@@ -122,19 +122,20 @@ class XmlLiquidacionCompraService
         if (is_bool($olc)) $olc = $olc ? 'SI' : 'NO';
         $this->txt($dom, $el, 'obligadoContabilidad', strtoupper($olc) === 'SI' ? 'SI' : 'NO');
 
-        // Tipo de proveedor: 01 = persona natural nacional, 02 = extranjero sin RUC
+        // Tipo de identificación del proveedor (el XSD del SRI NO incluye
+        // tipoProveedor ni codigoSustento en el XML de liquidación; esos datos
+        // pertenecen al ATS/retención, no al comprobante electrónico).
         $tipoIdProv = (string)($cab['proveedor_tipo_id'] ?? '05');
-        $tipoProv   = in_array($tipoIdProv, ['06', '6'], true) ? '02' : '01';
-        $this->txt($dom, $el, 'tipoProveedorLiquidacion', $tipoProv);
-
-        // Tipo de identificación del proveedor
-        $codTipoId = $this->mapTipoIdentificacion($tipoIdProv);
+        $codTipoId  = $this->mapTipoIdentificacion($tipoIdProv);
         $this->txt($dom, $el, 'tipoIdentificacionProveedor', $codTipoId);
         $this->txt($dom, $el, 'razonSocialProveedor',        mb_strtoupper($cab['proveedor_nombre'] ?? '', 'UTF-8'));
         $this->txt($dom, $el, 'identificacionProveedor',     $cab['proveedor_ruc'] ?? '');
 
-        // Código de sustento tributario
-        $this->txt($dom, $el, 'codigoSustento', (string)($cab['sustento_codigo'] ?? '01'));
+        // Dirección del proveedor (opcional en el XSD)
+        $dirProv = trim((string)($cab['proveedor_direccion'] ?? ''));
+        if ($dirProv !== '') {
+            $this->txt($dom, $el, 'direccionProveedor', $dirProv);
+        }
 
         $this->txt($dom, $el, 'totalSinImpuestos', $this->dec2($cab['total_sin_impuestos'] ?? 0));
         $this->txt($dom, $el, 'totalDescuento',    $this->dec2($cab['total_descuento']     ?? 0));

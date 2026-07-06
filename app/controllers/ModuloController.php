@@ -15,6 +15,7 @@ class ModuloController extends Controller
 {
     private ModuloSubmodulo $model;
     private const PER_PAGE = 20;
+    private const TODOS = 100000; // "sin paginación": la búsqueda es client-side
     private const BASE_PATH = '/config/modulo';
 
     public function __construct()
@@ -28,35 +29,29 @@ class ModuloController extends Controller
         $this->requireAuth();
         $this->requireNivel(3);
 
-        $tipo   = trim($_GET['tipo'] ?? $_SESSION['modulo_vista']['tipo'] ?? 'modulos');
-        $buscar = trim($_GET['b']    ?? '');
-        $page   = max(1, (int)($_GET['page'] ?? 1));
+        $tipo = trim($_GET['tipo'] ?? $_SESSION['modulo_vista']['tipo'] ?? 'modulos');
+        if (!in_array($tipo, ['modulos', 'submodulos', 'iconos'], true)) {
+            $tipo = 'modulos';
+        }
 
-        // Guardar estado de pestaña activa en sesión (sin redirigir)
-        $_SESSION['modulo_vista'] = ['tipo' => $tipo, 'buscar' => $buscar, 'page' => $page];
+        // Guardar pestaña activa en sesión (para volver tras guardar/editar)
+        $_SESSION['modulo_vista'] = ['tipo' => $tipo];
 
         $modulos = $this->model->getModulos();
         $iconos = $this->model->getIconos();
 
-        if ($tipo === 'iconos') {
-            $data = $this->model->getIconosListado($buscar, $page, 15);
-        } elseif ($tipo === 'submodulos') {
-            $data = $this->model->getSubmodulosListado($buscar, $page, self::PER_PAGE);
-        } else {
-            $data = $this->model->getModulosListado($buscar, $page, self::PER_PAGE);
-        }
-
-        $perPage = $tipo === 'iconos' ? 15 : self::PER_PAGE;
-        $totalPages = (int) ceil($data['total'] / $perPage);
+        // Volumen bajo: cargamos TODAS las listas de una vez. El cambio de pestaña
+        // y la búsqueda son client-side (instantáneos y con URL siempre limpia).
+        $rowsModulos    = $this->model->getModulosListado('', 1, self::TODOS)['rows'];
+        $rowsSubmodulos = $this->model->getSubmodulosListado('', 1, self::TODOS)['rows'];
+        $rowsIconos     = $this->model->getIconosListado('', 1, self::TODOS)['rows'];
 
         $this->viewWithLayout('layouts.main', 'modulo.index', [
             'titulo' => 'Módulos y submódulos',
             'tipo' => $tipo,
-            'rows' => $data['rows'],
-            'total' => $data['total'],
-            'page' => $page,
-            'totalPages' => $totalPages,
-            'buscar' => $buscar,
+            'rowsModulos' => $rowsModulos,
+            'rowsSubmodulos' => $rowsSubmodulos,
+            'rowsIconos' => $rowsIconos,
             'modulos' => $modulos,
             'iconos' => $iconos,
         ]);

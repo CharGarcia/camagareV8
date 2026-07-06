@@ -310,10 +310,12 @@ $pestanasConfigLiq = [
                         <button type="button" class="btn btn-outline-primary btn-sm" id="btnEnviarSri" onclick="enviarSri()"><i class="bi bi-cloud-arrow-up me-1"></i>Enviar al SRI</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="btnDuplicar" onclick="duplicar()"><i class="bi bi-copy me-1"></i>Duplicar</button>
                         
-                        <button type="button" class="btn btn-outline-danger btn-sm px-2" title="PDF"><i class="bi bi-file-earmark-pdf"></i></button>
-                        <button type="button" class="btn btn-outline-success btn-sm px-2" title="XML"><i class="bi bi-file-earmark-code"></i></button>
-                        <button type="button" class="btn btn-outline-info btn-sm px-2" title="Correo"><i class="bi bi-envelope"></i></button>
-                        
+                        <div class="vr mx-1"></div>
+                        <button type="button" id="btnPdfLiq" class="btn btn-outline-danger btn-sm px-2" onclick="window.LC_exportarPdf()" title="Exportar PDF"><i class="bi bi-file-earmark-pdf"></i></button>
+                        <button type="button" id="btnXmlLiq" class="btn btn-outline-success btn-sm px-2" onclick="window.LC_exportarXml()" title="Exportar XML"><i class="bi bi-file-earmark-code"></i></button>
+                        <button type="button" id="btnCorreoLiq" class="btn btn-outline-info btn-sm px-2" onclick="window.LC_enviarCorreo()" title="Enviar por correo"><i class="bi bi-envelope"></i></button>
+                        <button type="button" id="btnWhatsappLiq" class="btn btn-outline-success btn-sm px-2" onclick="window.LC_enviarWhatsapp()" title="Enviar por WhatsApp"><i class="bi bi-whatsapp"></i></button>
+                        <div class="vr mx-1"></div>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalProveedorCrear()" title="Nuevo Proveedor"><i class="bi bi-person-plus"></i></button>
                     </div>
 
