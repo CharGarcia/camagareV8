@@ -414,6 +414,10 @@ class EmpresaService
             $rucFirma = $exts['1.3.6.1.4.1.47286.102.3.11'];
         } elseif (isset($exts['1.3.6.1.4.1.37746.3.11'])) {
             $rucFirma = $exts['1.3.6.1.4.1.37746.3.11'];
+        } elseif (isset($exts['1.3.6.1.4.1.37947.3.11'])) {
+            // ECIBCE - Banco Central del Ecuador: el RUC va en esta extensión
+            // (el serialNumber del subject es la cédula de la persona, no el RUC).
+            $rucFirma = $exts['1.3.6.1.4.1.37947.3.11'];
         } elseif (isset($subject['organizationIdentifier'])) {
             $rucFirma = $subject['organizationIdentifier'];
         }
