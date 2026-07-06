@@ -93,6 +93,7 @@ class AnexoAtsController extends BaseModuloController
         $this->json([
             'ok'           => true,
             'registros'    => $res['registros'],
+            'ambiente'     => ($res['ambiente'] ?? '1') === '2' ? 'Producción' : 'Pruebas',
             'xml'          => $res['nombre_xml'],
             'url_xml'      => $urlBase . urlencode($res['nombre_xml']),
             'zip'          => $res['nombre_zip'],

@@ -76,13 +76,18 @@
         const advert  = j.advertencias || [];
 
         let html = '<div class="d-flex flex-column gap-2">';
+        var ambienteBadge = j.ambiente
+          ? ' <span class="badge ' + (j.ambiente === 'Producción' ? 'bg-danger' : 'bg-secondary') +
+            '">Ambiente: ' + j.ambiente + '</span>'
+          : '';
         if (errores.length === 0) {
           html += '<div><i class="fas fa-check-circle text-success me-1"></i> Anexo generado con <strong>' +
-                  (j.registros || 0) + '</strong> registro(s) de compras. <span class="text-success">Validación sin errores.</span></div>';
+                  (j.registros || 0) + '</strong> registro(s) de compras.' + ambienteBadge +
+                  ' <span class="text-success">Validación sin errores.</span></div>';
         } else {
           html += '<div><i class="fas fa-exclamation-triangle text-danger me-1"></i> Anexo generado con <strong>' +
-                  (j.registros || 0) + '</strong> registro(s), pero la validación encontró <strong>' +
-                  errores.length + '</strong> error(es). Corrija antes de cargar al SRI.</div>';
+                  (j.registros || 0) + '</strong> registro(s).' + ambienteBadge +
+                  ' La validación encontró <strong>' + errores.length + '</strong> error(es). Corrija antes de cargar al SRI.</div>';
         }
         html += '<div class="d-flex gap-2 flex-wrap">';
         if (j.url_zip) {

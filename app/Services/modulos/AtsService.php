@@ -52,6 +52,7 @@ class AtsService
         $anio       = $datos['anio'];
         $infXml     = $datos['informante'];
         $documentos = $datos['documentos'];
+        $ambiente   = $datos['tipo_ambiente'];
 
         $contenido = $this->xml->generar(
             $infXml,
@@ -83,12 +84,13 @@ class AtsService
             'ats',
             null,
             null,
-            ['periodo' => $mes . '/' . $anio, 'semestral' => $semestral, 'registros' => count($documentos)]
+            ['periodo' => $mes . '/' . $anio, 'semestral' => $semestral, 'ambiente' => $ambiente, 'registros' => count($documentos)]
         );
 
         return [
             'ok'           => true,
             'registros'    => count($documentos),
+            'ambiente'     => $ambiente,
             'nombre_xml'   => $nombreXml,
             'ruta_xml'     => $rutaXml,
             'nombre_zip'   => is_file($rutaZip) ? $nombreZip : null,
@@ -294,6 +296,7 @@ class AtsService
             'mes'          => $mes,
             'anio'         => $anio,
             'periodo'      => $mes . '/' . $anio,
+            'tipo_ambiente'=> (string) ($informante['tipo_ambiente'] ?? '1'),
             'informante'   => $infXml,
             'documentos'   => $documentos,
             'retenciones'  => $retenciones,
