@@ -552,10 +552,13 @@ class EmpresaRepository extends BaseModel
     public function getUsuariosAsignados(int $idEmpresa): array
     {
         $id = (int) $idEmpresa;
+        // Se excluyen los super administradores (nivel 3): no se muestran en la lista
+        // ni cuentan para el cupo de usuarios de la empresa.
         $sql = "SELECT u.id, u.nombre, u.estado, u.nivel, u.mail AS correo
                 FROM empresa_asignada ea
                 INNER JOIN usuarios u ON u.id = ea.id_usuario
                 WHERE ea.id_empresa = {$id}
+                  AND COALESCE(u.nivel, 1) < 3
                 ORDER BY u.nombre ASC";
         return $this->query($sql);
     }
