@@ -221,10 +221,15 @@ class AtsService
             }
             unset($g);
 
-            $baseVenta = (float) $v['base_no_gra_iva'] + (float) $v['base_imponible_0'] + (float) $v['base_imponible_grav'];
-            $totalVentas += $baseVenta;
-            $estab = str_pad(substr((string) $v['establecimiento'], 0, 3), 3, '0', STR_PAD_LEFT);
-            $ventasPorEstab[$estab] = ($ventasPorEstab[$estab] ?? 0.0) + $baseVenta;
+            // Solo la emisión FÍSICA (F) suma al talón resumen (totalVentas / ventasEstab).
+            // Las electrónicas se listan en el detalle pero el SRI las cruza con los
+            // comprobantes electrónicos; no se suman al talón (ficha técnica, 2.3).
+            if ($tipoEm === 'F') {
+                $baseVenta = (float) $v['base_no_gra_iva'] + (float) $v['base_imponible_0'] + (float) $v['base_imponible_grav'];
+                $totalVentas += $baseVenta;
+                $estab = str_pad(substr((string) $v['establecimiento'], 0, 3), 3, '0', STR_PAD_LEFT);
+                $ventasPorEstab[$estab] = ($ventasPorEstab[$estab] ?? 0.0) + $baseVenta;
+            }
         }
 
         $ventas = [];
@@ -251,21 +256,25 @@ class AtsService
             ];
         }
 
-        // ventasEstablecimiento: un registro por establecimiento inscrito en el RUC
-        $codigosEstab = $this->repo->getEstablecimientos($idEmpresa);
-        foreach (array_keys($ventasPorEstab) as $e) {
-            if (!in_array($e, $codigosEstab, true)) {
-                $codigosEstab[] = $e; // establecimiento con ventas pero no listado
-            }
-        }
-        sort($codigosEstab);
+        // ventasEstablecimiento: un registro por establecimiento inscrito en el RUC.
+        // Solo se emite cuando hay ventas reportadas; los importes son de emisión
+        // física (0.00 si el período solo tuvo ventas electrónicas).
         $ventasEstab = [];
-        foreach ($codigosEstab as $cod) {
-            $ventasEstab[] = [
-                'codEstab'   => str_pad((string) $cod, 3, '0', STR_PAD_LEFT),
-                'ventasEstab'=> $this->money($ventasPorEstab[$cod] ?? 0.0),
-                'ivaComp'    => '0.00',
-            ];
+        if ($ventas !== []) {
+            $codigosEstab = $this->repo->getEstablecimientos($idEmpresa);
+            foreach (array_keys($ventasPorEstab) as $e) {
+                if (!in_array($e, $codigosEstab, true)) {
+                    $codigosEstab[] = $e; // establecimiento con ventas pero no listado
+                }
+            }
+            sort($codigosEstab);
+            foreach ($codigosEstab as $cod) {
+                $ventasEstab[] = [
+                    'codEstab'   => str_pad((string) $cod, 3, '0', STR_PAD_LEFT),
+                    'ventasEstab'=> $this->money($ventasPorEstab[$cod] ?? 0.0),
+                    'ivaComp'    => '0.00',
+                ];
+            }
         }
 
         // ── ANULADOS ────────────────────────────────────────────────────────────
