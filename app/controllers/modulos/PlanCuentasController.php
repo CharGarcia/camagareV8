@@ -376,8 +376,12 @@ class PlanCuentasController extends BaseModuloController
         $idUsuario = (int) $_SESSION['id_usuario'];
 
         try {
-            $afectadas = $this->service->eliminarPlanCompleto($idEmpresa, $idUsuario);
-            echo json_encode(['ok' => true, 'msg' => "Se eliminó el plan de cuentas correctamente ({$afectadas} cuentas)."]);
+            $r = $this->service->eliminarCuentasNoUsadas($idEmpresa, $idUsuario);
+            $msg = "Se eliminaron {$r['eliminadas']} cuentas sin movimientos.";
+            if ($r['conservadas'] > 0) {
+                $msg .= " Se conservaron {$r['conservadas']} (usadas o necesarias para la jerarquía).";
+            }
+            echo json_encode(['ok' => true, 'msg' => $msg]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

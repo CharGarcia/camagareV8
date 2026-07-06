@@ -443,11 +443,11 @@ $proyectos  = $proyectos ?? [];
 
         window.eliminarPlanCompleto = async function() {
             const result = await Swal.fire({
-                title: '¿Eliminar todo el plan de cuentas?',
-                html: 'Se eliminarán <b>todas</b> las cuentas de esta empresa.<br>Esta acción solo es posible si ninguna cuenta tiene movimientos contables.',
+                title: '¿Eliminar cuentas del plan?',
+                html: 'Se eliminarán las cuentas <b>sin movimientos</b>.<br>Las cuentas que ya tengan movimientos contables (y sus cuentas padre) se conservarán.',
                 icon: 'warning',
                 showCancelButton: true,
-                confirmButtonText: 'Sí, eliminar todo',
+                confirmButtonText: 'Sí, eliminar no usadas',
                 cancelButtonText: 'Cancelar',
                 confirmButtonColor: '#dc3545'
             });

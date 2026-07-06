@@ -267,36 +267,31 @@ class PlanCuentaRepository extends BaseRepository
     }
 
     /**
-     * Devuelve las cuentas de la empresa que tienen movimientos contables registrados
-     * (referenciadas por un detalle de asiento activo). Se usan para bloquear el borrado
-     * completo del plan cuando alguna cuenta ya fue utilizada.
+     * Elimina lógicamente solo las cuentas que NO han sido usadas.
+     * Una cuenta se conserva si tiene movimientos contables (detalle de asiento activo)
+     * o si es ancestro (cuenta padre) de una cuenta usada — para no romper la jerarquía.
+     * Todo lo demás (cuentas sin uso ni descendientes usados) se elimina.
+     * Devuelve el número de cuentas eliminadas.
      */
-    public function getCuentasUsadas(int $idEmpresa): array
+    public function eliminarCuentasNoUsadas(int $idEmpresa, int $idUsuario): int
     {
-        $sql = "SELECT DISTINCT pc.codigo, pc.nombre
-                FROM {$this->table} pc
-                INNER JOIN asientos_contables_detalle acd
-                        ON acd.id_cuenta_contable = pc.id
-                       AND acd.id_empresa = pc.id_empresa
-                       AND acd.eliminado = false
-                WHERE pc.id_empresa = :id_e AND pc.eliminado = false
-                ORDER BY pc.codigo ASC";
-        $st = $this->db->prepare($sql);
-        $st->execute([':id_e' => $idEmpresa]);
-        return $st->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * Elimina lógicamente TODAS las cuentas activas de la empresa (reset del plan).
-     * Devuelve el número de cuentas afectadas.
-     */
-    public function eliminarTodasPorEmpresa(int $idEmpresa, int $idUsuario): int
-    {
-        $sql = "UPDATE {$this->table} SET
+        $sql = "UPDATE {$this->table} pc SET
                     eliminado = true,
                     deleted_by = :id_u,
                     deleted_at = CURRENT_TIMESTAMP
-                WHERE id_empresa = :id_e AND eliminado = false";
+                WHERE pc.id_empresa = :id_e
+                  AND pc.eliminado = false
+                  AND NOT EXISTS (
+                        SELECT 1
+                        FROM {$this->table} usada
+                        INNER JOIN asientos_contables_detalle acd
+                                ON acd.id_cuenta_contable = usada.id
+                               AND acd.id_empresa = usada.id_empresa
+                               AND acd.eliminado = false
+                        WHERE usada.id_empresa = pc.id_empresa
+                          AND usada.eliminado = false
+                          AND (usada.codigo = pc.codigo OR usada.codigo LIKE pc.codigo || '.%')
+                  )";
         $st = $this->db->prepare($sql);
         $st->execute([':id_e' => $idEmpresa, ':id_u' => $idUsuario]);
         return $st->rowCount();

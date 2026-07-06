@@ -106,41 +106,30 @@ class PlanCuentaService
     }
 
     /**
-     * Elimina (lógicamente) el plan de cuentas completo de la empresa.
-     * Solo procede si ninguna cuenta tiene movimientos contables; de lo contrario
-     * lanza una excepción listando las cuentas que impiden el borrado.
-     * Devuelve el número de cuentas eliminadas.
+     * Elimina (lógicamente) las cuentas del plan que NO han sido usadas.
+     * Conserva las cuentas con movimientos contables y sus cuentas padre (jerarquía).
+     * Devuelve ['eliminadas' => int, 'conservadas' => int].
      */
-    public function eliminarPlanCompleto(int $idEmpresa, int $idUsuario): int
+    public function eliminarCuentasNoUsadas(int $idEmpresa, int $idUsuario): array
     {
-        $usadas = $this->repository->getCuentasUsadas($idEmpresa);
-        if (!empty($usadas)) {
-            $ejemplos = array_slice($usadas, 0, 5);
-            $lista = implode(', ', array_map(
-                fn($c) => trim(($c['codigo'] ?? '') . ' ' . ($c['nombre'] ?? '')),
-                $ejemplos
-            ));
-            $restantes = count($usadas) - count($ejemplos);
-            $extra = $restantes > 0 ? " y {$restantes} más" : '';
-            throw new Exception("No se puede eliminar el plan de cuentas: hay cuentas con movimientos contables ({$lista}{$extra}).");
-        }
-
         $this->repository->beginTransaction();
         try {
-            $afectadas = $this->repository->eliminarTodasPorEmpresa($idEmpresa, $idUsuario);
+            $totalAntes = $this->repository->contarPorEmpresa($idEmpresa);
+            $eliminadas = $this->repository->eliminarCuentasNoUsadas($idEmpresa, $idUsuario);
+            $conservadas = $totalAntes - $eliminadas;
 
             $this->logService->registrar(
                 $idUsuario,
                 $idEmpresa,
-                'ELIMINAR PLAN',
+                'ELIMINAR NO USADAS',
                 'plan_cuentas',
                 null,
                 null,
-                ['total_eliminadas' => $afectadas]
+                ['eliminadas' => $eliminadas, 'conservadas' => $conservadas]
             );
 
             $this->repository->commit();
-            return $afectadas;
+            return ['eliminadas' => $eliminadas, 'conservadas' => $conservadas];
         } catch (Exception $e) {
             $this->repository->rollBack();
             throw $e;
