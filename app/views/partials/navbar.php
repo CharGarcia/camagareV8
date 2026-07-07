@@ -239,7 +239,7 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
         </style>
         <div class="d-flex align-items-center order-3 order-lg-2 cmg-mobile-row-2">
             <div class="cmg-nav-search-wrap d-flex align-items-center flex-grow-1 flex-lg-grow-0 position-relative" id="cmg-nav-search-wrap">
-                <input type="text" id="cmg-nav-search" class="form-control cmg-nav-search-input shadow-none w-100" placeholder="Buscar módulo..." autocomplete="off">
+                <input type="text" id="cmg-nav-search" class="form-control cmg-nav-search-input shadow-none w-100" placeholder='Presione "/" para buscar' autocomplete="off">
                 <i class="bi bi-search cmg-nav-search-icon d-none d-lg-block position-absolute" style="right: 10px;"></i>
                 <div id="cmg-nav-search-results" class="cmg-nav-search-results" style="top: 100%; right: 0; left: 0;"></div>
             </div>
@@ -861,6 +861,28 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                     searchResults.classList.remove('show');
                     searchInput.blur();
                 }
+            });
+
+            // Atajo global: "/" enfoca el buscador de módulos
+            document.addEventListener('keydown', function(e) {
+                if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+
+                // No interferir si el usuario está escribiendo en un campo editable
+                const ae = document.activeElement;
+                const tag = ae ? ae.tagName : '';
+                if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (ae && ae.isContentEditable)) return;
+
+                // No interferir si hay un modal abierto (creación/edición de registros)
+                if (document.querySelector('.modal.show')) return;
+
+                e.preventDefault();
+
+                // En móvil el buscador puede estar colapsado: expandirlo antes de enfocar
+                const wrap = document.getElementById('cmg-nav-search-wrap');
+                if (wrap && window.innerWidth < 992) wrap.classList.add('expanded');
+
+                searchInput.focus();
+                searchInput.select();
             });
         }
     });

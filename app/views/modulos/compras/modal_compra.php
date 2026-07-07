@@ -161,24 +161,8 @@
                 </select>
               </div>
 
-              <!-- Fila 4: Relacionada y Observaciones -->
-              <div class="col-12">
-                <div class="row g-2 mt-0">
-                  <!-- Parte relacionada -->
-                  <div class="col-6 col-md-2 d-flex align-items-end pb-1">
-                    <div class="form-check">
-                      <input class="form-check-input" type="checkbox" id="mcParteRelacionada">
-                      <label class="form-check-label small fw-semibold" for="mcParteRelacionada">Parte relacionada</label>
-                    </div>
-                  </div>
-
-                  <!-- Observaciones -->
-                  <div class="col-12 col-md-10">
-                    <label class="form-label form-label-sm mb-1">Observaciones</label>
-                    <input type="text" id="mcObservaciones" class="form-control form-control-sm" placeholder="Opcional">
-                  </div>
-                </div>
-              </div>
+              <!-- Observaciones y Parte relacionada se movieron a pestañas
+                   junto a "Crédito" (ver sección inferior de Totales y Pagos). -->
 
               <!-- Fila 4: Solo para Notas de Crédito / Débito (Documento Modificado) -->
               <div id="mcDivModificados" class="col-12 d-none">
@@ -246,6 +230,12 @@
                   <li class="nav-item">
                     <button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#mc-subtab-credito" type="button">Crédito</button>
                   </li>
+                  <li class="nav-item">
+                    <button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#mc-subtab-observaciones" type="button">Observaciones</button>
+                  </li>
+                  <li class="nav-item">
+                    <button class="nav-link py-1 small" data-bs-toggle="tab" data-bs-target="#mc-subtab-relacionada" type="button">Parte relacionada</button>
+                  </li>
                 </ul>
                 <div class="tab-content bg-white border p-2 rounded-bottom" style="min-height: 120px;">
                   <!-- Formas de Pago SRI -->
@@ -290,6 +280,23 @@
                           </select>
                         </div>
                       </div>
+                    </div>
+                  </div>
+                  <!-- Observaciones -->
+                  <div class="tab-pane fade" id="mc-subtab-observaciones" role="tabpanel">
+                    <div class="p-2">
+                      <label class="form-label form-label-sm mb-1">Observaciones</label>
+                      <input type="text" id="mcObservaciones" class="form-control form-control-sm" placeholder="Opcional">
+                    </div>
+                  </div>
+                  <!-- Parte relacionada -->
+                  <div class="tab-pane fade" id="mc-subtab-relacionada" role="tabpanel">
+                    <div class="p-2">
+                      <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="mcParteRelacionada">
+                        <label class="form-check-label small fw-semibold" for="mcParteRelacionada">Parte relacionada</label>
+                      </div>
+                      <div class="x-small text-muted mt-1">Marque si la transacción es con una parte relacionada (informativo para el ATS).</div>
                     </div>
                   </div>
                 </div>

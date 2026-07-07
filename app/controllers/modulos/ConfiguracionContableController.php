@@ -1142,7 +1142,14 @@ class ConfiguracionContableController extends BaseModuloController
                 exit;
             }
 
-            $sql = "SELECT ap.id, 
+            // En IVA, ap.id_referencia guarda el codigoPorcentaje del SRI (así lo guarda el combo y
+            // así lo consume el motor de asientos), no el id del catálogo. Unir por 'codigo' para no
+            // mostrar la tarifa equivocada (p. ej. 15% etiquetado como "No objeto").
+            $joinCond = ($tipoReferencia === 'iva')
+                ? 'ref.codigo::integer = ap.id_referencia'
+                : 'ref.id = ap.id_referencia';
+
+            $sql = "SELECT ap.id,
                            ap.id_asiento_tipo, 
                            ap.id_cuenta, 
                            ap.id_referencia, 
@@ -1154,7 +1161,7 @@ class ConfiguracionContableController extends BaseModuloController
                     FROM asientos_programados ap
                     INNER JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
                     INNER JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
-                    INNER JOIN {$joinTable} ref ON ref.id = ap.id_referencia
+                    INNER JOIN {$joinTable} ref ON {$joinCond}
                     WHERE ap.id_empresa = ? 
                       AND at.tipo_asiento = ? 
                       AND ap.tipo_referencia = ? 

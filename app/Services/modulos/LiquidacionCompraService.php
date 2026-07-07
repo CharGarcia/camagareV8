@@ -170,6 +170,16 @@ class LiquidacionCompraService
             throw new \Exception('Liquidación no encontrada.');
         }
 
+        // Los comprobantes autorizados por el SRI (o anulados) son inmutables:
+        // no se permite editar su contenido.
+        $estadoActual = strtolower((string) ($cabecera['estado'] ?? ''));
+        if ($estadoActual === 'autorizado') {
+            throw new \Exception('La liquidación está autorizada por el SRI y no puede editarse.');
+        }
+        if ($estadoActual === 'anulado') {
+            throw new \Exception('La liquidación está anulada y no puede editarse.');
+        }
+
         $this->rules->validar($data);
 
         $empresaConfig = $data['empresa_config'] ?? [];

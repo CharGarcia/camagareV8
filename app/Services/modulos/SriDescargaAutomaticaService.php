@@ -177,7 +177,7 @@ class SriDescargaAutomaticaService
 
                 if ($estadoReg === 'REGISTRADO') {
                     $totalNuevos++;
-                } elseif (in_array($estadoReg, ['YA_EXISTE', 'EXISTENTE'], true)) {
+                } elseif (in_array($estadoReg, ['YA_EXISTE', 'EXISTENTE', 'YA ESTABA REGISTRADO'], true)) {
                     $totalExistentes++;
                 } elseif ($estadoReg === 'IGNORADO') {
                     $totalIgnorados++;
@@ -383,7 +383,7 @@ class SriDescargaAutomaticaService
 
                 if ($estadoReg === 'REGISTRADO') {
                     $totalNuevos++;
-                } elseif (in_array($estadoReg, ['YA_EXISTE', 'EXISTENTE'], true)) {
+                } elseif (in_array($estadoReg, ['YA_EXISTE', 'EXISTENTE', 'YA ESTABA REGISTRADO'], true)) {
                     $totalExistentes++;
                 } elseif ($estadoReg === 'IGNORADO') {
                     $totalIgnorados++;
@@ -580,7 +580,7 @@ class SriDescargaAutomaticaService
             "SELECT clave_acceso        AS clave FROM retencion_compra_cabecera   WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
             "SELECT clave_acceso        AS clave FROM notas_credito_cabecera      WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
             "SELECT clave_acceso        AS clave FROM retencion_venta_cabecera    WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
-            "SELECT clave_acceso        AS clave FROM notas_debito_cabecera       WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
+            "SELECT clave_acceso        AS clave FROM nota_debito_cabecera        WHERE id_empresa = :id AND eliminado = false AND clave_acceso IS NOT NULL            AND tipo_ambiente = :amb",
         ];
 
         // Ignorados aplica a todos los ambientes (es una lista negra global de la empresa)
@@ -997,6 +997,41 @@ class SriDescargaAutomaticaService
         string    $origen = 'agente',
         ?callable $onProgress = null
     ): array {
+        // Serialización por empresa. Dos lotes solapados (dos envíos de la extensión, doble clic o
+        // reintento) intentarían registrar las mismas claves al mismo tiempo y crearían duplicados,
+        // porque el chequeo de existencia y el INSERT no son atómicos y estas tablas no siempre
+        // tienen índice UNIQUE de respaldo. El endpoint del agente no usa sesión PHP, así que nada
+        // más los serializa. Este advisory lock impide que dos registros de la misma empresa corran
+        // a la vez; si ya hay uno en curso, se rechaza en lugar de duplicar.
+        $db     = \App\core\Database::getConnection();
+        $lockNs = 815; // namespace del lock "registro SRI de claves"
+        $stLock = $db->prepare('SELECT pg_try_advisory_lock(?, ?)');
+        $stLock->execute([$lockNs, $idEmpresa]);
+        if (!$stLock->fetchColumn()) {
+            return [
+                'ok'       => false,
+                'en_curso' => true,
+                'error'    => 'Ya hay una descarga en curso para esta empresa. Espera a que termine antes de enviar más comprobantes.',
+            ];
+        }
+        try {
+            return $this->registrarClavesLote($claves, $idEmpresa, $idUsuario, $origen, $onProgress);
+        } finally {
+            $db->prepare('SELECT pg_advisory_unlock(?, ?)')->execute([$lockNs, $idEmpresa]);
+        }
+    }
+
+    /**
+     * Núcleo del registro de un lote de claves. La serialización por empresa la aplica
+     * registrarClaves() con un advisory lock; este método asume que ya se posee.
+     */
+    private function registrarClavesLote(
+        array     $claves,
+        int       $idEmpresa,
+        int       $idUsuario = 0,
+        string    $origen = 'agente',
+        ?callable $onProgress = null
+    ): array {
         $inicio    = microtime(true);
         $configMod = new SriConfigDescarga();
         $logMod    = new SriDescargaAutoLog();
@@ -1035,7 +1070,7 @@ class SriDescargaAutomaticaService
                 $estadoReg = $res['estado_registro'] ?? 'DESCONOCIDO';
                 if ($estadoReg === 'REGISTRADO') {
                     $totalNuevos++;
-                } elseif (in_array($estadoReg, ['YA_EXISTE', 'EXISTENTE'], true)) {
+                } elseif (in_array($estadoReg, ['YA_EXISTE', 'EXISTENTE', 'YA ESTABA REGISTRADO'], true)) {
                     $totalExistentes++;
                 } elseif ($estadoReg === 'IGNORADO') {
                     $totalIgnorados++;

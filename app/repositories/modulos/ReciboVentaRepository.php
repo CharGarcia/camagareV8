@@ -449,13 +449,19 @@ class ReciboVentaRepository extends BaseRepository
     /**
      * Crea un producto tipo "servicio" con código secuencial al vuelo (facturación libre).
      */
-    public function crearServicioLibre(int $idEmpresa, int $idUsuario, string $nombre, float $precio, ?float $porcentajeIva = null): int
+    public function crearServicioLibre(int $idEmpresa, int $idUsuario, string $nombre, float $precio, ?float $porcentajeIva = null, ?string $codigoPorcentaje = null): int
     {
         $productoRepo = new ProductoRepository();
         $codigo = $productoRepo->getSiguienteCodigo($idEmpresa, '02');
 
+        // Resolver por codigoPorcentaje del SRI cuando venga (distingue 0%/Exento/No objeto); si no, por %.
         $idTarifaIva = null;
-        if ($porcentajeIva !== null) {
+        if ($codigoPorcentaje !== null && $codigoPorcentaje !== '') {
+            $stIva = $this->db->prepare("SELECT id FROM tarifa_iva WHERE codigo = :c LIMIT 1");
+            $stIva->execute([':c' => $codigoPorcentaje]);
+            $idTarifaIva = $stIva->fetchColumn() ?: null;
+        }
+        if (!$idTarifaIva && $porcentajeIva !== null) {
             $stIva = $this->db->prepare("SELECT id FROM tarifa_iva WHERE porcentaje_iva = :p AND status = 1 ORDER BY id LIMIT 1");
             $stIva->execute([':p' => $porcentajeIva]);
             $idTarifaIva = $stIva->fetchColumn() ?: null;

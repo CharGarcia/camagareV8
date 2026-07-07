@@ -616,14 +616,20 @@ class FacturaVentaRepository extends BaseRepository
      * Crea un producto tipo "servicio" con código secuencial al vuelo (facturación libre).
      * Retorna el ID del producto creado.
      */
-    public function crearServicioLibre(int $idEmpresa, int $idUsuario, string $nombre, float $precio, ?float $porcentajeIva = null): int
+    public function crearServicioLibre(int $idEmpresa, int $idUsuario, string $nombre, float $precio, ?float $porcentajeIva = null, ?string $codigoPorcentaje = null): int
     {
         $productoRepo = new ProductoRepository();
         $codigo = $productoRepo->getSiguienteCodigo($idEmpresa, '02'); // Genera S001, S002, etc.
 
-        // Buscar tarifa IVA por porcentaje (si viene), o la primera disponible
+        // Resolver la tarifa de IVA por el codigoPorcentaje del SRI cuando venga (distingue
+        // 0% / Exento / No objeto, que comparten porcentaje 0); si no, por el porcentaje.
         $idTarifaIva = null;
-        if ($porcentajeIva !== null) {
+        if ($codigoPorcentaje !== null && $codigoPorcentaje !== '') {
+            $stIva = $this->db->prepare("SELECT id FROM tarifa_iva WHERE codigo = :c LIMIT 1");
+            $stIva->execute([':c' => $codigoPorcentaje]);
+            $idTarifaIva = $stIva->fetchColumn() ?: null;
+        }
+        if (!$idTarifaIva && $porcentajeIva !== null) {
             $stIva = $this->db->prepare("SELECT id FROM tarifa_iva WHERE porcentaje_iva = :p AND status = 1 ORDER BY id LIMIT 1");
             $stIva->execute([':p' => $porcentajeIva]);
             $idTarifaIva = $stIva->fetchColumn() ?: null;

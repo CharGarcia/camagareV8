@@ -207,7 +207,10 @@ class AtsService
             $g = &$grupos[$key];
             $g['numeroComprobantes']++;
             $g['baseNoGraIva'] += (float) $v['base_no_gra_iva'];
-            $g['baseImponible'] += (float) $v['base_imponible_0'];
+            // El nodo de ventas del ATS no tiene campo exento (a diferencia de compras): la base
+            // exenta (codigoPorcentaje 7) se acumula en baseImponible (base que no genera IVA) para
+            // que no se pierda del anexo.
+            $g['baseImponible'] += (float) $v['base_imponible_0'] + (float) $v['base_imponible_exe'];
             $g['baseImpGrav']  += (float) $v['base_imponible_grav'];
             $g['montoIva']     += (float) $v['monto_iva'];
             $g['montoIce']     += (float) $v['monto_ice'];
@@ -225,7 +228,7 @@ class AtsService
             // Las electrónicas se listan en el detalle pero el SRI las cruza con los
             // comprobantes electrónicos; no se suman al talón (ficha técnica, 2.3).
             if ($tipoEm === 'F') {
-                $baseVenta = (float) $v['base_no_gra_iva'] + (float) $v['base_imponible_0'] + (float) $v['base_imponible_grav'];
+                $baseVenta = (float) $v['base_no_gra_iva'] + (float) $v['base_imponible_0'] + (float) $v['base_imponible_exe'] + (float) $v['base_imponible_grav'];
                 $totalVentas += $baseVenta;
                 $estab = str_pad(substr((string) $v['establecimiento'], 0, 3), 3, '0', STR_PAD_LEFT);
                 $ventasPorEstab[$estab] = ($ventasPorEstab[$estab] ?? 0.0) + $baseVenta;

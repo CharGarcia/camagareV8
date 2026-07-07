@@ -297,6 +297,7 @@ $pestanasConfigLiq = [
                 <h5 class="modal-title fw-bold">
                     <i class="bi bi-receipt-cutoff text-primary me-2"></i>
                     <span id="tituloModalLiq">Liquidación de Compras y Servicios</span>
+                    <span id="liq-badge-estado" class="badge ms-2 d-none" style="font-size:0.72rem;vertical-align:middle;"></span>
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -306,8 +307,8 @@ $pestanasConfigLiq = [
 
                     <!-- Acciones -->
                     <div class="px-3 py-2 bg-light border-bottom d-flex gap-2 align-items-center flex-wrap">
-                        <button type="button" class="btn btn-outline-warning btn-sm d-none" id="btnAnularLiq" onclick="window.LC_anularLiquidacion()"><i class="bi bi-slash-circle me-1"></i>Anular</button>
                         <button type="button" class="btn btn-outline-primary btn-sm" id="btnEnviarSri" onclick="enviarSri()"><i class="bi bi-cloud-arrow-up me-1"></i>Enviar al SRI</button>
+                        <button type="button" class="btn btn-outline-warning btn-sm d-none" id="btnAnularLiq" onclick="window.LC_anularLiquidacion()"><i class="bi bi-slash-circle me-1"></i>Anular</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="btnDuplicar" onclick="duplicar()"><i class="bi bi-copy me-1"></i>Duplicar</button>
                         
                         <div class="vr mx-1"></div>

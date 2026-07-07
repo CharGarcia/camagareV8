@@ -160,6 +160,8 @@
         renderPagos();
         renderInfoAdicional();
         LC_calcTotales();
+        liqAplicarBloqueoEdicion({ estado: 'borrador' }); // desbloquear edición
+        liqActualizarBadgeEstado(''); // sin número aún: ocultar badge
 
         if (typeof window.aplicarFavoritosModal === 'function') {
             window.aplicarFavoritosModal('#modalLiquidacion');
@@ -243,6 +245,56 @@
         return match ? match.id : 0;
     }
 
+    // Bloquea/desbloquea la edición del modal según el estado. Los comprobantes
+    // AUTORIZADOS por el SRI (o ANULADOS) son inmutables: solo lectura.
+    function liqAplicarBloqueoEdicion(cab) {
+        const estado = (cab && cab.estado ? String(cab.estado) : '').toLowerCase();
+        const bloqueado = estado === 'autorizado' || estado === 'anulado';
+
+        // Campos de cabecera
+        ['liq-fecha', 'liq-punto', 'liq-secuencial', 'liq-sustento', 'search-proveedor'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = bloqueado;
+        });
+
+        // Controles dentro de detalles, pagos e info adicional
+        document.querySelectorAll(
+            '#tbodyDetalles input, #tbodyDetalles select, #tbodyDetalles button, ' +
+            '#container-pagos input, #container-pagos select, #container-pagos button, ' +
+            '#container-info-adicional input, #container-info-adicional select, #container-info-adicional button'
+        ).forEach(el => { el.disabled = bloqueado; });
+
+        // Botones de agregar línea/pago/info
+        document.querySelectorAll('[onclick*="LC_agregarFila"], [onclick*="LC_agregarPago"], [onclick*="LC_agregarInfoAdicional"]')
+            .forEach(el => { el.style.display = bloqueado ? 'none' : ''; });
+
+        // Guardar y Enviar al SRI
+        const btnGuardar = document.getElementById('btnGuardarLiq');
+        if (btnGuardar) btnGuardar.style.display = bloqueado ? 'none' : '';
+        const btnSri = document.getElementById('btnEnviarSri');
+        if (btnSri) btnSri.style.display = (estado === 'autorizado') ? 'none' : '';
+    }
+
+    // Badge de estado junto al número, en el encabezado del modal.
+    function liqActualizarBadgeEstado(estado) {
+        const badge = document.getElementById('liq-badge-estado');
+        if (!badge) return;
+        const e = (estado || '').toLowerCase();
+        const mapa = {
+            'borrador':      ['bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25', 'Borrador'],
+            'contabilizado': ['bg-info bg-opacity-10 text-info border border-info border-opacity-25',                'Contabilizado'],
+            'autorizado':    ['bg-success bg-opacity-10 text-success border border-success border-opacity-25',       'Autorizado'],
+            'aprobado':      ['bg-success bg-opacity-10 text-success border border-success border-opacity-25',       'Aprobado'],
+            'anulado':       ['bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25',          'Anulado'],
+        };
+        if (!e || !mapa[e]) { badge.className = 'badge ms-2 d-none'; badge.textContent = ''; return; }
+        const [cls, lbl] = mapa[e];
+        badge.className = 'badge ms-2 ' + cls;
+        badge.style.fontSize = '0.72rem';
+        badge.style.verticalAlign = 'middle';
+        badge.textContent = lbl;
+    }
+
     function abrirModalLiquidacionVerFn(row) {
         const data = JSON.parse(row.dataset.row);
         fetch(`${API_URL}/getLiquidacionAjax?id=${data.id}`)
@@ -269,6 +321,8 @@
                     renderPagos();
                     renderInfoAdicional();
                     LC_calcTotales();
+                    liqAplicarBloqueoEdicion(res.cabecera);
+                    liqActualizarBadgeEstado(res.cabecera.estado);
 
                     const seqCompleto = `${res.cabecera.establecimiento || '001'}-${res.cabecera.punto_emision || '001'}-${res.cabecera.secuencial || ''}`;
                     document.getElementById('tituloModalLiq').textContent = 'Liquidación de compras y servicios ' + seqCompleto;
@@ -1132,6 +1186,12 @@
                     mensajes_sri:         json.errores?.length ? JSON.stringify(json.errores) : null,
                 });
                 liqCargarHistorialSri(id);
+                // Autorizada por el SRI → bloquear edición de inmediato.
+                if (String(json.estado).toLowerCase() === 'autorizado') {
+                    if (liquidacionActual) liquidacionActual.estado = 'autorizado';
+                    liqAplicarBloqueoEdicion({ estado: 'autorizado' });
+                    liqActualizarBadgeEstado('autorizado');
+                }
                 Swal.fire({
                     icon: 'success',
                     title: '¡Autorizado!',

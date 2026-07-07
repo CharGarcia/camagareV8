@@ -184,7 +184,8 @@ class ReciboVentaService
                         $idUsuario,
                         $d['nombre'] ?? ($d['descripcion'] ?? ''),
                         (float) ($d['precio_unitario'] ?? 0),
-                        isset($d['porcentaje_iva']) ? (float) $d['porcentaje_iva'] : null
+                        isset($d['porcentaje_iva']) ? (float) $d['porcentaje_iva'] : null,
+                        isset($d['codigo_porcentaje']) ? (string) $d['codigo_porcentaje'] : null
                     );
                 }
                 $d['id_recibo'] = $idRecibo;

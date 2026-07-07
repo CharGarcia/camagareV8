@@ -243,7 +243,7 @@ class AtsRepository extends BaseRepository
                        c.identificacion AS cli_identificacion,
                        c.nombre        AS cli_nombre,
                        imp.base_no_gra_iva, imp.base_imponible_0, imp.base_imponible_grav,
-                       imp.monto_iva, imp.monto_ice
+                       imp.base_imponible_exe, imp.monto_iva, imp.monto_ice
                 FROM ventas_cabecera v
                 INNER JOIN clientes c ON c.id = v.id_cliente
                 LEFT  JOIN LATERAL (
@@ -251,6 +251,7 @@ class AtsRepository extends BaseRepository
                         COALESCE(SUM(CASE WHEN di.codigo_impuesto = '2' AND di.codigo_porcentaje = '6' THEN di.base_imponible END), 0) AS base_no_gra_iva,
                         COALESCE(SUM(CASE WHEN di.codigo_impuesto = '2' AND di.codigo_porcentaje = '0' THEN di.base_imponible END), 0) AS base_imponible_0,
                         COALESCE(SUM(CASE WHEN di.codigo_impuesto = '2' AND di.codigo_porcentaje NOT IN ('0','6','7') THEN di.base_imponible END), 0) AS base_imponible_grav,
+                        COALESCE(SUM(CASE WHEN di.codigo_impuesto = '2' AND di.codigo_porcentaje = '7' THEN di.base_imponible END), 0) AS base_imponible_exe,
                         COALESCE(SUM(CASE WHEN di.codigo_impuesto = '2' AND di.codigo_porcentaje NOT IN ('0','6','7') THEN di.valor END), 0) AS monto_iva,
                         COALESCE(SUM(CASE WHEN di.codigo_impuesto = '3' THEN di.valor END), 0) AS monto_ice
                     FROM ventas_detalle d

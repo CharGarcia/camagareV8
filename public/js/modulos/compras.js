@@ -2,6 +2,17 @@
 
 // ─── CONFIGURACIÓN INICIAL ───
 let _ivaDefault = 15;
+let _codigoIvaDefault = '4'; // codigoPorcentaje del SRI de la tarifa por defecto (15%)
+
+// Deriva el codigoPorcentaje del SRI desde un porcentaje (unívoco solo para % > 0). Para 0% no es
+// unívoco (0/6/7), por eso solo se usa como respaldo cuando no llega el codigoPorcentaje real.
+function _codigoIvaPorPct(pct) {
+    const p = parseFloat(pct) || 0;
+    const lista = window.CMG_tarifasIva || [];
+    const t = lista.find(x => parseFloat(x.porcentaje_iva) === p && String(x.status) === '1')
+           || lista.find(x => parseFloat(x.porcentaje_iva) === p);
+    return t ? String(t.codigo) : (p > 0 ? _codigoIvaDefault : '0');
+}
 const CMG_TIPOS_MASCARA = ['01', '03', '04', '05', '06', '09', '11', '12', '15', '16', '18', '19', '20', '21', '41', '42', '43', '47', '48'];
 
 // Verificar si la empresa es Persona Natural
@@ -12,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.CMG_tarifasIva && window.CMG_tarifasIva.length > 0) {
         const tDefault = window.CMG_tarifasIva.find(t => parseFloat(t.porcentaje_iva) > 0) || window.CMG_tarifasIva[0];
         _ivaDefault = parseFloat(tDefault.porcentaje_iva);
+        _codigoIvaDefault = String(tDefault.codigo);
     }
     
 
@@ -292,8 +304,10 @@ function mcActualizarBloqueoCampos() {
     if (!regEl) return;
     const isElectronico = regEl.value === 'electronico';
     
-    // IDs de campos que SIEMPRE deben ser editables (según pedido del usuario)
-    const permitidos = ['mcDeducible', 'mcMotivo', 'mcObservaciones', 'mcInputPropina'];
+    // IDs de campos internos (clasificación propia, no del comprobante) que
+    // SIEMPRE deben ser editables. La propina NO va aquí: afecta el total, que
+    // en una compra electrónica debe coincidir con el XML autorizado.
+    const permitidos = ['mcDeducible', 'mcMotivo', 'mcObservaciones'];
     const checkboxParteRel = 'mcParteRelacionada';
 
     // Bloquear campos de cabecera
@@ -302,11 +316,15 @@ function mcActualizarBloqueoCampos() {
         '#mcAutorizacion', '#mcAutorizacionDesde', '#mcAutorizacionHasta', '#mcFechaCaducidad',
         '#mcFechaEmision', '#mcFechaRegistro', '#mcTipoRegistro'
     ];
-    
+
     selectors.forEach(s => {
         const el = document.querySelector(s);
         if (el) el.disabled = isElectronico;
     });
+
+    // Propina: bloqueada en electrónica (forma parte del total del comprobante)
+    const propinaEl = document.getElementById('mcInputPropina');
+    if (propinaEl) propinaEl.disabled = isElectronico;
 
     // Especial para Deducible y Parte Relacionada (Permitidos)
     document.getElementById('mcDeducible').disabled = false;
@@ -833,7 +851,7 @@ window.CMG_seleccionarProducto = function(p) {
         id_tipo_medida: p.id_tipo_medida,
         impuestos: [{
             codigo_impuesto: '2',
-            codigo_porcentaje: p.codigo_porcentaje_iva || '2',
+            codigo_porcentaje: p.codigo_porcentaje_iva || _codigoIvaPorPct(iva),
             tarifa: iva,
             base_imponible: 0,
             valor: 0
@@ -925,7 +943,7 @@ window.CMG_cancelarVinculacionInline = function(idx) {
 
 
 window.CMG_agregarItemLibre = function() {
-    CMG_agregarFilaDetalle({ descripcion:'', cantidad:1, precio_unitario:0, descuento:0, impuestos:[{codigo_impuesto:'2',codigo_porcentaje:'4',tarifa:_ivaDefault,base_imponible:0,valor:0}] });
+    CMG_agregarFilaDetalle({ descripcion:'', cantidad:1, precio_unitario:0, descuento:0, impuestos:[{codigo_impuesto:'2',codigo_porcentaje:_codigoIvaDefault,tarifa:_ivaDefault,base_imponible:0,valor:0}] });
 };
 
 function CMG_agregarFilaDetalle(det) {
@@ -933,10 +951,15 @@ function CMG_agregarFilaDetalle(det) {
     const idx   = tbody.rows.length;
     
 
+    // Preseleccionar por el codigoPorcentaje real del detalle (para no colapsar 0%/Exento/No objeto,
+    // que comparten porcentaje 0). Solo si no llega el código se usa el porcentaje como respaldo.
+    const codDet = (det.impuestos && det.impuestos.length && (det.impuestos[0].codigo_porcentaje ?? '') !== '')
+        ? String(det.impuestos[0].codigo_porcentaje) : '';
     const ivaPct = det.impuestos && det.impuestos.length ? parseFloat(det.impuestos[0].tarifa||0) : _ivaDefault;
-    const opcIva = (window.CMG_tarifasIva || []).map(t =>
-        `<option value="${t.codigo_porcentaje||t.id}" data-tarifa="${t.porcentaje_iva}" ${parseFloat(t.porcentaje_iva)===ivaPct?'selected':''}>${t.tarifa || (t.porcentaje_iva + '%')}</option>`
-    ).join('');
+    const opcIva = (window.CMG_tarifasIva || []).map(t => {
+        const sel = codDet !== '' ? String(t.codigo) === codDet : parseFloat(t.porcentaje_iva) === ivaPct;
+        return `<option value="${t.codigo}" data-codigo="${t.codigo}" data-tarifa="${t.porcentaje_iva}" ${sel?'selected':''}>${t.tarifa || (t.porcentaje_iva + '%')}</option>`;
+    }).join('');
 
     const tr = document.createElement('tr');
     tr.className = 'row-detalle';
@@ -996,15 +1019,18 @@ function CMG_recalcularTotales() {
         const sel   = tr.querySelector('.input-iva');
         const tarifa = sel ? parseFloat(sel.selectedOptions[0]?.dataset.tarifa || 0) : 0;
         const codPct = sel ? sel.value : '0';
-        
+        // Etiqueta descriptiva del tipo de IVA (texto de la opción: "IVA 15%",
+        // "0%", "No objeto de IVA", "Exento"...), igual que en facturas de venta.
+        const label  = sel ? (sel.selectedOptions[0]?.text || (tarifa + '%')) : (tarifa + '%');
+
         const brutoFila = cant * prec;
         const netoFila  = Math.max(0, brutoFila - desc);
-        
+
         subTotalBruto += brutoFila;
         totalDesc += desc;
 
         if (!grupos[codPct]) {
-            grupos[codPct] = { tarifa: tarifa, base: 0, iva: 0 };
+            grupos[codPct] = { tarifa: tarifa, label: label, base: 0, iva: 0 };
         }
         grupos[codPct].base += netoFila;
         grupos[codPct].iva += netoFila * (tarifa / 100);
@@ -1020,7 +1046,7 @@ function CMG_recalcularTotales() {
         totalIva += g.iva;
         htmlSubtotales += `
             <div class="d-flex justify-content-between align-items-center mb-1">
-                <span class="text-muted">Subtotal ${g.tarifa}%</span>
+                <span class="text-muted">Subtotal ${g.label}</span>
                 <span>${g.base.toFixed(2)}</span>
             </div>`;
     });
@@ -1096,7 +1122,9 @@ window.CMG_guardar = async function() {
         const descInput = tr.querySelector('.input-descripcion');
         if (!descInput) return; // Fila inválida
         
-        const tarifa = parseFloat(tr.querySelector('select')?.selectedOptions[0]?.dataset.tarifa || 0);
+        const optIva = tr.querySelector('.input-iva')?.selectedOptions[0];
+        const tarifa = parseFloat(optIva?.dataset.tarifa || 0);
+        const codPct = optIva?.dataset.codigo || optIva?.value || _codigoIvaPorPct(tarifa);
         const cant = parseFloat(tr.querySelector('.input-cantidad')?.value || 1);
         const precio = parseFloat(tr.querySelector('.input-precio')?.value || 0);
         const descVal = parseFloat(tr.querySelector('.input-desc')?.value || 0);
@@ -1112,7 +1140,7 @@ window.CMG_guardar = async function() {
             precio_unitario: precio,
             descuento: descVal,
             precio_total_sin_impuesto: neto,
-            impuestos: [{ codigo_impuesto:'2', codigo_porcentaje: tarifa>0?'4':'0', tarifa, base_imponible: neto, valor: ivaVal }]
+            impuestos: [{ codigo_impuesto:'2', codigo_porcentaje: codPct, tarifa, base_imponible: neto, valor: ivaVal }]
         });
     });
 
@@ -1449,7 +1477,8 @@ function mcCapturarEstado() {
                 cantidad: tr.querySelector('.input-cantidad')?.value || '',
                 precio_unitario: tr.querySelector('.input-precio')?.value || '',
                 descuento: tr.querySelector('.input-desc')?.value || '',
-                iva: parseFloat(tr.querySelector('.input-iva')?.selectedOptions[0]?.dataset.tarifa || _ivaDefault)
+                iva: parseFloat(tr.querySelector('.input-iva')?.selectedOptions[0]?.dataset.tarifa || _ivaDefault),
+                codigo_iva: tr.querySelector('.input-iva')?.selectedOptions[0]?.dataset.codigo || ''
             });
         }
     });
@@ -1559,7 +1588,7 @@ async function mcEjecutarRestauracion(estado) {
                 cantidad: d.cantidad,
                 precio_unitario: d.precio_unitario,
                 descuento: d.descuento,
-                impuestos: [{ tarifa: d.iva }]
+                impuestos: [{ tarifa: d.iva, codigo_porcentaje: d.codigo_iva || '' }]
             });
         });
     } else {

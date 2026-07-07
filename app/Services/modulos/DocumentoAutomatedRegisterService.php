@@ -266,7 +266,22 @@ class DocumentoAutomatedRegisterService
             return $res;
 
         } catch (Exception $e) {
-            return ['ok' => false, 'error' => $e->getMessage(), 'estado_registro' => 'ERROR'];
+            // Si un índice UNIQUE de la BD frena el segundo registro de la misma clave (dos lotes
+            // solapados que pasaron el chequeo de existencia antes de que el otro comiteara),
+            // trátalo como ya registrado en lugar de error.
+            $msg = $e->getMessage();
+            if ($e->getCode() === '23505'
+                || stripos($msg, 'duplicate key') !== false
+                || stripos($msg, 'unique constraint') !== false
+                || stripos($msg, 'llave duplicada') !== false) {
+                return [
+                    'ok' => true,
+                    'existe' => true,
+                    'estado_registro' => 'YA ESTABA REGISTRADO',
+                    'mensaje' => 'El documento ya ha sido registrado con anterioridad.',
+                ];
+            }
+            return ['ok' => false, 'error' => $msg, 'estado_registro' => 'ERROR'];
         }
     }
 
@@ -370,7 +385,7 @@ class DocumentoAutomatedRegisterService
                 foreach ($xml->detalles->detalle as $d) {
                     $idDetalle = $this->ventaRepo->insertDetalle([
                         'id_venta' => $idVenta,
-                        'id_producto' => $this->getOrCreateProductoId($idEmpresa, $idUsuario, (string)$d->codigoPrincipal, (string)$d->descripcion, (float)$d->precioUnitario, isset($d->impuestos->impuesto) ? (string)$d->impuestos->impuesto[0]->tarifa : '0'),
+                        'id_producto' => $this->getOrCreateProductoId($idEmpresa, $idUsuario, (string)$d->codigoPrincipal, (string)$d->descripcion, (float)$d->precioUnitario, isset($d->impuestos->impuesto) ? (string)$d->impuestos->impuesto[0]->codigoPorcentaje : '0'),
                         'descripcion' => (string)$d->descripcion,
                         'cantidad' => (float)$d->cantidad,
                         'precio_unitario' => (float)$d->precioUnitario,
@@ -607,7 +622,7 @@ class DocumentoAutomatedRegisterService
         return null;
     }
 
-    private function getOrCreateProductoId(int $idEmpresa, int $idUsuario, string $codigoPrincipal, string $descripcion, float $precio, string $tarifaIvaStr): int
+    private function getOrCreateProductoId(int $idEmpresa, int $idUsuario, string $codigoPrincipal, string $descripcion, float $precio, string $codigoPorcentaje): int
     {
         $db = Database::getConnection();
         
@@ -623,11 +638,18 @@ class DocumentoAutomatedRegisterService
         $codigo = !empty($codigoPrincipal) ? $codigoPrincipal : 'SRI-' . substr(md5(uniqid()), 0, 8);
         $nombre = !empty($descripcion) ? $descripcion : 'Producto SRI no mapeado';
         
-        $tarifa_iva = 0; // 0%
-        if ($tarifaIvaStr == '2' || $tarifaIvaStr == '3' || $tarifaIvaStr == '4') {
-            $tarifa_iva = 2; // 12%, 14%, 15% etc.
+        // La tarifa de IVA del producto se resuelve por el codigoPorcentaje del SRI (0/4/5/6/7/8…),
+        // NO por la tarifa numérica: así 0% (0), No objeto (6) y Exento (7) —que comparten tarifa 0—
+        // no se colapsan, y nunca se guarda un id inválido en productos.tarifa_iva (FK a tarifa_iva.id).
+        $stTar = $db->prepare("SELECT id FROM tarifa_iva WHERE codigo = ? LIMIT 1");
+        $stTar->execute([$codigoPorcentaje]);
+        $tarifa_iva = (int)($stTar->fetchColumn() ?: 0);
+        if ($tarifa_iva === 0) {
+            // Fallback a un id válido (código '0' = 0% gravado) si el código no está en el catálogo.
+            $stFb = $db->query("SELECT id FROM tarifa_iva WHERE codigo = '0' LIMIT 1");
+            $tarifa_iva = (int)($stFb->fetchColumn() ?: 1);
         }
-        
+
         // Se inserta como servicio para no afectar kardex estrictamente si no se desea, o como bien genérico.
         // Se establecen opciones mínimas
         $sql = "INSERT INTO productos (
@@ -992,13 +1014,35 @@ class DocumentoAutomatedRegisterService
         } catch (Exception $e) { $db->rollBack(); throw $e; }
     }
 
+    /**
+     * Normaliza un número de documento de sustento al formato canónico NNN-NNN-NNNNNNNNN.
+     * Acepta tanto el formato con guiones (retención v1.0) como los 15 dígitos sin separadores
+     * (v2.0), de modo que la auto-retención (que se guarda con guiones) y la retención electrónica
+     * descargada del SRI coincidan en la verificación de unicidad y NO se dupliquen.
+     */
+    private function formatearNumDocSustento(string $raw): string
+    {
+        $raw = trim($raw);
+        $partes = explode('-', $raw);
+        if (count($partes) === 3) {
+            return str_pad($partes[0], 3, '0', STR_PAD_LEFT)
+                 . '-' . str_pad($partes[1], 3, '0', STR_PAD_LEFT)
+                 . '-' . str_pad($partes[2], 9, '0', STR_PAD_LEFT);
+        }
+        $soloDigitos = preg_replace('/\D/', '', $raw);
+        if (strlen($soloDigitos) === 15) {
+            return substr($soloDigitos, 0, 3) . '-' . substr($soloDigitos, 3, 3) . '-' . substr($soloDigitos, 6, 9);
+        }
+        return $raw;
+    }
+
     private function insertarRetencionCompra(SimpleXMLElement $xml, int $idEmpresa, int $idProv, int $idUsuario, string $ambiente): int
     {
         $it = $xml->infoTributaria;
         $info = isset($xml->infoRetencion) ? $xml->infoRetencion : $xml->infoCompRetencion;
-        
+
         $fechaEmision = $this->formatearFecha((string)$info->fechaEmision);
-        
+
         // Intentar vincular con una compra existente por número de documento de sustento
         $idCompra = null;
         $idLiquidacion = null;
@@ -1006,26 +1050,43 @@ class DocumentoAutomatedRegisterService
         $numDocSustento = null;
         $fechaSustento = null;
 
+        // Documento de sustento: soporta v1.0 (impuestos/impuesto) y v2.0 (docsSustento/docSustento).
+        // Se normaliza a NNN-NNN-NNNNNNNNN para que coincida con la auto-retención (que ya usa ese
+        // formato) en la verificación de unicidad y no se genere una retención duplicada.
+        $rawNumSustento = null;
         if (isset($xml->impuestos->impuesto)) {
             foreach ($xml->impuestos->impuesto as $imp) {
                 if (isset($imp->numDocSustento)) {
-                    $numDocSustento = (string)$imp->numDocSustento;
+                    $rawNumSustento  = (string)$imp->numDocSustento;
                     $tipoDocSustento = (string)$imp->codDocSustento;
-                    $fechaSustento = $this->formatearFecha((string)$imp->fechaEmisionDocSustento);
-                    
-                    // Buscar la compra
-                    $db = Database::getConnection();
-                    if ($tipoDocSustento === '01') {
-                        $st = $db->prepare("SELECT id FROM compras_cabecera WHERE id_empresa = ? AND id_proveedor = ? AND (establecimiento_prov || '-' || punto_emision_prov || '-' || secuencial_prov) = ? AND eliminado = false LIMIT 1");
-                        $st->execute([$idEmpresa, $idProv, $numDocSustento]);
-                        $idCompra = $st->fetchColumn() ?: null;
-                    } elseif ($tipoDocSustento === '03') {
-                        $st = $db->prepare("SELECT id FROM liquidaciones_cabecera WHERE id_empresa = ? AND id_proveedor = ? AND (establecimiento || '-' || punto_emision || '-' || secuencial) = ? AND eliminado = false LIMIT 1");
-                        $st->execute([$idEmpresa, $idProv, $numDocSustento]);
-                        $idLiquidacion = $st->fetchColumn() ?: null;
-                    }
-                    if ($idCompra || $idLiquidacion) break;
+                    $fechaSustento   = $this->formatearFecha((string)$imp->fechaEmisionDocSustento);
+                    break;
                 }
+            }
+        }
+        if ($rawNumSustento === null && isset($xml->docsSustento->docSustento)) {
+            foreach ($xml->docsSustento->docSustento as $doc) {
+                if (isset($doc->numDocSustento)) {
+                    $rawNumSustento  = (string)$doc->numDocSustento;
+                    $tipoDocSustento = (string)$doc->codDocSustento;
+                    $fechaSustento   = $this->formatearFecha((string)$doc->fechaEmisionDocSustento);
+                    break;
+                }
+            }
+        }
+        $numDocSustento = $rawNumSustento !== null ? $this->formatearNumDocSustento($rawNumSustento) : null;
+
+        // Vincular con la compra/liquidación por el número de sustento ya normalizado (con guiones).
+        if ($numDocSustento !== null) {
+            $db = Database::getConnection();
+            if ($tipoDocSustento === '01') {
+                $st = $db->prepare("SELECT id FROM compras_cabecera WHERE id_empresa = ? AND id_proveedor = ? AND (establecimiento_prov || '-' || punto_emision_prov || '-' || secuencial_prov) = ? AND eliminado = false LIMIT 1");
+                $st->execute([$idEmpresa, $idProv, $numDocSustento]);
+                $idCompra = $st->fetchColumn() ?: null;
+            } elseif ($tipoDocSustento === '03') {
+                $st = $db->prepare("SELECT id FROM liquidaciones_cabecera WHERE id_empresa = ? AND id_proveedor = ? AND (establecimiento || '-' || punto_emision || '-' || secuencial) = ? AND eliminado = false LIMIT 1");
+                $st->execute([$idEmpresa, $idProv, $numDocSustento]);
+                $idLiquidacion = $st->fetchColumn() ?: null;
             }
         }
 
@@ -1049,7 +1110,7 @@ class DocumentoAutomatedRegisterService
                     'porcentaje_retener' => (float)$imp->porcentajeRetener,
                     'valor_retenido' => (float)$imp->valorRetenido,
                     'cod_doc_sustento' => (string)($imp->codDocSustento ?? $tipoDocSustento),
-                    'num_doc_sustento' => (string)($imp->numDocSustento ?? $numDocSustento),
+                    'num_doc_sustento' => $this->formatearNumDocSustento((string)($imp->numDocSustento ?? $numDocSustento)),
                     'fecha_emision_doc_sustento' => $this->formatearFecha((string)($imp->fechaEmisionDocSustento ?? $fechaSustento))
                 ];
             }
@@ -1059,7 +1120,7 @@ class DocumentoAutomatedRegisterService
         if (isset($xml->docsSustento->docSustento)) {
             foreach ($xml->docsSustento->docSustento as $doc) {
                 $codSustento = (string)$doc->codDocSustento;
-                $numSustento = (string)$doc->numDocSustento;
+                $numSustento = $this->formatearNumDocSustento((string)$doc->numDocSustento);
                 $fecSustento = $this->formatearFecha((string)$doc->fechaEmisionDocSustento);
 
                 if (isset($doc->retenciones->retencion)) {
