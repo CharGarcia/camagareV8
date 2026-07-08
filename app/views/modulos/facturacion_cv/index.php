@@ -143,7 +143,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.EMPRESA_CONFIG = {
         facturacion_inventario: <?= (($empresa['facturacion_inventario'] ?? true) === 'true' || ($empresa['facturacion_inventario'] ?? true) === true) ? 'true' : 'false' ?>,
         decimales_precio: <?= (int) ($empresa['decimales_precio'] ?? 2) ?>,
-        decimales_cantidad: <?= (int) ($empresa['decimales_cantidad'] ?? 2) ?>
+        decimales_cantidad: <?= (int) ($empresa['decimales_cantidad'] ?? 2) ?>,
+        id_forma_pago_sri_def: <?= (isset($empresa['id_forma_pago_sri_def']) && $empresa['id_forma_pago_sri_def'] !== null && $empresa['id_forma_pago_sri_def'] !== '') ? (int)$empresa['id_forma_pago_sri_def'] : 'null' ?>
     };
 </script>
 

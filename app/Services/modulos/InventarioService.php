@@ -63,10 +63,10 @@ class InventarioService
      * Solo aplica a productos inventariables.
      * Devuelve array con id_inventario_kardex por posición de ítem.
      */
-    public function procesarSalidaPorVenta(int $idVenta, array $detalles, int $idEstablecimiento, int $idEmpresa, int $idUsuario, string $obsPrefix = '', bool $esEdicion = false, string $refTipo = 'factura_venta'): array
+    public function procesarSalidaPorVenta(int $idVenta, array $detalles, int $idEstablecimiento, int $idEmpresa, int $idUsuario, string $obsPrefix = '', bool $esEdicion = false, string $refTipo = 'factura_venta', bool $permitirNegativo = false): array
     {
         $estConfig = $this->getEmpresaRepository()->getEstablecimientoConfig($idEstablecimiento);
-        
+
         // Si no está activa la facturación con inventario, no hacemos nada
         if (!($estConfig['facturacion_inventario'] ?? false)) {
             return [];
@@ -74,6 +74,9 @@ class InventarioService
 
         $metodo          = $estConfig['metodo_costeo'] ?? 'promedio';
         $soloStockPos    = (bool)($estConfig['factura_solo_stock_positivo'] ?? false);
+        // $permitirNegativo fuerza salidas aunque el saldo quede negativo (p. ej. facturas
+        // generadas desde una consignación: el stock ya se reingresó y la restricción es redundante).
+        $permitirNeg     = $permitirNegativo || !$soloStockPos;
         $obliLotes       = (bool)($estConfig['obligatorio_lotes']   ?? false);
         $kardexIds        = [];
         
@@ -136,7 +139,7 @@ class InventarioService
                     $idBodega,
                     $cantidad,
                     $metodo,
-                    !$soloStockPos,
+                    $permitirNeg,
                     $idVenta,
                     $idEmpresa,
                     $idUsuario,
@@ -165,7 +168,7 @@ class InventarioService
                         $idBodega,
                         $cantComp,
                         $metodo,
-                        !$soloStockPos,
+                        $permitirNeg,
                         $idVenta,
                         $idEmpresa,
                         $idUsuario,

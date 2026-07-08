@@ -150,6 +150,33 @@ class EgresoRepository extends BaseRepository
         return $this->query($sql, [':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** Líneas de rol (rol_detalle) pendientes de pago de un empleado. Mismo shape que proveedor. */
+    public function getDocumentosPendientesEmpleado(int $idEmpleado, int $idEmpresa): array
+    {
+        $sql = "WITH pagado AS (
+                    SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
+                    FROM egresos_detalle d
+                    INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
+                    WHERE d.tipo_documento = 'ROL' AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
+                    GROUP BY d.id_referencia_documento
+                )
+                SELECT 'ROL' AS tipo_doc_bd, rd.id,
+                       COALESCE(NULLIF(rc.descripcion, ''), 'Rol ' || rc.periodo_mes || '/' || rc.periodo_anio) AS numero_documento,
+                       rc.fecha_pago AS fecha_emision,
+                       rd.neto AS monto_total,
+                       COALESCE(p.total_pagado, 0) AS monto_pagado_previo,
+                       (rd.neto - COALESCE(p.total_pagado, 0)) AS saldo_pendiente,
+                       0 AS dias_credito
+                FROM rol_detalle rd
+                INNER JOIN rol_cabecera rc ON rc.id = rd.id_rol
+                LEFT JOIN pagado p ON p.id_referencia_documento = rd.id
+                WHERE rd.id_empleado = :id_emp AND rd.id_empresa = :id_empresa
+                  AND rc.eliminado = FALSE AND rc.estado IN ('generado','pagado','contabilizado')
+                  AND (rd.neto - COALESCE(p.total_pagado, 0)) > 0.01
+                ORDER BY rc.periodo_anio ASC, rc.periodo_mes ASC";
+        return $this->query($sql, [':id_emp' => $idEmpleado, ':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getDocumentosPendientesProveedor(int $idProveedor, int $idEmpresa): array
     {
         // Calcular acumulado pagado previamente en egresos registrados

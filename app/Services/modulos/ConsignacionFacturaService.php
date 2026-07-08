@@ -79,6 +79,12 @@ class ConsignacionFacturaService
         $repoProd = new \App\repositories\modulos\ProductoRepository();
         foreach ($lineas as &$l) {
             $l['precios_lista'] = $repoProd->getPrecios((int) $l['id_producto'], $idEmpresa);
+            // IVA actual del producto (misma fuente que al facturar) para que el ítem muestre
+            // el porcentaje que realmente se aplicará.
+            $tar = $this->repository->getTarifaIvaProducto((int) $l['id_producto']);
+            if ($tar) {
+                $l['porcentaje_impuesto'] = (float) $tar['porcentaje_iva'];
+            }
         }
         unset($l);
         return $lineas;
@@ -90,7 +96,36 @@ class ConsignacionFacturaService
         if (!$cab) return null;
         $cab['detalles'] = $this->repository->getDetalles($id, $idEmpresa);
         $cab['info_adicional'] = $this->decodeInfoAdicional($cab['info_adicional'] ?? null);
+        $cab['pagos_sri'] = $this->decodePagos($cab['pagos_sri'] ?? null);
         return $cab;
+    }
+
+    /** Normaliza los pagos SRI [{forma_pago, valor}] (solo filas con forma). */
+    private function limpiarPagos($pagos): array
+    {
+        if (is_string($pagos)) { $pagos = json_decode($pagos, true); }
+        if (!is_array($pagos)) return [];
+        $out = [];
+        foreach ($pagos as $p) {
+            $forma = trim((string) ($p['forma_pago'] ?? ''));
+            if ($forma === '') continue;
+            $out[] = ['forma_pago' => $forma, 'valor' => round((float) ($p['valor'] ?? 0), 2)];
+        }
+        return $out;
+    }
+
+    private function decodePagos($raw): array
+    {
+        if (is_array($raw)) return $raw;
+        if (!is_string($raw) || $raw === '') return [];
+        $dec = json_decode($raw, true);
+        return is_array($dec) ? $dec : [];
+    }
+
+    private function normalizarPlazoUnidad($u): string
+    {
+        $u = (string) $u;
+        return in_array($u, ['dias', 'meses', 'anios'], true) ? $u : 'dias';
     }
 
     /** Normaliza info adicional [{nombre, valor}] a JSON para persistir. */
@@ -164,6 +199,10 @@ class ConsignacionFacturaService
                 'tipo_ambiente'    => (string) ($data['empresa_config']['tipo_ambiente'] ?? '1'),
                 'id_cliente'       => (int) $data['id_cliente'],
                 'id_vendedor'      => empty($data['id_vendedor']) ? null : (int) $data['id_vendedor'],
+                'dias_credito'     => (int) ($data['dias_credito'] ?? 0),
+                'plazo_unidad'     => $this->normalizarPlazoUnidad($data['plazo_unidad'] ?? 'dias'),
+                'forma_pago_sri'   => ($p = $this->limpiarPagos($data['pagos_sri'] ?? [])) ? ($p[0]['forma_pago'] ?? null) : (!empty($data['forma_pago_sri']) ? (string) $data['forma_pago_sri'] : null),
+                'pagos_sri'        => $p ? json_encode($p) : null,
                 'observaciones'    => $data['observaciones'] ?? null,
                 'info_adicional'   => $this->encodeInfoAdicional($data['info_adicional'] ?? []),
                 'estado'           => 'borrador',
@@ -217,6 +256,10 @@ class ConsignacionFacturaService
                 'fecha_emision' => $data['fecha_emision'],
                 'id_cliente'    => (int) $data['id_cliente'],
                 'id_vendedor'   => empty($data['id_vendedor']) ? null : (int) $data['id_vendedor'],
+                'dias_credito'  => (int) ($data['dias_credito'] ?? 0),
+                'plazo_unidad'  => $this->normalizarPlazoUnidad($data['plazo_unidad'] ?? 'dias'),
+                'forma_pago_sri'=> ($p = $this->limpiarPagos($data['pagos_sri'] ?? [])) ? ($p[0]['forma_pago'] ?? null) : (!empty($data['forma_pago_sri']) ? (string) $data['forma_pago_sri'] : null),
+                'pagos_sri'     => $p ? json_encode($p) : null,
                 'observaciones' => $data['observaciones'] ?? null,
                 'info_adicional'=> $this->encodeInfoAdicional($data['info_adicional'] ?? []),
                 'subtotal'      => $tot['subtotal'],
@@ -252,6 +295,82 @@ class ConsignacionFacturaService
             if ($db->inTransaction()) $db->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Crea un nuevo documento en 'borrador' copiando la cabecera y las líneas de un
+     * documento existente (típicamente uno 'anulada'), re-validando el saldo actual de
+     * cada línea: la cantidad se capea al saldo facturable vigente (y el descuento se
+     * escala proporcionalmente); las líneas sin saldo se omiten. Devuelve el id del
+     * nuevo borrador para abrirlo y, si se desea, generar una nueva factura.
+     */
+    public function duplicar(int $idDoc, int $idEmpresa, int $idUsuario, array $empresaConfig): int
+    {
+        $src = $this->repository->find($idDoc, $idEmpresa);
+        if (!$src) throw new Exception('Documento no encontrado.');
+
+        $idPunto = (int) ($src['id_punto_emision'] ?? 0);
+        if ($idPunto <= 0) {
+            throw new Exception('El documento de origen no tiene punto de emisión; no se puede duplicar.');
+        }
+
+        // Nuevo secuencial propio para el punto de emisión.
+        $repoSec = new \App\repositories\SecuencialRepository();
+        $cfgSec  = $repoSec->getConfigSecuencial($idPunto, 'Facturacion consignaciones ventas');
+        if (empty($cfgSec['id'])) {
+            throw new Exception('No hay secuencial configurado para "Facturacion consignaciones ventas" en el punto de emisión del documento.');
+        }
+        $sec = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Facturacion consignaciones ventas');
+
+        // Copiar líneas capando cada cantidad al saldo facturable actual.
+        $detsSrc  = $this->repository->getDetalles($idDoc, $idEmpresa);
+        $detalles = [];
+        foreach ($detsSrc as $d) {
+            $idConsDet = (int) ($d['id_consignacion_detalle'] ?? 0);
+            $srcCant   = (float) ($d['cantidad'] ?? 0);
+            if ($idConsDet <= 0 || $srcCant <= 0) continue;
+
+            $saldo = (float) $this->repository->getSaldoFacturableLinea($idConsDet, $idEmpresa, null);
+            if ($saldo <= 1e-9) continue;
+
+            $cant = min($srcCant, $saldo);
+            $desc = max(0.0, (float) ($d['descuento'] ?? 0));
+            if ($cant < $srcCant) $desc = round($desc * ($cant / $srcCant), 2); // escala el descuento al capear
+
+            $detalles[] = [
+                'id_consignacion_detalle' => $idConsDet,
+                'cantidad'                => $cant,
+                'precio_unitario'         => (float) ($d['precio_unitario'] ?? 0),
+                'descuento'               => $desc,
+            ];
+        }
+        if (empty($detalles)) {
+            throw new Exception('Las consignaciones del documento ya no tienen saldo facturable; no hay nada que duplicar.');
+        }
+
+        $data = [
+            'id_empresa'       => $idEmpresa,
+            'id_usuario'       => $idUsuario,
+            'empresa_config'   => $empresaConfig,
+            'fecha_emision'    => date('Y-m-d'),
+            'serie'            => $src['serie'] ?? '',
+            'secuencial'       => $sec['secuencial'],
+            'id_punto_emision' => $idPunto,
+            'establecimiento'  => $src['establecimiento'] ?? null,
+            'punto_emision'    => $src['punto_emision'] ?? null,
+            'id_cliente'       => (int) ($src['id_cliente'] ?? 0),
+            'id_vendedor'      => $src['id_vendedor'] ?? null,
+            'dias_credito'     => (int) ($src['dias_credito'] ?? 0),
+            'plazo_unidad'     => $src['plazo_unidad'] ?? 'dias',
+            'pagos_sri'        => $this->decodePagos($src['pagos_sri'] ?? null),
+            'observaciones'    => $src['observaciones'] ?? null,
+            'info_adicional'   => $this->decodeInfoAdicional($src['info_adicional'] ?? null),
+            'detalles'         => $detalles,
+        ];
+
+        $newId = $this->crear($data);
+        $this->logService->registrar($idUsuario, $idEmpresa, 'DUPLICAR_FACTURACION_CV', 'consignaciones_facturas', $newId, ['origen' => $idDoc], null);
+        return $newId;
     }
 
     /**
@@ -430,6 +549,34 @@ class ConsignacionFacturaService
         $secuencial = $sec['formateado'];
         $numFactura = ($doc['establecimiento'] ?? '') . '-' . ($doc['punto_emision'] ?? '') . '-' . $secuencial;
 
+        // Pagos SRI del documento (una o varias formas). Si hay una sola forma, le toca el total;
+        // si hay varias, se respetan los valores; si no hay ninguna, un pago único con la forma o '01'.
+        $dias   = (int) ($doc['dias_credito'] ?? 0);
+        $unidad = $this->normalizarPlazoUnidad($doc['plazo_unidad'] ?? 'dias');
+        $pagosDoc = $this->limpiarPagos($doc['pagos_sri'] ?? []);
+        $pagosFactura = [];
+        if (count($pagosDoc) === 1) {
+            $pagosFactura[] = ['forma_pago' => $pagosDoc[0]['forma_pago'], 'total' => $importeTotal, 'plazo' => $dias, 'unidad_tiempo' => $unidad];
+        } elseif (count($pagosDoc) > 1) {
+            foreach ($pagosDoc as $pp) {
+                $pagosFactura[] = ['forma_pago' => $pp['forma_pago'], 'total' => round((float) $pp['valor'], 2), 'plazo' => $dias, 'unidad_tiempo' => $unidad];
+            }
+        } else {
+            $pagosFactura[] = ['forma_pago' => !empty($doc['forma_pago_sri']) ? (string) $doc['forma_pago_sri'] : '01', 'total' => $importeTotal, 'plazo' => $dias, 'unidad_tiempo' => $unidad];
+        }
+
+        // Info adicional de la factura = la del documento + una línea con el/los número(s)
+        // de consignación usados (concepto "Consignación").
+        $infoFactura = $this->decodeInfoAdicional($doc['info_adicional'] ?? null);
+        $consigNums = [];
+        foreach ($detalles as $d) {
+            $numC = trim(((string) ($d['consignacion_serie'] ?? '')) . '-' . ((string) ($d['consignacion_secuencial'] ?? '')), '-');
+            if ($numC !== '' && !in_array($numC, $consigNums, true)) $consigNums[] = $numC;
+        }
+        if ($consigNums) {
+            $infoFactura[] = ['nombre' => 'Consignación', 'valor' => implode(', ', $consigNums)];
+        }
+
         $payload = [
             'id_empresa'          => $idEmpresa,
             'id_usuario'          => $idUsuario,
@@ -442,9 +589,10 @@ class ConsignacionFacturaService
             'fecha_emision'       => $doc['fecha_emision'] ?? date('Y-m-d'),
             'id_cliente'          => (int) $doc['id_cliente'],
             'id_vendedor'         => !empty($doc['id_vendedor']) ? (int) $doc['id_vendedor'] : null,
-            'dias_credito'        => 0,
+            'dias_credito'        => $dias,
+            'plazo'               => $dias,
             'moneda'              => 'DOLAR',
-            'observaciones'       => trim('Generada desde facturación de consignación ' . $numDoc . '. ' . ($doc['observaciones'] ?? '')),
+            'observaciones'       => trim((string) ($doc['observaciones'] ?? '')),
             'id_bodega'           => $idBodegaTop,
             'total_sin_impuestos' => $totalSinImp,
             'total_descuento'     => round($descTotal, 2),
@@ -452,13 +600,12 @@ class ConsignacionFacturaService
             'propina'             => 0,
             'importe_total'       => $importeTotal,
             'detalles'            => $detFactura,
-            'pagos'               => [[
-                'forma_pago'    => '01',
-                'total'         => $importeTotal,
-                'plazo'         => 0,
-                'unidad_tiempo' => 'dias',
-            ]],
-            'info_adicional'      => $this->decodeInfoAdicional($doc['info_adicional'] ?? null),
+            'pagos'               => $pagosFactura,
+            'info_adicional'      => $infoFactura,
+            // El stock ya fue reingresado a la bodega en el paso anterior; la validación
+            // "solo stock positivo" de la factura es redundante (y bloquearía si el saldo
+            // global quedó negativo por la consignación).
+            'omitir_validacion_stock' => true,
         ];
 
         $facturaService = new FacturaVentaService(
@@ -514,9 +661,12 @@ class ConsignacionFacturaService
 
     private function reingresarLinea(array $d, int $idEmpresa, int $idUsuario, array $empresaConfig, int $idDoc, string $numDoc): void
     {
+        // La consignación descuenta el stock de forma INCONDICIONAL (registra la salida
+        // para toda línea). Por eso el reingreso debe hacerse igual, sin gatear por
+        // facturacion_inventario; si no, la factura no encuentra el stock reingresado.
         $cant = (float) $d['cantidad'];
         $idBodega = (int) ($d['id_bodega'] ?? 0);
-        if ($cant <= 0 || $idBodega <= 0 || !$this->afectaInventario($d, $empresaConfig)) return;
+        if ($cant <= 0 || $idBodega <= 0) return;
 
         $idProducto  = (int) $d['id_producto'];
         $stockActual = $this->inventarioRepo->getStockActual($idProducto, $idBodega, $idEmpresa);
@@ -553,15 +703,27 @@ class ConsignacionFacturaService
     {
         $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $idDoc, $idEmpresa, $idUsuario, true);
 
+        // Anular el asiento de reingreso. Se busca por la columna del documento y, como
+        // respaldo, por origen ('FACTURACION_CV' + id del documento) por si la columna no
+        // quedó registrada; así el asiento SIEMPRE se anula al revertir.
+        $asientoSvc = $this->getAsientoService();
         $doc = $this->repository->find($idDoc, $idEmpresa);
         $idAsiento = (int) ($doc['id_asiento_reingreso'] ?? 0);
+        if ($idAsiento <= 0) {
+            try {
+                $prev = $asientoSvc->getAsientoPorOrigen(self::REF_TIPO, $idDoc, $idEmpresa);
+                $idAsiento = $prev ? (int) $prev['id'] : 0;
+            } catch (\Throwable $e) { $idAsiento = 0; }
+        }
         if ($idAsiento > 0) {
             try {
-                $this->getAsientoService()->anular($idAsiento, $idEmpresa, $idUsuario);
-                $this->repository->updateAsientoReingreso($idDoc, $idEmpresa, null);
+                $asientoSvc->anular($idAsiento, $idEmpresa, $idUsuario);
             } catch (\Throwable $e) {
-                error_log("[FacturacionCV] No se pudo anular el asiento de reingreso $idAsiento: " . $e->getMessage());
+                if (stripos($e->getMessage(), 'ya se encuentra anulado') === false) {
+                    error_log("[FacturacionCV] No se pudo anular el asiento de reingreso $idAsiento: " . $e->getMessage());
+                }
             }
+            $this->repository->updateAsientoReingreso($idDoc, $idEmpresa, null);
         }
 
         if ($marcarAnulada) {

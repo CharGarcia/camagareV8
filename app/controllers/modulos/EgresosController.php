@@ -503,4 +503,63 @@ class EgresosController extends BaseModuloController
         }
         return $empresa;
     }
+
+    /** Envía por correo el PDF del comprobante de egreso. */
+    public function enviarCorreoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $id        = (int) ($_POST['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            if (!$id) { echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']); exit; }
+
+            $egreso = $this->service->getPorId($id, $idEmpresa);
+            if (!$egreso) { echo json_encode(['ok' => false, 'mensaje' => 'Egreso no encontrado.']); exit; }
+
+            // Destino: correo del POST o, si viene vacío, el del proveedor/empleado.
+            $correo = trim($_POST['correo'] ?? '');
+            if ($correo === '') {
+                $db = \App\core\Database::getConnection();
+                if (!empty($egreso['id_proveedor'])) {
+                    $st = $db->prepare("SELECT email FROM proveedores WHERE id = ? AND id_empresa = ?");
+                    $st->execute([(int) $egreso['id_proveedor'], $idEmpresa]);
+                    $correo = trim((string) $st->fetchColumn());
+                } elseif (!empty($egreso['id_empleado'])) {
+                    $st = $db->prepare("SELECT email FROM empleados WHERE id = ? AND id_empresa = ?");
+                    $st->execute([(int) $egreso['id_empleado'], $idEmpresa]);
+                    $correo = trim((string) $st->fetchColumn());
+                }
+            }
+            if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Ingrese un correo válido.']);
+                exit;
+            }
+
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
+            $asiento = $this->service->getAsientoContable($id, $idEmpresa);
+            $pdf = (new \App\Services\modulos\ComprobanteCajaPdfService())
+                ->generarEgreso($egreso, $egreso['detalles'] ?? [], $egreso['pagos'] ?? [], $empresa, 'S', $asiento);
+
+            $num        = (string) ($egreso['numero_egreso'] ?? $id);
+            $nombreDest = (string) ($egreso['sujeto_nombre'] ?? 'Beneficiario');
+            $asunto     = 'Comprobante de Egreso ' . $num;
+            $cuerpo     = '<p>Estimado/a ' . htmlspecialchars($nombreDest) . ',</p>'
+                        . '<p>Adjuntamos el comprobante de egreso <strong>' . htmlspecialchars($num) . '</strong>.</p>'
+                        . '<p>Saludos cordiales.</p>';
+
+            $ok = (new \App\Services\EnvioDocumentosSRIService())->enviarPdfSimple(
+                $idEmpresa, $correo, $nombreDest, $asunto, $cuerpo, $pdf,
+                'Egreso_' . $num, (string) ($empresa['nombre'] ?? '')
+            );
+
+            echo json_encode($ok
+                ? ['ok' => true, 'mensaje' => 'Comprobante enviado a ' . $correo]
+                : ['ok' => false, 'mensaje' => 'No se pudo enviar. Verifica la configuración de correo de la empresa.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
+        }
+        exit;
+    }
 }

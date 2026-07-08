@@ -37,6 +37,44 @@ if (($rutaModulo ?? '') !== 'modulos/empleados') {
 
 $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
 ?>
+<style>
+    /* Grilla estilo "detalle de factura" para Periodos y Rubros Fijos */
+    #modalEmpleado .emp-grid th {
+        font-size: 0.7rem !important;
+        text-transform: uppercase;
+        background-color: #f8f9fa;
+        padding: 4px 8px !important;
+    }
+    #modalEmpleado .emp-grid td {
+        padding: 0 !important;
+        vertical-align: middle;
+    }
+    #modalEmpleado .input-emp {
+        border: none;
+        background: transparent;
+        height: 30px !important;
+        font-size: 0.82rem !important;
+        padding: 2px 8px !important;
+        border-radius: 0;
+        box-shadow: none;
+    }
+    #modalEmpleado .input-emp:focus {
+        background: #fff;
+        box-shadow: inset 0 0 0 1px #0d6efd;
+        outline: none;
+    }
+    #modalEmpleado .row-emp:hover {
+        background-color: rgba(13, 110, 253, 0.03);
+    }
+    #modalEmpleado .emp-grid .remove-row {
+        color: #dc3545;
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+    #modalEmpleado .emp-grid .row-emp:hover .remove-row {
+        opacity: 1;
+    }
+</style>
 <!-- Modal Empleado -->
 <div class="modal fade" id="modalEmpleado" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
@@ -52,7 +90,14 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                 <div class="modal-body p-0">
                     <div id="modalAlert" class="alert d-none mx-3 mt-3 mb-0 py-2 small shadow-sm border-0"></div>
                     <input type="hidden" name="id" id="emp_id" value="">
-                    
+
+                    <!-- Barra de Acciones Superior -->
+                    <div class="d-flex gap-1 align-items-center flex-wrap px-3 py-2 border-bottom bg-white">
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="btnEmpPdf" onclick="window.imprimirEmpleadoPdf()" title="Imprimir ficha del empleado (PDF)">
+                            <i class="bi bi-file-earmark-pdf"></i>
+                        </button>
+                    </div>
+
                     <!-- Pestañas -->
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 tab-pestaña" id="tabsEmpleado" role="tablist">
@@ -72,7 +117,7 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                 <a class="nav-link py-2 small" id="tab-periodos-btn" data-bs-toggle="tab" href="#tab-periodos" role="tab"><i class="bi bi-clock-history me-1"></i>Periodos</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link py-2 small" id="tab-rubros-btn" data-bs-toggle="tab" href="#tab-rubros" role="tab"><i class="bi bi-calculator me-1"></i>Rubros</a>
+                                <a class="nav-link py-2 small" id="tab-rubros-btn" data-bs-toggle="tab" href="#tab-rubros" role="tab"><i class="bi bi-calculator me-1"></i>Rubros Fijos</a>
                             </li>
                         </ul>
                         <div class="ms-auto pb-1">
@@ -102,8 +147,12 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                     </select>
                                 </div>
                                 <div class="col-md-4">
-                                    <label class="form-label mb-1 small fw-bold text-muted">Identificación *</label>
-                                    <input type="text" class="form-control form-control-sm shadow-none fw-bold" name="identificacion" id="emp_identificacion" required>
+                                    <label class="form-label mb-1 small fw-bold text-muted d-flex align-items-center gap-1">
+                                        Identificación *
+                                        <span id="empSriBadge" class="badge d-none" style="font-size:0.6rem;"></span>
+                                        <span id="empSriSpinner" class="spinner-border spinner-border-sm text-secondary d-none" style="width:0.75rem;height:0.75rem;" role="status" aria-hidden="true"></span>
+                                    </label>
+                                    <input type="text" class="form-control form-control-sm shadow-none fw-bold" name="identificacion" id="emp_identificacion" required autocomplete="off">
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label mb-1 small fw-bold text-muted d-flex align-items-center">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_estado', 'estado') ?></label>
@@ -136,9 +185,13 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                     <label class="form-label mb-1 small fw-bold text-muted">Teléfono</label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="telefono" id="emp_telefono">
                                 </div>
-                                <div class="col-12">
+                                <div class="col-md-6">
                                     <label class="form-label mb-1 small fw-bold text-muted">Dirección</label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="direccion" id="emp_direccion">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Contacto de Emergencia</label>
+                                    <input type="text" class="form-control form-control-sm shadow-none" name="contacto_emergencia" id="emp_contacto_emergencia" placeholder="Nombre y teléfono">
                                 </div>
                             </div>
                         </div>
@@ -172,6 +225,20 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                             <input type="number" step="0.0001" class="form-control form-control-sm shadow-none iess-field" name="aporte_patronal" id="emp_aporte_patronal">
                                         </div>
                                     </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Décimo Tercero <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_decimo_tercero', 'decimo_tercero') ?></label>
+                                    <select class="form-select form-select-sm shadow-none" name="decimo_tercero" id="emp_decimo_tercero">
+                                        <option value="acumula">Acumula</option>
+                                        <option value="mensualiza">Mensualiza</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Décimo Cuarto <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_decimo_cuarto', 'decimo_cuarto') ?></label>
+                                    <select class="form-select form-select-sm shadow-none" name="decimo_cuarto" id="emp_decimo_cuarto">
+                                        <option value="acumula">Acumula</option>
+                                        <option value="mensualiza">Mensualiza</option>
+                                    </select>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label mb-1 small fw-bold text-muted">Sueldo Base ($)</label>
@@ -207,6 +274,14 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                 <div class="col-12">
                                     <label class="form-label mb-1 small fw-bold text-muted">Cargo</label>
                                     <input type="text" class="form-control form-control-sm shadow-none text-uppercase" name="cargo" id="emp_cargo">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Lugar de Trabajo</label>
+                                    <input type="text" class="form-control form-control-sm shadow-none" name="lugar_trabajo" id="emp_lugar_trabajo">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Horario de Trabajo</label>
+                                    <input type="text" class="form-control form-control-sm shadow-none" name="horario_trabajo" id="emp_horario_trabajo" placeholder="Ej: 08:00-17:00">
                                 </div>
                                 <div class="col-12">
                                     <label class="form-label mb-1 small fw-bold text-muted">Cód. Sectorial IESS</label>
@@ -244,33 +319,50 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
 
                         <!-- Tablas Dinámicas -->
                         <div class="tab-pane fade" id="tab-periodos" role="tabpanel">
-                            <div class="d-flex justify-content-between mb-2">
-                                <span class="small fw-bold text-primary">Historial Laboral</span>
-                                <button type="button" class="btn btn-primary btn-xs" onclick="window.agregarFilaPeriodo()"><i class="bi bi-plus-lg"></i></button>
-                            </div>
-                            <div class="table-responsive border rounded" style="max-height: 250px;">
-                                <table class="table table-sm table-bordered mb-0 small" id="tablaPeriodos">
-                                    <thead class="table-light sticky-top">
-                                        <tr><th>Ingreso</th><th>Salida</th><th>Motivo</th><th style="width: 40px;"></th></tr>
-                                    </thead>
-                                    <tbody></tbody>
-                                </table>
+                            <div class="border rounded overflow-hidden">
+                                <div class="table-responsive" style="max-height: 300px;">
+                                    <table class="table table-sm emp-grid mb-0 text-nowrap" id="tablaPeriodos">
+                                        <thead>
+                                            <tr class="table-light border-bottom">
+                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:30%;">Ingreso</th>
+                                                <th class="py-2 small fw-bold text-muted" style="width:30%;">Salida</th>
+                                                <th class="py-2 small fw-bold text-muted" style="width:40%;">Motivo</th>
+                                                <th style="width:40px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                                <div class="p-2 border-top bg-light">
+                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="window.agregarFilaPeriodo()">
+                                        <i class="bi bi-plus-circle me-1"></i> Agregar periodo
+                                    </button>
+                                </div>
                             </div>
                             <input type="hidden" name="periodos_json" id="periodos_json">
                         </div>
 
                         <div class="tab-pane fade" id="tab-rubros" role="tabpanel">
-                            <div class="d-flex justify-content-between mb-2">
-                                <span class="small fw-bold text-primary">Rubros Fijos</span>
-                                <button type="button" class="btn btn-primary btn-xs" onclick="window.agregarFilaRubro()"><i class="bi bi-plus-lg"></i></button>
-                            </div>
-                            <div class="table-responsive border rounded" style="max-height: 250px;">
-                                <table class="table table-sm table-bordered mb-0 small" id="tablaRubros">
-                                    <thead class="table-light sticky-top">
-                                        <tr><th>Tipo</th><th>Nombre</th><th>Valor</th><th>IESS?</th><th style="width: 40px;"></th></tr>
-                                    </thead>
-                                    <tbody></tbody>
-                                </table>
+                            <div class="border rounded overflow-hidden">
+                                <div class="table-responsive" style="max-height: 300px;">
+                                    <table class="table table-sm emp-grid mb-0 text-nowrap" id="tablaRubros">
+                                        <thead>
+                                            <tr class="table-light border-bottom">
+                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width:22%;">Tipo</th>
+                                                <th class="py-2 small fw-bold text-muted" style="width:40%;">Nombre</th>
+                                                <th class="py-2 small fw-bold text-muted text-end" style="width:18%;">Valor</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width:20%;">IESS</th>
+                                                <th style="width:40px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                                <div class="p-2 border-top bg-light">
+                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="window.agregarFilaRubro()">
+                                        <i class="bi bi-plus-circle me-1"></i> Agregar rubro
+                                    </button>
+                                </div>
                             </div>
                             <input type="hidden" name="rubros_json" id="rubros_json">
                         </div>

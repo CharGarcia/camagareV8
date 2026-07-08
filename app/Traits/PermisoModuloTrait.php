@@ -43,63 +43,14 @@ trait PermisoModuloTrait
     }
 
     /**
-     * @return array{ver:bool,crear:bool,actualizar:bool,eliminar:bool,id_submodulo:?int}
+     * @return array{ver:bool,crear:bool,actualizar:bool,eliminar:bool,todo:bool,id_submodulo:?int}
+     *
+     * Delegado en \App\Helpers\Permisos (fuente de verdad única, con caché),
+     * para que la misma resolución esté disponible desde vistas/servicios.
      */
     protected function permisosModuloPorRuta(string $pathMvc): array
     {
-        $model = $this->getPermisoSubmoduloModel();
-        $idSub = $model->getIdSubmoduloPorRutaMvc($pathMvc);
-        $base = [
-            'ver' => false,
-            'crear' => false,
-            'actualizar' => false,
-            'eliminar' => false,
-            'todo' => false,
-            'id_submodulo' => $idSub,
-        ];
-        $nivel = (int) ($_SESSION['nivel'] ?? 1);
-        if ($idSub === null) {
-            // Regla general: Nivel 3 tiene acceso a todo, incluso si no hay id_submodulo detectado
-            if ($nivel >= 3) {
-                return [
-                    'ver' => true,
-                    'crear' => true,
-                    'actualizar' => true,
-                    'eliminar' => true,
-                    'todo' => true,
-                    'id_submodulo' => null,
-                ];
-            }
-            return $base;
-        }
-        $idU = (int) ($_SESSION['id_usuario'] ?? 0);
-        $idE = (int) ($_SESSION['id_empresa'] ?? 0);
-        $nivel = (int) ($_SESSION['nivel'] ?? 1);
-        $map = $model->getPermisosDeUsuario($idU, $idE);
-        if (!isset($map[$idSub])) {
-            if ($nivel >= 3) {
-                return [
-                    'ver' => true,
-                    'crear' => true,
-                    'actualizar' => true,
-                    'eliminar' => true,
-                    'todo' => true,
-                    'id_submodulo' => $idSub,
-                ];
-            }
-
-            return $base;
-        }
-        $p = $map[$idSub];
-
-        return [
-            'ver' => !empty($p['ver']),
-            'crear' => !empty($p['crear']),
-            'actualizar' => !empty($p['actualizar']),
-            'eliminar' => !empty($p['eliminar']),
-            'todo' => !empty($p['t']),
-            'id_submodulo' => $idSub,
-        ];
+        return \App\Helpers\Permisos::porRuta($pathMvc);
     }
 
     /** Sin permiso de lectura: responde JSON 403 en AJAX, o redirige al menú. */

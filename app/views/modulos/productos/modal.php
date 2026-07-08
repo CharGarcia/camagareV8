@@ -313,14 +313,18 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                     <label class="form-label small fw-bold text-muted">Categoría</label>
                                     <div class="input-group input-group-sm">
                                         <select name="id_categoria" id="prod_id_categoria" class="form-select shadow-none"></select>
+                                        <?php if (\App\Helpers\Permisos::puedeCrear('modulos/categorias')): ?>
                                         <button type="button" class="btn btn-outline-primary" onclick="abrirModalCategoriaCrear()"><i class="bi bi-plus-circle"></i></button>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold text-muted">Marca</label>
                                     <div class="input-group input-group-sm">
                                         <select name="id_marca" id="prod_id_marca" class="form-select shadow-none"></select>
+                                        <?php if (\App\Helpers\Permisos::puedeCrear('modulos/marcas')): ?>
                                         <button type="button" class="btn btn-outline-primary" onclick="abrirModalMarcaCrear()"><i class="bi bi-plus-circle"></i></button>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </div>

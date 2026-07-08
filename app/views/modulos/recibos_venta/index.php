@@ -456,8 +456,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <button id="m-btn-ticket" type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="imprimirTicket()" title="Imprimir ticket / tirilla"><i class="bi bi-receipt"></i></button>
                         <button id="btnAnularFacturaModal" type="button" class="btn btn-outline-warning btn-sm d-none" title="Anular Recibo"><i class="bi bi-slash-circle me-1"></i>Anular</button>
                         <div class="vr mx-1"></div>
+                        <?php if (\App\Helpers\Permisos::puedeCrear('modulos/clientes')): ?>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalClienteCrear()" title="Registrar nuevo cliente"><i class="bi bi-person-plus fs-6"></i></button>
+                        <?php endif; ?>
+                        <?php if (\App\Helpers\Permisos::puedeCrear('modulos/productos')): ?>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalProductoCrear()" title="Registrar nuevo producto"><i class="bi bi-box-seam fs-6"></i></button>
+                        <?php endif; ?>
                         <div class="form-check form-switch d-flex align-items-center mb-0 ms-auto pe-1" title="Con impuestos / Sin impuestos">
                             <input class="form-check-input" type="checkbox" role="switch" id="rec-con-impuestos" checked onchange="calcTotales()">
                             <!-- Espejo del switch para el servicio de favoritos (guarda 1/0 como valor por defecto del usuario) -->

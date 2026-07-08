@@ -371,6 +371,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                     <!-- ── TAB FACTURAS ───────────────────────── -->
                     <div class="tab-pane fade" id="pf-tab-facturas" role="tabpanel">
                         <div class="p-3">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-receipt me-2 text-primary"></i>
+                                <h6 class="mb-0 fw-bold text-secondary small">Detalle de facturas</h6>
+                                <span class="ms-2 text-muted small">Facturas generadas a partir de esta proforma</span>
+                            </div>
                             <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
                                 <div class="table-responsive" style="max-height:350px;">
                                     <table class="table table-sm table-detalle mb-0 text-nowrap">

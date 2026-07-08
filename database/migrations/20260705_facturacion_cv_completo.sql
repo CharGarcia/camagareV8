@@ -31,6 +31,10 @@ CREATE TABLE IF NOT EXISTS consignaciones_facturas (
     tipo_ambiente          VARCHAR(1) DEFAULT '1',
     id_cliente             INTEGER,                      -- cliente a facturar (puede diferir del de la consignación)
     id_vendedor            INTEGER,
+    dias_credito           INTEGER DEFAULT 0,
+    plazo_unidad           VARCHAR(10) DEFAULT 'dias',    -- dias | meses | anios
+    forma_pago_sri         VARCHAR(10),                   -- código SRI (primera forma de pago; compat)
+    pagos_sri              TEXT,                          -- JSON [{forma_pago, valor}]
     observaciones          TEXT,
     id_factura             INTEGER,                      -- ventas_cabecera.id (se llena al Generar factura)
     numero_factura         VARCHAR(50),
@@ -66,6 +70,10 @@ ALTER TABLE consignaciones_facturas ADD COLUMN IF NOT EXISTS impuesto         NU
 ALTER TABLE consignaciones_facturas ADD COLUMN IF NOT EXISTS total            NUMERIC(15,6) DEFAULT 0;
 ALTER TABLE consignaciones_facturas ADD COLUMN IF NOT EXISTS id_asiento_reingreso INTEGER;
 ALTER TABLE consignaciones_facturas ADD COLUMN IF NOT EXISTS info_adicional   TEXT;
+ALTER TABLE consignaciones_facturas ADD COLUMN IF NOT EXISTS dias_credito     INTEGER DEFAULT 0;
+ALTER TABLE consignaciones_facturas ADD COLUMN IF NOT EXISTS forma_pago_sri   VARCHAR(10);
+ALTER TABLE consignaciones_facturas ADD COLUMN IF NOT EXISTS pagos_sri        TEXT;
+ALTER TABLE consignaciones_facturas ADD COLUMN IF NOT EXISTS plazo_unidad     VARCHAR(10) DEFAULT 'dias';
 
 -- La cabecera del documento NO usa id_consignacion (vive en el detalle). Si una versión
 -- previa creó la columna como NOT NULL, se relaja para no romper el INSERT del documento.

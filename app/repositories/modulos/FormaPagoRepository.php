@@ -195,6 +195,28 @@ class FormaPagoRepository extends BaseRepository
         ]);
     }
 
+    /**
+     * Formas de ANTICIPO del flujo indicado (INGRESO = cobro / EGRESO = pago) que aún NO tienen
+     * cuenta contable asignada. Incluye las de aplica_en = 'AMBAS'. Se usa para propagar la cuenta
+     * del concepto de anticipo (Ingresos/Egresos) a su forma de Cobro/Pago sin pisar una ya puesta.
+     *
+     * @return array<int,array{id:int,nombre:string,aplica_en:string}>
+     */
+    public function getFormasAnticipoSinCuenta(int $idEmpresa, string $flujo): array
+    {
+        $flujo = strtoupper($flujo) === 'EGRESO' ? 'EGRESO' : 'INGRESO';
+        $sql = "SELECT id, nombre, aplica_en
+                FROM {$this->table}
+                WHERE id_empresa = :id_empresa
+                  AND eliminado = FALSE
+                  AND tipo = 'ANTICIPO'
+                  AND id_cuenta_contable IS NULL
+                  AND (aplica_en = 'AMBAS' OR aplica_en = :flujo)";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':flujo' => $flujo]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function delete(int $id, int $idEmpresa, int $usuarioId): bool
     {
         $sql = "UPDATE {$this->table} SET 

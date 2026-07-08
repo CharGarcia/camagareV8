@@ -167,7 +167,22 @@ return [
     ],
 
     // ─── NÓMINA (id_modulo = 313) ────────────────────────────────────────────
-    // 'modulos/empleados' => ['id_submodulo' => 169, 'legacy_rutas' => [...]],
+    'modulos/empleados' => [
+        'id_submodulo' => 169, // submodulos_menu.id (Empleados)
+        'legacy_rutas' => [],
+    ],
+    'modulos/novedades' => [
+        'id_submodulo' => 170, // submodulos_menu.id (Novedades)
+        'legacy_rutas' => [],
+    ],
+    'modulos/roles-pago' => [
+        'id_submodulo' => 172, // submodulos_menu.id (Roles de pagos)
+        'legacy_rutas' => [],
+    ],
+    'modulos/vacaciones' => [
+        'id_submodulo' => 47, // submodulos_menu.id (Vacaciones)
+        'legacy_rutas' => [],
+    ],
 
     // ─── CONTABILIDAD (id_modulo = 314) ──────────────────────────────────────
     'modulos/centro-costos' => [

@@ -62,7 +62,8 @@
         const facturable    = perm().crear && ['aprobada','convertida'].includes(estado);
         show('pf-btn-factura',  facturable);
         show('pf-btn-pedido',   convertible);
-        show('pf-btn-recibo',   convertible);
+        // El recibo aplica las mismas reglas de facturación → misma condición que la factura.
+        show('pf-btn-recibo',   facturable);
         show('pf-btn-duplicar', perm().crear && guardada);
         show('pf-vr1',          perm().crear && guardada);
         show('pf-btn-pdf',       guardada);
@@ -755,6 +756,30 @@
         return `<span class="badge ${cls}">${_esc(label)}</span>`;
     }
 
+    // Diálogo reutilizable de stock insuficiente (factura y recibo).
+    function _mostrarStockInsuficiente(faltantes) {
+        const filas = (faltantes || []).map(f => `
+            <tr>
+                <td class="text-start">${_esc(f.producto)}</td>
+                <td class="text-end">${parseFloat(f.disponible || 0).toFixed(2)}</td>
+                <td class="text-end">${parseFloat(f.requerido || 0).toFixed(2)}</td>
+            </tr>`).join('');
+        Swal.fire({
+            icon: 'error',
+            title: 'Stock insuficiente',
+            html: `
+                <p class="mb-2 small">La configuración de la empresa exige stock disponible para facturar.
+                Los siguientes productos no tienen saldo suficiente:</p>
+                <table class="table table-sm table-bordered small mb-0">
+                    <thead class="table-light">
+                        <tr><th class="text-start">Producto</th><th class="text-end">Disponible</th><th class="text-end">Requerido</th></tr>
+                    </thead>
+                    <tbody>${filas}</tbody>
+                </table>`,
+            confirmButtonText: 'Entendido'
+        });
+    }
+
     async function _cargarFacturas(id) {
         const tbody = $id('pf_tbodyFacturas');
         if (!tbody) return;
@@ -1215,6 +1240,9 @@
                     return;
                 }
 
+                // La configuración de la empresa exige stock y no hay saldo suficiente.
+                if (data.stock_insuficiente) { _mostrarStockInsuficiente(data.faltantes); return; }
+
                 if (!data.ok) { toast(data.error || 'No se pudo crear la factura', 'error'); return; }
 
                 // Nos quedamos en el modal de proforma: la proforma queda marcada como
@@ -1225,6 +1253,9 @@
                     badge.textContent = BADGE_LABELS.convertida;
                     badge.classList.remove('d-none');
                 }
+
+                // Refrescar la pestaña "Detalle de facturas" para que aparezca la recién creada.
+                _cargarFacturas(id);
 
                 Swal.fire({
                     icon: 'success',
@@ -1242,8 +1273,49 @@
             toast('Crear pedido próximamente', 'info');
         },
 
-        crearReciboVenta() {
-            toast('Crear recibo de venta próximamente', 'info');
+        async crearReciboVenta() {
+            const id = $id('pf_id').value;
+            if (!id) return;
+
+            const r = await Swal.fire({
+                icon: 'question',
+                title: 'Generar recibo de venta',
+                text: 'Se generará un recibo de venta (borrador) a partir de esta proforma. ¿Desea continuar?',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, generar',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!r.isConfirmed) return;
+
+            try {
+                const body = new URLSearchParams();
+                body.append('id', id);
+
+                const resp = await fetch(`${urlBase()}/convertirAReciboAjax`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body
+                });
+                const data = await resp.json();
+
+                // La configuración de la empresa exige stock y no hay saldo suficiente.
+                if (data.stock_insuficiente) { _mostrarStockInsuficiente(data.faltantes); return; }
+
+                if (!data.ok) { toast(data.error || 'No se pudo generar el recibo', 'error'); return; }
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Recibo generado',
+                    text: 'Se ha generado un recibo de venta (borrador) para que sea revisado y emitido.',
+                    confirmButtonText: 'Aceptar'
+                });
+            } catch (e) {
+                console.error(e);
+                toast('Error de conexión', 'error');
+            }
         },
 
         duplicar() {

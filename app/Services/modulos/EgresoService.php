@@ -363,9 +363,8 @@ class EgresoService
     
     public function getDocumentosPendientesEmpleado(int $idEmpleado, int $idEmpresa): array
     {
-        // Placeholder para rol de pagos y prestamos a empleados si las tablas existieran
-        // Por ahora devolvemos vacío ya que usualmente esas tablas no están listas.
-        return [];
+        // Líneas de rol pendientes de pago del empleado (rol_detalle con saldo).
+        return $this->repository->getDocumentosPendientesEmpleado($idEmpleado, $idEmpresa);
     }
 
     public function getUltimoNumeroCheque(int $idFormaPago): ?string

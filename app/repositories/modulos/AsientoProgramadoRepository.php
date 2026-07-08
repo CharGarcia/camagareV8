@@ -219,7 +219,7 @@ class AsientoProgramadoRepository extends BaseRepository
         }
 
         if ($idReferencia !== null && $idReferencia > 0) {
-            if ($tipoReferencia !== 'cliente' && $tipoReferencia !== 'proveedor' && $tipoReferencia !== 'producto' && $tipoReferencia !== 'categoria' && $tipoReferencia !== 'marca' && $tipoReferencia !== 'iva') {
+            if ($tipoReferencia !== 'cliente' && $tipoReferencia !== 'proveedor' && $tipoReferencia !== 'producto' && $tipoReferencia !== 'categoria' && $tipoReferencia !== 'marca' && $tipoReferencia !== 'iva' && $tipoReferencia !== 'empleado') {
                 // For general rules, check both new and old reference types to prevent duplicates
                 $sql .= " AND id_referencia = :id_ref AND (tipo_referencia = :tipo_ref OR tipo_referencia = 'asientos tipo')";
             } else {
@@ -244,6 +244,34 @@ class AsientoProgramadoRepository extends BaseRepository
     /**
      * Obtiene todos los asientos tipo de un concepto y su homólogo programado a nivel general de empresa.
      */
+    /** Overrides por empleado con datos de la cuenta: [id_asiento_tipo => [id_cuenta,codigo,nombre]]. */
+    public function getReglasEmpleadoConCuenta(int $idEmpresa, int $idEmpleado): array
+    {
+        $st = $this->db->prepare("SELECT ap.id_asiento_tipo, ap.id_cuenta, pc.codigo, pc.nombre
+                                  FROM {$this->table} ap JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                                  WHERE ap.id_empresa = :e AND ap.tipo_referencia = 'empleado' AND ap.id_referencia = :id AND ap.eliminado = false");
+        $st->execute([':e' => $idEmpresa, ':id' => $idEmpleado]);
+        $map = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $map[(int) $r['id_asiento_tipo']] = ['id_cuenta' => (int) $r['id_cuenta'], 'codigo' => $r['codigo'], 'nombre' => $r['nombre']];
+        }
+        return $map;
+    }
+
+    /** Overrides de cuenta por empleado: [id_asiento_tipo => id_cuenta]. */
+    public function getReglasEmpleado(int $idEmpresa, int $idEmpleado): array
+    {
+        $st = $this->db->prepare("SELECT id_asiento_tipo, id_cuenta FROM {$this->table}
+                                  WHERE id_empresa = :e AND tipo_referencia = 'empleado' AND id_referencia = :id
+                                    AND eliminado = false AND id_cuenta IS NOT NULL");
+        $st->execute([':e' => $idEmpresa, ':id' => $idEmpleado]);
+        $map = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $map[(int) $r['id_asiento_tipo']] = (int) $r['id_cuenta'];
+        }
+        return $map;
+    }
+
     public function getReglasGeneralesPorConcepto(int $idEmpresa, string $tipoAsiento): array
     {
         $sql = "SELECT at.id AS id_asiento_tipo,

@@ -224,6 +224,48 @@ $base = BASE_URL;
             </div>
         </div>
 
+        <!-- POR EMPLEADO (nómina) -->
+        <div class="accordion-item border-0 border-top dim-accordion-fase-a" id="accItemEmpleado" style="display:none;">
+            <h2 class="accordion-header" id="headingEmpleados">
+                <button class="accordion-button collapsed fw-bold py-3 px-4 text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseEmpleados" aria-expanded="false" aria-controls="collapseEmpleados" onclick="ASIENTOPROG_cargarDim('empleado')">
+                    <i class="bi bi-person-badge me-2 text-primary"></i> Reglas por Empleado
+                </button>
+            </h2>
+            <div id="collapseEmpleados" class="accordion-collapse collapse" aria-labelledby="headingEmpleados" data-bs-parent="#acordeonConfiguracion">
+                <div class="accordion-body bg-white p-4">
+                    <form onsubmit="ASIENTOPROG_agregarDim(event, 'empleado')" class="row g-3 align-items-end mb-4 bg-light p-3 rounded-3 border shadow-sm">
+                        <div class="col-12 mb-2 border-bottom pb-2">
+                            <h6 class="text-primary mb-0 fw-bold"><i class="bi bi-person-plus-fill me-1"></i> Cuentas espec&iacute;ficas por Empleado</h6>
+                            <small class="text-muted">Las cuentas asignadas aqu&iacute; sobreescriben las cuentas generales de n&oacute;mina para ese empleado.</small>
+                        </div>
+                        <div class="col-md-12 mb-2">
+                            <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-search me-1"></i> Empleado</label>
+                            <div class="d-flex gap-2 align-items-center flex-wrap">
+                                <div class="position-relative" style="flex:1 1 240px; min-width:220px; max-width:420px;">
+                                    <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_search_empleado" placeholder="Escriba nombre o c&eacute;dula..." autocomplete="off" required>
+                                    <input type="hidden" id="dim_id_empleado" required>
+                                    <div class="list-group sugerencias-flotantes" id="dim_sug_empleado" style="display: none;"></div>
+                                </div>
+                                <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" onclick="ASIENTOPROG_abrirModalEntidades('empleado')">
+                                    <i class="bi bi-people me-1"></i> Empleados activos
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-12"><div class="row g-3" id="inputsDinamicos_empleado"></div></div>
+                        <div class="col-12 mt-4 text-end">
+                            <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Asociaci&oacute;n</button>
+                        </div>
+                    </form>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm align-middle table-interactiva">
+                            <thead class="table-light"><tr><th class="ps-4 py-2">Empleado</th><th class="py-2">Concepto / Referencia</th><th class="py-2">Cuenta Contable Asignada</th><th class="text-center py-2" style="width: 15%">Acci&oacute;n</th></tr></thead>
+                            <tbody id="tbodyDim_empleado"><tr><td colspan="4" class="text-center py-3 text-muted">No se han registrado cuentas por empleado.</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- POR PROVEEDOR (compras) -->
         <div class="accordion-item border-0 border-top dim-accordion-fase-a" id="accItemProveedor" style="display:none;">
             <h2 class="accordion-header" id="headingProveedores">

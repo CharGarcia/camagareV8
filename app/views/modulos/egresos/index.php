@@ -285,6 +285,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <button type="button" class="btn btn-outline-danger btn-sm px-2 d-none" id="btnPdfEgreso" onclick="abrirPdfEgreso()" title="Generar PDF del comprobante">
                         <i class="bi bi-file-earmark-pdf fs-6"></i>
                     </button>
+                    <button type="button" class="btn btn-outline-info btn-sm px-2 d-none" id="btnCorreoEgreso" onclick="enviarCorreoEgreso()" title="Enviar comprobante por correo">
+                        <i class="bi bi-envelope fs-6"></i>
+                    </button>
                     <!-- Conceptos de egreso (derecha): los relacionados con un módulo van como botón; el resto en un selector -->
                     <?php
                         $conceptosBoton  = array_values(array_filter($conceptos, fn($c) => ($c['comportamiento'] ?? 'GENERAL') !== 'GENERAL'));
@@ -1301,6 +1304,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         document.getElementById('eg-footer-ver-extra').classList.add('d-none');
         document.getElementById('btnPdfEgreso').classList.add('d-none');
+        document.getElementById('btnCorreoEgreso').classList.add('d-none');
         document.getElementById('eg-input-fecha').value = new Date().toISOString().slice(0,10);
         
         // Resetear controles dinámicos de pagos
@@ -1461,6 +1465,36 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         a.remove();
     }
 
+    async function enviarCorreoEgreso() {
+        const id = document.getElementById('eg-input-id').value;
+        if (!id) return;
+        const { value: correo } = await Swal.fire({
+            title: 'Enviar comprobante',
+            input: 'email',
+            inputLabel: 'Correo del destinatario',
+            inputPlaceholder: 'proveedor@correo.com',
+            inputValue: '',
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-envelope me-1"></i> Enviar',
+            cancelButtonText: 'Cancelar',
+            footer: 'Si lo dejas vacío, se usa el correo registrado del proveedor/empleado.',
+            inputValidator: (v) => (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) ? 'Correo no válido' : undefined
+        });
+        if (correo === undefined) return;
+
+        Swal.fire({ title: 'Enviando…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        try {
+            const fd = new FormData();
+            fd.append('id', id);
+            fd.append('correo', correo || '');
+            const res = await fetch(`${EGR_URL}/enviarCorreoAjax`, { method: 'POST', body: fd });
+            const json = await res.json();
+            Swal.fire({ icon: json.ok ? 'success' : 'error', title: json.ok ? 'Enviado' : 'Atención', text: json.mensaje });
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo enviar el correo.' });
+        }
+    }
+
     function abrirModalEgresoVer(id) {
         fetch(`${EGR_URL}/getEgresoAjax?id=${id}`).then(r=>r.json()).then(res => {
             if(!res.ok) return alert(res.mensaje);
@@ -1469,6 +1503,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('modalEgresoTitulo').textContent = `Ver Egreso #${e.numero_egreso}`;
             document.getElementById('eg-input-id').value = e.id;
             document.getElementById('btnPdfEgreso').classList.remove('d-none');
+            document.getElementById('btnCorreoEgreso').classList.remove('d-none');
             document.getElementById('eg-input-fecha').value = e.fecha_emision;
             // Mostrar la serie (punto) original del documento, sin disparar el cálculo del siguiente secuencial
             if (e.id_punto_emision) {

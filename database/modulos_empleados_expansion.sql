@@ -2,21 +2,21 @@
 
 -- 1. Actualización de la tabla 'empleados'
 ALTER TABLE empleados 
-    ADD COLUMN fondos_reserva VARCHAR(20) DEFAULT 'no_se_paga', -- 'rol', 'planilla', 'no_se_paga'
-    ADD COLUMN aporta_iess BOOLEAN DEFAULT TRUE,
-    ADD COLUMN decimo_tercero VARCHAR(20) DEFAULT 'acumula', -- 'mensualiza', 'acumula'
-    ADD COLUMN decimo_cuarto VARCHAR(20) DEFAULT 'acumula', -- 'mensualiza', 'acumula'
-    ADD COLUMN aporte_personal DECIMAL(10, 4) DEFAULT 9.45,
-    ADD COLUMN aporte_patronal DECIMAL(10, 4) DEFAULT 11.15,
-    ADD COLUMN sueldo_base DECIMAL(10, 2) DEFAULT 0.00,
-    ADD COLUMN valor_quincena DECIMAL(10, 2) DEFAULT 0.00,
-    ADD COLUMN forma_pago VARCHAR(20) DEFAULT 'mensual', -- 'semanal', 'quincenal', 'mensual'
-    ADD COLUMN region VARCHAR(20) DEFAULT 'costa', -- 'costa', 'sierra', 'oriente', 'insular'
-    ADD COLUMN cargo VARCHAR(100),
-    ADD COLUMN lugar_trabajo VARCHAR(200),
-    ADD COLUMN horario_trabajo VARCHAR(100),
-    ADD COLUMN departamento VARCHAR(100),
-    ADD COLUMN codigo_sectorial_iess VARCHAR(50);
+    ADD COLUMN IF NOT EXISTS fondos_reserva VARCHAR(20) DEFAULT 'no_se_paga', -- 'rol', 'planilla', 'no_se_paga'
+    ADD COLUMN IF NOT EXISTS aporta_iess BOOLEAN DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS decimo_tercero VARCHAR(20) DEFAULT 'acumula', -- 'mensualiza', 'acumula'
+    ADD COLUMN IF NOT EXISTS decimo_cuarto VARCHAR(20) DEFAULT 'acumula', -- 'mensualiza', 'acumula'
+    ADD COLUMN IF NOT EXISTS aporte_personal DECIMAL(10, 4) DEFAULT 9.45,
+    ADD COLUMN IF NOT EXISTS aporte_patronal DECIMAL(10, 4) DEFAULT 11.15,
+    ADD COLUMN IF NOT EXISTS sueldo_base DECIMAL(10, 2) DEFAULT 0.00,
+    ADD COLUMN IF NOT EXISTS valor_quincena DECIMAL(10, 2) DEFAULT 0.00,
+    ADD COLUMN IF NOT EXISTS forma_pago VARCHAR(20) DEFAULT 'mensual', -- 'semanal', 'quincenal', 'mensual'
+    ADD COLUMN IF NOT EXISTS region VARCHAR(20) DEFAULT 'costa', -- 'costa', 'sierra', 'oriente', 'insular'
+    ADD COLUMN IF NOT EXISTS cargo VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS lugar_trabajo VARCHAR(200),
+    ADD COLUMN IF NOT EXISTS horario_trabajo VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS departamento VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS codigo_sectorial_iess VARCHAR(50);
 
 -- 2. Tabla historial de periodos laborales
 CREATE TABLE IF NOT EXISTS empleado_periodos (
@@ -55,5 +55,5 @@ CREATE TABLE IF NOT EXISTS empleado_rubros_fijos (
 );
 
 -- Índices para mejorar rendimiento
-CREATE INDEX idx_periodos_empleado ON empleado_periodos(id_empleado, id_empresa);
-CREATE INDEX idx_rubros_empleado ON empleado_rubros_fijos(id_empleado, id_empresa);
+CREATE INDEX IF NOT EXISTS idx_periodos_empleado ON empleado_periodos(id_empleado, id_empresa);
+CREATE INDEX IF NOT EXISTS idx_rubros_empleado ON empleado_rubros_fijos(id_empleado, id_empresa);

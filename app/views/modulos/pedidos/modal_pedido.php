@@ -16,9 +16,11 @@
             <div class="modal-body p-3">
                 <!-- Acciones Rápidas Superior -->
                 <div class="d-flex justify-content-start gap-1 mb-3">
+                    <?php if (\App\Helpers\Permisos::puedeCrear('modulos/clientes')): ?>
                     <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1" onclick="abrirModalClienteCrear()" title="Crear nuevo cliente rápido">
                         <i class="bi bi-person-plus"></i>
                     </button>
+                    <?php endif; ?>
                     <button type="button" class="btn btn-outline-success btn-sm px-2 py-1" onclick="abrirModalResponsableCrear()" title="Crear responsable de traslado rápido">
                         <i class="bi bi-truck"></i>
                     </button>

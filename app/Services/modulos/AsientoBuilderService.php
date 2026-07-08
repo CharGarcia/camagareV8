@@ -1905,9 +1905,12 @@ class AsientoBuilderService
         $manualTipo = $esEgreso ? 'MANUAL' : 'OTRO';
 
         // 1. Líneas manuales del documento (descripción + monto). Definen líneas y montos.
+        //    egresos_detalle tiene columna 'eliminado'; ingresos_detalle NO (mismo caso que
+        //    ingresos_pagos en lineasFormas): solo se filtra por eliminado en egresos.
+        $filtroElim = $esEgreso ? ' AND eliminado = FALSE' : '';
         $sql = "SELECT descripcion, {$colMonto} AS monto
                 FROM {$tablaDet}
-                WHERE {$colDoc} = :id AND eliminado = FALSE AND tipo_documento = :tipo
+                WHERE {$colDoc} = :id{$filtroElim} AND tipo_documento = :tipo
                 ORDER BY id ASC";
         $st = $db->prepare($sql);
         $st->execute([':id' => $idDocumento, ':tipo' => $manualTipo]);

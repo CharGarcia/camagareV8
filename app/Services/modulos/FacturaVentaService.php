@@ -409,10 +409,12 @@ class FacturaVentaService
             }
             unset($det);
 
-            // Segundo, validar stock acumulado si se requiere saldo positivo
+            // Segundo, validar stock acumulado si se requiere saldo positivo.
+            // Se puede OMITIR (p. ej. facturas generadas desde una consignación, donde el
+            // stock ya fue reingresado a la bodega y la validación estándar es redundante).
             $toBool = fn($v) => ($v === true || $v === 't' || $v === 'true' || $v === 1 || $v === '1');
-            $soloStockPos = $toBool($estConfig['factura_solo_stock_positivo'] ?? false);
-            
+            $soloStockPos = $toBool($estConfig['factura_solo_stock_positivo'] ?? false) && empty($data['omitir_validacion_stock']);
+
             if ($soloStockPos) {
                 $validados = [];
                 foreach ($data['detalles'] as $det) {
@@ -641,10 +643,12 @@ class FacturaVentaService
             }
             unset($det);
 
-            // Segundo, validar stock acumulado si se requiere saldo positivo
+            // Segundo, validar stock acumulado si se requiere saldo positivo.
+            // Se puede OMITIR (p. ej. facturas generadas desde una consignación, donde el
+            // stock ya fue reingresado a la bodega y la validación estándar es redundante).
             $toBool = fn($v) => ($v === true || $v === 't' || $v === 'true' || $v === 1 || $v === '1');
-            $soloStockPos = $toBool($estConfig['factura_solo_stock_positivo'] ?? false);
-            
+            $soloStockPos = $toBool($estConfig['factura_solo_stock_positivo'] ?? false) && empty($data['omitir_validacion_stock']);
+
             if ($soloStockPos) {
                 $validados = [];
                 foreach ($data['detalles'] as $det) {
@@ -758,7 +762,10 @@ class FacturaVentaService
                 (int)$data['id_establecimiento'],
                 $idEmpresa,
                 $idUsuario,
-                "Factura # $numFactura"
+                "Factura # $numFactura",
+                false,
+                'factura_venta',
+                !empty($data['omitir_validacion_stock'])
             );
 
             $db->commit();

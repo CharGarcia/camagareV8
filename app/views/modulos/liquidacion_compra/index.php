@@ -317,7 +317,9 @@ $pestanasConfigLiq = [
                         <button type="button" id="btnCorreoLiq" class="btn btn-outline-info btn-sm px-2" onclick="window.LC_enviarCorreo()" title="Enviar por correo"><i class="bi bi-envelope"></i></button>
                         <button type="button" id="btnWhatsappLiq" class="btn btn-outline-success btn-sm px-2" onclick="window.LC_enviarWhatsapp()" title="Enviar por WhatsApp"><i class="bi bi-whatsapp"></i></button>
                         <div class="vr mx-1"></div>
+                        <?php if (\App\Helpers\Permisos::puedeCrear('modulos/proveedores')): ?>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalProveedorCrear()" title="Nuevo Proveedor"><i class="bi bi-person-plus"></i></button>
+                        <?php endif; ?>
                     </div>
 
                     <!-- Pestañas estilo Proveedores -->

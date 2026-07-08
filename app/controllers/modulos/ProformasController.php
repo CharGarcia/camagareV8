@@ -394,7 +394,54 @@ class ProformasController extends BaseModuloController
                 exit;
             }
 
+            // La configuración de la empresa exige stock y no hay saldo suficiente.
+            if (!empty($res['stock_insuficiente'])) {
+                echo json_encode([
+                    'ok' => false,
+                    'stock_insuficiente' => true,
+                    'faltantes' => $res['faltantes'] ?? [],
+                ]);
+                exit;
+            }
+
             echo json_encode(['ok' => true, 'id_factura' => (int) ($res['id_factura'] ?? 0)]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Genera un recibo de venta a partir de la proforma, aplicando las mismas reglas
+     * de inventario que la factura (stock + lotes FEFO).
+     */
+    public function convertirAReciboAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        $id        = (int) ($_GET['id'] ?? $_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        if (!$id) {
+            echo json_encode(['ok' => false, 'error' => 'ID requerido.']);
+            exit;
+        }
+
+        try {
+            $res = $this->service->convertirARecibo($id, $idEmpresa, $idUsuario);
+
+            // La configuración de la empresa exige stock y no hay saldo suficiente.
+            if (!empty($res['stock_insuficiente'])) {
+                echo json_encode([
+                    'ok' => false,
+                    'stock_insuficiente' => true,
+                    'faltantes' => $res['faltantes'] ?? [],
+                ]);
+                exit;
+            }
+
+            echo json_encode(['ok' => true, 'id_recibo' => (int) ($res['id_recibo'] ?? 0)]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

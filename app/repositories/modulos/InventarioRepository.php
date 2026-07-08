@@ -279,10 +279,35 @@ class InventarioRepository extends BaseRepository
         $params = [':e' => $idEmpresa];
         $where  = 'WHERE k.id_empresa = :e AND k.eliminado = false AND k.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)';
 
-        if (!empty($filtros['buscar'])) {
+        // Buscador con sintaxis de tokens (texto libre + filtros clave:valor).
+        // Ver §9 CLAUDE.md — mismo patrón que Proveedores.
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear((string)($filtros['buscar'] ?? ''));
+        if ($parsed['texto_libre'] !== '') {
             $where .= ' AND (p.nombre ILIKE :b OR p.codigo ILIKE :b OR k.observaciones ILIKE :b OR b.nombre ILIKE :b)';
-            $params[':b'] = '%' . $filtros['buscar'] . '%';
+            $params[':b'] = '%' . $parsed['texto_libre'] . '%';
         }
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
+            'texto' => [
+                'producto' => 'p.nombre',
+                'codigo'   => 'p.codigo',
+                'lote'     => 'k.numero_lote',
+                'nup'      => 'k.nup',
+                'obs'      => 'k.observaciones',
+                'bodega'   => 'b.nombre',
+            ],
+            'exacto' => [
+                'tipo'       => 'k.tipo_movimiento',
+                'origen'     => 'k.referencia_tipo',
+                'id_bodega'  => 'k.id_bodega',
+                'id_usuario' => 'k.created_by',
+                'id_medida'  => 'k.id_medida',
+            ],
+            'fecha' => [
+                'fecha' => 'k.fecha_movimiento',
+            ],
+        ]);
+
+        // Filtros explícitos (compatibilidad con exportaciones y getKardexAjax)
         if (!empty($filtros['id_producto'])) {
             $where .= ' AND k.id_producto = :prod';
             $params[':prod'] = (int)$filtros['id_producto'];

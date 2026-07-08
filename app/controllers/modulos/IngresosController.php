@@ -638,4 +638,60 @@ class IngresosController extends BaseModuloController
         }
         return $empresa;
     }
+
+    /** Envía por correo el PDF del comprobante de ingreso. */
+    public function enviarCorreoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $id        = (int) ($_POST['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            if (!$id) { echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']); exit; }
+
+            $ingreso = $this->service->getPorId($id, $idEmpresa);
+            if (!$ingreso) { echo json_encode(['ok' => false, 'mensaje' => 'Ingreso no encontrado.']); exit; }
+
+            // Destino: correo del POST o, si viene vacío, el del cliente.
+            $correo = trim($_POST['correo'] ?? '');
+            if ($correo === '') {
+                $idCli = (int) ($ingreso['id_cliente'] ?? $ingreso['id_recibo_cliente'] ?? 0);
+                if ($idCli > 0) {
+                    $st = \App\core\Database::getConnection()
+                        ->prepare("SELECT email FROM clientes WHERE id = ? AND id_empresa = ?");
+                    $st->execute([$idCli, $idEmpresa]);
+                    $correo = trim((string) $st->fetchColumn());
+                }
+            }
+            if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Ingrese un correo válido.']);
+                exit;
+            }
+
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
+            $asiento = $this->service->getAsientoContable($id, $idEmpresa);
+            $pdf = (new \App\Services\modulos\ComprobanteCajaPdfService())
+                ->generarIngreso($ingreso, $ingreso['detalles'] ?? [], $ingreso['pagos'] ?? [], $empresa, 'S', $asiento);
+
+            $num        = (string) ($ingreso['numero_ingreso'] ?? $id);
+            $nombreDest = (string) ($ingreso['recibo_de'] ?? $ingreso['cliente_nombre'] ?? 'Cliente');
+            $asunto     = 'Comprobante de Ingreso ' . $num;
+            $cuerpo     = '<p>Estimado/a ' . htmlspecialchars($nombreDest) . ',</p>'
+                        . '<p>Adjuntamos el comprobante de ingreso <strong>' . htmlspecialchars($num) . '</strong>.</p>'
+                        . '<p>Saludos cordiales.</p>';
+
+            $ok = (new \App\Services\EnvioDocumentosSRIService())->enviarPdfSimple(
+                $idEmpresa, $correo, $nombreDest, $asunto, $cuerpo, $pdf,
+                'Ingreso_' . $num, (string) ($empresa['nombre'] ?? '')
+            );
+
+            echo json_encode($ok
+                ? ['ok' => true, 'mensaje' => 'Comprobante enviado a ' . $correo]
+                : ['ok' => false, 'mensaje' => 'No se pudo enviar. Verifica la configuración de correo de la empresa.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
+        }
+        exit;
+    }
 }

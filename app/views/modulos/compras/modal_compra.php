@@ -13,8 +13,12 @@
         <input type="hidden" id="mcIdEstablecimiento" name="id_establecimiento">
         <!-- Barra de Acciones Superior -->
         <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap">
+          <?php if (\App\Helpers\Permisos::puedeCrear('modulos/productos')): ?>
           <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalProductoCrear()" title="Registrar nuevo producto"><i class="bi bi-box-seam fs-6"></i></button>
+          <?php endif; ?>
+          <?php if (\App\Helpers\Permisos::puedeCrear('modulos/proveedores')): ?>
           <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="abrirModalProveedorCrear()" title="Registrar nuevo proveedor"><i class="bi bi-person-plus fs-6"></i></button>
+          <?php endif; ?>
           <button type="button" class="btn btn-outline-danger btn-sm px-2 d-none" id="mcBtnPdf" onclick="mcExportarPdf()" title="Exportar PDF">
             <i class="bi bi-file-earmark-pdf fs-6"></i> <span class="d-none d-md-inline small">PDF</span>
           </button>

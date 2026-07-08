@@ -286,6 +286,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <button type="button" class="btn btn-outline-danger btn-sm px-2 d-none" id="btnPdfIngreso" onclick="abrirPdfIngreso()" title="Generar PDF del comprobante">
                         <i class="bi bi-file-earmark-pdf fs-6"></i>
                     </button>
+                    <button type="button" class="btn btn-outline-info btn-sm px-2 d-none" id="btnCorreoIngreso" onclick="enviarCorreoIngreso()" title="Enviar comprobante por correo">
+                        <i class="bi bi-envelope fs-6"></i>
+                    </button>
                     <!-- Conceptos de ingreso (derecha): los relacionados con un módulo van como botón; el resto en un selector -->
                     <?php
                         $conceptosBoton  = array_values(array_filter($conceptos, fn($c) => ($c['comportamiento'] ?? 'GENERAL') !== 'GENERAL'));
@@ -1516,6 +1519,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('btnGuardarIngreso').classList.remove('d-none');
         document.getElementById('m-container-footer-ver').classList.add('d-none');
         document.getElementById('btnPdfIngreso').classList.add('d-none');
+        document.getElementById('btnCorreoIngreso').classList.add('d-none');
 
         document.getElementById('m-input-fecha').value = new Date().toISOString().slice(0, 10);
 
@@ -1731,6 +1735,36 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         a.remove();
     }
 
+    async function enviarCorreoIngreso() {
+        const id = document.getElementById('m-input-id').value;
+        if (!id) return;
+        const { value: correo } = await Swal.fire({
+            title: 'Enviar comprobante',
+            input: 'email',
+            inputLabel: 'Correo del destinatario',
+            inputPlaceholder: 'cliente@correo.com',
+            inputValue: '',
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-envelope me-1"></i> Enviar',
+            cancelButtonText: 'Cancelar',
+            footer: 'Si lo dejas vacío, se usa el correo registrado del cliente.',
+            inputValidator: (v) => (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) ? 'Correo no válido' : undefined
+        });
+        if (correo === undefined) return; // cancelado
+
+        Swal.fire({ title: 'Enviando…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        try {
+            const fd = new FormData();
+            fd.append('id', id);
+            fd.append('correo', correo || '');
+            const res = await fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/enviarCorreoAjax`, { method: 'POST', body: fd });
+            const json = await res.json();
+            Swal.fire({ icon: json.ok ? 'success' : 'error', title: json.ok ? 'Enviado' : 'Atención', text: json.mensaje });
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo enviar el correo.' });
+        }
+    }
+
     function abrirModalIngresoVer(id) {
         fetch(`<?= BASE_URL ?>/<?= $rutaModulo ?>/getIngresoAjax?id=${id}`)
             .then(r => r.json())
@@ -1752,6 +1786,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 
                 document.getElementById('m-input-id').value = ing.id;
                 document.getElementById('btnPdfIngreso').classList.remove('d-none');
+                document.getElementById('btnCorreoIngreso').classList.remove('d-none');
                 document.getElementById('m-input-fecha').value = ing.fecha_emision;
                 // Mostrar la serie (punto) original del documento, sin disparar el cálculo del siguiente secuencial
                 if (ing.id_punto_emision) {

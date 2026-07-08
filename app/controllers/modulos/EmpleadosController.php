@@ -8,7 +8,13 @@ use App\repositories\modulos\EmpleadoRepository;
 use App\Rules\modulos\EmpleadoRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\EmpleadoService;
+use App\Services\modulos\EmpleadoImportService;
+use App\Services\SriIdentificationService;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use App\Services\modulos\EmpleadoPdfService;
 use App\models\BancoEcuador;
+use App\models\Empresa;
 use App\models\Usuario;
 
 class EmpleadosController extends BaseModuloController
@@ -298,6 +304,151 @@ class EmpleadosController extends BaseModuloController
         header('Content-Type: application/json');
         $defaults = $this->service->getIessDefaults();
         echo json_encode(['ok' => true, 'data' => $defaults]);
+        exit;
+    }
+
+    /**
+     * Consulta los datos de una cédula/identificación al SRI para autocompletar
+     * el nombre del empleado. Reutiliza el servicio global SriIdentificationService.
+     */
+    public function consultarSri(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json; charset=utf-8');
+
+        $identificacion = trim($_POST['identificacion'] ?? $_GET['identificacion'] ?? '');
+        if ($identificacion === '') {
+            echo json_encode(['ok' => false, 'error' => 'Identificación vacía.']);
+            exit;
+        }
+
+        try {
+            $svc    = new SriIdentificationService();
+            $result = $svc->consultar($identificacion);
+            echo json_encode($result);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Imprime la ficha del empleado en PDF (A4).
+     */
+    public function imprimirPdf(): void
+    {
+        $this->requireLeer();
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if ($id <= 0) { http_response_code(400); echo 'ID requerido'; exit; }
+
+        try {
+            $emp = $this->service->getDetalle($id, $idEmpresa);
+            if (!$emp) { http_response_code(404); echo 'Empleado no encontrado'; exit; }
+
+            // Resolver nombre del banco (findById no hace join).
+            if (!empty($emp['id_banco_ecuador'])) {
+                $bancos = (new BancoEcuador())->getAll('nombre_banco', 'ASC');
+                foreach ($bancos as $b) {
+                    if ((int)$b['id'] === (int)$emp['id_banco_ecuador']) {
+                        $emp['nombre_banco'] = $b['nombre_banco'];
+                        break;
+                    }
+                }
+            }
+
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
+            (new EmpleadoPdfService())->generar($emp, $empresa, 'D');
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            echo 'Error al generar PDF: ' . $e->getMessage();
+        }
+        exit;
+    }
+
+    /** Datos de la empresa (con logo del establecimiento) para el PDF. */
+    private function cargarEmpresaParaPdf(int $idEmpresa): array
+    {
+        $empresaModel = new Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+        if (!empty($establecimientos[0]['logo_ruta'])) {
+            $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+        }
+        return $empresa;
+    }
+
+    /** Descarga la plantilla Excel para importar empleados. */
+    public function plantillaExcel(): void
+    {
+        $this->requireCrear();
+        $ss = new Spreadsheet();
+        $hoja = $ss->getActiveSheet();
+        $hoja->setTitle('Empleados');
+        $headers = [
+            'TIPO_ID', 'IDENTIFICACION', 'NOMBRES_APELLIDOS', 'EMAIL', 'TELEFONO', 'DIRECCION',
+            'FECHA_NACIMIENTO', 'SEXO', 'CARGO', 'DEPARTAMENTO', 'SUELDO_BASE', 'VALOR_SEMANAL',
+            'VALOR_QUINCENA', 'REGION', 'APORTA_IESS', 'FONDOS_RESERVA', 'DECIMO_TERCERO',
+            'DECIMO_CUARTO', 'BANCO', 'TIPO_CUENTA', 'NUMERO_CUENTA', 'FECHA_INGRESO',
+        ];
+        $hoja->fromArray($headers, null, 'A1');
+        $hoja->getStyle('A1:V1')->getFont()->setBold(true);
+        $hoja->fromArray([[
+            'cedula', '1717136574', 'JUAN PEREZ', 'juan@correo.com', '0999999999', 'Av. Siempre Viva',
+            '1990-05-20', 'M', 'VENDEDOR', 'VENTAS', 460, 0, 0, 'costa', 'si', 'no_se_paga',
+            'acumula', 'acumula', 'PICHINCHA', 'ahorros', '2200123456', '2020-03-01',
+        ]], null, 'A2');
+        foreach (range('A', 'V') as $col) $hoja->getColumnDimension($col)->setAutoSize(true);
+
+        // Hoja de referencia con valores válidos
+        $ref = $ss->createSheet();
+        $ref->setTitle('Referencia');
+        $ref->fromArray([
+            ['CAMPO', 'VALORES VÁLIDOS'],
+            ['TIPO_ID', 'cedula, pasaporte'],
+            ['SEXO', 'M, F, O'],
+            ['REGION', 'costa, sierra, oriente, insular'],
+            ['APORTA_IESS', 'si, no'],
+            ['FONDOS_RESERVA', 'rol, planilla, no_se_paga'],
+            ['DECIMO_TERCERO', 'mensualiza, acumula'],
+            ['DECIMO_CUARTO', 'mensualiza, acumula'],
+            ['TIPO_CUENTA', 'ahorros, corriente, virtual'],
+            ['BANCO', 'Nombre exacto del banco (ver módulo Bancos)'],
+            ['FECHA_NACIMIENTO', 'Formato AAAA-MM-DD'],
+            ['FECHA_INGRESO', 'Formato AAAA-MM-DD (crea el periodo laboral)'],
+        ], null, 'A1');
+        $ref->getStyle('A1:B1')->getFont()->setBold(true);
+        $ref->getColumnDimension('A')->setAutoSize(true);
+        $ref->getColumnDimension('B')->setAutoSize(true);
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="plantilla_empleados.xlsx"');
+        header('Cache-Control: max-age=0');
+        (new Xlsx($ss))->save('php://output');
+        exit;
+    }
+
+    /** Procesa la carga masiva de empleados desde Excel. */
+    public function importarExcel(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        try {
+            if (empty($_FILES['archivo']['tmp_name']) || !is_uploaded_file($_FILES['archivo']['tmp_name'])) {
+                throw new \Exception('No se recibió ningún archivo.');
+            }
+            $ext = strtolower(pathinfo($_FILES['archivo']['name'] ?? '', PATHINFO_EXTENSION));
+            if (!in_array($ext, ['xlsx', 'xls'], true)) {
+                throw new \Exception('El archivo debe ser Excel (.xlsx o .xls).');
+            }
+            $import = new EmpleadoImportService($this->service, \App\core\Database::getConnection());
+            $res = $import->procesar($_FILES['archivo']['tmp_name'], (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            echo json_encode(['ok' => true] + $res);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
         exit;
     }
 

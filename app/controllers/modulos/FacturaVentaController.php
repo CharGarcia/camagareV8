@@ -77,12 +77,16 @@ class FacturaVentaController extends BaseModuloController
         $total = $result['total'];
         $permNC = $this->permisosModuloPorRuta('modulos/notas_credito');
         $permGR = $this->permisosModuloPorRuta('modulos/guias_remision');
+        $permClientes  = $this->permisosModuloPorRuta('modulos/clientes');
+        $permProductos = $this->permisosModuloPorRuta('modulos/productos');
 
         $this->viewWithLayout('layouts.main', 'modulos/factura_venta/index', [
             'titulo'      => 'Facturas de Venta',
             'perm'        => $perm,
             'permNC'      => $permNC,
             'permGR'      => $permGR,
+            'permClientes'  => $permClientes,
+            'permProductos' => $permProductos,
             'rows'        => $result['rows'],
             'total'       => $total,
             'page'        => $page,
@@ -2261,7 +2265,9 @@ class FacturaVentaController extends BaseModuloController
         $retencion    = (float)($r['total_retencion'] ?? 0);
         $saldo        = max(0, $importeTotal - $cobrado - $nc - $retencion);
 
-        if ($saldo <= 0.01) {
+        if ($estado === 'anulado') {
+            $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulado</span>';
+        } elseif ($saldo <= 0.01) {
             $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
         } elseif (($cobrado + $nc + $retencion) > 0) {
             $estadoPagoBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Abonada</span>';

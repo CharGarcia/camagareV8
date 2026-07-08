@@ -114,7 +114,7 @@ class EmpleadoRepository extends BaseRepository
             ':tipo_cuenta'          => $data['tipo_cuenta'] ?? null,
             ':numero_cuenta'        => $data['numero_cuenta'] ?? null,
             ':fondos_reserva'       => $data['fondos_reserva'] ?? 'no_se_paga',
-            ':aporta_iess'          => ($data['aporta_iess'] ?? 'si') === 'si',
+            ':aporta_iess'          => (($data['aporta_iess'] ?? 'si') === 'si') ? 'true' : 'false',
             ':decimo_tercero'       => $data['decimo_tercero'] ?? 'acumula',
             ':decimo_cuarto'        => $data['decimo_cuarto'] ?? 'acumula',
             ':aporte_personal'      => floatval($data['aporte_personal'] ?? 0),
@@ -188,7 +188,7 @@ class EmpleadoRepository extends BaseRepository
             ':tipo_cuenta'          => $data['tipo_cuenta'] ?? null,
             ':numero_cuenta'        => $data['numero_cuenta'] ?? null,
             ':fondos_reserva'       => $data['fondos_reserva'] ?? 'no_se_paga',
-            ':aporta_iess'          => ($data['aporta_iess'] ?? 'si') === 'si',
+            ':aporta_iess'          => (($data['aporta_iess'] ?? 'si') === 'si') ? 'true' : 'false',
             ':decimo_tercero'       => $data['decimo_tercero'] ?? 'acumula',
             ':decimo_cuarto'        => $data['decimo_cuarto'] ?? 'acumula',
             ':aporte_personal'      => floatval($data['aporte_personal'] ?? 0),
@@ -243,6 +243,20 @@ class EmpleadoRepository extends BaseRepository
         $st->execute($params);
         return $st->fetchColumn() !== false;
     }
+    /**
+     * Lista compacta de empleados (no eliminados) para poblar selects.
+     */
+    public function getActivosParaSelect(int $idEmpresa): array
+    {
+        $sql = "SELECT id, identificacion, nombres_apellidos
+                FROM {$this->table}
+                WHERE id_empresa = :id_empresa AND eliminado = false
+                ORDER BY nombres_apellidos ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /**
      * Obtiene los periodos laborales de un empleado.
      */
@@ -314,7 +328,7 @@ class EmpleadoRepository extends BaseRepository
                 ':t' => $r['tipo'], // 'ingreso' o 'descuento'
                 ':n' => mb_strtoupper($r['nombre']),
                 ':v' => floatval($r['valor'] ?? 0),
-                ':i' => ($r['aporta_iess'] ?? 'no') === 'si',
+                ':i' => (($r['aporta_iess'] ?? 'no') === 'si') ? 'true' : 'false',
                 ':u' => $idUsuario
             ]);
         }

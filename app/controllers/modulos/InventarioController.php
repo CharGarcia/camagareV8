@@ -57,6 +57,7 @@ class InventarioController extends BaseModuloController
         $kardexData = $this->service->getKardex($idEmpresa, $filtros, $page, $perPage);
         $rows       = $kardexData['rows'];
         $total      = $kardexData['total'];
+        $saldo      = $kardexData['saldo'] ?? 0;
         $totalPages = (int) ceil($total / $perPage);
 
         // Catálogos para filtros
@@ -84,6 +85,7 @@ class InventarioController extends BaseModuloController
             'usuarios'   => $usuarios,
             'tipos_ref'  => $tipoRef,
             'medidas'    => $medidas,
+            'saldo'      => $saldo,
             'filtros'    => $filtros,
             'perm'       => $permisos,
             'base'       => $base,

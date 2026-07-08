@@ -9,9 +9,10 @@
     // la resolución de cuentas elige el más específico configurado, cayendo a General).
     const ACORDEONES_DIM = {
         ventas_factura:        ['accItemCliente', 'accItemProducto', 'accItemCategoria', 'accItemMarca'],
-        adquisiciones_compras: ['accItemProveedor', 'accItemProducto', 'accItemCategoria', 'accItemMarca']
+        adquisiciones_compras: ['accItemProveedor', 'accItemProducto', 'accItemCategoria', 'accItemMarca'],
+        nomina:                ['accItemEmpleado']
     };
-    const ACORDEONES_DIM_TODOS = ['accItemCliente', 'accItemProveedor', 'accItemProducto', 'accItemCategoria', 'accItemMarca'];
+    const ACORDEONES_DIM_TODOS = ['accItemCliente', 'accItemProveedor', 'accItemProducto', 'accItemCategoria', 'accItemMarca', 'accItemEmpleado'];
 
     // ¿La dimensión actual es la regla por NOMBRE del ítem de compra? (producto + adquisiciones_compras).
     // En ese caso la regla se guarda por texto (tipo_referencia='item_compra', clave = descripción del ítem).
@@ -489,7 +490,6 @@
         ['Activo', 'success'], ['Pasivo', 'danger'], ['Patrimonio', 'dark'],
         ['Ingresos', 'primary'], ['Costos', 'info'], ['Gastos', 'warning']
     ];
-    const ASIENTOPROG_TIPOS_ACTIVO = [['Activo', 'success']];
 
     /**
      * Construye los badges informativos de tipo de cuenta.
@@ -568,8 +568,10 @@
         const base = {
             idKey: 'id_forma', refParam: 'id_forma', selectorParam: 'flujo',
             detalle: 'Configurado en Formas de Cobros y Pagos',
-            badgesHtml: ASIENTOPROG_badgesTipoCuenta(ASIENTOPROG_TIPOS_ACTIVO),
-            tipoCuentaFiltro: 'activo',
+            // Todos los tipos de cuenta (activo, pasivo, patrimonio, ingreso, costo, gasto),
+            // igual que Ingresos/Egresos: el selector no filtra por tipo.
+            badgesHtml: ASIENTOPROG_badgesTipoCuenta(ASIENTOPROG_TIPOS_TODOS),
+            tipoCuentaFiltro: '',
             endpointGuardar: 'guardarReglaFormaAjax', endpointEliminar: 'eliminarReglaFormaAjax'
         };
 
@@ -1080,7 +1082,8 @@
         proveedor: 'Proveedores con compras',
         producto:  'Productos con movimientos',
         categoria: 'Categorías',
-        marca:     'Marcas'
+        marca:     'Marcas',
+        empleado:  'Empleados activos'
     };
 
     /**

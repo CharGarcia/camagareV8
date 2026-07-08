@@ -362,8 +362,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="text-center sortable-header" role="button" data-sort="estado_correo" data-col="estado_correo" onclick="window.FV_ordenar(this.dataset.sort)">
                             Correo <i class="bi <?= $ordenCol === 'estado_correo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
-                        <th class="text-center sortable-header" role="button" data-col="estado_pago">
-                            Pago
+                        <th class="text-center sortable-header" role="button" data-sort="estado_pago" data-col="estado_pago" onclick="window.FV_ordenar(this.dataset.sort)">
+                            Pago <i class="bi <?= $ordenCol === 'estado_pago' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
                         <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado" onclick="window.FV_ordenar(this.dataset.sort)">
                             Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
@@ -397,7 +397,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             $retencion    = (float)($r['total_retencion'] ?? 0);
                             $saldo        = max(0, $importeTotal - $cobrado - $nc - $retencion);
 
-                            if ($saldo <= 0.01) {
+                            if ($estado === 'anulado') {
+                                $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulado</span>';
+                            } elseif ($saldo <= 0.01) {
                                 $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
                             } elseif (($cobrado + $nc + $retencion) > 0) {
                                 $estadoPagoBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Abonada</span>';
@@ -459,9 +461,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <button id="m-btn-whatsapp" type="button" class="btn btn-outline-success btn-sm px-2" onclick="FV_abrirModalWhatsapp()" title="Enviar por WhatsApp"><i class="bi bi-whatsapp"></i></button>
                         <button id="m-btn-ticket" type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="imprimirTicket()" title="Imprimir ticket / tirilla"><i class="bi bi-receipt"></i></button>
                         <button id="btnAnularFacturaModal" type="button" class="btn btn-outline-warning btn-sm d-none" title="Anular Factura"><i class="bi bi-slash-circle me-1"></i>Anular</button>
+                        <?php if (!empty($permClientes['crear']) || !empty($permProductos['crear'])): ?>
                         <div class="vr mx-1"></div>
+                        <?php endif; ?>
+                        <?php if (!empty($permClientes['crear'])): ?>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalClienteCrear()" title="Registrar nuevo cliente"><i class="bi bi-person-plus fs-6"></i></button>
+                        <?php endif; ?>
+                        <?php if (!empty($permProductos['crear'])): ?>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="abrirModalProductoCrear()" title="Registrar nuevo producto"><i class="bi bi-box-seam fs-6"></i></button>
+                        <?php endif; ?>
                     </div>
 
                     <!-- Pestañas -->
@@ -984,6 +992,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             <i class="bi bi-check-circle-fill fs-2 mb-2 text-success d-block"></i>
                                             <h6 class="fw-bold mb-1 text-success">¡Factura Completamente Cobrada!</h6>
                                             <p class="text-muted mb-0" style="font-size: 0.75rem;">El saldo pendiente de esta factura es de $0.00.</p>
+                                        </div>
+
+                                        <!-- Factura anulada -->
+                                        <div class="alert alert-danger border-danger border-opacity-25 text-center py-4 shadow-sm mb-0 d-none" id="fvPagoAlertaAnulada">
+                                            <i class="bi bi-slash-circle-fill fs-2 mb-2 text-danger d-block"></i>
+                                            <h6 class="fw-bold mb-1 text-danger">Factura Anulada</h6>
+                                            <p class="text-muted mb-0" style="font-size: 0.75rem;">No se pueden registrar cobros. Los ingresos asociados fueron anulados y no hay saldo pendiente.</p>
                                         </div>
 
                                         <!-- Factura nueva (sin ID aún) -->
@@ -2196,10 +2211,11 @@ $totalPages = $totalPagesOriginal;
         if (btnCorreo) btnCorreo.disabled = !esAutorizado;
         if (btnWhatsapp) btnWhatsapp.disabled = !esAutorizado;
 
-        // Botón SRI: visible cuando NO está autorizado, oculto si ya está autorizado
+        // Botón SRI: oculto si ya está autorizado o si está ANULADO; visible en el resto.
         if (btnSri) {
-            if (esAutorizado) {
+            if (esAutorizado || st.includes('anulad')) {
                 btnSri.classList.add('d-none');
+                btnSri.disabled = true;
             } else {
                 btnSri.classList.remove('d-none');
                 btnSri.disabled = false;
@@ -2294,6 +2310,8 @@ $totalPages = $totalPagesOriginal;
         if (cardReg) cardReg.classList.add('d-none');
         const alertPag = document.getElementById('fvPagoAlertaPagada');
         if (alertPag) alertPag.classList.add('d-none');
+        const alertAnul = document.getElementById('fvPagoAlertaAnulada');
+        if (alertAnul) alertAnul.classList.add('d-none');
         const alertNueva = document.getElementById('fvPagoAlertaNueva');
         if (alertNueva) alertNueva.classList.remove('d-none');
         const elSec = document.getElementById('fvPagoSecuencial');
@@ -6089,17 +6107,31 @@ $totalPages = $totalPagesOriginal;
                 }
             }
 
+            // Factura anulada: sin saldo pendiente y sin registro de cobros
+            // (los ingresos asociados ya fueron anulados por el backend).
+            const esAnuladaFV = (window.FV_ESTADO_ACTIVO || (jCob.factura && jCob.factura.estado) || '')
+                                    .toString().toLowerCase().includes('anulad');
+
             // Saldo = Factura − Cobrado − Retenciones − Notas de Crédito − Pagos tarjeta aprobados
             totalCobrado += totalPagadoTarjeta;
-            const saldo = Math.max(0, totalFactura - totalCobrado - totalRetenciones - totalNC);
+            const saldo = esAnuladaFV ? 0 : Math.max(0, totalFactura - totalCobrado - totalRetenciones - totalNC);
             _fvSaldoPendiente = saldo;                       // guardar para validación
             _fvSetTarjetas(totalFactura, totalCobrado, totalRetenciones, totalNC, saldo);
 
+            const alertaAnulada = document.getElementById('fvPagoAlertaAnulada');
+
             // Panel derecho
-            if (saldo < 0.01) {
+            if (esAnuladaFV) {
+                // No se permite registrar cobros en una factura anulada.
+                if (alertaAnulada) alertaAnulada.classList.remove('d-none');
+                if (alertaPagada)  alertaPagada.classList.add('d-none');
+                cardReg.classList.add('d-none');
+            } else if (saldo < 0.01) {
+                if (alertaAnulada) alertaAnulada.classList.add('d-none');
                 alertaPagada.classList.remove('d-none');
                 cardReg.classList.add('d-none');
             } else {
+                if (alertaAnulada) alertaAnulada.classList.add('d-none');
                 alertaPagada.classList.add('d-none');
                 cardReg.classList.remove('d-none');
                 const elMonto = document.getElementById('fvPagoMonto');

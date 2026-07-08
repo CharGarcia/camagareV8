@@ -141,9 +141,24 @@ class FacturaVentaRepository extends BaseRepository
                      $where";
         $total = $this->query($sqlCount, $params)->fetchColumn();
 
-        $allowedCols = ['id', 'fecha_emision', 'secuencial', 'numero', 'importe_total', 'total_sin_impuestos', 'total_descuento', 'total_ice', 'propina', 'estado', 'estado_correo', 'cliente_nombre', 'cliente_ruc', 'vendedor_nombre', 'usuario_nombre', 'observaciones', 'iva'];
+        $allowedCols = ['id', 'fecha_emision', 'secuencial', 'numero', 'importe_total', 'total_sin_impuestos', 'total_descuento', 'total_ice', 'propina', 'estado', 'estado_correo', 'estado_pago', 'cliente_nombre', 'cliente_ruc', 'vendedor_nombre', 'usuario_nombre', 'observaciones', 'iva'];
         if (!in_array($ordenCol, $allowedCols)) $ordenCol = 'fecha_emision';
         $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
+
+        // Suma de abonos (cobros + notas de crédito + retenciones) para ordenar por
+        // el ESTADO DE PAGO calculado. Mismas subconsultas que la columna/badge.
+        $sqlAbonosOrden =
+            "((SELECT COALESCE(SUM(ind.monto_cobrado),0) FROM ingresos_detalle ind "
+            . "INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id "
+            . "WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' "
+            . "AND inc.estado != 'anulado' AND inc.eliminado = false) "
+            . "+ (SELECT COALESCE(SUM(nc.importe_total),0) FROM notas_credito_cabecera nc "
+            . "WHERE nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) "
+            . "AND nc.id_empresa = v.id_empresa AND nc.estado != 'anulado' AND nc.eliminado = false) "
+            . "+ (SELECT COALESCE(SUM(r.total_renta + r.total_iva + r.total_isd),0) FROM retencion_venta_cabecera r "
+            . "WHERE r.eliminado = false AND r.id_empresa = v.id_empresa AND (r.id_venta = v.id "
+            . "OR EXISTS (SELECT 1 FROM retencion_venta_detalle rd WHERE rd.id_retencion = r.id "
+            . "AND rd.num_doc_sustento = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)))))";
 
         // Para columnas calculadas (JOIN) se prefija la tabla correcta
         $ordenExpr = match($ordenCol) {
@@ -153,6 +168,9 @@ class FacturaVentaRepository extends BaseRepository
             'usuario_nombre'  => 'u.nombre',
             'iva'             => '(v.importe_total - v.total_sin_impuestos + v.total_descuento - COALESCE(v.total_ice,0) - COALESCE(v.propina,0))',
             'numero'          => 'v.secuencial',
+            'estado_pago'     => "CASE WHEN v.estado = 'anulado' THEN 4 "
+                                 . "WHEN (v.importe_total - $sqlAbonosOrden) <= 0.01 THEN 3 "
+                                 . "WHEN $sqlAbonosOrden > 0 THEN 2 ELSE 1 END",
             default           => "v.$ordenCol",
         };
 

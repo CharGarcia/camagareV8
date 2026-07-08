@@ -21,6 +21,7 @@
     window.abrirModalCrear = async function() {
         if (!formEmp) return;
         formEmp.reset();
+        limpiarBadgeSriEmp();
         document.getElementById('emp_id').value = '';
         document.getElementById('tituloModal').textContent = 'Nuevo Empleado';
         document.getElementById('btnEliminarModal')?.classList.add('d-none');
@@ -58,6 +59,7 @@
         if (!formEmp || !id) return;
 
         formEmp.reset();
+        limpiarBadgeSriEmp();
         document.getElementById('emp_id').value = id;
         document.getElementById('tituloModal').textContent = 'Editar Empleado';
         document.getElementById('btnEliminarModal')?.classList.remove('d-none');
@@ -159,11 +161,12 @@
         const tbody = document.querySelector('#tablaPeriodos tbody');
         if (!tbody) return;
         const row = document.createElement('tr');
+        row.className = 'row-emp';
         row.innerHTML = `
-            <td><input type="date" class="form-control form-control-sm dt-ingreso shadow-none" value="${data.fecha_ingreso || ''}"></td>
-            <td><input type="date" class="form-control form-control-sm dt-salida shadow-none" value="${data.fecha_salida || ''}"></td>
-            <td><input type="text" class="form-control form-control-sm dt-motivo shadow-none" value="${data.motivo_salida || ''}" placeholder="..."></td>
-            <td class="text-center"><button type="button" class="btn btn-outline-danger btn-xs border-0" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
+            <td class="ps-2"><input type="date" class="form-control form-control-sm input-emp dt-ingreso" value="${data.fecha_ingreso || ''}"></td>
+            <td><input type="date" class="form-control form-control-sm input-emp dt-salida" value="${data.fecha_salida || ''}"></td>
+            <td><input type="text" class="form-control form-control-sm input-emp dt-motivo" value="${data.motivo_salida || ''}" placeholder="Motivo de salida..."></td>
+            <td class="text-center"><button type="button" class="btn btn-sm p-1 border-0 remove-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
         `;
         tbody.appendChild(row);
     };
@@ -171,23 +174,33 @@
     window.agregarFilaRubro = function(data = {}) {
         const tbody = document.querySelector('#tablaRubros tbody');
         if (!tbody) return;
+
+        // Coordinación con la pestaña Laboral (Aporta al IESS):
+        // una fila NUEVA de tipo ingreso hereda el "Aporta IESS" de la empresa;
+        // una fila cargada respeta su valor guardado.
+        const esNuevo = Object.keys(data).length === 0;
+        const masterAporta = document.getElementById('emp_aporta_iess')?.value === 'si';
+        const tipoRow = data.tipo || 'ingreso';
+        const iessAporta = esNuevo ? (masterAporta && tipoRow === 'ingreso') : !!data.aporta_iess;
+
         const row = document.createElement('tr');
+        row.className = 'row-emp';
         row.innerHTML = `
-            <td>
-                <select class="form-select form-select-sm rb-tipo shadow-none" onchange="window.toggleRubroIess(this)">
-                    <option value="ingreso" ${data.tipo === 'ingreso' ? 'selected' : ''}>Ingreso</option>
-                    <option value="descuento" ${data.tipo === 'descuento' ? 'selected' : ''}>Descuento</option>
+            <td class="ps-2">
+                <select class="form-select form-select-sm input-emp rb-tipo" onchange="window.toggleRubroIess(this)">
+                    <option value="ingreso" ${tipoRow === 'ingreso' ? 'selected' : ''}>Ingreso</option>
+                    <option value="descuento" ${tipoRow === 'descuento' ? 'selected' : ''}>Descuento</option>
                 </select>
             </td>
-            <td><input type="text" class="form-control form-control-sm rb-nombre text-uppercase shadow-none" value="${data.nombre || ''}" placeholder="Ej: BONO... "></td>
-            <td><input type="number" step="0.01" class="form-control form-control-sm rb-valor shadow-none" value="${data.valor || '0.00'}"></td>
+            <td><input type="text" class="form-control form-control-sm input-emp rb-nombre text-uppercase" value="${data.nombre || ''}" placeholder="Ej: BONO..."></td>
+            <td><input type="number" step="0.01" class="form-control form-control-sm input-emp text-end rb-valor" value="${data.valor || '0.00'}"></td>
             <td class="text-center">
-                <select class="form-select form-select-sm rb-iess shadow-none">
-                    <option value="si" ${data.aporta_iess ? 'selected' : ''}>SÍ</option>
-                    <option value="no" ${!data.aporta_iess ? 'selected' : ''}>NO</option>
+                <select class="form-select form-select-sm input-emp text-center rb-iess">
+                    <option value="si" ${iessAporta ? 'selected' : ''}>SÍ</option>
+                    <option value="no" ${!iessAporta ? 'selected' : ''}>NO</option>
                 </select>
             </td>
-            <td class="text-center"><button type="button" class="btn btn-outline-danger btn-xs border-0" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
+            <td class="text-center"><button type="button" class="btn btn-sm p-1 border-0 remove-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
         `;
         tbody.appendChild(row);
         window.toggleRubroIess(row.querySelector('.rb-tipo'));
@@ -198,10 +211,15 @@
         const iessSel = tr.querySelector('.rb-iess');
         const masterAporta = document.getElementById('emp_aporta_iess')?.value;
         if (!iessSel) return;
+        // Un rubro solo puede aportar al IESS si es INGRESO y la empresa aporta.
         if (select.value === 'descuento' || masterAporta === 'no') {
             iessSel.value = 'no';
             iessSel.disabled = true;
         } else {
+            // Al pasar de deshabilitado a habilitado (p. ej. cambia a ingreso,
+            // o la empresa pasa a aportar), se coordina a "Sí" para evitar
+            // discrepancias con la pestaña Laboral.
+            if (iessSel.disabled) iessSel.value = 'si';
             iessSel.disabled = false;
         }
     };
@@ -209,27 +227,47 @@
     function serializarTablasEmp() {
         const periodos = [];
         document.querySelectorAll('#tablaPeriodos tbody tr').forEach(tr => {
-            const fi = tr.querySelector('.dt-ingreso').value;
+            const inpIngreso = tr.querySelector('.dt-ingreso');
+            if (!inpIngreso) return; // ignora filas placeholder (p. ej. "Cargando...")
+            const fi = inpIngreso.value;
             if (fi) periodos.push({
                 fecha_ingreso: fi,
-                fecha_salida: tr.querySelector('.dt-salida').value,
-                motivo_salida: tr.querySelector('.dt-motivo').value
+                fecha_salida: tr.querySelector('.dt-salida')?.value || '',
+                motivo_salida: tr.querySelector('.dt-motivo')?.value || ''
             });
         });
         document.getElementById('periodos_json').value = JSON.stringify(periodos);
 
         const rubros = [];
         document.querySelectorAll('#tablaRubros tbody tr').forEach(tr => {
-            const nombre = tr.querySelector('.rb-nombre').value;
+            const inpNombre = tr.querySelector('.rb-nombre');
+            if (!inpNombre) return; // ignora filas placeholder
+            const nombre = inpNombre.value;
             if (nombre) rubros.push({
-                tipo: tr.querySelector('.rb-tipo').value,
+                tipo: tr.querySelector('.rb-tipo')?.value || 'ingreso',
                 nombre: nombre,
-                valor: tr.querySelector('.rb-valor').value,
-                aporta_iess: tr.querySelector('.rb-iess').value
+                valor: tr.querySelector('.rb-valor')?.value || '0',
+                aporta_iess: tr.querySelector('.rb-iess')?.value || 'no'
             });
         });
         document.getElementById('rubros_json').value = JSON.stringify(rubros);
     }
+
+    // Botón "Imprimir PDF" de la barra superior del modal.
+    window.imprimirEmpleadoPdf = function() {
+        const id = document.getElementById('emp_id').value;
+        if (!id) {
+            Swal.fire({ icon: 'info', title: 'Guarde primero', text: 'Debe guardar el empleado antes de imprimir su ficha.' });
+            return;
+        }
+        // Descarga directa (el servidor responde con Content-Disposition: attachment).
+        const a = document.createElement('a');
+        a.href = `${urlModuloEmp}/imprimirPdf?id=${id}`;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    };
 
     if (formEmp) {
         formEmp.addEventListener('submit', async (e) => {
@@ -241,41 +279,157 @@
 
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>';
-            if (alertElEmp) alertElEmp.classList.add('d-none');
+
+            const restaurarBtn = () => { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar'; };
 
             try {
                 const fd = new FormData(formEmp);
                 const resp = await fetch(url, { method: 'POST', body: fd });
                 const json = await resp.json();
 
-                if (alertElEmp) {
-                    alertElEmp.textContent = json.msg || json.error;
-                    alertElEmp.className = 'alert mb-3 py-2 small shadow-sm border-0 ' + (json.ok ? 'alert-success' : 'alert-danger');
-                    alertElEmp.classList.remove('d-none');
-                }
-
                 if (json.ok) {
-                    setTimeout(() => { 
-                        getModalEmp()?.hide(); 
+                    Swal.fire({
+                        icon: 'success',
+                        title: id ? 'Actualizado' : 'Guardado',
+                        text: json.msg || 'Empleado guardado correctamente.',
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+                    setTimeout(() => {
+                        restaurarBtn();
+                        getModalEmp()?.hide();
                         if (typeof window.cambiarPaginaAjax === 'function') window.cambiarPaginaAjax(window.currentPage || 1);
                         window.dispatchEvent(new CustomEvent('empleadoGuardado', { detail: json }));
-                    }, 800);
-                } else { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar'; }
-            } catch (err) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar'; }
+                    }, 1500);
+                } else {
+                    Swal.fire({ icon: 'error', title: 'Atención', text: json.error || 'No se pudo guardar el empleado.' });
+                    restaurarBtn();
+                }
+            } catch (err) {
+                Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se pudo conectar con el servidor.' });
+                restaurarBtn();
+            }
         });
     }
 
 
 
-    window.eliminarRegistroModal = async function() {
-        const id = document.getElementById('emp_id').value;
-        if (!id || !confirm('¿Seguro que desea eliminar este empleado?')) return;
+    // ─── Consulta SRI por cédula (autocompletar nombre) ──────────────────────
+    let sriDebounceEmp = null;
+    const campoIdEmp = document.getElementById('emp_identificacion');
+    const badgeSriEmp = document.getElementById('empSriBadge');
+    const spinnerSriEmp = document.getElementById('empSriSpinner');
+
+    function mostrarBadgeSriEmp(texto, clase) {
+        if (!badgeSriEmp) return;
+        badgeSriEmp.textContent = texto;
+        badgeSriEmp.className = 'badge ' + clase;
+    }
+
+    function limpiarBadgeSriEmp() {
+        if (badgeSriEmp) badgeSriEmp.className = 'badge d-none';
+        if (spinnerSriEmp) spinnerSriEmp.classList.add('d-none');
+    }
+
+    async function consultarSriEmp(identificacion) {
+        if (spinnerSriEmp) spinnerSriEmp.classList.remove('d-none');
+        mostrarBadgeSriEmp('Consultando SRI…', 'bg-secondary');
         try {
-            const fd = new FormData(); fd.append('id_eliminar', id);
+            const fd = new FormData();
+            fd.append('identificacion', identificacion);
+            const resp = await fetch(`${urlModuloEmp}/consultarSri`, { method: 'POST', body: fd });
+            const json = await resp.json();
+            if (spinnerSriEmp) spinnerSriEmp.classList.add('d-none');
+
+            if (!json.ok || !json.data) {
+                mostrarBadgeSriEmp('No encontrado', 'bg-warning text-dark');
+                return;
+            }
+
+            const d = json.data;
+            mostrarBadgeSriEmp('✓ SRI', 'bg-success');
+
+            // El nombre del SRI es la fuente oficial: rellena el campo.
+            if (d.nombre) {
+                const elNom = document.getElementById('emp_nombres_apellidos');
+                if (elNom) elNom.value = d.nombre;
+            }
+            // La dirección solo se coloca si viene y el campo está vacío.
+            if (d.direccion) {
+                const elDir = document.getElementById('emp_direccion');
+                if (elDir && !elDir.value.trim()) elDir.value = d.direccion;
+            }
+        } catch (err) {
+            if (spinnerSriEmp) spinnerSriEmp.classList.add('d-none');
+            mostrarBadgeSriEmp('Error', 'bg-danger');
+        }
+    }
+
+    function onIdentificacionInputEmp() {
+        limpiarBadgeSriEmp();
+        clearTimeout(sriDebounceEmp);
+        const tipo = (document.getElementById('emp_tipo_id')?.value || '').toLowerCase();
+        const valor = (campoIdEmp?.value || '').replace(/\D/g, '');
+        if (tipo !== 'cedula') return;           // solo cédulas
+        if (valor.length === 10) {
+            sriDebounceEmp = setTimeout(() => consultarSriEmp(valor), 700);
+        }
+    }
+
+    if (campoIdEmp) {
+        campoIdEmp.addEventListener('input', onIdentificacionInputEmp);
+    }
+    document.getElementById('emp_tipo_id')?.addEventListener('change', () => {
+        limpiarBadgeSriEmp();
+        onIdentificacionInputEmp();
+    });
+
+    async function eliminarEmpleadoConSwal(id, cerrarModal) {
+        if (!id) return;
+        const result = await Swal.fire({
+            title: '¿Está seguro?',
+            text: 'No podrá revertir esta acción.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar'
+        });
+        if (!result.isConfirmed) return;
+
+        try {
+            const fd = new FormData();
+            fd.append('id_eliminar', id);
             const resp = await fetch(`${urlModuloEmp}/delete`, { method: 'POST', body: fd });
             const json = await resp.json();
-            if (json.ok) { getModalEmp()?.hide(); if (typeof window.cambiarPaginaAjax === 'function') window.cambiarPaginaAjax(window.currentPage || 1); }
-        } catch (e) {}
+            if (json.ok) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Eliminado',
+                    text: json.msg || 'Empleado eliminado correctamente.',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+                if (cerrarModal) getModalEmp()?.hide();
+                if (typeof window.cambiarPaginaAjax === 'function') window.cambiarPaginaAjax(window.currentPage || 1);
+            } else {
+                Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'No se pudo eliminar el empleado.' });
+            }
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se pudo conectar con el servidor.' });
+        }
+    }
+
+    // Botón de eliminar de cada fila del listado.
+    window.eliminarRegistro = function(id) {
+        eliminarEmpleadoConSwal(id, false);
+    };
+
+    // Botón de eliminar dentro del modal.
+    window.eliminarRegistroModal = function() {
+        const id = document.getElementById('emp_id').value;
+        eliminarEmpleadoConSwal(id, true);
     };
 
 })(window, document);

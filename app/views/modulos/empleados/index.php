@@ -90,6 +90,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
                 <a id="btnExportPdf" href="<?= $urlBaseEmp ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
                 <a id="btnExportExcel" href="<?= $urlBaseEmp ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                <?php if (!empty($perm['crear'])): ?>
+                    <button type="button" class="btn btn-outline-primary" title="Cargar empleados desde Excel" onclick="window.abrirImportEmp()"><i class="bi bi-upload"></i> Importar</button>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -222,5 +225,76 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             clearTimeout(timer);
             timer = setTimeout(() => cargarListado(1), 400);
         });
+    })();
+</script>
+
+<!-- Modal Importar Empleados -->
+<div class="modal fade" id="modalImportEmp" tabindex="-1" aria-hidden="true" style="z-index:1060;">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light py-3">
+                <h5 class="modal-title fw-bold"><i class="bi bi-upload me-2 text-primary"></i>Importar Empleados desde Excel</h5>
+                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info small py-2 mb-3">
+                    Descarga la <a href="<?= $urlBaseEmp ?>/plantilla-excel" class="fw-bold">plantilla</a>, complétala y súbela.
+                    Solo <b>IDENTIFICACION</b> y <b>NOMBRES_APELLIDOS</b> son obligatorios; el resto es opcional
+                    (ver hoja «Referencia» para los valores válidos). Los aportes IESS se asignan automáticamente.
+                </div>
+                <input type="file" id="emp_import_file" class="form-control form-control-sm" accept=".xlsx,.xls">
+                <div id="emp_import_result" class="mt-3"></div>
+            </div>
+            <div class="modal-footer bg-light border-top p-2">
+                <a href="<?= $urlBaseEmp ?>/plantilla-excel" class="btn btn-outline-secondary btn-sm me-auto"><i class="bi bi-download me-1"></i>Plantilla</a>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cerrar</button>
+                <button type="button" class="btn btn-primary btn-sm px-4 shadow-sm" id="btnImportarEmp" onclick="window.importarEmp()"><i class="bi bi-upload me-1"></i> Importar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        'use strict';
+        const urlImp = '<?= $urlBaseEmp ?>';
+        let modalImp = null;
+        const esc = (s) => (s == null ? '' : String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])));
+
+        window.abrirImportEmp = function () {
+            document.getElementById('emp_import_file').value = '';
+            document.getElementById('emp_import_result').innerHTML = '';
+            if (!modalImp && typeof bootstrap !== 'undefined') modalImp = new bootstrap.Modal(document.getElementById('modalImportEmp'));
+            modalImp?.show();
+        };
+
+        window.importarEmp = async function () {
+            const fileInput = document.getElementById('emp_import_file');
+            if (!fileInput.files.length) { Swal.fire({ icon: 'info', title: 'Seleccione un archivo', timer: 1500, showConfirmButton: false }); return; }
+            const btn = document.getElementById('btnImportarEmp');
+            btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Importando...';
+            const cont = document.getElementById('emp_import_result');
+            cont.innerHTML = '';
+            try {
+                const fd = new FormData(); fd.append('archivo', fileInput.files[0]);
+                const resp = await fetch(`${urlImp}/importar-excel`, { method: 'POST', body: fd });
+                const json = await resp.json();
+                if (!json.ok) {
+                    cont.innerHTML = `<div class="alert alert-danger small py-2 mb-0">${esc(json.error)}</div>`;
+                } else {
+                    let html = `<div class="alert alert-success small py-2 mb-2"><b>${json.creadas}</b> empleado(s) importado(s) de ${json.total}.</div>`;
+                    if (json.errores && json.errores.length) {
+                        html += `<div class="alert alert-warning small py-2 mb-0" style="max-height:220px;overflow:auto;"><b>${json.errores.length} fila(s) con error:</b><ul class="mb-0 mt-1 ps-3">`;
+                        json.errores.forEach(e => { html += `<li>Fila ${e.fila}: ${esc(e.error)}</li>`; });
+                        html += '</ul></div>';
+                    }
+                    cont.innerHTML = html;
+                    if (json.creadas > 0 && typeof window.cambiarPaginaAjax === 'function') window.cambiarPaginaAjax(window.currentPage || 1);
+                }
+            } catch (e) {
+                cont.innerHTML = '<div class="alert alert-danger small py-2 mb-0">Error de red al importar.</div>';
+            }
+            btn.disabled = false; btn.innerHTML = '<i class="bi bi-upload me-1"></i> Importar';
+        };
     })();
 </script>

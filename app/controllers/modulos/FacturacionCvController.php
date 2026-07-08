@@ -43,7 +43,8 @@ class FacturacionCvController extends BaseModuloController
                 "establecimiento VARCHAR(3)", "punto_emision VARCHAR(3)", "tipo_ambiente VARCHAR(1)",
                 "id_cliente INTEGER", "id_vendedor INTEGER", "observaciones TEXT", "numero_factura VARCHAR(50)",
                 "subtotal NUMERIC(15,6)", "impuesto NUMERIC(15,6)", "total NUMERIC(15,6)", "id_asiento_reingreso INTEGER",
-                "info_adicional TEXT"
+                "info_adicional TEXT", "dias_credito INTEGER DEFAULT 0", "forma_pago_sri VARCHAR(10)",
+                "pagos_sri TEXT", "plazo_unidad VARCHAR(10) DEFAULT 'dias'"
             ] as $col) {
                 $db->exec("ALTER TABLE consignaciones_facturas ADD COLUMN IF NOT EXISTS $col");
             }
@@ -122,6 +123,12 @@ class FacturacionCvController extends BaseModuloController
             }
         }
 
+        // Formas de pago SRI (para la pestaña Forma de pago).
+        $formasPago = [];
+        try {
+            $formasPago = (new \App\repositories\modulos\FacturaVentaRepository())->getFormasPago();
+        } catch (\Throwable $e) {}
+
         $this->viewWithLayout('layouts.main', 'modulos.facturacion_cv.index', [
             'titulo'      => 'Facturación de Consignaciones',
             'perm'        => $perm,
@@ -129,6 +136,7 @@ class FacturacionCvController extends BaseModuloController
             'empresa'     => $empresaData,
             'vendedores'  => $vendedores,
             'puntos'      => $puntos,
+            'formasPago'  => $formasPago,
             'rows'        => $rows,
             'total'       => $total,
             'page'        => $page,
@@ -286,6 +294,25 @@ class FacturacionCvController extends BaseModuloController
         exit;
     }
 
+    /** Crea un nuevo borrador copiando un documento existente (p. ej. uno anulado). */
+    public function duplicarAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        try {
+            $id = (int) ($_POST['id'] ?? 0);
+            if ($id <= 0) throw new Exception('Documento no válido.');
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $newId = $this->service->duplicar($id, $idEmpresa, $idUsuario, $this->getEmpresaConfig($idEmpresa));
+            echo json_encode(['ok' => true, 'msg' => 'Nueva facturación creada en borrador.', 'id' => $newId]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     /** Anula la factura generada (dispara la reversión automática del reingreso). */
     public function anularFacturaAjax(): void
     {
@@ -352,6 +379,13 @@ class FacturacionCvController extends BaseModuloController
             if ($idDoc <= 0) { echo json_encode(['ok' => true, 'detalles' => [], 'es_guardado' => false]); exit; }
 
             $doc = $this->service->getPorId($idDoc, $idEmpresa) ?? [];
+
+            // Documento anulado: el asiento de reingreso fue reversado, no se muestra.
+            if (($doc['estado'] ?? '') === 'anulada') {
+                echo json_encode(['ok' => true, 'detalles' => [], 'es_guardado' => false, 'anulado' => true]);
+                exit;
+            }
+
             $idAsiento = (int) ($doc['id_asiento_reingreso'] ?? 0);
 
             if ($idAsiento > 0) {
@@ -394,7 +428,8 @@ class FacturacionCvController extends BaseModuloController
         $q = trim($_GET['q'] ?? '');
         try {
             $db = \App\Core\Database::getConnection();
-            $sql = "SELECT id, nombre, identificacion, direccion, email, id_vendedor
+            $sql = "SELECT id, nombre, identificacion, direccion, email, id_vendedor,
+                           COALESCE(plazo, 0) AS plazo, id_forma_pago_sri
                     FROM clientes
                     WHERE id_empresa = :e AND eliminado = false
                       AND (nombre ILIKE :q OR identificacion ILIKE :q)
@@ -402,6 +437,29 @@ class FacturacionCvController extends BaseModuloController
             $st = $db->prepare($sql);
             $st->execute([':e' => $idEmpresa, ':q' => '%' . $q . '%']);
             echo json_encode(['ok' => true, 'data' => $st->fetchAll(\PDO::FETCH_ASSOC)]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Un cliente por id con datos para autocompletar (vendedor, crédito, forma de pago, correo). */
+    public function getClienteAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $id = (int) ($_GET['id'] ?? 0);
+        try {
+            if ($id <= 0) { echo json_encode(['ok' => false, 'error' => 'ID no válido.']); exit; }
+            $db = \App\Core\Database::getConnection();
+            $st = $db->prepare("SELECT id, nombre, identificacion, direccion, email, id_vendedor,
+                                       COALESCE(plazo, 0) AS plazo, id_forma_pago_sri
+                                FROM clientes WHERE id = :id AND id_empresa = :e AND eliminado = false LIMIT 1");
+            $st->execute([':id' => $id, ':e' => $idEmpresa]);
+            $row = $st->fetch(\PDO::FETCH_ASSOC);
+            echo json_encode($row ? ['ok' => true, 'data' => $row] : ['ok' => false, 'error' => 'Cliente no encontrado.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

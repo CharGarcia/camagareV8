@@ -556,11 +556,64 @@ class ConfiguracionContableController extends BaseModuloController
                 $msg = 'Cuenta contable asignada correctamente.';
             }
 
+            // 3. Si la opción es de anticipo (cliente/proveedor), propagar la misma cuenta a la
+            //    forma de Cobro/Pago de anticipo correspondiente, si aún no tiene cuenta asignada.
+            $opcion = $opcRepo->getById($idOpcion, $idEmpresa);
+            if ($opcion && !empty($opcion['comportamiento'])) {
+                $this->propagarCuentaAnticipoAFormas($idEmpresa, $idUsuario, (string) $opcion['comportamiento'], $idCuenta);
+            }
+
             echo json_encode(['ok' => true, 'msg' => $msg]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    /**
+     * Propaga la cuenta de una OPCIÓN de anticipo (Ingresos/Egresos) a la FORMA de anticipo
+     * correspondiente (Cobros/Pagos), SOLO si esa forma aún no tiene cuenta contable asignada:
+     *   - comportamiento ANTICIPO_CLIENTE  (ingreso) → forma ANTICIPO de cobro (aplica_en INGRESO/AMBAS).
+     *   - comportamiento ANTICIPO_PROVEEDOR (egreso)  → forma ANTICIPO de pago  (aplica_en EGRESO/AMBAS).
+     * Se guarda en los dos lugares (módulo de Formas + asiento programado), igual que guardarReglaFormaAjax.
+     */
+    private function propagarCuentaAnticipoAFormas(int $idEmpresa, int $idUsuario, string $comportamiento, int $idCuenta): void
+    {
+        $comportamiento = strtoupper(trim($comportamiento));
+        if ($comportamiento === 'ANTICIPO_CLIENTE') {
+            $flujoDir       = 'INGRESO';
+            $tipoReferencia = 'forma_cobro';
+        } elseif ($comportamiento === 'ANTICIPO_PROVEEDOR') {
+            $flujoDir       = 'EGRESO';
+            $tipoReferencia = 'forma_pago';
+        } else {
+            return; // La opción no es de anticipo: no hay nada que propagar.
+        }
+
+        $formaRepo = new FormaPagoRepository();
+        $formas = $formaRepo->getFormasAnticipoSinCuenta($idEmpresa, $flujoDir);
+
+        foreach ($formas as $forma) {
+            $idForma = (int) $forma['id'];
+
+            // 1. Cuenta en el módulo de Formas de Cobros/Pagos
+            $formaRepo->updateCuentaContable($idForma, $idEmpresa, $idCuenta, $idUsuario);
+
+            // 2. Asiento programado asociado a la forma
+            $reglaExistente = $this->repository->getReglaPorReferencia($idEmpresa, $idForma, $tipoReferencia);
+            $dataRule = [
+                'id_asiento_tipo' => 0,
+                'id_cuenta'       => $idCuenta,
+                'id_referencia'   => $idForma,
+                'tipo_referencia' => $tipoReferencia,
+            ];
+            if ($reglaExistente) {
+                $dataRule['updated_by'] = $idUsuario;
+                $this->service->actualizar((int) $reglaExistente['id'], $dataRule, $idEmpresa, $idUsuario);
+            } else {
+                $this->service->registrar($dataRule, $idEmpresa, $idUsuario);
+            }
+        }
     }
 
     /**
@@ -750,6 +803,12 @@ class ConfiguracionContableController extends BaseModuloController
                                 ORDER BY tarifa ASC LIMIT 10");
             $st->execute(["%$q%", "%$q%", "%$q%"]);
             $results = $st->fetchAll(PDO::FETCH_ASSOC);
+        } elseif ($tipo === 'empleado') {
+            $st = $db->prepare("SELECT id, nombres_apellidos AS text, identificacion FROM empleados
+                                WHERE id_empresa = ? AND eliminado = false AND (nombres_apellidos ILIKE ? OR identificacion ILIKE ?)
+                                ORDER BY nombres_apellidos ASC LIMIT 10");
+            $st->execute([$idEmpresa, "%$q%", "%$q%"]);
+            $results = $st->fetchAll(PDO::FETCH_ASSOC);
         }
 
         echo json_encode($results);
@@ -771,7 +830,7 @@ class ConfiguracionContableController extends BaseModuloController
         $q      = trim($_GET['q'] ?? '');
         $modulo = trim($_GET['modulo'] ?? '');
 
-        if (!in_array($tipo, ['cliente', 'proveedor', 'producto', 'categoria', 'marca'], true)) {
+        if (!in_array($tipo, ['cliente', 'proveedor', 'producto', 'categoria', 'marca', 'empleado'], true)) {
             echo json_encode(['ok' => false, 'error' => 'Tipo de dimensión no válido.']);
             exit;
         }
@@ -813,6 +872,11 @@ class ConfiguracionContableController extends BaseModuloController
                         FROM productos ent
                         WHERE ent.id_empresa = :e AND ent.eliminado = false AND {$movim}";
                 $like = "(ent.nombre ILIKE :q OR ent.codigo ILIKE :q)";
+            } elseif ($tipo === 'empleado') {
+                $sql = "SELECT ent.id, ent.nombres_apellidos AS nombre, ent.identificacion, $cfg
+                        FROM empleados ent
+                        WHERE ent.id_empresa = :e AND ent.eliminado = false AND ent.estado = 'activo'";
+                $like = "(ent.nombres_apellidos ILIKE :q OR ent.identificacion ILIKE :q)";
             } else {
                 $tabla = $tipo === 'categoria' ? 'categorias' : 'marcas';
                 $sql = "SELECT ent.id, ent.nombre AS nombre, NULL AS identificacion, $cfg
@@ -1135,6 +1199,9 @@ class ConfiguracionContableController extends BaseModuloController
             } elseif ($tipoReferencia === 'iva') {
                 $joinTable = 'tarifa_iva';
                 $joinField = 'tarifa';
+            } elseif ($tipoReferencia === 'empleado') {
+                $joinTable = 'empleados';
+                $joinField = 'nombres_apellidos';
             }
 
             if ($joinTable === '') {
