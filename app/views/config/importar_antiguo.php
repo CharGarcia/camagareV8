@@ -294,7 +294,7 @@ $base = BASE_URL;
                 `<div class="alert alert-info py-2 mb-0">
                     Claves en archivo <b>${d.total}</b> · Anuladas <b class="text-success">${d.anuladas}</b> ·
                     Ya anuladas <b>${d.ya_anuladas}</b> · No encontradas <b class="text-warning">${d.no_encontradas}</b> ·
-                    Errores <b class="text-danger">${d.errores}</b>
+                    No soportadas <b>${d.no_soportado || 0}</b> · Errores <b class="text-danger">${d.errores}</b>
                  </div>`;
         } catch (e) {
             $('zonaAnular').innerHTML = '<div class="alert alert-danger py-2 mb-0">' + e.message + '</div>';

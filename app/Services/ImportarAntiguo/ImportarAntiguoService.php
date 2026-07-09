@@ -129,28 +129,24 @@ class ImportarAntiguoService
     }
 
     /**
-     * Anula EN LOTE facturas de venta por clave de acceso (limpieza de migración).
-     * Reusa FacturaVentaService::anular() con el candado SRI DESACTIVADO, porque el WS
-     * del SRI reporta AUTORIZADO aunque el documento esté dado de baja; la fuente de
-     * verdad es la lista de claves provista (Excel). Anular es limpio en migrados: no
-     * hay inventario/asiento/cobros creados, así que solo marca estado='anulado' + log.
+     * Anula EN LOTE comprobantes por clave de acceso (limpieza de migración).
+     * Enruta por codDoc (posiciones 8-9 de la clave) al servicio de anulación de cada
+     * tipo, que reversa cobros/asiento/inventario si los hubiera. En facturas desactiva
+     * el candado SRI (el WS reporta AUTORIZADO aunque el documento esté dado de baja).
+     * Tipos soportados: 01 factura, 04 nota de crédito, 06 guía de remisión, 03 liquidación.
+     * (05 nota de débito y 07 retención no tienen anulación en el sistema → no soportado.)
      *
      * @param string[] $claves
      */
-    public function anularFacturasPorClaves(int $idEmpresa, array $claves, int $idUsuario): array
+    public function anularPorClaves(int $idEmpresa, array $claves, int $idUsuario): array
     {
-        $res = ['total' => count($claves), 'anuladas' => 0, 'ya_anuladas' => 0, 'no_encontradas' => 0, 'errores' => 0, 'detalle' => []];
+        $res = ['total' => count($claves), 'anuladas' => 0, 'ya_anuladas' => 0, 'no_encontradas' => 0, 'no_soportado' => 0, 'errores' => 0, 'detalle' => []];
         if (empty($claves)) {
             return $res;
         }
 
         $db = Database::getConnection();
-        $repo = new FacturaVentaRepository();
-        $facturaService = new FacturaVentaService($repo, new FacturaVentaRules(), new LogSistemaService());
-        $buscar = $db->prepare(
-            "SELECT id, estado FROM ventas_cabecera
-             WHERE clave_acceso = :c AND id_empresa = :e AND eliminado = false LIMIT 1"
-        );
+        $rutas = $this->rutasAnulacion();
 
         foreach ($claves as $claveRaw) {
             $clave = preg_replace('/\D+/', '', (string) $claveRaw); // solo dígitos
@@ -159,28 +155,56 @@ class ImportarAntiguoService
                 $res['detalle'][] = ['clave' => (string) $claveRaw, 'estado' => 'clave_invalida'];
                 continue;
             }
-            $buscar->execute([':c' => $clave, ':e' => $idEmpresa]);
-            $row = $buscar->fetch(\PDO::FETCH_ASSOC);
-            if (!$row) {
-                $res['no_encontradas']++;
-                $res['detalle'][] = ['clave' => $clave, 'estado' => 'no_encontrada'];
+            $codDoc = substr($clave, 8, 2); // el codDoc va embebido en la clave de acceso
+            if (!isset($rutas[$codDoc])) {
+                $res['no_soportado']++;
+                $res['detalle'][] = ['clave' => $clave, 'cod_doc' => $codDoc, 'estado' => 'tipo_no_soportado'];
                 continue;
             }
-            if (($row['estado'] ?? '') === 'anulado') {
+            $ruta = $rutas[$codDoc];
+            $st = $db->prepare("SELECT id, estado FROM {$ruta['tabla']} WHERE clave_acceso = :c AND id_empresa = :e AND eliminado = false LIMIT 1");
+            $st->execute([':c' => $clave, ':e' => $idEmpresa]);
+            $row = $st->fetch(\PDO::FETCH_ASSOC);
+            if (!$row) {
+                $res['no_encontradas']++;
+                $res['detalle'][] = ['clave' => $clave, 'cod_doc' => $codDoc, 'estado' => 'no_encontrada'];
+                continue;
+            }
+            if (strtolower((string) ($row['estado'] ?? '')) === 'anulado') {
                 $res['ya_anuladas']++;
-                $res['detalle'][] = ['clave' => $clave, 'estado' => 'ya_anulada'];
+                $res['detalle'][] = ['clave' => $clave, 'cod_doc' => $codDoc, 'estado' => 'ya_anulada'];
                 continue;
             }
             try {
-                $facturaService->anular((int) $row['id'], $idEmpresa, $idUsuario, false);
+                ($ruta['anular'])((int) $row['id'], $idEmpresa, $idUsuario);
                 $res['anuladas']++;
-                $res['detalle'][] = ['clave' => $clave, 'estado' => 'anulada', 'id' => (int) $row['id']];
+                $res['detalle'][] = ['clave' => $clave, 'cod_doc' => $codDoc, 'estado' => 'anulada', 'id' => (int) $row['id']];
             } catch (Throwable $e) {
                 $res['errores']++;
-                $res['detalle'][] = ['clave' => $clave, 'estado' => 'error', 'msg' => substr($e->getMessage(), 0, 200)];
+                $res['detalle'][] = ['clave' => $clave, 'cod_doc' => $codDoc, 'estado' => 'error', 'msg' => substr($e->getMessage(), 0, 200)];
             }
         }
         return $res;
+    }
+
+    /** codDoc => ['tabla' => ..., 'anular' => fn(int $id,int $emp,int $usu)]. Solo tipos con servicio de anulación. */
+    private function rutasAnulacion(): array
+    {
+        $log = new LogSistemaService();
+        return [
+            '01' => ['tabla' => 'ventas_cabecera', 'anular' => function (int $id, int $e, int $u) use ($log) {
+                (new FacturaVentaService(new FacturaVentaRepository(), new FacturaVentaRules(), $log))->anular($id, $e, $u, false);
+            }],
+            '04' => ['tabla' => 'notas_credito_cabecera', 'anular' => function (int $id, int $e, int $u) use ($log) {
+                (new \App\Services\modulos\NotaCreditoService(new \App\repositories\modulos\NotaCreditoRepository(), new \App\Rules\modulos\NotaCreditoRules(), $log))->anular($id, $e, $u);
+            }],
+            '06' => ['tabla' => 'guias_remision_cabecera', 'anular' => function (int $id, int $e, int $u) use ($log) {
+                (new \App\Services\modulos\GuiaRemisionService(new \App\repositories\modulos\GuiaRemisionRepository(), new \App\Rules\modulos\GuiaRemisionRules(), $log))->anular($id, $e, $u);
+            }],
+            '03' => ['tabla' => 'liquidaciones_cabecera', 'anular' => function (int $id, int $e, int $u) use ($log) {
+                (new \App\Services\modulos\LiquidacionCompraService(new \App\repositories\modulos\LiquidacionCompraRepository(), new \App\Rules\modulos\LiquidacionCompraRules(), $log))->anular($id, $e, $u);
+            }],
+        ];
     }
 
     /**

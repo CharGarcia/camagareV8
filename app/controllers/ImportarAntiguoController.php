@@ -134,7 +134,7 @@ class ImportarAntiguoController extends Controller
                 throw new \RuntimeException('No se encontraron claves de acceso (49 dígitos) en el archivo.');
             }
 
-            $r = $this->service->anularFacturasPorClaves($idEmpresa, $claves, $idUsuario);
+            $r = $this->service->anularPorClaves($idEmpresa, $claves, $idUsuario);
             echo json_encode(['ok' => true, 'data' => $r], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
