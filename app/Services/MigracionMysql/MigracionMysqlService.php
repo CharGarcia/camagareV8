@@ -21,6 +21,8 @@ class MigracionMysqlService
         'clientes'          => ['label' => 'Clientes',                        'tabla' => 'clientes'],
         'productos'         => ['label' => 'Productos y servicios',           'tabla' => 'productos_servicios'],
         'proveedores'       => ['label' => 'Proveedores',                     'tabla' => 'proveedores'],
+        'vendedores'        => ['label' => 'Vendedores',                      'tabla' => 'vendedores'],
+        'bodegas'           => ['label' => 'Bodegas',                         'tabla' => 'bodega'],
         'facturas'          => ['label' => 'Facturas de venta',               'tabla' => 'encabezado_factura'],
         'notas_credito'     => ['label' => 'Notas de crédito',                'tabla' => 'encabezado_nc'],
         'retenciones_venta' => ['label' => 'Retenciones en venta',            'tabla' => 'encabezado_retencion_venta'],
@@ -71,6 +73,10 @@ class MigracionMysqlService
                 return $this->migrarProductos($idEmpresa, $ruc, $idUsuario);
             case 'proveedores':
                 return $this->migrarProveedores($idEmpresa, $ruc, $idUsuario);
+            case 'vendedores':
+                return $this->migrarVendedores($idEmpresa, $ruc, $idUsuario);
+            case 'bodegas':
+                return $this->migrarBodegas($idEmpresa, $ruc, $idUsuario);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -347,6 +353,109 @@ class MigracionMysqlService
             }
         }
         return $res;
+    }
+
+    /** Migra los vendedores del contribuyente. */
+    private function migrarVendedores(int $idEmpresa, string $ruc, int $idUsuario): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+        $res = ['entidad' => 'vendedores', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+
+        $done = $this->idsMigrados($pg, $idEmpresa, 'vendedores');
+        $buscar = $pg->prepare("SELECT id FROM vendedores WHERE id_empresa = :e AND identificacion = :ident LIMIT 1");
+        $ins = $pg->prepare(
+            "INSERT INTO vendedores (id_empresa, id_usuario, identificacion, nombre, correo, telefono, direccion, created_by)
+             VALUES (:e, :u, :ident, :nom, :cor, :tel, :dir, :cb) RETURNING id"
+        );
+        $insMap = $this->stmtMap($pg, 'vendedores');
+
+        $stmt = $mysql->query("SELECT id_vendedor, numero_id, nombre, correo, telefono, direccion FROM vendedores WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base));
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $r['id_vendedor'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            $ident = trim((string) $r['numero_id']) ?: ('V-' . $old);
+            $nombre = trim((string) $r['nombre']) ?: $ident;
+            try {
+                $pg->beginTransaction();
+                $buscar->execute([':e' => $idEmpresa, ':ident' => $ident]);
+                $ex = $buscar->fetchColumn();
+                if ($ex !== false) { $idDest = (int) $ex; $vin = true; $res['vinculados']++; }
+                else {
+                    $ins->execute([':e' => $idEmpresa, ':u' => $idUsuario, ':ident' => $ident, ':nom' => $nombre,
+                        ':cor' => self::nz($r['correo']), ':tel' => self::nz($r['telefono']), ':dir' => self::nz($r['direccion']), ':cb' => $idUsuario]);
+                    $idDest = (int) $ins->fetchColumn(); $vin = false; $res['migrados']++;
+                }
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idDest, ':cn' => substr($ident, 0, 120), ':vin' => $vin ? 't' : 'f', ':cb' => $idUsuario]);
+                $pg->commit(); $done[(string) $old] = true;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) $pg->rollBack();
+                $res['errores']++;
+            }
+        }
+        return $res;
+    }
+
+    /** Migra las bodegas del contribuyente. */
+    private function migrarBodegas(int $idEmpresa, string $ruc, int $idUsuario): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+        $res = ['entidad' => 'bodegas', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+
+        $done = $this->idsMigrados($pg, $idEmpresa, 'bodegas');
+        $buscar = $pg->prepare("SELECT id FROM bodegas WHERE id_empresa = :e AND nombre = :nom LIMIT 1");
+        $ins = $pg->prepare("INSERT INTO bodegas (id_empresa, id_usuario, nombre, created_by) VALUES (:e, :u, :nom, :cb) RETURNING id");
+        $insMap = $this->stmtMap($pg, 'bodegas');
+
+        $stmt = $mysql->query("SELECT id_bodega, nombre_bodega FROM bodega WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base));
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $r['id_bodega'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            $nombre = trim((string) $r['nombre_bodega']);
+            if ($nombre === '') { $res['omitidos']++; continue; }
+            try {
+                $pg->beginTransaction();
+                $buscar->execute([':e' => $idEmpresa, ':nom' => $nombre]);
+                $ex = $buscar->fetchColumn();
+                if ($ex !== false) { $idDest = (int) $ex; $vin = true; $res['vinculados']++; }
+                else {
+                    $ins->execute([':e' => $idEmpresa, ':u' => $idUsuario, ':nom' => $nombre, ':cb' => $idUsuario]);
+                    $idDest = (int) $ins->fetchColumn(); $vin = false; $res['migrados']++;
+                }
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idDest, ':cn' => substr($nombre, 0, 120), ':vin' => $vin ? 't' : 'f', ':cb' => $idUsuario]);
+                $pg->commit(); $done[(string) $old] = true;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) $pg->rollBack();
+                $res['errores']++;
+            }
+        }
+        return $res;
+    }
+
+    /** Ids ya migrados de una entidad (anti-reproceso). */
+    private function idsMigrados(PDO $pg, int $idEmpresa, string $entidad): array
+    {
+        $done = [];
+        $q = $pg->prepare("SELECT id_origen FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = ?");
+        $q->execute([$idEmpresa, $entidad]);
+        foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $o) {
+            $done[(string) $o] = true;
+        }
+        return $done;
+    }
+
+    /** Prepared statement de inserción en el mapa (idempotente). */
+    private function stmtMap(PDO $pg, string $entidad): \PDOStatement
+    {
+        return $pg->prepare(
+            "INSERT INTO migracion_mysql_map (id_empresa, entidad, id_origen, id_destino, clave_natural, vinculado, created_by)
+             VALUES (:e, " . $pg->quote($entidad) . ", :o, :d, :cn, :vin, :cb) ON CONFLICT (id_empresa, entidad, id_origen) DO NOTHING"
+        );
     }
 
     /** Cadena vacía -> null (para columnas nullable). */
