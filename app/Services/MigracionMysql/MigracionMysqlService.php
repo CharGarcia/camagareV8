@@ -69,6 +69,8 @@ class MigracionMysqlService
                 return $this->migrarClientes($idEmpresa, $ruc, $idUsuario);
             case 'productos':
                 return $this->migrarProductos($idEmpresa, $ruc, $idUsuario);
+            case 'proveedores':
+                return $this->migrarProveedores($idEmpresa, $ruc, $idUsuario);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -247,6 +249,94 @@ class MigracionMysqlService
                     $res['migrados']++;
                 }
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idDest, ':cn' => substr($codigo, 0, 120), ':vin' => $vin ? 't' : 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) {
+                    $pg->rollBack();
+                }
+                $res['errores']++;
+            }
+        }
+        return $res;
+    }
+
+    /** Migra los proveedores del contribuyente. */
+    private function migrarProveedores(int $idEmpresa, string $ruc, int $idUsuario): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'proveedores', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+
+        $done = [];
+        $q = $pg->prepare("SELECT id_origen FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'proveedores'");
+        $q->execute([$idEmpresa]);
+        foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $o) {
+            $done[(string) $o] = true;
+        }
+
+        // Dedup por (id_empresa, identificacion) — sin unique constraint, se controla aquí.
+        $buscar = $pg->prepare("SELECT id FROM proveedores WHERE id_empresa = :e AND identificacion = :ident LIMIT 1");
+        $ins = $pg->prepare(
+            "INSERT INTO proveedores (id_empresa, id_usuario, razon_social, nombre_comercial, tipo_id_proveedor, identificacion, email, direccion, telefono, tipo_empresa, plazo, unidad_tiempo, relacionado, tipo_cta, numero_cta, created_by)
+             VALUES (:e, :u, :rs, :nc, :tipo, :ident, :mail, :dir, :tel, :temp, :plazo, :ut, :rel, :tcta, :ncta, :cb) RETURNING id"
+        );
+        $insMap = $pg->prepare(
+            "INSERT INTO migracion_mysql_map (id_empresa, entidad, id_origen, id_destino, clave_natural, vinculado, created_by)
+             VALUES (:e, 'proveedores', :o, :d, :cn, :vin, :cb) ON CONFLICT (id_empresa, entidad, id_origen) DO NOTHING"
+        );
+
+        $stmt = $mysql->query(
+            "SELECT id_proveedor, razon_social, nombre_comercial, tipo_id_proveedor, ruc_proveedor, mail_proveedor, dir_proveedor, telf_proveedor, tipo_empresa, plazo, unidad_tiempo, relacionado, tipo_cta, numero_cta
+               FROM proveedores WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base)
+        );
+
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $r['id_proveedor'];
+            if (isset($done[(string) $old])) {
+                $res['ya_migrados']++;
+                continue;
+            }
+            $ident = trim((string) $r['ruc_proveedor']);
+            if ($ident === '') {
+                $res['omitidos']++;
+                continue;
+            }
+            $rs = trim((string) $r['razon_social']);
+            if ($rs === '') {
+                $rs = trim((string) $r['nombre_comercial']) ?: $ident;
+            }
+            $tipo = trim((string) $r['tipo_id_proveedor']);
+            if ($tipo === '') {
+                $tipo = self::inferirTipoId($ident);
+            }
+            $rel = in_array(strtolower(trim((string) $r['relacionado'])), ['1', 'si', 'true', 't'], true) ? 't' : 'f';
+            $plazo = is_numeric($r['plazo']) ? (int) $r['plazo'] : null;
+
+            try {
+                $pg->beginTransaction();
+                $buscar->execute([':e' => $idEmpresa, ':ident' => $ident]);
+                $existente = $buscar->fetchColumn();
+                if ($existente !== false) {
+                    $idDest = (int) $existente;
+                    $vin = true;
+                    $res['vinculados']++;
+                } else {
+                    $ins->execute([
+                        ':e' => $idEmpresa, ':u' => $idUsuario, ':rs' => $rs, ':nc' => self::nz($r['nombre_comercial']),
+                        ':tipo' => $tipo, ':ident' => $ident, ':mail' => self::nz($r['mail_proveedor']),
+                        ':dir' => self::nz($r['dir_proveedor']), ':tel' => self::nz($r['telf_proveedor']),
+                        ':temp' => self::nz($r['tipo_empresa']), ':plazo' => $plazo, ':ut' => self::nz($r['unidad_tiempo']) ?? 'Días',
+                        ':rel' => $rel, ':tcta' => self::nz($r['tipo_cta']), ':ncta' => self::nz($r['numero_cta']), ':cb' => $idUsuario,
+                    ]);
+                    $idDest = (int) $ins->fetchColumn();
+                    $vin = false;
+                    $res['migrados']++;
+                }
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idDest, ':cn' => substr($ident, 0, 120), ':vin' => $vin ? 't' : 'f', ':cb' => $idUsuario]);
                 $pg->commit();
                 $done[(string) $old] = true;
             } catch (Throwable $ex) {
