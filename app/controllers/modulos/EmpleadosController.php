@@ -189,11 +189,28 @@ class EmpleadosController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $data = $this->recogerDatosFormulario();
         $data['id_usuario'] = (int) $_SESSION['id_usuario'];
+        $data['confirmar_roles'] = !empty($_POST['confirmar_roles']);
 
         try {
             if ($id <= 0) throw new \Exception('ID no válido.');
-            $this->service->actualizar($id, $idEmpresa, $data);
-            echo json_encode(['ok' => true, 'msg' => 'Empleado actualizado correctamente.']);
+            $info = $this->service->actualizar($id, $idEmpresa, $data);
+            $msg = 'Empleado actualizado correctamente.';
+            if (!empty($info['regenerados'])) {
+                $msg .= ' Se regeneraron los roles: ' . implode(', ', $info['regenerados']) . '.';
+            }
+            echo json_encode(['ok' => true, 'msg' => $msg]);
+        } catch (\App\Services\modulos\ConfirmacionRolRequeridaException $e) {
+            $lista = array_map(
+                fn($r) => $r['tipo_rol'] . ' ' . str_pad((string) $r['periodo_mes'], 2, '0', STR_PAD_LEFT) . '/' . $r['periodo_anio'],
+                $e->roles
+            );
+            echo json_encode([
+                'ok' => false,
+                'requiere_confirmacion' => true,
+                'roles' => $lista,
+                'msg' => 'Este empleado tiene roles abiertos sin pagar: ' . implode(', ', $lista)
+                    . '. Al guardar se regenerarán con los datos nuevos. ¿Desea continuar?',
+            ]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

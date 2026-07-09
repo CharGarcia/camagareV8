@@ -13,6 +13,9 @@ use App\repositories\modulos\PeriodosContablesRepository;
 use App\Rules\modulos\PeriodosContablesRules;
 use App\repositories\modulos\AsientoContableRepository;
 use App\Rules\modulos\AsientoContableRules;
+use App\Services\modulos\RolPagoService;
+use App\repositories\modulos\RolPagoRepository;
+use App\Rules\modulos\RolPagoRules;
 
 class EgresoService
 {
@@ -126,6 +129,10 @@ class EgresoService
             $this->generarAsientoContableSeguro($idEgreso, $data);
         }
 
+        // Si este egreso paga semanas/quincenas, re-generar el rol MENSUAL del período
+        // para que aplique el neteo por lo realmente pagado.
+        $this->sincronizarNominaMensual($idEgreso, (int) $data['id_empresa'], (int) $data['usuario_id']);
+
         return $idEgreso;
     }
 
@@ -170,7 +177,64 @@ class EgresoService
         // Anular el asiento contable asociado (fuera de la transacción).
         $this->anularAsientoContable($id, $idEmpresa, $idUsuario);
 
+        // Al anular un egreso que pagaba semanas/quincenas, el mensual debe des-netear:
+        // se regenera con lo que queda realmente pagado.
+        $this->sincronizarNominaMensual($id, $idEmpresa, $idUsuario);
+
         return $res;
+    }
+
+    /**
+     * Re-sincroniza la nómina tras registrar/anular un egreso:
+     *  (a) Pago de líneas SEMANAL/QUINCENA → regenera el MENSUAL (neteo por lo pagado).
+     *  (b) Pago de anticipos/préstamos (novedades) → regenera el rol de su aplica_en+período
+     *      para aplicar el descuento por lo realmente pagado.
+     * Nunca debe romper el flujo del egreso: cualquier fallo se ignora.
+     */
+    private function sincronizarNominaMensual(int $idEgreso, int $idEmpresa, int $idUsuario): void
+    {
+        try {
+            $db = Database::getConnection();
+            $rolSvc = new RolPagoService(new RolPagoRepository(), new RolPagoRules(), $this->logService);
+
+            // (a) SEMANAL/QUINCENA pagadas → regenerar el MENSUAL del período.
+            $st = $db->prepare("SELECT DISTINCT c.periodo_anio, c.periodo_mes
+                                FROM egresos_detalle ed
+                                JOIN rol_detalle d ON d.id = ed.id_referencia_documento
+                                JOIN rol_cabecera c ON c.id = d.id_rol
+                                WHERE ed.id_egreso = :eg AND ed.tipo_documento = 'ROL'
+                                  AND c.tipo_rol IN ('SEMANAL','QUINCENA')");
+            $st->execute([':eg' => $idEgreso]);
+            foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $p) {
+                $rolSvc->regenerarAfectados($idEmpresa, 'rol', (int) $p['periodo_anio'], (int) $p['periodo_mes'], $idUsuario);
+            }
+
+            // (b) Anticipos pagados → regenerar el rol de su aplica_en+período (descuenta lo pagado).
+            $st2 = $db->prepare("SELECT DISTINCT n.aplica_en, n.periodo_anio, n.periodo_mes
+                                 FROM egresos_detalle ed
+                                 JOIN novedades n ON n.id = ed.id_referencia_documento
+                                 WHERE ed.id_egreso = :eg AND ed.tipo_documento = 'ANTICIPO'");
+            $st2->execute([':eg' => $idEgreso]);
+            foreach ($st2->fetchAll(\PDO::FETCH_ASSOC) as $p) {
+                $rolSvc->regenerarAfectados($idEmpresa, (string) ($p['aplica_en'] ?: 'rol'), (int) $p['periodo_anio'], (int) $p['periodo_mes'], $idUsuario);
+            }
+
+            // (c) Desembolso de préstamo pagado/anulado → regenerar los roles de TODAS las cuotas
+            //     de ese empleado+tipo (el desembolso habilita el descuento de las cuotas).
+            $st3 = $db->prepare("SELECT DISTINCT n.aplica_en, n.periodo_anio, n.periodo_mes
+                                 FROM egresos_detalle ed
+                                 JOIN novedades n ON n.id_empleado = ed.id_referencia_documento
+                                      AND ('PRESTAMO' || n.tipo_codigo) = ed.tipo_documento
+                                 WHERE ed.id_egreso = :eg AND ed.tipo_documento LIKE 'PRESTAMO%'
+                                   AND n.eliminado = false AND n.estado = 'activo'
+                                   AND n.tipo_codigo IN ('7','8','9')");
+            $st3->execute([':eg' => $idEgreso]);
+            foreach ($st3->fetchAll(\PDO::FETCH_ASSOC) as $p) {
+                $rolSvc->regenerarAfectados($idEmpresa, (string) ($p['aplica_en'] ?: 'rol'), (int) $p['periodo_anio'], (int) $p['periodo_mes'], $idUsuario);
+            }
+        } catch (\Throwable $e) {
+            // El módulo de nómina puede no estar disponible en todas las instalaciones.
+        }
     }
 
     public function actualizarPagos(int $id, array $pagos, int $idEmpresa, int $idUsuario, ?string $fechaEmision = null, array $extraData = []): void

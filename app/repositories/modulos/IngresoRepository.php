@@ -95,7 +95,9 @@ class IngresoRepository extends BaseRepository
         $sql = "SELECT i.*,
                        c.nombre AS cliente_nombre,
                        c.identificacion AS cliente_ruc,
+                       c.email AS cliente_email,
                        rc.nombre AS recibo_cliente_nombre,
+                       rc.email AS recibo_cliente_email,
                        u.nombre AS usuario_nombre,
                        eic.nombre AS concepto_nombre,
                        est.nombre AS establecimiento_nombre,
@@ -118,14 +120,16 @@ class IngresoRepository extends BaseRepository
     public function getDetalles(int $idIngreso): array
     {
         $sql = "SELECT d.*,
-                       COALESCE(cv.id, cs.id, s.id_cliente)            AS id_cliente,
-                       COALESCE(cv.nombre, cs.nombre, s.nombre_cliente) AS cliente_nombre,
-                       COALESCE(v.fecha_emision, s.fecha_emision)       AS fecha_documento
+                       COALESCE(cv.id, cr.id, cs.id, s.id_cliente)                 AS id_cliente,
+                       COALESCE(cv.nombre, cr.nombre, cs.nombre, s.nombre_cliente)  AS cliente_nombre,
+                       COALESCE(v.fecha_emision, rv.fecha_emision, s.fecha_emision) AS fecha_documento
                 FROM ingresos_detalle d
-                LEFT JOIN ventas_cabecera v       ON d.id_referencia_documento = v.id AND d.tipo_documento = 'FACTURA'
-                LEFT JOIN clientes cv             ON v.id_cliente = cv.id
-                LEFT JOIN saldos_iniciales_cxc s  ON d.id_referencia_documento = s.id AND d.tipo_documento = 'SALDO_INICIAL'
-                LEFT JOIN clientes cs             ON s.id_cliente = cs.id
+                LEFT JOIN ventas_cabecera v        ON d.id_referencia_documento = v.id  AND d.tipo_documento = 'FACTURA'
+                LEFT JOIN clientes cv              ON v.id_cliente = cv.id
+                LEFT JOIN recibos_venta_cabecera rv ON d.id_referencia_documento = rv.id AND d.tipo_documento = 'RECIBO'
+                LEFT JOIN clientes cr              ON rv.id_cliente = cr.id
+                LEFT JOIN saldos_iniciales_cxc s   ON d.id_referencia_documento = s.id  AND d.tipo_documento = 'SALDO_INICIAL'
+                LEFT JOIN clientes cs              ON s.id_cliente = cs.id
                 WHERE d.id_ingreso = ?
                 ORDER BY d.id ASC";
         return $this->query($sql, [$idIngreso])->fetchAll(PDO::FETCH_ASSOC);
@@ -516,9 +520,13 @@ class IngresoRepository extends BaseRepository
         $this->query("DELETE FROM ingresos_pagos WHERE id_ingreso = ?", [$idIngreso]);
     }
 
-    public function buscarDocumentosPendientes(int $idEmpresa, string $q = '', ?int $excluirIngresoId = null): array
+    public function buscarDocumentosPendientes(int $idEmpresa, string $q = '', ?int $excluirIngresoId = null, string $tipo = 'FACTURA'): array
     {
-        $params     = [':id_empresa' => $idEmpresa];
+        // Según el concepto del ingreso: 'RECIBO' muestra solo recibos de venta;
+        // cualquier otro ('FACTURA') muestra facturas de venta + saldos iniciales CXC.
+        $tiposPermitidos = strtoupper($tipo) === 'RECIBO' ? '{RECIBO}' : '{FACTURA,SALDO_INICIAL}';
+
+        $params     = [':id_empresa' => $idEmpresa, ':tipos' => $tiposPermitidos];
         $excluirSql = '';
         $filtroBusq = '';
         $filtroBusqRec = '';
@@ -700,6 +708,7 @@ class IngresoRepository extends BaseRepository
                       AND (r.importe_total - COALESCE(cr.total_cobrado, 0)) > 0.01
                       $filtroBusqRec
                 ) docs
+                WHERE docs.tipo_documento = ANY(:tipos::text[])
                 ORDER BY cliente_nombre ASC, fecha_emision ASC, id ASC
                 LIMIT 301";
 

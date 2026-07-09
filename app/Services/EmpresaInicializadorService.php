@@ -168,6 +168,7 @@ class EmpresaInicializadorService
      *   - "Recibos de venta"      → RECIBO_VENTA      (ingreso)
      *   - "Anticipos Clientes"    → ANTICIPO_CLIENTE  (ingreso)
      *   - "Anticipos Proveedores" → ANTICIPO_PROVEEDOR (egreso)
+     *   - "Nómina"                → ROL               (egreso, pago de roles de pago)
      * Cada una se verifica de forma independiente por comportamiento.
      */
     private function crearOpcionesIngresoEgresoDefault(int $idEmpresa, int $idUsuario): void
@@ -179,6 +180,7 @@ class EmpresaInicializadorService
             ['nombre' => 'Recibos de venta',      'comportamiento' => 'RECIBO_VENTA',      'ingresos' => 'true',  'egresos' => 'false'],
             ['nombre' => 'Anticipos Clientes',    'comportamiento' => 'ANTICIPO_CLIENTE',   'ingresos' => 'true',  'egresos' => 'false'],
             ['nombre' => 'Anticipos Proveedores', 'comportamiento' => 'ANTICIPO_PROVEEDOR', 'ingresos' => 'false', 'egresos' => 'true'],
+            ['nombre' => 'Nómina',                'comportamiento' => 'ROL',               'ingresos' => 'false', 'egresos' => 'true'],
         ];
 
         try {

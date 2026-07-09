@@ -31,11 +31,29 @@ class RolPagoService
         return $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
-    public function getDetalle(int $id, int $idEmpresa): ?array
+    public function getDetalle(int $id, int $idEmpresa, ?int $idUsuario = null): ?array
     {
         $cab = $this->repo->findCabecera($id, $idEmpresa);
         if (!$cab) return null;
+        // Auto-refresco al abrir: si el rol está 'generado' (aún no pagado/contabilizado),
+        // se regenera para reflejar cambios recientes (novedades, préstamos desembolsados,
+        // neteo, etc.). Los borrador/pagado/contabilizado/anulado NO se tocan. Barato (batch).
+        if ($idUsuario !== null && ($cab['estado'] ?? '') === 'generado' && !$this->repo->tienePagos($id)) {
+            try {
+                $this->generar($id, $idEmpresa, $idUsuario);
+                $cab = $this->repo->findCabecera($id, $idEmpresa);
+            } catch (\Throwable $e) {
+                // Si la regeneración falla, se muestra lo último guardado.
+            }
+        }
         $cab['detalle'] = $this->repo->getDetalleCompleto($id, $idEmpresa);
+        // Avisos: anticipos/préstamos del período aún sin desembolsar (no se descuentan en el rol).
+        $cab['avisos'] = $this->repo->getAvisosPendientes(
+            $idEmpresa,
+            (int) $cab['periodo_anio'],
+            (int) $cab['periodo_mes'],
+            CatalogoRol::aplicaEn((string) $cab['tipo_rol'])
+        );
         return $cab;
     }
 
@@ -118,6 +136,12 @@ class RolPagoService
         if (in_array($cab['estado'], ['pagado', 'contabilizado', 'anulado'], true)) {
             throw new Exception('No se puede regenerar una corrida en estado ' . CatalogoRol::nombreEstado($cab['estado']) . '.');
         }
+        // Si el rol ya tiene pagos (egresos), NO se regenera: al recrear rol_detalle cambiarían
+        // los IDs y se romperían los vínculos de pago (quedarían huérfanos → mostraría "pendiente"
+        // y podría duplicarse el pago). El rol queda congelado una vez que se empieza a pagar.
+        if ($this->repo->tienePagos($id)) {
+            return $this->getDetalle($id, $idEmpresa);
+        }
 
         $tipo    = (string) $cab['tipo_rol'];
         $anio    = (int) $cab['periodo_anio'];
@@ -132,35 +156,95 @@ class RolPagoService
         $salario   = $this->repo->getSalario($anio);
         $vacRepo   = new VacacionRepository();
 
+        $ids = array_map(fn($e) => (int) $e['id'], $empleados);
+        $esMensual = ($tipo === 'MENSUAL');
+        // En SEMANAL/QUINCENA se omiten los empleados cuyo rol de fin de mes (MENSUAL) ya
+        // está pagado: ese mes ya se cerró para ellos. Solo se generan los pendientes.
+        $esParcial = ($tipo === 'SEMANAL' || $tipo === 'QUINCENA');
+
+        // Pre-carga masiva: una consulta por dato para TODOS los empleados (evita N+1).
+        $rubrosMap        = $this->repo->getRubrosFijosMasivo($idEmpresa, $ids);
+        $novedMap         = $this->repo->getNovedadesMasivo($idEmpresa, $ids, $anio, $mes, $aplica);
+        // Anticipos: montos pagados por egreso (descuenta solo lo pagado).
+        // Préstamos: cuota descuenta solo si el préstamo ya fue desembolsado (pagado).
+        $idsNovAnticipo = [];
+        $idsNovPrestamo = [];
+        foreach ($novedMap as $lista) {
+            foreach ($lista as $n) {
+                $cod = (string) $n['tipo_codigo'];
+                if (\App\models\CatalogoNovedades::esPagoPorEgreso($cod)) {
+                    $idsNovAnticipo[] = (int) $n['id'];
+                } elseif (\App\models\CatalogoNovedades::esPrestamo($cod)) {
+                    $idsNovPrestamo[] = (int) $n['id'];
+                }
+            }
+        }
+        $anticiposMap     = $this->repo->getAnticiposPagadosMasivo($idEmpresa, $idsNovAnticipo);
+        $prestamosNoDesemb = $this->repo->getPrestamosNoDesembolsadosMasivo($idEmpresa, $idsNovPrestamo);
+        $neteoMap         = $esMensual ? $this->repo->getPagadoNeteoMasivo($idEmpresa, $ids, $anio, $mes) : [];
+        $vacMap           = $esMensual ? $vacRepo->getValorParaRolMasivo($idEmpresa, $ids, $anio, $mes) : [];
+        $mensualPagadoSet = $esParcial ? $this->repo->getMensualPagadoMasivo($idEmpresa, $ids, $anio, $mes) : [];
+
         $totales = ['ingresos' => 0.0, 'egresos' => 0.0, 'neto' => 0.0, 'aporte_patronal' => 0.0];
+        $totalCandidatos = count($empleados);
+        $excluidosMensualPagado = 0;
 
         $this->repo->beginTransaction();
         try {
             $this->repo->borrarDetalle($id);
 
+            // Loop en memoria: solo cálculo, sin consultas.
+            $filasDetalle = []; // [ ['id_empleado'=>int, 'calc'=>[...]], ... ]
             foreach ($empleados as $emp) {
-                $idEmp    = (int) $emp['id'];
-                $rubrosF  = $this->repo->getRubrosFijos($idEmp, $idEmpresa);
-                $noveds   = $this->repo->getNovedades($idEmpresa, $idEmp, $anio, $mes, $aplica);
-                $neteo    = $tipo === 'MENSUAL' ? $this->repo->getPagadoNeteo($idEmpresa, $idEmp, $anio, $mes) : 0.0;
-                $vacacion = $tipo === 'MENSUAL' ? $vacRepo->getValorParaRol($idEmpresa, $idEmp, $anio, $mes) : 0.0;
+                $idEmp = (int) $emp['id'];
 
-                $calc = $this->calc->calcular($emp, $tipo, $salario, $rubrosF, $noveds, $neteo, $vacacion);
+                if ($esParcial && isset($mensualPagadoSet[$idEmp])) {
+                    $excluidosMensualPagado++;
+                    continue;
+                }
+
+                $rubrosF  = $rubrosMap[$idEmp] ?? [];
+                $noveds   = $novedMap[$idEmp] ?? [];
+                $neteo    = $neteoMap[$idEmp] ?? 0.0;
+                $vacacion = $vacMap[$idEmp] ?? 0.0;
+                $dias = 30;
+                if ($esMensual) {
+                    $periodos = json_decode((string) ($emp['periodos_json'] ?? ''), true) ?: [];
+                    $dias = self::diasTrabajadosMes($anio, $mes, $periodos);
+                }
+
+                $calc = $this->calc->calcular($emp, $tipo, $salario, $rubrosF, $noveds, $neteo, $vacacion, $dias, $anticiposMap, $prestamosNoDesemb);
 
                 // Omite empleados sin ningún concepto (p. ej. base 0 y sin novedades).
                 if ($calc['total_ingresos'] == 0 && $calc['total_egresos'] == 0) {
                     continue;
                 }
 
-                $idDet = $this->repo->insertDetalle($id, $idEmpresa, $idEmp, $calc);
-                foreach ($calc['rubros'] as $r) {
-                    $this->repo->insertRubro($idDet, $idEmpresa, $r);
-                }
-
+                $filasDetalle[] = ['id_empleado' => $idEmp, 'calc' => $calc];
                 $totales['ingresos']        += $calc['total_ingresos'];
                 $totales['egresos']         += $calc['total_egresos'];
                 $totales['neto']            += $calc['neto'];
                 $totales['aporte_patronal'] += $calc['aporte_patronal'];
+            }
+
+            // Si es semanal/quincena y TODOS los empleados del período quedaron excluidos
+            // porque su rol de fin de mes ya está pagado, no tiene sentido la corrida.
+            if ($esParcial && $totalCandidatos > 0 && $excluidosMensualPagado === $totalCandidatos) {
+                throw new Exception('No se puede generar esta corrida: el rol de fin de mes de ' . str_pad((string) $mes, 2, '0', STR_PAD_LEFT) . '/' . $anio . ' ya está pagado para todos los empleados del período.');
+            }
+
+            // Inserción en lote: detalle (con RETURNING para mapear id) + rubros.
+            if (!empty($filasDetalle)) {
+                $idsDetalle = $this->repo->insertDetalleMasivo($id, $idEmpresa, $filasDetalle);
+                $filasRubro = [];
+                foreach ($filasDetalle as $f) {
+                    $idDet = $idsDetalle[$f['id_empleado']] ?? null;
+                    if ($idDet === null) continue;
+                    foreach ($f['calc']['rubros'] as $r) {
+                        $filasRubro[] = ['id_detalle' => $idDet, 'rubro' => $r];
+                    }
+                }
+                $this->repo->insertRubrosMasivo($idEmpresa, $filasRubro);
             }
 
             foreach ($totales as $k => $v) $totales[$k] = round($v, 2);
@@ -173,6 +257,123 @@ class RolPagoService
         }
 
         return $this->getDetalle($id, $idEmpresa);
+    }
+
+    /**
+     * Días efectivamente laborados en el mes (convención de 30 días de Ecuador),
+     * SUMANDO todos los tramos de empleo que solapan el mes (un empleado puede tener
+     * varios períodos, p. ej. salida y reingreso en el mismo mes). Cada tramo cuenta
+     * inclusivo el día de ingreso y el de salida. Sin tramos → mes completo (30).
+     * El total se limita a 30 (los tramos de un mismo empleado no se solapan).
+     *
+     * @param array<int,array{i?:?string,s?:?string}> $periodos
+     */
+    public static function diasTrabajadosMes(int $anio, int $mes, array $periodos): int
+    {
+        if (empty($periodos)) return 30; // sin registros de períodos → mes completo
+
+        $diaEnEsteMes = function (?string $fecha) use ($anio, $mes): ?int {
+            if (empty($fecha)) return null;
+            $ts = strtotime($fecha);
+            if ($ts === false) return null;
+            if ((int) date('Y', $ts) !== $anio || (int) date('n', $ts) !== $mes) return null;
+            return min(30, max(1, (int) date('j', $ts)));
+        };
+
+        $total = 0;
+        foreach ($periodos as $p) {
+            $inicioDia = $diaEnEsteMes($p['i'] ?? null) ?? 1;   // ingresó este mes → desde ese día
+            $finDia    = $diaEnEsteMes($p['s'] ?? null) ?? 30;   // salió este mes → hasta ese día
+            $total    += max(0, $finDia - $inicioDia + 1);
+        }
+        return max(0, min(30, $total));
+    }
+
+    /**
+     * Impide editar las fechas de ingreso/salida de un empleado cuando el cambio
+     * alteraría un rol YA PAGADO: si cambia la elegibilidad (empleado dentro/fuera de
+     * un mes pagado) o los días laborados de un mes con rol MENSUAL pagado, lanza excepción.
+     * Los cambios que no tocan meses pagados (registrar una salida/reingreso a futuro) sí se permiten.
+     * Silencioso (no bloquea) si el módulo de roles/egresos no está disponible.
+     *
+     * @param array<int,array> $periodosNuevos  Períodos entrantes (fecha_ingreso/fecha_salida)
+     * @param array<int,array> $periodosViejos  Períodos actuales en BD
+     */
+    public function validarPeriodosContraRolesPagados(int $idEmpresa, int $idEmpleado, array $periodosNuevos, array $periodosViejos): void
+    {
+        try {
+            $meses = $this->repo->getMesesRolPagado($idEmpresa, $idEmpleado);
+        } catch (\Throwable $e) {
+            return; // roles/egresos no desplegado → sin restricción
+        }
+        if (empty($meses)) return;
+
+        $norm = fn(array $ps) => array_values(array_map(
+            fn($p) => ['i' => $p['fecha_ingreso'] ?? null, 's' => $p['fecha_salida'] ?? null],
+            array_filter($ps, fn($p) => !empty($p['fecha_ingreso']))
+        ));
+        $viejos = $norm($periodosViejos);
+        $nuevos = $norm($periodosNuevos);
+
+        foreach ($meses as $m) {
+            $anio = (int) $m['anio'];
+            $mes  = (int) $m['mes'];
+            $tipo = (string) ($m['tipo_rol'] ?? 'MENSUAL');
+
+            // (a) Elegibilidad: el empleado no puede quedar dentro/fuera de un mes ya pagado.
+            if ($this->elegibleMes($viejos, $anio, $mes) !== $this->elegibleMes($nuevos, $anio, $mes)) {
+                throw new Exception($this->msgRolPagado($mes, $anio));
+            }
+            // (b) Prorrateo: en un MENSUAL pagado, no pueden cambiar los días laborados.
+            if ($tipo === 'MENSUAL'
+                && $this->diasEfectivosMes($viejos, $anio, $mes) !== $this->diasEfectivosMes($nuevos, $anio, $mes)) {
+                throw new Exception($this->msgRolPagado($mes, $anio));
+            }
+        }
+    }
+
+    /** Roles abiertos ('generado' sin pagar) del empleado (para avisar/regenerar al editarlo). */
+    public function getRolesAbiertosEmpleado(int $idEmpresa, int $idEmpleado): array
+    {
+        return $this->repo->getRolesAbiertosEmpleado($idEmpresa, $idEmpleado);
+    }
+
+    private function msgRolPagado(int $mes, int $anio): string
+    {
+        return 'No se puede modificar la fecha de ingreso/salida: el empleado tiene un rol pagado en '
+            . str_pad((string) $mes, 2, '0', STR_PAD_LEFT) . '/' . $anio
+            . ' y el cambio afectaría ese rol. Anule el pago/rol de ese período si necesita corregir la fecha.';
+    }
+
+    /** ¿El empleado es elegible para el mes? (sin períodos = sí; con períodos = al menos uno solapa). */
+    private function elegibleMes(array $periodos, int $anio, int $mes): bool
+    {
+        if (empty($periodos)) return true;
+        return !empty($this->periodosQueSolapan($periodos, $anio, $mes));
+    }
+
+    /** Días efectivos del mes considerando solo los tramos que lo solapan (0 si tiene períodos pero ninguno cubre el mes). */
+    private function diasEfectivosMes(array $periodos, int $anio, int $mes): int
+    {
+        if (empty($periodos)) return 30;
+        $solapan = $this->periodosQueSolapan($periodos, $anio, $mes);
+        if (empty($solapan)) return 0;
+        return self::diasTrabajadosMes($anio, $mes, $solapan);
+    }
+
+    /** @return array<int,array{i?:?string,s?:?string}> tramos que solapan el mes */
+    private function periodosQueSolapan(array $periodos, int $anio, int $mes): array
+    {
+        $inicioMes = sprintf('%04d-%02d-01', $anio, $mes);
+        $finMes    = date('Y-m-t', mktime(0, 0, 0, $mes, 1, $anio));
+        return array_values(array_filter($periodos, function ($p) use ($inicioMes, $finMes) {
+            $i = $p['i'] ?? null;
+            $s = $p['s'] ?? null;
+            if (empty($i)) return false;
+            $i = substr((string) $i, 0, 10);
+            $s = $s ? substr((string) $s, 0, 10) : null;
+            return $i <= $finMes && ($s === null || $s === '' || $s >= $inicioMes);
+        }));
     }
 
     /**

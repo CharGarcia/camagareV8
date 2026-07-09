@@ -67,9 +67,9 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
     </div>
     <?php if ($perm['crear']): ?>
         <div class="d-flex gap-2">
-            <button type="button" class="btn btn-outline-success btn-sm px-3" data-bs-toggle="modal" data-bs-target="#modalImportExcel">
-                <i class="bi bi-file-earmark-excel"></i> Importar
-            </button>
+            <a href="<?= BASE_URL ?>/modulos/cargas-inventario" class="btn btn-outline-success btn-sm px-3" title="La importación masiva ahora se gestiona (con aprobación) en el módulo Cargas de Inventario">
+                <i class="bi bi-file-earmark-excel"></i> Importar (Cargas de Inventario)
+            </a>
             <button type="button" class="btn btn-primary btn-sm px-3" onclick="abrirModalNuevoAjuste()">
                 <i class="bi bi-plus-lg"></i> Nuevo
             </button>

@@ -398,7 +398,7 @@ class EgresosController extends BaseModuloController
             $excluirId = isset($_GET['excluir_egreso_id']) && $_GET['excluir_egreso_id'] !== ''
                          ? (int) $_GET['excluir_egreso_id'] : null;
 
-            if (!in_array($tipo, ['COMPRA', 'LIQUIDACION'])) {
+            if (!in_array($tipo, ['COMPRA', 'LIQUIDACION', 'ROL'])) {
                 $tipo = 'COMPRA';
             }
 

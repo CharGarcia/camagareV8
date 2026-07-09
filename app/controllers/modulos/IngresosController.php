@@ -270,8 +270,10 @@ class IngresosController extends BaseModuloController
         $q         = trim($_GET['q'] ?? '');
         $excluirId = isset($_GET['excluir_ingreso_id']) && $_GET['excluir_ingreso_id'] !== ''
                      ? (int) $_GET['excluir_ingreso_id'] : null;
+        // 'RECIBO' cuando el ingreso es de tipo Recibo de Venta; 'FACTURA' por defecto.
+        $tipoDoc   = strtoupper(trim($_GET['tipo'] ?? '')) === 'RECIBO' ? 'RECIBO' : 'FACTURA';
 
-        $result = $this->repository->buscarDocumentosPendientes($idEmpresa, $q, $excluirId);
+        $result = $this->repository->buscarDocumentosPendientes($idEmpresa, $q, $excluirId, $tipoDoc);
         echo json_encode(['ok' => true, 'data' => $result['data'], 'has_more' => $result['has_more']]);
         exit;
     }

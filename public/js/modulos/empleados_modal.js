@@ -284,8 +284,25 @@
 
             try {
                 const fd = new FormData(formEmp);
-                const resp = await fetch(url, { method: 'POST', body: fd });
-                const json = await resp.json();
+                let resp = await fetch(url, { method: 'POST', body: fd });
+                let json = await resp.json();
+
+                // El backend pide confirmar porque hay roles abiertos que se regenerarán.
+                if (!json.ok && json.requiere_confirmacion) {
+                    const conf = await Swal.fire({
+                        icon: 'warning',
+                        title: 'Roles abiertos',
+                        text: json.msg,
+                        showCancelButton: true,
+                        confirmButtonText: 'Sí, continuar',
+                        cancelButtonText: 'Cancelar',
+                        reverseButtons: true
+                    });
+                    if (!conf.isConfirmed) { restaurarBtn(); return; }
+                    fd.append('confirmar_roles', '1');
+                    resp = await fetch(url, { method: 'POST', body: fd });
+                    json = await resp.json();
+                }
 
                 if (json.ok) {
                     Swal.fire({

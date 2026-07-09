@@ -81,6 +81,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                         Facturación
                     </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="inventario-tab" data-bs-toggle="tab" data-bs-target="#inventario_config" type="button" role="tab">
+                        Inventario
+                    </button>
+                </li>
             </ul>
         </div>
         <div class="card-body p-0">
@@ -800,6 +805,46 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
 
                 <!-- Pestaña: Secuenciales -->
                 <div class="tab-pane fade" id="secuenciales" role="tabpanel">
+                    <!-- Tarjeta informativa: cómo nombrar y crear secuenciales -->
+                    <div class="card border-0 mb-3" style="background:#eff6ff;">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-center justify-content-between" role="button" data-bs-toggle="collapse" data-bs-target="#sec-ayuda" aria-expanded="false">
+                                <h6 class="fw-bold small text-primary mb-0"><i class="bi bi-info-circle me-2"></i>¿Cómo funcionan los secuenciales? (nombres válidos y cómo crearlos)</h6>
+                                <i class="bi bi-chevron-down text-primary"></i>
+                            </div>
+                            <div class="collapse mt-3" id="sec-ayuda">
+                                <div class="small text-muted mb-3" style="font-size:0.78rem;">
+                                    El secuencial es el <strong>número inicial</strong> de cada tipo de documento, <strong>por punto de emisión</strong>. El sistema detecta huecos (números faltantes) desde ese inicial y nunca asigna un número menor al configurado.
+                                </div>
+                                <div class="alert alert-warning py-2 px-3 small mb-3" style="font-size:0.76rem;">
+                                    <i class="bi bi-exclamation-triangle me-1"></i>
+                                    <strong>Importante:</strong> el nombre del secuencial debe escribirse <strong>idéntico</strong> a uno de los siguientes (respetando mayúsculas y tildes); si no coincide, el módulo correspondiente no tomará su numeración.
+                                </div>
+                                <div class="row g-2">
+                                    <?php foreach (($tiposSecuencialAgrupados ?? []) as $area => $tipos): ?>
+                                        <div class="col-md-6 col-lg-4">
+                                            <div class="border rounded-3 bg-white h-100 p-2">
+                                                <div class="fw-bold text-secondary text-uppercase mb-1" style="font-size:0.66rem;letter-spacing:.03em;"><?= htmlspecialchars($area) ?></div>
+                                                <?php foreach ($tipos as $t): ?>
+                                                    <div class="d-flex align-items-center mb-1">
+                                                        <code class="text-dark bg-light px-2 py-1 rounded" style="font-size:0.72rem;"><?= htmlspecialchars($t) ?></code>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                                <div class="small text-muted mt-3" style="font-size:0.76rem;">
+                                    <strong>Cómo crearlos desde aquí:</strong>
+                                    <ul class="mb-0 mt-1 ps-3">
+                                        <li>Al entrar a un punto sin secuenciales, use el botón que crea los <strong>tipos estándar</strong> automáticamente.</li>
+                                        <li>Para agregar otros (Recibos, Proformas, Consignaciones, etc.), elija el tipo en el <strong>selector "Agregar Tipo Documento"</strong> — solo aparecen los que faltan en ese punto.</li>
+                                        <li>Puede <strong>editar</strong> el nombre (ícono lápiz) y el <strong>número inicial</strong> de cada uno, y luego <strong>Guardar</strong>.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="row g-4">
                         <div class="col-md-3 border-end">
                             <label class="form-label small fw-bold mb-3 text-primary">Punto de Emisión</label>
@@ -825,10 +870,15 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                         <i class="bi bi-info-circle me-2"></i>Seleccione un punto de emisión para ver sus secuenciales.
                                     </div>
                                 </div>
-                                <div class="mt-5 border-top pt-3 d-flex justify-content-between align-items-center">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" id="btn-agregar-sec" onclick="agregarSecuencialPersonalizado()">
-                                        <i class="bi bi-plus-lg me-1"></i>Agregar Tipo Documento
-                                    </button>
+                                <div class="mt-5 border-top pt-3 d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                                    <div class="d-flex align-items-center gap-2" style="min-width:0;">
+                                        <select id="sec-add-tipo" class="form-select form-select-sm" style="max-width:320px;">
+                                            <option value="">Agregar Tipo Documento…</option>
+                                        </select>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3 text-nowrap" id="btn-agregar-sec" onclick="agregarSecuencialSeleccionado()">
+                                            <i class="bi bi-plus-lg me-1"></i>Agregar
+                                        </button>
+                                    </div>
                                     <button type="submit" id="btn-guardar-sec" class="btn btn-primary btn-sm px-4 rounded-pill shadow-sm fw-bold">
                                         <i class="bi bi-save me-1"></i>GUARDAR SECUENCIALES
                                     </button>
@@ -1247,11 +1297,62 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Aprobación de cargas de inventario -->
+                            <?php
+                            $invReqAprob   = !empty($empresa['inv_requiere_aprobacion']) && $empresa['inv_requiere_aprobacion'] !== 'f';
+                            $invNotifCorreo = !isset($empresa['inv_notificar_correo']) || ($empresa['inv_notificar_correo'] && $empresa['inv_notificar_correo'] !== 'f');
+                            $invAprobadores = json_decode($empresa['inv_usuarios_aprobadores'] ?? '[]', true);
+                            if (!is_array($invAprobadores)) $invAprobadores = [];
+                            $invAprobadores = array_map('intval', $invAprobadores);
+                            $usuariosParaAprobar = $usuarios_empresa ?? [];
+                            ?>
+                            <div class="col-md-12">
+                                <h6 class="fw-bold fs-6 text-primary border-bottom pb-2 mb-3 mt-2">Aprobación de cargas de inventario</h6>
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="inv_requiere_aprobacion" name="inv_requiere_aprobacion" value="1" <?= $invReqAprob ? 'checked' : '' ?>>
+                                    <label class="form-check-label fw-bold small" for="inv_requiere_aprobacion">Las cargas de inventario requieren aprobación</label>
+                                    <div class="text-muted" style="font-size:0.7rem;">Si se activa, las cargas quedan pendientes y no afectan el stock hasta ser aprobadas.</div>
+                                </div>
+
+                                <div id="inv-aprob-config" class="ps-2 border-start <?= $invReqAprob ? '' : 'opacity-50' ?>">
+                                    <label class="form-label small fw-bold mb-1">Usuarios que aprueban <span class="text-muted fw-normal">(puede seleccionar varios)</span></label>
+                                    <?php if (empty($usuariosParaAprobar)): ?>
+                                        <p class="text-muted small mb-2"><i class="bi bi-info-circle me-1"></i>No hay usuarios asignados a esta empresa para elegir como aprobadores.</p>
+                                    <?php else: ?>
+                                        <div class="row g-2 mb-3">
+                                            <?php foreach ($usuariosParaAprobar as $u): $uid = (int)($u['id'] ?? 0); ?>
+                                                <div class="col-md-4 col-lg-3">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input inv-aprob-user" type="checkbox" name="inv_usuarios_aprobadores[]" value="<?= $uid ?>" id="inv-aprob-<?= $uid ?>" <?= in_array($uid, $invAprobadores, true) ? 'checked' : '' ?>>
+                                                        <label class="form-check-label small text-truncate d-block" for="inv-aprob-<?= $uid ?>" title="<?= htmlspecialchars($u['nombre'] ?? '') ?>"><?= htmlspecialchars($u['nombre'] ?? '') ?></label>
+                                                    </div>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endif; ?>
+
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="inv_notificar_correo" name="inv_notificar_correo" value="1" <?= $invNotifCorreo ? 'checked' : '' ?>>
+                                        <label class="form-check-label small" for="inv_notificar_correo">Notificar por correo a los aprobadores</label>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="col-12 mt-4 text-end">
                             <button type="submit" class="btn btn-primary btn-sm px-4">Guardar Configuración</button>
                         </div>
                     </form>
+                    <script>
+                        (function () {
+                            var sw = document.getElementById('inv_requiere_aprobacion');
+                            var box = document.getElementById('inv-aprob-config');
+                            if (sw && box) {
+                                var toggle = function () { box.classList.toggle('opacity-50', !sw.checked); };
+                                sw.addEventListener('change', toggle);
+                            }
+                        })();
+                    </script>
                 </div>
 
             </div>
@@ -1459,12 +1560,16 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             btn.innerHTML = '<i class="bi bi-save me-1"></i>GUARDAR SECUENCIALES';
             btn.onclick = null;
             if (btnAgregar) btnAgregar.style.display = '';
+            const selAdd = document.getElementById('sec-add-tipo');
+            if (selAdd) selAdd.style.display = '';
         } else {
             btn.type = 'button';
             btn.className = 'btn btn-success btn-sm px-4 rounded-pill shadow-sm fw-bold';
             btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>CREAR INICIALES DE SECUENCIALES';
             btn.onclick = crearSecuencialesIniciales;
             if (btnAgregar) btnAgregar.style.display = 'none';
+            const selAdd = document.getElementById('sec-add-tipo');
+            if (selAdd) selAdd.style.display = 'none';
         }
     }
 
@@ -1525,6 +1630,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                 if (!data || data.length === 0) {
                     container.innerHTML = '<div class="col-12 text-center py-4 text-muted small"><i class="bi bi-info-circle me-2"></i>Este punto aún no tiene secuenciales registrados. Use el botón para crear los tipos estándar.</div>';
                     _setBtnSecuencialesEstado(false);
+                    refrescarSelectorTipos();
                     return;
                 }
 
@@ -1559,49 +1665,99 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     container.appendChild(div);
                 }
                 _setBtnSecuencialesEstado(true);
+                refrescarSelectorTipos();
             }
         } catch (err) {
             container.innerHTML = '<div class="col-12 text-center py-4 text-danger small">Error al conectar con el servidor.</div>';
         }
     }
 
-    function agregarSecuencialPersonalizado() {
-        const container = document.getElementById('secuenciales-fields');
-        if (container.querySelector('.text-muted')) container.innerHTML = '';
+    // Tipos de documento soportados por el motor de numeración (fuente: SecuencialRepository::DOCUMENT_MAP).
+    const APP_SEC_TIPOS = <?= json_encode(array_values($tiposSecuencialSoportados ?? []), JSON_UNESCAPED_UNICODE) ?>;
 
-        const name = prompt('Ingrese el nombre del tipo de documento (Ej: Factura, Nota de Crédito, etc):');
-        if (name) {
-            const newKey = 'new_' + Date.now();
-            const safeName = name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-            const div = document.createElement('div');
-            div.className = 'col-md-6 col-lg-4';
-            div.innerHTML = `
-                <div class="sec-nombre-wrapper d-flex align-items-center gap-1 mb-1">
-                    <span class="sec-nombre-label fw-bold text-muted small flex-grow-1 text-truncate" title="${safeName}" style="cursor:default;min-width:0;">${safeName}</span>
-                    <input type="text" name="secuenciales[${newKey}][nombre]"
-                        class="sec-nombre-input form-control form-control-sm border shadow-sm fw-bold text-muted d-none flex-grow-1"
-                        value="${safeName}" placeholder="Nombre del tipo de documento">
-                    <button type="button" class="btn btn-link btn-sm p-0 text-muted sec-btn-editar" title="Editar nombre" onclick="editarNombreSec(this)">
-                        <i class="bi bi-pencil" style="font-size:0.72rem;"></i>
-                    </button>
-                    <button type="button" class="btn btn-link btn-sm p-0 text-success sec-btn-guardar d-none" title="Confirmar" onclick="guardarNombreSec(this)">
-                        <i class="bi bi-check-lg" style="font-size:0.8rem;"></i>
-                    </button>
-                    <button type="button" class="btn btn-link btn-sm p-0 text-secondary sec-btn-cancelar d-none" title="Cancelar" onclick="cancelarNombreSec(this)">
-                        <i class="bi bi-x-lg" style="font-size:0.72rem;"></i>
-                    </button>
-                </div>
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text bg-light border-0 shadow-sm text-muted small">#</span>
-                    <input type="number" name="secuenciales[${newKey}][valor]" class="form-control border-0 shadow-sm" value="1" min="1">
-                    <button type="button" class="btn btn-outline-danger border-0 bg-white" onclick="this.closest('.col-md-6').remove()">
-                        <i class="bi bi-x-lg"></i>
-                    </button>
-                </div>
-            `;
-            container.appendChild(div);
-            _setBtnSecuencialesEstado(true);
+    function _secEscape(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // Nombres de secuenciales ya presentes en el punto seleccionado (existentes + nuevos sin guardar).
+    function _secNombresPresentes() {
+        const nombres = [];
+        document.querySelectorAll('#secuenciales-fields input[name$="[nombre]"]').forEach(i => {
+            const v = (i.value || '').trim();
+            if (v) nombres.push(v.toLowerCase());
+        });
+        return nombres;
+    }
+
+    // Repuebla el selector con los tipos soportados que aún NO existen en el punto + opción "Otro".
+    function refrescarSelectorTipos() {
+        const sel = document.getElementById('sec-add-tipo');
+        if (!sel) return;
+        const presentes = _secNombresPresentes();
+        let html = '<option value="">Agregar Tipo Documento…</option>';
+        APP_SEC_TIPOS.forEach(t => {
+            if (!presentes.includes(t.toLowerCase())) {
+                html += `<option value="${_secEscape(t)}">${_secEscape(t)}</option>`;
+            }
+        });
+        html += '<option value="__otro__">Otro (personalizado)…</option>';
+        sel.innerHTML = html;
+    }
+
+    function _agregarCampoSecuencial(name) {
+        const container = document.getElementById('secuenciales-fields');
+        const placeholder = container.querySelector('.text-muted');
+        if (placeholder && placeholder.closest('.col-12')) container.innerHTML = '';
+
+        const newKey = 'new_' + Date.now();
+        const safeName = _secEscape(name);
+        const div = document.createElement('div');
+        div.className = 'col-md-6 col-lg-4';
+        div.innerHTML = `
+            <div class="sec-nombre-wrapper d-flex align-items-center gap-1 mb-1">
+                <span class="sec-nombre-label fw-bold text-muted small flex-grow-1 text-truncate" title="${safeName}" style="cursor:default;min-width:0;">${safeName}</span>
+                <input type="text" name="secuenciales[${newKey}][nombre]"
+                    class="sec-nombre-input form-control form-control-sm border shadow-sm fw-bold text-muted d-none flex-grow-1"
+                    value="${safeName}" placeholder="Nombre del tipo de documento">
+                <button type="button" class="btn btn-link btn-sm p-0 text-muted sec-btn-editar" title="Editar nombre" onclick="editarNombreSec(this)">
+                    <i class="bi bi-pencil" style="font-size:0.72rem;"></i>
+                </button>
+                <button type="button" class="btn btn-link btn-sm p-0 text-success sec-btn-guardar d-none" title="Confirmar" onclick="guardarNombreSec(this)">
+                    <i class="bi bi-check-lg" style="font-size:0.8rem;"></i>
+                </button>
+                <button type="button" class="btn btn-link btn-sm p-0 text-secondary sec-btn-cancelar d-none" title="Cancelar" onclick="cancelarNombreSec(this)">
+                    <i class="bi bi-x-lg" style="font-size:0.72rem;"></i>
+                </button>
+            </div>
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-light border-0 shadow-sm text-muted small">#</span>
+                <input type="number" name="secuenciales[${newKey}][valor]" class="form-control border-0 shadow-sm" value="1" min="1">
+                <button type="button" class="btn btn-outline-danger border-0 bg-white" onclick="this.closest('.col-md-6').remove(); refrescarSelectorTipos();">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(div);
+        _setBtnSecuencialesEstado(true);
+        refrescarSelectorTipos();
+    }
+
+    // Agrega el tipo elegido en el selector (o uno personalizado si eligió "Otro").
+    function agregarSecuencialSeleccionado() {
+        const sel = document.getElementById('sec-add-tipo');
+        if (!sel) return;
+        let name = sel.value;
+        if (!name) return;
+        if (name === '__otro__') {
+            name = (prompt('Nombre del tipo de documento (debe coincidir exacto con el que espera el módulo):') || '').trim();
+            if (!name) return;
         }
+        const presentes = _secNombresPresentes();
+        if (presentes.includes(name.toLowerCase())) {
+            alert('Ese tipo de documento ya existe en este punto de emisión.');
+            return;
+        }
+        _agregarCampoSecuencial(name);
     }
 
     /* ---------------------------------------------------------

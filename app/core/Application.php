@@ -41,7 +41,7 @@ class Application
         $action = $dispatch['action'];
 
         // Controladores públicos (sin autenticación requerida)
-        $publicControllers = ['Auth', 'Registro', 'SolicitudFirma', 'FacturaExpressPublico', 'WhatsappWebhook', 'Reservas', 'Payphone'];
+        $publicControllers = ['Auth', 'Registro', 'SolicitudFirma', 'FacturaExpressPublico', 'WhatsappWebhook', 'Reservas', 'Payphone', 'CargasInventarioAprobacion', 'Asistencia'];
 
         // Si no hay sesión y no es un controlador público, mostrar login
         if (!isset($_SESSION['id_usuario']) && !in_array($controller, $publicControllers, true)) {

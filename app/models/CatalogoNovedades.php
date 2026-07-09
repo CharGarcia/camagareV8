@@ -20,6 +20,28 @@ final class CatalogoNovedades
     /** Tipos cuyo "valor" representa cantidad de días. */
     public const CODS_DIAS = ['10'];
 
+    /**
+     * Tipos que NO se descuentan en el rol al registrarse: se ENTREGAN al empleado y
+     * se pagan primero con un egreso (aparecen en Egresos → Nómina); el rol descuenta
+     * solo lo pagado por egreso. Solo el ANTICIPO (3), que es de un único mes.
+     * Los préstamos (7/8/9) se manejan como CUOTA: descuento directo en el rol (una
+     * novedad por cuota, manual o por Excel), y el desembolso del capital es un egreso aparte.
+     */
+    public const CODS_PAGO_EGRESO = ['3'];
+
+    public static function esPagoPorEgreso(string $codigo): bool
+    {
+        return in_array($codigo, self::CODS_PAGO_EGRESO, true);
+    }
+
+    /** Préstamos: cuota de descuento directo, pero SOLO si el préstamo ya fue desembolsado (pagado). */
+    public const CODS_PRESTAMO = ['7', '8', '9'];
+
+    public static function esPrestamo(string $codigo): bool
+    {
+        return in_array($codigo, self::CODS_PRESTAMO, true);
+    }
+
     public const TIPOS = [
         ['codigo' => '1',  'nombre' => 'Otros Ingresos'],
         ['codigo' => '2',  'nombre' => 'Descuento'],

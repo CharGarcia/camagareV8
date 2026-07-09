@@ -193,6 +193,8 @@
             const infoCli = document.getElementById('nc_info_cliente');
             if (infoCli) infoCli.classList.add('d-none');
             NC_limpiarInfoAdicional();
+            // NC nueva: campos editables.
+            NC_setModoLectura(false);
             // En una NC nueva, el documento a modificar arranca deshabilitado
             // hasta que se seleccione un cliente.
             NC_setFacturaHabilitada(false);
@@ -248,18 +250,19 @@
 
             document.getElementById('modalNCTitulo').innerHTML = `<i class="bi bi-file-earmark-minus text-primary me-2"></i>Nota de Crédito ${num}${cliente}`;
             
-            // Cargar datos cabecera
-            document.getElementById('nc_fecha_emision').value = data.fecha_emision;
-            document.getElementById('nc_id_punto_emision').value = data.id_punto_emision;
-            document.getElementById('nc_secuencial').value = String(data.secuencial).padStart(9, '0');
-            document.getElementById('nc_id_cliente').value = data.id_cliente;
-            document.getElementById('nc_cliente_search').value = data.cliente_nombre;
+            // Cargar datos cabecera (con guardas: al recargar solo con {id} estos
+            // valores llegan vacíos y luego se repueblan desde getNcAjax).
+            document.getElementById('nc_fecha_emision').value = (data.fecha_emision || '').split(' ')[0].split('T')[0];
+            document.getElementById('nc_id_punto_emision').value = data.id_punto_emision || '';
+            document.getElementById('nc_secuencial').value = data.secuencial != null ? String(data.secuencial).padStart(9, '0') : '';
+            document.getElementById('nc_id_cliente').value = data.id_cliente || '';
+            document.getElementById('nc_cliente_search').value = data.cliente_nombre || '';
             // En edición el documento a modificar siempre está habilitado.
             NC_setFacturaHabilitada(true);
             const fechaSustento = (data.fecha_emision_docs_sustento || '').split(' ')[0].split('T')[0];
             document.getElementById('nc_factura_search').value = data.num_doc_modificado || '';
             document.getElementById('nc_fecha_emision_docs_sustento').value = fechaSustento;
-            document.getElementById('nc_motivo').value = data.motivo;
+            document.getElementById('nc_motivo').value = data.motivo || '';
 
             document.getElementById('nc_info_factura_modificada').innerHTML = `
                 <div class="d-flex gap-3 flex-wrap">
@@ -285,14 +288,54 @@
                     renderDetalles(result.detalles);
                     NC_renderInfoAdicional(result.info_adicional);
                     calcTotales();
+
+                    const cab = result.cabecera || {};
+                    const soloDia = (f) => (f || '').split(' ')[0].split('T')[0];
+
+                    // Repoblar la cabecera desde el registro autoritativo (permite
+                    // recargar la NC pasando solo {id}, p. ej. después de guardar).
+                    if (cab.id_punto_emision != null) document.getElementById('nc_id_punto_emision').value = cab.id_punto_emision;
+                    if (cab.secuencial != null)        document.getElementById('nc_secuencial').value = String(cab.secuencial).padStart(9, '0');
+                    if (cab.fecha_emision)             document.getElementById('nc_fecha_emision').value = soloDia(cab.fecha_emision);
+                    if (cab.id_cliente != null)        document.getElementById('nc_id_cliente').value = cab.id_cliente;
+                    if (cab.cliente_nombre != null)    document.getElementById('nc_cliente_search').value = cab.cliente_nombre;
+                    if (cab.num_doc_modificado != null) {
+                        NC_setFacturaHabilitada(true);
+                        document.getElementById('nc_factura_search').value = cab.num_doc_modificado;
+                    }
+                    if (cab.fecha_emision_docs_sustento) document.getElementById('nc_fecha_emision_docs_sustento').value = soloDia(cab.fecha_emision_docs_sustento);
+                    if (cab.motivo != null)            document.getElementById('nc_motivo').value = cab.motivo;
+
+                    // Tarjeta de info del cliente
+                    setEl('nc_lbl_cliente_ruc', 'textContent', cab.cliente_ruc || '');
+                    setEl('nc_lbl_cliente_direccion', 'textContent', cab.cliente_direccion || '');
+                    setEl('nc_lbl_cliente_correo', 'textContent', cab.cliente_email || '');
+                    const infoCli = document.getElementById('nc_info_cliente');
+                    if (infoCli && cab.id_cliente) infoCli.classList.remove('d-none');
+
+                    // Título y estado desde el registro real
+                    if (cab.secuencial != null) {
+                        const estN = String(cab.establecimiento || '000').padStart(3, '0');
+                        const ptoN = String(cab.punto_emision || '000').padStart(3, '0');
+                        const secN = String(cab.secuencial || '0').padStart(9, '0');
+                        const cliN = cab.cliente_nombre ? ` - ${cab.cliente_nombre}` : '';
+                        document.getElementById('modalNCTitulo').innerHTML = `<i class="bi bi-file-earmark-minus text-primary me-2"></i>Nota de Crédito ${estN}-${ptoN}-${secN}${cliN}`;
+                    }
+                    if (cab.estado) {
+                        actualizarBadgeEstado(cab.estado);
+                        toggleBotonesAccion(true, cab.estado);
+                    }
+
                     // cliente_email solo viene en getPorId (no en el listado), lo tomamos aquí
-                    const cab = result.cabecera;
                     const elCorreo = document.getElementById('nc-sri-correo-cliente');
                     if (elCorreo) elCorreo.value = cab.cliente_email || '';
-                    // Actualizar RUC también por si acaso
                     const elIdentif = document.getElementById('nc-sri-identificacion-cliente');
                     if (elIdentif && !elIdentif.value) elIdentif.value = cab.cliente_ruc || '';
                     window.NC_CLIENTE_RUC = (cab.cliente_ruc || '').trim();
+
+                    // Modo solo lectura para NC guardadas (ver NC_setModoLectura).
+                    const soloLectura = (data && data._soloLectura === true) || (cab.estado && cab.estado !== 'borrador');
+                    NC_setModoLectura(!!soloLectura);
                 }
             } catch (e) {
                 console.error('Error al cargar datos NC:', e);
@@ -383,6 +426,39 @@
         
         if (btnEliminar) btnEliminar.classList.toggle('d-none', !habilitar || !esBorrador);
         if (btnAnular) btnAnular.classList.toggle('d-none', !habilitar || !esAutorizado);
+    }
+
+    /**
+     * Pone la NC en modo solo lectura (campos bloqueados) o edición.
+     * Los botones de acción (SRI, PDF, XML, correo, cerrar) NO se tocan aquí:
+     * los gestiona toggleBotonesAccion. En modo lectura se ocultan además los
+     * controles de edición (agregar/eliminar línea, guardar, registrar cliente).
+     */
+    function NC_setModoLectura(lock) {
+        const modal = document.getElementById('modalNC');
+        if (!modal) return;
+
+        modal.classList.toggle('nc-lectura', !!lock);
+
+        const campos = ['nc_fecha_emision', 'nc_id_punto_emision', 'nc_id_bodega',
+            'nc_motivo', 'nc_cliente_search', 'nc_factura_search', 'nc_fecha_emision_docs_sustento'];
+        campos.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (el.tagName === 'SELECT') el.disabled = !!lock;
+            else el.readOnly = !!lock;
+        });
+
+        // Detalle e información adicional
+        modal.querySelectorAll('#nc_detalles_body input, #nc_detalles_body select, #nc-tbody-info-adicional input')
+            .forEach(el => {
+                if (el.tagName === 'SELECT') el.disabled = !!lock;
+                else el.readOnly = !!lock;
+            });
+
+        // Botón Guardar: sin sentido en modo lectura
+        const btnGuardar = document.getElementById('btnGuardarNC');
+        if (btnGuardar) btnGuardar.classList.toggle('d-none', !!lock);
     }
 
     function setEl(id, prop, val) {
@@ -569,6 +645,11 @@
 
     // Carga el listado de documentos (facturas + saldos iniciales) del cliente seleccionado.
     async function NC_cargarFacturasCliente(term = '') {
+        // En modo lectura no se permite cambiar el documento a modificar.
+        if (searchFactura && (searchFactura.readOnly || searchFactura.disabled)) {
+            dropdownFactura.classList.add('d-none');
+            return;
+        }
         const idCliente = document.getElementById('nc_id_cliente').value;
         if (!idCliente) {
             dropdownFactura.classList.add('d-none');
@@ -770,7 +851,7 @@
             </td>
             <td class="text-end pe-4 fw-bold nc-fila-total py-1">$0.00</td>
             <td class="py-1">
-                <button type="button" class="btn btn-link btn-sm text-danger p-0" onclick="window.NC_removerFila(this)">
+                <button type="button" class="btn btn-link btn-sm text-danger p-0 nc-edit-only" onclick="window.NC_removerFila(this)">
                     <i class="bi bi-trash"></i>
                 </button>
             </td>
@@ -898,7 +979,7 @@
             <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-concepto-nc" style="${NC_INFO_INPUT_STYLE}" placeholder="Concepto..." value="${(concepto || '').replace(/"/g, '&quot;')}"></td>
             <td class="p-0"><input type="text" class="form-control form-control-sm border-0 bg-transparent input-info-detalle-nc" style="${NC_INFO_INPUT_STYLE}" placeholder="Detalle..." value="${(detalle || '').replace(/"/g, '&quot;')}"></td>
             <td class="p-0 text-center pe-1">
-                <button type="button" class="btn btn-link btn-sm p-0 m-0 text-danger shadow-none" onclick="this.closest('tr').remove();">
+                <button type="button" class="btn btn-link btn-sm p-0 m-0 text-danger shadow-none nc-edit-only" onclick="this.closest('tr').remove();">
                     <i class="bi bi-x-circle-fill"></i>
                 </button>
             </td>`;
@@ -1224,7 +1305,9 @@
                 // fecha y reenviar al SRI sin reabrir). Refrescar y recargar en edición.
                 window.NC_fetchSearch();
                 if (idGuardado > 0 && typeof window.NC_abrirModalNC === 'function') {
-                    window.NC_abrirModalNC({ dataset: { row: JSON.stringify({ id: idGuardado }) } });
+                    // Recargar en modo solo lectura: la NC ya está guardada; el usuario
+                    // usa los botones (SRI, PDF, XML, correo) sin editar los campos.
+                    window.NC_abrirModalNC({ dataset: { row: JSON.stringify({ id: idGuardado, _soloLectura: true }) } });
                 }
                 // Notificar al módulo padre si existe una función de refresco.
                 if (typeof window.fvRefrescarDatosModal === 'function') {
@@ -1418,7 +1501,10 @@
                     ncCargarHistorialSri(id);
 
                     if (data.ok) {
+                        // Autorizada: bloquear edición y actualizar el badge de estado.
+                        actualizarBadgeEstado('autorizado');
                         toggleBotonesAccion(true, 'autorizado');
+                        NC_setModoLectura(true);
                         window.NC_fetchSearch();
                         Swal.fire('Éxito', 'Comprobante autorizado correctamente.', 'success');
                     } else {

@@ -181,8 +181,61 @@ class RolesPagoController extends BaseModuloController
         $this->requireLeer();
         header('Content-Type: application/json');
         $id = (int) ($_GET['id'] ?? 0);
-        $data = $this->service->getDetalle($id, (int) $_SESSION['id_empresa']);
+        $data = $this->service->getDetalle($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
         echo json_encode($data ? ['ok' => true, 'data' => $data] : ['ok' => false, 'error' => 'No encontrado']);
+        exit;
+    }
+
+    /** Datos para el modal de "Generar egresos de nómina": formas de pago, puntos y concepto. */
+    public function datosEgresoLoteAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        $fpRepo = new \App\repositories\modulos\FormaPagoRepository();
+        $formas = $fpRepo->getFormasFiltradas($idEmpresa, 'EGRESO');
+
+        $emp    = new Empresa();
+        $ests   = $emp->getEstablecimientos($idEmpresa);
+        $puntos = !empty($ests) ? $emp->getPuntosEmision((int) $ests[0]['id']) : [];
+
+        $db = \App\core\Database::getConnection();
+        $stC = $db->prepare("SELECT COUNT(*) FROM empresa_opciones_ingreso_egreso
+                             WHERE id_empresa = :e AND comportamiento = 'ROL' AND aplica_egresos = true
+                               AND eliminado = false AND UPPER(estado) = 'ACTIVO'");
+        $stC->execute([':e' => $idEmpresa]);
+        $tieneConcepto = ((int) $stC->fetchColumn()) > 0;
+
+        // Empleados del rol que aún tienen saldo pendiente (para no permitir regenerar de más).
+        $idRol = (int) ($_GET['id_rol'] ?? 0);
+        $pendientes = $idRol > 0 ? (new RolPagoRepository())->contarLineasPendientesPago($idRol, $idEmpresa) : 0;
+
+        echo json_encode(['ok' => true, 'formas' => $formas, 'puntos' => $puntos, 'tiene_concepto' => $tieneConcepto, 'pendientes' => $pendientes]);
+        exit;
+    }
+
+    /** Genera en lote un egreso por empleado del rol (solo los que tienen saldo pendiente). */
+    public function generarEgresosLoteAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        try {
+            $idRol = (int) ($_POST['id_rol'] ?? 0);
+            if ($idRol <= 0) throw new \Exception('Rol no válido.');
+            $opts = [
+                'fecha'                    => trim($_POST['fecha'] ?? ''),
+                'id_forma_pago'            => (int) ($_POST['id_forma_pago'] ?? 0),
+                'id_punto_emision'         => (int) ($_POST['id_punto_emision'] ?? 0),
+                'tipo_operacion_bancaria'  => trim($_POST['tipo_operacion_bancaria'] ?? ''),
+                'numero_cheque_inicial'    => (int) ($_POST['numero_cheque_inicial'] ?? 0),
+            ];
+            $svc = new \App\Services\modulos\RolEgresoLoteService(new LogSistemaService());
+            $res = $svc->generar($idRol, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $opts);
+            echo json_encode(array_merge(['ok' => true], $res));
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
         exit;
     }
 

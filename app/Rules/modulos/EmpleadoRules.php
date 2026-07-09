@@ -70,5 +70,55 @@ class EmpleadoRules
         if (isset($data['valor_quincena']) && floatval($data['valor_quincena']) < 0) {
             throw new Exception('El valor de quincena no puede ser negativo.');
         }
+
+        if (!empty($data['periodos']) && is_array($data['periodos'])) {
+            $this->validatePeriodos($data['periodos']);
+        }
+    }
+
+    /**
+     * Valida el conjunto de períodos de empleo (ingreso/salida). Reglas:
+     *  - No puede haber un período sin fecha de salida salvo el más reciente (no se
+     *    permite agregar un período nuevo mientras exista uno anterior abierto).
+     *  - La salida no puede ser anterior al ingreso.
+     *  - Los períodos no pueden solaparse.
+     */
+    public function validatePeriodos(array $periodos): void
+    {
+        $ps = array_values(array_filter($periodos, fn($p) => !empty($p['fecha_ingreso'])));
+        foreach ($ps as $p) $this->validarRangoPeriodo($p);
+
+        if (count($ps) <= 1) return;
+
+        // Ordenar por fecha de ingreso ascendente
+        usort($ps, fn($a, $b) => strcmp($this->dia($a['fecha_ingreso']), $this->dia($b['fecha_ingreso'])));
+        $n = count($ps);
+
+        foreach ($ps as $i => $p) {
+            $esUltimo = ($i === $n - 1);
+            if (!$esUltimo && empty($p['fecha_salida'])) {
+                throw new Exception('No puede agregar un nuevo período mientras exista un período anterior sin fecha de salida. Registre primero la fecha de salida del período abierto.');
+            }
+            if ($i > 0) {
+                $prevSal = $ps[$i - 1]['fecha_salida'] ?? null;
+                if (!empty($prevSal) && $this->dia($p['fecha_ingreso']) <= $this->dia($prevSal)) {
+                    throw new Exception('Los períodos no pueden solaparse: la fecha de ingreso debe ser posterior a la fecha de salida del período anterior.');
+                }
+            }
+        }
+    }
+
+    private function validarRangoPeriodo(array $p): void
+    {
+        $ing = $p['fecha_ingreso'] ?? null;
+        $sal = $p['fecha_salida'] ?? null;
+        if (!empty($ing) && !empty($sal) && $this->dia($sal) < $this->dia($ing)) {
+            throw new Exception('La fecha de salida no puede ser anterior a la fecha de ingreso.');
+        }
+    }
+
+    private function dia($fecha): string
+    {
+        return substr((string) $fecha, 0, 10);
     }
 }

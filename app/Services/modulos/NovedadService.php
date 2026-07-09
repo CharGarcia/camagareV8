@@ -41,6 +41,9 @@ class NovedadService
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) $data['id_usuario'];
 
+        // No permitir registrar una novedad sobre un rol ya pagado.
+        $this->bloquearSiRolPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['aplica_en'] ?? 'rol', $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0);
+
         $this->repository->beginTransaction();
         try {
             $id = $this->repository->create($data);
@@ -63,6 +66,10 @@ class NovedadService
         if (!$old) {
             throw new Exception('Novedad no encontrada.');
         }
+
+        // Bloquear si el destino ANTERIOR o el NUEVO corresponden a un rol ya pagado.
+        $this->bloquearSiRolPagado($idEmpresa, $old['id_empleado'] ?? 0, $old['aplica_en'] ?? 'rol', $old['periodo_anio'] ?? 0, $old['periodo_mes'] ?? 0);
+        $this->bloquearSiRolPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['aplica_en'] ?? 'rol', $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0);
 
         $idUsuario = (int) $data['id_usuario'];
         $this->repository->beginTransaction();
@@ -89,6 +96,10 @@ class NovedadService
         if (!$old) {
             throw new Exception('Novedad no encontrada.');
         }
+
+        // No permitir eliminar una novedad que ya afecta a un rol pagado.
+        $this->bloquearSiRolPagado($idEmpresa, $old['id_empleado'] ?? 0, $old['aplica_en'] ?? 'rol', $old['periodo_anio'] ?? 0, $old['periodo_mes'] ?? 0);
+
         $this->repository->beginTransaction();
         try {
             $this->repository->deleteLogic($id, $idEmpresa, $idUsuario);
@@ -99,6 +110,39 @@ class NovedadService
             throw $e;
         }
         $this->sincronizarRol($idEmpresa, $old['aplica_en'] ?? 'rol', $old['periodo_anio'] ?? 0, $old['periodo_mes'] ?? 0, $idUsuario);
+    }
+
+    /**
+     * Lanza excepción si el empleado ya tiene un rol PAGADO para el tipo (según aplica_en)
+     * y período de la novedad: no se puede crear/editar/eliminar una novedad que afectaría
+     * un rol ya pagado. Silencioso si el módulo de roles/egresos no está disponible.
+     */
+    private function bloquearSiRolPagado(int $idEmpresa, $idEmpleado, ?string $aplicaEn, $anio, $mes): void
+    {
+        $idEmpleado = (int) $idEmpleado;
+        $anio = (int) $anio;
+        $mes  = (int) $mes;
+        if ($idEmpleado <= 0 || $mes < 1 || $anio < 2000) return;
+
+        $tipo = match (strtolower((string) ($aplicaEn ?: 'rol'))) {
+            'semanal'  => 'SEMANAL',
+            'quincena' => 'QUINCENA',
+            default    => 'MENSUAL',
+        };
+
+        try {
+            $pagado = (new \App\repositories\modulos\RolPagoRepository())
+                ->existeRolPagadoPeriodo($idEmpresa, $idEmpleado, $tipo, $anio, $mes);
+        } catch (\Throwable $e) {
+            return; // roles/egresos no desplegado → sin restricción
+        }
+
+        if ($pagado) {
+            $etiqueta = match ($tipo) { 'SEMANAL' => 'semanal', 'QUINCENA' => 'quincena', default => 'mensual' };
+            throw new Exception('No se puede crear, editar ni eliminar esta novedad: el rol ' . $etiqueta
+                . ' de ' . str_pad((string) $mes, 2, '0', STR_PAD_LEFT) . '/' . $anio
+                . ' del empleado ya está pagado. Anule el pago/rol de ese período si necesita modificarla.');
+        }
     }
 
     /** Auto-regenera el rol 'generado' afectado por el cambio de novedad (silencioso si falla). */

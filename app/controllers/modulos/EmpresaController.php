@@ -41,7 +41,13 @@ class EmpresaController extends BaseModuloController
         
         $data = $this->service->getData($idEmpresa);
 
+        $secRepo = new \App\repositories\SecuencialRepository();
+        $tiposSecuencialAgrupados = $secRepo->getTiposDocumentoAgrupados();
+        $tiposSecuencialSoportados = $secRepo->getTiposDocumentoSoportados();
+
         $this->viewWithLayout('layouts.main', 'modulos.empresa.index', [
+            'tiposSecuencialAgrupados' => $tiposSecuencialAgrupados,
+            'tiposSecuencialSoportados' => $tiposSecuencialSoportados,
             'titulo' => 'Configuración de Empresa',
             'id_empresa' => $idEmpresa,
             'empresa' => $data['empresa'],

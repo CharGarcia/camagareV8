@@ -16,10 +16,17 @@
     const ESTADOS = { borrador: 'Borrador', generado: 'Generado', pagado: 'Pagado', contabilizado: 'Contabilizado', anulado: 'Anulado' };
     const COLOR = { borrador: 'secondary', generado: 'info', pagado: 'success', contabilizado: 'primary', anulado: 'danger' };
     const MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    const PAGO = { pagado: { c: 'success', t: 'Pagado' }, parcial: { c: 'warning', t: 'Parcial' }, pendiente: { c: 'secondary', t: 'Pendiente' } };
+    const PAGO = {
+        pagado:    { c: 'success',   t: 'Pagado',         i: 'bi-check-circle-fill' },
+        parcial:   { c: 'warning',   t: 'Pago parcial',   i: 'bi-hourglass-split' },
+        pendiente: { c: 'secondary', t: 'Pago pendiente', i: 'bi-cash-coin' }
+    };
     const pagoBadge = (d) => {
         const p = PAGO[d.estado_pago] || PAGO.pendiente;
-        return `<span class="badge bg-${p.c} bg-opacity-10 text-${p.c} border border-${p.c} border-opacity-25 ms-2" style="font-size:0.62rem;">${p.t}</span>`;
+        const pagado = money(d.pagado || 0);
+        const saldo  = money(d.saldo != null ? d.saldo : d.neto);
+        const title  = `Estado de pago del rol · Pagado ${pagado} · Saldo ${saldo}`;
+        return `<span class="badge bg-${p.c} bg-opacity-10 text-${p.c} border border-${p.c} border-opacity-25 ms-2" style="font-size:0.62rem;" title="${title}"><i class="bi ${p.i} me-1"></i>${p.t}</span>`;
     };
 
     const $ = (id) => document.getElementById(id);
@@ -66,6 +73,7 @@
                 renderVer(json.data);
                 modalVer()?.show();
                 window.dispatchEvent(new CustomEvent('rolGuardado'));
+                avisarPendientes(json.data.avisos || []);
             } else {
                 Swal.fire({ icon: 'error', title: 'Atención', text: json.error || 'No se pudo generar.' });
             }
@@ -104,6 +112,7 @@
         rolActual = { id: rol.id, estado: rol.estado };
         $('rolver_periodo').textContent = `${mes} ${rol.periodo_anio}${num}`;
         $('rolver_totales').innerHTML = `Ingresos <b>${money(rol.total_ingresos)}</b> · Egresos <b>${money(rol.total_egresos)}</b> · Neto <b>${money(rol.total_neto)}</b>`;
+        renderAvisos(rol.avisos || []);
 
         const det = rol.detalle || [];
         if (!det.length) { $('rolver_lista').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Sin empleados con conceptos.</td></tr>'; $('rolver_conteo').textContent = ''; return; }
@@ -119,6 +128,129 @@
         $('rolver_lista').innerHTML = rows;
         $('rolver_conteo').textContent = det.length + ' empleados';
     }
+
+    // Banner de anticipos/préstamos pendientes de desembolso (no se descuentan hasta pagarlos).
+    function renderAvisos(avisos) {
+        const box = $('rolver_avisos');
+        if (!box) return;
+        if (!avisos || !avisos.length) { box.innerHTML = ''; return; }
+        const li = avisos.map(a =>
+            `<li>${esc(a.empleado)} — <b>${esc(a.concepto)}</b>: ${money(a.monto)} <span class="text-muted">(${a.tipo === 'anticipo' ? 'anticipo sin pagar' : 'préstamo sin desembolsar'})</span></li>`
+        ).join('');
+        box.innerHTML = `<div class="alert alert-warning py-2 px-3 mb-2 small">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+            <b>Pendientes de desembolso.</b> Estas novedades NO se descuentan en el rol hasta pagarlas en <b>Egresos → Nómina</b>:
+            <ul class="mb-0 mt-1">${li}</ul></div>`;
+    }
+
+    // Aviso emergente al generar, si hay pendientes de desembolso.
+    function avisarPendientes(avisos) {
+        if (!avisos || !avisos.length) return;
+        const li = avisos.map(a => `<li>${esc(a.empleado)} — ${esc(a.concepto)}: ${money(a.monto)}</li>`).join('');
+        Swal.fire({
+            icon: 'warning',
+            title: 'Hay novedades sin desembolsar',
+            html: `<div class="small text-start">Estos anticipos/préstamos <b>no se descontaron</b> en el rol porque aún no se han pagado en <b>Egresos → Nómina</b>:<ul class="mt-2">${li}</ul></div>`,
+            confirmButtonText: 'Entendido'
+        });
+    }
+
+    // ─── Generar egresos de nómina en lote (un egreso por empleado) ──────────
+    let mEgLote = null;
+    const modalEgLote = () => (mEgLote = mEgLote || (typeof bootstrap !== 'undefined' ? new bootstrap.Modal($('modalEgresoLote')) : null));
+
+    window.abrirEgresoLote = async function () {
+        if (!rolActual || !rolActual.id) return;
+        if ($('egl_msg')) $('egl_msg').innerHTML = '';
+        try {
+            const resp = await fetch(`${urlModulo}/datosEgresoLoteAjax?id_rol=${rolActual.id}`);
+            const res = await resp.json();
+            if (!res.ok) { Swal.fire('Atención', res.error || 'No se pudieron cargar los datos.', 'warning'); return; }
+            if (!res.tiene_concepto) {
+                Swal.fire('Falta configurar', 'No existe un concepto de egreso de Nómina (comportamiento ROL). Créelo en opciones de ingreso/egreso antes de generar.', 'warning');
+                return;
+            }
+            if (!res.pendientes) {
+                Swal.fire('Sin saldos pendientes', 'Todos los empleados de este rol ya tienen su egreso generado. No hay nada que pagar.', 'info');
+                return;
+            }
+            const selP = $('egl_punto'); selP.innerHTML = '';
+            (res.puntos || []).forEach(p => {
+                const est = String(p.cod_establecimiento || '').padStart(3, '0');
+                const pto = String(p.codigo_punto || '').padStart(3, '0');
+                const o = document.createElement('option'); o.value = p.id; o.textContent = `${est}-${pto}`;
+                selP.appendChild(o);
+            });
+            const selF = $('egl_forma'); selF.innerHTML = '';
+            (res.formas || []).forEach(f => {
+                const o = document.createElement('option'); o.value = f.id; o.textContent = f.nombre;
+                o.dataset.tipo = (f.tipo || '');
+                selF.appendChild(o);
+            });
+            if (!selP.options.length) { Swal.fire('Atención', 'No hay puntos de emisión configurados.', 'warning'); return; }
+            if (!selF.options.length) { Swal.fire('Atención', 'No hay formas de pago para egresos configuradas.', 'warning'); return; }
+            window.eglFormaChange();
+            modalEgLote()?.show();
+        } catch (e) {
+            Swal.fire('Error de Red', 'No se pudo conectar con el servidor.', 'error');
+        }
+    };
+
+    // Muestra/oculta el bloque bancario según la forma de pago seleccionada.
+    window.eglFormaChange = function () {
+        const sel = $('egl_forma'); const opt = sel.options[sel.selectedIndex];
+        const esBanco = opt && String(opt.dataset.tipo || '').toUpperCase() === 'BANCO';
+        $('egl_banco_wrap').classList.toggle('d-none', !esBanco);
+        if (esBanco) { $('egl_tipo_op').value = 'TRANSFERENCIA'; window.eglTipoOpChange(); }
+    };
+    window.eglTipoOpChange = function () {
+        const esCheque = $('egl_tipo_op').value === 'CHEQUE';
+        $('egl_cheque_wrap').classList.toggle('d-none', !esCheque);
+    };
+
+    window.confirmarEgresoLote = async function () {
+        if (!rolActual || !rolActual.id) return;
+        const btn = $('eglBtnConfirmar');
+        const fecha = $('egl_fecha').value, idPunto = $('egl_punto').value, idForma = $('egl_forma').value;
+        if (!fecha || !idPunto || !idForma) { Swal.fire('Requerido', 'Complete fecha, punto y forma de pago.', 'warning'); return; }
+        // Datos bancarios (si aplica).
+        const esBanco = !$('egl_banco_wrap').classList.contains('d-none');
+        let tipoOp = '', chequeIni = '';
+        if (esBanco) {
+            tipoOp = $('egl_tipo_op').value;
+            if (tipoOp === 'CHEQUE') {
+                chequeIni = $('egl_cheque_ini').value;
+                if (!chequeIni || parseInt(chequeIni, 10) <= 0) { Swal.fire('Requerido', 'Ingrese el número inicial del cheque.', 'warning'); return; }
+            }
+        }
+        const conf = await Swal.fire({ icon: 'question', title: '¿Generar egresos?', text: 'Se creará un egreso por cada empleado con saldo pendiente.', showCancelButton: true, confirmButtonText: 'Sí, generar', cancelButtonText: 'Cancelar' });
+        if (!conf.isConfirmed) return;
+        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generando...';
+        try {
+            const fd = new FormData();
+            fd.append('id_rol', rolActual.id); fd.append('fecha', fecha); fd.append('id_punto_emision', idPunto); fd.append('id_forma_pago', idForma);
+            if (esBanco) { fd.append('tipo_operacion_bancaria', tipoOp); if (tipoOp === 'CHEQUE') fd.append('numero_cheque_inicial', chequeIni); }
+            const resp = await fetch(`${urlModulo}/generarEgresosLoteAjax`, { method: 'POST', body: fd });
+            const res = await resp.json();
+            if (!res.ok) { Swal.fire('Atención', res.error || 'No se pudo generar.', 'error'); }
+            else {
+                modalEgLote()?.hide();
+                let html = `<div class="small text-start">Se generaron <b>${res.creados}</b> egreso(s) por <b>${money(res.total || 0)}</b>.`;
+                if (res.omitidos) html += ` ${res.omitidos} ya estaban pagados.`;
+                if (res.errores && res.errores.length) {
+                    html += `<div class="alert alert-warning mt-2 mb-0 py-1 px-2"><b>${res.errores.length} con error:</b><ul class="mb-0 mt-1">` +
+                        res.errores.map(e => `<li>${esc(e.empleado)}: ${esc(e.error)}</li>`).join('') + `</ul></div>`;
+                }
+                html += '</div>';
+                Swal.fire({ icon: (res.errores && res.errores.length) ? 'warning' : 'success', title: 'Egresos generados', html });
+                window.abrirModalVer({ id: rolActual.id }); // refrescar estado de pago
+                window.dispatchEvent(new CustomEvent('rolGuardado'));
+            }
+        } catch (e) {
+            Swal.fire('Error de Red', 'No se pudo conectar con el servidor.', 'error');
+        }
+        btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Generar egresos';
+    };
 
     window.rolEliminarModal = async function () {
         if (!rolActual) return;

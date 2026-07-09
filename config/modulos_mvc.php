@@ -108,6 +108,13 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // Cargas de Inventario (Documentos, id_modulo 11). Actualizar id_submodulo con el
+    // id real que retorne la migración de menú (create_menu_cargas_inventario.sql).
+    'modulos/cargas-inventario' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => ['modulos/cargas_inventario'],
+    ],
+
     'modulos/ingresos' => [
         'legacy_rutas' => [],
     ],
@@ -181,6 +188,14 @@ return [
     ],
     'modulos/vacaciones' => [
         'id_submodulo' => 47, // submodulos_menu.id (Vacaciones)
+        'legacy_rutas' => [],
+    ],
+    // Control de Asistencia (marcaciones por QR de punto de servicio).
+    // Actualizar id_submodulo con el id real tras ejecutar database/menu_control_asistencia.sql
+    // (SELECT id FROM submodulos_menu WHERE ruta = 'modulos/control-asistencia';).
+    // Mientras id_submodulo = 0, el super admin (Nivel 3) igual puede entrar por URL.
+    'modulos/control-asistencia' => [
+        'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],
 

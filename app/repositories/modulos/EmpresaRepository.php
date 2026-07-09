@@ -302,7 +302,8 @@ class EmpresaRepository extends BaseModel
                        mostrar_unidad_medida, valor_limite_consumidor_final,
                        id_forma_pago_sri_def,
                        editar_precio_factura, editar_iva_factura, editar_descuento_factura,
-                       mostrar_propina_factura, logo_ruta
+                       mostrar_propina_factura, logo_ruta,
+                       inv_requiere_aprobacion, inv_notificar_correo, inv_usuarios_aprobadores
                 FROM empresa_establecimiento
                 WHERE id = {$id} AND eliminado = false";
         $res = $this->query($sql);
@@ -324,6 +325,7 @@ class EmpresaRepository extends BaseModel
             'id_forma_pago_sri_def',
             'editar_precio_factura', 'editar_iva_factura', 'editar_descuento_factura',
             'mostrar_propina_factura',
+            'inv_requiere_aprobacion', 'inv_notificar_correo', 'inv_usuarios_aprobadores',
         ];
 
         // Campos numéricos que admiten NULL

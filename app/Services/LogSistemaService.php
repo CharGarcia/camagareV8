@@ -87,6 +87,15 @@ class LogSistemaService
     }
 
     /**
+     * Envoltura pública de generarDetalleCambios() para reutilizar el diff legible
+     * desde el módulo de consulta de auditoría (LogSistemaConsultaService).
+     */
+    public function formatearCambios(?array $antes, ?array $despues): array
+    {
+        return $this->generarDetalleCambios($antes, $despues);
+    }
+
+    /**
      * Compara dos arreglos de datos y retorna una lista de cambios legibles.
      */
     private function generarDetalleCambios(?array $antes, ?array $despues): array

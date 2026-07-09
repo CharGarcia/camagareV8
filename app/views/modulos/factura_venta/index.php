@@ -6273,7 +6273,7 @@ $totalPages = $totalPagesOriginal;
             if (res.ok) {
                 Swal.fire({ icon: 'success', title: 'Éxito', text: res.msg, timer: 2000, showConfirmButton: false });
                 fvCargarCobrosTab();
-                if (typeof fetchSearchFn === 'function') fetchSearchFn(window.FV_currentPage || 1);
+                if (typeof window.FV_fetchSearch === 'function') window.FV_fetchSearch(window.FV_currentPage || 1);
             } else {
                 throw new Error(res.mensaje || res.error || 'Error desconocido.');
             }
@@ -6605,7 +6605,7 @@ window.fvReversarPagoTarjeta = function(ctid) {
                     target: document.getElementById('modalNuevaFactura')
                 });
                 fvCargarCobrosTab();
-                if (typeof fetchSearchFn === 'function') fetchSearchFn(window.FV_currentPage || 1);
+                if (typeof window.FV_fetchSearch === 'function') window.FV_fetchSearch(window.FV_currentPage || 1);
             })
             .catch(function() {
                 Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.', target: document.getElementById('modalNuevaFactura') });

@@ -94,6 +94,80 @@ if (!function_exists('enviar_correo_recuperar_clave')) {
     }
 
     /**
+     * Notifica a los aprobadores que hay una carga de inventario pendiente.
+     * Usa la configuración del sistema (correos_config: recuperar_password).
+     *
+     * @param string[] $destinatarios Correos de los aprobadores.
+     * @param array    $data          numero, tipo, fecha, total_lineas, empresa, creador, url.
+     */
+    function notificar_carga_inventario_pendiente(array $destinatarios, array $data): bool
+    {
+        $destinatarios = array_values(array_filter(array_map('trim', $destinatarios), static fn($c) => $c !== '' && filter_var($c, FILTER_VALIDATE_EMAIL)));
+        if (empty($destinatarios)) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'Sin destinatarios válidos';
+            return false;
+        }
+
+        $base = \App\services\EmailConfigService::getDataForSendEmail('recuperar_password');
+        if (!$base) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'No hay configuración en correos_config (codigo: recuperar_password)';
+            return false;
+        }
+
+        $docMailDir = MVC_APP . '/lib/mail';
+        require_once $docMailDir . '/phpmailer.php';
+        require_once $docMailDir . '/smtp.php';
+        require_once $docMailDir . '/exception.php';
+
+        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        $GLOBALS['LAST_EMAIL_ERROR'] = null;
+
+        try {
+            $mail->isSMTP();
+            $mail->Host = _mail_resolve_ipv4_host($base['host']);
+            $mail->SMTPAuth = true;
+            $mail->Username = $base['emisor'];
+            $mail->Password = $base['pass'];
+            $mail->SMTPSecure = $base['smtp_secure'] ?? 'tls';
+            $mail->Port = $base['port'];
+            $mail->CharSet = 'UTF-8';
+
+            $config = require MVC_CONFIG . '/app.php';
+            if (!empty($config['mail_smtp_options'])) {
+                $mail->SMTPOptions = $config['mail_smtp_options'];
+            }
+
+            $mail->setFrom($base['emisor'], $base['empresa']);
+            foreach ($destinatarios as $c) { $mail->addAddress($c); }
+            $mail->Subject = 'Carga de inventario pendiente de aprobación #' . ($data['numero'] ?? '');
+
+            $e = static fn($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES, 'UTF-8');
+            $url = $data['url'] ?? '';
+            $mail->Body = '
+                <div style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:auto;">
+                    <h2 style="color:#2563eb;">Carga de inventario pendiente</h2>
+                    <p>Hay una carga de inventario que requiere su aprobación en <strong>' . $e($data['empresa']) . '</strong>.</p>
+                    <table style="border-collapse:collapse;font-size:14px;">
+                        <tr><td style="padding:4px 12px;color:#666;">N°</td><td style="padding:4px 12px;"><strong>#' . $e($data['numero']) . '</strong></td></tr>
+                        <tr><td style="padding:4px 12px;color:#666;">Tipo</td><td style="padding:4px 12px;">' . $e(ucfirst((string) ($data['tipo'] ?? ''))) . '</td></tr>
+                        <tr><td style="padding:4px 12px;color:#666;">Fecha</td><td style="padding:4px 12px;">' . $e($data['fecha']) . '</td></tr>
+                        <tr><td style="padding:4px 12px;color:#666;">Líneas</td><td style="padding:4px 12px;">' . $e($data['total_lineas']) . '</td></tr>
+                        <tr><td style="padding:4px 12px;color:#666;">Registrada por</td><td style="padding:4px 12px;">' . $e($data['creador']) . '</td></tr>
+                    </table>
+                    ' . ($url ? '<p style="margin-top:20px;"><a href="' . $e($url) . '" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">Revisar y aprobar</a></p>' : '') . '
+                    <p style="color:#888;font-size:12px;margin-top:24px;">El inventario se afecta únicamente cuando la carga es aprobada.</p>
+                </div>';
+            $mail->isHTML(true);
+
+            return $mail->send();
+        } catch (\PHPMailer\PHPMailer\Exception $ex) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = $mail->ErrorInfo ?? $ex->getMessage();
+            error_log('Mailer Error (carga inventario): ' . ($GLOBALS['LAST_EMAIL_ERROR']));
+            return false;
+        }
+    }
+
+    /**
      * Envía el correo de invitación para nuevo usuario.
      * Usa la configuración de correos_config (codigo: nuevo_usuario).
      *

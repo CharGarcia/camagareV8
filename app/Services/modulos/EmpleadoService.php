@@ -7,6 +7,10 @@ namespace App\Services\modulos;
 use App\repositories\modulos\EmpleadoRepository;
 use App\Rules\modulos\EmpleadoRules;
 use App\Services\LogSistemaService;
+use App\Services\modulos\RolPagoService;
+use App\repositories\modulos\RolPagoRepository;
+use App\Rules\modulos\RolPagoRules;
+use App\Services\modulos\ConfirmacionRolRequeridaException;
 use Exception;
 
 class EmpleadoService
@@ -84,7 +88,13 @@ class EmpleadoService
     /**
      * Actualiza los datos de un empleado.
      */
-    public function actualizar(int $id, int $idEmpresa, array $data): void
+    /**
+     * Actualiza el empleado. Devuelve ['regenerados' => string[]] con los roles abiertos
+     * que se regeneraron por el cambio.
+     * @throws ConfirmacionRolRequeridaException si el cambio afecta al rol y hay roles
+     *   abiertos sin pagar y aún no se confirmó ($data['confirmar_roles']).
+     */
+    public function actualizar(int $id, int $idEmpresa, array $data): array
     {
         $this->rules->validate($data);
 
@@ -97,6 +107,23 @@ class EmpleadoService
         $old = $this->repository->findById($id, $idEmpresa);
         if (!$old) {
             throw new Exception("Empleado no encontrado.");
+        }
+
+        $rolSvc = new RolPagoService(new RolPagoRepository(), new RolPagoRules(), $this->logService);
+        $periodosViejos = $this->repository->getPeriodos($id, $idEmpresa);
+        $periodosNuevos = $data['periodos'] ?? null;
+
+        // 1) Bloqueo duro: fechas que afectarían un rol YA PAGADO.
+        if ($periodosNuevos !== null) {
+            $rolSvc->validarPeriodosContraRolesPagados($idEmpresa, $id, $periodosNuevos, $periodosViejos);
+        }
+
+        // 2) Confirmación: si el cambio afecta al rol y hay roles abiertos (generado sin pagar),
+        //    pedir confirmación; al confirmar se regenerarán tras guardar.
+        $afecta = $this->cambioAfectaRol($old, $data, $periodosViejos, $periodosNuevos);
+        $rolesAbiertos = $afecta ? $rolSvc->getRolesAbiertosEmpleado($idEmpresa, $id) : [];
+        if (!empty($rolesAbiertos) && empty($data['confirmar_roles'])) {
+            throw new ConfirmacionRolRequeridaException($rolesAbiertos);
         }
 
         $this->repository->beginTransaction();
@@ -118,6 +145,48 @@ class EmpleadoService
             $this->repository->rollBack();
             throw $e;
         }
+
+        // 3) Regenerar los roles abiertos afectados (fuera de la transacción; un fallo no revierte el guardado).
+        $regenerados = [];
+        foreach ($rolesAbiertos as $r) {
+            try {
+                $rolSvc->generar((int) $r['id'], $idEmpresa, $idUsuario);
+                $regenerados[] = $r['tipo_rol'] . ' ' . str_pad((string) $r['periodo_mes'], 2, '0', STR_PAD_LEFT) . '/' . $r['periodo_anio'];
+            } catch (\Throwable $e) {
+                // La regeneración no debe romper el guardado del empleado.
+            }
+        }
+        return ['regenerados' => $regenerados];
+    }
+
+    /** ¿El cambio toca algún dato que interviene en el cálculo del rol? */
+    private function cambioAfectaRol(array $old, array $data, array $periodosViejos, ?array $periodosNuevos): bool
+    {
+        foreach (['sueldo_base', 'valor_semanal', 'valor_quincena', 'aporte_personal', 'aporte_patronal'] as $f) {
+            if (array_key_exists($f, $data) && round((float) ($old[$f] ?? 0), 2) !== round((float) $data[$f], 2)) {
+                return true;
+            }
+        }
+        foreach (['fondos_reserva', 'decimo_tercero', 'decimo_cuarto'] as $f) {
+            if (array_key_exists($f, $data) && (string) ($old[$f] ?? '') !== (string) ($data[$f] ?? '')) {
+                return true;
+            }
+        }
+        return $periodosNuevos !== null && $this->periodosCambiaron($periodosViejos, $periodosNuevos);
+    }
+
+    private function periodosCambiaron(array $viejos, array $nuevos): bool
+    {
+        $norm = function (array $ps): array {
+            $out = [];
+            foreach ($ps as $p) {
+                if (empty($p['fecha_ingreso'])) continue;
+                $out[] = substr((string) $p['fecha_ingreso'], 0, 10) . '|' . substr((string) ($p['fecha_salida'] ?? ''), 0, 10);
+            }
+            sort($out);
+            return $out;
+        };
+        return $norm($viejos) !== $norm($nuevos);
     }
 
     /**

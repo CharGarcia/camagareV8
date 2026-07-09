@@ -43,9 +43,39 @@ class SecuencialRepository
         'Cambios de productos'                 => ['tabla' => 'cambios_producto_cv',    'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
     ];
 
+    /**
+     * Agrupación por área de los tipos de documento soportados (solo para mostrar
+     * en la ayuda de la pestaña Secuenciales). Los nombres deben coincidir EXACTO
+     * con las claves de DOCUMENT_MAP.
+     */
+    private const DOCUMENT_AREAS = [
+        'Ventas'         => ['Facturas de venta', 'Recibos de venta', 'Nota de crédito', 'Nota de débito', 'Proformas', 'Guía de remisión'],
+        'Compras'        => ['Retenciones de compras', 'Liquidación de compras o servicios', 'Órdenes de compra'],
+        'Tesorería'      => ['Ingresos', 'Egresos'],
+        'Operativos'     => ['Pedidos', 'Cambios de productos', 'Ordenes car-wash'],
+        'Consignaciones' => ['Consignaciones ventas', 'Retornos consignaciones ventas', 'Facturacion consignaciones ventas'],
+    ];
+
     public function __construct()
     {
         $this->db = Database::getConnection();
+    }
+
+    /**
+     * Tipos soportados agrupados por área para la tarjeta de ayuda.
+     * Cualquier tipo de DOCUMENT_MAP no clasificado cae en "Otros".
+     *
+     * @return array<string, string[]>
+     */
+    public function getTiposDocumentoAgrupados(): array
+    {
+        $grupos = self::DOCUMENT_AREAS;
+        $clasificados = array_merge(...array_values(self::DOCUMENT_AREAS));
+        $otros = array_values(array_diff(array_keys(self::DOCUMENT_MAP), $clasificados));
+        if (!empty($otros)) {
+            $grupos['Otros'] = $otros;
+        }
+        return $grupos;
     }
 
     /**

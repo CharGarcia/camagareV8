@@ -99,6 +99,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'aplica_en'      => 'Afecta a',
                     'motivo'         => 'Motivo',
                     'estado'         => 'Estado',
+                    'pago'           => 'Pago',
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
@@ -132,16 +133,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th data-col="aplica_en">Afecta a</th>
                         <th data-col="motivo">Motivo</th>
                         <th class="text-center sortable-header" data-sort="estado" role="button" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center" data-col="pago">Pago</th>
                         <th class="text-center" style="width: 40px;"></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyNovedades">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="10" class="text-center py-5 text-muted">No se encontraron novedades registradas.</td></tr>
+                        <tr><td colspan="11" class="text-center py-5 text-muted">No se encontraron novedades registradas.</td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $row):
                             $mes = $meses[(int) $row['periodo_mes']] ?? $row['periodo_mes'];
                             $estadoOk = ($row['estado'] ?? 'activo') === 'activo';
+                            $pagada = !empty($row['pagada']);
                         ?>
                             <tr class="novedad-row" onclick="abrirModalEditar(this)" data-row='<?= htmlspecialchars(json_encode($row), ENT_QUOTES) ?>'>
                                 <td class="ps-3 fw-medium" data-col="empleado"><?= htmlspecialchars((string) ($row['empleado_nombre'] ?? '')) ?></td>
@@ -154,6 +157,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td data-col="motivo" class="small text-muted"><?= htmlspecialchars((string) ($row['motivo_nombre'] ?? '—')) ?></td>
                                 <td class="text-center" data-col="estado">
                                     <span class="badge bg-<?= $estadoOk ? 'success' : 'secondary' ?> bg-opacity-10 text-<?= $estadoOk ? 'success' : 'secondary' ?> border border-<?= $estadoOk ? 'success' : 'secondary' ?> border-opacity-25"><?= $estadoOk ? 'Activo' : 'Anulado' ?></span>
+                                </td>
+                                <td class="text-center" data-col="pago">
+                                    <?php if ($pagada): ?>
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="bi bi-check-circle me-1"></i>Pagada</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Pendiente</span>
+                                    <?php endif; ?>
                                 </td>
                                 <td class="text-center pe-3" onclick="event.stopPropagation()">
                                     <button class="btn btn-outline-danger btn-xs border-0 px-2" onclick="eliminarRegistro(<?= $row['id'] ?>)" title="Eliminar"><i class="bi bi-trash"></i></button>

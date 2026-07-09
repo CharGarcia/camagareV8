@@ -30,6 +30,10 @@ class RolProvisionService
         }
         $sbu   = (float) ($salario['sbu'] ?? 0);
         $pctFR = (float) ($salario['fondo_reserva'] ?? 8.33) ?: 8.33;
+        // El 14º (SBU/12) se prorratea por días trabajados; el resto ya hereda la base
+        // (que sale de los rubros del rol, prorrateados en origen).
+        $diasTrab = min(30, max(0, (int) ($lin['dias_trabajados'] ?? 30)));
+        $factorDC = $diasTrab / 30;
 
         $dtMode = (string) ($lin['decimo_tercero'] ?? '');
         $dcMode = (string) ($lin['decimo_cuarto'] ?? '');
@@ -42,7 +46,7 @@ class RolProvisionService
 
         return [
             $mk('Décimo Tercero', $base / 12, $dtMode !== 'mensualiza', $dtMode === 'mensualiza' ? 'Pagado en rol' : 'Provisión mensual'),
-            $mk('Décimo Cuarto', $sbu / 12, $dcMode !== 'mensualiza', $dcMode === 'mensualiza' ? 'Pagado en rol' : 'Provisión mensual'),
+            $mk('Décimo Cuarto', $sbu / 12 * $factorDC, $dcMode !== 'mensualiza', $dcMode === 'mensualiza' ? 'Pagado en rol' : 'Provisión mensual'),
             $mk('Vacaciones', $base / 24, true, 'Provisión mensual'),
             $mk('Fondos de Reserva', $base * $pctFR / 100, $frMode !== 'rol', $frMode === 'rol' ? 'Pagado en rol' : 'Provisión mensual'),
             $mk('Desahucio', $base * 0.25 / 12, true, 'Provisión mensual'),

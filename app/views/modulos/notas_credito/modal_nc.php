@@ -28,7 +28,7 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                         <button id="nc-btn-xml" type="button" class="btn btn-outline-success btn-sm px-2" onclick="window.NC_exportarXml()" title="Exportar XML" disabled><i class="bi bi-file-earmark-code"></i></button>
                         <button id="nc-btn-correo" type="button" class="btn btn-outline-info btn-sm px-2" onclick="window.NC_enviarPorCorreo()" title="Enviar por correo" disabled><i class="bi bi-envelope"></i></button>
                         <div class="vr mx-1"></div>
-                        <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.NC_abrirModalClienteCrear()" title="Registrar nuevo cliente"><i class="bi bi-person-plus fs-6"></i></button>
+                        <button type="button" class="btn btn-outline-primary btn-sm px-2 nc-edit-only" onclick="window.NC_abrirModalClienteCrear()" title="Registrar nuevo cliente"><i class="bi bi-person-plus fs-6"></i></button>
 
 
                     </div>
@@ -193,7 +193,7 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                                             </tbody>
                                         </table>
                                     </div>
-                                    <div class="p-2 border-top bg-light">
+                                    <div class="p-2 border-top bg-light nc-edit-only">
                                         <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="window.NC_agregarFila()">
                                             <i class="bi bi-plus-circle me-1"></i> Agregar línea manual
                                         </button>
@@ -222,7 +222,7 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                                                     <tbody id="nc-tbody-info-adicional"></tbody>
                                                 </table>
                                             </div>
-                                            <div class="p-1 border-top bg-light">
+                                            <div class="p-1 border-top bg-light nc-edit-only">
                                                 <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold ms-2" onclick="window.NC_agregarInfoAdicional()">
                                                     <i class="bi bi-plus-circle me-1"></i> Agregar línea
                                                 </button>
@@ -482,5 +482,10 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
 
     .modal-nc .row-det:hover {
         background-color: rgba(13, 110, 253, 0.02) !important;
+    }
+
+    /* Modo solo lectura: ocultar controles de edición (agregar/eliminar/guardar) */
+    #modalNC.nc-lectura .nc-edit-only {
+        display: none !important;
     }
 </style>

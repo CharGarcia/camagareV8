@@ -11,18 +11,27 @@ use App\models\CatalogoNovedades;
  * datos ya cargados y devuelve el desglose de ingresos/egresos + totales.
  *
  * Reglas (confirmadas):
- *  - Base: MENSUAL=sueldo_base, QUINCENA=valor_quincena, SEMANAL=valor_semanal.
+ *  - Base: MENSUAL=sueldo_base prorrateado por días trabajados (ingreso/salida),
+ *    QUINCENA=valor_quincena, SEMANAL=valor_semanal.
+ *  - Prorrateo (solo MENSUAL): factor = díasTrabajados/30. Aplica a sueldo, décimo
+ *    tercero/cuarto mensualizados y fondos de reserva. La base del IESS hereda el
+ *    sueldo ya prorrateado. Las faltas adicionales se cargan con la novedad 10.
  *  - Horas (novedades 4/5/6): tarifa = sueldo/hora_normal * (1+recargo%) * nº horas.
  *  - IESS personal (solo MENSUAL): base_iess * empleado.aporte_personal%. La base
  *    incluye sueldo + horas + rubros/ingresos marcados "aporta IESS".
  *  - Fondos de reserva 8.33% del sueldo si fondos_reserva='rol' (solo MENSUAL).
  *  - Décimos si 'mensualiza' (13º = sueldo/12, 14º = SBU/12) (solo MENSUAL).
  *  - Días no laborados (novedad 10): días * sueldo/30 como egreso.
+ *  - Anticipo (novedad 3): NO se descuenta al registrarse; se paga por egreso y el rol
+ *    descuenta solo lo pagado ($anticiposPagados[id_novedad]).
+ *  - Descuento (2): egreso directo por su valor.
+ *  - Préstamos (7,8,9): la cuota descuenta directo SOLO si el préstamo ya fue desembolsado
+ *    (pagado por egreso); si no, no descuenta ($prestamosNoDesembolsados[id_novedad]).
  *  - Neteo (solo MENSUAL): resta lo ya pagado en SEMANAL/QUINCENA del mes.
  */
 class RolCalculoService
 {
-    public function calcular(array $emp, string $tipo, array $salario, array $rubrosFijos, array $novedades, float $neteo = 0.0, float $vacaciones = 0.0): array
+    public function calcular(array $emp, string $tipo, array $salario, array $rubrosFijos, array $novedades, float $neteo = 0.0, float $vacaciones = 0.0, int $diasTrabajados = 30, array $anticiposPagados = [], array $prestamosNoDesembolsados = []): array
     {
         $esMensual = $tipo === 'MENSUAL';
         $rubros = [];
@@ -33,16 +42,21 @@ class RolCalculoService
         $sueldoBase   = (float) ($emp['sueldo_base'] ?? 0);
         $sueldoDiario = $sueldoBase > 0 ? $sueldoBase / 30 : 0.0;
 
-        // 1) Base de la corrida
+        // Días efectivamente laborados en el mes (prorrateo por fecha de ingreso/salida).
+        // Solo aplica al MENSUAL; QUINCENA/SEMANAL usan su valor fijo.
+        $diasTrab = $esMensual ? max(0, min(30, $diasTrabajados)) : 30;
+        $factor   = $diasTrab / 30;
+
+        // 1) Base de la corrida (el sueldo mensual se prorratea por días trabajados)
         $base = match ($tipo) {
             'QUINCENA' => (float) ($emp['valor_quincena'] ?? 0),
             'SEMANAL'  => (float) ($emp['valor_semanal'] ?? 0),
-            default    => $sueldoBase,
+            default    => round($sueldoBase * $factor, 2),
         };
         $conceptoBase = match ($tipo) {
             'QUINCENA' => 'Quincena',
             'SEMANAL'  => 'Semana',
-            default    => 'Sueldo',
+            default    => $diasTrab < 30 ? "Sueldo ({$diasTrab} días)" : 'Sueldo',
         };
         $rubros[] = $this->r('ingreso', $conceptoBase, null, 'sueldo', $base, $esMensual);
         $ingresos += $base;
@@ -75,6 +89,27 @@ class RolCalculoService
                 continue;
             }
 
+            // Anticipos / Préstamos: NO se descuentan al registrarse. Se pagan por egreso
+            // (Egresos → Nómina) y el rol descuenta SOLO lo pagado por egreso contra la novedad.
+            if (CatalogoNovedades::esPagoPorEgreso($cod)) {
+                $pagado = round((float) ($anticiposPagados[$idn] ?? 0), 2);
+                if ($pagado > 0.001) {
+                    $rubros[] = $this->r('egreso', $nom, $cod, 'novedad', $pagado, false, $idn);
+                    $egresos += $pagado;
+                }
+                continue; // sin pago → no descuenta (no genera rubro)
+            }
+
+            // Préstamos (cuota): descuento directo, PERO solo si el préstamo ya fue desembolsado.
+            if (CatalogoNovedades::esPrestamo($cod)) {
+                if (isset($prestamosNoDesembolsados[$idn])) {
+                    continue; // préstamo aún no desembolsado (pagado) → no descuenta la cuota
+                }
+                $rubros[] = $this->r('egreso', $nom, $cod, 'novedad', $val, false, $idn);
+                $egresos += $val;
+                continue;
+            }
+
             switch ($cod) {
                 case '1': // Otros Ingresos
                     $rubros[] = $this->r('ingreso', $nom, $cod, 'novedad', $val, false, $idn);
@@ -85,7 +120,7 @@ class RolCalculoService
                     $rubros[] = $this->r('egreso', $nom . ' (' . $val . 'd)', $cod, 'novedad', $monto, false, $idn);
                     $egresos += $monto;
                     break;
-                default: // 2 Descuento, 3 Anticipo, 7/8/9 Préstamos
+                default: // 2 Descuento: descuento directo, sin egreso
                     $rubros[] = $this->r('egreso', $nom, $cod, 'novedad', $val, false, $idn);
                     $egresos += $val;
                     break;
@@ -118,21 +153,21 @@ class RolCalculoService
         // 4) Beneficios (solo MENSUAL)
         $aportePatronal = 0.0;
         if ($esMensual) {
-            // Fondos de reserva
+            // Fondos de reserva (proporcional a días trabajados)
             if (($emp['fondos_reserva'] ?? '') === 'rol' && $sueldoBase > 0) {
                 $pctFR = (float) ($salario['fondo_reserva'] ?? 8.33);
-                $fr = round($sueldoBase * $pctFR / 100, 2);
+                $fr = round($sueldoBase * $factor * $pctFR / 100, 2);
                 $rubros[] = $this->r('ingreso', 'Fondos de Reserva', null, 'fondos', $fr, false);
                 $ingresos += $fr;
             }
-            // Décimos mensualizados
+            // Décimos mensualizados (proporcional a días trabajados)
             if (($emp['decimo_tercero'] ?? '') === 'mensualiza' && $sueldoBase > 0) {
-                $dt = round($sueldoBase / 12, 2);
+                $dt = round($sueldoBase * $factor / 12, 2);
                 $rubros[] = $this->r('ingreso', 'Décimo Tercero', null, 'decimo', $dt, false);
                 $ingresos += $dt;
             }
             if (($emp['decimo_cuarto'] ?? '') === 'mensualiza') {
-                $dc = round(((float) ($salario['sbu'] ?? 0)) / 12, 2);
+                $dc = round(((float) ($salario['sbu'] ?? 0)) * $factor / 12, 2);
                 if ($dc > 0) {
                     $rubros[] = $this->r('ingreso', 'Décimo Cuarto', null, 'decimo', $dc, false);
                     $ingresos += $dc;
@@ -164,7 +199,7 @@ class RolCalculoService
         $egresos  = round($egresos, 2);
 
         return [
-            'dias_trabajados' => 30,
+            'dias_trabajados' => $diasTrab,
             'sueldo_base'     => round($base, 2),
             'total_ingresos'  => $ingresos,
             'total_egresos'   => $egresos,

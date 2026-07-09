@@ -20,6 +20,7 @@
                         <input type="text" id="rolver_buscar" class="form-control border-start-0 ps-0 shadow-none" placeholder="Buscar empleado por nombre o cédula..." autocomplete="off" oninput="window.rolVerFiltrar()">
                     </div>
                 </div>
+                <div id="rolver_avisos" class="px-3"></div>
                 <div class="flex-grow-1" style="overflow-y:auto; min-height:0;">
                     <table class="table table-hover table-sm mb-0 align-middle">
                         <thead class="table-light" style="position:sticky; top:0; z-index:5;">
@@ -41,7 +42,60 @@
                     <button type="button" class="btn btn-outline-danger btn-sm" id="rolverBtnEliminar" onclick="window.rolEliminarModal()"><i class="bi bi-trash3 me-1"></i>Eliminar</button>
                 <?php endif; ?>
                 <span class="me-auto small text-muted" id="rolver_conteo"></span>
+                <?php if (!empty($perm['actualizar'])): ?>
+                    <button type="button" class="btn btn-success btn-sm" id="rolverBtnEgresos" onclick="window.abrirEgresoLote()"><i class="bi bi-cash-coin me-1"></i>Generar egresos</button>
+                <?php endif; ?>
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Mini-modal: Generar egresos de nómina en lote -->
+<div class="modal fade" id="modalEgresoLote" tabindex="-1" aria-hidden="true" style="z-index:1075;">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light py-2">
+                <h6 class="modal-title fw-bold"><i class="bi bi-cash-coin me-2 text-success"></i>Generar egresos de nómina</h6>
+                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3">Se generará <b>un egreso por empleado</b> con saldo pendiente en este rol, con el neto a pagar. Los ya pagados se omiten.</p>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Fecha de pago</label>
+                        <input type="date" id="egl_fecha" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Punto de emisión (serie)</label>
+                        <select id="egl_punto" class="form-select form-select-sm"></select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold">Forma de pago</label>
+                        <select id="egl_forma" class="form-select form-select-sm" onchange="window.eglFormaChange()"></select>
+                    </div>
+                    <div class="col-12 d-none" id="egl_banco_wrap">
+                        <div class="row g-2 border rounded-2 bg-warning bg-opacity-10 p-2 mx-0">
+                            <div class="col-6">
+                                <label class="form-label small fw-bold mb-1">Operación bancaria</label>
+                                <select id="egl_tipo_op" class="form-select form-select-sm" onchange="window.eglTipoOpChange()">
+                                    <option value="TRANSFERENCIA" selected>Transferencia</option>
+                                    <option value="CHEQUE">Cheque</option>
+                                </select>
+                            </div>
+                            <div class="col-6 d-none" id="egl_cheque_wrap">
+                                <label class="form-label small fw-bold mb-1">N° inicial de cheque</label>
+                                <input type="number" id="egl_cheque_ini" class="form-control form-control-sm" min="1" step="1" placeholder="Ej. 1001">
+                                <small class="text-muted">Se numera consecutivo por empleado.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="egl_msg" class="mt-2"></div>
+            </div>
+            <div class="modal-footer bg-light border-top p-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cancelar</button>
+                <button type="button" class="btn btn-success btn-sm px-3" id="eglBtnConfirmar" onclick="window.confirmarEgresoLote()"><i class="bi bi-check2-circle me-1"></i>Generar egresos</button>
             </div>
         </div>
     </div>

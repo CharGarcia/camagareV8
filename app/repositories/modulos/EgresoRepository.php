@@ -99,6 +99,7 @@ class EgresoRepository extends BaseRepository
         $sql = "SELECT e.*,
                        COALESCE(p.razon_social, emp.nombres_apellidos, 'N/A') AS sujeto_nombre,
                        COALESCE(p.identificacion, emp.identificacion, '') AS sujeto_ruc,
+                       COALESCE(p.email, emp.email) AS sujeto_email,
                        u.nombre AS usuario_nombre,
                        ec.nombre AS concepto_nombre
                 FROM egresos_cabecera e
@@ -150,15 +151,27 @@ class EgresoRepository extends BaseRepository
         return $this->query($sql, [':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /** Líneas de rol (rol_detalle) pendientes de pago de un empleado. Mismo shape que proveedor. */
+    /** Documentos de nómina pendientes de un empleado: líneas de rol + anticipos/préstamos. */
     public function getDocumentosPendientesEmpleado(int $idEmpleado, int $idEmpresa): array
     {
-        $sql = "WITH pagado AS (
+        $sql = "WITH pagado_rol AS (
                     SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
-                    FROM egresos_detalle d
-                    INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
+                    FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
                     WHERE d.tipo_documento = 'ROL' AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
                     GROUP BY d.id_referencia_documento
+                ),
+                pagado_ant AS (
+                    SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
+                    FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
+                    WHERE d.tipo_documento = 'ANTICIPO' AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
+                    GROUP BY d.id_referencia_documento
+                ),
+                pagado_pre AS (
+                    SELECT d.tipo_documento, d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
+                    FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
+                    WHERE d.tipo_documento IN ('PRESTAMO7','PRESTAMO8','PRESTAMO9')
+                      AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
+                    GROUP BY d.tipo_documento, d.id_referencia_documento
                 )
                 SELECT 'ROL' AS tipo_doc_bd, rd.id,
                        COALESCE(NULLIF(rc.descripcion, ''), 'Rol ' || rc.periodo_mes || '/' || rc.periodo_anio) AS numero_documento,
@@ -169,11 +182,38 @@ class EgresoRepository extends BaseRepository
                        0 AS dias_credito
                 FROM rol_detalle rd
                 INNER JOIN rol_cabecera rc ON rc.id = rd.id_rol
-                LEFT JOIN pagado p ON p.id_referencia_documento = rd.id
+                LEFT JOIN pagado_rol p ON p.id_referencia_documento = rd.id
                 WHERE rd.id_empleado = :id_emp AND rd.id_empresa = :id_empresa
                   AND rc.eliminado = FALSE AND rc.estado IN ('generado','pagado','contabilizado')
                   AND (rd.neto - COALESCE(p.total_pagado, 0)) > 0.01
-                ORDER BY rc.periodo_anio ASC, rc.periodo_mes ASC";
+                UNION ALL
+                SELECT 'ANTICIPO' AS tipo_doc_bd, n.id,
+                       n.tipo_nombre || ' ' || n.periodo_mes || '/' || n.periodo_anio AS numero_documento,
+                       n.fecha AS fecha_emision,
+                       n.valor AS monto_total,
+                       COALESCE(pa.total_pagado, 0) AS monto_pagado_previo,
+                       (n.valor - COALESCE(pa.total_pagado, 0)) AS saldo_pendiente,
+                       0 AS dias_credito
+                FROM novedades n
+                LEFT JOIN pagado_ant pa ON pa.id_referencia_documento = n.id
+                WHERE n.id_empleado = :id_emp AND n.id_empresa = :id_empresa
+                  AND n.eliminado = FALSE AND n.estado = 'activo' AND n.tipo_codigo = '3'
+                  AND (n.valor - COALESCE(pa.total_pagado, 0)) > 0.01
+                UNION ALL
+                SELECT ('PRESTAMO' || n.tipo_codigo) AS tipo_doc_bd, n.id_empleado AS id,
+                       MAX(n.tipo_nombre) || ' (desembolso)' AS numero_documento,
+                       MIN(n.fecha) AS fecha_emision,
+                       SUM(n.valor) AS monto_total,
+                       COALESCE(pp.total_pagado, 0) AS monto_pagado_previo,
+                       (SUM(n.valor) - COALESCE(pp.total_pagado, 0)) AS saldo_pendiente,
+                       0 AS dias_credito
+                FROM novedades n
+                LEFT JOIN pagado_pre pp ON pp.tipo_documento = ('PRESTAMO' || n.tipo_codigo) AND pp.id_referencia_documento = n.id_empleado
+                WHERE n.id_empleado = :id_emp AND n.id_empresa = :id_empresa
+                  AND n.eliminado = FALSE AND n.estado = 'activo' AND n.tipo_codigo IN ('7','8','9')
+                GROUP BY n.id_empleado, n.tipo_codigo, pp.total_pagado
+                HAVING (SUM(n.valor) - COALESCE(pp.total_pagado, 0)) > 0.01
+                ORDER BY numero_documento ASC";
         return $this->query($sql, [':id_emp' => $idEmpleado, ':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -415,6 +455,109 @@ class EgresoRepository extends BaseRepository
                       AND (cb.importe_total - COALESCE(p.total_pagado, 0) - COALESCE(nn.total_nc, 0) + COALESCE(nn.total_nd, 0)) > 0.01
                       $filtroBusq
                     ORDER BY prov.razon_social ASC, cb.fecha_emision ASC
+                    LIMIT 301";
+        } elseif ($tipo === 'ROL') {
+            // NÓMINA: líneas de rol pendientes + anticipos/préstamos (novedades) pendientes,
+            // por empleado, en una sola lista (cada fila con su tipo_doc_bd).
+            $filtroRol = '';
+            $filtroAnt = '';
+            $filtroPre = '';
+            if ($q !== '') {
+                $filtroRol = " AND (emp.nombres_apellidos ILIKE :q OR emp.identificacion ILIKE :q OR rc.descripcion ILIKE :q)";
+                $filtroAnt = " AND (emp.nombres_apellidos ILIKE :q OR emp.identificacion ILIKE :q OR n.tipo_nombre ILIKE :q)";
+                $filtroPre = " AND (emp.nombres_apellidos ILIKE :q OR emp.identificacion ILIKE :q OR n.tipo_nombre ILIKE :q)";
+                $params[':q'] = '%' . $q . '%';
+            }
+            $sql = "WITH pagado_rol AS (
+                        SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
+                        FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
+                        WHERE d.tipo_documento = 'ROL' AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
+                          $excluirSql
+                        GROUP BY d.id_referencia_documento
+                    ),
+                    pagado_ant AS (
+                        SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
+                        FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
+                        WHERE d.tipo_documento = 'ANTICIPO' AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
+                          $excluirSql
+                        GROUP BY d.id_referencia_documento
+                    ),
+                    pagado_pre AS (
+                        SELECT d.tipo_documento, d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
+                        FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
+                        WHERE d.tipo_documento IN ('PRESTAMO7','PRESTAMO8','PRESTAMO9')
+                          AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
+                          $excluirSql
+                        GROUP BY d.tipo_documento, d.id_referencia_documento
+                    )
+                    SELECT * FROM (
+                        SELECT 'ROL' AS tipo_doc_bd,
+                               rd.id,
+                               COALESCE(NULLIF(rc.descripcion, ''), 'Rol ' || rc.periodo_mes || '/' || rc.periodo_anio) AS numero_documento,
+                               rc.fecha_pago AS fecha_emision,
+                               0 AS dias_credito,
+                               rd.neto AS monto_total,
+                               COALESCE(p.total_pagado, 0) AS monto_cobrado,
+                               (rd.neto - COALESCE(p.total_pagado, 0)) AS saldo_pendiente,
+                               emp.id                AS proveedor_id,
+                               emp.nombres_apellidos AS proveedor_nombre,
+                               emp.identificacion    AS proveedor_ruc
+                        FROM rol_detalle rd
+                        INNER JOIN rol_cabecera rc ON rc.id = rd.id_rol
+                        INNER JOIN empleados emp ON emp.id = rd.id_empleado
+                        LEFT  JOIN pagado_rol p ON rd.id = p.id_referencia_documento
+                        WHERE rd.id_empresa = :id_empresa
+                          AND rc.eliminado = FALSE
+                          AND rc.estado IN ('generado','pagado','contabilizado')
+                          AND rc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                          AND (rd.neto - COALESCE(p.total_pagado, 0)) > 0.01
+                          $filtroRol
+                        UNION ALL
+                        SELECT 'ANTICIPO' AS tipo_doc_bd,
+                               n.id,
+                               n.tipo_nombre || ' ' || n.periodo_mes || '/' || n.periodo_anio AS numero_documento,
+                               n.fecha AS fecha_emision,
+                               0 AS dias_credito,
+                               n.valor AS monto_total,
+                               COALESCE(pa.total_pagado, 0) AS monto_cobrado,
+                               (n.valor - COALESCE(pa.total_pagado, 0)) AS saldo_pendiente,
+                               emp.id                AS proveedor_id,
+                               emp.nombres_apellidos AS proveedor_nombre,
+                               emp.identificacion    AS proveedor_ruc
+                        FROM novedades n
+                        INNER JOIN empleados emp ON emp.id = n.id_empleado
+                        LEFT  JOIN pagado_ant pa ON n.id = pa.id_referencia_documento
+                        WHERE n.id_empresa = :id_empresa
+                          AND n.eliminado = FALSE AND n.estado = 'activo'
+                          AND n.tipo_codigo = '3'
+                          AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                          AND (n.valor - COALESCE(pa.total_pagado, 0)) > 0.01
+                          $filtroAnt
+                        UNION ALL
+                        -- PRÉSTAMOS AGRUPADOS: una línea por empleado+tipo = desembolso (suma de cuotas).
+                        SELECT ('PRESTAMO' || n.tipo_codigo) AS tipo_doc_bd,
+                               n.id_empleado AS id,
+                               MAX(n.tipo_nombre) || ' (desembolso)' AS numero_documento,
+                               MIN(n.fecha) AS fecha_emision,
+                               0 AS dias_credito,
+                               SUM(n.valor) AS monto_total,
+                               COALESCE(pp.total_pagado, 0) AS monto_cobrado,
+                               (SUM(n.valor) - COALESCE(pp.total_pagado, 0)) AS saldo_pendiente,
+                               emp.id                AS proveedor_id,
+                               emp.nombres_apellidos AS proveedor_nombre,
+                               emp.identificacion    AS proveedor_ruc
+                        FROM novedades n
+                        INNER JOIN empleados emp ON emp.id = n.id_empleado
+                        LEFT  JOIN pagado_pre pp ON pp.tipo_documento = ('PRESTAMO' || n.tipo_codigo) AND pp.id_referencia_documento = n.id_empleado
+                        WHERE n.id_empresa = :id_empresa
+                          AND n.eliminado = FALSE AND n.estado = 'activo'
+                          AND n.tipo_codigo IN ('7','8','9')
+                          AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                          $filtroPre
+                        GROUP BY n.id_empleado, n.tipo_codigo, emp.id, emp.nombres_apellidos, emp.identificacion, pp.total_pagado
+                        HAVING (SUM(n.valor) - COALESCE(pp.total_pagado, 0)) > 0.01
+                    ) u
+                    ORDER BY proveedor_nombre ASC, numero_documento ASC
                     LIMIT 301";
         } else {
             // LIQUIDACION

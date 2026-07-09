@@ -681,19 +681,23 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 const comp = this.dataset.comportamiento || 'GENERAL';
 
                 if (sel.value == this.dataset.id) {
-                    // Mismo concepto ya seleccionado → si es COMPRA/LIQUIDACION, re-abrir modal de docs
+                    // Mismo concepto ya seleccionado → re-abrir el modal de docs pendientes.
                     if (['COMPRA', 'LIQUIDACION'].includes(comp)) {
                         abrirModalEgDocsPendientes(comp);
+                    } else if (['ROL', 'QUINCENA', 'PRESTAMO'].includes(comp)) {
+                        abrirModalEgDocsPendientes('ROL');
                     }
                     return;
                 }
 
-                const hayDatos = docsEgreso.length > 0 || manualEgreso.some(m => m.desc.trim() !== '' || m.monto > 0);
+                const hayDatos = docsEgreso.length > 0 || manualEgreso.some(m => m.desc.trim() !== '' || m.monto > 0) || pagosEgreso.length > 0;
                 const aplicarCambio = () => {
                     sel.value = this.dataset.id;
                     manejarCambioConceptoEgreso(sel);
                     if (['COMPRA', 'LIQUIDACION'].includes(comp)) {
                         setTimeout(() => abrirModalEgDocsPendientes(comp), 150);
+                    } else if (['ROL', 'QUINCENA', 'PRESTAMO'].includes(comp)) {
+                        setTimeout(() => abrirModalEgDocsPendientes('ROL'), 150);
                     }
                 };
                 if (hayDatos) {
@@ -752,7 +756,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function seleccionarConceptoGeneralEgreso(id) {
         const sel = document.getElementById('eg-select-concepto');
         if (!sel || sel.value == id) return;
-        const hayDatos = docsEgreso.length > 0 || manualEgreso.some(m => m.desc.trim() !== '' || m.monto > 0);
+        const hayDatos = docsEgreso.length > 0 || manualEgreso.some(m => m.desc.trim() !== '' || m.monto > 0) || pagosEgreso.length > 0;
         const aplicarCambio = () => { sel.value = id; manejarCambioConceptoEgreso(sel); };
         if (hayDatos) {
             Swal.fire({
@@ -781,7 +785,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const prevVal = selSuj.value;
 
         // 1. Inteligencia de mapeo dinámica basada en Comportamiento
-        if (['COMPRA', 'LIQUIDACION'].includes(comp)) {
+        if (['COMPRA', 'LIQUIDACION', 'ANTICIPO_PROVEEDOR'].includes(comp)) {
             selSuj.value = 'PROVEEDOR';
         } else if (['ROL', 'QUINCENA', 'PRESTAMO'].includes(comp)) {
             selSuj.value = 'EMPLEADO';
@@ -791,32 +795,23 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             }
         }
 
-        // 2. Alternar cuadrícula visual
-        const blkDoc  = document.getElementById('eg-block-docs');
-        const blkOtr  = document.getElementById('eg-block-otros');
+        // 2. Alternar cuadrícula visual: entrada manual para GENERAL y ANTICIPO_PROVEEDOR,
+        //    grilla de documentos para los que sí se enlazan a un módulo (COMPRA/LIQUIDACION/etc.)
+        const usaManual = (comp === 'GENERAL' || comp === 'ANTICIPO_PROVEEDOR');
+        document.getElementById('eg-block-docs').classList.toggle('d-none', usaManual);
+        document.getElementById('eg-block-otros').classList.toggle('d-none', !usaManual);
 
-        if (comp === 'GENERAL') {
-            blkDoc.classList.add('d-none');
-            blkOtr.classList.remove('d-none');
-        } else {
-            blkDoc.classList.remove('d-none');
-            blkOtr.classList.add('d-none');
-        }
-
-        // 3. Gestión de Re-render
+        // 3. Limpiar SIEMPRE el detalle y los pagos al cambiar de concepto
+        docsEgreso = [];
+        manualEgreso = [];
+        pagosEgreso = [];
         if (prevVal !== selSuj.value) {
-            toggleBuscadorSujeto(selSuj.value);
+            toggleBuscadorSujeto(selSuj.value); // limpia sujeto + arrays + re-render de docs
         } else {
-            // Mismo sujeto, filtrado por comportamiento si aplica a grilla
-            docsEgreso.forEach(d => {
-                if (['COMPRA', 'LIQUIDACION'].includes(comp) && d.tipo_bd !== comp) {
-                    d.seleccionado = false;
-                    d.pagado = 0;
-                }
-            });
             renderDocsEgreso();
-            recalcEgresoTot();
         }
+        renderPagosEgreso();
+        recalcEgresoTot();
     }
 
     function toggleBuscadorSujeto(val) {
@@ -873,9 +868,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('eg-dropdown-sujetos').classList.add('d-none');
         if (typeof EGR_renderSaldoForma === 'function') EGR_renderSaldoForma();
 
-        // Para COMPRA/LIQUIDACION: los docs se agregan mediante el modal secundario de documentos pendientes.
-        // Para GENERAL/EMPLEADO: no hay tabla de docs pendientes en ese bloque.
-        // No se hace carga automática de documentos.
+        // COMPRA/LIQUIDACION/NÓMINA: los documentos a pagar se agregan mediante el
+        // modal de documentos pendientes (botón de concepto). No se cargan aquí.
     }
 
     function quitarDocEgreso(i) {
@@ -887,7 +881,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function renderDocsEgreso() {
         const tEgreso = document.getElementById('eg-input-tipo-egreso').value;
 
-        if (tEgreso !== 'GENERAL') {
+        // Entrada manual (sin documentos): conceptos GENERAL y Anticipo a proveedor.
+        const egUsaManual = ['GENERAL', 'ANTICIPO_PROVEEDOR'].includes(tEgreso);
+        if (!egUsaManual) {
             const tb = document.getElementById('eg-tbody-docs-pendientes');
             tb.innerHTML = '';
 
@@ -895,20 +891,32 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             const docsConfirmados = docsEgreso.filter(d => d.seleccionado);
 
             if (docsConfirmados.length === 0) {
-                const tipoLabel = tEgreso === 'COMPRA' ? 'facturas de compra' : tEgreso === 'LIQUIDACION' ? 'liquidaciones de compras' : 'documentos';
-                tb.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-muted small">No hay ${tipoLabel} seleccionados. Haga clic en el botón de concepto para agregar documentos.</td></tr>`;
+                const tipoLabel = tEgreso === 'COMPRA' ? 'facturas de compra' : tEgreso === 'LIQUIDACION' ? 'liquidaciones de compras' : (['ROL','QUINCENA','PRESTAMO'].includes(tEgreso) ? 'roles pendientes' : 'documentos');
+                const ayuda = ['ROL','QUINCENA','PRESTAMO'].includes(tEgreso) ? 'Seleccione el empleado para cargar sus roles pendientes.' : 'Haga clic en el botón de concepto para agregar documentos.';
+                tb.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-muted small">No hay ${tipoLabel} seleccionados. ${ayuda}</td></tr>`;
                 return;
             }
 
             docsConfirmados.forEach((d) => {
                 const i = docsEgreso.indexOf(d);
-                const tipoBadge = d.tipo_bd === 'COMPRA'
-                    ? '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" style="font-size:0.65rem">COMPRA</span>'
-                    : '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.65rem">LIQUID.</span>';
+                const badgesDoc = {
+                    COMPRA:      '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" style="font-size:0.65rem">COMPRA</span>',
+                    LIQUIDACION: '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.65rem">LIQUID.</span>',
+                    ROL:         '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:0.65rem">NÓMINA</span>',
+                    ANTICIPO:    '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" style="font-size:0.65rem">ANTICIPO</span>'
+                };
+                const esPrestamo = String(d.tipo_bd || '').startsWith('PRESTAMO');
+                const esNominaTipo = d.tipo_bd === 'ROL' || d.tipo_bd === 'ANTICIPO' || esPrestamo;
+                const tipoBadge = esPrestamo
+                    ? '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.65rem">PRÉSTAMO</span>'
+                    : (badgesDoc[d.tipo_bd] || `<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:0.65rem">${d.tipo_bd}</span>`);
+                const numeroCell = esNominaTipo
+                    ? `<span class="small fw-bold">${d.numero}</span>`
+                    : `<code class="small text-primary fw-bold pointer text-decoration-underline" onclick="abrirPrevisualizadorDoc(${d.id}, '${d.tipo_bd}')">${d.numero}</code>`;
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${tipoBadge}</td>
-                    <td><code class="small text-primary fw-bold pointer text-decoration-underline" onclick="abrirPrevisualizadorDoc(${d.id}, '${d.tipo_bd}')">${d.numero}</code></td>
+                    <td>${numeroCell}</td>
                     <td class="small">${d.fecha ? d.fecha.split('-').reverse().join('/') : ''}</td>
                     <td class="text-end small">$${d.total.toFixed(2)}</td>
                     <td class="text-end"><input type="number" class="form-control form-control-sm input-numeric px-1" style="height:26px;" step="0.01" value="${d.pagado > 0 ? d.pagado.toFixed(2) : ''}" ${isReadOnly ? 'disabled' : ''} oninput="updateDocAmt(${i}, this.value, this)"></td>
@@ -1373,7 +1381,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         if (!data.id_egreso_concepto) { Swal.fire('Requerido', 'Debe seleccionar el Concepto del Egreso.', 'warning'); return; }
 
         // Det
-        if (data.tipo_egreso === 'GENERAL') {
+        if (['GENERAL', 'ANTICIPO_PROVEEDOR'].includes(data.tipo_egreso)) {
             // Lógica Manual
             if(manualEgreso.length===0){ Swal.fire('Atención', 'Agregue al menos un concepto o ítem manual.', 'warning'); return;}
             manualEgreso.forEach(m => {
@@ -1468,17 +1476,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     async function enviarCorreoEgreso() {
         const id = document.getElementById('eg-input-id').value;
         if (!id) return;
+        const emailPrecargado = document.getElementById('btnCorreoEgreso').dataset.email || '';
         const { value: correo } = await Swal.fire({
             title: 'Enviar comprobante',
             input: 'email',
             inputLabel: 'Correo del destinatario',
             inputPlaceholder: 'proveedor@correo.com',
-            inputValue: '',
+            inputValue: emailPrecargado,
             showCancelButton: true,
             confirmButtonText: '<i class="bi bi-envelope me-1"></i> Enviar',
             cancelButtonText: 'Cancelar',
-            footer: 'Si lo dejas vacío, se usa el correo registrado del proveedor/empleado.',
-            inputValidator: (v) => (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) ? 'Correo no válido' : undefined
+            target: document.getElementById('modalNuevoEgreso'),
+            inputValidator: (v) => {
+                if (!v || !v.trim()) return 'Ingrese un correo.';
+                if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim())) return 'Correo no válido.';
+            }
         });
         if (correo === undefined) return;
 
@@ -1503,7 +1515,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('modalEgresoTitulo').textContent = `Ver Egreso #${e.numero_egreso}`;
             document.getElementById('eg-input-id').value = e.id;
             document.getElementById('btnPdfEgreso').classList.remove('d-none');
-            document.getElementById('btnCorreoEgreso').classList.remove('d-none');
+            const _btnCorreoEg = document.getElementById('btnCorreoEgreso');
+            _btnCorreoEg.classList.remove('d-none');
+            _btnCorreoEg.dataset.email = e.sujeto_email || '';
             document.getElementById('eg-input-fecha').value = e.fecha_emision;
             // Mostrar la serie (punto) original del documento, sin disparar el cálculo del siguiente secuencial
             if (e.id_punto_emision) {
@@ -1526,10 +1540,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             const blkDoc  = document.getElementById('eg-block-docs');
             const blkOtr  = document.getElementById('eg-block-otros');
             
-            if (comp === 'GENERAL') {
+            if (['GENERAL', 'ANTICIPO_PROVEEDOR'].includes(comp)) {
                 blkDoc.classList.add('d-none');
                 blkOtr.classList.remove('d-none');
-                
+
                 document.getElementById('eg-search-input').value = e.sujeto_nombre;
                 manualEgreso = (e.detalles||[]).map(d=>({
                     desc: d.descripcion||'Detalle',
@@ -1587,7 +1601,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 btnGuardar.onclick = () => actualizarPagosEgreso();
                 setPagosControlesHabilitados(true);
                 
-                if (comp === 'GENERAL') {
+                if (['GENERAL', 'ANTICIPO_PROVEEDOR'].includes(comp)) {
                     // Regla del Usuario: Para egresos generales, permitir modificar todo EXCEPTO concepto, serie y secuencial
                     document.getElementById('eg-select-punto').disabled = true;
                     document.getElementById('eg-select-concepto').disabled = true;
@@ -1714,8 +1728,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             }))
         };
 
-        // Si es egreso general, integramos y validamos datos extendidos
-        if (comp === 'GENERAL') {
+        // Si es egreso general o anticipo a proveedor (entrada manual), integramos y validamos datos extendidos
+        if (['GENERAL', 'ANTICIPO_PROVEEDOR'].includes(comp)) {
             const valSujeto = document.getElementById('eg-input-id-sujeto').value;
             if (!valSujeto) {
                 Swal.fire('Requerido', 'Debe seleccionar un Beneficiario (Proveedor/Empleado) válido.', 'warning');
@@ -1873,10 +1887,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         const titulos = {
             COMPRA:      'Facturas de Compra - Pendientes de Pago',
-            LIQUIDACION: 'Liquidaciones de Compra - Pendientes de Pago'
+            LIQUIDACION: 'Liquidaciones de Compra - Pendientes de Pago',
+            ROL:         'Nómina - Roles y Anticipos Pendientes de Pago'
         };
         const el = document.getElementById('eg-sdp-titulo');
         if (el) el.textContent = titulos[tipoBehav] || 'Documentos Pendientes de Pago';
+        // La columna "sujeto" muestra Empleado para nómina, Proveedor para compras.
+        const thSuj = document.getElementById('eg-sdp-th-suj');
+        if (thSuj) thSuj.textContent = tipoBehav === 'ROL' ? 'Empleado' : 'Proveedor';
 
         const inpBuscar = document.getElementById('eg-sdp-buscar');
         if (inpBuscar) inpBuscar.value = '';
@@ -1921,17 +1939,19 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         tbody.innerHTML = '';
 
         if (docs.length === 0) {
-            const tipo = _egTipoDocActual === 'COMPRA' ? 'facturas de compra' : _egTipoDocActual === 'LIQUIDACION' ? 'liquidaciones de compras' : 'documentos';
+            const tipo = _egTipoDocActual === 'COMPRA' ? 'facturas de compra' : _egTipoDocActual === 'LIQUIDACION' ? 'liquidaciones de compras' : _egTipoDocActual === 'ROL' ? 'roles de pago' : 'documentos';
             tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-muted"><i class="bi bi-inbox fs-4 d-block mb-1"></i>No hay ${tipo} pendientes de pago.</td></tr>`;
             actualizarResumenModalEg();
             return;
         }
 
         docs.forEach(doc => {
-            const yaAgregado = docsEgreso.some(d => d.id == doc.id && d.seleccionado);
+            // Clave compuesta: rol_detalle.id y novedades.id pueden colisionar en el modal mixto.
+            const uid        = doc.tipo_doc_bd + '_' + doc.id;
+            const yaAgregado = docsEgreso.some(d => d.id == doc.id && d.tipo_bd == doc.tipo_doc_bd && d.seleccionado);
             const saldo      = parseFloat(doc.saldo_pendiente);
-            const checked    = _egSelModal[doc.id] !== undefined;
-            const montoPrev  = checked ? _egSelModal[doc.id] : saldo;
+            const checked    = _egSelModal[uid] !== undefined;
+            const montoPrev  = checked ? _egSelModal[uid] : saldo;
 
             const creditoBadge = (() => {
                 if (!doc.fecha_emision) return '<span class="text-muted">-</span>';
@@ -1955,7 +1975,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     const chk = this.querySelector('.eg-sdp-chk');
                     if (!chk) return;
                     chk.checked = !chk.checked;
-                    toggleEgDocModal(doc.id, chk.checked, saldo);
+                    toggleEgDocModal(uid, chk.checked, saldo);
                 });
             }
 
@@ -1963,9 +1983,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <td class="text-center ps-2">
                     ${yaAgregado
                         ? '<i class="bi bi-check-circle-fill text-success" title="Ya agregado"></i>'
-                        : `<input type="checkbox" class="form-check-input eg-sdp-chk" data-id="${doc.id}"
+                        : `<input type="checkbox" class="form-check-input eg-sdp-chk" data-id="${uid}"
                                ${checked ? 'checked' : ''}
-                               onchange="toggleEgDocModal(${doc.id}, this.checked, ${saldo})">`
+                               onchange="toggleEgDocModal('${uid}', this.checked, ${saldo})">`
                     }
                 </td>
                 <td><code class="text-primary small">${doc.numero_documento}</code></td>
@@ -1977,12 +1997,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     ${yaAgregado
                         ? `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 small">Agregado</span>`
                         : `<input type="number" class="form-control form-control-sm text-end eg-sdp-monto px-1"
-                               data-id="${doc.id}" data-saldo="${saldo}"
+                               data-id="${uid}" data-saldo="${saldo}"
                                style="height:26px;font-size:0.8rem;width:90px;"
                                step="0.01" min="0.01" max="${saldo}"
                                value="${montoPrev.toFixed(2)}"
                                ${checked ? '' : 'disabled'}
-                               oninput="actualizarMontoEgModal(${doc.id}, this)">`
+                               oninput="actualizarMontoEgModal('${uid}', this)">`
                     }
                 </td>`;
             tbody.appendChild(tr);
@@ -1999,25 +2019,52 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         actualizarResumenModalEg();
     }
 
-    function toggleEgDocModal(id, checked, saldo) {
-        const inputMonto = document.querySelector(`.eg-sdp-monto[data-id="${id}"]`);
+    // Autocompleta el sujeto del egreso desde un documento del modal, si aún no hay uno.
+    function egAutocompletarSujeto(doc) {
+        if (!doc || !doc.proveedor_id) return;
+        const campoId = document.getElementById('eg-input-id-sujeto');
+        if (campoId.value) return; // ya hay datos ingresados → no sobreescribir
+        const esNomina = _egTipoDocActual === 'ROL';
+        document.getElementById('eg-select-tipo-sujeto').value = esNomina ? 'EMPLEADO' : 'PROVEEDOR';
+        campoId.value = doc.proveedor_id;
+        document.getElementById('eg-search-input').value = doc.proveedor_nombre || '';
+        const lblSuj = document.getElementById('eg-lbl-search');
+        if (lblSuj) lblSuj.innerText = esNomina ? 'Buscar Empleado' : 'Buscar Proveedor';
+        if (typeof EGR_renderSaldoForma === 'function') EGR_renderSaldoForma();
+    }
+
+    function toggleEgDocModal(uid, checked, saldo) {
+        const inputMonto = document.querySelector(`.eg-sdp-monto[data-id="${uid}"]`);
+        const doc = _egDocsModal.find(d => (d.tipo_doc_bd + '_' + d.id) === uid);
         if (checked) {
+            // Nómina: un egreso es por empleado. Evitar mezclar líneas de empleados distintos.
+            if (_egTipoDocActual === 'ROL') {
+                const campoId = document.getElementById('eg-input-id-sujeto');
+                if (campoId.value && doc && String(campoId.value) !== String(doc.proveedor_id)) {
+                    const chk = document.querySelector(`.eg-sdp-chk[data-id="${uid}"]`);
+                    if (chk) chk.checked = false;
+                    Swal.fire('Un empleado por egreso', 'Este egreso ya corresponde a otro empleado. Registre un egreso independiente para cada empleado.', 'warning');
+                    return;
+                }
+            }
             const monto = inputMonto ? parseFloat(inputMonto.value) || saldo : saldo;
-            _egSelModal[id] = monto;
+            _egSelModal[uid] = monto;
             if (inputMonto) inputMonto.disabled = false;
+            // Nómina: al seleccionar la línea, autocompletar el empleado en el egreso.
+            if (_egTipoDocActual === 'ROL') egAutocompletarSujeto(doc);
         } else {
-            delete _egSelModal[id];
+            delete _egSelModal[uid];
             if (inputMonto) inputMonto.disabled = true;
         }
         actualizarResumenModalEg();
     }
 
-    function actualizarMontoEgModal(id, input) {
+    function actualizarMontoEgModal(uid, input) {
         const saldo = parseFloat(input.dataset.saldo);
         let val = parseFloat(input.value);
         if (isNaN(val) || val <= 0) val = 0;
         if (val > saldo) { val = saldo; input.value = saldo.toFixed(2); }
-        _egSelModal[id] = val;
+        _egSelModal[uid] = val;
         actualizarResumenModalEg();
     }
 
@@ -2031,8 +2078,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     function confirmarSeleccionEgDocsPendientes() {
-        const ids = Object.keys(_egSelModal);
-        if (ids.length === 0) {
+        const uids = Object.keys(_egSelModal);
+        if (uids.length === 0) {
             Swal.fire('Atención', 'Seleccione al menos un documento para continuar.', 'warning');
             return;
         }
@@ -2041,12 +2088,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         let proveedorId   = '';
         let proveedorNom  = '';
 
-        ids.forEach(id => {
-            const doc = _egDocsModal.find(d => d.id == id);
+        uids.forEach(uid => {
+            const doc = _egDocsModal.find(d => (d.tipo_doc_bd + '_' + d.id) === uid);
             if (!doc) return;
-            if (docsEgreso.some(d => d.id == doc.id)) return; // evitar duplicados
+            if (docsEgreso.some(d => d.id == doc.id && d.tipo_bd == doc.tipo_doc_bd)) return; // evitar duplicados
 
-            const monto = _egSelModal[id] || parseFloat(doc.saldo_pendiente);
+            const monto = _egSelModal[uid] || parseFloat(doc.saldo_pendiente);
             docsEgreso.push({
                 id:           doc.id,
                 tipo_bd:      doc.tipo_doc_bd,
@@ -2058,7 +2105,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 pagado:       monto
             });
 
-            // Capturar proveedor del primer documento seleccionado
+            // Capturar el sujeto (proveedor o empleado) del primer documento seleccionado
             if (!proveedorId && doc.proveedor_id) {
                 proveedorId  = doc.proveedor_id;
                 proveedorNom = doc.proveedor_nombre || '';
@@ -2066,12 +2113,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             agregados++;
         });
 
-        // Auto-rellenar proveedor en el formulario principal si no había uno seleccionado
+        // Auto-rellenar el sujeto en el formulario principal si no había uno seleccionado.
+        const esNomina = _egTipoDocActual === 'ROL';
         const campoIdSujeto = document.getElementById('eg-input-id-sujeto');
         if (proveedorId && !campoIdSujeto.value) {
+            document.getElementById('eg-select-tipo-sujeto').value = esNomina ? 'EMPLEADO' : 'PROVEEDOR';
             campoIdSujeto.value = proveedorId;
-            document.getElementById('eg-search-input').value       = proveedorNom;
-            document.getElementById('eg-select-tipo-sujeto').value = 'PROVEEDOR';
+            document.getElementById('eg-search-input').value = proveedorNom;
+            const lblSuj = document.getElementById('eg-lbl-search');
+            if (lblSuj) lblSuj.innerText = esNomina ? 'Buscar Empleado' : 'Buscar Proveedor';
         }
 
         renderDocsEgreso();
@@ -2129,7 +2179,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 btn.addEventListener('click', function () {
                     const selEl = document.getElementById('eg-select-concepto');
                     if (selEl.value == this.dataset.id) return;
-                    const hayDatos = docsEgreso.length > 0 || manualEgreso.some(m => m.desc.trim() !== '' || m.monto > 0);
+                    const hayDatos = docsEgreso.length > 0 || manualEgreso.some(m => m.desc.trim() !== '' || m.monto > 0) || pagosEgreso.length > 0;
                     const aplicarCambio = () => { selEl.value = this.dataset.id; manejarCambioConceptoEgreso(selEl); };
                     if (hayDatos) {
                         Swal.fire({
@@ -2404,7 +2454,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <tr>
                                 <th class="text-center ps-2" style="width:42px;"></th>
                                 <th style="min-width:140px;">Nº Documento</th>
-                                <th style="min-width:160px;">Proveedor</th>
+                                <th style="min-width:160px;" id="eg-sdp-th-suj">Proveedor</th>
                                 <th style="min-width:90px;">Fecha</th>
                                 <th style="min-width:100px;">Crédito</th>
                                 <th class="text-end" style="min-width:90px;">Total Doc.</th>

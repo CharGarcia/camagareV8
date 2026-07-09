@@ -325,8 +325,22 @@ class EmpresaService
     {
         $idEst = (int) ($data['id_establecimiento'] ?? 0);
         if (!$idEst) $idEst = $this->repository->getPrimerEstablecimientoId($idEmpresa);
-        $fields = ['metodo_costeo'];
-        $filtered = array_intersect_key($data, array_flip($fields));
+
+        // Lista de usuarios aprobadores (puede ser más de uno) → arreglo JSON de ids.
+        $aprobadores = $data['inv_usuarios_aprobadores'] ?? [];
+        if (!is_array($aprobadores)) $aprobadores = [];
+        $aprobadores = array_values(array_unique(array_filter(
+            array_map('intval', $aprobadores),
+            static fn($x) => $x > 0
+        )));
+
+        $filtered = [
+            'metodo_costeo'            => $data['metodo_costeo'] ?? 'promedio',
+            'inv_requiere_aprobacion'  => !empty($data['inv_requiere_aprobacion']) ? 'true' : 'false',
+            'inv_notificar_correo'     => !empty($data['inv_notificar_correo']) ? 'true' : 'false',
+            'inv_usuarios_aprobadores' => json_encode($aprobadores),
+        ];
+
         return $this->repository->updateEstablecimientoConfig($idEst, $filtered);
     }
 

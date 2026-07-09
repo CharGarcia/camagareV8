@@ -485,6 +485,24 @@ class ConfigController extends Controller
         (new SriCasillerosEtiquetasController())->delete();
     }
 
+    public function logSistema(): void
+    {
+        $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
+        $c = new LogSistemaConsultaController();
+        $method = match ($sub) {
+            'listar'         => 'listarAjax',
+            'detalle'        => 'detalleAjax',
+            'exportarExcel'  => 'exportarExcel',
+            'exportarPdf'    => 'exportarPdf',
+            default          => 'index',
+        };
+        if (method_exists($c, $method)) {
+            $c->$method();
+        } else {
+            $c->index();
+        }
+    }
+
     public function index(): void
     {
         $this->requireAuth();

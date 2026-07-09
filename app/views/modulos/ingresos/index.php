@@ -429,7 +429,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                 <thead class="table-light sticky-top">
                                                     <tr>
                                                         <th style="width: 40px;"></th>
-                                                        <th>Factura</th>
+                                                        <th>Documento</th>
                                                         <th style="min-width:120px;">Cliente</th>
                                                         <th>Fecha</th>
                                                         <th class="text-end">Total</th>
@@ -726,7 +726,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const sel = document.getElementById('m-select-concepto');
         if (!sel || sel.value == id) return;
         const hayDatos = docPendientes.length > 0
-                      || detalleManual.some(d => d.descripcion.trim() !== '' || parseFloat(d.monto) > 0);
+                      || detalleManual.some(d => d.descripcion.trim() !== '' || parseFloat(d.monto) > 0)
+                      || formasPagoData.length > 0;
         const aplicarCambio = () => { sel.value = id; manejarCambioConceptoIngreso(sel); };
         if (hayDatos) {
             Swal.fire({
@@ -754,12 +755,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         sincronizarBotonesConcepto(sel.value);
         document.getElementById('m-input-tipo-ingreso').value = comp;
 
-        // Limpiar
+        // Limpiar detalle y pagos
         docPendientes = [];
         detalleManual = [];
+        formasPagoData = [];
         clientesCargados = {};
         actualizarInfoClientesCargados();
         renderDetalles();
+        renderPagos();
         recalcularTotales();
 
         if (['FACTURA_VENTA', 'RECIBO_VENTA'].includes(comp)) {
@@ -881,7 +884,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const excluirId = document.getElementById('m-input-id')?.value || '';
         tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Buscando...</td></tr>';
 
-        let uri = `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDocumentosPendientesAjax?q=${encodeURIComponent(q)}`;
+        const tipoIng = document.getElementById('m-input-tipo-ingreso').value;
+        const tipoDoc = (tipoIng === 'RECIBO_VENTA') ? 'RECIBO' : 'FACTURA';
+        let uri = `<?= BASE_URL ?>/<?= $rutaModulo ?>/buscarDocumentosPendientesAjax?q=${encodeURIComponent(q)}&tipo=${tipoDoc}`;
         if (excluirId) uri += `&excluir_ingreso_id=${excluirId}`;
 
         fetch(uri)
@@ -1129,9 +1134,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 const disChk   = esHistorico ? 'disabled' : '';
                 const cliLabel = f.cliente_nombre ? `<span class="badge bg-light text-dark border" style="font-size:0.7rem;">${f.cliente_nombre}</span>` : '';
                 const esSaldoIni = (f.tipo_documento === 'SALDO_INICIAL');
+                const previewTipo = (f.tipo_documento === 'RECIBO') ? 'RECIBO_VENTA' : 'FACTURA_VENTA';
                 const numeroCell = esSaldoIni
                     ? `<code class="text-secondary fw-bold">${f.numero}</code> <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.62rem;">Saldo inicial</span>`
-                    : `<code class="text-primary fw-bold pointer text-decoration-underline" onclick="abrirPrevisualizadorDoc(${f.id}, 'FACTURA_VENTA')">${f.numero}</code>`;
+                    : `<code class="text-primary fw-bold pointer text-decoration-underline" onclick="abrirPrevisualizadorDoc(${f.id}, '${previewTipo}')">${f.numero}</code>`;
 
                 tr.innerHTML = `
                     <td class="text-center">
@@ -1605,7 +1611,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         if (['FACTURA_VENTA', 'RECIBO_VENTA'].includes(tipo)) {
             const sel = docPendientes.filter(f => f.seleccionado && f.cobrado > 0);
             if (sel.length === 0) {
-                Swal.fire('Sin Selección', 'Debe seleccionar al menos una factura y definir monto.', 'warning');
+                Swal.fire('Sin Selección', 'Debe seleccionar al menos un documento y definir monto.', 'warning');
                 return;
             }
             sel.forEach(s => {
@@ -1738,17 +1744,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     async function enviarCorreoIngreso() {
         const id = document.getElementById('m-input-id').value;
         if (!id) return;
+        const emailPrecargado = document.getElementById('btnCorreoIngreso').dataset.email || '';
         const { value: correo } = await Swal.fire({
             title: 'Enviar comprobante',
             input: 'email',
             inputLabel: 'Correo del destinatario',
             inputPlaceholder: 'cliente@correo.com',
-            inputValue: '',
+            inputValue: emailPrecargado,
             showCancelButton: true,
             confirmButtonText: '<i class="bi bi-envelope me-1"></i> Enviar',
             cancelButtonText: 'Cancelar',
-            footer: 'Si lo dejas vacío, se usa el correo registrado del cliente.',
-            inputValidator: (v) => (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) ? 'Correo no válido' : undefined
+            target: document.getElementById('modalNuevoIngreso'),
+            inputValidator: (v) => {
+                if (!v || !v.trim()) return 'Ingrese un correo.';
+                if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim())) return 'Correo no válido.';
+            }
         });
         if (correo === undefined) return; // cancelado
 
@@ -1786,7 +1796,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 
                 document.getElementById('m-input-id').value = ing.id;
                 document.getElementById('btnPdfIngreso').classList.remove('d-none');
-                document.getElementById('btnCorreoIngreso').classList.remove('d-none');
+                const _btnCorreo = document.getElementById('btnCorreoIngreso');
+                _btnCorreo.classList.remove('d-none');
+                _btnCorreo.dataset.email = ing.cliente_email || ing.recibo_cliente_email || '';
                 document.getElementById('m-input-fecha').value = ing.fecha_emision;
                 // Mostrar la serie (punto) original del documento, sin disparar el cálculo del siguiente secuencial
                 if (ing.id_punto_emision) {
@@ -2156,7 +2168,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         bsOffcanvas.show();
         
         let url = '';
-        if (tipo === 'FACTURA_VENTA' || tipo === 'VENTA' || tipo === 'RECIBO_VENTA') {
+        if (tipo === 'RECIBO_VENTA') {
+            url = `<?= BASE_URL ?>/modulos/recibo-venta/getFacturaAjax?id=${id}`;
+        } else if (tipo === 'FACTURA_VENTA' || tipo === 'VENTA') {
             url = `<?= BASE_URL ?>/modulos/factura-venta/getFacturaAjax?id=${id}`;
         } else if (tipo === 'COMPRA') {
             url = `<?= BASE_URL ?>/modulos/compras/getCompraAjax?id=${id}`;
@@ -2291,7 +2305,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
                         <input type="text" id="inp-docs-buscar" class="form-control"
-                               placeholder="Buscar por Nº factura, nombre de cliente o RUC..."
+                               placeholder="Buscar por Nº documento, nombre de cliente o RUC..."
                                oninput="clearTimeout(window._timerDocsBuscar); window._timerDocsBuscar = setTimeout(() => buscarEnModalDocsPendientes(this.value.trim()), 350)">
                         <button type="button" class="btn btn-outline-secondary" onclick="buscarEnModalDocsPendientes(document.getElementById('inp-docs-buscar').value.trim())">
                             <i class="bi bi-search"></i>

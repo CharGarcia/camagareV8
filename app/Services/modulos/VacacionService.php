@@ -72,6 +72,9 @@ class VacacionService
         $data = $this->prepararCalculos($data, $idEmpresa);
         $this->rules->validate($data);
 
+        // No permitir registrar vacaciones sobre un rol mensual ya pagado.
+        $this->bloquearSiRolPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0);
+
         $this->repo->beginTransaction();
         try {
             $id = $this->repo->create($data);
@@ -91,6 +94,10 @@ class VacacionService
         if (!$antes) throw new Exception('Registro no encontrado.');
         $data = $this->prepararCalculos($data, $idEmpresa);
         $this->rules->validate($data);
+
+        // Bloquear si el destino ANTERIOR o el NUEVO corresponden a un rol mensual ya pagado.
+        $this->bloquearSiRolPagado($idEmpresa, $antes['id_empleado'] ?? 0, $antes['periodo_anio'] ?? 0, $antes['periodo_mes'] ?? 0);
+        $this->bloquearSiRolPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0);
 
         $this->repo->beginTransaction();
         try {
@@ -145,6 +152,10 @@ class VacacionService
     {
         $antes = $this->repo->getDetalle($id, $idEmpresa);
         if (!$antes) throw new Exception('Registro no encontrado.');
+
+        // No permitir eliminar vacaciones que ya afectan a un rol mensual pagado.
+        $this->bloquearSiRolPagado($idEmpresa, $antes['id_empleado'] ?? 0, $antes['periodo_anio'] ?? 0, $antes['periodo_mes'] ?? 0);
+
         $this->repo->beginTransaction();
         try {
             $this->repo->deleteLogic($id, $idEmpresa, $idUsuario);
@@ -155,6 +166,32 @@ class VacacionService
             throw $e;
         }
         $this->sincronizarRol($idEmpresa, $antes['periodo_anio'] ?? 0, $antes['periodo_mes'] ?? 0, $idUsuario);
+    }
+
+    /**
+     * Lanza excepción si el empleado ya tiene un rol MENSUAL PAGADO para el período de la
+     * vacación: no se puede crear/editar/eliminar una vacación que afectaría un rol ya pagado
+     * (las vacaciones siempre alimentan el rol mensual). Silencioso si roles/egresos no está.
+     */
+    private function bloquearSiRolPagado(int $idEmpresa, $idEmpleado, $anio, $mes): void
+    {
+        $idEmpleado = (int) $idEmpleado;
+        $anio = (int) $anio;
+        $mes  = (int) $mes;
+        if ($idEmpleado <= 0 || $mes < 1 || $anio < 2000) return;
+
+        try {
+            $pagado = (new \App\repositories\modulos\RolPagoRepository())
+                ->existeRolPagadoPeriodo($idEmpresa, $idEmpleado, 'MENSUAL', $anio, $mes);
+        } catch (\Throwable $e) {
+            return; // roles/egresos no desplegado → sin restricción
+        }
+
+        if ($pagado) {
+            throw new Exception('No se puede crear, editar ni eliminar estas vacaciones: el rol mensual de '
+                . str_pad((string) $mes, 2, '0', STR_PAD_LEFT) . '/' . $anio
+                . ' del empleado ya está pagado. Anule el pago/rol de ese período si necesita modificarlas.');
+        }
     }
 
     /** Auto-regenera el rol MENSUAL 'generado' del período afectado (silencioso si falla). */

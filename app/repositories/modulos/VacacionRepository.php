@@ -173,6 +173,25 @@ class VacacionRepository extends BaseRepository
         return (float) $st->fetchColumn();
     }
 
+    /** [id_empleado => valor de vacaciones que alimenta el rol] para todos los empleados (batch). */
+    public function getValorParaRolMasivo(int $idEmpresa, array $ids, int $anio, int $mes): array
+    {
+        $map = array_fill_keys(array_map('intval', $ids), 0.0);
+        if (empty($ids)) return $map;
+        $in = implode(',', array_map('intval', $ids));
+        $st = $this->db->prepare("SELECT id_empleado, COALESCE(SUM(valor), 0) AS v FROM {$this->table}
+                                  WHERE id_empresa = :emp AND id_empleado IN ($in)
+                                    AND periodo_anio = :a AND periodo_mes = :m
+                                    AND afecta_rol = true AND estado != 'anulado' AND eliminado = false
+                                    AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
+                                  GROUP BY id_empleado");
+        $st->execute([':emp' => $idEmpresa, ':a' => $anio, ':m' => $mes]);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $map[(int) $r['id_empleado']] = (float) $r['v'];
+        }
+        return $map;
+    }
+
     public function buscarEmpleados(int $idEmpresa, string $q): array
     {
         $st = $this->db->prepare("SELECT id, nombres_apellidos, identificacion FROM empleados

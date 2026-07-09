@@ -37,7 +37,9 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
                                 <option value="LIQUIDACION">Módulo de liquidaciones de compras</option>
                                 <option value="FACTURA_VENTA">Módulo facturas de venta</option>
                                 <option value="RECIBO_VENTA">Módulo recibo de venta</option>
-                                <option value="ROLES">Módulo roles de pago</option>
+                                <option value="ROL">Nómina (roles de pago)</option>
+                                <option value="QUINCENA">Nómina (quincenas)</option>
+                                <option value="PRESTAMO">Préstamo a empleado</option>
                                 <option value="ANTICIPO_CLIENTE">Anticipo de cliente</option>
                                 <option value="ANTICIPO_PROVEEDOR">Anticipo a proveedor</option>
                             </select>
@@ -157,7 +159,7 @@ $idEmpresaActOIE = (int)($_SESSION['id_empresa'] ?? 0);
             selComp.addEventListener('change', function() {
                 const comp = this.value;
                 // Comportamientos puramente de egresos
-                if (['COMPRA', 'LIQUIDACION', 'ROLES', 'ANTICIPO_PROVEEDOR'].includes(comp)) {
+                if (['COMPRA', 'LIQUIDACION', 'ROL', 'QUINCENA', 'PRESTAMO', 'ANTICIPO_PROVEEDOR'].includes(comp)) {
                     document.getElementById('oie-rdo-egreso').checked = true;
                 }
                 // Comportamientos puramente de ingresos

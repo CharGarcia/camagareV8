@@ -96,7 +96,7 @@ class NovedadesController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="10" class="text-center py-5 text-muted">No se encontraron novedades.</td></tr>';
+            echo '<tr><td colspan="11" class="text-center py-5 text-muted">No se encontraron novedades.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 echo $this->renderFila($r);
@@ -134,6 +134,9 @@ class NovedadesController extends BaseModuloController
         $estadoBadge = $estadoOk
             ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Activo</span>'
             : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Anulado</span>';
+        $pagoBadge = !empty($r['pagada'])
+            ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="bi bi-check-circle me-1"></i>Pagada</span>'
+            : '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Pendiente</span>';
 
         return '<tr class="novedad-row" role="button" data-row=\'' . $dataJson . '\' onclick="abrirModalEditar(this)">'
             . '<td class="ps-3 fw-medium" data-col="empleado">' . $h($r['empleado_nombre']) . '</td>'
@@ -145,6 +148,7 @@ class NovedadesController extends BaseModuloController
             . '<td data-col="aplica_en"><span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">' . $h(CatalogoNovedades::nombreAplicaEn((string) ($r['aplica_en'] ?? 'rol'))) . '</span></td>'
             . '<td data-col="motivo" class="small text-muted">' . $h($r['motivo_nombre'] ?? '—') . '</td>'
             . '<td class="text-center" data-col="estado">' . $estadoBadge . '</td>'
+            . '<td class="text-center" data-col="pago">' . $pagoBadge . '</td>'
             . '<td class="text-center pe-3" onclick="event.stopPropagation()">'
             . '<button class="btn btn-outline-danger btn-xs border-0 px-2" onclick="eliminarRegistro(' . (int) $r['id'] . ')" title="Eliminar"><i class="bi bi-trash"></i></button>'
             . '</td></tr>';
