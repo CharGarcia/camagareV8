@@ -846,6 +846,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     // ── Modal secundario: selección de documentos pendientes ─────────────────
     let _docsModal = [];
     let _selModal  = {};
+    let _modoItems = false; // switch "Cobrar por ítems" del modal selector
+    let _itemsModal = [];   // ítems aplanados (modo por ítems)
+    let _selItems   = {};   // { iuid: monto } selección por ítem
+    let _docsHasMore = false;
 
     document.addEventListener('DOMContentLoaded', () => {
         const modalDocsPend = document.getElementById('modalSelDocPendientes');
@@ -876,6 +880,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
         modal.show();
         document.getElementById('inp-docs-buscar').value = '';
+        _modoItems = false;
+        _selItems = {};
+        _itemsModal = [];
+        const swItems = document.getElementById('sdp-modo-items');
+        if (swItems) swItems.checked = false;
         buscarEnModalDocsPendientes('');
     }
 
@@ -893,7 +902,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             .then(r => r.json())
             .then(res => {
                 _docsModal = res.data || [];
-                renderTablaDocsPendientesModal(_docsModal, res.has_more);
+                _docsHasMore = !!res.has_more;
+                if (_modoItems) cargarItemsYRender();
+                else renderTablaDocsPendientesModal(_docsModal, _docsHasMore);
             })
             .catch(() => {
                 tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-danger">Error al buscar documentos.</td></tr>';
@@ -902,6 +913,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     function renderTablaDocsPendientesModal(docs, hasMore) {
         const tbody = document.getElementById('sdp-tbody');
+        setHeadersModo('doc');
         tbody.innerHTML = '';
 
         if (docs.length === 0) {
@@ -1009,27 +1021,224 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         actualizarResumenModal();
     }
 
+    // ── Cobro por ítems: switch global (arriba, junto al buscador) ────────────
+    function toggleModoItems(on) {
+        _modoItems = !!on;
+        if (_modoItems) {
+            _selModal = {};              // al pasar a ítems, se ignora la selección por documento
+            cargarItemsYRender();
+        } else {
+            _selItems = {};              // al volver a documentos, se ignora la selección por ítem
+            renderTablaDocsPendientesModal(_docsModal, _docsHasMore);
+        }
+    }
+
+    // Cambia los encabezados de la tabla según el modo.
+    function setHeadersModo(modo) {
+        const hDoc = document.getElementById('sdp-th-doc');
+        const hCre = document.getElementById('sdp-th-credito');
+        const hTot = document.getElementById('sdp-th-total');
+        if (!hDoc) return;
+        if (modo === 'items') {
+            hDoc.textContent = 'Ítem';
+            hCre.textContent = 'Documento';
+            hTot.textContent = 'Total ítem';
+        } else {
+            hDoc.textContent = 'Nº Documento';
+            hCre.textContent = 'Crédito';
+            hTot.textContent = 'Total Doc.';
+        }
+    }
+
+    // Trae los ítems de todos los documentos y los aplana en _itemsModal.
+    async function cargarItemsYRender() {
+        const tbody = document.getElementById('sdp-tbody');
+        setHeadersModo('items');
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Cargando ítems…</td></tr>';
+        _itemsModal = [];
+
+        await Promise.all((_docsModal || []).map(async doc => {
+            const uid   = docUid(doc);
+            const saldo = parseFloat(doc.saldo_pendiente);
+            // Saldos iniciales no tienen ítems: se representan como un único "ítem" = todo el saldo.
+            if (doc.tipo_documento === 'SALDO_INICIAL') {
+                _itemsModal.push({ iuid: uid + '#0', docUid: uid, docId: doc.id, tipo_documento: doc.tipo_documento,
+                    numero_documento: doc.numero_documento, cliente_nombre: doc.cliente_nombre, id_cliente: doc.id_cliente,
+                    fecha: doc.fecha_emision, saldo_doc: saldo, desc: 'Saldo inicial', cant: 1, total_item: saldo });
+                return;
+            }
+            const ep = (doc.tipo_documento === 'RECIBO') ? 'recibo-venta' : 'factura-venta';
+            try {
+                const res  = await (await fetch(`<?= BASE_URL ?>/modulos/${ep}/getFacturaAjax?id=${doc.id}`)).json();
+                (res.detalles || []).forEach((d, idx) => {
+                    const cant  = parseFloat(d.cantidad || 0);
+                    const base  = parseFloat(d.precio_total_sin_impuesto || d.subtotal || (cant * parseFloat(d.precio_unitario || 0)) || 0);
+                    // Valor del ítem CON su impuesto (IVA/ICE de la línea), para que la suma cuadre con el saldo.
+                    const imp   = (d.impuestos || []).reduce((a, x) => a + parseFloat(x.valor || 0), 0);
+                    const tItem = Math.round((base + imp) * 100) / 100;
+                    _itemsModal.push({ iuid: uid + '#' + idx, docUid: uid, docId: doc.id, tipo_documento: doc.tipo_documento,
+                        numero_documento: doc.numero_documento, cliente_nombre: doc.cliente_nombre, id_cliente: doc.id_cliente,
+                        fecha: doc.fecha_emision, saldo_doc: saldo, desc: (d.descripcion || d.producto_nombre || 'Ítem'), cant, total_item: tItem });
+                });
+            } catch (e) { /* documento sin ítems accesibles */ }
+        }));
+
+        renderItemsModal();
+    }
+
+    function renderItemsModal() {
+        const tbody = document.getElementById('sdp-tbody');
+        tbody.innerHTML = '';
+        if (_itemsModal.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted"><i class="bi bi-inbox fs-4 d-block mb-1"></i>No hay ítems pendientes.</td></tr>';
+            actualizarResumenModal();
+            return;
+        }
+
+        _itemsModal.forEach(it => {
+            const iuid     = it.iuid;
+            const yaDoc    = docPendientes.some(d => docUid(d) === it.docUid);
+            const checked  = _selItems[iuid] !== undefined;
+            const montoPrev = _selItems[iuid] !== undefined ? _selItems[iuid] : it.total_item;
+
+            const tr = document.createElement('tr');
+            tr.className = yaDoc ? 'table-success' : '';
+            if (!yaDoc) {
+                tr.style.cursor = 'pointer';
+                tr.addEventListener('click', function (e) {
+                    if (e.target.closest('input')) return;
+                    const chk = this.querySelector('.sdp-item-chk');
+                    if (!chk) return;
+                    chk.checked = !chk.checked;
+                    toggleItemModal(iuid, chk.checked);
+                });
+            }
+            const desc = String(it.desc).replace(/</g, '&lt;');
+            tr.innerHTML = `
+                <td class="text-center ps-2">
+                    ${yaDoc
+                        ? '<i class="bi bi-check-circle-fill text-success" title="Documento ya agregado"></i>'
+                        : `<input type="checkbox" class="form-check-input sdp-item-chk" data-iuid="${iuid}" ${checked ? 'checked' : ''} onchange="toggleItemModal('${iuid}', this.checked)">`
+                    }
+                </td>
+                <td class="small"><strong>${desc}</strong>${it.cant ? ` <span class="text-muted">(x${it.cant})</span>` : ''}</td>
+                <td class="small">${it.cliente_nombre || ''}</td>
+                <td class="small">${it.fecha ? it.fecha.split('-').reverse().join('/') : ''}</td>
+                <td class="small"><code class="text-primary">${it.numero_documento}</code></td>
+                <td class="text-end small">$${it.total_item.toFixed(2)}</td>
+                <td class="text-end">
+                    ${yaDoc
+                        ? `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 small">Agregado</span>`
+                        : `<input type="number" class="form-control form-control-sm text-end sdp-item-monto2 px-1" data-iuid="${iuid}"
+                               style="height:26px;font-size:0.8rem;width:90px;" step="0.01" min="0.01" max="${it.total_item.toFixed(2)}"
+                               value="${checked ? montoPrev.toFixed(2) : it.total_item.toFixed(2)}"
+                               ${checked ? '' : 'disabled'} oninput="actualizarItemMonto('${iuid}', this)">`
+                    }
+                </td>`;
+            tbody.appendChild(tr);
+        });
+
+        if (_docsHasMore) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td colspan="7" class="text-center small text-muted py-2 bg-light border-top"><i class="bi bi-info-circle me-1"></i>Hay más de 300 documentos. Refine la búsqueda para ver más.</td>`;
+            tbody.appendChild(tr);
+        }
+        actualizarResumenModal();
+    }
+
+    // Saldo aún disponible del documento (saldo − ítems ya seleccionados del mismo doc, excepto el indicado).
+    function docSaldoRestante(docUid_, exceptIuid) {
+        const doc = _docsModal.find(d => docUid(d) === docUid_);
+        const saldo = doc ? parseFloat(doc.saldo_pendiente) : Infinity;
+        let usado = 0;
+        Object.keys(_selItems).forEach(k => {
+            if (k === exceptIuid) return;
+            const it = _itemsModal.find(x => x.iuid === k);
+            if (it && it.docUid === docUid_) usado += _selItems[k];
+        });
+        return Math.max(0, saldo - usado);
+    }
+
+    function toggleItemModal(iuid, checked) {
+        const it = _itemsModal.find(x => x.iuid === iuid);
+        if (!it) return;
+        const input = document.querySelector(`.sdp-item-monto2[data-iuid="${iuid}"]`);
+        if (checked) {
+            const monto = Math.min(it.total_item, docSaldoRestante(it.docUid, iuid));
+            _selItems[iuid] = monto;
+            if (input) { input.disabled = false; input.value = monto.toFixed(2); }
+        } else {
+            delete _selItems[iuid];
+            if (input) input.disabled = true;
+        }
+        actualizarResumenModal();
+    }
+
+    function actualizarItemMonto(iuid, input) {
+        const it = _itemsModal.find(x => x.iuid === iuid);
+        if (!it) return;
+        let v = parseFloat(input.value);
+        if (isNaN(v) || v < 0) v = 0;
+        if (v > it.total_item) v = it.total_item;                 // no más que el total del ítem
+        const tope = docSaldoRestante(it.docUid, iuid);           // ni más que el saldo restante del documento
+        if (v > tope) v = tope;
+        input.value = v > 0 ? v.toFixed(2) : '';
+        _selItems[iuid] = v;
+        actualizarResumenModal();
+    }
+
     function actualizarResumenModal() {
-        const ids    = Object.keys(_selModal);
-        const total  = ids.reduce((s, id) => s + (_selModal[id] || 0), 0);
-        document.getElementById('sdp-lbl-sel').textContent  = ids.length;
+        let n, total;
+        if (_modoItems) {
+            const ids = Object.keys(_selItems);
+            n = ids.length;
+            total = ids.reduce((s, k) => s + (_selItems[k] || 0), 0);
+        } else {
+            const ids = Object.keys(_selModal);
+            n = ids.length;
+            total = ids.reduce((s, id) => s + (_selModal[id] || 0), 0);
+        }
+        document.getElementById('sdp-lbl-sel').textContent   = n;
         document.getElementById('sdp-lbl-total').textContent = `$${total.toFixed(2)}`;
     }
 
     function confirmarSeleccionDocsPendientes() {
-        const ids = Object.keys(_selModal);
-        if (ids.length === 0) {
-            if (typeof showToast === 'function') showToast('Seleccione al menos un documento.', 'warning');
+        // Arma un mapa docUid → monto a cobrar (desde documentos o desde ítems).
+        const montosPorDoc = {};
+        if (_modoItems) {
+            Object.keys(_selItems).forEach(iuid => {
+                const it = _itemsModal.find(x => x.iuid === iuid);
+                if (!it) return;
+                montosPorDoc[it.docUid] = (montosPorDoc[it.docUid] || 0) + (_selItems[iuid] || 0);
+            });
+        } else {
+            Object.keys(_selModal).forEach(uid => { montosPorDoc[uid] = _selModal[uid]; });
+        }
+
+        // Desglose de ítems por documento (solo en modo ítems), para detallarlos en el ingreso.
+        const itemsPorDoc = {};
+        if (_modoItems) {
+            Object.keys(_selItems).forEach(iuid => {
+                const it = _itemsModal.find(x => x.iuid === iuid);
+                if (!it || (_selItems[iuid] || 0) <= 0.0001) return;
+                (itemsPorDoc[it.docUid] = itemsPorDoc[it.docUid] || []).push({ desc: it.desc, cobrado: _selItems[iuid] || 0, total: it.total_item });
+            });
+        }
+
+        const uids = Object.keys(montosPorDoc).filter(u => (montosPorDoc[u] || 0) > 0.0001);
+        if (uids.length === 0) {
+            if (typeof showToast === 'function') showToast('Seleccione al menos un documento o ítem.', 'warning');
             return;
         }
 
         let agregados = 0;
-        ids.forEach(uid => {
+        uids.forEach(uid => {
             const doc = _docsModal.find(d => docUid(d) === uid);
             if (!doc) return;
             if (docPendientes.some(d => docUid(d) === uid)) return; // ya existe
 
-            const monto = _selModal[uid] || parseFloat(doc.saldo_pendiente);
+            const saldo = parseFloat(doc.saldo_pendiente);
+            const monto = Math.min(montosPorDoc[uid] || saldo, saldo);
             docPendientes.push({
                 id:             doc.id,
                 tipo_documento: doc.tipo_documento || 'FACTURA',
@@ -1037,8 +1246,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 fecha:          doc.fecha_emision,
                 cliente_nombre: doc.cliente_nombre,
                 monto_doc:      parseFloat(doc.importe_total),
-                saldo_ant:      parseFloat(doc.saldo_pendiente),
+                saldo_ant:      saldo,
                 cobrado:        monto,
+                items:          itemsPorDoc[uid] || null,
                 seleccionado:   true
             });
             clientesCargados[doc.id_cliente] = doc.cliente_nombre;
@@ -1130,7 +1340,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
             docPendientes.forEach((f, idx) => {
                 const tr = document.createElement('tr');
-                const disInput = (!f.seleccionado || esHistorico) ? 'disabled' : '';
+                const tieneItems = Array.isArray(f.items) && f.items.length > 0;
+                const disInput = (!f.seleccionado || esHistorico || tieneItems) ? 'disabled' : '';
                 const disChk   = esHistorico ? 'disabled' : '';
                 const cliLabel = f.cliente_nombre ? `<span class="badge bg-light text-dark border" style="font-size:0.7rem;">${f.cliente_nombre}</span>` : '';
                 const esSaldoIni = (f.tipo_documento === 'SALDO_INICIAL');
@@ -1159,6 +1370,25 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     </td>
                 `;
                 tbody.appendChild(tr);
+
+                // Sub-detalle de ítems cobrados (si el documento se cobró por ítems)
+                if (tieneItems) {
+                    const filas = f.items.map(it => `
+                        <div class="d-flex justify-content-between align-items-center px-2 py-1 border-top border-light" style="font-size:0.74rem;">
+                            <span class="text-truncate text-secondary" style="max-width:75%"><i class="bi bi-dot"></i>${String(it.desc).replace(/</g, '&lt;')}</span>
+                            <span class="fw-bold text-secondary">$${(it.cobrado || 0).toFixed(2)}</span>
+                        </div>`).join('');
+                    const trItems = document.createElement('tr');
+                    trItems.className = 'ing-items-detalle';
+                    trItems.innerHTML = `<td class="border-0"></td>
+                        <td colspan="6" class="p-0 border-0">
+                            <div class="bg-light bg-opacity-50 rounded-bottom mb-1">
+                                <div class="small text-muted px-2 pt-1 fw-bold"><i class="bi bi-list-check me-1"></i>Ítems cobrados</div>
+                                ${filas}
+                            </div>
+                        </td>`;
+                    tbody.appendChild(trItems);
+                }
             });
         } else {
             const tbody = document.getElementById('m-tbody-otros-manual');
@@ -1615,16 +1845,35 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 return;
             }
             sel.forEach(s => {
-                data.detalles.push({
-                    tipo_documento:          s.tipo_documento || 'FACTURA',
-                    id_referencia_documento: s.id,
-                    numero_documento:        s.numero,
-                    fecha_documento:         s.fecha || '',
-                    monto_documento:         s.monto_doc,
-                    saldo_anterior:          s.saldo_ant,
-                    monto_cobrado:           s.cobrado,
-                    saldo_actual:            s.saldo_ant - s.cobrado
-                });
+                if (Array.isArray(s.items) && s.items.length > 0) {
+                    // Un renglón por ítem cobrado (mismo documento de referencia; el saldo se calcula por SUMA)
+                    s.items.forEach(it => {
+                        if ((it.cobrado || 0) <= 0) return;
+                        const tItem = it.total || it.cobrado;
+                        data.detalles.push({
+                            tipo_documento:          s.tipo_documento || 'FACTURA',
+                            id_referencia_documento: s.id,
+                            numero_documento:        s.numero,
+                            fecha_documento:         s.fecha || '',
+                            descripcion:             `${s.numero} · ${it.desc}`,
+                            monto_documento:         tItem,
+                            saldo_anterior:          tItem,
+                            monto_cobrado:           it.cobrado,
+                            saldo_actual:            Math.max(0, tItem - it.cobrado)
+                        });
+                    });
+                } else {
+                    data.detalles.push({
+                        tipo_documento:          s.tipo_documento || 'FACTURA',
+                        id_referencia_documento: s.id,
+                        numero_documento:        s.numero,
+                        fecha_documento:         s.fecha || '',
+                        monto_documento:         s.monto_doc,
+                        saldo_anterior:          s.saldo_ant,
+                        monto_cobrado:           s.cobrado,
+                        saldo_actual:            s.saldo_ant - s.cobrado
+                    });
+                }
             });
         } else {
             // Filtrar conceptos en blanco
@@ -1875,22 +2124,42 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     document.getElementById('m-block-facturas').classList.remove('d-none');
                     document.getElementById('m-block-otros').classList.add('d-none');
 
-                    // Reconstruir docPendientes directamente desde los detalles guardados (multi-cliente)
+                    // Reconstruir docPendientes agrupando por documento (varias filas = cobro por ítems)
                     docPendientes = [];
+                    const _grupos = {};
                     (ing.detalles || []).forEach(d => {
-                        docPendientes.push({
-                            id:             d.id_referencia_documento,
-                            tipo_documento: d.tipo_documento || 'FACTURA',
-                            numero:         d.numero_documento,
-                            fecha:          d.fecha_documento || '',
-                            cliente_nombre: d.cliente_nombre || '',
-                            monto_doc:      parseFloat(d.monto_documento || 0),
-                            saldo_ant:      parseFloat(d.saldo_anterior || 0),
-                            cobrado:        parseFloat(d.monto_cobrado || 0),
-                            seleccionado:   true
-                        });
+                        const tipoDoc = d.tipo_documento || 'FACTURA';
+                        const key = tipoDoc + ':' + d.id_referencia_documento;
+                        const prefItem = (d.numero_documento || '') + ' · ';
+                        const esItem = (d.descripcion || '').startsWith(prefItem);
+                        if (!_grupos[key]) {
+                            _grupos[key] = {
+                                id:             d.id_referencia_documento,
+                                tipo_documento: tipoDoc,
+                                numero:         d.numero_documento,
+                                fecha:          d.fecha_documento || '',
+                                cliente_nombre: d.cliente_nombre || '',
+                                monto_doc:      0,
+                                saldo_ant:      0,
+                                cobrado:        0,
+                                items:          [],
+                                _hasItems:      false,
+                                seleccionado:   true
+                            };
+                            docPendientes.push(_grupos[key]);
+                        }
+                        const g = _grupos[key];
+                        g.monto_doc += parseFloat(d.monto_documento || 0);
+                        g.saldo_ant += parseFloat(d.saldo_anterior || 0);
+                        g.cobrado   += parseFloat(d.monto_cobrado || 0);
+                        if (esItem) {
+                            g._hasItems = true;
+                            g.items.push({ desc: (d.descripcion || '').slice(prefItem.length) || d.numero_documento, cobrado: parseFloat(d.monto_cobrado || 0), total: parseFloat(d.monto_documento || 0) });
+                        }
                         if (d.id_cliente) clientesCargados[d.id_cliente] = d.cliente_nombre || '';
                     });
+                    // Los documentos sin renglones de ítem se muestran como documento simple
+                    docPendientes.forEach(g => { if (!g._hasItems) g.items = null; delete g._hasItems; });
                     actualizarInfoClientesCargados();
                     renderDetalles();
                     renderPagos();
@@ -2301,8 +2570,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
             <div class="modal-body p-0 d-flex flex-column" style="min-height: 400px;">
                 <!-- Barra de búsqueda -->
-                <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50">
-                    <div class="input-group input-group-sm">
+                <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50 d-flex align-items-center gap-2 flex-wrap">
+                    <div class="input-group input-group-sm flex-grow-1" style="min-width:240px;">
                         <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
                         <input type="text" id="inp-docs-buscar" class="form-control"
                                placeholder="Buscar por Nº documento, nombre de cliente o RUC..."
@@ -2314,6 +2583,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <i class="bi bi-x-lg"></i>
                         </button>
                     </div>
+                    <div class="form-check form-switch mb-0 text-nowrap" title="Desglosa los ítems de cada documento para cobrar por ítem">
+                        <input class="form-check-input" type="checkbox" role="switch" id="sdp-modo-items" onchange="toggleModoItems(this.checked)">
+                        <label class="form-check-label small fw-bold text-secondary" for="sdp-modo-items"><i class="bi bi-list-check me-1"></i>Cobrar por ítems</label>
+                    </div>
                 </div>
 
                 <!-- Tabla -->
@@ -2322,11 +2595,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <thead class="table-light sticky-top" style="top:0; z-index:1;">
                             <tr>
                                 <th class="text-center ps-2" style="width:42px;"></th>
-                                <th style="min-width:130px;">Nº Documento</th>
+                                <th id="sdp-th-doc" style="min-width:130px;">Nº Documento</th>
                                 <th style="min-width:150px;">Cliente</th>
                                 <th style="min-width:90px;">Fecha</th>
-                                <th style="min-width:90px;">Crédito</th>
-                                <th class="text-end" style="min-width:90px;">Total Doc.</th>
+                                <th id="sdp-th-credito" style="min-width:90px;">Crédito</th>
+                                <th id="sdp-th-total" class="text-end" style="min-width:90px;">Total Doc.</th>
                                 <th class="text-end" style="min-width:100px;">Monto a cobrar</th>
                             </tr>
                         </thead>

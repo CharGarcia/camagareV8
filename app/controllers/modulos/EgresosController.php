@@ -537,21 +537,16 @@ class EgresosController extends BaseModuloController
                 exit;
             }
 
-            $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
-            $asiento = $this->service->getAsientoContable($id, $idEmpresa);
-            $pdf = (new \App\Services\modulos\ComprobanteCajaPdfService())
-                ->generarEgreso($egreso, $egreso['detalles'] ?? [], $egreso['pagos'] ?? [], $empresa, 'S', $asiento);
-
+            $empresa    = new Empresa();
+            $empresaRow = $empresa->getPorId($idEmpresa) ?? [];
             $num        = (string) ($egreso['numero_egreso'] ?? $id);
             $nombreDest = (string) ($egreso['sujeto_nombre'] ?? 'Beneficiario');
             $asunto     = 'Comprobante de Egreso ' . $num;
-            $cuerpo     = '<p>Estimado/a ' . htmlspecialchars($nombreDest) . ',</p>'
-                        . '<p>Adjuntamos el comprobante de egreso <strong>' . htmlspecialchars($num) . '</strong>.</p>'
-                        . '<p>Saludos cordiales.</p>';
+            $cuerpo     = $this->construirCuerpoCorreoEgreso($egreso, $empresaRow, $nombreDest);
 
-            $ok = (new \App\Services\EnvioDocumentosSRIService())->enviarPdfSimple(
-                $idEmpresa, $correo, $nombreDest, $asunto, $cuerpo, $pdf,
-                'Egreso_' . $num, (string) ($empresa['nombre'] ?? '')
+            // Solo el detalle en el cuerpo (HTML), SIN adjuntar PDF.
+            $ok = (new \App\Services\EnvioDocumentosSRIService())->enviarAvisoSimple(
+                $idEmpresa, $correo, $nombreDest, $asunto, $cuerpo, (string) ($empresaRow['nombre'] ?? '')
             );
 
             echo json_encode($ok
@@ -561,5 +556,77 @@ class EgresosController extends BaseModuloController
             echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
         }
         exit;
+    }
+
+    /** Cuerpo HTML del correo con el detalle del egreso (sin PDF). */
+    private function construirCuerpoCorreoEgreso(array $eg, array $empresa, string $nombreDest): string
+    {
+        $num      = htmlspecialchars((string) ($eg['numero_egreso'] ?? ''));
+        $fecha    = !empty($eg['fecha_emision']) ? date('d/m/Y', strtotime((string) $eg['fecha_emision'])) : '';
+        $ident    = htmlspecialchars((string) ($eg['sujeto_ruc'] ?? ''));
+        $concepto = htmlspecialchars(trim((string) ($eg['observaciones'] ?? ''))) ?: '—';
+        $total    = (float) ($eg['monto_total'] ?? 0);
+        $letras   = $this->montoEnLetras($total);
+        $sujeto   = htmlspecialchars($nombreDest);
+
+        $filasDoc = '';
+        foreach (($eg['detalles'] ?? []) as $d) {
+            $tipo  = htmlspecialchars((string) ($d['tipo_documento'] ?? ''));
+            $ndoc  = htmlspecialchars((string) ($d['numero_documento'] ?? '')) ?: '—';
+            $desc  = htmlspecialchars((string) ($d['descripcion'] ?? '')) ?: '—';
+            $monto = number_format((float) ($d['monto_pagado'] ?? 0), 2);
+            $filasDoc .= "<tr><td style='border:1px solid #ddd;padding:5px'>$tipo</td><td style='border:1px solid #ddd;padding:5px'>$ndoc</td><td style='border:1px solid #ddd;padding:5px'>$desc</td><td style='border:1px solid #ddd;padding:5px;text-align:right'>\$$monto</td></tr>";
+        }
+
+        $filasPago = '';
+        foreach (($eg['pagos'] ?? []) as $p) {
+            $forma = htmlspecialchars((string) ($p['forma_pago_nombre'] ?? ''));
+            $ref   = trim((string) ($p['referencia'] ?? ''));
+            $tipoOp = trim((string) ($p['tipo_operacion_bancaria'] ?? ''));
+            if ($tipoOp !== '') { $ref = $ref !== '' ? ($tipoOp . ' — ' . $ref) : $tipoOp; }
+            $ref   = htmlspecialchars($ref) ?: '—';
+            $monto = number_format((float) ($p['monto'] ?? 0), 2);
+            $filasPago .= "<tr><td style='border:1px solid #ddd;padding:5px'>$forma</td><td style='border:1px solid #ddd;padding:5px'>$ref</td><td style='border:1px solid #ddd;padding:5px;text-align:right'>\$$monto</td></tr>";
+        }
+
+        $emp = htmlspecialchars((string) ($empresa['nombre'] ?? ''));
+        $th  = "style='border:1px solid #ddd;padding:5px;background:#f0f2f5;text-align:left'";
+
+        return "
+        <div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333;max-width:640px'>
+            <p>Estimado/a <strong>$sujeto</strong>,</p>
+            <p>Le compartimos el detalle de su comprobante de egreso:</p>
+            <table style='border-collapse:collapse;margin-bottom:12px'>
+                <tr><td style='padding:3px 8px'><strong>Comprobante N.°</strong></td><td style='padding:3px 8px'>$num</td></tr>
+                <tr><td style='padding:3px 8px'><strong>Fecha</strong></td><td style='padding:3px 8px'>$fecha</td></tr>
+                <tr><td style='padding:3px 8px'><strong>Pagado a</strong></td><td style='padding:3px 8px'>$sujeto</td></tr>
+                " . ($ident !== '' ? "<tr><td style='padding:3px 8px'><strong>Identificación</strong></td><td style='padding:3px 8px'>$ident</td></tr>" : '') . "
+                <tr><td style='padding:3px 8px'><strong>Concepto</strong></td><td style='padding:3px 8px'>$concepto</td></tr>
+            </table>
+            <p style='margin:6px 0'><strong>Documentos pagados</strong></p>
+            <table style='border-collapse:collapse;width:100%;margin-bottom:12px'>
+                <tr><th $th>Tipo</th><th $th>N.° Documento</th><th $th>Descripción</th><th $th style='text-align:right'>Monto</th></tr>
+                $filasDoc
+            </table>
+            <p style='margin:6px 0'><strong>Formas de pago</strong></p>
+            <table style='border-collapse:collapse;width:100%;margin-bottom:12px'>
+                <tr><th $th>Forma</th><th $th>Referencia</th><th $th style='text-align:right'>Valor</th></tr>
+                $filasPago
+            </table>
+            <p style='font-size:16px'><strong>TOTAL: \$" . number_format($total, 2) . "</strong><br>
+               <span style='font-size:12px;color:#666'>Son: $letras dólares</span></p>
+            <hr style='border:none;border-top:1px solid #eee'>
+            <p style='font-size:12px;color:#888'>$emp<br>Mensaje informativo generado automáticamente.</p>
+        </div>";
+    }
+
+    /** Monto en letras (reutiliza el validador global num_letras). */
+    private function montoEnLetras(float $monto): string
+    {
+        require_once \MVC_ROOT . '/app/validadores/numero_letras.php';
+        if (function_exists('num_letras')) {
+            return trim(preg_replace('/\s+/', ' ', (string) num_letras(number_format($monto, 2, '.', ''))));
+        }
+        return number_format($monto, 2);
     }
 }

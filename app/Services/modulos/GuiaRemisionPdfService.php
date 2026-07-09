@@ -29,6 +29,35 @@ class GuiaRemisionPdfService
         $this->generarHtmlFallback($cabecera, $detalles, $infoAdicional, $empresa, $numero, $filename);
     }
 
+    /** Devuelve el PDF de la guía como string (para adjuntar en correos). */
+    public function generarBytes(array $cabecera, array $detalles, array $infoAdicional, array $empresa): string
+    {
+        $numero = ($cabecera['establecimiento'] ?? '001') . '-'
+                . ($cabecera['punto_emision']   ?? '001') . '-'
+                . str_pad((string)($cabecera['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+        return $this->pdfDesdeHtml($cabecera, $detalles, $infoAdicional, $empresa, $numero, 'S', 'guia_remision_' . $numero . '.pdf');
+    }
+
+    /** Genera un TCPDF real a partir del HTML de la guía y lo entrega según $dest ('S','I','D'). */
+    private function pdfDesdeHtml(
+        array $cabecera, array $detalles, array $infoAdicional, array $empresa,
+        string $numero, string $dest, string $filename
+    ): string {
+        require_once MVC_ROOT . '/vendor/autoload.php';
+        $html = $this->construirHtml($cabecera, $detalles, $infoAdicional, $empresa, $numero);
+
+        $pdf = new \TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
+        $pdf->SetCreator('Sistema');
+        $pdf->SetTitle('Guía de Remisión ' . $numero);
+        $pdf->setPrintHeader(false);
+        $pdf->setPrintFooter(false);
+        $pdf->SetMargins(10, 10, 10);
+        $pdf->SetAutoPageBreak(true, 12);
+        $pdf->AddPage();
+        $pdf->writeHTML($html, true, false, true, false, '');
+        return (string) $pdf->Output($filename, $dest);
+    }
+
     private function generarHtmlFallback(
         array $cabecera,
         array $detalles,
@@ -37,6 +66,18 @@ class GuiaRemisionPdfService
         string $numero,
         string $filename
     ): void {
+        header('Content-Type: text/html; charset=UTF-8');
+        header('Content-Disposition: inline; filename="' . $filename . '"');
+        echo $this->construirHtml($cabecera, $detalles, $infoAdicional, $empresa, $numero);
+    }
+
+    private function construirHtml(
+        array $cabecera,
+        array $detalles,
+        array $infoAdicional,
+        array $empresa,
+        string $numero
+    ): string {
         $fechaEmision    = !empty($cabecera['fecha_emision'])            ? date('d-m-Y', strtotime($cabecera['fecha_emision']))            : '—';
         $fechaIni        = !empty($cabecera['fecha_inicio_transporte'])  ? date('d-m-Y', strtotime($cabecera['fecha_inicio_transporte']))  : '—';
         $fechaFin        = !empty($cabecera['fecha_fin_transporte'])     ? date('d-m-Y', strtotime($cabecera['fecha_fin_transporte']))     : '—';
@@ -144,13 +185,7 @@ class GuiaRemisionPdfService
 
 </body></html>';
 
-        header('Content-Type: application/pdf');
-        header('Content-Disposition: inline; filename="' . $filename . '"');
-
-        // Si no hay librería PDF, enviar HTML como fallback con content-type text/html
-        header('Content-Type: text/html; charset=UTF-8');
-        header('Content-Disposition: inline; filename="' . $filename . '"');
-        echo $html;
+        return $html;
     }
 
     private function generarConTcpdf(
@@ -161,8 +196,7 @@ class GuiaRemisionPdfService
         string $numero,
         string $filename
     ): void {
-        // Implementación con TCPDF cuando esté disponible
-        // Por ahora delegamos al fallback HTML
-        $this->generarHtmlFallback($cabecera, $detalles, $infoAdicional, $empresa, $numero, $filename);
+        // PDF real (inline en el navegador) generado desde el HTML de la guía.
+        $this->pdfDesdeHtml($cabecera, $detalles, $infoAdicional, $empresa, $numero, 'I', $filename);
     }
 }

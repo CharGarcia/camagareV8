@@ -629,6 +629,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     let _egDocsModal    = [];
     let _egSelModal     = {};
     let _egTipoDocActual = '';
+    let _egModoItems    = false; // switch "Pagar por ítems"
+    let _egItemsModal   = [];    // ítems aplanados
+    let _egSelItems     = {};    // { iuid: monto }
+    let _egDocsHasMore  = false;
 
     document.addEventListener('DOMContentLoaded', () => {
         const p = document.getElementById('eg-select-punto');
@@ -913,16 +917,35 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 const numeroCell = esNominaTipo
                     ? `<span class="small fw-bold">${d.numero}</span>`
                     : `<code class="small text-primary fw-bold pointer text-decoration-underline" onclick="abrirPrevisualizadorDoc(${d.id}, '${d.tipo_bd}')">${d.numero}</code>`;
+                const tieneItems = Array.isArray(d.items) && d.items.length > 0;
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${tipoBadge}</td>
                     <td>${numeroCell}</td>
                     <td class="small">${d.fecha ? d.fecha.split('-').reverse().join('/') : ''}</td>
                     <td class="text-end small">$${d.total.toFixed(2)}</td>
-                    <td class="text-end"><input type="number" class="form-control form-control-sm input-numeric px-1" style="height:26px;" step="0.01" value="${d.pagado > 0 ? d.pagado.toFixed(2) : ''}" ${isReadOnly ? 'disabled' : ''} oninput="updateDocAmt(${i}, this.value, this)"></td>
+                    <td class="text-end"><input type="number" class="form-control form-control-sm input-numeric px-1" style="height:26px;" step="0.01" value="${d.pagado > 0 ? d.pagado.toFixed(2) : ''}" ${(isReadOnly || tieneItems) ? 'disabled' : ''} oninput="updateDocAmt(${i}, this.value, this)"></td>
                     <td class="text-center">${!isReadOnly ? `<button type="button" class="btn btn-link btn-sm p-0 text-danger" onclick="quitarDocEgreso(${i})" title="Quitar"><i class="bi bi-x-lg"></i></button>` : ''}</td>
                 `;
                 tb.appendChild(tr);
+
+                if (tieneItems) {
+                    const filas = d.items.map(it => `
+                        <div class="d-flex justify-content-between align-items-center px-2 py-1 border-top border-light" style="font-size:0.74rem;">
+                            <span class="text-truncate text-secondary" style="max-width:75%"><i class="bi bi-dot"></i>${String(it.desc).replace(/</g, '&lt;')}</span>
+                            <span class="fw-bold text-secondary">$${(it.pagado || 0).toFixed(2)}</span>
+                        </div>`).join('');
+                    const trItems = document.createElement('tr');
+                    trItems.className = 'eg-items-detalle';
+                    trItems.innerHTML = `<td class="border-0"></td>
+                        <td colspan="5" class="p-0 border-0">
+                            <div class="bg-light bg-opacity-50 rounded-bottom mb-1">
+                                <div class="small text-muted px-2 pt-1 fw-bold"><i class="bi bi-list-check me-1"></i>Ítems pagados</div>
+                                ${filas}
+                            </div>
+                        </td>`;
+                    tb.appendChild(trItems);
+                }
             });
         } else {
             const tb = document.getElementById('eg-tbody-otros');
@@ -1400,15 +1423,33 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             }
 
             sel.forEach(s => {
-                data.detalles.push({
-                    tipo_documento: s.tipo_bd,
-                    id_referencia_documento: s.id,
-                    numero_documento: s.numero,
-                    monto_documento: s.total,
-                    saldo_anterior: s.pendiente,
-                    monto_pagado: s.pagado,
-                    saldo_actual: s.pendiente - s.pagado
-                });
+                if (Array.isArray(s.items) && s.items.length > 0) {
+                    // Un renglón por ítem pagado (mismo documento; el saldo se calcula por SUMA)
+                    s.items.forEach(it => {
+                        if ((it.pagado || 0) <= 0) return;
+                        const tItem = it.total || it.pagado;
+                        data.detalles.push({
+                            tipo_documento: s.tipo_bd,
+                            id_referencia_documento: s.id,
+                            numero_documento: s.numero,
+                            descripcion: `${s.numero} · ${it.desc}`,
+                            monto_documento: tItem,
+                            saldo_anterior: tItem,
+                            monto_pagado: it.pagado,
+                            saldo_actual: Math.max(0, tItem - it.pagado)
+                        });
+                    });
+                } else {
+                    data.detalles.push({
+                        tipo_documento: s.tipo_bd,
+                        id_referencia_documento: s.id,
+                        numero_documento: s.numero,
+                        monto_documento: s.total,
+                        saldo_anterior: s.pendiente,
+                        monto_pagado: s.pagado,
+                        saldo_actual: s.pendiente - s.pagado
+                    });
+                }
             });
         }
 
@@ -1559,17 +1600,39 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                 document.getElementById('eg-search-input').value = e.sujeto_nombre;
                 
-                // Hidratar docsEgreso para que recalcEgresoTot() funcione en modo Ver
-                docsEgreso = (e.detalles||[]).map(d => ({
-                    id:          d.id_referencia_documento,
-                    tipo_bd:     d.tipo_documento || comp,
-                    numero:      d.numero_documento || '-',
-                    fecha:       d.fecha_documento || null,
-                    total:       parseFloat(d.monto_documento),
-                    pendiente:   parseFloat(d.saldo_anterior || d.monto_documento),
-                    seleccionado: true,
-                    pagado:      parseFloat(d.monto_pagado)
-                }));
+                // Hidratar docsEgreso agrupando por documento (varias filas = pago por ítems)
+                docsEgreso = [];
+                const _egGrupos = {};
+                (e.detalles || []).forEach(d => {
+                    const tipoBd = d.tipo_documento || comp;
+                    const key = tipoBd + ':' + d.id_referencia_documento;
+                    const prefItem = (d.numero_documento || '') + ' · ';
+                    const esItem = (d.descripcion || '').startsWith(prefItem);
+                    if (!_egGrupos[key]) {
+                        _egGrupos[key] = {
+                            id:          d.id_referencia_documento,
+                            tipo_bd:     tipoBd,
+                            numero:      d.numero_documento || '-',
+                            fecha:       d.fecha_documento || null,
+                            total:       0,
+                            pendiente:   0,
+                            seleccionado: true,
+                            pagado:      0,
+                            items:       [],
+                            _hasItems:   false
+                        };
+                        docsEgreso.push(_egGrupos[key]);
+                    }
+                    const g = _egGrupos[key];
+                    g.total     += parseFloat(d.monto_documento || 0);
+                    g.pendiente += parseFloat(d.saldo_anterior || d.monto_documento || 0);
+                    g.pagado    += parseFloat(d.monto_pagado || 0);
+                    if (esItem) {
+                        g._hasItems = true;
+                        g.items.push({ desc: (d.descripcion || '').slice(prefItem.length) || d.numero_documento, pagado: parseFloat(d.monto_pagado || 0), total: parseFloat(d.monto_documento || 0) });
+                    }
+                });
+                docsEgreso.forEach(g => { if (!g._hasItems) g.items = null; delete g._hasItems; });
                 // Renderizar usando la función unificada (modo solo-lectura: eg-input-obs está disabled)
                 renderDocsEgreso();
             }
@@ -1899,6 +1962,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const inpBuscar = document.getElementById('eg-sdp-buscar');
         if (inpBuscar) inpBuscar.value = '';
 
+        // Reset del modo "Pagar por ítems"; solo aplica a COMPRA/LIQUIDACION (documentos con ítems).
+        _egModoItems = false;
+        _egSelItems  = {};
+        _egItemsModal = [];
+        const swWrap = document.getElementById('eg-sdp-modo-items-wrap');
+        const sw     = document.getElementById('eg-sdp-modo-items');
+        if (sw) sw.checked = false;
+        if (swWrap) swWrap.classList.toggle('d-none', !['COMPRA', 'LIQUIDACION'].includes(tipoBehav));
+
         actualizarResumenModalEg();
 
         const modalEl = document.getElementById('modalEgDocsPendientes');
@@ -1926,7 +1998,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     return;
                 }
                 _egDocsModal = res.data || [];
-                renderTablaEgDocsPendientes(_egDocsModal, res.has_more);
+                _egDocsHasMore = !!res.has_more;
+                if (_egModoItems) cargarEgItemsYRender();
+                else renderTablaEgDocsPendientes(_egDocsModal, _egDocsHasMore);
             })
             .catch(err => {
                 console.error('buscarDocumentosPendientesEgresoAjax:', err);
@@ -1936,6 +2010,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     function renderTablaEgDocsPendientes(docs, hasMore) {
         const tbody = document.getElementById('eg-sdp-tbody');
+        setHeadersModoEg('doc');
         tbody.innerHTML = '';
 
         if (docs.length === 0) {
@@ -2068,19 +2143,181 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         actualizarResumenModalEg();
     }
 
+    // ── Pago por ítems (egresos): switch global ───────────────────────────────
+    function toggleEgModoItems(on) {
+        _egModoItems = !!on;
+        if (_egModoItems) { _egSelModal = {}; cargarEgItemsYRender(); }
+        else { _egSelItems = {}; renderTablaEgDocsPendientes(_egDocsModal, _egDocsHasMore); }
+    }
+
+    function setHeadersModoEg(modo) {
+        const hDoc = document.getElementById('eg-sdp-th-doc');
+        const hCre = document.getElementById('eg-sdp-th-credito');
+        const hTot = document.getElementById('eg-sdp-th-total');
+        if (!hDoc) return;
+        if (modo === 'items') { hDoc.textContent = 'Ítem'; hCre.textContent = 'Documento'; hTot.textContent = 'Total ítem'; }
+        else { hDoc.textContent = 'Nº Documento'; hCre.textContent = 'Crédito'; hTot.textContent = 'Total Doc.'; }
+    }
+
+    async function cargarEgItemsYRender() {
+        const tbody = document.getElementById('eg-sdp-tbody');
+        setHeadersModoEg('items');
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Cargando ítems…</td></tr>';
+        _egItemsModal = [];
+
+        await Promise.all((_egDocsModal || []).map(async doc => {
+            const uid   = doc.tipo_doc_bd + '_' + doc.id;
+            const saldo = parseFloat(doc.saldo_pendiente);
+            const ep    = (doc.tipo_doc_bd === 'LIQUIDACION') ? 'liquidacion-compra/getLiquidacionAjax' : 'compras/getCompraAjax';
+            try {
+                const res  = await (await fetch(`<?= BASE_URL ?>/modulos/${ep}?id=${doc.id}`)).json();
+                const dets = res.detalles || (res.data && res.data.detalles) || [];
+                dets.forEach((d, idx) => {
+                    const cant  = parseFloat(d.cantidad || 0);
+                    const base  = parseFloat(d.precio_total_sin_impuesto || d.subtotal || (cant * parseFloat(d.precio_unitario || 0)) || 0);
+                    const imp   = (d.impuestos || []).reduce((a, x) => a + parseFloat(x.valor || 0), 0);
+                    const tItem = Math.round((base + imp) * 100) / 100;
+                    _egItemsModal.push({ iuid: uid + '#' + idx, docUid: uid, docId: doc.id, tipo_bd: doc.tipo_doc_bd,
+                        numero_documento: doc.numero_documento, proveedor_nombre: doc.proveedor_nombre, proveedor_id: doc.proveedor_id,
+                        fecha: doc.fecha_emision, saldo_doc: saldo, desc: (d.descripcion || d.producto_nombre || 'Ítem'), cant, total_item: tItem });
+                });
+            } catch (e) { /* documento sin ítems accesibles */ }
+        }));
+
+        renderEgItemsModal();
+    }
+
+    function renderEgItemsModal() {
+        const tbody = document.getElementById('eg-sdp-tbody');
+        tbody.innerHTML = '';
+        if (_egItemsModal.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted"><i class="bi bi-inbox fs-4 d-block mb-1"></i>No hay ítems pendientes.</td></tr>';
+            actualizarResumenModalEg();
+            return;
+        }
+        _egItemsModal.forEach(it => {
+            const iuid    = it.iuid;
+            const yaDoc   = docsEgreso.some(d => d.id == it.docId && d.tipo_bd == it.tipo_bd && d.seleccionado);
+            const checked = _egSelItems[iuid] !== undefined;
+            const montoPrev = _egSelItems[iuid] !== undefined ? _egSelItems[iuid] : it.total_item;
+            const desc = String(it.desc).replace(/</g, '&lt;');
+
+            const tr = document.createElement('tr');
+            tr.className = yaDoc ? 'table-success' : '';
+            if (!yaDoc) {
+                tr.style.cursor = 'pointer';
+                tr.addEventListener('click', function (e) {
+                    if (e.target.closest('input')) return;
+                    const chk = this.querySelector('.eg-item-chk');
+                    if (!chk) return;
+                    chk.checked = !chk.checked;
+                    toggleEgItemModal(iuid, chk.checked);
+                });
+            }
+            tr.innerHTML = `
+                <td class="text-center ps-2">
+                    ${yaDoc
+                        ? '<i class="bi bi-check-circle-fill text-success" title="Documento ya agregado"></i>'
+                        : `<input type="checkbox" class="form-check-input eg-item-chk" data-iuid="${iuid}" ${checked ? 'checked' : ''} onchange="toggleEgItemModal('${iuid}', this.checked)">`
+                    }
+                </td>
+                <td class="small"><strong>${desc}</strong>${it.cant ? ` <span class="text-muted">(x${it.cant})</span>` : ''}</td>
+                <td class="small text-truncate" style="max-width:150px;">${it.proveedor_nombre || ''}</td>
+                <td class="small">${it.fecha ? it.fecha.split('-').reverse().join('/') : ''}</td>
+                <td class="small"><code class="text-primary">${it.numero_documento}</code></td>
+                <td class="text-end small">$${it.total_item.toFixed(2)}</td>
+                <td class="text-end">
+                    ${yaDoc
+                        ? `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 small">Agregado</span>`
+                        : `<input type="number" class="form-control form-control-sm text-end eg-item-monto px-1" data-iuid="${iuid}"
+                               style="height:26px;font-size:0.8rem;width:90px;" step="0.01" min="0.01" max="${it.total_item.toFixed(2)}"
+                               value="${checked ? montoPrev.toFixed(2) : it.total_item.toFixed(2)}"
+                               ${checked ? '' : 'disabled'} oninput="actualizarEgItemMonto('${iuid}', this)">`
+                    }
+                </td>`;
+            tbody.appendChild(tr);
+        });
+        if (_egDocsHasMore) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td colspan="7" class="text-center small text-muted py-2 bg-light border-top"><i class="bi bi-info-circle me-1"></i>Hay más de 300 documentos. Refine la búsqueda para ver más.</td>`;
+            tbody.appendChild(tr);
+        }
+        actualizarResumenModalEg();
+    }
+
+    function egDocSaldoRestante(docUid_, exceptIuid) {
+        const it0 = _egItemsModal.find(x => x.docUid === docUid_);
+        const saldo = it0 ? it0.saldo_doc : Infinity;
+        let usado = 0;
+        Object.keys(_egSelItems).forEach(k => {
+            if (k === exceptIuid) return;
+            const it = _egItemsModal.find(x => x.iuid === k);
+            if (it && it.docUid === docUid_) usado += _egSelItems[k];
+        });
+        return Math.max(0, saldo - usado);
+    }
+
+    function toggleEgItemModal(iuid, checked) {
+        const it = _egItemsModal.find(x => x.iuid === iuid);
+        if (!it) return;
+        const input = document.querySelector(`.eg-item-monto[data-iuid="${iuid}"]`);
+        if (checked) {
+            const monto = Math.min(it.total_item, egDocSaldoRestante(it.docUid, iuid));
+            _egSelItems[iuid] = monto;
+            if (input) { input.disabled = false; input.value = monto.toFixed(2); }
+        } else {
+            delete _egSelItems[iuid];
+            if (input) input.disabled = true;
+        }
+        actualizarResumenModalEg();
+    }
+
+    function actualizarEgItemMonto(iuid, input) {
+        const it = _egItemsModal.find(x => x.iuid === iuid);
+        if (!it) return;
+        let v = parseFloat(input.value);
+        if (isNaN(v) || v < 0) v = 0;
+        if (v > it.total_item) v = it.total_item;
+        const tope = egDocSaldoRestante(it.docUid, iuid);
+        if (v > tope) v = tope;
+        input.value = v > 0 ? v.toFixed(2) : '';
+        _egSelItems[iuid] = v;
+        actualizarResumenModalEg();
+    }
+
     function actualizarResumenModalEg() {
-        const ids   = Object.keys(_egSelModal);
-        const total = ids.reduce((s, id) => s + (_egSelModal[id] || 0), 0);
+        let n, total;
+        if (_egModoItems) {
+            const ids = Object.keys(_egSelItems);
+            n = ids.length; total = ids.reduce((s, k) => s + (_egSelItems[k] || 0), 0);
+        } else {
+            const ids = Object.keys(_egSelModal);
+            n = ids.length; total = ids.reduce((s, id) => s + (_egSelModal[id] || 0), 0);
+        }
         const lblSel = document.getElementById('eg-sdp-lbl-sel');
         const lblTot = document.getElementById('eg-sdp-lbl-total');
-        if (lblSel) lblSel.textContent = ids.length;
+        if (lblSel) lblSel.textContent = n;
         if (lblTot) lblTot.textContent = `$${total.toFixed(2)}`;
     }
 
     function confirmarSeleccionEgDocsPendientes() {
-        const uids = Object.keys(_egSelModal);
+        // Mapa docUid → monto y desglose de ítems (según modo).
+        const montosPorDoc = {};
+        const itemsPorDoc  = {};
+        if (_egModoItems) {
+            Object.keys(_egSelItems).forEach(iuid => {
+                const it = _egItemsModal.find(x => x.iuid === iuid);
+                if (!it || (_egSelItems[iuid] || 0) <= 0.0001) return;
+                montosPorDoc[it.docUid] = (montosPorDoc[it.docUid] || 0) + (_egSelItems[iuid] || 0);
+                (itemsPorDoc[it.docUid] = itemsPorDoc[it.docUid] || []).push({ desc: it.desc, pagado: _egSelItems[iuid] || 0, total: it.total_item });
+            });
+        } else {
+            Object.keys(_egSelModal).forEach(uid => { montosPorDoc[uid] = _egSelModal[uid]; });
+        }
+
+        const uids = Object.keys(montosPorDoc).filter(u => (montosPorDoc[u] || 0) > 0.0001);
         if (uids.length === 0) {
-            Swal.fire('Atención', 'Seleccione al menos un documento para continuar.', 'warning');
+            Swal.fire('Atención', 'Seleccione al menos un documento o ítem para continuar.', 'warning');
             return;
         }
 
@@ -2093,16 +2330,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if (!doc) return;
             if (docsEgreso.some(d => d.id == doc.id && d.tipo_bd == doc.tipo_doc_bd)) return; // evitar duplicados
 
-            const monto = _egSelModal[uid] || parseFloat(doc.saldo_pendiente);
+            const saldo = parseFloat(doc.saldo_pendiente);
+            const monto = Math.min(montosPorDoc[uid] || saldo, saldo);
             docsEgreso.push({
                 id:           doc.id,
                 tipo_bd:      doc.tipo_doc_bd,
                 numero:       doc.numero_documento,
                 fecha:        doc.fecha_emision,
                 total:        parseFloat(doc.monto_total),
-                pendiente:    parseFloat(doc.saldo_pendiente),
+                pendiente:    saldo,
                 seleccionado: true,
-                pagado:       monto
+                pagado:       monto,
+                items:        itemsPorDoc[uid] || null
             });
 
             // Capturar el sujeto (proveedor o empleado) del primer documento seleccionado
@@ -2428,8 +2667,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
             <div class="modal-body p-0 d-flex flex-column" style="min-height: 420px;">
                 <!-- Barra de búsqueda única -->
-                <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50">
-                    <div class="input-group input-group-sm">
+                <div class="px-3 pt-3 pb-2 border-bottom bg-light bg-opacity-50 d-flex align-items-center gap-2 flex-wrap">
+                    <div class="input-group input-group-sm flex-grow-1" style="min-width:240px;">
                         <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
                         <input type="text" id="eg-sdp-buscar" class="form-control"
                                placeholder="Buscar por Nº documento, proveedor o RUC..."
@@ -2445,6 +2684,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <i class="bi bi-x-lg"></i>
                         </button>
                     </div>
+                    <div class="form-check form-switch mb-0 text-nowrap d-none" id="eg-sdp-modo-items-wrap" title="Desglosa los ítems de cada documento para pagar por ítem">
+                        <input class="form-check-input" type="checkbox" role="switch" id="eg-sdp-modo-items" onchange="toggleEgModoItems(this.checked)">
+                        <label class="form-check-label small fw-bold text-secondary" for="eg-sdp-modo-items"><i class="bi bi-list-check me-1"></i>Pagar por ítems</label>
+                    </div>
                 </div>
 
                 <!-- Tabla de documentos -->
@@ -2453,11 +2696,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <thead class="table-light sticky-top" style="top:0; z-index:1;">
                             <tr>
                                 <th class="text-center ps-2" style="width:42px;"></th>
-                                <th style="min-width:140px;">Nº Documento</th>
+                                <th style="min-width:140px;" id="eg-sdp-th-doc">Nº Documento</th>
                                 <th style="min-width:160px;" id="eg-sdp-th-suj">Proveedor</th>
                                 <th style="min-width:90px;">Fecha</th>
-                                <th style="min-width:100px;">Crédito</th>
-                                <th class="text-end" style="min-width:90px;">Total Doc.</th>
+                                <th style="min-width:100px;" id="eg-sdp-th-credito">Crédito</th>
+                                <th class="text-end" style="min-width:90px;" id="eg-sdp-th-total">Total Doc.</th>
                                 <th class="text-end" style="min-width:110px;">Monto a Pagar</th>
                             </tr>
                         </thead>

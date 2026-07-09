@@ -248,6 +248,16 @@ class SriEnvioService
                 error_log('[SRI] Error guardando detalle_xml en factura #' . $idVenta . ': ' . $eXml->getMessage());
             }
 
+            // Reflejar en la cabecera (en memoria) los datos de autorización recién
+            // obtenidos: la cabecera se cargó ANTES de autorizar, por lo que sin esto
+            // el PDF del correo saldría sin número ni fecha/hora de autorización.
+            $cabecera['estado']              = 'autorizado';
+            $cabecera['numero_autorizacion'] = $numAut;
+            $cabecera['fecha_autorizacion']  = $fechaAut;
+            if (empty($cabecera['clave_acceso'])) {
+                $cabecera['clave_acceso'] = $claveAcceso;
+            }
+
             // --- ENVÍO AUTOMÁTICO DE CORREO ---
             try {
                 $renderer = new \App\Services\PlantillasPdfRendererService();
@@ -325,19 +335,33 @@ class SriEnvioService
 
         $infoAdicional = $repo->getInfoAdicional($idNC);
 
-        // Dirección del establecimiento para el XML (igual que en el guardado).
+        // Dirección y LOGO del establecimiento (igual que factura: para que el RIDE
+        // muestre el logo y la dirección de sucursal en el PDF del correo).
         $dirEstablecimiento = null;
-        if (!empty($cabecera['id_establecimiento'])) {
-            try {
-                $estRepo = new \App\repositories\modulos\EmpresaRepository();
-                foreach ($estRepo->getEstablecimientos($idEmpresa) as $est) {
-                    if ((int)$est['id'] === (int)$cabecera['id_establecimiento']) {
-                        $dirEstablecimiento = $est['direccion'] ?? null;
-                        break;
+        try {
+            $estRepo = new \App\repositories\modulos\EmpresaRepository();
+            foreach ($estRepo->getEstablecimientos($idEmpresa) as $est) {
+                $esElEstablecimiento = !empty($cabecera['id_establecimiento'])
+                    ? (int)$est['id'] === (int)$cabecera['id_establecimiento']
+                    : true; // si no hay id_establecimiento, usar el primero
+                if ($esElEstablecimiento) {
+                    $dirEstablecimiento = $est['direccion'] ?? null;
+                    if (!empty($est['logo_ruta']))           $empresa['logo_ruta'] = $est['logo_ruta'];
+                    if (!empty($est['direccion']))           $empresa['direccion_establecimiento'] = $est['direccion'];
+                    if (!empty($est['leyenda_pdf_titulo']))  $empresa['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+                    if (!empty($est['leyenda_pdf_mensaje'])) $empresa['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+
+                    $estConfig = $estRepo->getEstablecimientoConfig((int)$est['id']);
+                    if ($estConfig) {
+                        $estConfig['direccion_matriz'] = $empresa['direccion'] ?? '';
+                        $estConfig['direccion_establecimiento'] = $est['direccion'] ?? '';
+                        if (!empty($est['logo_ruta'])) $estConfig['logo_ruta'] = $est['logo_ruta'];
+                        $empresa = array_merge($empresa, $estConfig);
                     }
+                    break;
                 }
-            } catch (\Throwable) {}
-        }
+            }
+        } catch (\Throwable) {}
 
         // 1. Generar XML
         $xmlService = new \App\Services\Xml\XmlNotaCreditoService();
@@ -417,10 +441,16 @@ class SriEnvioService
                 error_log('[SRI] Error guardando detalle_xml en NC #' . $idNC . ': ' . $eXml->getMessage());
             }
 
+            // El PDF del correo debe mostrar la autorización: se toma del $cabecera
+            // que fue leído ANTES de autorizar, así que aquí se completa.
+            $cabecera['estado']              = 'autorizado';
+            $cabecera['numero_autorizacion'] = $numAut;
+            $cabecera['fecha_autorizacion']  = $fechaAut;
+
             // --- ENVÍO AUTOMÁTICO DE CORREO ---
             try {
                 $pdfService = new \App\Services\modulos\NotaCreditoPdfService();
-                $pdfString  = $pdfService->generarBytes($cabecera, $detalles, $empresa);
+                $pdfString  = $pdfService->generarBytes($cabecera, $detalles, $empresa, $infoAdicional);
 
                 $emailSvc = new \App\Services\EnvioDocumentosSRIService();
                 $enviado = $emailSvc->enviarSiAplica($idEmpresa, 'nota_credito', $cabecera, $xmlDetalleCompleto, $pdfString, $numAut);
@@ -605,6 +635,12 @@ class SriEnvioService
             } catch (\Throwable $eAs) {
                 error_log('[SRI] Asiento no generado para retención #' . $idRetencion . ': ' . $eAs->getMessage());
             }
+
+            // Completar la cabecera con la autorización para que el PDF del correo
+            // muestre número y fecha/hora de autorización (se leyó antes de autorizar).
+            $cabecera['estado']              = 'autorizada';
+            $cabecera['numero_autorizacion'] = $numAut;
+            $cabecera['fecha_autorizacion']  = $fechaAut;
 
             // --- ENVÍO AUTOMÁTICO DE CORREO ---
             try {
@@ -1008,6 +1044,32 @@ class SriEnvioService
             } catch (\Throwable $eXml) {
                 error_log('[SRI] Error guardando detalle_xml en guía #' . $idGuia . ': ' . $eXml->getMessage());
             }
+
+            // Completar la cabecera con la autorización para que el PDF la muestre.
+            $cabecera['estado']              = 'autorizado';
+            $cabecera['numero_autorizacion'] = $numAut;
+            $cabecera['fecha_autorizacion']  = $fechaAut;
+
+            // --- ENVÍO AUTOMÁTICO DE CORREO (PDF de la guía al destinatario) ---
+            try {
+                $renderer     = new \App\Services\PlantillasPdfRendererService();
+                $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'guia_remision');
+                if ($plantillaPdf) {
+                    $pdfString = $renderer->generar($plantillaPdf, $cabecera, $detalles, [], $infoAdicional, $empresa, 'S');
+                } else {
+                    $pdfString = (new \App\Services\modulos\GuiaRemisionPdfService())
+                        ->generarBytes($cabecera, $detalles, $infoAdicional, $empresa);
+                }
+
+                $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+                $enviado  = $emailSvc->enviarSiAplica($idEmpresa, 'guia_remision', $cabecera, $xmlDetalleCompleto, $pdfString, $numAut);
+                if ($enviado) {
+                    $db->prepare("UPDATE guias_remision_cabecera SET estado_correo = 'enviado', updated_at = NOW() WHERE id = ?")
+                       ->execute([$idGuia]);
+                }
+            } catch (\Throwable $eEmail) {
+                error_log('[SRI] Error al enviar correo de guía #' . $idGuia . ': ' . $eEmail->getMessage());
+            }
         }
 
         return [
@@ -1170,6 +1232,29 @@ class SriEnvioService
                 $repo->updateDetalleXml($idLiq, $xmlDetalleCompleto);
             } catch (\Throwable $eXml) {
                 error_log('[SRI] Error guardando detalle_xml en liquidación #' . $idLiq . ': ' . $eXml->getMessage());
+            }
+
+            // Completar la cabecera con la autorización para que el PDF la muestre.
+            $cabecera['estado']              = 'autorizado';
+            $cabecera['numero_autorizacion'] = $numAut;
+            $cabecera['fecha_autorizacion']  = $fechaAut;
+
+            // --- ENVÍO AUTOMÁTICO DE CORREO (PDF de la liquidación al proveedor) ---
+            try {
+                $renderer     = new \App\Services\PlantillasPdfRendererService();
+                $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'liquidacion_compra');
+                if ($plantillaPdf) {
+                    $pdfString = $renderer->generar($plantillaPdf, $cabecera, $detalles, $pagos, $infoAdicional, $empresa, 'S');
+                } else {
+                    $pdfString = (new \App\Services\modulos\LiquidacionCompraPdfService())
+                        ->generarBytes($cabecera, $detalles, $pagos, $infoAdicional, $empresa);
+                }
+
+                $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+                // liquidaciones_cabecera no tiene columna estado_correo; se envía sin marcar estado.
+                $emailSvc->enviarSiAplica($idEmpresa, 'liquidacion_compra', $cabecera, $xmlDetalleCompleto, $pdfString, $numAut);
+            } catch (\Throwable $eEmail) {
+                error_log('[SRI] Error al enviar correo de liquidación #' . $idLiq . ': ' . $eEmail->getMessage());
             }
         }
 

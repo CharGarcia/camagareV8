@@ -824,6 +824,7 @@
         tr.className = 'row-det';
         
         const idProducto = data.id_producto || '';
+        const codigoPrincipal = data.codigo_principal || '';
         const descripcion = data.descripcion || '';
         const cantidad = data.cantidad || 0;
         const precioUnitario = data.precio_unitario || 0;
@@ -833,6 +834,7 @@
         tr.innerHTML = `
             <td class="ps-3 py-1 position-relative">
                 <input type="hidden" name="det_id_producto[]" value="${idProducto}">
+                <input type="hidden" name="det_codigo_principal[]" value="${String(codigoPrincipal).replace(/"/g, '&quot;')}">
                 <input type="text" name="det_descripcion[]" class="input-detalle" value="${descripcion}" placeholder="Buscar producto/servicio o escribir..." autocomplete="off">
             </td>
             <td class="py-1">
@@ -891,11 +893,13 @@
             dd.style.width = Math.max(r.width, 320) + 'px';
         }
 
+        const inpCod = tr.querySelector('input[name="det_codigo_principal[]"]');
         let timer;
         inpDesc.addEventListener('input', () => {
             clearTimeout(timer);
             // Al editar manualmente la descripción se rompe el vínculo con el producto.
             if (inpId) inpId.value = '';
+            if (inpCod) inpCod.value = '';
             const q = inpDesc.value.trim();
             if (q.length < 2) { dd.classList.add('d-none'); return; }
             timer = setTimeout(async () => {
@@ -931,12 +935,14 @@
         if (!tr) return;
 
         const inpId   = tr.querySelector('input[name="det_id_producto[]"]');
+        const inpCod  = tr.querySelector('input[name="det_codigo_principal[]"]');
         const inpDesc = tr.querySelector('input[name="det_descripcion[]"]');
         const inpCant = tr.querySelector('input[name="det_cantidad[]"]');
         const inpPrec = tr.querySelector('input[name="det_precio_unitario[]"]');
         const selIva  = tr.querySelector('select[name="det_id_tarifa_iva[]"]');
 
         if (inpId)   inpId.value = p.id || '';
+        if (inpCod)  inpCod.value = p.codigo || '';
         if (inpDesc) inpDesc.value = p.nombre || '';
         if (inpCant && (!inpCant.value || parseFloat(inpCant.value) <= 0)) inpCant.value = 1;
         if (inpPrec) inpPrec.value = parseFloat(p.precio_base || 0).toFixed(2);
@@ -1252,6 +1258,7 @@
 
             detalles.push({
                 id_producto: tr.querySelector('input[name="det_id_producto[]"]').value,
+                codigo_principal: (tr.querySelector('input[name="det_codigo_principal[]"]')?.value || ''),
                 descripcion: tr.querySelector('input[name="det_descripcion[]"]').value,
                 cantidad: cant,
                 precio_unitario: prec,
@@ -1335,6 +1342,7 @@
         rows.forEach(tr => {
             detalles.push({
                 id_producto: tr.querySelector('input[name="det_id_producto[]"]').value,
+                codigo_principal: (tr.querySelector('input[name="det_codigo_principal[]"]')?.value || ''),
                 descripcion: tr.querySelector('input[name="det_descripcion[]"]').value,
                 cantidad: tr.querySelector('input[name="det_cantidad[]"]').value,
                 precio_unitario: tr.querySelector('input[name="det_precio_unitario[]"]').value,
