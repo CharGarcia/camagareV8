@@ -608,8 +608,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <table class="table table-sm table-detalle mb-0 text-nowrap">
                                             <thead>
                                                 <tr class="table-light border-bottom">
-                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width: 20%;">Descripción</th>
-                                                    <th class="py-2 small fw-bold text-muted" style="width: 10%;">Adicional</th>
+                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width: 28%;">Descripción</th>
+                                                    <th class="py-2 small fw-bold text-muted" style="width: 7%;">Adicional</th>
                                                     <th class="py-2 small fw-bold text-muted col-medida-header <?= (($empresa['mostrar_unidad_medida'] ?? true) === 'true' || ($empresa['mostrar_unidad_medida'] ?? true) === true) ? '' : 'd-none' ?>" style="width: 8%;">Medida</th>
                                                     <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Cant.</th>
                                                     <th class="py-2 small fw-bold text-muted" style="width: 12%;">Precios</th>
@@ -626,7 +626,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                     <?php if (!empty($empresa['obligatorio_nup']) && ($empresa['obligatorio_nup'] === 'true' || $empresa['obligatorio_nup'] === true)): ?>
                                                         <th class="py-2 small fw-bold text-muted text-center" style="width:9%;">NUP / Serial</th>
                                                     <?php endif; ?>
-                                                    <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 11%;">Subtotal</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 6%;">Subtotal</th>
                                                     <th style="width: 40px;"></th>
                                                 </tr>
                                             </thead>
