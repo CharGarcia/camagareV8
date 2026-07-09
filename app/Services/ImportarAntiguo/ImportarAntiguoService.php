@@ -133,8 +133,8 @@ class ImportarAntiguoService
      * Enruta por codDoc (posiciones 8-9 de la clave) al servicio de anulación de cada
      * tipo, que reversa cobros/asiento/inventario si los hubiera. En facturas desactiva
      * el candado SRI (el WS reporta AUTORIZADO aunque el documento esté dado de baja).
-     * Tipos soportados: 01 factura, 04 nota de crédito, 06 guía de remisión, 03 liquidación.
-     * (05 nota de débito y 07 retención no tienen anulación en el sistema → no soportado.)
+     * Tipos soportados: 01 factura, 04 nota de crédito, 06 guía de remisión, 03 liquidación,
+     * 07 retención (de compra). (05 nota de débito no tiene anulación → no soportado.)
      *
      * @param string[] $claves
      */
@@ -170,7 +170,7 @@ class ImportarAntiguoService
                 $res['detalle'][] = ['clave' => $clave, 'cod_doc' => $codDoc, 'estado' => 'no_encontrada'];
                 continue;
             }
-            if (strtolower((string) ($row['estado'] ?? '')) === 'anulado') {
+            if (in_array(strtolower((string) ($row['estado'] ?? '')), ['anulado', 'anulada'], true)) {
                 $res['ya_anuladas']++;
                 $res['detalle'][] = ['clave' => $clave, 'cod_doc' => $codDoc, 'estado' => 'ya_anulada'];
                 continue;
@@ -203,6 +203,10 @@ class ImportarAntiguoService
             }],
             '03' => ['tabla' => 'liquidaciones_cabecera', 'anular' => function (int $id, int $e, int $u) use ($log) {
                 (new \App\Services\modulos\LiquidacionCompraService(new \App\repositories\modulos\LiquidacionCompraRepository(), new \App\Rules\modulos\LiquidacionCompraRules(), $log))->anular($id, $e, $u);
+            }],
+            '07' => ['tabla' => 'retencion_compra_cabecera', 'anular' => function (int $id, int $e, int $u) use ($log) {
+                $rr = new \App\repositories\modulos\RetencionCompraRepository();
+                (new \App\Services\modulos\RetencionCompraService($rr, new \App\Rules\modulos\RetencionCompraRules($rr), $log))->anular($id, $e, $u);
             }],
         ];
     }
