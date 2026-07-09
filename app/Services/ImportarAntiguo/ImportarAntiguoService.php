@@ -23,26 +23,49 @@ class ImportarAntiguoService
 {
     private ImportacionXmlRepository $repo;
 
-    // TODO: mover a configuración del sistema (no hardcodear en producción).
     private string $ftpHost;
     private string $ftpUser;
     private string $ftpPass;
+    private int $ftpPort;
 
     public function __construct(
         ?ImportacionXmlRepository $repo = null,
-        string $ftpHost = '64.225.69.65',
-        string $ftpUser = 'char',
-        string $ftpPass = 'CmGr1980'
+        ?string $ftpHost = null,
+        ?string $ftpUser = null,
+        ?string $ftpPass = null
     ) {
         $this->repo = $repo ?? new ImportacionXmlRepository();
-        $this->ftpHost = $ftpHost;
-        $this->ftpUser = $ftpUser;
-        $this->ftpPass = $ftpPass;
+        $cfg = self::configFtp();
+        $this->ftpHost = $ftpHost ?? $cfg['host'];
+        $this->ftpUser = $ftpUser ?? $cfg['user'];
+        $this->ftpPass = $ftpPass ?? $cfg['pass'];
+        $this->ftpPort = $cfg['port'];
+    }
+
+    /**
+     * Credenciales del servidor FTP legacy. Se leen de config/parametros.xml
+     * (no versionado, por entorno): claves ftp_docs_host/user/pass/port.
+     * Si no están, cae a los valores por defecto conocidos (no rompe producción).
+     */
+    private static function configFtp(): array
+    {
+        $cfg = ['host' => '64.225.69.65', 'user' => 'char', 'pass' => 'CmGr1980', 'port' => 21];
+        $file = (defined('MVC_CONFIG') ? MVC_CONFIG : dirname(__DIR__, 3) . '/config') . '/parametros.xml';
+        if (is_file($file)) {
+            $xml = @simplexml_load_file($file);
+            if ($xml !== false) {
+                if (!empty($xml->ftp_docs_host)) $cfg['host'] = (string) $xml->ftp_docs_host;
+                if (!empty($xml->ftp_docs_user)) $cfg['user'] = (string) $xml->ftp_docs_user;
+                if (!empty($xml->ftp_docs_pass)) $cfg['pass'] = (string) $xml->ftp_docs_pass;
+                if (!empty($xml->ftp_docs_port)) $cfg['port'] = (int) $xml->ftp_docs_port;
+            }
+        }
+        return $cfg;
     }
 
     private function nuevoScanner(): FtpDocumentosScanner
     {
-        return new FtpDocumentosScanner($this->ftpHost, $this->ftpUser, $this->ftpPass);
+        return new FtpDocumentosScanner($this->ftpHost, $this->ftpUser, $this->ftpPass, $this->ftpPort);
     }
 
     /**
