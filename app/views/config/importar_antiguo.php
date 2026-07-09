@@ -78,14 +78,6 @@ $base = BASE_URL;
                             <label class="form-label small mb-0">Bloque</label>
                             <input type="number" class="form-control form-control-sm" id="fLimite" value="25" min="1" max="100" style="width:90px">
                         </div>
-                        <div class="col-auto">
-                            <div class="form-check mt-3">
-                                <input class="form-check-input" type="checkbox" id="fVerificar">
-                                <label class="form-check-label small" for="fVerificar" title="Consulta el estado real de cada comprobante en el SRI antes de importarlo (más lento).">
-                                    Verificar en el SRI
-                                </label>
-                            </div>
-                        </div>
                         <div class="col text-end">
                             <button class="btn btn-success" id="btnImportar"><i class="bi bi-download me-1"></i> Importar</button>
                             <button class="btn btn-outline-danger d-none" id="btnDetener"><i class="bi bi-stop-circle me-1"></i> Detener</button>
@@ -188,12 +180,10 @@ $base = BASE_URL;
 
         const pend = (d.resumen || []).reduce((a, r) => a + parseInt(r.pendientes || 0, 10), 0);
         const etaBase = fmtTiempo(pend * SEG_POR_DOC);
-        const etaSri  = fmtTiempo(pend * (SEG_POR_DOC + 0.1));
         const eta = pend > 0
             ? `<div class="alert alert-secondary py-2 small mb-3">
                  <i class="bi bi-clock me-1"></i><b>${pend}</b> documento(s) pendiente(s) por importar ·
                  Tiempo estimado: <b>~${etaBase}</b>
-                 <span class="text-muted">(con verificación SRI ~${etaSri})</span>
                </div>`
             : `<div class="alert alert-success py-2 small mb-3"><i class="bi bi-check2-circle me-1"></i>No hay documentos pendientes por importar.</div>`;
 
@@ -211,8 +201,8 @@ $base = BASE_URL;
     }
 
     // ── Importar por bloques ──
-    let tot = { procesados:0, importados:0, duplicados:0, omitidos:0, no_autorizados:0, errores:0 };
-    function reset() { tot = { procesados:0, importados:0, duplicados:0, omitidos:0, no_autorizados:0, errores:0 }; $('barra').style.width='0%'; $('barra').textContent='0%'; $('contadores').textContent=''; $('logImport').innerHTML=''; }
+    let tot = { procesados:0, importados:0, duplicados:0, omitidos:0, errores:0 };
+    function reset() { tot = { procesados:0, importados:0, duplicados:0, omitidos:0, errores:0 }; $('barra').style.width='0%'; $('barra').textContent='0%'; $('contadores').textContent=''; $('logImport').innerHTML=''; }
 
     $('btnImportar').addEventListener('click', () => correr());
     $('btnDetener').addEventListener('click', () => { detener = true; });
@@ -227,19 +217,18 @@ $base = BASE_URL;
         const tipos = tiposSeleccionados();
         const limite = $('fLimite').value || 25;
         const desde = $('fDesde').value, hasta = $('fHasta').value;
-        const verificar = $('fVerificar').checked ? 1 : 0;
 
         let restantes = 1;
         while (restantes > 0 && !detener) {
             let res;
             try {
-                res = await post('importar', { id_empresa: idEmpresa, tipos, limite, desde, hasta, verificar });
+                res = await post('importar', { id_empresa: idEmpresa, tipos, limite, desde, hasta });
             } catch (e) { logLinea('Error de red: ' + e.message, 'danger'); break; }
             if (!res.ok) { logLinea(res.mensaje || 'Error', 'danger'); break; }
             const d = res.data;
             tot.procesados += d.procesados; tot.importados += d.importados;
             tot.duplicados += d.duplicados; tot.omitidos += d.omitidos;
-            tot.no_autorizados += (d.no_autorizados || 0); tot.errores += d.errores;
+            tot.errores += d.errores;
             restantes = d.restantes;
             actualizar(restantes);
             if (d.procesados === 0) break;
@@ -261,8 +250,7 @@ $base = BASE_URL;
 
         $('contadores').innerHTML =
             `Procesados <b>${tot.procesados}</b> · Importados <b class="text-success">${tot.importados}</b> · `
-            + `Duplicados <b>${tot.duplicados}</b> · No autorizados <b class="text-warning">${tot.no_autorizados}</b> · `
-            + `Omitidos <b>${tot.omitidos}</b> · Errores <b class="text-danger">${tot.errores}</b> · `
+            + `Duplicados <b>${tot.duplicados}</b> · Omitidos <b>${tot.omitidos}</b> · Errores <b class="text-danger">${tot.errores}</b> · `
             + `Restantes <b>${restantes}</b>${etaTxt}`;
         logLinea(`Bloque: +${tot.importados} importados, quedan ${restantes}`);
     }

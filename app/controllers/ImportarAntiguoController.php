@@ -89,14 +89,8 @@ class ImportarAntiguoController extends Controller
             $limite = max(1, min(100, (int) ($_POST['limite'] ?? 25)));
             $desde = !empty($_POST['desde']) ? (string) $_POST['desde'] : null;
             $hasta = !empty($_POST['hasta']) ? (string) $_POST['hasta'] : null;
-            $verificar = !empty($_POST['verificar']);
 
-            // Con verificación SRI conviene un bloque más pequeño (una llamada web por documento).
-            if ($verificar) {
-                $limite = min($limite, 15);
-            }
-
-            $r = $this->service->importarBloque($idEmpresa, $idUsuario, $limite, $codDocs, $desde, $hasta, $verificar);
+            $r = $this->service->importarBloque($idEmpresa, $idUsuario, $limite, $codDocs, $desde, $hasta);
             echo json_encode(['ok' => true, 'data' => $r], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);

@@ -10,7 +10,6 @@ use App\Services\modulos\FacturaVentaService;
 use App\repositories\modulos\FacturaVentaRepository;
 use App\Rules\modulos\FacturaVentaRules;
 use App\Services\LogSistemaService;
-use App\Services\Sri\SriWebserviceService;
 use App\core\Database;
 use SimpleXMLElement;
 use Throwable;
@@ -225,12 +224,11 @@ class ImportarAntiguoService
         int $limite = 25,
         array $codDocs = [],
         ?string $desde = null,
-        ?string $hasta = null,
-        bool $verificarSri = false
+        ?string $hasta = null
     ): array {
         $pendientes = $this->repo->getPendientes($idEmpresa, $limite, $codDocs);
 
-        $res = ['procesados' => 0, 'importados' => 0, 'duplicados' => 0, 'omitidos' => 0, 'no_autorizados' => 0, 'errores' => 0];
+        $res = ['procesados' => 0, 'importados' => 0, 'duplicados' => 0, 'omitidos' => 0, 'errores' => 0];
         if (empty($pendientes)) {
             $res['restantes'] = 0;
             return $res;
@@ -239,12 +237,11 @@ class ImportarAntiguoService
         $scanner = $this->nuevoScanner();
         $scanner->conectar();
         $register = new DocumentoAutomatedRegisterService();
-        $sri = $verificarSri ? new SriWebserviceService(30) : null;
 
         try {
             foreach ($pendientes as $item) {
                 $res['procesados']++;
-                $this->procesarItem($item, $idEmpresa, $idUsuario, $scanner, $register, $sri, $desde, $hasta, $res);
+                $this->procesarItem($item, $idEmpresa, $idUsuario, $scanner, $register, $desde, $hasta, $res);
             }
         } finally {
             $scanner->cerrar();
@@ -260,7 +257,6 @@ class ImportarAntiguoService
         int $idUsuario,
         FtpDocumentosScanner $scanner,
         DocumentoAutomatedRegisterService $register,
-        ?SriWebserviceService $sri,
         ?string $desde,
         ?string $hasta,
         array &$res
@@ -285,29 +281,6 @@ class ImportarAntiguoService
                     ]));
                     $res['omitidos']++;
                     return;
-                }
-            }
-
-            // Verificación opcional del estado real en el SRI (por clave de acceso).
-            if ($sri !== null && !empty($meta['clave_acceso'])) {
-                $amb = substr((string) $meta['clave_acceso'], 23, 1) ?: ($meta['ambiente'] ?? '2');
-                $cons = $sri->consultarAutorizacion($meta['clave_acceso'], $amb);
-                $meta['sri_estado'] = $cons['estado'] ?? 'ERROR';
-                if (($cons['estado'] ?? '') !== 'AUTORIZADO') {
-                    $msg = 'SRI: ' . ($cons['estado'] ?? 'ERROR');
-                    if (!empty($cons['errores'][0]['mensaje'])) {
-                        $msg .= ' — ' . $cons['errores'][0]['mensaje'];
-                    }
-                    $this->repo->actualizarItem($idItem, array_merge($meta, [
-                        'estado'  => 'no_autorizado',
-                        'mensaje' => $msg,
-                    ]));
-                    $res['no_autorizados']++;
-                    return;
-                }
-                // Autorizado: usar la autorización REAL del SRI (más fiable que SigningTime).
-                if (!empty($cons['fecha_autorizacion'])) {
-                    $meta['fecha_autorizacion'] = $cons['fecha_autorizacion'];
                 }
             }
 
