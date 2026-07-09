@@ -73,11 +73,12 @@ $base = BASE_URL;
                     Selecciona una empresa y los datos, y pulsa <b>Analizar</b> para ver cuántos registros hay en la base anterior.
                 </div>
                 <div id="zonaMigrar" class="d-none mt-3">
-                    <div class="alert alert-warning py-2 small mb-0">
-                        <i class="bi bi-tools me-1"></i>La <b>migración</b> de cada tipo de dato se está implementando por fases
-                        (primero catálogos: clientes, productos, proveedores; luego documentos y cobros/pagos).
-                        Este resumen ya te muestra el volumen real a migrar.
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="small text-muted">Migra los datos seleccionados desde la base anterior. Es idempotente (no duplica).</div>
+                        <button class="btn btn-success btn-sm" id="btnMigrar"><i class="bi bi-database-down me-1"></i> Migrar seleccionados</button>
                     </div>
+                    <div id="zonaMigrarResultado" class="small"></div>
+                    <div class="form-text mt-1"><i class="bi bi-info-circle me-1"></i>Por ahora está implementada la migración de <b>clientes</b>; el resto se irá habilitando por fases.</div>
                 </div>
             </div>
         </div>
@@ -146,6 +147,42 @@ $base = BASE_URL;
                 <tbody>${rows}</tbody>
              </table>`;
         $('zonaMigrar').classList.remove('d-none');
+        $('zonaMigrarResultado').innerHTML = '';
+    }
+
+    // Migrar los datos seleccionados (uno por uno)
+    $('btnMigrar').addEventListener('click', async () => {
+        const idEmpresa = $('selEmpresa').value;
+        if (!idEmpresa) { alert('Seleccione una empresa.'); return; }
+        const entidades = entsSeleccionadas();
+        if (!entidades.length) { alert('Seleccione al menos un dato.'); return; }
+        if (!confirm('¿Migrar los datos seleccionados desde la base anterior? Es idempotente (no duplica).')) return;
+
+        const btn = $('btnMigrar');
+        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Migrando...';
+        $('zonaMigrarResultado').innerHTML = '';
+        for (const ent of entidades) {
+            logMig(ent, '<span class="text-muted">migrando…</span>');
+            try {
+                const body = new URLSearchParams();
+                body.append('id_empresa', idEmpresa);
+                body.append('entidad', ent);
+                const res = await fetch(base + '/config/migrarMysql?action=migrar', { method: 'POST', body }).then(r => r.json());
+                if (!res.ok) { logMig(ent, '<span class="text-danger">' + res.mensaje + '</span>'); continue; }
+                const d = res.data;
+                if (d.no_implementado) { logMig(ent, '<span class="text-muted">próximamente</span>'); continue; }
+                logMig(ent, `<span class="text-success fw-bold">migrados ${fmt(d.migrados)}</span> · vinculados ${fmt(d.vinculados)} · ya estaban ${fmt(d.ya_migrados)} · omitidos ${fmt(d.omitidos)} · errores <span class="${d.errores ? 'text-danger fw-bold' : ''}">${fmt(d.errores)}</span> <span class="text-muted">(de ${fmt(d.total)})</span>`);
+            } catch (e) { logMig(ent, '<span class="text-danger">' + e.message + '</span>'); }
+        }
+        btn.disabled = false; btn.innerHTML = '<i class="bi bi-database-down me-1"></i> Migrar seleccionados';
+    });
+
+    function logMig(ent, html) {
+        const id = 'mig_' + ent;
+        const label = (document.querySelector('#ent_' + ent)?.nextElementSibling?.textContent) || ent;
+        let el = document.getElementById(id);
+        if (!el) { el = document.createElement('div'); el.id = id; el.className = 'mb-1'; $('zonaMigrarResultado').appendChild(el); }
+        el.innerHTML = '<b>' + label + ':</b> ' + html;
     }
 })();
 </script>

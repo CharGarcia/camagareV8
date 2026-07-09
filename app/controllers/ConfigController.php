@@ -510,6 +510,7 @@ class ConfigController extends Controller
         $method = match ($sub) {
             'analizar' => 'analizarAjax',
             'probar'   => 'probarAjax',
+            'migrar'   => 'migrarAjax',
             default    => 'index',
         };
         if (method_exists($c, $method)) {

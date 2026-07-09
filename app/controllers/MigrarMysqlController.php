@@ -72,6 +72,25 @@ class MigrarMysqlController extends Controller
         exit;
     }
 
+    /** POST: migra una entidad de la empresa desde la BD anterior. */
+    public function migrarAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            [$idEmpresa, $ruc] = $this->resolverEmpresa();
+            $entidad = (string) ($_POST['entidad'] ?? '');
+            if (!array_key_exists($entidad, MigracionMysqlService::ENTIDADES)) {
+                throw new \RuntimeException('Entidad no válida.');
+            }
+            $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+            $data = $this->service->migrar($entidad, $idEmpresa, $ruc, $idUsuario);
+            echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     /** Devuelve [idEmpresa, ruc] de la empresa seleccionada. */
     private function resolverEmpresa(): array
     {
