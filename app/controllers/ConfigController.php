@@ -485,6 +485,23 @@ class ConfigController extends Controller
         (new SriCasillerosEtiquetasController())->delete();
     }
 
+    public function importarAntiguo(): void
+    {
+        $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
+        $c = new ImportarAntiguoController();
+        $method = match ($sub) {
+            'escanear' => 'escanearAjax',
+            'importar' => 'importarAjax',
+            'lotes'    => 'lotesAjax',
+            default    => 'index',
+        };
+        if (method_exists($c, $method)) {
+            $c->$method();
+        } else {
+            $c->index();
+        }
+    }
+
     public function logSistema(): void
     {
         $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
