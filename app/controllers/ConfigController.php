@@ -503,6 +503,22 @@ class ConfigController extends Controller
         }
     }
 
+    public function migrarMysql(): void
+    {
+        $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
+        $c = new MigrarMysqlController();
+        $method = match ($sub) {
+            'analizar' => 'analizarAjax',
+            'probar'   => 'probarAjax',
+            default    => 'index',
+        };
+        if (method_exists($c, $method)) {
+            $c->$method();
+        } else {
+            $c->index();
+        }
+    }
+
     public function logSistema(): void
     {
         $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
