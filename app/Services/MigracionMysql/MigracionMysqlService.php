@@ -64,7 +64,7 @@ class MigracionMysqlService
      * Migra una entidad de la empresa (idempotente vía migracion_mysql_map).
      * @return array contadores del proceso
      */
-    public function migrar(string $entidad, int $idEmpresa, string $ruc, int $idUsuario): array
+    public function migrar(string $entidad, int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0): array
     {
         switch ($entidad) {
             case 'clientes':
@@ -77,6 +77,8 @@ class MigracionMysqlService
                 return $this->migrarVendedores($idEmpresa, $ruc, $idUsuario);
             case 'bodegas':
                 return $this->migrarBodegas($idEmpresa, $ruc, $idUsuario);
+            case 'facturas':
+                return $this->migrarFacturas($idEmpresa, $ruc, $idUsuario, $limite);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -435,6 +437,164 @@ class MigracionMysqlService
             }
         }
         return $res;
+    }
+
+    /** % de IVA por código SRI (para derivar impuestos del detalle). */
+    private const IVA_PCT = ['0' => 0, '2' => 12, '3' => 14, '4' => 15, '5' => 5, '6' => 0, '7' => 0, '8' => 8, '10' => 13];
+
+    /**
+     * Migra facturas de venta (cabecera + detalle + impuestos) resolviendo cliente/producto/
+     * bodega vía el mapa. Requiere clientes/productos migrados. $limite>0 = solo para pruebas.
+     */
+    private function migrarFacturas(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+        $repo  = new \App\repositories\modulos\FacturaVentaRepository();
+
+        $res = ['entidad' => 'facturas', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+
+        $done       = $this->idsMigrados($pg, $idEmpresa, 'facturas');
+        $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
+        $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
+        $mapBodega  = $this->mapaDe($pg, $idEmpresa, 'bodegas');
+        $insMap     = $this->stmtMap($pg, 'facturas');
+
+        $cuerpoStmt = $mysql->prepare(
+            "SELECT id_producto, cantidad_factura, valor_unitario_factura, subtotal_factura, descuento, tarifa_iva, codigo_producto, nombre_producto, id_bodega
+               FROM cuerpo_factura WHERE ruc_empresa = :r AND serie_factura = :s AND secuencial_factura = :sec"
+        );
+
+        $sql = "SELECT id_encabezado_factura, ruc_empresa, fecha_factura, serie_factura, secuencial_factura, id_cliente, observaciones_factura, estado_sri, total_factura, ambiente, aut_sri, propina
+                  FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_encabezado_factura";
+        if ($limite > 0) {
+            $sql .= " LIMIT " . (int) $limite;
+        }
+        $stmt = $mysql->query($sql);
+
+        while ($ef = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $ef['id_encabezado_factura'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+
+            $idCliente = $mapCliente[(string) $ef['id_cliente']] ?? null;
+            if (!$idCliente) { $res['omitidos']++; continue; } // cliente no migrado
+
+            $serie = trim((string) $ef['serie_factura']);
+            $partes = explode('-', $serie);
+            $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
+            $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
+            $secuencial = str_pad(preg_replace('/\D+/', '', (string) $ef['secuencial_factura']), 9, '0', STR_PAD_LEFT);
+
+            try {
+                $pg->beginTransaction();
+                $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
+                $idPto = $this->getPuntoEmisionId($idEmpresa, $estab, $pto, $idUsuario);
+
+                // Detalle: leer líneas y totales
+                $cuerpoStmt->execute([':r' => $ef['ruc_empresa'], ':s' => $serie, ':sec' => $ef['secuencial_factura']]);
+                $lineas = $cuerpoStmt->fetchAll(PDO::FETCH_ASSOC);
+                $totalSinImp = 0.0; $totalDesc = 0.0;
+                foreach ($lineas as $l) {
+                    $totalSinImp += (float) $l['subtotal_factura'] - (float) $l['descuento'];
+                    $totalDesc   += (float) $l['descuento'];
+                }
+
+                $estado = $this->estadoFacturaSri((string) $ef['estado_sri']);
+                $idVenta = $repo->insertCabecera([
+                    'id_empresa' => $idEmpresa, 'id_establecimiento' => $idEst, 'id_punto_emision' => $idPto,
+                    'id_cliente' => $idCliente, 'id_usuario' => $idUsuario,
+                    'fecha_emision' => substr((string) $ef['fecha_factura'], 0, 10),
+                    'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $secuencial,
+                    'total_sin_impuestos' => round($totalSinImp, 2), 'total_descuento' => round($totalDesc, 2),
+                    'importe_total' => (float) $ef['total_factura'], 'propina' => (float) $ef['propina'],
+                    'moneda' => 'DOLAR', 'estado' => $estado,
+                    'observaciones' => self::nz($ef['observaciones_factura']),
+                    'clave_acceso' => self::nz($ef['aut_sri']),
+                    'tipo_ambiente' => ((string) $ef['ambiente'] === '2') ? '2' : '1',
+                    'tipo_registro' => 'migrado',
+                ]);
+
+                foreach ($lineas as $l) {
+                    $base_i = (float) $l['subtotal_factura'] - (float) $l['descuento'];
+                    $idDet = $repo->insertDetalle([
+                        'id_venta' => $idVenta,
+                        'id_producto' => $mapProd[(string) $l['id_producto']] ?? null,
+                        'id_bodega' => ((int) $l['id_bodega'] > 0) ? ($mapBodega[(string) $l['id_bodega']] ?? null) : null,
+                        'codigo_principal' => (string) $l['codigo_producto'],
+                        'descripcion' => (string) $l['nombre_producto'],
+                        'cantidad' => (float) $l['cantidad_factura'],
+                        'precio_unitario' => (float) $l['valor_unitario_factura'],
+                        'descuento' => (float) $l['descuento'],
+                        'precio_total_sin_impuesto' => round($base_i, 2),
+                    ]);
+                    $cod = trim((string) $l['tarifa_iva']); // el valor viejo puede traer espacios
+                    $pct = self::IVA_PCT[$cod] ?? 0;
+                    $repo->insertImpuesto([
+                        'id_venta_detalle' => $idDet, 'codigo_impuesto' => '2', 'codigo_porcentaje' => $cod,
+                        'tarifa' => $pct, 'base_imponible' => round($base_i, 2), 'valor' => round($base_i * $pct / 100, 2),
+                    ]);
+                }
+
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idVenta, ':cn' => "$estab-$pto-$secuencial", ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); }
+            }
+        }
+        return $res;
+    }
+
+    /** Mapa id_origen(string) => id_destino(int) de una entidad ya migrada. */
+    private function mapaDe(PDO $pg, int $idEmpresa, string $entidad): array
+    {
+        $m = [];
+        $q = $pg->prepare("SELECT id_origen, id_destino FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = ?");
+        $q->execute([$idEmpresa, $entidad]);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $m[(string) $r['id_origen']] = (int) $r['id_destino'];
+        }
+        return $m;
+    }
+
+    private function estadoFacturaSri(string $e): string
+    {
+        $e = strtoupper(trim($e));
+        if (strpos($e, 'ANULAD') !== false) return 'anulado';
+        if ($e === 'AUTORIZADO') return 'autorizado';
+        return 'autorizado'; // histórico: se asume emitido
+    }
+
+    /** Establecimiento (get-or-create). Réplica de DocumentoAutomatedRegisterService. */
+    private function getEstablecimientoId(int $idEmpresa, string $cod, int $idUsuario): int
+    {
+        $db = Database::getConnection();
+        $st = $db->prepare("SELECT id FROM empresa_establecimiento WHERE id_empresa = ? AND codigo = ? LIMIT 1");
+        $st->execute([$idEmpresa, $cod]);
+        $r = $st->fetchColumn();
+        if ($r !== false) return (int) $r;
+        $ins = $db->prepare("INSERT INTO empresa_establecimiento (id_empresa, nombre, codigo, direccion, tipo, logo_ruta, leyenda_pdf_titulo, leyenda_pdf_mensaje, created_by, updated_by) VALUES (?, ?, ?, '', 'otro', '', '', '', ?, ?) RETURNING id");
+        $ins->execute([$idEmpresa, "Establecimiento $cod", $cod, $idUsuario, $idUsuario]);
+        return (int) $ins->fetchColumn();
+    }
+
+    /** Punto de emisión (get-or-create). */
+    private function getPuntoEmisionId(int $idEmpresa, string $estab, string $pto, int $idUsuario): int
+    {
+        $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
+        $db = Database::getConnection();
+        $st = $db->prepare("SELECT id FROM empresa_punto_emision WHERE id_establecimiento = ? AND codigo_punto = ? LIMIT 1");
+        $st->execute([$idEst, $pto]);
+        $r = $st->fetchColumn();
+        if ($r !== false) return (int) $r;
+        $ins = $db->prepare("INSERT INTO empresa_punto_emision (id_empresa, id_establecimiento, nombre, codigo_punto, logo_ruta, estado, created_by, updated_by) VALUES (?, ?, ?, ?, '', 'activo', ?, ?) RETURNING id");
+        $ins->execute([$idEmpresa, $idEst, "Punto $pto", $pto, $idUsuario, $idUsuario]);
+        return (int) $ins->fetchColumn();
     }
 
     /** Ids ya migrados de una entidad (anti-reproceso). */
