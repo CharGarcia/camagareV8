@@ -67,6 +67,8 @@ class MigracionMysqlService
         switch ($entidad) {
             case 'clientes':
                 return $this->migrarClientes($idEmpresa, $ruc, $idUsuario);
+            case 'productos':
+                return $this->migrarProductos($idEmpresa, $ruc, $idUsuario);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -151,6 +153,100 @@ class MigracionMysqlService
                     $res['migrados']++;
                 }
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idDest, ':cn' => substr($ident, 0, 120), ':vin' => $vin ? 't' : 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) {
+                    $pg->rollBack();
+                }
+                $res['errores']++;
+            }
+        }
+        return $res;
+    }
+
+    /** Migra los productos/servicios del contribuyente. */
+    private function migrarProductos(int $idEmpresa, string $ruc, int $idUsuario): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'productos', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+
+        $done = [];
+        $q = $pg->prepare("SELECT id_origen FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'productos'");
+        $q->execute([$idEmpresa]);
+        foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $o) {
+            $done[(string) $o] = true;
+        }
+
+        // Dedup por (id_empresa, codigo) — no hay unique constraint, se controla aquí.
+        $buscar = $pg->prepare("SELECT id FROM productos WHERE id_empresa = :e AND codigo = :cod LIMIT 1");
+        $ins = $pg->prepare(
+            "INSERT INTO productos (id_empresa, codigo, nombre, codigo_auxiliar, codigo_barras, precio_base, tipo_produccion, tarifa_iva, status, inventariable, id_usuario, created_by)
+             VALUES (:e, :cod, :nom, :aux, :barras, :precio, :tipo, :iva, :status, :inv, :u, :cb) RETURNING id"
+        );
+        $insMap = $pg->prepare(
+            "INSERT INTO migracion_mysql_map (id_empresa, entidad, id_origen, id_destino, clave_natural, vinculado, created_by)
+             VALUES (:e, 'productos', :o, :d, :cn, :vin, :cb) ON CONFLICT (id_empresa, entidad, id_origen) DO NOTHING"
+        );
+
+        $ivaValidos = ['0', '2', '3', '4', '5', '6', '7', '8', '10'];
+        $stmt = $mysql->query(
+            "SELECT id, codigo_producto, nombre_producto, codigo_auxiliar, precio_producto, tipo_produccion, tarifa_iva, status
+               FROM productos_servicios WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base)
+        );
+
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $r['id'];
+            if (isset($done[(string) $old])) {
+                $res['ya_migrados']++;
+                continue;
+            }
+            $codigo = trim((string) $r['codigo_producto']);
+            $nombre = trim((string) $r['nombre_producto']);
+            if ($codigo === '' && $nombre === '') {
+                $res['omitidos']++;
+                continue;
+            }
+            if ($codigo === '') {
+                $codigo = 'MIG-' . $old; // sin código: se genera uno estable
+            }
+            if ($nombre === '') {
+                $nombre = $codigo;
+            }
+            $tipo = trim((string) $r['tipo_produccion']);
+            if ($tipo === '') {
+                $tipo = '01';
+            }
+            $iva = trim((string) $r['tarifa_iva']);
+            if (!in_array($iva, $ivaValidos, true)) {
+                $iva = '0';
+            }
+
+            try {
+                $pg->beginTransaction();
+                $buscar->execute([':e' => $idEmpresa, ':cod' => $codigo]);
+                $existente = $buscar->fetchColumn();
+                if ($existente !== false) {
+                    $idDest = (int) $existente;
+                    $vin = true;
+                    $res['vinculados']++;
+                } else {
+                    $ins->execute([
+                        ':e' => $idEmpresa, ':cod' => $codigo, ':nom' => $nombre,
+                        ':aux' => trim((string) ($r['codigo_auxiliar'] ?? '')), ':barras' => '',
+                        ':precio' => (float) ($r['precio_producto'] ?? 0), ':tipo' => $tipo, ':iva' => (int) $iva,
+                        ':status' => (int) ($r['status'] ?? 1), ':inv' => $tipo === '01' ? 't' : 'f',
+                        ':u' => $idUsuario, ':cb' => $idUsuario,
+                    ]);
+                    $idDest = (int) $ins->fetchColumn();
+                    $vin = false;
+                    $res['migrados']++;
+                }
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idDest, ':cn' => substr($codigo, 0, 120), ':vin' => $vin ? 't' : 'f', ':cb' => $idUsuario]);
                 $pg->commit();
                 $done[(string) $old] = true;
             } catch (Throwable $ex) {
