@@ -322,15 +322,27 @@ class LogSistemaRepository extends BaseRepository
         }
         usort($tablas, fn ($a, $b) => strcmp($a['label'], $b['label']));
 
-        // Usuarios que aparecen en la bitácora
+        // Usuarios que aparecen en la bitácora.
+        // Alcance ESTRICTO: para nivel < 3 solo se listan usuarios con actividad
+        // de SU empresa (se excluyen los eventos globales id_empresa IS NULL) para
+        // no filtrar por nombre a usuarios de otras empresas que solo hicieron
+        // login u otras acciones globales. Los eventos globales siguen visibles en
+        // el listado; esto acota únicamente las opciones del filtro.
+        if ($nivel < 3) {
+            $whereUsuarios  = 'WHERE l.id_empresa = :scope_empresa_u';
+            $paramsUsuarios = [':scope_empresa_u' => (int) ($scope['id_empresa'] ?? 0)];
+        } else {
+            $whereUsuarios  = 'WHERE 1=1';
+            $paramsUsuarios = [];
+        }
         $st = $this->db->prepare(
             "SELECT DISTINCT l.id_usuario, COALESCE(u.nombre, '#' || l.id_usuario) AS nombre
              FROM log_sistema l
              LEFT JOIN usuarios u ON u.id = l.id_usuario
-             {$where} AND l.id_usuario IS NOT NULL
+             {$whereUsuarios} AND l.id_usuario IS NOT NULL
              ORDER BY nombre LIMIT 500"
         );
-        $st->execute($params);
+        $st->execute($paramsUsuarios);
         $usuarios = $st->fetchAll(PDO::FETCH_ASSOC);
 
         // Empresas: solo para nivel 3 (los demás están acotados a su empresa).
