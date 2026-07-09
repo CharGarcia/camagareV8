@@ -6,6 +6,10 @@ namespace App\Services\ImportarAntiguo;
 
 use App\repositories\modulos\ImportacionXmlRepository;
 use App\Services\modulos\DocumentoAutomatedRegisterService;
+use App\Services\modulos\FacturaVentaService;
+use App\repositories\modulos\FacturaVentaRepository;
+use App\Rules\modulos\FacturaVentaRules;
+use App\Services\LogSistemaService;
 use App\Services\Sri\SriWebserviceService;
 use App\core\Database;
 use SimpleXMLElement;
@@ -122,6 +126,61 @@ class ImportarAntiguoService
             // Estado real de la empresa por tipo (acumulado entre lotes), no solo lo nuevo.
             'resumen'         => $this->repo->getResumenEmpresa($idEmpresa, $codDocs),
         ];
+    }
+
+    /**
+     * Anula EN LOTE facturas de venta por clave de acceso (limpieza de migración).
+     * Reusa FacturaVentaService::anular() con el candado SRI DESACTIVADO, porque el WS
+     * del SRI reporta AUTORIZADO aunque el documento esté dado de baja; la fuente de
+     * verdad es la lista de claves provista (Excel). Anular es limpio en migrados: no
+     * hay inventario/asiento/cobros creados, así que solo marca estado='anulado' + log.
+     *
+     * @param string[] $claves
+     */
+    public function anularFacturasPorClaves(int $idEmpresa, array $claves, int $idUsuario): array
+    {
+        $res = ['total' => count($claves), 'anuladas' => 0, 'ya_anuladas' => 0, 'no_encontradas' => 0, 'errores' => 0, 'detalle' => []];
+        if (empty($claves)) {
+            return $res;
+        }
+
+        $db = Database::getConnection();
+        $repo = new FacturaVentaRepository();
+        $facturaService = new FacturaVentaService($repo, new FacturaVentaRules(), new LogSistemaService());
+        $buscar = $db->prepare(
+            "SELECT id, estado FROM ventas_cabecera
+             WHERE clave_acceso = :c AND id_empresa = :e AND eliminado = false LIMIT 1"
+        );
+
+        foreach ($claves as $claveRaw) {
+            $clave = preg_replace('/\D+/', '', (string) $claveRaw); // solo dígitos
+            if (strlen($clave) !== 49) {
+                $res['no_encontradas']++;
+                $res['detalle'][] = ['clave' => (string) $claveRaw, 'estado' => 'clave_invalida'];
+                continue;
+            }
+            $buscar->execute([':c' => $clave, ':e' => $idEmpresa]);
+            $row = $buscar->fetch(\PDO::FETCH_ASSOC);
+            if (!$row) {
+                $res['no_encontradas']++;
+                $res['detalle'][] = ['clave' => $clave, 'estado' => 'no_encontrada'];
+                continue;
+            }
+            if (($row['estado'] ?? '') === 'anulado') {
+                $res['ya_anuladas']++;
+                $res['detalle'][] = ['clave' => $clave, 'estado' => 'ya_anulada'];
+                continue;
+            }
+            try {
+                $facturaService->anular((int) $row['id'], $idEmpresa, $idUsuario, false);
+                $res['anuladas']++;
+                $res['detalle'][] = ['clave' => $clave, 'estado' => 'anulada', 'id' => (int) $row['id']];
+            } catch (Throwable $e) {
+                $res['errores']++;
+                $res['detalle'][] = ['clave' => $clave, 'estado' => 'error', 'msg' => substr($e->getMessage(), 0, 200)];
+            }
+        }
+        return $res;
     }
 
     /**

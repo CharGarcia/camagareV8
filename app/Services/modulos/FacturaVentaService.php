@@ -810,7 +810,7 @@ class FacturaVentaService
         return $res;
     }
 
-    public function anular(int $id, int $idEmpresa, int $idUsuario): void
+    public function anular(int $id, int $idEmpresa, int $idUsuario, bool $verificarSri = true): void
     {
         $cabecera = $this->repository->getPorId($id);
         if (!$cabecera || (int)$cabecera['id_empresa'] !== $idEmpresa) {
@@ -823,9 +823,11 @@ class FacturaVentaService
 
         // 1. VERIFICACIÓN SRI: si la factura fue autorizada, solo se puede anular internamente
         //    cuando el SRI YA NO la reporta como AUTORIZADO (es decir, ya se anuló en el SRI).
+        //    $verificarSri=false lo usa la anulación en lote de migración (el WS del SRI reporta
+        //    AUTORIZADO aunque el documento esté dado de baja; la fuente de verdad es el Excel).
         $claveAcceso  = trim((string)($cabecera['clave_acceso'] ?? ''));
         $estadoActual = $cabecera['estado'] ?? '';
-        if ($estadoActual === 'autorizado' && $claveAcceso !== '') {
+        if ($verificarSri && $estadoActual === 'autorizado' && $claveAcceso !== '') {
             $tipoAmbiente = (string)($cabecera['tipo_ambiente'] ?? '1');
             $envioSri = new \App\Services\Sri\SriEnvioService();
             $consulta = $envioSri->verificarAutorizacion($claveAcceso, $tipoAmbiente);

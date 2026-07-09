@@ -493,6 +493,7 @@ class ConfigController extends Controller
             'escanear' => 'escanearAjax',
             'importar' => 'importarAjax',
             'lotes'    => 'lotesAjax',
+            'anular'   => 'anularLoteAjax',
             default    => 'index',
         };
         if (method_exists($c, $method)) {

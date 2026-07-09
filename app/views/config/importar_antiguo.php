@@ -103,6 +103,30 @@ $base = BASE_URL;
     </div>
 </div>
 
+<!-- Herramienta: anular en lote por clave de acceso -->
+<div class="card border-0 shadow-sm mt-4">
+    <div class="card-header bg-white py-3 border-bottom-0">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-x-octagon text-danger me-2"></i>Anular en lote (comprobantes dados de baja en el SRI)</h6>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">
+            Sube un Excel/CSV con las <b>claves de acceso</b> (49 dígitos) de las facturas que fueron
+            <b>anuladas en el SRI</b>. El sistema las marcará como <b>anuladas</b> (reversando cobros, asiento
+            e inventario si los hubiera). Se usa la <b>empresa seleccionada arriba</b>.
+        </p>
+        <div class="row g-2 align-items-end">
+            <div class="col-auto">
+                <label class="form-label small mb-0">Archivo de claves (.xlsx / .csv)</label>
+                <input type="file" class="form-control form-control-sm" id="fAnularArchivo" accept=".xlsx,.xls,.csv">
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-danger" id="btnAnular"><i class="bi bi-x-octagon me-1"></i> Anular en lote</button>
+            </div>
+        </div>
+        <div id="zonaAnular" class="small mt-3"></div>
+    </div>
+</div>
+
 <script>
 (function () {
     const base = '<?= $base ?>';
@@ -247,5 +271,36 @@ $base = BASE_URL;
         const c = tipo ? 'text-' + tipo : 'text-muted';
         $('logImport').insertAdjacentHTML('afterbegin', `<div class="${c}">• ${txt}</div>`);
     }
+
+    // ── Anular en lote por clave de acceso ──
+    $('btnAnular').addEventListener('click', async () => {
+        const idEmpresa = $('selEmpresa').value;
+        if (!idEmpresa) { alert('Seleccione una empresa arriba.'); return; }
+        const file = $('fAnularArchivo').files[0];
+        if (!file) { alert('Seleccione el archivo con las claves de acceso.'); return; }
+        if (!confirm('¿Anular las facturas cuyas claves están en el archivo? Los documentos quedarán marcados como anulados.')) return;
+
+        const btn = $('btnAnular');
+        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Anulando...';
+        try {
+            const body = new FormData();
+            body.append('action', 'anular');
+            body.append('id_empresa', idEmpresa);
+            body.append('archivo', file);
+            const res = await fetch(base + '/config/importarAntiguo', { method: 'POST', body }).then(r => r.json());
+            if (!res.ok) throw new Error(res.mensaje || 'Error al anular');
+            const d = res.data;
+            $('zonaAnular').innerHTML =
+                `<div class="alert alert-info py-2 mb-0">
+                    Claves en archivo <b>${d.total}</b> · Anuladas <b class="text-success">${d.anuladas}</b> ·
+                    Ya anuladas <b>${d.ya_anuladas}</b> · No encontradas <b class="text-warning">${d.no_encontradas}</b> ·
+                    Errores <b class="text-danger">${d.errores}</b>
+                 </div>`;
+        } catch (e) {
+            $('zonaAnular').innerHTML = '<div class="alert alert-danger py-2 mb-0">' + e.message + '</div>';
+        } finally {
+            btn.disabled = false; btn.innerHTML = '<i class="bi bi-x-octagon me-1"></i> Anular en lote';
+        }
+    });
 })();
 </script>

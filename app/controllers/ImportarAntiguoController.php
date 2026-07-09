@@ -118,6 +118,48 @@ class ImportarAntiguoController extends Controller
         exit;
     }
 
+    /** POST: anula en lote facturas de venta por clave de acceso (Excel/CSV subido). */
+    public function anularLoteAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            [$idEmpresa] = $this->resolverEmpresa();
+            $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+
+            if (!isset($_FILES['archivo']) || $_FILES['archivo']['error'] !== UPLOAD_ERR_OK) {
+                throw new \RuntimeException('Debe subir un archivo Excel/CSV con las claves de acceso.');
+            }
+            $claves = $this->leerClavesArchivo($_FILES['archivo']['tmp_name']);
+            if (empty($claves)) {
+                throw new \RuntimeException('No se encontraron claves de acceso (49 dígitos) en el archivo.');
+            }
+
+            $r = $this->service->anularFacturasPorClaves($idEmpresa, $claves, $idUsuario);
+            echo json_encode(['ok' => true, 'data' => $r], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
+    /** Lee un Excel/CSV y extrae todas las claves de acceso (49 dígitos) de cualquier celda. */
+    private function leerClavesArchivo(string $rutaTmp): array
+    {
+        $claves = [];
+        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($rutaTmp);
+        foreach ($spreadsheet->getWorksheetIterator() as $sheet) {
+            foreach ($sheet->toArray() as $fila) {
+                foreach ($fila as $celda) {
+                    $val = preg_replace('/\D+/', '', (string) $celda);
+                    if (strlen($val) === 49) {
+                        $claves[$val] = $val; // dedup por clave
+                    }
+                }
+            }
+        }
+        return array_values($claves);
+    }
+
     /** Resuelve y valida la empresa seleccionada; devuelve [idEmpresa, ruc, establecimiento]. */
     private function resolverEmpresa(): array
     {
