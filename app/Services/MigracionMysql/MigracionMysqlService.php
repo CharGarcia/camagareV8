@@ -32,6 +32,7 @@ class MigracionMysqlService
         'retenciones_compra' => ['label' => 'Retenciones en compra',           'tabla' => 'encabezado_retencion',       'fecha' => 'fecha_emision',  'tipo' => 'documento'],
         'recibos'           => ['label' => 'Recibos de venta',                 'tabla' => 'encabezado_recibo',          'fecha' => 'fecha_recibo',   'tipo' => 'documento'],
         'liquidaciones'     => ['label' => 'Liquidaciones de compra',           'tabla' => 'encabezado_liquidacion',     'fecha' => 'fecha_liquidacion', 'tipo' => 'documento'],
+        'guias'             => ['label' => 'Guías de remisión',                 'tabla' => 'encabezado_gr',              'fecha' => 'fecha_gr',       'tipo' => 'documento'],
         'compras'           => ['label' => 'Compras',                          'tabla' => 'encabezado_compra',          'fecha' => 'fecha_compra',   'tipo' => 'documento'],
         'ingresos_egresos'  => ['label' => 'Cobros y pagos (ingresos/egresos)', 'tabla' => 'ingresos_egresos',          'fecha' => 'fecha_ing_egr',  'tipo' => 'documento'],
     ];
@@ -112,6 +113,8 @@ class MigracionMysqlService
                 return $this->migrarRecibos($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'liquidaciones':
                 return $this->migrarLiquidaciones($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
+            case 'guias':
+                return $this->migrarGuias($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -474,6 +477,92 @@ class MigracionMysqlService
 
     /** % de IVA por código SRI (para derivar impuestos del detalle). */
     private const IVA_PCT = ['0' => 0, '2' => 12, '3' => 14, '4' => 15, '5' => 5, '6' => 0, '7' => 0, '8' => 8, '10' => 13];
+
+    /** Migra guías de remisión (cabecera + detalle, sin importes). */
+    private function migrarGuias(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'guias', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done       = $this->idsMigrados($pg, $idEmpresa, 'guias');
+        $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
+        $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
+        $insMap     = $this->stmtMap($pg, 'guias');
+
+        $insCab = $pg->prepare(
+            "INSERT INTO guias_remision_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_transportista, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, placa, fecha_inicio_transporte, fecha_fin_transporte, direccion_partida, direccion_destino, motivo_traslado, num_doc_sustento, tipo_ambiente, estado, created_by)
+             VALUES (:e, :est, :pto, :cli, :tra, :u, :fe, :estc, :ptoc, :sec, :clave, :placa, :fini, :ffin, :dpart, :ddest, :mot, :nds, :amb, :estado, :cb) RETURNING id"
+        );
+        $insDet = $pg->prepare(
+            "INSERT INTO guias_remision_detalle (id_guia_remision, id_producto, codigo_principal, descripcion, cantidad)
+             VALUES (:g, :prod, :cod, :desc, :cant)"
+        );
+        $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad_gr, codigo_producto, nombre_producto FROM cuerpo_gr WHERE ruc_empresa = :r AND serie_gr = :s AND secuencial_gr = :sec");
+        $transStmt  = $mysql->prepare("SELECT ruc, nombre, tipo_id FROM clientes WHERE id = :id LIMIT 1");
+
+        $sql = "SELECT id_encabezado_gr, ruc_empresa, fecha_gr, fecha_salida, fecha_llegada, serie_gr, secuencial_gr, factura_aplica, origen, destino, id_transportista, id_cliente, placa, estado_sri, ambiente, aut_sri, motivo
+                  FROM encabezado_gr WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_gr', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_gr";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $stmt = $mysql->query($sql);
+
+        while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $ec['id_encabezado_gr'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            $idCliente = $mapCliente[(string) $ec['id_cliente']] ?? null;
+            if (!$idCliente) { $res['omitidos']++; continue; }
+
+            $serie = trim((string) $ec['serie_gr']);
+            $partes = explode('-', $serie);
+            $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
+            $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
+            $sec   = str_pad(preg_replace('/\D+/', '', (string) $ec['secuencial_gr']), 9, '0', STR_PAD_LEFT);
+            $fe    = substr((string) $ec['fecha_gr'], 0, 10);
+            $fini  = self::fechaCorta($ec['fecha_salida']) ?: $fe;
+            $ffin  = self::fechaCorta($ec['fecha_llegada']) ?: $fe;
+
+            try {
+                $pg->beginTransaction();
+                $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
+                $idPto = $this->getPuntoEmisionId($idEmpresa, $estab, $pto, $idUsuario);
+                // Transportista: get-or-create desde el cliente viejo
+                $transStmt->execute([':id' => (int) $ec['id_transportista']]);
+                $t = $transStmt->fetch(PDO::FETCH_ASSOC);
+                $tIdent = $t ? trim((string) $t['ruc']) : '';
+                if ($tIdent === '') { throw new \RuntimeException('transportista sin identificación'); }
+                $idTra = $this->getOrCreateTransportista($idEmpresa, $idUsuario, $tIdent, (($t['nombre'] ?? '') ?: $tIdent), (trim((string) $t['tipo_id']) ?: '04'), (string) ($ec['placa'] ?? ''));
+                $insCab->execute([
+                    ':e' => $idEmpresa, ':est' => $idEst, ':pto' => $idPto, ':cli' => $idCliente, ':tra' => $idTra, ':u' => $idUsuario,
+                    ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec, ':clave' => self::nz($ec['aut_sri']),
+                    ':placa' => (string) ($ec['placa'] ?? ''), ':fini' => $fini, ':ffin' => $ffin,
+                    ':dpart' => (string) ($ec['origen'] ?? ''), ':ddest' => (string) ($ec['destino'] ?? ''),
+                    ':mot' => (string) ($ec['motivo'] ?: 'Venta'), ':nds' => self::nz($ec['factura_aplica']),
+                    ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1', ':estado' => $this->estadoFacturaSri((string) $ec['estado_sri']), ':cb' => $idUsuario,
+                ]);
+                $idGr = (int) $insCab->fetchColumn();
+
+                $cuerpoStmt->execute([':r' => $ec['ruc_empresa'], ':s' => $serie, ':sec' => $ec['secuencial_gr']]);
+                foreach ($cuerpoStmt->fetchAll(PDO::FETCH_ASSOC) as $l) {
+                    $insDet->execute([
+                        ':g' => $idGr, ':prod' => $mapProd[(string) $l['id_producto']] ?? null, ':cod' => (string) $l['codigo_producto'],
+                        ':desc' => (string) ($l['nombre_producto'] ?: 'ITEM'), ':cant' => (float) $l['cantidad_gr'],
+                    ]);
+                }
+
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idGr, ':cn' => "$estab-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
 
     /** Migra liquidaciones de compra (cabecera + detalle + impuestos) resolviendo proveedor. */
     private function migrarLiquidaciones(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
@@ -1182,6 +1271,21 @@ class MigracionMysqlService
         if (strpos($e, 'ANULAD') !== false) return 'anulado';
         if ($e === 'AUTORIZADO') return 'autorizado';
         return 'autorizado'; // histórico: se asume emitido
+    }
+
+    /** Transportista (get-or-create) por (id_empresa, identificacion). */
+    private function getOrCreateTransportista(int $idEmpresa, int $idUsuario, string $ident, string $nombre, string $tipoId, string $placa): int
+    {
+        $db = Database::getConnection();
+        $st = $db->prepare("SELECT id FROM transportistas WHERE id_empresa = ? AND identificacion = ? LIMIT 1");
+        $st->execute([$idEmpresa, $ident]);
+        $r = $st->fetchColumn();
+        if ($r !== false) {
+            return (int) $r;
+        }
+        $ins = $db->prepare("INSERT INTO transportistas (id_empresa, id_usuario, tipo_id, identificacion, nombre, placa, created_by) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id");
+        $ins->execute([$idEmpresa, $idUsuario, $tipoId, $ident, $nombre, $placa, $idUsuario]);
+        return (int) $ins->fetchColumn();
     }
 
     /** Establecimiento (get-or-create). Réplica de DocumentoAutomatedRegisterService. */
