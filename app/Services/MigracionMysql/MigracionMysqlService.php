@@ -490,6 +490,8 @@ class MigracionMysqlService
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
         $insMap     = $this->stmtMap($pg, 'guias');
+        $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
+        $oldCliRuc   = $mysql->prepare("SELECT ruc FROM clientes WHERE id = :id LIMIT 1");
 
         $insCab = $pg->prepare(
             "INSERT INTO guias_remision_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_transportista, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, placa, fecha_inicio_transporte, fecha_fin_transporte, direccion_partida, direccion_destino, motivo_traslado, num_doc_sustento, tipo_ambiente, estado, created_by)
@@ -511,7 +513,7 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $ec['id_encabezado_gr'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            $idCliente = $mapCliente[(string) $ec['id_cliente']] ?? null;
+            $idCliente = $this->resolverEntidadPorId($mapCliente, $cliPorIdent, $oldCliRuc, (int) $ec['id_cliente']);
             if (!$idCliente) { $res['omitidos']++; continue; }
 
             $serie = trim((string) $ec['serie_gr']);
@@ -575,6 +577,8 @@ class MigracionMysqlService
         $done    = $this->idsMigrados($pg, $idEmpresa, 'liquidaciones');
         $mapProv = $this->mapaDe($pg, $idEmpresa, 'proveedores');
         $insMap  = $this->stmtMap($pg, 'liquidaciones');
+        $provPorIdent = $this->proveedoresPorIdentificacion($pg, $idEmpresa);
+        $oldProvRuc   = $mysql->prepare("SELECT ruc_proveedor FROM proveedores WHERE id_proveedor = :id LIMIT 1");
 
         $insCab = $pg->prepare(
             "INSERT INTO liquidaciones_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_proveedor, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, numero_autorizacion, total_sin_impuestos, total_descuento, importe_total, moneda, estado, tipo_ambiente, created_by)
@@ -599,7 +603,7 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $ec['id_encabezado_liq'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            $idProv = $mapProv[(string) $ec['id_proveedor']] ?? null;
+            $idProv = $this->resolverEntidadPorId($mapProv, $provPorIdent, $oldProvRuc, (int) $ec['id_proveedor']);
             if (!$idProv) { $res['omitidos']++; continue; }
 
             $serie = trim((string) $ec['serie_liquidacion']);
@@ -784,6 +788,8 @@ class MigracionMysqlService
         $done     = $this->idsMigrados($pg, $idEmpresa, 'compras');
         $mapProv  = $this->mapaDe($pg, $idEmpresa, 'proveedores');
         $insMap   = $this->stmtMap($pg, 'compras');
+        $provPorIdent = $this->proveedoresPorIdentificacion($pg, $idEmpresa);
+        $oldProvRuc   = $mysql->prepare("SELECT ruc_proveedor FROM proveedores WHERE id_proveedor = :id LIMIT 1");
 
         $insCab = $pg->prepare(
             "INSERT INTO compras_cabecera (id_empresa, id_proveedor, establecimiento_prov, punto_emision_prov, secuencial_prov, numero_autorizacion, fecha_emision, fecha_registro, importe_total, total_sin_impuestos, total_descuento, propina, observaciones, tipo_registro, tipo_ambiente, id_usuario, created_by)
@@ -810,7 +816,7 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $ec['id_encabezado_compra'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            $idProv = $mapProv[(string) $ec['id_proveedor']] ?? null;
+            $idProv = $this->resolverEntidadPorId($mapProv, $provPorIdent, $oldProvRuc, (int) $ec['id_proveedor']);
             if (!$idProv) { $res['omitidos']++; continue; } // proveedor no migrado
 
             $num = explode('-', trim((string) $ec['numero_documento']));
@@ -871,6 +877,8 @@ class MigracionMysqlService
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
         $insMap     = $this->stmtMap($pg, 'notas_credito');
+        $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
+        $oldCliRuc   = $mysql->prepare("SELECT ruc FROM clientes WHERE id = :id LIMIT 1");
 
         $insCab = $pg->prepare(
             "INSERT INTO notas_credito_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, cod_doc_modificado, num_doc_modificado, fecha_emision_docs_sustento, motivo, total_sin_impuestos, total_descuento, importe_total, estado, clave_acceso, tipo_ambiente, created_by)
@@ -895,7 +903,7 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $ec['id_encabezado_nc'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            $idCliente = $mapCliente[(string) $ec['id_cliente']] ?? null;
+            $idCliente = $this->resolverEntidadPorId($mapCliente, $cliPorIdent, $oldCliRuc, (int) $ec['id_cliente']);
             if (!$idCliente) { $res['omitidos']++; continue; }
 
             $serie = trim((string) $ec['serie_nc']);
@@ -962,6 +970,8 @@ class MigracionMysqlService
         $done    = $this->idsMigrados($pg, $idEmpresa, 'retenciones_compra');
         $mapProv = $this->mapaDe($pg, $idEmpresa, 'proveedores');
         $insMap  = $this->stmtMap($pg, 'retenciones_compra');
+        $provPorIdent = $this->proveedoresPorIdentificacion($pg, $idEmpresa);
+        $oldProvRuc   = $mysql->prepare("SELECT ruc_proveedor FROM proveedores WHERE id_proveedor = :id LIMIT 1");
 
         $insCab = $pg->prepare(
             "INSERT INTO retencion_compra_cabecera (id_empresa, id_proveedor, id_usuario, id_establecimiento, id_punto_emision, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, numero_autorizacion, tipo_ambiente, tipo_doc_sustento, num_doc_sustento, fecha_emision_doc_sustento, total_retenido, created_by)
@@ -982,7 +992,7 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $ec['id_encabezado_retencion'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            $idProv = $mapProv[(string) $ec['id_proveedor']] ?? null;
+            $idProv = $this->resolverEntidadPorId($mapProv, $provPorIdent, $oldProvRuc, (int) $ec['id_proveedor']);
             if (!$idProv) { $res['omitidos']++; continue; }
 
             $serie = trim((string) $ec['serie_retencion']);
@@ -1040,6 +1050,8 @@ class MigracionMysqlService
         $done       = $this->idsMigrados($pg, $idEmpresa, 'retenciones_venta');
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $insMap     = $this->stmtMap($pg, 'retenciones_venta');
+        $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
+        $oldCliRuc   = $mysql->prepare("SELECT ruc FROM clientes WHERE id = :id LIMIT 1");
 
         $insCab = $pg->prepare(
             "INSERT INTO retencion_venta_cabecera (id_empresa, id_cliente, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, periodo_fiscal, total_isd, total_iva, total_renta, tipo_ambiente, created_by, updated_by)
@@ -1060,7 +1072,7 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $ec['id_encabezado_retencion'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            $idCliente = $mapCliente[(string) $ec['id_cliente']] ?? null;
+            $idCliente = $this->resolverEntidadPorId($mapCliente, $cliPorIdent, $oldCliRuc, (int) $ec['id_cliente']);
             if (!$idCliente) { $res['omitidos']++; continue; }
 
             $serie = trim((string) $ec['serie_retencion']);
@@ -1125,6 +1137,8 @@ class MigracionMysqlService
         $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
         $mapBodega  = $this->mapaDe($pg, $idEmpresa, 'bodegas');
         $insMap     = $this->stmtMap($pg, 'recibos');
+        $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
+        $oldCliRuc   = $mysql->prepare("SELECT ruc FROM clientes WHERE id = :id LIMIT 1");
 
         $insCab = $pg->prepare(
             "INSERT INTO recibos_venta_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, recibo_numero, con_impuestos, total_sin_impuestos, total_descuento, importe_total, propina, moneda, tipo_ambiente, created_by)
@@ -1149,7 +1163,7 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $ec['id_encabezado_recibo'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            $idCliente = $mapCliente[(string) $ec['id_cliente']] ?? null;
+            $idCliente = $this->resolverEntidadPorId($mapCliente, $cliPorIdent, $oldCliRuc, (int) $ec['id_cliente']);
             if (!$idCliente) { $res['omitidos']++; continue; }
 
             $serie = trim((string) $ec['serie_recibo']);
@@ -1274,6 +1288,32 @@ class MigracionMysqlService
             $m[(string) $r['identificacion']] = (int) $r['id'];
         }
         return $m;
+    }
+
+    /** Mapa identificacion => id de los proveedores del sistema nuevo. */
+    private function proveedoresPorIdentificacion(PDO $pg, int $idEmpresa): array
+    {
+        $m = [];
+        $q = $pg->prepare("SELECT DISTINCT ON (identificacion) identificacion, id FROM proveedores WHERE id_empresa = ? ORDER BY identificacion, eliminado, id");
+        $q->execute([$idEmpresa]);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $m[(string) $r['identificacion']] = (int) $r['id'];
+        }
+        return $m;
+    }
+
+    /**
+     * Resuelve el id nuevo de un cliente/proveedor: primero por el mapa de migración,
+     * y si no está, por identificación contra los existentes en el sistema nuevo.
+     */
+    private function resolverEntidadPorId(array $mapMig, array $porIdent, \PDOStatement $oldRucStmt, int $oldId): ?int
+    {
+        if (isset($mapMig[(string) $oldId])) {
+            return $mapMig[(string) $oldId];
+        }
+        $oldRucStmt->execute([':id' => $oldId]);
+        $ruc = trim((string) $oldRucStmt->fetchColumn());
+        return $ruc !== '' ? ($porIdent[$ruc] ?? null) : null;
     }
 
     /** Mapa id_origen(string) => id_destino(int) de una entidad ya migrada. */
