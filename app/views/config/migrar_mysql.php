@@ -28,15 +28,29 @@ $base = BASE_URL;
 
                 <div class="mb-3">
                     <label class="form-label fw-semibold small">Empresa (destino)</label>
-                    <select class="form-select" id="selEmpresa">
-                        <option value="">-- Seleccione la empresa --</option>
-                        <?php foreach ($empresasMigrar as $e): ?>
-                            <option value="<?= (int)$e['id'] ?>" data-ruc="<?= htmlspecialchars($e['ruc']) ?>">
-                                <?= htmlspecialchars($e['razon_social']) ?> (<?= htmlspecialchars($e['ruc']) ?>)
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                    <div class="form-text">Se busca en la base anterior por el RUC del contribuyente (todos sus establecimientos).</div>
+                    <div class="position-relative">
+                        <input type="text" class="form-control" id="selEmpresaBuscar" autocomplete="off"
+                               placeholder="Buscar por nombre, RUC o establecimiento…">
+                        <input type="hidden" id="selEmpresa">
+                        <div id="ddEmpresas" class="list-group position-absolute w-100 shadow-sm"
+                             style="max-height:260px;overflow:auto;z-index:1050;display:none;">
+                            <?php foreach ($empresasMigrar as $e):
+                                $est = str_pad((string)($e['establecimiento'] ?? ''), 3, '0', STR_PAD_LEFT);
+                                $busq = mb_strtolower(($e['razon_social'] ?? '') . ' ' . ($e['ruc'] ?? '') . ' ' . $est, 'UTF-8');
+                            ?>
+                                <button type="button" class="list-group-item list-group-item-action py-1 dd-emp"
+                                        data-id="<?= (int)$e['id'] ?>"
+                                        data-ruc="<?= htmlspecialchars($e['ruc']) ?>"
+                                        data-est="<?= htmlspecialchars($est) ?>"
+                                        data-nombre="<?= htmlspecialchars($e['razon_social']) ?>"
+                                        data-search="<?= htmlspecialchars($busq) ?>">
+                                    <span class="fw-semibold"><?= htmlspecialchars($e['razon_social']) ?></span><br>
+                                    <span class="text-muted small">RUC <?= htmlspecialchars($e['ruc']) ?> · Est. <?= htmlspecialchars($est) ?></span>
+                                </button>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <div class="form-text">Escribe para filtrar. Se busca en la base anterior por el RUC del contribuyente (todos sus establecimientos).</div>
                 </div>
 
                 <label class="form-label fw-semibold small">¿Qué quieres extraer?</label>
@@ -105,6 +119,31 @@ $base = BASE_URL;
 
     $('selTodos').addEventListener('click', (e) => { e.preventDefault(); document.querySelectorAll('.chk-ent').forEach(c => c.checked = true); });
     $('selNinguno').addEventListener('click', (e) => { e.preventDefault(); document.querySelectorAll('.chk-ent').forEach(c => c.checked = false); });
+
+    // ── Buscador de empresa (destino) ──
+    const dd = $('ddEmpresas'), buscar = $('selEmpresaBuscar');
+    const items = Array.from(document.querySelectorAll('.dd-emp'));
+
+    function filtrarEmpresas() {
+        const q = buscar.value.trim().toLowerCase();
+        let visibles = 0;
+        items.forEach(it => {
+            const ok = q === '' || it.dataset.search.indexOf(q) !== -1;
+            it.style.display = ok ? '' : 'none';
+            if (ok) visibles++;
+        });
+        dd.style.display = visibles ? 'block' : 'none';
+    }
+    buscar.addEventListener('focus', filtrarEmpresas);
+    buscar.addEventListener('input', () => { $('selEmpresa').value = ''; filtrarEmpresas(); });
+    items.forEach(it => it.addEventListener('click', () => {
+        $('selEmpresa').value = it.dataset.id;
+        buscar.value = it.dataset.nombre + ' (RUC ' + it.dataset.ruc + ' · Est. ' + it.dataset.est + ')';
+        dd.style.display = 'none';
+    }));
+    document.addEventListener('click', (e) => {
+        if (!dd.contains(e.target) && e.target !== buscar) dd.style.display = 'none';
+    });
 
     // Probar conexión
     $('btnProbar').addEventListener('click', async () => {
