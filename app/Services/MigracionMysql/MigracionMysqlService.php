@@ -513,7 +513,7 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $ec['id_encabezado_gr'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            $idCliente = $this->resolverEntidadPorId($mapCliente, $cliPorIdent, $oldCliRuc, (int) $ec['id_cliente']);
+            $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
 
             $serie = trim((string) $ec['serie_gr']);
@@ -603,7 +603,7 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $ec['id_encabezado_liq'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            $idProv = $this->resolverEntidadPorId($mapProv, $provPorIdent, $oldProvRuc, (int) $ec['id_proveedor']);
+            $idProv = $this->resolverOCrearProveedor($provPorIdent, $mapProv, (int) $ec['id_proveedor'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idProv) { $res['omitidos']++; continue; }
 
             $serie = trim((string) $ec['serie_liquidacion']);
@@ -683,6 +683,7 @@ class MigracionMysqlService
             "SELECT id_producto, cantidad_factura, valor_unitario_factura, subtotal_factura, descuento, tarifa_iva, codigo_producto, nombre_producto, id_bodega
                FROM cuerpo_factura WHERE ruc_empresa = :r AND serie_factura = :s AND secuencial_factura = :sec"
         );
+        $prodPorCod = $this->productosPorCodigo($pg, $idEmpresa);
 
         $sql = "SELECT id_encabezado_factura, ruc_empresa, fecha_factura, serie_factura, secuencial_factura, id_cliente, observaciones_factura, estado_sri, total_factura, ambiente, aut_sri, propina
                   FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_factura', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_factura";
@@ -696,14 +697,8 @@ class MigracionMysqlService
             $old = (int) $ef['id_encabezado_factura'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
 
-            $idCliente = $mapCliente[(string) $ef['id_cliente']] ?? null;
-            if (!$idCliente) {
-                // No está en el mapa: resolver por identificación (RUC del cliente viejo)
-                $oldCliRuc->execute([':id' => (int) $ef['id_cliente']]);
-                $rucCli = trim((string) $oldCliRuc->fetchColumn());
-                if ($rucCli !== '') { $idCliente = $cliPorIdent[$rucCli] ?? null; }
-            }
-            if (!$idCliente) { $res['omitidos']++; continue; } // cliente no existe en el nuevo
+            $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ef['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
+            if (!$idCliente) { $res['omitidos']++; continue; } // cliente viejo sin identificación
 
             $serie = trim((string) $ef['serie_factura']);
             $partes = explode('-', $serie);
@@ -744,7 +739,7 @@ class MigracionMysqlService
                     $base_i = (float) $l['subtotal_factura'] - (float) $l['descuento'];
                     $idDet = $repo->insertDetalle([
                         'id_venta' => $idVenta,
-                        'id_producto' => $mapProd[(string) $l['id_producto']] ?? null,
+                        'id_producto' => $this->resolverOCrearProducto($prodPorCod, $mapProd, (int) $l['id_producto'], (string) $l['codigo_producto'], (string) $l['nombre_producto'], trim((string) $l['tarifa_iva']), $idEmpresa, $idUsuario, $pg),
                         'id_bodega' => ((int) $l['id_bodega'] > 0) ? ($mapBodega[(string) $l['id_bodega']] ?? null) : null,
                         'codigo_principal' => (string) $l['codigo_producto'],
                         'descripcion' => (string) $l['nombre_producto'],
@@ -816,7 +811,7 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $ec['id_encabezado_compra'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            $idProv = $this->resolverEntidadPorId($mapProv, $provPorIdent, $oldProvRuc, (int) $ec['id_proveedor']);
+            $idProv = $this->resolverOCrearProveedor($provPorIdent, $mapProv, (int) $ec['id_proveedor'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idProv) { $res['omitidos']++; continue; } // proveedor no migrado
 
             $num = explode('-', trim((string) $ec['numero_documento']));
@@ -903,7 +898,7 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $ec['id_encabezado_nc'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            $idCliente = $this->resolverEntidadPorId($mapCliente, $cliPorIdent, $oldCliRuc, (int) $ec['id_cliente']);
+            $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
 
             $serie = trim((string) $ec['serie_nc']);
@@ -992,7 +987,7 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $ec['id_encabezado_retencion'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            $idProv = $this->resolverEntidadPorId($mapProv, $provPorIdent, $oldProvRuc, (int) $ec['id_proveedor']);
+            $idProv = $this->resolverOCrearProveedor($provPorIdent, $mapProv, (int) $ec['id_proveedor'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idProv) { $res['omitidos']++; continue; }
 
             $serie = trim((string) $ec['serie_retencion']);
@@ -1072,7 +1067,7 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $ec['id_encabezado_retencion'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            $idCliente = $this->resolverEntidadPorId($mapCliente, $cliPorIdent, $oldCliRuc, (int) $ec['id_cliente']);
+            $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
 
             $serie = trim((string) $ec['serie_retencion']);
@@ -1163,7 +1158,7 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $ec['id_encabezado_recibo'];
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
-            $idCliente = $this->resolverEntidadPorId($mapCliente, $cliPorIdent, $oldCliRuc, (int) $ec['id_cliente']);
+            $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
 
             $serie = trim((string) $ec['serie_recibo']);
@@ -1314,6 +1309,114 @@ class MigracionMysqlService
         $oldRucStmt->execute([':id' => $oldId]);
         $ruc = trim((string) $oldRucStmt->fetchColumn());
         return $ruc !== '' ? ($porIdent[$ruc] ?? null) : null;
+    }
+
+    /**
+     * Resuelve el cliente de un documento: mapa → identificación → y si no existe, lo CREA
+     * desde la base vieja (para que los documentos no fallen aunque no se migraron catálogos).
+     * Actualiza $cliPorIdent por referencia. Devuelve id nuevo o null (si el viejo no tiene RUC).
+     */
+    private function resolverOCrearCliente(array &$cliPorIdent, array $mapMig, int $oldId, int $idEmpresa, int $idUsuario, PDO $mysql, PDO $pg): ?int
+    {
+        if (isset($mapMig[(string) $oldId])) {
+            return $mapMig[(string) $oldId];
+        }
+        $st = $mysql->prepare("SELECT ruc, nombre, tipo_id, telefono, email, direccion, plazo FROM clientes WHERE id = :id LIMIT 1");
+        $st->execute([':id' => $oldId]);
+        $c = $st->fetch(PDO::FETCH_ASSOC);
+        $ident = $c ? trim((string) $c['ruc']) : '';
+        if ($ident === '') {
+            return null;
+        }
+        if (isset($cliPorIdent[$ident])) {
+            return $cliPorIdent[$ident];
+        }
+        $tipo   = trim((string) $c['tipo_id']) ?: self::inferirTipoId($ident);
+        $nombre = trim((string) $c['nombre']) ?: $ident;
+        try {
+            $ins = $pg->prepare("INSERT INTO clientes (id_empresa, id_usuario, nombre, tipo_id, identificacion, telefono, email, direccion, plazo, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) RETURNING id");
+            $ins->execute([$idEmpresa, $idUsuario, $nombre, $tipo, $ident, self::nz($c['telefono']), self::nz($c['email']), self::nz($c['direccion']), (int) ($c['plazo'] ?? 0), $idUsuario]);
+            $id = (int) $ins->fetchColumn();
+        } catch (Throwable $e) {
+            $q = $pg->prepare("SELECT id FROM clientes WHERE id_empresa = ? AND identificacion = ? LIMIT 1");
+            $q->execute([$idEmpresa, $ident]);
+            $id = (int) $q->fetchColumn();
+            if (!$id) { return null; }
+        }
+        $cliPorIdent[$ident] = $id;
+        return $id;
+    }
+
+    /** Igual que resolverOCrearCliente pero para proveedores. */
+    private function resolverOCrearProveedor(array &$provPorIdent, array $mapMig, int $oldId, int $idEmpresa, int $idUsuario, PDO $mysql, PDO $pg): ?int
+    {
+        if (isset($mapMig[(string) $oldId])) {
+            return $mapMig[(string) $oldId];
+        }
+        $st = $mysql->prepare("SELECT ruc_proveedor, razon_social, nombre_comercial, tipo_id_proveedor, mail_proveedor, dir_proveedor, telf_proveedor FROM proveedores WHERE id_proveedor = :id LIMIT 1");
+        $st->execute([':id' => $oldId]);
+        $c = $st->fetch(PDO::FETCH_ASSOC);
+        $ident = $c ? trim((string) $c['ruc_proveedor']) : '';
+        if ($ident === '') {
+            return null;
+        }
+        if (isset($provPorIdent[$ident])) {
+            return $provPorIdent[$ident];
+        }
+        $tipo = trim((string) $c['tipo_id_proveedor']) ?: self::inferirTipoId($ident);
+        $rs   = trim((string) $c['razon_social']) ?: (trim((string) $c['nombre_comercial']) ?: $ident);
+        try {
+            $ins = $pg->prepare("INSERT INTO proveedores (id_empresa, id_usuario, razon_social, nombre_comercial, tipo_id_proveedor, identificacion, email, direccion, telefono, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+            $ins->execute([$idEmpresa, $idUsuario, $rs, self::nz($c['nombre_comercial']), $tipo, $ident, self::nz($c['mail_proveedor']), self::nz($c['dir_proveedor']), self::nz($c['telf_proveedor']), $idUsuario]);
+            $id = (int) $ins->fetchColumn();
+        } catch (Throwable $e) {
+            $q = $pg->prepare("SELECT id FROM proveedores WHERE id_empresa = ? AND identificacion = ? LIMIT 1");
+            $q->execute([$idEmpresa, $ident]);
+            $id = (int) $q->fetchColumn();
+            if (!$id) { return null; }
+        }
+        $provPorIdent[$ident] = $id;
+        return $id;
+    }
+
+    /** Mapa codigo => id de los productos del sistema nuevo. */
+    private function productosPorCodigo(PDO $pg, int $idEmpresa): array
+    {
+        $m = [];
+        $q = $pg->prepare("SELECT DISTINCT ON (codigo) codigo, id FROM productos WHERE id_empresa = ? ORDER BY codigo, id");
+        $q->execute([$idEmpresa]);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $m[(string) $r['codigo']] = (int) $r['id'];
+        }
+        return $m;
+    }
+
+    /**
+     * Resuelve el producto de una línea: mapa → código → y si no existe, lo CREA
+     * (ventas_detalle.id_producto es NOT NULL). Devuelve siempre un id válido.
+     */
+    private function resolverOCrearProducto(array &$prodPorCod, array $mapProd, int $oldId, string $codigo, string $nombre, string $ivaCode, int $idEmpresa, int $idUsuario, PDO $pg): int
+    {
+        if (isset($mapProd[(string) $oldId])) {
+            return $mapProd[(string) $oldId];
+        }
+        $codigo = trim($codigo) !== '' ? trim($codigo) : ('MIG-' . $oldId);
+        if (isset($prodPorCod[$codigo])) {
+            return $prodPorCod[$codigo];
+        }
+        $iva = in_array($ivaCode, ['0', '2', '3', '4', '5', '6', '7', '8', '10'], true) ? $ivaCode : '0';
+        try {
+            $ins = $pg->prepare("INSERT INTO productos (id_empresa, codigo, nombre, codigo_auxiliar, codigo_barras, precio_base, tipo_produccion, tarifa_iva, status, inventariable, id_usuario, created_by) VALUES (?, ?, ?, '', '', 0, '01', ?, 1, false, ?, ?) RETURNING id");
+            $ins->execute([$idEmpresa, $codigo, ($nombre !== '' ? $nombre : $codigo), (int) $iva, $idUsuario, $idUsuario]);
+            $id = (int) $ins->fetchColumn();
+        } catch (Throwable $e) {
+            $q = $pg->prepare("SELECT id FROM productos WHERE id_empresa = ? AND codigo = ? LIMIT 1");
+            $q->execute([$idEmpresa, $codigo]);
+            $id = (int) $q->fetchColumn();
+            if (!$id) { throw $e; }
+        }
+        $prodPorCod[$codigo] = $id;
+        return $id;
     }
 
     /** Mapa id_origen(string) => id_destino(int) de una entidad ya migrada. */

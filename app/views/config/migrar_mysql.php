@@ -254,6 +254,7 @@ $base = BASE_URL;
                 partes.push(`errores <b class="${d.errores ? 'text-danger' : ''}">${fmt(d.errores)}</b>`);
                 let html = partes.join(' · ') + ` <span class="text-muted">(de ${fmt(d.total)})</span>`;
                 if (d.error_muestra) html += `<br><span class="text-danger small">⚠ ${d.error_muestra}</span>`;
+                if (d.omitidos > 0) html += `<br><span class="text-warning small">ℹ ${fmt(d.omitidos)} omitido(s): el documento de origen no tiene cliente/proveedor con identificación (RUC/cédula).</span>`;
                 logMig(ent, html);
             } catch (e) { logMig(ent, '<span class="text-danger">' + e.message + '</span>'); }
         }
