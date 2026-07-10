@@ -99,7 +99,8 @@ class MigrarMysqlController extends Controller
         header('Content-Type: application/json');
         try {
             [$idEmpresa, $ruc] = $this->resolverEmpresa();
-            $data = $this->service->verificarAnuladasFacturas($idEmpresa, $ruc);
+            $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+            $data = $this->service->verificarAnuladasFacturas($idEmpresa, $ruc, $idUsuario);
             echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);

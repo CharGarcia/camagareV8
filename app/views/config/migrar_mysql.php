@@ -267,9 +267,10 @@ $base = BASE_URL;
             if (!res.ok) throw new Error(res.mensaje || 'Error');
             const d = res.data;
             $('zonaAnuladas').innerHTML =
-                `<span class="text-success">Anuladas en base anterior: <b>${fmt(d.anuladas_en_viejo)}</b></span> · `
-                + `Actualizadas ahora: <b class="text-success">${fmt(d.actualizadas)}</b> · Ya estaban: <b>${fmt(d.ya_anuladas)}</b> · `
-                + `Anuladas aún sin migrar: <b class="text-warning">${fmt(d.no_migradas)}</b>`;
+                `Anuladas en base anterior: <b>${fmt(d.anuladas_en_viejo)}</b> · `
+                + `Anuladas ahora en el nuevo: <b class="text-success">${fmt(d.anuladas_ahora)}</b> · Ya estaban anuladas: <b>${fmt(d.ya_anuladas)}</b> · `
+                + `No están en el nuevo: <b class="text-warning">${fmt(d.no_estan_en_nuevo)}</b>`
+                + (d.errores ? ` · Errores: <b class="text-danger">${fmt(d.errores)}</b>` : '');
         } catch (e) {
             $('zonaAnuladas').innerHTML = '<span class="text-danger">' + e.message + '</span>';
         } finally {

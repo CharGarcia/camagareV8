@@ -1018,30 +1018,45 @@ class MigracionMysqlService
     }
 
     /**
-     * Verifica en la base vieja qué facturas están anuladas (estado_sri) y actualiza
-     * a 'anulado' las facturas ya migradas que no lo tengan. Idempotente.
+     * Verifica en la base vieja qué facturas están anuladas (estado_sri) y ANULA en el
+     * sistema nuevo las que existan (sin importar cómo entraron: XML, migración, manual).
+     * Empareja por NÚMERO de factura (establecimiento-punto-secuencial), no por el mapa,
+     * y usa el anular() oficial (reversa inventario/asiento/cobros si los hay). Idempotente.
      */
-    public function verificarAnuladasFacturas(int $idEmpresa, string $ruc): array
+    public function verificarAnuladasFacturas(int $idEmpresa, string $ruc, int $idUsuario): array
     {
         $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['anuladas_en_viejo' => 0, 'actualizadas' => 0, 'ya_anuladas' => 0, 'no_migradas' => 0];
-        $map = $this->mapaDe($pg, $idEmpresa, 'facturas');
+        $res = ['anuladas_en_viejo' => 0, 'anuladas_ahora' => 0, 'ya_anuladas' => 0, 'no_estan_en_nuevo' => 0, 'errores' => 0];
 
-        $st  = $mysql->query("SELECT id_encabezado_factura FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND UPPER(estado_sri) LIKE '%ANULAD%'");
-        $chk = $pg->prepare("SELECT estado FROM ventas_cabecera WHERE id = :id");
-        $upd = $pg->prepare("UPDATE ventas_cabecera SET estado = 'anulado', updated_at = CURRENT_TIMESTAMP WHERE id = :id");
+        $facturaService = new \App\Services\modulos\FacturaVentaService(
+            new \App\repositories\modulos\FacturaVentaRepository(),
+            new \App\Rules\modulos\FacturaVentaRules(),
+            new \App\Services\LogSistemaService()
+        );
+
+        $chk = $pg->prepare("SELECT id, estado FROM ventas_cabecera WHERE id_empresa = :e AND establecimiento = :est AND punto_emision = :pto AND secuencial = :sec AND eliminado = false LIMIT 1");
+        $st  = $mysql->query("SELECT serie_factura, secuencial_factura FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND UPPER(estado_sri) LIKE '%ANULAD%'");
 
         while ($r = $st->fetch(PDO::FETCH_ASSOC)) {
             $res['anuladas_en_viejo']++;
-            $new = $map[(string) (int) $r['id_encabezado_factura']] ?? null;
-            if (!$new) { $res['no_migradas']++; continue; }
-            $chk->execute([':id' => $new]);
-            if ($chk->fetchColumn() === 'anulado') { $res['ya_anuladas']++; continue; }
-            $upd->execute([':id' => $new]);
-            $res['actualizadas']++;
+            $partes = explode('-', trim((string) $r['serie_factura']));
+            $est = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
+            $pto = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
+            $sec = str_pad(preg_replace('/\D+/', '', (string) $r['secuencial_factura']), 9, '0', STR_PAD_LEFT);
+
+            $chk->execute([':e' => $idEmpresa, ':est' => $est, ':pto' => $pto, ':sec' => $sec]);
+            $row = $chk->fetch(PDO::FETCH_ASSOC);
+            if (!$row) { $res['no_estan_en_nuevo']++; continue; }
+            if ($row['estado'] === 'anulado') { $res['ya_anuladas']++; continue; }
+            try {
+                $facturaService->anular((int) $row['id'], $idEmpresa, $idUsuario, false); // sin candado SRI
+                $res['anuladas_ahora']++;
+            } catch (Throwable $e) {
+                $res['errores']++;
+            }
         }
         return $res;
     }
