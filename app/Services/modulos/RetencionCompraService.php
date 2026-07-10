@@ -203,6 +203,19 @@ class RetencionCompraService
         if ($managed) $db->beginTransaction();
 
         try {
+            // Anular el asiento contable de la retención (si existe)
+            $idAsiento = (int)($cabecera['id_asiento_contable'] ?? 0);
+            if ($idAsiento > 0) {
+                try {
+                    $this->asientoContableService()->anular($idAsiento, $idEmpresa, $idUsuario);
+                } catch (\Throwable $eA) {
+                    // Si el asiento ya estaba anulado, continuar; otros errores se propagan.
+                    if (stripos($eA->getMessage(), 'ya se encuentra anulado') === false) {
+                        throw $eA;
+                    }
+                }
+            }
+
             $db->prepare(
                 "UPDATE retencion_compra_cabecera SET estado = 'anulada', updated_by = ?, updated_at = NOW() WHERE id = ?"
             )->execute([$idUsuario, $id]);

@@ -608,7 +608,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <table class="table table-sm table-detalle mb-0 text-nowrap">
                                             <thead>
                                                 <tr class="table-light border-bottom">
-                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width: 28%;">Descripción</th>
+                                                    <th class="ps-3 py-2 small fw-bold text-muted" style="width: 34%;">Descripción</th>
                                                     <th class="py-2 small fw-bold text-muted" style="width: 7%;">Adicional</th>
                                                     <th class="py-2 small fw-bold text-muted col-medida-header <?= (($empresa['mostrar_unidad_medida'] ?? true) === 'true' || ($empresa['mostrar_unidad_medida'] ?? true) === true) ? '' : 'd-none' ?>" style="width: 8%;">Medida</th>
                                                     <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Cant.</th>
@@ -626,7 +626,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                     <?php if (!empty($empresa['obligatorio_nup']) && ($empresa['obligatorio_nup'] === 'true' || $empresa['obligatorio_nup'] === true)): ?>
                                                         <th class="py-2 small fw-bold text-muted text-center" style="width:9%;">NUP / Serial</th>
                                                     <?php endif; ?>
-                                                    <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 6%;">Subtotal</th>
+                                                    <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 78px; min-width: 78px;">Subtotal</th>
                                                     <th style="width: 40px;"></th>
                                                 </tr>
                                             </thead>
@@ -3505,8 +3505,8 @@ $totalPages = $totalPagesOriginal;
         tr.className = 'row-detalle';
         tr.innerHTML = `
             <td class="ps-3 position-relative">
-                <input type="text" class="form-control form-control-sm input-detalle input-descripcion" placeholder="${EMPRESA_CONFIG.facturacion_libre ? 'Escribe o busca un producto/servicio...' : 'Buscar producto o escanee c\u00f3digo...'}"
-                    title="${EMPRESA_CONFIG.facturacion_libre ? 'Modo libre: puedes escribir directamente o seleccionar del cat\u00e1logo' : ''}">
+                <textarea rows="2" class="form-control form-control-sm input-detalle input-descripcion" style="resize:none; overflow:auto; line-height:1.15;" placeholder="${EMPRESA_CONFIG.facturacion_libre ? 'Escribe o busca un producto/servicio...' : 'Buscar producto o escanee c\u00f3digo...'}"
+                    title="${EMPRESA_CONFIG.facturacion_libre ? 'Modo libre: puedes escribir directamente o seleccionar del cat\u00e1logo' : ''}"></textarea>
                 <input type="hidden" class="input-id-producto">
                 <input type="hidden" class="input-codigo">
                 <input type="hidden" class="input-casillero">
@@ -3570,7 +3570,7 @@ $totalPages = $totalPagesOriginal;
                 <td class="align-middle" style="min-width:100px;">
                     <input type="text" class="form-control form-control-sm input-detalle input-nup d-none" placeholder="NUP/Serial" style="font-size:0.75rem;">
                 </td>` : ''}
-            <td class="text-end pe-4 align-middle">
+            <td class="text-end pe-4 align-middle" style="width: 78px; min-width: 78px;">
                 <span class="subtotal-line">0.00</span>
             </td>
             <td class="text-center p-0 align-middle" style="width: 40px;">
@@ -3893,6 +3893,10 @@ $totalPages = $totalPagesOriginal;
                 if (firstBtn && !dropdownGlobal.classList.contains('d-none')) {
                     e.preventDefault();
                     if (firstBtn.onmousedown) firstBtn.onmousedown(new MouseEvent('mousedown'));
+                } else {
+                    // Es un textarea: evitar salto de línea (la descripción va en una sola
+                    // línea al SRI). El texto igual se ve envuelto en 2 filas.
+                    e.preventDefault();
                 }
             }
         });

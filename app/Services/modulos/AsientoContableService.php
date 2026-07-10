@@ -215,6 +215,24 @@ class AsientoContableService
                 );
             }
 
+            // Si el asiento pertenece a una retención en compras, desvincular su id_asiento_contable
+            if (
+                ($asiento['modulo_origen'] ?? '') === 'retencion_compra' &&
+                !empty($asiento['id_referencia_origen'])
+            ) {
+                $this->repository->desvincularAsientoRetencionCompra((int)$asiento['id_referencia_origen']);
+
+                $this->logService->registrar(
+                    idUsuario: $idUsuario,
+                    idEmpresa: $idEmpresa,
+                    accion: 'Desvincular Asiento de Retención Compra',
+                    tabla: 'retencion_compra_cabecera',
+                    idRegistro: (int)$asiento['id_referencia_origen'],
+                    antes: ['id_asiento_contable' => $idAsiento],
+                    despues: ['id_asiento_contable' => null]
+                );
+            }
+
             // Si el asiento pertenece a un ingreso o egreso, desvincular su id_asiento_contable.
             // Así, si el documento sigue activo, el control de Estados Financieros lo regenerará.
             $origenDoc = $asiento['modulo_origen'] ?? '';
