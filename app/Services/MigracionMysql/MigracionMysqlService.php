@@ -27,6 +27,7 @@ class MigracionMysqlService
         'notas_credito'     => ['label' => 'Notas de crédito',                'tabla' => 'encabezado_nc'],
         'retenciones_venta' => ['label' => 'Retenciones en venta',            'tabla' => 'encabezado_retencion_venta'],
         'retenciones_compra' => ['label' => 'Retenciones en compra',          'tabla' => 'encabezado_retencion'],
+        'recibos'           => ['label' => 'Recibos de venta',                'tabla' => 'encabezado_recibo'],
         'compras'           => ['label' => 'Compras',                         'tabla' => 'encabezado_compra'],
         'ingresos_egresos'  => ['label' => 'Cobros y pagos (ingresos/egresos)','tabla' => 'ingresos_egresos'],
     ];
@@ -88,6 +89,8 @@ class MigracionMysqlService
                 return $this->migrarRetencionesCompra($idEmpresa, $ruc, $idUsuario, $limite);
             case 'retenciones_venta':
                 return $this->migrarRetencionesVenta($idEmpresa, $ruc, $idUsuario, $limite);
+            case 'recibos':
+                return $this->migrarRecibos($idEmpresa, $ruc, $idUsuario, $limite);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -889,6 +892,101 @@ class MigracionMysqlService
                 }
 
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idRet, ':cn' => "$estab-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
+
+    /** Migra recibos de venta (cabecera + detalle + impuestos). Patrón de facturas. */
+    private function migrarRecibos(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'recibos', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done       = $this->idsMigrados($pg, $idEmpresa, 'recibos');
+        $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
+        $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
+        $mapBodega  = $this->mapaDe($pg, $idEmpresa, 'bodegas');
+        $insMap     = $this->stmtMap($pg, 'recibos');
+
+        $insCab = $pg->prepare(
+            "INSERT INTO recibos_venta_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, recibo_numero, con_impuestos, total_sin_impuestos, total_descuento, importe_total, propina, moneda, tipo_ambiente, created_by)
+             VALUES (:e, :est, :pto, :cli, :u, :fe, :estc, :ptoc, :sec, :num, :ci, :tsi, :tdes, :tot, :prop, 'DOLAR', '1', :cb) RETURNING id"
+        );
+        $insDet = $pg->prepare(
+            "INSERT INTO recibos_venta_detalle (id_recibo, id_producto, id_bodega, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)
+             VALUES (:r, :prod, :bod, :cod, :desc, :cant, :pu, :desc2, :baseCol) RETURNING id"
+        );
+        $insImp = $pg->prepare(
+            "INSERT INTO recibos_venta_detalle_impuestos (id_recibo_detalle, codigo_impuesto, codigo_porcentaje, tarifa, base_imponible, valor)
+             VALUES (:d, '2', :cp, :tar, :base, :val)"
+        );
+        $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad, valor_unitario, subtotal, descuento, tarifa_iva, codigo_producto, nombre_producto, id_bodega FROM cuerpo_recibo WHERE id_encabezado_recibo = :id");
+
+        $sql = "SELECT id_encabezado_recibo, fecha_recibo, serie_recibo, secuencial_recibo, id_cliente, total_recibo, propina
+                  FROM encabezado_recibo WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_encabezado_recibo";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $stmt = $mysql->query($sql);
+
+        while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $ec['id_encabezado_recibo'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            $idCliente = $mapCliente[(string) $ec['id_cliente']] ?? null;
+            if (!$idCliente) { $res['omitidos']++; continue; }
+
+            $serie = trim((string) $ec['serie_recibo']);
+            $partes = explode('-', $serie);
+            $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
+            $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
+            $sec   = str_pad(preg_replace('/\D+/', '', (string) $ec['secuencial_recibo']), 9, '0', STR_PAD_LEFT);
+
+            try {
+                $pg->beginTransaction();
+                $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
+                $idPto = $this->getPuntoEmisionId($idEmpresa, $estab, $pto, $idUsuario);
+                $cuerpoStmt->execute([':id' => $old]);
+                $lineas = $cuerpoStmt->fetchAll(PDO::FETCH_ASSOC);
+                $tsi = 0.0; $tdes = 0.0; $ivaTot = 0.0;
+                foreach ($lineas as $l) {
+                    $b = (float) $l['subtotal'] - (float) $l['descuento'];
+                    $tsi += $b; $tdes += (float) $l['descuento'];
+                    $ivaTot += $b * (self::IVA_PCT[trim((string) $l['tarifa_iva'])] ?? 0) / 100;
+                }
+                $conImp = $ivaTot > 0.005 ? 't' : 'f';
+
+                $insCab->execute([
+                    ':e' => $idEmpresa, ':est' => $idEst, ':pto' => $idPto, ':cli' => $idCliente, ':u' => $idUsuario,
+                    ':fe' => substr((string) $ec['fecha_recibo'], 0, 10), ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec,
+                    ':num' => "$estab-$pto-$sec", ':ci' => $conImp, ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
+                    ':tot' => (float) $ec['total_recibo'], ':prop' => (float) $ec['propina'], ':cb' => $idUsuario,
+                ]);
+                $idRec = (int) $insCab->fetchColumn();
+
+                foreach ($lineas as $l) {
+                    $base_i = (float) $l['subtotal'] - (float) $l['descuento'];
+                    $insDet->execute([
+                        ':r' => $idRec, ':prod' => $mapProd[(string) $l['id_producto']] ?? null,
+                        ':bod' => ((int) $l['id_bodega'] > 0) ? ($mapBodega[(string) $l['id_bodega']] ?? null) : null,
+                        ':cod' => (string) $l['codigo_producto'], ':desc' => (string) $l['nombre_producto'],
+                        ':cant' => (float) $l['cantidad'], ':pu' => (float) $l['valor_unitario'], ':desc2' => (float) $l['descuento'], ':baseCol' => round($base_i, 2),
+                    ]);
+                    $idDet = (int) $insDet->fetchColumn();
+                    $cod = trim((string) $l['tarifa_iva']);
+                    $pct = self::IVA_PCT[$cod] ?? 0;
+                    $insImp->execute([':d' => $idDet, ':cp' => ($cod === '' ? '0' : $cod), ':tar' => $pct, ':base' => round($base_i, 2), ':val' => round($base_i * $pct / 100, 2)]);
+                }
+
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idRec, ':cn' => "$estab-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
                 $pg->commit();
                 $done[(string) $old] = true;
                 $res['migrados']++;
