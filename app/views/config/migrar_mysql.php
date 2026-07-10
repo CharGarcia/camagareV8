@@ -142,18 +142,35 @@ $base = BASE_URL;
         }
     });
 
+    function fmtTiempo(seg) {
+        seg = Math.max(0, Math.round(seg));
+        if (seg < 60) return seg + ' s';
+        const m = Math.floor(seg / 60), s = seg % 60;
+        if (m < 60) return m + ' min' + (s ? ' ' + s + ' s' : '');
+        const h = Math.floor(m / 60);
+        return h + ' h ' + (m % 60) + ' min';
+    }
+
     function pintar(res) {
-        const rows = Object.entries(res.data).map(([k, f]) => `
-            <tr>
+        const rows = Object.entries(res.data).map(([k, f]) => {
+            const rango = f.fecha_min ? ('desde <b>' + f.fecha_min + '</b>' + (f.fecha_max ? ' hasta <b>' + f.fecha_max + '</b>' : '')) : '<span class="text-muted">—</span>';
+            return `<tr>
                 <td>${f.label}</td>
                 <td class="text-muted small">${f.tabla}</td>
                 <td class="text-end fw-bold">${f.error ? '<span class="text-danger" title="' + f.error + '">error</span>' : fmt(f.total)}</td>
-            </tr>`).join('');
-        const total = Object.values(res.data).reduce((a, f) => a + (f.total || 0), 0);
+                <td class="small">${rango}</td>
+            </tr>`;
+        }).join('');
+        const total  = Object.values(res.data).reduce((a, f) => a + (f.total || 0), 0);
+        const estSeg = Object.values(res.data).reduce((a, f) => a + (f.est_segundos || 0), 0);
         $('zonaResumen').innerHTML =
-            `<div class="alert alert-info py-2 small mb-3">RUC en base anterior: <b>${res.ruc}</b> · Total de registros: <b>${fmt(total)}</b></div>
+            `<div class="alert alert-info py-2 small mb-3">
+                RUC en base anterior: <b>${res.ruc}</b> · Total de registros: <b>${fmt(total)}</b><br>
+                <i class="bi bi-clock me-1"></i>Tiempo estimado de migración (lo marcado): <b>~${fmtTiempo(estSeg)}</b>
+                <span class="text-muted">— aproximado; los catálogos van más rápido que los documentos</span>
+             </div>
              <table class="table table-sm align-middle mb-0">
-                <thead><tr><th>Dato</th><th class="text-muted small">Tabla origen</th><th class="text-end">Registros</th></tr></thead>
+                <thead><tr><th>Dato</th><th class="text-muted small">Tabla origen</th><th class="text-end">Registros</th><th>Registros desde</th></tr></thead>
                 <tbody>${rows}</tbody>
              </table>`;
         $('zonaMigrar').classList.remove('d-none');

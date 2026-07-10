@@ -16,21 +16,27 @@ use Throwable;
  */
 class MigracionMysqlService
 {
-    /** Entidades migrables: clave => [label, tabla origen en MySQL]. Todas filtran por ruc_empresa. */
+    /**
+     * Entidades migrables: clave => [label, tabla, fecha (columna de fecha o null), tipo].
+     * `tipo` (catalogo|documento) ajusta la estimación de tiempo. Todas filtran por ruc_empresa.
+     */
     public const ENTIDADES = [
-        'clientes'          => ['label' => 'Clientes',                        'tabla' => 'clientes'],
-        'productos'         => ['label' => 'Productos y servicios',           'tabla' => 'productos_servicios'],
-        'proveedores'       => ['label' => 'Proveedores',                     'tabla' => 'proveedores'],
-        'vendedores'        => ['label' => 'Vendedores',                      'tabla' => 'vendedores'],
-        'bodegas'           => ['label' => 'Bodegas',                         'tabla' => 'bodega'],
-        'facturas'          => ['label' => 'Facturas de venta',               'tabla' => 'encabezado_factura'],
-        'notas_credito'     => ['label' => 'Notas de crédito',                'tabla' => 'encabezado_nc'],
-        'retenciones_venta' => ['label' => 'Retenciones en venta',            'tabla' => 'encabezado_retencion_venta'],
-        'retenciones_compra' => ['label' => 'Retenciones en compra',          'tabla' => 'encabezado_retencion'],
-        'recibos'           => ['label' => 'Recibos de venta',                'tabla' => 'encabezado_recibo'],
-        'compras'           => ['label' => 'Compras',                         'tabla' => 'encabezado_compra'],
-        'ingresos_egresos'  => ['label' => 'Cobros y pagos (ingresos/egresos)','tabla' => 'ingresos_egresos'],
+        'clientes'          => ['label' => 'Clientes',                         'tabla' => 'clientes',                   'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
+        'productos'         => ['label' => 'Productos y servicios',            'tabla' => 'productos_servicios',        'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
+        'proveedores'       => ['label' => 'Proveedores',                      'tabla' => 'proveedores',                'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
+        'vendedores'        => ['label' => 'Vendedores',                       'tabla' => 'vendedores',                 'fecha' => 'fecha_registro', 'tipo' => 'catalogo'],
+        'bodegas'           => ['label' => 'Bodegas',                          'tabla' => 'bodega',                     'fecha' => null,             'tipo' => 'catalogo'],
+        'facturas'          => ['label' => 'Facturas de venta',                'tabla' => 'encabezado_factura',         'fecha' => 'fecha_factura',  'tipo' => 'documento'],
+        'notas_credito'     => ['label' => 'Notas de crédito',                 'tabla' => 'encabezado_nc',              'fecha' => 'fecha_nc',       'tipo' => 'documento'],
+        'retenciones_venta' => ['label' => 'Retenciones en venta',             'tabla' => 'encabezado_retencion_venta', 'fecha' => 'fecha_emision',  'tipo' => 'documento'],
+        'retenciones_compra' => ['label' => 'Retenciones en compra',           'tabla' => 'encabezado_retencion',       'fecha' => 'fecha_emision',  'tipo' => 'documento'],
+        'recibos'           => ['label' => 'Recibos de venta',                 'tabla' => 'encabezado_recibo',          'fecha' => 'fecha_recibo',   'tipo' => 'documento'],
+        'compras'           => ['label' => 'Compras',                          'tabla' => 'encabezado_compra',          'fecha' => 'fecha_compra',   'tipo' => 'documento'],
+        'ingresos_egresos'  => ['label' => 'Cobros y pagos (ingresos/egresos)', 'tabla' => 'ingresos_egresos',          'fecha' => 'fecha_ing_egr',  'tipo' => 'documento'],
     ];
+
+    /** Segundos estimados por registro según tipo (aprox., calibrado en pruebas). */
+    private const SEG_POR_REG = ['catalogo' => 0.012, 'documento' => 0.04];
 
     /**
      * Resumen de cuántos registros hay por entidad para la empresa (por RUC base,
@@ -49,11 +55,23 @@ class MigracionMysqlService
             if (!empty($entidades) && !in_array($key, $entidades, true)) {
                 continue;
             }
-            $fila = ['label' => $def['label'], 'tabla' => $def['tabla'], 'total' => null, 'error' => null];
+            $fecha = $def['fecha'] ?? null;
+            $fila = ['label' => $def['label'], 'tabla' => $def['tabla'], 'total' => null, 'fecha_min' => null, 'fecha_max' => null, 'est_segundos' => 0, 'error' => null];
             try {
-                $st = $pdo->prepare("SELECT COUNT(*) FROM `{$def['tabla']}` WHERE LEFT(ruc_empresa, 10) = :b");
+                $sel = "COUNT(*) AS n";
+                if ($fecha) {
+                    $sel .= ", MIN(CASE WHEN `$fecha` >= '2000-01-01' THEN `$fecha` END) AS fmin, MAX(`$fecha`) AS fmax";
+                }
+                $st = $pdo->prepare("SELECT $sel FROM `{$def['tabla']}` WHERE LEFT(ruc_empresa, 10) = :b");
                 $st->execute([':b' => $base]);
-                $fila['total'] = (int) $st->fetchColumn();
+                $row = $st->fetch();
+                $fila['total'] = (int) $row['n'];
+                if ($fecha) {
+                    $fila['fecha_min'] = self::fechaCorta($row['fmin'] ?? null);
+                    $fila['fecha_max'] = self::fechaCorta($row['fmax'] ?? null);
+                }
+                $rate = self::SEG_POR_REG[$def['tipo'] ?? 'catalogo'] ?? 0.02;
+                $fila['est_segundos'] = (int) ceil($fila['total'] * $rate);
             } catch (Throwable $e) {
                 $fila['error'] = substr($e->getMessage(), 0, 140);
             }
@@ -1078,6 +1096,16 @@ class MigracionMysqlService
             "INSERT INTO migracion_mysql_map (id_empresa, entidad, id_origen, id_destino, clave_natural, vinculado, created_by)
              VALUES (:e, " . $pg->quote($entidad) . ", :o, :d, :cn, :vin, :cb) ON CONFLICT (id_empresa, entidad, id_origen) DO NOTHING"
         );
+    }
+
+    /** Fecha a 'Y-m-d' o null (descarta ceros / vacíos). */
+    private static function fechaCorta($v): ?string
+    {
+        $v = trim((string) $v);
+        if ($v === '' || strpos($v, '0000') === 0) {
+            return null;
+        }
+        return substr($v, 0, 10);
     }
 
     /** Cadena vacía -> null (para columnas nullable). */
