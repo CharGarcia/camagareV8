@@ -81,6 +81,8 @@ class MigracionMysqlService
                 return $this->migrarFacturas($idEmpresa, $ruc, $idUsuario, $limite);
             case 'compras':
                 return $this->migrarCompras($idEmpresa, $ruc, $idUsuario, $limite);
+            case 'notas_credito':
+                return $this->migrarNotasCredito($idEmpresa, $ruc, $idUsuario, $limite);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -629,6 +631,98 @@ class MigracionMysqlService
                 }
 
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idCompra, ':cn' => "$est-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); }
+            }
+        }
+        return $res;
+    }
+
+    /** Migra notas de crédito (cabecera + detalle + impuestos). Mismo patrón que facturas. */
+    private function migrarNotasCredito(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'notas_credito', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done       = $this->idsMigrados($pg, $idEmpresa, 'notas_credito');
+        $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
+        $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
+        $insMap     = $this->stmtMap($pg, 'notas_credito');
+
+        $insCab = $pg->prepare(
+            "INSERT INTO notas_credito_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, cod_doc_modificado, num_doc_modificado, fecha_emision_docs_sustento, motivo, total_sin_impuestos, total_descuento, importe_total, estado, clave_acceso, tipo_ambiente, created_by)
+             VALUES (:e, :est, :pto, :cli, :u, :fe, :estc, :ptoc, :sec, '01', :ndm, :fds, :mot, :tsi, :tdes, :tot, :estado, :clave, :amb, :cb) RETURNING id"
+        );
+        $insDet = $pg->prepare(
+            "INSERT INTO notas_credito_detalle (id_nota_credito, id_producto, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)
+             VALUES (:n, :prod, :cod, :desc, :cant, :pu, :desc2, :baseCol) RETURNING id"
+        );
+        $insImp = $pg->prepare(
+            "INSERT INTO notas_credito_detalle_impuestos (id_nota_credito_detalle, codigo_impuesto, codigo_porcentaje, tarifa, base_imponible, valor)
+             VALUES (:d, '2', :cp, :tar, :base, :val)"
+        );
+        $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad_nc, valor_unitario_nc, subtotal_nc, descuento, tarifa_iva, codigo_producto, nombre_producto FROM cuerpo_nc WHERE ruc_empresa = :r AND serie_nc = :s AND secuencial_nc = :sec");
+
+        $sql = "SELECT id_encabezado_nc, ruc_empresa, fecha_nc, serie_nc, secuencial_nc, factura_modificada, id_cliente, estado_sri, total_nc, ambiente, aut_sri, motivo, fecha_factura
+                  FROM encabezado_nc WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_encabezado_nc";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $stmt = $mysql->query($sql);
+
+        while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $ec['id_encabezado_nc'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            $idCliente = $mapCliente[(string) $ec['id_cliente']] ?? null;
+            if (!$idCliente) { $res['omitidos']++; continue; }
+
+            $serie = trim((string) $ec['serie_nc']);
+            $partes = explode('-', $serie);
+            $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
+            $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
+            $sec   = str_pad(preg_replace('/\D+/', '', (string) $ec['secuencial_nc']), 9, '0', STR_PAD_LEFT);
+            $fe    = substr((string) $ec['fecha_nc'], 0, 10);
+            $fds   = substr((string) $ec['fecha_factura'], 0, 10);
+            if ($fds === '' || strpos($fds, '0000') === 0) { $fds = $fe; }
+
+            try {
+                $pg->beginTransaction();
+                $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
+                $idPto = $this->getPuntoEmisionId($idEmpresa, $estab, $pto, $idUsuario);
+                $cuerpoStmt->execute([':r' => $ec['ruc_empresa'], ':s' => $serie, ':sec' => $ec['secuencial_nc']]);
+                $lineas = $cuerpoStmt->fetchAll(PDO::FETCH_ASSOC);
+                $tsi = 0.0; $tdes = 0.0;
+                foreach ($lineas as $l) { $tsi += (float) $l['subtotal_nc'] - (float) $l['descuento']; $tdes += (float) $l['descuento']; }
+
+                $insCab->execute([
+                    ':e' => $idEmpresa, ':est' => $idEst, ':pto' => $idPto, ':cli' => $idCliente, ':u' => $idUsuario,
+                    ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec, ':ndm' => (string) $ec['factura_modificada'],
+                    ':fds' => $fds, ':mot' => (string) ($ec['motivo'] ?: 'Migración'), ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
+                    ':tot' => (float) $ec['total_nc'], ':estado' => $this->estadoFacturaSri((string) $ec['estado_sri']),
+                    ':clave' => self::nz($ec['aut_sri']), ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1', ':cb' => $idUsuario,
+                ]);
+                $idNc = (int) $insCab->fetchColumn();
+
+                foreach ($lineas as $l) {
+                    $base_i = (float) $l['subtotal_nc'] - (float) $l['descuento'];
+                    $insDet->execute([
+                        ':n' => $idNc, ':prod' => $mapProd[(string) $l['id_producto']] ?? null, ':cod' => (string) $l['codigo_producto'],
+                        ':desc' => (string) $l['nombre_producto'], ':cant' => (float) $l['cantidad_nc'], ':pu' => (float) $l['valor_unitario_nc'],
+                        ':desc2' => (float) $l['descuento'], ':baseCol' => round($base_i, 2),
+                    ]);
+                    $idDet = (int) $insDet->fetchColumn();
+                    $cod = trim((string) $l['tarifa_iva']);
+                    $pct = self::IVA_PCT[$cod] ?? 0;
+                    $insImp->execute([':d' => $idDet, ':cp' => ($cod === '' ? '0' : $cod), ':tar' => $pct, ':base' => round($base_i, 2), ':val' => round($base_i * $pct / 100, 2)]);
+                }
+
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idNc, ':cn' => "$estab-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
                 $pg->commit();
                 $done[(string) $old] = true;
                 $res['migrados']++;
