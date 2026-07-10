@@ -86,6 +86,8 @@ class MigracionMysqlService
                 return $this->migrarNotasCredito($idEmpresa, $ruc, $idUsuario, $limite);
             case 'retenciones_compra':
                 return $this->migrarRetencionesCompra($idEmpresa, $ruc, $idUsuario, $limite);
+            case 'retenciones_venta':
+                return $this->migrarRetencionesVenta($idEmpresa, $ruc, $idUsuario, $limite);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -800,6 +802,89 @@ class MigracionMysqlService
                         ':e' => $idEmpresa, ':r' => $idRet, ':ci' => trim((string) $l['codigo_impuesto']) ?: '1',
                         ':cr' => trim((string) $l['id_retencion']), ':con' => self::nz($l['nombre_retencion']),
                         ':bi' => (float) $l['base_imponible'], ':pct' => (float) $l['porcentaje_retencion'], ':val' => (float) $l['valor_retenido'],
+                    ]);
+                }
+
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idRet, ':cn' => "$estab-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
+
+    /** Migra retenciones de venta (cabecera + detalle) resolviendo cliente vía el mapa. */
+    private function migrarRetencionesVenta(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'retenciones_venta', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done       = $this->idsMigrados($pg, $idEmpresa, 'retenciones_venta');
+        $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
+        $insMap     = $this->stmtMap($pg, 'retenciones_venta');
+
+        $insCab = $pg->prepare(
+            "INSERT INTO retencion_venta_cabecera (id_empresa, id_cliente, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, periodo_fiscal, total_isd, total_iva, total_renta, tipo_ambiente, created_by, updated_by)
+             VALUES (:e, :cli, :fe, :est, :pto, :sec, :clave, :per, :isd, :iva, :renta, '1', :cb, :cb) RETURNING id"
+        );
+        $insDet = $pg->prepare(
+            "INSERT INTO retencion_venta_detalle (id_retencion, cod_doc_sustento, fecha_emision_doc_sustento, codigo_impuesto, codigo_retencion, base_imponible, porcentaje_retencion, valor_retenido, num_doc_sustento)
+             VALUES (:r, :cds, :fds, :ci, :cr, :bi, :pct, :val, :nds)"
+        );
+        $cuerpoStmt = $mysql->prepare("SELECT ejercicio_fiscal, base_imponible, codigo_impuesto, impuesto, porcentaje_retencion, valor_retenido, tipo_documento, numero_documento FROM cuerpo_retencion_venta WHERE codigo_unico = :cu");
+
+        $sql = "SELECT id_encabezado_retencion, ruc_empresa, id_cliente, serie_retencion, secuencial_retencion, aut_sri, fecha_emision, codigo_unico, numero_documento
+                  FROM encabezado_retencion_venta WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_encabezado_retencion";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $stmt = $mysql->query($sql);
+
+        while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $ec['id_encabezado_retencion'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            $idCliente = $mapCliente[(string) $ec['id_cliente']] ?? null;
+            if (!$idCliente) { $res['omitidos']++; continue; }
+
+            $serie = trim((string) $ec['serie_retencion']);
+            $partes = explode('-', $serie);
+            $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
+            $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
+            $sec   = str_pad(preg_replace('/\D+/', '', (string) $ec['secuencial_retencion']), 9, '0', STR_PAD_LEFT);
+            $fe    = substr((string) $ec['fecha_emision'], 0, 10);
+            $per   = ($fe !== '' && strpos($fe, '0000') !== 0) ? (substr($fe, 5, 2) . '/' . substr($fe, 0, 4)) : '';
+
+            try {
+                $pg->beginTransaction();
+                $cuerpoStmt->execute([':cu' => $ec['codigo_unico']]);
+                $lineas = $cuerpoStmt->fetchAll(PDO::FETCH_ASSOC);
+                $tRenta = 0.0; $tIva = 0.0; $tIsd = 0.0;
+                foreach ($lineas as $l) {
+                    $tipo = trim((string) $l['impuesto']);
+                    $v = (float) $l['valor_retenido'];
+                    if ($tipo === '2') $tIva += $v; elseif ($tipo === '6') $tIsd += $v; else $tRenta += $v;
+                }
+                if ($per === '' && !empty($lineas[0]['ejercicio_fiscal'])) { $per = (string) $lineas[0]['ejercicio_fiscal']; }
+
+                $insCab->execute([
+                    ':e' => $idEmpresa, ':cli' => $idCliente, ':fe' => $fe, ':est' => $estab, ':pto' => $pto, ':sec' => $sec,
+                    ':clave' => self::nz($ec['aut_sri']), ':per' => ($per ?: '01/1900'), ':isd' => round($tIsd, 2),
+                    ':iva' => round($tIva, 2), ':renta' => round($tRenta, 2), ':cb' => $idUsuario,
+                ]);
+                $idRet = (int) $insCab->fetchColumn();
+
+                foreach ($lineas as $l) {
+                    $insDet->execute([
+                        ':r' => $idRet, ':cds' => (string) ($l['tipo_documento'] ?: '01'), ':fds' => $fe,
+                        ':ci' => trim((string) $l['impuesto']) ?: '1', ':cr' => trim((string) $l['codigo_impuesto']),
+                        ':bi' => (float) $l['base_imponible'], ':pct' => (float) $l['porcentaje_retencion'], ':val' => (float) $l['valor_retenido'],
+                        ':nds' => self::nz($l['numero_documento']),
                     ]);
                 }
 
