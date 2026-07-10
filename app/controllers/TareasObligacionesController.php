@@ -659,7 +659,7 @@ class TareasObligacionesController extends Controller
                     'telefono'   => $tel,
                     'updated_by' => $idUsuario,
                 ]);
-                echo json_encode(['ok' => true, 'id' => $existente['id'], 'msg' => 'Cliente actualizado.']);
+                echo json_encode(['ok' => true, 'id' => $existente['id'], 'nombre' => $nombre, 'correo' => $correo, 'ruc' => $ruc, 'msg' => 'Cliente actualizado.']);
             } else {
                 $id = $this->tareaService->createClienteTarea([
                     'ruc'        => $ruc ?: null,
@@ -668,8 +668,123 @@ class TareasObligacionesController extends Controller
                     'telefono'   => $tel ?: null,
                     'created_by' => $idUsuario,
                 ]);
-                echo json_encode(['ok' => true, 'id' => $id, 'msg' => 'Cliente creado.']);
+                echo json_encode(['ok' => true, 'id' => $id, 'nombre' => $nombre, 'correo' => $correo, 'ruc' => $ruc, 'msg' => 'Cliente creado.']);
             }
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // ════════════════════════════════════════════════════════
+    //  AJAX — CLIENTES / DUPLICAR COMBO
+    // ════════════════════════════════════════════════════════
+
+    public function clientesSearchAjax(): void
+    {
+        $this->requireAuth();
+        header('Content-Type: application/json');
+
+        $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $page      = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
+        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
+        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'ASC'));
+        $perPage   = 20;
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
+
+        $result     = $this->tareaService->getClientesListado($buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuario, $nivel);
+        $rows       = $result['rows'];
+        $total      = $result['total'];
+        $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
+        $from       = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
+        $to         = $total > 0 ? min($page * $perPage, $total) : 0;
+
+        ob_start();
+        if (empty($rows)) {
+            echo '<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-people fs-3 d-block mb-2"></i>No hay clientes con obligaciones vigentes.</td></tr>';
+        } else {
+            foreach ($rows as $r) {
+                $vigentes = (int) ($r['obligaciones_vigentes'] ?? 0);
+                $badge    = '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">' . $vigentes . ' vigente' . ($vigentes === 1 ? '' : 's') . '</span>';
+                $fechaC   = !empty($r['created_at']) ? date('d-m-Y H:i:s', strtotime($r['created_at'])) : '-';
+                $dataAttr = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
+                echo '<tr class="cliente-row" role="button" tabindex="0" data-row=\'' . $dataAttr . '\' onclick="abrirModalClienteCombo(this)">
+                        <td class="ps-3 fw-medium">' . htmlspecialchars($r['nombre']) . '</td>
+                        <td class="text-muted small">' . htmlspecialchars($r['ruc'] ?? '') . '</td>
+                        <td class="text-muted small">' . htmlspecialchars($r['correo'] ?? '') . '</td>
+                        <td class="text-muted small">' . htmlspecialchars($r['telefono'] ?? '') . '</td>
+                        <td class="text-center">' . $badge . '</td>
+                        <td class="text-center pe-3 text-muted small">' . $fechaC . '</td>
+                      </tr>';
+            }
+        }
+        $rowsHtml = ob_get_clean();
+
+        ob_start();
+        $prevD = ($page <= 1) ? 'disabled' : '';
+        $nextD = ($page >= $totalPages) ? 'disabled' : '';
+        echo '<div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary border-end-0 rounded-end-0" ' . $prevD . ' onclick="cambiarPaginaCliente(' . ($page - 1) . ')"><i class="bi bi-chevron-left"></i></button>
+                <button type="button" class="btn btn-outline-secondary rounded-start-0" ' . $nextD . ' onclick="cambiarPaginaCliente(' . ($page + 1) . ')"><i class="bi bi-chevron-right"></i></button>
+              </div>';
+        $paginationHtml = ob_get_clean();
+
+        echo json_encode([
+            'ok'         => true,
+            'rows'       => $rowsHtml,
+            'pagination' => $paginationHtml,
+            'info'       => "{$from}-{$to}/{$total}",
+            'total'      => $total,
+        ]);
+        exit;
+    }
+
+    public function clienteComboAjax(): void
+    {
+        $this->requireAuth();
+        header('Content-Type: application/json');
+
+        $idCliente = (int) ($_GET['id_cliente'] ?? 0);
+        try {
+            if ($idCliente <= 0) throw new \Exception('Cliente no válido.');
+            $combo = $this->tareaService->getComboCliente($idCliente);
+            echo json_encode(['ok' => true, 'data' => $combo]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function tareasCopiarComboAjax(): void
+    {
+        $this->requireAuth();
+        header('Content-Type: application/json');
+
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $destino = [
+            'id_cliente'     => !empty($_POST['id_cliente_destino']) ? (int) $_POST['id_cliente_destino'] : null,
+            'cliente_nombre' => trim($_POST['cliente_nombre_destino'] ?? ''),
+            'cliente_correo' => trim($_POST['cliente_correo_destino'] ?? ''),
+        ];
+        $items = json_decode($_POST['items'] ?? '[]', true);
+        if (!is_array($items)) {
+            $items = [];
+        }
+
+        try {
+            if ($destino['cliente_nombre'] === '') throw new \Exception('Debe indicar el cliente destino.');
+            if ($destino['cliente_correo'] === '') throw new \Exception('El correo del cliente destino es obligatorio.');
+            if (empty($items)) throw new \Exception('No hay obligaciones seleccionadas para copiar.');
+
+            $resultado = $this->tareaService->copiarCombo($destino, $items, $idUsuario);
+            echo json_encode([
+                'ok'       => true,
+                'creadas'  => $resultado['creadas'],
+                'omitidas' => $resultado['omitidas'],
+                'msg'      => $resultado['creadas'] . ' tarea(s) copiada(s) correctamente.'
+                    . (!empty($resultado['omitidas']) ? ' Se omitieron ' . count($resultado['omitidas']) . ' por ya existir.' : ''),
+            ]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

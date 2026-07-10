@@ -33,24 +33,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-geo-alt-fill me-2 text-primary"></i> <?= htmlspecialchars($titulo) ?></h5>
     <div class="d-flex align-items-center gap-2">
-        <a href="<?= $urlBase ?>/empleados" class="btn btn-outline-secondary btn-sm px-3">
-            <i class="bi bi-person-vcard me-1"></i> Credenciales
-        </a>
-        <a href="<?= $urlBase ?>/horarios" class="btn btn-outline-secondary btn-sm px-3">
-            <i class="bi bi-clock-history me-1"></i> Horarios
-        </a>
-        <a href="<?= $urlBase ?>/jornadas" class="btn btn-outline-secondary btn-sm px-3">
-            <i class="bi bi-calendar-check me-1"></i> Jornadas
-        </a>
-        <a href="<?= $urlBase ?>/configuracion" class="btn btn-outline-secondary btn-sm px-3">
-            <i class="bi bi-gear-fill me-1"></i> Configuración
-        </a>
-        <a href="<?= $urlBase ?>/marcaciones" class="btn btn-outline-secondary btn-sm px-3">
-            <i class="bi bi-list-check me-1"></i> Marcaciones
-        </a>
         <?php if ($perm['crear']): ?>
             <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="abrirModalCrearPunto()">
-                <i class="bi bi-plus-lg me-1"></i> Nuevo punto
+                <i class="bi bi-plus-lg me-1"></i> Nuevo
             </button>
         <?php endif; ?>
     </div>
@@ -167,7 +152,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <?php include 'modal_punto.php'; ?>
 <?php include 'modal_qr.php'; ?>
 
-<script src="<?= $base ?>/js/modulos/control_asistencia.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/puntos_servicio.js?v=<?= time() ?>"></script>
 
 <script>
     (function () {
@@ -202,7 +187,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
 
         if (window.CMG_initSort) {
-            window.CMG_initSort('control_asistencia', (col, dir) => {
+            window.CMG_initSort('puntos_servicio', (col, dir) => {
                 currentSort = col;
                 currentDir = dir;
                 cargarListado(1);

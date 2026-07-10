@@ -904,6 +904,10 @@ class ConfigController extends Controller
             'crear-cliente-tarea'      => 'crearClienteTarea',
             'crear-responsable-tarea'  => 'crearResponsableTarea',
             'tareas-alertas-count'     => 'tareasAlertasCountAjax',
+            // Clientes / duplicar combo
+            'clientes-search-ajax'     => 'clientesSearchAjax',
+            'cliente-combo-ajax'       => 'clienteComboAjax',
+            'tareas-copiar-combo'      => 'tareasCopiarComboAjax',
             default                    => 'index',
         };
         if (method_exists($c, $method)) {

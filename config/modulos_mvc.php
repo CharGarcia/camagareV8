@@ -190,12 +190,27 @@ return [
         'id_submodulo' => 47, // submodulos_menu.id (Vacaciones)
         'legacy_rutas' => [],
     ],
-    // Control de Asistencia (marcaciones por QR de punto de servicio).
-    // Actualizar id_submodulo con el id real tras ejecutar database/menu_control_asistencia.sql
-    // (SELECT id FROM submodulos_menu WHERE ruta = 'modulos/control-asistencia';).
-    // Mientras id_submodulo = 0, el super admin (Nivel 3) igual puede entrar por URL.
-    'modulos/control-asistencia' => [
-        'id_submodulo' => 0,
+    // Puntos de servicio (antes "Control asistencia"): puntos QR + horarios/turnos + config.
+    'modulos/puntos-servicio' => [
+        'id_submodulo' => 194,
+        'legacy_rutas' => [],
+    ],
+
+    // Marcaciones (bitácora de marcaciones, separada de Control de Asistencia).
+    'modulos/marcaciones' => [
+        'id_submodulo' => 195,
+        'legacy_rutas' => [],
+    ],
+
+    // Jornadas (consolidado diario + puente al rol, separado de Control de Asistencia).
+    'modulos/jornadas' => [
+        'id_submodulo' => 196,
+        'legacy_rutas' => [],
+    ],
+
+    // Horarios y turnos (separado de Puntos de servicio).
+    'modulos/horarios' => [
+        'id_submodulo' => 197,
         'legacy_rutas' => [],
     ],
 

@@ -233,6 +233,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 { id: '{{3}}', label: 'Valor Total de la Factura' }
             ]
         },
+        'link_pago_payphone': {
+            nombre: 'link_pago_payphone',
+            categoria: 'UTILITY',
+            cabecera: 'NONE',
+            descripcion: 'Sirve para enviar al cliente un enlace de pago con tarjeta (Payphone) para que cancele su saldo pendiente. El enlace ya dirige a la página segura de Payphone, por eso la plantilla no lleva botón: el texto plano con la URL es suficiente porque WhatsApp la vuelve clicable automáticamente.',
+            texto: 'Estimado(a) {{1}}, tiene un saldo pendiente de pago de {{2}} correspondiente a {{3}}. Puede pagarlo de forma segura con tarjeta en el siguiente enlace: {{4}}. El enlace es de un solo uso y caduca en 10 minutos.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Cliente' },
+                { id: '{{2}}', label: 'Monto a Pagar' },
+                { id: '{{3}}', label: 'Descripción / Referencia' },
+                { id: '{{4}}', label: 'Enlace de Pago (Payphone)' }
+            ]
+        },
         'cuenta_por_cobrar': {
             nombre: 'cuenta_por_cobrar',
             categoria: 'UTILITY',

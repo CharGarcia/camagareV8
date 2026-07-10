@@ -10,6 +10,20 @@
     const formEmp = document.getElementById('formEmpleado');
     const alertElEmp = document.getElementById('modalAlert');
 
+    // Opciones para la pestaña Horario (turnos + puntos). Se cargan una vez y se cachean.
+    let horarioOpts = null;
+    async function cargarOpcionesHorario() {
+        if (horarioOpts) return horarioOpts;
+        try {
+            const resp = await fetch(`${urlModuloEmp}/opcionesHorarioAjax`);
+            const j = await resp.json();
+            horarioOpts = j.ok ? { horarios: j.horarios || [], puntos: j.puntos || [] } : { horarios: [], puntos: [] };
+        } catch (e) {
+            horarioOpts = { horarios: [], puntos: [] };
+        }
+        return horarioOpts;
+    }
+
     function getModalEmp() {
         if (!modalInstEmp && typeof bootstrap !== 'undefined') {
             const el = document.getElementById('modalEmpleado');
@@ -27,6 +41,9 @@
         document.getElementById('btnEliminarModal')?.classList.add('d-none');
         document.querySelector('#tablaPeriodos tbody').innerHTML = '';
         document.querySelector('#tablaRubros tbody').innerHTML = '';
+        const tAsg = document.querySelector('#tablaAsignaciones tbody'); if (tAsg) tAsg.innerHTML = '';
+        const asgJson = document.getElementById('asignaciones_horario_json'); if (asgJson) asgJson.value = '[]';
+        cargarOpcionesHorario(); // precarga turnos/puntos para la pestaña Horario
         if (alertElEmp) alertElEmp.classList.add('d-none');
 
         // Cargar defaults IESS
@@ -110,6 +127,7 @@
                 document.getElementById('emp_lugar_trabajo').value = d.lugar_trabajo || '';
                 document.getElementById('emp_horario_trabajo').value = d.horario_trabajo || '';
                 document.getElementById('emp_codigo_sectorial_iess').value = d.codigo_sectorial_iess || '';
+                var _atr = document.getElementById('emp_atraso_modo'); if (_atr) _atr.value = d.atraso_modo || 'no_descuenta';
 
                 // Bancarios
                 document.getElementById('emp_id_banco_ecuador').value = d.id_banco_ecuador || 0;
@@ -125,7 +143,13 @@
                 tRubros.innerHTML = '';
                 if (d.rubros?.length) d.rubros.forEach(r => window.agregarFilaRubro(r));
 
-
+                // Asignaciones de horario: cargar opciones (turnos/puntos) y renderizar la grilla.
+                const tAsg = document.querySelector('#tablaAsignaciones tbody');
+                if (tAsg) {
+                    tAsg.innerHTML = '';
+                    await cargarOpcionesHorario();
+                    if (d.asignaciones_horario?.length) d.asignaciones_horario.forEach(a => window.agregarFilaAsignacion(a));
+                }
             }
         } catch (e) {}
     };
@@ -206,6 +230,31 @@
         window.toggleRubroIess(row.querySelector('.rb-tipo'));
     };
 
+    window.agregarFilaAsignacion = function (data = {}) {
+        const tbody = document.querySelector('#tablaAsignaciones tbody');
+        if (!tbody) return;
+        const opts = horarioOpts || { horarios: [], puntos: [] };
+        const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        const nuevo = Object.keys(data).length === 0;
+        if (nuevo && !opts.horarios.length) {
+            if (window.Swal) Swal.fire({ icon: 'info', title: 'No hay turnos', text: 'Primero crea turnos en el módulo «Horarios y turnos».' });
+            else alert('Primero crea turnos en el módulo Horarios y turnos.');
+            return;
+        }
+        const optHor = opts.horarios.map(h => `<option value="${h.id}" ${String(data.id_horario) === String(h.id) ? 'selected' : ''}>${esc(h.nombre)}</option>`).join('');
+        const optPun = ['<option value="">— Sin punto —</option>'].concat(opts.puntos.map(p => `<option value="${p.id}" ${String(data.id_punto) === String(p.id) ? 'selected' : ''}>${esc(p.nombre)}</option>`)).join('');
+        const row = document.createElement('tr');
+        row.className = 'row-emp';
+        row.innerHTML = `
+            <td class="ps-2"><select class="form-select form-select-sm input-emp asg-horario">${optHor}</select></td>
+            <td><select class="form-select form-select-sm input-emp asg-punto">${optPun}</select></td>
+            <td><input type="date" class="form-control form-control-sm input-emp asg-desde" value="${(data.vigente_desde || '').substring(0, 10)}"></td>
+            <td><input type="date" class="form-control form-control-sm input-emp asg-hasta" value="${(data.vigente_hasta || '').substring(0, 10)}"></td>
+            <td class="text-center"><button type="button" class="btn btn-sm p-1 border-0 remove-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
+        `;
+        tbody.appendChild(row);
+    };
+
     window.toggleRubroIess = function(select) {
         const tr = select.closest('tr');
         const iessSel = tr.querySelector('.rb-iess');
@@ -251,6 +300,22 @@
             });
         });
         document.getElementById('rubros_json').value = JSON.stringify(rubros);
+
+        const asignaciones = [];
+        document.querySelectorAll('#tablaAsignaciones tbody tr').forEach(tr => {
+            const selHor = tr.querySelector('.asg-horario');
+            if (!selHor) return;
+            const idHor = selHor.value;
+            const desde = tr.querySelector('.asg-desde')?.value || '';
+            if (idHor && desde) asignaciones.push({
+                id_horario: idHor,
+                id_punto: tr.querySelector('.asg-punto')?.value || '',
+                vigente_desde: desde,
+                vigente_hasta: tr.querySelector('.asg-hasta')?.value || ''
+            });
+        });
+        const asgInput = document.getElementById('asignaciones_horario_json');
+        if (asgInput) asgInput.value = JSON.stringify(asignaciones);
     }
 
     // Botón "Imprimir PDF" de la barra superior del modal.

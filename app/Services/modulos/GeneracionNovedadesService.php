@@ -31,6 +31,7 @@ class GeneracionNovedadesService
     private const MARCADOR_EXTRA        = 'ASISTENCIA-EXTRA';
     private const MARCADOR_ATRASO_DESC  = 'ASISTENCIA-ATRASO';
     private const MARCADOR_ATRASO_DIAS  = 'ASISTENCIA-ATRASO-DIAS';
+    private const MARCADOR_ATRASO_INFO  = 'ASISTENCIA-ATRASO-INFO'; // 'Solo informativo': novedad de registro con valor 0
 
     private AsistenciaJornadaRepository $jornadaRepo;
     private AsistenciaConfigRepository $configRepo;
@@ -93,24 +94,36 @@ class GeneracionNovedadesService
                 $horasExtra > 0 ? "Horas extra detectadas por Control de Asistencia ({$horasExtra} h)." : null
             );
 
-            // Atrasos → según configuración de la empresa.
-            if ($atrasoModo === 'descuento') {
-                $valorHora = $sueldoBase > 0 ? $sueldoBase / 240 : 0;
-                $monto = round($horasAtraso * $valorHora, 2);
-                $movs[] = $this->upsertTipo(
-                    $idEmpresa, $idEmp, self::TIPO_DESCUENTO, self::MARCADOR_ATRASO_DESC, $mes, $anio, $aplicaEn, $idUsuario,
-                    $monto > 0 ? $monto : 0,
-                    $monto > 0 ? "Descuento por atrasos, Control de Asistencia ({$horasAtraso} h)." : null
-                );
-            } elseif ($atrasoModo === 'dias') {
-                $fraccion = round($horasAtraso / 8, 2);
-                $movs[] = $this->upsertTipo(
-                    $idEmpresa, $idEmp, self::TIPO_FALTA, self::MARCADOR_ATRASO_DIAS, $mes, $anio, $aplicaEn, $idUsuario,
-                    $fraccion > 0 ? $fraccion : 0,
-                    $fraccion > 0 ? "Fracción de día por atrasos, Control de Asistencia ({$horasAtraso} h)." : null
-                );
-            }
-            // 'informativo': no genera novedad por atrasos.
+            // Atrasos → según el modo EFECTIVO del empleado: su override si lo tiene,
+            // si no el default de la empresa. Se llama a los TRES marcadores (los
+            // inactivos con valor 0 → se eliminan), así al cambiar de modo no quedan huérfanos.
+            //   'descuento'       → Descuento = horas × sueldo/240
+            //   'dias'            → Días no laborados = horas/8 (heredable del default de empresa)
+            //   'informativo_reg' → 'Solo informativo': novedad de registro con valor 0
+            //   'no_descuenta' / 'informativo' / vacío → no genera nada
+            $modoEmp = !empty($r['atraso_modo']) ? (string) $r['atraso_modo'] : $atrasoModo;
+            $valorHora = $sueldoBase > 0 ? $sueldoBase / 240 : 0;
+            $montoDesc = $modoEmp === 'descuento' ? round($horasAtraso * $valorHora, 2) : 0;
+            $fraccion  = $modoEmp === 'dias' ? round($horasAtraso / 8, 2) : 0;
+            $infoGate  = $modoEmp === 'informativo_reg' ? $horasAtraso : 0; // >0 si hay atraso que registrar
+
+            $movs[] = $this->upsertTipo(
+                $idEmpresa, $idEmp, self::TIPO_DESCUENTO, self::MARCADOR_ATRASO_DESC, $mes, $anio, $aplicaEn, $idUsuario,
+                $montoDesc,
+                $montoDesc > 0 ? "Descuento por atrasos, Control de Asistencia ({$horasAtraso} h)." : null
+            );
+            $movs[] = $this->upsertTipo(
+                $idEmpresa, $idEmp, self::TIPO_FALTA, self::MARCADOR_ATRASO_DIAS, $mes, $anio, $aplicaEn, $idUsuario,
+                $fraccion,
+                $fraccion > 0 ? "Fracción de día por atrasos, Control de Asistencia ({$horasAtraso} h)." : null
+            );
+            // Registro informativo: se persiste con valor 0 (no descuenta), solo deja constancia.
+            $movs[] = $this->upsertTipo(
+                $idEmpresa, $idEmp, self::TIPO_DESCUENTO, self::MARCADOR_ATRASO_INFO, $mes, $anio, $aplicaEn, $idUsuario,
+                $infoGate,
+                $infoGate > 0 ? "Atraso informativo (no descuenta), Control de Asistencia ({$horasAtraso} h)." : null,
+                0.0
+            );
 
             foreach ($movs as $m) {
                 if ($m === null) continue;
@@ -145,8 +158,11 @@ class GeneracionNovedadesService
      */
     private function upsertTipo(
         int $idEmpresa, int $idEmpleado, string $tipoCodigo, string $marcador,
-        int $mes, int $anio, string $aplicaEn, int $idUsuario, float $valor, ?string $observacionBase
+        int $mes, int $anio, string $aplicaEn, int $idUsuario, float $valor, ?string $observacionBase,
+        ?float $valorPersistir = null
     ): ?array {
+        // $valor decide crear/eliminar (>0 crea, ≤0 elimina). Si $valorPersistir viene,
+        // ese es el valor que se guarda (p. ej. 0 para el registro "Solo informativo").
         $marcadorTag = "[{$marcador} {$anio}-" . str_pad((string) $mes, 2, '0', STR_PAD_LEFT) . ']';
         $existente = $this->novedadRepo->getByMarcador($idEmpresa, $idEmpleado, $tipoCodigo, $aplicaEn, $mes, $anio, $marcadorTag);
 
@@ -167,7 +183,7 @@ class GeneracionNovedadesService
                 'fecha'        => $fecha,
                 'periodo_mes'  => $mes,
                 'periodo_anio' => $anio,
-                'valor'        => $valor,
+                'valor'        => $valorPersistir ?? $valor,
                 'aplica_en'    => $aplicaEn,
                 'observacion'  => trim($marcadorTag . ' ' . $observacionBase),
                 'estado'       => 'activo',

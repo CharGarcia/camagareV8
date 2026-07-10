@@ -6353,6 +6353,15 @@ $perm = $permNCRespaldo;
                         </div>
                         <div class="form-text">Código de país + número (sin +). Si está vacío, ingresa el número.</div>
                     </div>
+
+                    <div class="mb-3 d-none" id="waDivMontoPago">
+                        <label class="form-label small fw-bold">Saldo Pendiente a Cobrar</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">$</span>
+                            <input type="text" id="waMontoPago" class="form-control bg-light" readonly>
+                        </div>
+                        <div class="form-text">Se enviará un enlace de pago con tarjeta (Payphone) por el total del saldo pendiente de la factura. No admite cobro parcial por este medio.</div>
+                    </div>
                 </div>
                 <div class="modal-footer bg-light border-top-0 rounded-bottom-3">
                     <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="modal">Cancelar</button>
@@ -6367,11 +6376,21 @@ $perm = $permNCRespaldo;
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('waSelectPlantilla')?.addEventListener('change', FV_toggleWaMontoPago);
+
     // Manejador del formulario
     const formWa = document.getElementById('formEnviarWhatsappFactura');
     if (formWa) {
         formWa.addEventListener('submit', (e) => {
             e.preventDefault();
+
+            const select = document.getElementById('waSelectPlantilla');
+            const opt = select.options[select.selectedIndex];
+            if (opt && opt.dataset.nombre === 'link_pago_payphone' && _waSaldoPendiente <= 0) {
+                Swal.fire('Atención', 'Esta factura no tiene saldo pendiente de pago; no se puede enviar el enlace.', 'warning');
+                return;
+            }
+
             const btn = document.getElementById('btnEnviarWhatsappFactura');
             const originalHtml = btn.innerHTML;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Enviando...';
@@ -6403,6 +6422,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+let _waSaldoPendiente = 0;
+
+function FV_toggleWaMontoPago() {
+    const select   = document.getElementById('waSelectPlantilla');
+    const divMonto = document.getElementById('waDivMontoPago');
+    const opt      = select.options[select.selectedIndex];
+    const esLinkPago = opt && opt.dataset.nombre === 'link_pago_payphone';
+
+    if (divMonto) divMonto.classList.toggle('d-none', !esLinkPago);
+
+    if (esLinkPago) {
+        document.getElementById('waMontoPago').value = _waSaldoPendiente.toFixed(2);
+    }
+}
+
 function FV_abrirModalWhatsapp() {
     const idFactura = parseInt(FV_ID_ACTIVO) || 0;
     if (!idFactura) {
@@ -6412,6 +6446,8 @@ function FV_abrirModalWhatsapp() {
 
     const select = document.getElementById('waSelectPlantilla');
     select.innerHTML = '<option value="">Cargando plantillas...</option>';
+    document.getElementById('waDivMontoPago')?.classList.add('d-none');
+    document.getElementById('waMontoPago').value = '';
 
     fetch(`${B_URL}/${RUTA_MODULO}/getPlantillasWhatsappAjax?id_factura=${idFactura}`, {
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -6437,13 +6473,20 @@ function FV_abrirModalWhatsapp() {
                 return;
             }
 
+            _waSaldoPendiente = parseFloat(data.saldo_pendiente || 0);
+            const sinSaldoPendiente = _waSaldoPendiente <= 0;
+
             select.innerHTML = '<option value="">-- Seleccione una plantilla --</option>';
             data.plantillas.forEach(p => {
-                select.innerHTML += `<option value="${p.id}">${p.nombre} (${p.idioma})</option>`;
+                const esLinkPago = p.nombre === 'link_pago_payphone';
+                const etiqueta = esLinkPago ? 'Enviar Link de Pago (Payphone)' : `${p.nombre} (${p.idioma})`;
+                const disabled = (esLinkPago && sinSaldoPendiente) ? 'disabled title="La factura no tiene saldo pendiente de pago"' : '';
+                select.innerHTML += `<option value="${p.id}" data-nombre="${p.nombre}" ${disabled}>${etiqueta}${esLinkPago && sinSaldoPendiente ? ' (sin saldo pendiente)' : ''}</option>`;
             });
 
-            // Seleccionar favorito si existe, o el default
-            if (typeof APP_FAVORITOS !== 'undefined' && APP_FAVORITOS['plantilla_whatsapp']) {
+            // Seleccionar favorito si existe, o el default (nunca la plantilla de link de pago si no hay saldo pendiente)
+            if (typeof APP_FAVORITOS !== 'undefined' && APP_FAVORITOS['plantilla_whatsapp']
+                && !(sinSaldoPendiente && select.querySelector(`option[value="${APP_FAVORITOS['plantilla_whatsapp']}"]`)?.dataset.nombre === 'link_pago_payphone')) {
                 select.value = APP_FAVORITOS['plantilla_whatsapp'];
             } else if (data.id_plantilla_default) {
                 select.value = data.id_plantilla_default;
@@ -6458,6 +6501,7 @@ function FV_abrirModalWhatsapp() {
             document.getElementById('waTelefonoCliente').value = data.telefono_cliente || '593';
 
             document.getElementById('waIdFactura').value = idFactura;
+            FV_toggleWaMontoPago();
             const modal = new bootstrap.Modal(document.getElementById('modalEnviarWhatsappFactura'));
             modal.show();
 

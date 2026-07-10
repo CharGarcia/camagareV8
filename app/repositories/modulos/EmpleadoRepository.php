@@ -83,7 +83,7 @@ class EmpleadoRepository extends BaseRepository
                     fondos_reserva, aporta_iess, decimo_tercero, decimo_cuarto,
                     aporte_personal, aporte_patronal, sueldo_base, valor_semanal, valor_quincena,
                     region, cargo, lugar_trabajo, horario_trabajo,
-                    departamento, codigo_sectorial_iess,
+                    departamento, codigo_sectorial_iess, atraso_modo,
                     created_by, updated_by, created_at, updated_at, eliminado
                 ) VALUES (
                     :id_empresa, :tipo_id, :identificacion,
@@ -93,7 +93,7 @@ class EmpleadoRepository extends BaseRepository
                     :fondos_reserva, :aporta_iess, :decimo_tercero, :decimo_cuarto,
                     :aporte_personal, :aporte_patronal, :sueldo_base, :valor_semanal, :valor_quincena,
                     :region, :cargo, :lugar_trabajo, :horario_trabajo,
-                    :departamento, :codigo_sectorial_iess,
+                    :departamento, :codigo_sectorial_iess, :atraso_modo,
                     :id_u, :id_u, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, false
                 )";
 
@@ -128,6 +128,7 @@ class EmpleadoRepository extends BaseRepository
             ':horario_trabajo'      => $data['horario_trabajo'] ?? null,
             ':departamento'         => $data['departamento'] ?? null,
             ':codigo_sectorial_iess' => $data['codigo_sectorial_iess'] ?? null,
+            ':atraso_modo'          => !empty($data['atraso_modo']) ? $data['atraso_modo'] : null,
             ':id_u'                 => $data['id_usuario']
         ]);
 
@@ -168,6 +169,7 @@ class EmpleadoRepository extends BaseRepository
                     horario_trabajo = :horario_trabajo,
                     departamento = :departamento,
                     codigo_sectorial_iess = :codigo_sectorial_iess,
+                    atraso_modo = :atraso_modo,
                     updated_by = :updated_by,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
@@ -202,6 +204,7 @@ class EmpleadoRepository extends BaseRepository
             ':horario_trabajo'      => $data['horario_trabajo'] ?? null,
             ':departamento'         => $data['departamento'] ?? null,
             ':codigo_sectorial_iess' => $data['codigo_sectorial_iess'] ?? null,
+            ':atraso_modo'          => !empty($data['atraso_modo']) ? $data['atraso_modo'] : null,
             ':updated_by'           => $data['id_usuario'],
             ':id'                   => $id,
             ':id_empresa'           => $idEmpresa
@@ -266,6 +269,52 @@ class EmpleadoRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id_e' => $idEmpleado, ':id_c' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Asignaciones de horario/turno del empleado (turno + punto + vigencia). */
+    public function getAsignacionesHorario(int $idEmpleado, int $idEmpresa): array
+    {
+        $sql = "SELECT eh.id, eh.id_horario, eh.id_punto, eh.vigente_desde, eh.vigente_hasta,
+                       h.nombre AS horario_nombre, p.nombre AS punto_nombre
+                FROM asistencia_empleado_horario eh
+                JOIN asistencia_horarios h ON h.id = eh.id_horario
+                LEFT JOIN asistencia_puntos p ON p.id = eh.id_punto
+                WHERE eh.id_empleado = :e AND eh.id_empresa = :c AND eh.eliminado = false
+                ORDER BY eh.vigente_desde DESC";
+        try {
+            $st = $this->db->prepare($sql);
+            $st->execute([':e' => $idEmpleado, ':c' => $idEmpresa]);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            return []; // módulo de asistencia no desplegado
+        }
+    }
+
+    /** Sincroniza las asignaciones de horario del empleado (borra e inserta). */
+    public function syncAsignacionesHorario(int $idEmpleado, int $idEmpresa, array $asignaciones, int $idUsuario): void
+    {
+        $st = $this->db->prepare("UPDATE asistencia_empleado_horario SET eliminado = true, deleted_by = :u, deleted_at = CURRENT_TIMESTAMP WHERE id_empleado = :e AND id_empresa = :c AND eliminado = false");
+        $st->execute([':u' => $idUsuario, ':e' => $idEmpleado, ':c' => $idEmpresa]);
+
+        if (empty($asignaciones)) return;
+
+        $sql = "INSERT INTO asistencia_empleado_horario (id_empresa, id_empleado, id_horario, id_punto, vigente_desde, vigente_hasta, created_by, updated_by)
+                VALUES (:c, :e, :h, :p, :vd, :vh, :u, :u)";
+        $st = $this->db->prepare($sql);
+        foreach ($asignaciones as $a) {
+            $idHorario = (int) ($a['id_horario'] ?? 0);
+            $desde     = trim((string) ($a['vigente_desde'] ?? ''));
+            if ($idHorario <= 0 || $desde === '') continue; // fila incompleta
+            $st->execute([
+                ':c'  => $idEmpresa,
+                ':e'  => $idEmpleado,
+                ':h'  => $idHorario,
+                ':p'  => !empty($a['id_punto']) ? (int) $a['id_punto'] : null,
+                ':vd' => $desde,
+                ':vh' => !empty($a['vigente_hasta']) ? $a['vigente_hasta'] : null,
+                ':u'  => $idUsuario,
+            ]);
+        }
     }
 
     /**

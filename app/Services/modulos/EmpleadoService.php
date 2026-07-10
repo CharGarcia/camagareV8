@@ -44,6 +44,7 @@ class EmpleadoService
 
         $empleado['periodos'] = $this->repository->getPeriodos($id, $idEmpresa);
         $empleado['rubros'] = $this->repository->getRubrosFijos($id, $idEmpresa);
+        $empleado['asignaciones_horario'] = $this->repository->getAsignacionesHorario($id, $idEmpresa);
 
         return $empleado;
     }
@@ -73,6 +74,9 @@ class EmpleadoService
             }
             if (!empty($data['rubros_fijos'])) {
                 $this->repository->syncRubrosFijos($id, $idEmpresa, $data['rubros_fijos'], $idUsuario);
+            }
+            if (isset($data['asignaciones_horario'])) {
+                $this->repository->syncAsignacionesHorario($id, $idEmpresa, $data['asignaciones_horario'], $idUsuario);
             }
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'CREAR', 'empleados', $id, null, $data);
@@ -136,6 +140,9 @@ class EmpleadoService
             }
             if (isset($data['rubros_fijos'])) {
                 $this->repository->syncRubrosFijos($id, $idEmpresa, $data['rubros_fijos'], $idUsuario);
+            }
+            if (isset($data['asignaciones_horario'])) {
+                $this->repository->syncAsignacionesHorario($id, $idEmpresa, $data['asignaciones_horario'], $idUsuario);
             }
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR', 'empleados', $id, $old, $data);

@@ -28,6 +28,19 @@ class AsistenciaJornadaRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /** Jornadas diarias de un empleado en un rango (para el detalle de asistencia del rol). */
+    public function getDiasEmpleado(int $idEmpresa, int $idEmpleado, string $desde, string $hasta): array
+    {
+        $sql = "SELECT fecha, primera_entrada, ultima_salida, horas_trabajadas, atraso_min, extra_min, estado
+                FROM {$this->table}
+                WHERE id_empresa = :emp AND id_empleado = :e AND eliminado = false
+                  AND fecha BETWEEN :d AND :h
+                ORDER BY fecha";
+        $st = $this->db->prepare($sql);
+        $st->execute([':emp' => $idEmpresa, ':e' => $idEmpleado, ':d' => $desde, ':h' => $hasta]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function insert(array $d): int
     {
         $sql = "INSERT INTO {$this->table} (
@@ -150,6 +163,7 @@ class AsistenciaJornadaRepository extends BaseRepository
         $sql = "SELECT j.id_empleado,
                        e.nombres_apellidos AS empleado_nombre,
                        e.sueldo_base,
+                       e.atraso_modo,
                        COUNT(*) FILTER (WHERE j.estado = 'falta')          AS dias_falta,
                        COALESCE(SUM(j.atraso_min), 0)                      AS atraso_min,
                        COALESCE(SUM(j.extra_min), 0)                       AS extra_min
@@ -158,7 +172,7 @@ class AsistenciaJornadaRepository extends BaseRepository
                 WHERE j.id_empresa = :e AND j.eliminado = false
                   AND j.fecha BETWEEN :d AND :h
                   {$filtroEmp}
-                GROUP BY j.id_empleado, e.nombres_apellidos, e.sueldo_base
+                GROUP BY j.id_empleado, e.nombres_apellidos, e.sueldo_base, e.atraso_modo
                 HAVING COUNT(*) FILTER (WHERE j.estado = 'falta') > 0
                     OR COALESCE(SUM(j.atraso_min), 0) > 0
                     OR COALESCE(SUM(j.extra_min), 0) > 0

@@ -37,6 +37,8 @@ class MigracionMysqlService
         'ingresos'          => ['label' => 'Cobros (ingresos)',                 'tabla' => 'ingresos_egresos',           'fecha' => 'fecha_ing_egr',  'tipo' => 'documento', 'filtro' => "tipo_ing_egr = 'INGRESO'"],
         'egresos'           => ['label' => 'Pagos (egresos)',                   'tabla' => 'ingresos_egresos',           'fecha' => 'fecha_ing_egr',  'tipo' => 'documento', 'filtro' => "tipo_ing_egr = 'EGRESO'"],
         'inventario'        => ['label' => 'Inventario (kardex)',               'tabla' => 'inventarios',                'fecha' => 'fecha_registro', 'tipo' => 'catalogo'],
+        'contabilidad'      => ['label' => 'Contabilidad (asientos)',            'tabla' => 'encabezado_diario',          'fecha' => 'fecha_asiento',  'tipo' => 'documento'],
+        'proformas'         => ['label' => 'Proformas (cotizaciones)',           'tabla' => 'encabezado_proforma',        'fecha' => 'fecha_proforma', 'tipo' => 'documento'],
     ];
 
     /** Segundos estimados por registro según tipo (aprox., calibrado en pruebas). */
@@ -124,6 +126,10 @@ class MigracionMysqlService
                 return $this->migrarEgresos($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'inventario':
                 return $this->migrarInventario($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
+            case 'contabilidad':
+                return $this->migrarContabilidad($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
+            case 'proformas':
+                return $this->migrarProformas($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -486,6 +492,189 @@ class MigracionMysqlService
 
     /** % de IVA por código SRI (para derivar impuestos del detalle). */
     private const IVA_PCT = ['0' => 0, '2' => 12, '3' => 14, '4' => 15, '5' => 5, '6' => 0, '7' => 0, '8' => 8, '10' => 13];
+
+    /** Migra proformas (cabecera + detalle + impuestos). El producto es opcional (no se auto-crea). */
+    private function migrarProformas(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'proformas', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done        = $this->idsMigrados($pg, $idEmpresa, 'proformas');
+        $mapCliente  = $this->mapaDe($pg, $idEmpresa, 'clientes');
+        $mapProd     = $this->mapaDe($pg, $idEmpresa, 'productos');
+        $insMap      = $this->stmtMap($pg, 'proformas');
+        $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
+
+        $insCab = $pg->prepare(
+            "INSERT INTO proformas_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, total_sin_impuestos, total_descuento, importe_total, moneda, estado, observaciones, tipo_ambiente, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DOLAR', ?, ?, '1', ?) RETURNING id"
+        );
+        $insDet = $pg->prepare(
+            "INSERT INTO proformas_detalle (id_proforma, id_producto, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
+        );
+        $insImp = $pg->prepare(
+            "INSERT INTO proformas_detalle_impuestos (id_proforma_detalle, codigo_impuesto, codigo_porcentaje, tarifa, base_imponible, valor)
+             VALUES (?, '2', ?, ?, ?, ?)"
+        );
+        $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad, valor_unitario, subtotal, descuento, tarifa_iva, codigo_producto, nombre_producto FROM cuerpo_proforma WHERE codigo_unico = :cu");
+
+        $sql = "SELECT id_encabezado_proforma, fecha_proforma, serie_proforma, secuencial_proforma, id_cliente, total_proforma, estado_proforma, codigo_unico
+                  FROM encabezado_proforma WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_proforma', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_proforma";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $stmt = $mysql->query($sql);
+
+        while ($ep = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $ep['id_encabezado_proforma'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+
+            $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ep['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
+            if (!$idCliente) { $res['omitidos']++; continue; }
+
+            $partes = explode('-', trim((string) $ep['serie_proforma']));
+            $estab  = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
+            $pto    = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
+            $sec    = str_pad(preg_replace('/\D+/', '', (string) $ep['secuencial_proforma']), 9, '0', STR_PAD_LEFT);
+
+            try {
+                $pg->beginTransaction();
+                $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
+                $idPto = $this->getPuntoEmisionId($idEmpresa, $estab, $pto, $idUsuario);
+
+                $cuerpoStmt->execute([':cu' => (string) $ep['codigo_unico']]);
+                $lineas = $cuerpoStmt->fetchAll(PDO::FETCH_ASSOC);
+                $totalSinImp = 0.0; $totalDesc = 0.0;
+                foreach ($lineas as $l) {
+                    $totalSinImp += (float) $l['subtotal'] - (float) $l['descuento'];
+                    $totalDesc   += (float) $l['descuento'];
+                }
+                $est = (stripos((string) $ep['estado_proforma'], 'anul') !== false) ? 'ANULADA' : 'EMITIDA';
+
+                $insCab->execute([$idEmpresa, $idEst, $idPto, $idCliente, $idUsuario, substr((string) $ep['fecha_proforma'], 0, 10), $estab, $pto, $sec, round($totalSinImp, 2), round($totalDesc, 2), (float) $ep['total_proforma'], $est, null, $idUsuario]);
+                $idProf = (int) $insCab->fetchColumn();
+
+                foreach ($lineas as $l) {
+                    $base_i = (float) $l['subtotal'] - (float) $l['descuento'];
+                    $insDet->execute([$idProf, ($mapProd[(string) (int) $l['id_producto']] ?? null), (string) $l['codigo_producto'], ((string) $l['nombre_producto'] !== '' ? (string) $l['nombre_producto'] : 'ITEM'), (float) $l['cantidad'], (float) $l['valor_unitario'], (float) $l['descuento'], round($base_i, 2)]);
+                    $idDet = (int) $insDet->fetchColumn();
+                    $cod = trim((string) $l['tarifa_iva']);
+                    $pct = self::IVA_PCT[$cod] ?? 0;
+                    $insImp->execute([$idDet, $cod, $pct, round($base_i, 2), round($base_i * $pct / 100, 2)]);
+                }
+
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idProf, ':cn' => "$estab-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
+
+    /**
+     * Resuelve la cuenta contable de una línea vieja (id_cuenta) → id de plan_cuentas nuevo,
+     * puenteando por código; si el código no existe en el plan nuevo, lo CREA. Null si no hay dato.
+     */
+    private function resolverOCrearCuenta(array &$mapCuenta, array &$cuentaPorCod, array $oldCuentas, int $oldId, int $idEmpresa, int $idUsuario, PDO $pg): ?int
+    {
+        if (isset($mapCuenta[$oldId])) { return $mapCuenta[$oldId]; }
+        $info = $oldCuentas[$oldId] ?? null;
+        if (!$info) { return null; }
+        $cod = trim((string) $info['codigo']);
+        if ($cod === '') { return null; }
+        if (isset($cuentaPorCod[$cod])) { return $mapCuenta[$oldId] = $cuentaPorCod[$cod]; }
+        $nivel = (int) ($info['nivel'] ?: (substr_count($cod, '.') + 1));
+        try {
+            $ins = $pg->prepare("INSERT INTO plan_cuentas (id_empresa, id_usuario, codigo, nivel, nombre, status, created_by) VALUES (?, ?, ?, ?, ?, 1, ?) RETURNING id");
+            $ins->execute([$idEmpresa, $idUsuario, $cod, $nivel, ((string) $info['nombre'] !== '' ? (string) $info['nombre'] : $cod), $idUsuario]);
+            $id = (int) $ins->fetchColumn();
+        } catch (Throwable $e) {
+            $q = $pg->prepare("SELECT id FROM plan_cuentas WHERE id_empresa = ? AND codigo = ? LIMIT 1");
+            $q->execute([$idEmpresa, $cod]);
+            $id = (int) $q->fetchColumn();
+            if (!$id) { throw $e; }
+        }
+        $cuentaPorCod[$cod] = $id;
+        return $mapCuenta[$oldId] = $id;
+    }
+
+    /** Migra la contabilidad histórica (encabezado_diario + detalle_diario_contable) → asientos, tal cual (modulo_origen='migracion'). */
+    private function migrarContabilidad(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'contabilidad', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done   = $this->idsMigrados($pg, $idEmpresa, 'contabilidad');
+        $insMap = $this->stmtMap($pg, 'contabilidad');
+
+        // Plan de cuentas: código → id nuevo, y old id_cuenta → info (para puentear/crear)
+        $cuentaPorCod = [];
+        $qn = $pg->prepare("SELECT codigo, id FROM plan_cuentas WHERE id_empresa = ?");
+        $qn->execute([$idEmpresa]);
+        foreach ($qn->fetchAll(PDO::FETCH_ASSOC) as $r) { $cuentaPorCod[(string) $r['codigo']] = (int) $r['id']; }
+        $oldCuentas = [];
+        foreach ($mysql->query("SELECT id_cuenta, codigo_cuenta, nombre_cuenta, nivel_cuenta FROM plan_cuentas WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $r) {
+            $oldCuentas[(int) $r['id_cuenta']] = ['codigo' => $r['codigo_cuenta'], 'nombre' => $r['nombre_cuenta'], 'nivel' => $r['nivel_cuenta']];
+        }
+        $mapCuenta = [];
+
+        $detStmt = $mysql->prepare("SELECT id_cuenta, debe, haber, detalle_item FROM detalle_diario_contable WHERE codigo_unico = :cu");
+        $insCab  = $pg->prepare("INSERT INTO asientos_contables_cabecera (id_empresa, fecha_asiento, tipo_comprobante, numero_comprobante, concepto, estado, modulo_origen, total_debe, total_haber, created_by) VALUES (?, ?, ?, ?, ?, ?, 'migracion', ?, ?, ?) RETURNING id");
+        $insDet  = $pg->prepare("INSERT INTO asientos_contables_detalle (id_empresa, id_asiento, id_cuenta_contable, debe, haber, referencia_detalle, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
+
+        $sql = "SELECT id_diario, codigo_unico, fecha_asiento, concepto_general, estado, tipo
+                  FROM encabezado_diario WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND codigo_unico <> ''" . $this->clausulaFecha('fecha_asiento', $desde, $hasta, $mysql) . " ORDER BY id_diario";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $stmt = $mysql->query($sql);
+
+        while ($e = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $e['id_diario'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+
+            $detStmt->execute([':cu' => (string) $e['codigo_unico']]);
+            $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
+            if (!$dets) { $res['omitidos']++; continue; } // encabezado sin detalle (huérfano)
+
+            try {
+                $pg->beginTransaction();
+                $lineas = [];
+                $td = 0.0;
+                $th = 0.0;
+                foreach ($dets as $d) {
+                    $idc = $this->resolverOCrearCuenta($mapCuenta, $cuentaPorCod, $oldCuentas, (int) $d['id_cuenta'], $idEmpresa, $idUsuario, $pg);
+                    if (!$idc) { throw new \RuntimeException('Cuenta no resuelta (id_cuenta ' . (int) $d['id_cuenta'] . ')'); }
+                    $lineas[] = [$idc, (float) $d['debe'], (float) $d['haber'], self::nz($d['detalle_item'])];
+                    $td += (float) $d['debe'];
+                    $th += (float) $d['haber'];
+                }
+                $est = (stripos((string) $e['estado'], 'anul') !== false) ? 'anulado' : 'registrado';
+                $insCab->execute([$idEmpresa, substr((string) $e['fecha_asiento'], 0, 10), (self::nz($e['tipo']) !== null ? (string) $e['tipo'] : 'DIARIO'), (string) $e['codigo_unico'], (self::nz($e['concepto_general']) !== null ? (string) $e['concepto_general'] : (string) $e['codigo_unico']), $est, $td, $th, $idUsuario]);
+                $idAsiento = (int) $insCab->fetchColumn();
+                foreach ($lineas as $ln) {
+                    $insDet->execute([$idEmpresa, $idAsiento, $ln[0], $ln[1], $ln[2], $ln[3], $idUsuario]);
+                }
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idAsiento, ':cn' => (string) $e['codigo_unico'], ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
 
     /** Migra el kardex (tabla inventarios) → inventario_kardex, con saldo corrido por producto/bodega. */
     private function migrarInventario(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array

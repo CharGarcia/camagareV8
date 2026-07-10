@@ -18,11 +18,13 @@
                     <li class="nav-item"><a class="nav-link active py-2 small" data-bs-toggle="tab" href="#rolemp-general" role="tab"><i class="bi bi-cash-coin me-1"></i>General</a></li>
                     <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#rolemp-prov" role="tab"><i class="bi bi-piggy-bank me-1"></i>Provisiones</a></li>
                     <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#rolemp-asiento" role="tab"><i class="bi bi-journal-text me-1"></i>Asiento contable</a></li>
+                    <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#rolemp-asist" role="tab"><i class="bi bi-clock-history me-1"></i>Asistencia</a></li>
                 </ul>
                 <div class="tab-content">
                     <div class="tab-pane fade show active" id="rolemp-general" role="tabpanel"><div id="rolemp_general_body"></div></div>
                     <div class="tab-pane fade" id="rolemp-prov" role="tabpanel"><div id="rolemp_prov_body"></div></div>
                     <div class="tab-pane fade" id="rolemp-asiento" role="tabpanel"><div id="rolemp_asiento_body"></div></div>
+                    <div class="tab-pane fade" id="rolemp-asist" role="tabpanel"><div id="rolemp_asist_body"></div></div>
                 </div>
             </div>
             <div class="modal-footer bg-light border-top p-2">

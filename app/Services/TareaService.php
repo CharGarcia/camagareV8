@@ -48,33 +48,112 @@ class TareaService
         return $result;
     }
 
+    // ─── Clientes (listado + combo de obligaciones vigentes) ─────
+
+    public function getClientesListado(string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, int $idUsuario, int $nivel): array
+    {
+        return $this->repository->getClientesListado($buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuario, $nivel);
+    }
+
+    /**
+     * "Combo" de un cliente: una fila por cada obligación que tiene vigente
+     * (su tarea activa más reciente por obligación), con sus responsables.
+     */
+    public function getComboCliente(int $idCliente): array
+    {
+        $rows = $this->repository->getComboVigentePorCliente($idCliente);
+        foreach ($rows as &$row) {
+            $row['responsables'] = $this->repository->getResponsables((int) $row['id']);
+        }
+        unset($row);
+        return $rows;
+    }
+
+    // ─── Duplicar combo hacia otro cliente ─────────────────────
+
+    /**
+     * Crea una tarea por cada item del combo para el cliente destino (auto-catalogado
+     * si no existe). Atómico: todo o nada salvo los items omitidos por ya existir.
+     *
+     * @param array $destino ['id_cliente'?, 'cliente_nombre', 'cliente_correo']
+     * @param array $items   [['id_obligacion','obligacion_nombre'?,'periodicidad','fecha_tarea','responsables'], ...]
+     * @return array ['creadas' => int, 'omitidas' => array<string>]
+     */
+    public function copiarCombo(array $destino, array $items, int $idUsuario): array
+    {
+        $creadas  = 0;
+        $omitidas = [];
+
+        $this->repository->beginTransaction();
+        try {
+            // Resolver (o crear) el cliente destino una sola vez para todo el lote
+            $destinoResuelto = $this->autoCatalogarCliente([
+                'id_cliente'     => $destino['id_cliente'] ?? null,
+                'cliente_nombre' => trim($destino['cliente_nombre'] ?? ''),
+                'cliente_correo' => trim($destino['cliente_correo'] ?? ''),
+            ], $idUsuario);
+            $idClienteDestino = (int) ($destinoResuelto['id_cliente'] ?? 0);
+            if ($idClienteDestino <= 0) {
+                throw new Exception('No se pudo determinar el cliente destino.');
+            }
+
+            foreach ($items as $item) {
+                $idObligacion = (int) ($item['id_obligacion'] ?? 0);
+
+                if ($this->repository->existeObligacionActivaParaCliente($idClienteDestino, $idObligacion)) {
+                    $omitidas[] = ($item['obligacion_nombre'] ?? "Obligación #{$idObligacion}") . ' (ya la tiene activa)';
+                    continue;
+                }
+
+                $data = [
+                    'id_obligacion'      => $idObligacion,
+                    'id_cliente'         => $idClienteDestino,
+                    'cliente_nombre'     => $destinoResuelto['cliente_nombre'],
+                    'cliente_correo'     => $destinoResuelto['cliente_correo'],
+                    'periodicidad'       => trim($item['periodicidad'] ?? ''),
+                    'fecha_tarea'        => trim($item['fecha_tarea'] ?? ''),
+                    'estado'             => 'por_realizar',
+                    'notas'              => null,
+                    'resumen'            => null,
+                    'motivo_cancelacion' => null,
+                    'id_tarea_origen'    => null,
+                    'created_by'         => $idUsuario,
+                    'responsables'       => $item['responsables'] ?? [],
+                ];
+
+                try {
+                    $this->rules->validar($data);
+                } catch (\InvalidArgumentException $e) {
+                    $omitidas[] = ($item['obligacion_nombre'] ?? "Obligación #{$idObligacion}") . ' (' . $e->getMessage() . ')';
+                    continue;
+                }
+
+                $this->crearInterno($data);
+                $creadas++;
+            }
+
+            $this->repository->commit();
+            return ['creadas' => $creadas, 'omitidas' => $omitidas];
+        } catch (Exception $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+    }
+
     // ─── Crear ────────────────────────────────────────────────
 
     public function crear(array $data): int
     {
         $this->rules->validar($data);
 
-        $idUsuario    = (int) $data['created_by'];
-        $responsables = $data['responsables'] ?? [];
-
         $this->repository->beginTransaction();
         try {
-            // Auto-catalogar cliente si es nuevo
-            $data = $this->autoCatalogarCliente($data, $idUsuario);
-
-            $insertData = $this->prepararDatos($data, $idUsuario, false);
-            
-            $id = $this->repository->create($insertData);
-
-            // Responsables (pueden ser usuarios del sistema o propios)
-            $this->asignarResponsables($id, $responsables, $idUsuario);
-
-            $this->logService->registrar($idUsuario, null, 'crear', 'tareas', $id, null, $insertData);
-
+            $id = $this->crearInterno($data);
             $this->repository->commit();
-            
+
             // Evaluar notificaciones de tarea en estados aplicables
             if (in_array(trim($data['estado'] ?? ''), ['realizada_continua', 'realizada_finalizada', 'cancelada'], true)) {
+                $insertData = $this->prepararDatos($data, (int) $data['created_by'], false);
                 $this->intentarNotificarTarea($id, [], $insertData);
             }
 
@@ -83,6 +162,29 @@ class TareaService
             $this->repository->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Igual que crear(), sin abrir/cerrar transacción propia: para usar dentro de un
+     * lote (ver copiarCombo) que ya maneja su propia transacción externa.
+     */
+    private function crearInterno(array $data): int
+    {
+        $idUsuario    = (int) $data['created_by'];
+        $responsables = $data['responsables'] ?? [];
+
+        // Auto-catalogar cliente si es nuevo
+        $data = $this->autoCatalogarCliente($data, $idUsuario);
+
+        $insertData = $this->prepararDatos($data, $idUsuario, false);
+        $id = $this->repository->create($insertData);
+
+        // Responsables (pueden ser usuarios del sistema o propios)
+        $this->asignarResponsables($id, $responsables, $idUsuario);
+
+        $this->logService->registrar($idUsuario, null, 'crear', 'tareas', $id, null, $insertData);
+
+        return $id;
     }
 
     // ─── Actualizar ──────────────────────────────────────────

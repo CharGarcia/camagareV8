@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\controllers\modulos;
 
 use App\repositories\modulos\EmpleadoRepository;
+use App\repositories\modulos\BiometriaRepository;
 use App\Rules\modulos\EmpleadoRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\EmpleadoService;
+use App\Services\modulos\BiometriaService;
 use App\Services\modulos\EmpleadoImportService;
 use App\Services\SriIdentificationService;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -20,6 +22,7 @@ use App\models\Usuario;
 class EmpleadosController extends BaseModuloController
 {
     private EmpleadoService $service;
+    private BiometriaService $biometriaService;
     private const RUTA_MODULO = 'modulos/empleados';
 
     public function __construct()
@@ -29,6 +32,94 @@ class EmpleadosController extends BaseModuloController
         $rules = new EmpleadoRules();
         $logService = new LogSistemaService();
         $this->service = new EmpleadoService($repository, $rules, $logService);
+        $this->biometriaService = new BiometriaService(new BiometriaRepository(), $logService);
+    }
+
+    // ==================================================================
+    // CREDENCIALES (pestaña Credenciales del modal): QR personal + rostro.
+    // ==================================================================
+
+    /** Estado de la credencial del empleado (solo lectura, no la crea). */
+    public function credencialAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $idEmpleado = (int) ($_GET['id'] ?? 0);
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        try {
+            if ($idEmpleado <= 0) throw new \Exception('Empleado no válido.');
+            $bio = $this->biometriaService->getByEmpleado($idEmpleado, $idEmpresa);
+            echo json_encode([
+                'ok'              => true,
+                'tiene_credencial' => $bio !== null,
+                'token'           => $bio['qr_token'] ?? null,
+                'link'            => $bio ? rtrim(BASE_URL, '/') . '/asistencia/app?e=' . urlencode($bio['qr_token']) : null,
+                'tiene_rostro'    => $bio ? !empty($bio['descriptor_facial']) : false,
+                'consentimiento'  => $bio['consentimiento_at'] ?? null,
+            ]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Enrola (o devuelve) la credencial personal del empleado y su enlace. */
+    public function generarCredencialAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        $idEmpleado = (int) ($_POST['id_empleado'] ?? 0);
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $idUsuario  = (int) $_SESSION['id_usuario'];
+        try {
+            if ($idEmpleado <= 0) throw new \Exception('Empleado no válido.');
+            $bio = $this->biometriaService->enrolar($idEmpleado, $idEmpresa, $idUsuario);
+            $token = $bio['qr_token'];
+            echo json_encode(['ok' => true, 'token' => $token, 'link' => rtrim(BASE_URL, '/') . '/asistencia/app?e=' . urlencode($token)]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Regenera el token personal (revoca el anterior). */
+    public function regenerarCredencialAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        $idEmpleado = (int) ($_POST['id_empleado'] ?? 0);
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $idUsuario  = (int) $_SESSION['id_usuario'];
+        try {
+            if ($idEmpleado <= 0) throw new \Exception('Empleado no válido.');
+            $token = $this->biometriaService->regenerarToken($idEmpleado, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'token' => $token, 'link' => rtrim(BASE_URL, '/') . '/asistencia/app?e=' . urlencode($token)]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Enrola el rostro del empleado (descriptor calculado en el navegador). */
+    public function enrolarRostroAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        $idEmpleado = (int) ($_POST['id_empleado'] ?? 0);
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $idUsuario  = (int) $_SESSION['id_usuario'];
+        $descriptor = json_decode($_POST['descriptor'] ?? '[]', true);
+        try {
+            if ($idEmpleado <= 0) throw new \Exception('Empleado no válido.');
+            if (empty($_POST['consentimiento'])) throw new \Exception('Se requiere el consentimiento del empleado para registrar su rostro.');
+            if (!is_array($descriptor)) throw new \Exception('Descriptor facial no válido.');
+            $descriptor = array_map('floatval', $descriptor);
+            $this->biometriaService->enrolarRostro($idEmpleado, $idEmpresa, $descriptor, $idUsuario);
+            echo json_encode(['ok' => true, 'msg' => 'Rostro registrado correctamente.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
     }
 
     protected function getRutaModulo(): string
@@ -501,6 +592,7 @@ class EmpleadosController extends BaseModuloController
             'horario_trabajo'       => trim($_POST['horario_trabajo'] ?? ''),
             'departamento'          => trim($_POST['departamento'] ?? ''),
             'codigo_sectorial_iess'  => trim($_POST['codigo_sectorial_iess'] ?? ''),
+            'atraso_modo'           => trim($_POST['atraso_modo'] ?? ''),
         ];
 
         // Manejo de arrays dinámicos (vienen como JSON desde el frontend para JS a servidor)
@@ -510,7 +602,27 @@ class EmpleadosController extends BaseModuloController
         if (!empty($_POST['rubros_json'])) {
             $data['rubros_fijos'] = json_decode($_POST['rubros_json'], true);
         }
+        // asignaciones_horario_json siempre presente (aunque sea '[]') → así se pueden vaciar.
+        if (isset($_POST['asignaciones_horario_json'])) {
+            $data['asignaciones_horario'] = json_decode($_POST['asignaciones_horario_json'] ?: '[]', true) ?: [];
+        }
 
         return $data;
+    }
+
+    /** Opciones para asignar horario en la ficha del empleado: turnos + puntos de servicio. */
+    public function opcionesHorarioAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        try {
+            $horarios = (new \App\repositories\modulos\AsistenciaHorarioRepository())->getActivos($idEmpresa);
+            $puntos   = (new \App\repositories\modulos\AsistenciaPuntoRepository())->getListado($idEmpresa, '', 1, 0, 'nombre', 'ASC')['rows'];
+            echo json_encode(['ok' => true, 'horarios' => $horarios, 'puntos' => $puntos]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => true, 'horarios' => [], 'puntos' => []]); // asistencia no desplegada
+        }
+        exit;
     }
 }

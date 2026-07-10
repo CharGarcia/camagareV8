@@ -379,7 +379,7 @@ class TareaRepository extends BaseRepository
      */
     public function buscarUsuariosSistema(string $buscar, int $limit = 15): array
     {
-        $sql = "SELECT id, nombre, mail, 'sistema' AS tipo
+        $sql = "SELECT id, nombre, mail, 'usuario' AS tipo
                 FROM usuarios
                 WHERE estado = 1
                   AND (nombre ILIKE :b OR mail ILIKE :b2)
@@ -626,5 +626,111 @@ class TareaRepository extends BaseRepository
             ':u_mail_aux'      => $uMail
         ]);
         return (int)$st->fetchColumn();
+    }
+
+    // ─── Clientes: listado + combo de obligaciones vigentes ──────
+
+    /**
+     * Listado paginado de clientes CON obligaciones vigentes ("Detalle por cliente").
+     * Nivel 3 (superadmin) ve todos; el resto solo clientes cuyas tareas vigentes
+     * creó o donde figura como responsable (mismo criterio de "registros propios"
+     * que getListado()).
+     */
+    public function getClientesListado(string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, int $idUsuario, int $nivel): array
+    {
+        $colsPermitidas = ['nombre', 'ruc', 'correo', 'created_at', 'obligaciones_vigentes'];
+        $orden    = in_array($ordenCol, $colsPermitidas, true) ? $ordenCol : 'nombre';
+        $ordenDir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
+
+        $visSql = 't.eliminado = false AND t.archivada = false';
+        $params = [];
+        if ($nivel < 3) {
+            $selMail = $this->db->prepare("SELECT mail FROM usuarios WHERE id = :id_u");
+            $selMail->execute([':id_u' => $idUsuario]);
+            $uMail = strtolower(trim((string) $selMail->fetchColumn()));
+
+            $visSql .= " AND (
+                t.created_by = :id_usuario
+                OR t.id IN (
+                    SELECT id_tarea FROM tareas_responsables
+                    WHERE id_usuario = :id_usuario_aux
+                       OR (:u_mail <> '' AND LOWER(correo_cache) = :u_mail_aux)
+                )
+            )";
+            $params[':id_usuario']     = $idUsuario;
+            $params[':id_usuario_aux'] = $idUsuario;
+            $params[':u_mail']         = $uMail;
+            $params[':u_mail_aux']     = $uMail;
+        }
+
+        $buscarSql = '';
+        if ($buscar !== '') {
+            $buscarSql = ' AND (c.nombre ILIKE :b OR c.ruc ILIKE :b2 OR c.correo ILIKE :b3)';
+            $params[':b']  = '%' . $buscar . '%';
+            $params[':b2'] = '%' . $buscar . '%';
+            $params[':b3'] = '%' . $buscar . '%';
+        }
+
+        // Subconsulta única (evita repetir los mismos parámetros con nombre dos veces
+        // en la misma sentencia, que PDO/pgsql no soporta de forma confiable).
+        $baseSql = "FROM clientes_tareas c
+                     JOIN (
+                         SELECT id_cliente, COUNT(DISTINCT id_obligacion) AS n
+                         FROM tareas t
+                         WHERE {$visSql}
+                         GROUP BY id_cliente
+                     ) v ON v.id_cliente = c.id AND v.n > 0
+                     WHERE c.eliminado = false{$buscarSql}";
+
+        $countSt = $this->db->prepare("SELECT COUNT(*) {$baseSql}");
+        $countSt->execute($params);
+        $total = (int) $countSt->fetchColumn();
+
+        $offset = ($page - 1) * $perPage;
+        $sql = "SELECT c.id, c.ruc, c.nombre, c.correo, c.telefono, c.created_at, v.n AS obligaciones_vigentes
+                {$baseSql}
+                ORDER BY {$orden} {$ordenDir}
+                LIMIT :lim OFFSET :off";
+        $st = $this->db->prepare($sql);
+        foreach ($params as $k => $v) {
+            $st->bindValue($k, $v);
+        }
+        $st->bindValue(':lim', $perPage, PDO::PARAM_INT);
+        $st->bindValue(':off', $offset, PDO::PARAM_INT);
+        $st->execute();
+
+        return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
+    }
+
+    /**
+     * Combo vigente de un cliente: una fila por cada obligación con tarea activa
+     * (no archivada), tomando la más reciente por obligación.
+     */
+    public function getComboVigentePorCliente(int $idCliente): array
+    {
+        $sql = "SELECT DISTINCT ON (t.id_obligacion)
+                       t.id, t.id_obligacion, co.nombre AS obligacion_nombre,
+                       t.periodicidad, t.fecha_tarea, t.estado
+                FROM tareas t
+                JOIN cat_obligaciones co ON co.id = t.id_obligacion
+                WHERE t.id_cliente = :id_cliente AND t.eliminado = false AND t.archivada = false
+                ORDER BY t.id_obligacion, t.fecha_tarea DESC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_cliente' => $idCliente]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * true si el cliente ya tiene una tarea activa (no archivada) para esa obligación.
+     */
+    public function existeObligacionActivaParaCliente(int $idCliente, int $idObligacion): bool
+    {
+        $sql = "SELECT 1 FROM tareas
+                WHERE id_cliente = :id_cliente AND id_obligacion = :id_obligacion
+                  AND eliminado = false AND archivada = false
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_cliente' => $idCliente, ':id_obligacion' => $idObligacion]);
+        return (bool) $st->fetchColumn();
     }
 }

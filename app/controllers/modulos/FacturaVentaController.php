@@ -618,22 +618,27 @@ class FacturaVentaController extends BaseModuloController
             }
 
             $telefonoCliente = '593';
+            $saldoPendiente  = 0.0;
             if ($idFactura > 0) {
                 $factura = $this->repository->getPorId($idFactura);
-                if ($factura && !empty($factura['id_cliente'])) {
-                    $stmtCl = $this->db->prepare("SELECT telefono FROM clientes WHERE id = ? AND id_empresa = ? AND eliminado = FALSE");
-                    $stmtCl->execute([(int)$factura['id_cliente'], $idEmpresa]);
-                    $cliente = $stmtCl->fetch(\PDO::FETCH_ASSOC);
-                    if ($cliente && !empty($cliente['telefono'])) {
-                        $tel = trim($cliente['telefono']);
-                        // Si empieza con 0, lo quitamos y agregamos 593
-                        if (str_starts_with($tel, '0')) {
-                            $telefonoCliente = '593' . substr($tel, 1);
-                        } elseif (!str_starts_with($tel, '593')) {
-                            // Si no empieza con 593 ni con 0, le agregamos el 593
-                            $telefonoCliente = '593' . $tel;
-                        } else {
-                            $telefonoCliente = $tel;
+                if ($factura && (int) ($factura['id_empresa'] ?? 0) === $idEmpresa) {
+                    $saldoPendiente = $this->calcularSaldoPendienteTarjeta($factura, $idFactura);
+
+                    if (!empty($factura['id_cliente'])) {
+                        $stmtCl = $this->db->prepare("SELECT telefono FROM clientes WHERE id = ? AND id_empresa = ? AND eliminado = FALSE");
+                        $stmtCl->execute([(int)$factura['id_cliente'], $idEmpresa]);
+                        $cliente = $stmtCl->fetch(\PDO::FETCH_ASSOC);
+                        if ($cliente && !empty($cliente['telefono'])) {
+                            $tel = trim($cliente['telefono']);
+                            // Si empieza con 0, lo quitamos y agregamos 593
+                            if (str_starts_with($tel, '0')) {
+                                $telefonoCliente = '593' . substr($tel, 1);
+                            } elseif (!str_starts_with($tel, '593')) {
+                                // Si no empieza con 593 ni con 0, le agregamos el 593
+                                $telefonoCliente = '593' . $tel;
+                            } else {
+                                $telefonoCliente = $tel;
+                            }
                         }
                     }
                 }
@@ -652,7 +657,8 @@ class FacturaVentaController extends BaseModuloController
                 'ok' => true,
                 'plantillas' => $plantillas,
                 'telefono_cliente' => $telefonoCliente,
-                'id_plantilla_default' => $idPlantillaDefault
+                'id_plantilla_default' => $idPlantillaDefault,
+                'saldo_pendiente' => round($saldoPendiente, 2)
             ]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -671,6 +677,7 @@ class FacturaVentaController extends BaseModuloController
         }
 
         $idEmpresa   = (int) $_SESSION['id_empresa'];
+        $idUsuario   = (int) $_SESSION['id_usuario'];
         $idFactura   = (int) ($_POST['id_factura'] ?? 0);
         $idPlantilla = (int) ($_POST['id_plantilla'] ?? 0);
         $telefono    = preg_replace('/[^0-9]/', '', trim($_POST['telefono'] ?? ''));
@@ -701,6 +708,15 @@ class FacturaVentaController extends BaseModuloController
 
             if (!$plantillaMeta || $plantillaMeta['estado_meta'] !== 'APPROVED') {
                 echo json_encode(['ok' => false, 'error' => 'Plantilla no válida o no aprobada.']);
+                return;
+            }
+
+            $whatsappService = new \App\services\WhatsappService();
+
+            // --- Plantilla especial: enviar el ENLACE DE PAGO CON TARJETA (Payphone) ---
+            // Mismo flujo que prepararPagoTarjetaAjax() (correo), pero el mensaje sale por WhatsApp.
+            if ($plantillaMeta['nombre'] === 'link_pago_payphone') {
+                $this->enviarLinkPagoPorWhatsapp($idEmpresa, $idUsuario, $idFactura, $factura, $plantillaMeta, $telefono, $whatsappService);
                 return;
             }
 
@@ -774,8 +790,6 @@ class FacturaVentaController extends BaseModuloController
             $tmpPdfPath = sys_get_temp_dir() . '/factura_' . $idFactura . '_' . time() . '.pdf';
             file_put_contents($tmpPdfPath, $pdfString);
 
-            $whatsappService = new \App\services\WhatsappService();
-            
             // Subir Media
             $uploadResult = $whatsappService->uploadMessageMedia($idEmpresa, $tmpPdfPath, 'application/pdf');
             unlink($tmpPdfPath); // Borrar temporal inmediatamente
@@ -919,6 +933,188 @@ class FacturaVentaController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => 'Error inesperado: ' . $e->getMessage()]);
         }
         exit;
+    }
+
+    /**
+     * Calcula el saldo pendiente de cobro de una factura (total - cobrado vía ingresos
+     * - pagos con tarjeta/Payphone aprobados que aún no generaron ingreso). Usado tanto
+     * por el envío del enlace de pago por correo como por WhatsApp.
+     */
+    private function calcularSaldoPendienteTarjeta(array $factura, int $idFactura): float
+    {
+        $total = (float) ($factura['importe_total'] ?? 0);
+
+        $stCob = $this->db->prepare(
+            "SELECT COALESCE(SUM(id2.monto_cobrado), 0)
+             FROM ingresos_detalle id2
+             INNER JOIN ingresos_cabecera ic2 ON id2.id_ingreso = ic2.id
+             WHERE id2.tipo_documento = 'FACTURA'
+               AND id2.id_referencia_documento = ?
+               AND ic2.estado != 'anulado'
+               AND ic2.eliminado = false"
+        );
+        $stCob->execute([$idFactura]);
+        $cobrado = (float) $stCob->fetchColumn();
+
+        $stPP = $this->db->prepare(
+            "SELECT COALESCE(SUM(monto), 0)
+             FROM payphone_transacciones
+             WHERE id_empresa    = ?
+               AND modulo        = 'factura_venta'
+               AND id_referencia = ?
+               AND estado        = 'aprobado'
+               AND id_ingreso    IS NULL
+               AND eliminado     = false"
+        );
+        $stPP->execute([(int) $factura['id_empresa'], $idFactura]);
+        $pagadoTarjeta = ((float) $stPP->fetchColumn()) / 100;
+
+        return round($total - $cobrado - $pagadoTarjeta, 2);
+    }
+
+    /**
+     * Genera el enlace de pago con tarjeta (Payphone) y lo envía por WhatsApp usando
+     * la plantilla rápida 'link_pago_payphone'. Replica el flujo de prepararPagoTarjetaAjax()
+     * (correo): misma validación de saldo, mismo anti-duplicado de 15 min y misma
+     * transacción en payphone_transacciones, por lo que el resultado aparece igual en
+     * la pestaña "Pagos" de la factura. La plantilla no lleva botón: el enlace va como
+     * texto plano en el cuerpo (WhatsApp lo vuelve clicable automáticamente).
+     */
+    private function enviarLinkPagoPorWhatsapp(
+        int $idEmpresa,
+        int $idUsuario,
+        int $idFactura,
+        array $factura,
+        array $plantillaMeta,
+        string $telefono,
+        \App\services\WhatsappService $whatsappService
+    ): void {
+        if (($factura['estado'] ?? '') !== 'autorizado') {
+            echo json_encode(['ok' => false, 'error' => 'Solo se pueden pagar facturas autorizadas.']);
+            return;
+        }
+
+        $ppRepo     = new \App\repositories\PayphoneRepository();
+        $formaCobro = $ppRepo->getFormaCobroTarjeta($idEmpresa);
+        if (!$formaCobro) {
+            echo json_encode(['ok' => false, 'error' => 'No hay una forma de cobro de tipo "Tarjeta" activa y configurada para la empresa.']);
+            return;
+        }
+
+        // El enlace de pago por WhatsApp solo aplica si la factura tiene saldo pendiente,
+        // y siempre es por el valor total pendiente de pago (no admite cobro parcial).
+        $saldo = $this->calcularSaldoPendienteTarjeta($factura, $idFactura);
+        if ($saldo <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Esta factura no tiene saldo pendiente de pago; no se puede enviar el enlace.']);
+            return;
+        }
+
+        $montoCobrar = $saldo;
+
+        // Evitar enviar un segundo enlace mientras hay uno pendiente reciente (15 min)
+        $stPend = $this->db->prepare(
+            "SELECT COUNT(*)
+             FROM payphone_transacciones
+             WHERE id_empresa    = ?
+               AND modulo        = 'factura_venta'
+               AND id_referencia = ?
+               AND estado        = 'pendiente'
+               AND eliminado     = false
+               AND created_at >= (CURRENT_TIMESTAMP - INTERVAL '15 minutes')"
+        );
+        $stPend->execute([$idEmpresa, $idFactura]);
+        if ((int) $stPend->fetchColumn() > 0) {
+            echo json_encode(['ok' => false, 'error' => 'Ya existe un enlace de pago pendiente enviado en los últimos 15 minutos. Espera a que el cliente lo complete o a que expire.']);
+            return;
+        }
+
+        $pp     = new \App\Services\PayphoneService($ppRepo);
+        $numero = ($factura['establecimiento'] ?? '001') . '-' . ($factura['punto_emision'] ?? '001') . '-' . str_pad((string) ($factura['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+        $descripcion = 'Factura ' . $numero;
+
+        $host       = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $scheme     = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $urlBaseAbs = $scheme . '://' . $host . rtrim(BASE_URL, '/');
+
+        try {
+            $cajita = $pp->prepararCajita($idEmpresa, [
+                'monto'           => \App\Services\PayphoneService::dolaresACentavos($montoCobrar),
+                'descripcion'     => $descripcion,
+                'modulo'          => 'factura_venta',
+                'id_referencia'   => $idFactura,
+                'url_retorno'     => $urlBaseAbs . '/payphone/retorno',
+                'url_cancelacion' => $urlBaseAbs . '/payphone/cancelacion',
+                'url_exito'       => null,
+                'id_usuario'      => $idUsuario,
+                'id_forma_cobro'  => (int) $formaCobro['id'],
+            ]);
+        } catch (\InvalidArgumentException $ex) {
+            echo json_encode(['ok' => false, 'error' => $ex->getMessage()]);
+            return;
+        }
+
+        if (empty($cajita['ok'])) {
+            echo json_encode(['ok' => false, 'error' => $cajita['mensaje'] ?? 'No se pudo generar el enlace de pago.']);
+            return;
+        }
+
+        $urlPago       = $urlBaseAbs . '/pago/' . $cajita['client_transaction_id'];
+        $nombreCliente = $factura['cliente_nombre'] ?? 'Cliente';
+        $valoresVariables = [$nombreCliente, '$' . number_format($montoCobrar, 2), $descripcion, $urlPago];
+
+        // Armar componentes de Meta: solo BODY (sin cabecera ni botones)
+        $componentes   = json_decode($plantillaMeta['componentes'], true) ?? [];
+        $apiComponents = [];
+        $bodyTexto     = '';
+        foreach ($componentes as $comp) {
+            if (($comp['type'] ?? '') === 'BODY') {
+                $bodyTexto = $comp['text'] ?? '';
+                $parameters = array_map(fn($v) => ['type' => 'text', 'text' => (string) $v], $valoresVariables);
+                $apiComponents[] = ['type' => 'body', 'parameters' => $parameters];
+                break;
+            }
+        }
+
+        $result = $whatsappService->sendTemplateMessage($idEmpresa, $telefono, $plantillaMeta['nombre'], $plantillaMeta['idioma'], $apiComponents);
+
+        if (!$result['success']) {
+            echo json_encode(['ok' => false, 'error' => 'Error enviando el enlace de pago: ' . $result['message']]);
+            return;
+        }
+
+        // Guardar mensaje en BD para historial de chat/webhook (no detiene el flujo si falla)
+        try {
+            $metaMessageId = $result['data']['messages'][0]['id'] ?? null;
+            $repoMsj = new \App\repositories\modulos\WhatsappMensajeRepository();
+            $idChat  = $repoMsj->getOrCreateChat($idEmpresa, $telefono, $nombreCliente, 'Enlace de pago enviado', false);
+
+            $templateTextGuardar = $bodyTexto;
+            foreach ($valoresVariables as $idx => $val) {
+                $templateTextGuardar = str_replace('{{' . ($idx + 1) . '}}', $val, $templateTextGuardar);
+            }
+
+            $repoMsj->saveMessage(
+                $idEmpresa,
+                $idChat,
+                'OUT',
+                $telefono,
+                'template',
+                [
+                    'template'      => $plantillaMeta['nombre'],
+                    'variables'     => $valoresVariables,
+                    'template_text' => $templateTextGuardar,
+                ],
+                $metaMessageId,
+                'sent'
+            );
+        } catch (\Throwable $ex) {
+            error_log('Error guardando mensaje en BD: ' . $ex->getMessage());
+        }
+
+        echo json_encode([
+            'ok'      => true,
+            'mensaje' => 'Enlace de pago por $' . number_format($montoCobrar, 2) . ' enviado por WhatsApp al ' . $telefono,
+        ]);
     }
 
     /**
@@ -1810,37 +2006,7 @@ class FacturaVentaController extends BaseModuloController
                 exit;
             }
 
-            $total = (float) ($factura['importe_total'] ?? 0);
-
-            // Calcular total cobrado real desde ingresos
-            $stCob = $this->db->prepare(
-                "SELECT COALESCE(SUM(id2.monto_cobrado), 0)
-                 FROM ingresos_detalle id2
-                 INNER JOIN ingresos_cabecera ic2 ON id2.id_ingreso = ic2.id
-                 WHERE id2.tipo_documento = 'FACTURA'
-                   AND id2.id_referencia_documento = ?
-                   AND ic2.estado != 'anulado'
-                   AND ic2.eliminado = false"
-            );
-            $stCob->execute([$idFactura]);
-            $cobrado = (float) $stCob->fetchColumn();
-
-            // Pagos con tarjeta (Payphone) APROBADOS aún SIN ingreso vinculado
-            // (los que ya generaron ingreso se cuentan vía la suma de ingresos)
-            $stPP = $this->db->prepare(
-                "SELECT COALESCE(SUM(monto), 0)
-                 FROM payphone_transacciones
-                 WHERE id_empresa    = ?
-                   AND modulo        = 'factura_venta'
-                   AND id_referencia = ?
-                   AND estado        = 'aprobado'
-                   AND id_ingreso    IS NULL
-                   AND eliminado     = false"
-            );
-            $stPP->execute([$idEmpresa, $idFactura]);
-            $pagadoTarjeta = ((float) $stPP->fetchColumn()) / 100;
-
-            $saldo = round($total - $cobrado - $pagadoTarjeta, 2);
+            $saldo = $this->calcularSaldoPendienteTarjeta($factura, $idFactura);
 
             if ($saldo <= 0) {
                 echo json_encode(['ok' => false, 'mensaje' => 'Esta factura ya se encuentra pagada en su totalidad.']);

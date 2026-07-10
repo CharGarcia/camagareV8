@@ -80,7 +80,34 @@ class RolPagoService
         $lin['asiento'] = $esMensual
             ? (new RolAsientoService($this->repo, $this->log))->asientoEmpleado($lin, $idEmpresa, $salario)
             : null;
+        // Detalle de asistencia del mes del rol (contexto de faltas/atrasos/extras).
+        $lin['asistencia'] = $this->getAsistenciaEmpleado(
+            $idEmpresa,
+            (int) $lin['id_empleado'],
+            (int) ($lin['cabecera']['periodo_anio'] ?? 0),
+            (int) ($lin['cabecera']['periodo_mes'] ?? 0)
+        );
         return $lin;
+    }
+
+    /** Asistencia (jornadas) del empleado en el mes del rol: resumen + detalle diario. Silencioso si no está el módulo. */
+    private function getAsistenciaEmpleado(int $idEmpresa, int $idEmpleado, int $anio, int $mes): array
+    {
+        if ($anio < 2000 || $mes < 1 || $mes > 12) {
+            return ['dias' => [], 'resumen' => null];
+        }
+        try {
+            $desde = sprintf('%04d-%02d-01', $anio, $mes);
+            $hasta = date('Y-m-t', strtotime($desde));
+            $jornRepo = new \App\repositories\modulos\AsistenciaJornadaRepository();
+            $resumen  = $jornRepo->getResumenPeriodo($idEmpresa, $desde, $hasta, $idEmpleado);
+            return [
+                'dias'    => $jornRepo->getDiasEmpleado($idEmpresa, $idEmpleado, $desde, $hasta),
+                'resumen' => $resumen[0] ?? null,
+            ];
+        } catch (\Throwable $e) {
+            return ['dias' => [], 'resumen' => null];
+        }
     }
 
     public function crear(array $data): int

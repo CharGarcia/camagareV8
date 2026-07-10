@@ -42,6 +42,7 @@
                                 <option value="aviso_mensajes_pendientes">Aviso de Mensajes Pendientes</option>
                                 <option value="factura_por_cobrar">Factura por Cobrar</option>
                                 <option value="factura_venta">Factura de Venta</option>
+                                <option value="link_pago_payphone">Enviar Link de Pago (Payphone)</option>
                                 <option value="cuenta_por_cobrar">Cuenta por Cobrar</option>
                                 <option value="renovacion_suscripcion">Renovación de Suscripción</option>
                                 <option value="renovacion_firma_electronica">Renovación Firma Electrónica</option>

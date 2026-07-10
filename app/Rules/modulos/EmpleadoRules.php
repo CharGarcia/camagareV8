@@ -71,6 +71,10 @@ class EmpleadoRules
             throw new Exception('El valor de quincena no puede ser negativo.');
         }
 
+        if (!empty($data['atraso_modo']) && !in_array($data['atraso_modo'], ['descuento', 'no_descuenta', 'informativo_reg'], true)) {
+            throw new Exception('El tratamiento de atrasos seleccionado no es válido.');
+        }
+
         if (!empty($data['periodos']) && is_array($data['periodos'])) {
             $this->validatePeriodos($data['periodos']);
         }

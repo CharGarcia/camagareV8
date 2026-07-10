@@ -288,6 +288,7 @@
         $('rolemp_general_body').innerHTML = '<div class="text-center py-4 text-muted">Cargando…</div>';
         $('rolemp_prov_body').innerHTML = '';
         $('rolemp_asiento_body').innerHTML = '';
+        if ($('rolemp_asist_body')) $('rolemp_asist_body').innerHTML = '';
         modalEmp()?.show();
         try {
             const resp = await fetch(`${urlModulo}/getEmpleadoAjax?det=${det}`);
@@ -308,6 +309,7 @@
             renderGeneral(d);
             renderProvisiones(d);
             renderAsiento(d);
+            renderAsistencia(d);
         } catch (e) {
             $('rolemp_general_body').innerHTML = '<div class="text-danger">Error de red.</div>';
         }
@@ -405,6 +407,70 @@
                     </table>
                 </div>
             </div>`;
+    }
+
+    function renderAsistencia(d) {
+        const cont = $('rolemp_asist_body');
+        if (!cont) return;
+        const a = d.asistencia || { dias: [], resumen: null };
+        const dias = a.dias || [];
+        if (!dias.length) {
+            cont.innerHTML = '<div class="text-muted py-4 text-center"><i class="bi bi-clock-history me-1"></i>Sin marcaciones/jornadas registradas para este empleado en el período.</div>';
+            return;
+        }
+        const r = a.resumen || {};
+        const hm = (min) => { const m = parseInt(min, 10) || 0; return m > 0 ? (m + ' min') : '—'; };
+        const hhmm = (ts) => ts ? String(ts).substring(11, 16) : '—';
+        const estadoColor = { completa: 'success', incompleta: 'warning', falta: 'danger', permiso: 'info' };
+        const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+
+        const totFaltas = parseInt(r.dias_falta, 10) || 0;
+        const totAtraso = parseInt(r.atraso_min, 10) || 0;
+        const totExtra = parseInt(r.extra_min, 10) || 0;
+        const totDias = dias.filter(x => (x.estado || '') !== 'falta').length;
+
+        let filas = '';
+        dias.forEach(x => {
+            const ec = estadoColor[x.estado] || 'secondary';
+            const atr = (parseInt(x.atraso_min, 10) || 0);
+            const ext = (parseInt(x.extra_min, 10) || 0);
+            filas += `<tr>
+                <td class="ps-3 small">${esc(String(x.fecha).substring(0, 10).split('-').reverse().join('-'))}</td>
+                <td class="text-center small">${hhmm(x.primera_entrada)}</td>
+                <td class="text-center small">${hhmm(x.ultima_salida)}</td>
+                <td class="text-center small fw-medium">${(parseFloat(x.horas_trabajadas) || 0).toFixed(2)}</td>
+                <td class="text-center small ${atr > 0 ? 'text-danger fw-medium' : 'text-muted'}">${atr > 0 ? atr + ' min' : '—'}</td>
+                <td class="text-center small ${ext > 0 ? 'text-success fw-medium' : 'text-muted'}">${ext > 0 ? ext + ' min' : '—'}</td>
+                <td class="text-center"><span class="badge bg-${ec} bg-opacity-10 text-${ec} border border-${ec} border-opacity-25">${esc(cap(x.estado))}</span></td>
+            </tr>`;
+        });
+
+        cont.innerHTML = `
+            <div class="row g-2 mb-3">
+                <div class="col"><div class="border rounded-3 p-2 text-center"><div class="small text-muted">Días trabajados</div><div class="fw-bold">${totDias}</div></div></div>
+                <div class="col"><div class="border rounded-3 p-2 text-center"><div class="small text-muted">Faltas</div><div class="fw-bold text-danger">${totFaltas}</div></div></div>
+                <div class="col"><div class="border rounded-3 p-2 text-center"><div class="small text-muted">Atraso total</div><div class="fw-bold text-danger">${hm(totAtraso)}</div></div></div>
+                <div class="col"><div class="border rounded-3 p-2 text-center"><div class="small text-muted">Extra total</div><div class="fw-bold text-success">${hm(totExtra)}</div></div></div>
+            </div>
+            <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+                <div class="table-responsive" style="max-height: 320px;">
+                    <table class="table table-sm mb-0 text-nowrap align-middle">
+                        <thead class="table-light border-bottom">
+                            <tr>
+                                <th class="ps-3 py-2 small fw-bold text-muted">Fecha</th>
+                                <th class="py-2 small fw-bold text-muted text-center">Entrada</th>
+                                <th class="py-2 small fw-bold text-muted text-center">Salida</th>
+                                <th class="py-2 small fw-bold text-muted text-center">Horas</th>
+                                <th class="py-2 small fw-bold text-muted text-center">Atraso</th>
+                                <th class="py-2 small fw-bold text-muted text-center">Extra</th>
+                                <th class="py-2 small fw-bold text-muted text-center">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>${filas}</tbody>
+                    </table>
+                </div>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><i class="bi bi-info-circle me-1"></i>Asistencia del mes del rol. Los atrasos se trasladan al rol según el tratamiento de la ficha del empleado.</p>`;
     }
 
     window.rolEmailEmpleado = async function (det) {
