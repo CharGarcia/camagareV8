@@ -508,10 +508,11 @@ class ConfigController extends Controller
         $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
         $c = new MigrarMysqlController();
         $method = match ($sub) {
-            'analizar' => 'analizarAjax',
-            'probar'   => 'probarAjax',
-            'migrar'   => 'migrarAjax',
-            default    => 'index',
+            'analizar'           => 'analizarAjax',
+            'probar'             => 'probarAjax',
+            'migrar'             => 'migrarAjax',
+            'verificar-anuladas' => 'verificarAnuladasAjax',
+            default              => 'index',
         };
         if (method_exists($c, $method)) {
             $c->$method();

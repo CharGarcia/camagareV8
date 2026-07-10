@@ -102,7 +102,14 @@ $base = BASE_URL;
                     </div>
                     <div class="small text-muted mb-2"><i class="bi bi-info-circle me-1"></i>El rango de fechas aplica a los <b>documentos</b> (facturas, compras, NC, retenciones, recibos). Los catálogos se migran completos. Vacío = todo el histórico.</div>
                     <div id="zonaMigrarResultado" class="small"></div>
-                    <div class="form-text mt-1"><i class="bi bi-info-circle me-1"></i>Por ahora está implementada la migración de <b>clientes</b>; el resto se irá habilitando por fases.</div>
+                    <hr class="my-2">
+                    <div class="mb-1">
+                        <button class="btn btn-outline-warning btn-sm" id="btnVerificarAnuladas">
+                            <i class="bi bi-check2-square me-1"></i> Verificar / actualizar facturas anuladas
+                        </button>
+                        <span id="zonaAnuladas" class="small ms-2"></span>
+                    </div>
+                    <div class="form-text"><i class="bi bi-info-circle me-1"></i>Cruza las facturas migradas contra el estado del sistema anterior y marca como <b>anuladas</b> las que corresponda.</div>
                 </div>
             </div>
         </div>
@@ -244,6 +251,30 @@ $base = BASE_URL;
             } catch (e) { logMig(ent, '<span class="text-danger">' + e.message + '</span>'); }
         }
         btn.disabled = false; btn.innerHTML = '<i class="bi bi-database-down me-1"></i> Migrar seleccionados';
+    });
+
+    // Verificar/actualizar facturas anuladas
+    $('btnVerificarAnuladas').addEventListener('click', async () => {
+        const idEmpresa = $('selEmpresa').value;
+        if (!idEmpresa) { alert('Seleccione una empresa.'); return; }
+        const btn = $('btnVerificarAnuladas');
+        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Verificando...';
+        $('zonaAnuladas').innerHTML = '';
+        try {
+            const body = new URLSearchParams();
+            body.append('id_empresa', idEmpresa);
+            const res = await fetch(base + '/config/migrarMysql?action=verificar-anuladas', { method: 'POST', body }).then(r => r.json());
+            if (!res.ok) throw new Error(res.mensaje || 'Error');
+            const d = res.data;
+            $('zonaAnuladas').innerHTML =
+                `<span class="text-success">Anuladas en base anterior: <b>${fmt(d.anuladas_en_viejo)}</b></span> · `
+                + `Actualizadas ahora: <b class="text-success">${fmt(d.actualizadas)}</b> · Ya estaban: <b>${fmt(d.ya_anuladas)}</b> · `
+                + `Anuladas aún sin migrar: <b class="text-warning">${fmt(d.no_migradas)}</b>`;
+        } catch (e) {
+            $('zonaAnuladas').innerHTML = '<span class="text-danger">' + e.message + '</span>';
+        } finally {
+            btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-square me-1"></i> Verificar / actualizar facturas anuladas';
+        }
     });
 
     function logMig(ent, html) {

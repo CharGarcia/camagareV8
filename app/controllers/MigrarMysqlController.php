@@ -93,6 +93,20 @@ class MigrarMysqlController extends Controller
         exit;
     }
 
+    /** POST: verifica y actualiza las facturas anuladas (según estado_sri de la base vieja). */
+    public function verificarAnuladasAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            [$idEmpresa, $ruc] = $this->resolverEmpresa();
+            $data = $this->service->verificarAnuladasFacturas($idEmpresa, $ruc);
+            echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     /** Devuelve [idEmpresa, ruc] de la empresa seleccionada. */
     private function resolverEmpresa(): array
     {

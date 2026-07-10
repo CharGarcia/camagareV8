@@ -1017,6 +1017,35 @@ class MigracionMysqlService
         return $res;
     }
 
+    /**
+     * Verifica en la base vieja qué facturas están anuladas (estado_sri) y actualiza
+     * a 'anulado' las facturas ya migradas que no lo tengan. Idempotente.
+     */
+    public function verificarAnuladasFacturas(int $idEmpresa, string $ruc): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['anuladas_en_viejo' => 0, 'actualizadas' => 0, 'ya_anuladas' => 0, 'no_migradas' => 0];
+        $map = $this->mapaDe($pg, $idEmpresa, 'facturas');
+
+        $st  = $mysql->query("SELECT id_encabezado_factura FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND UPPER(estado_sri) LIKE '%ANULAD%'");
+        $chk = $pg->prepare("SELECT estado FROM ventas_cabecera WHERE id = :id");
+        $upd = $pg->prepare("UPDATE ventas_cabecera SET estado = 'anulado', updated_at = CURRENT_TIMESTAMP WHERE id = :id");
+
+        while ($r = $st->fetch(PDO::FETCH_ASSOC)) {
+            $res['anuladas_en_viejo']++;
+            $new = $map[(string) (int) $r['id_encabezado_factura']] ?? null;
+            if (!$new) { $res['no_migradas']++; continue; }
+            $chk->execute([':id' => $new]);
+            if ($chk->fetchColumn() === 'anulado') { $res['ya_anuladas']++; continue; }
+            $upd->execute([':id' => $new]);
+            $res['actualizadas']++;
+        }
+        return $res;
+    }
+
     /** Cláusula SQL de filtro por rango de fechas (sobre la columna de fecha del documento). */
     private function clausulaFecha(string $col, ?string $desde, ?string $hasta, PDO $mysql): string
     {
