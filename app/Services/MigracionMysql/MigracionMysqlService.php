@@ -34,7 +34,8 @@ class MigracionMysqlService
         'liquidaciones'     => ['label' => 'Liquidaciones de compra',           'tabla' => 'encabezado_liquidacion',     'fecha' => 'fecha_liquidacion', 'tipo' => 'documento'],
         'guias'             => ['label' => 'Guías de remisión',                 'tabla' => 'encabezado_gr',              'fecha' => 'fecha_gr',       'tipo' => 'documento'],
         'compras'           => ['label' => 'Compras',                          'tabla' => 'encabezado_compra',          'fecha' => 'fecha_compra',   'tipo' => 'documento'],
-        'ingresos_egresos'  => ['label' => 'Cobros y pagos (ingresos/egresos)', 'tabla' => 'ingresos_egresos',          'fecha' => 'fecha_ing_egr',  'tipo' => 'documento'],
+        'ingresos'          => ['label' => 'Cobros (ingresos)',                 'tabla' => 'ingresos_egresos',           'fecha' => 'fecha_ing_egr',  'tipo' => 'documento', 'filtro' => "tipo_ing_egr = 'INGRESO'"],
+        'egresos'           => ['label' => 'Pagos (egresos)',                   'tabla' => 'ingresos_egresos',           'fecha' => 'fecha_ing_egr',  'tipo' => 'documento', 'filtro' => "tipo_ing_egr = 'EGRESO'"],
     ];
 
     /** Segundos estimados por registro según tipo (aprox., calibrado en pruebas). */
@@ -64,7 +65,8 @@ class MigracionMysqlService
                 if ($fecha) {
                     $sel .= ", MIN(CASE WHEN `$fecha` >= '2000-01-01' THEN `$fecha` END) AS fmin, MAX(`$fecha`) AS fmax";
                 }
-                $st = $pdo->prepare("SELECT $sel FROM `{$def['tabla']}` WHERE LEFT(ruc_empresa, 10) = :b");
+                $whereF = "LEFT(ruc_empresa, 10) = :b" . (!empty($def['filtro']) ? " AND " . $def['filtro'] : "");
+                $st = $pdo->prepare("SELECT $sel FROM `{$def['tabla']}` WHERE $whereF");
                 $st->execute([':b' => $base]);
                 $row = $st->fetch();
                 $fila['total'] = (int) $row['n'];
@@ -115,6 +117,10 @@ class MigracionMysqlService
                 return $this->migrarLiquidaciones($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'guias':
                 return $this->migrarGuias($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
+            case 'ingresos':
+                return $this->migrarIngresos($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
+            case 'egresos':
+                return $this->migrarEgresos($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -477,6 +483,180 @@ class MigracionMysqlService
 
     /** % de IVA por código SRI (para derivar impuestos del detalle). */
     private const IVA_PCT = ['0' => 0, '2' => 12, '3' => 14, '4' => 15, '5' => 5, '6' => 0, '7' => 0, '8' => 8, '10' => 13];
+
+    /** get-or-create de una forma de cobro/pago por nombre. */
+    private function getOrCreateFormaPago(int $idEmpresa, int $idUsuario, string $nombre, PDO $pg): int
+    {
+        $nombre = trim($nombre) !== '' ? trim($nombre) : 'Efectivo';
+        $st = $pg->prepare("SELECT id FROM empresa_formas_pago WHERE id_empresa = ? AND nombre = ? LIMIT 1");
+        $st->execute([$idEmpresa, $nombre]);
+        $r = $st->fetchColumn();
+        if ($r !== false) { return (int) $r; }
+        $ins = $pg->prepare("INSERT INTO empresa_formas_pago (id_empresa, nombre, activo, tipo, aplica_en, created_by) VALUES (?, ?, true, 'EFECTIVO', 'AMBAS', ?) RETURNING id");
+        $ins->execute([$idEmpresa, $nombre, $idUsuario]);
+        return (int) $ins->fetchColumn();
+    }
+
+    /** Migra cobros (ingresos): cabecera + detalle (enlaza facturas por el mapa) + pagos (forma de cobro). */
+    private function migrarIngresos(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'ingresos', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done       = $this->idsMigrados($pg, $idEmpresa, 'ingresos');
+        $mapFactura = $this->mapaDe($pg, $idEmpresa, 'facturas');
+        $insMap     = $this->stmtMap($pg, 'ingresos');
+
+        // Formas de cobro: pre-crear desde el catálogo viejo (fuera de transacción) + una por defecto
+        $formaCache = [];
+        foreach ($mysql->query("SELECT id, descripcion FROM opciones_cobros_pagos WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $o) {
+            $formaCache[(string) $o['id']] = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, (string) $o['descripcion'], $pg);
+        }
+        $formaDef = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, 'Efectivo', $pg);
+
+        $detStmt   = $mysql->prepare("SELECT valor_ing_egr, detalle_ing_egr, codigo_documento_cv FROM detalle_ingresos_egresos WHERE codigo_documento = :cd AND tipo_documento = 'INGRESO'");
+        $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, fecha_pago, cheque FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'INGRESO'");
+
+        $vc      = $pg->prepare("SELECT id_cliente FROM ventas_cabecera WHERE id = :id");
+        $insCab  = $pg->prepare("INSERT INTO ingresos_cabecera (id_empresa, id_usuario, fecha_emision, secuencial, numero_ingreso, tipo_ingreso, id_cliente, monto_total, observaciones, created_by) VALUES (?, ?, ?, ?, ?, 'FACTURA_VENTA', ?, ?, ?, ?) RETURNING id");
+        $insDet  = $pg->prepare("INSERT INTO ingresos_detalle (id_ingreso, tipo_documento, id_referencia_documento, descripcion, monto_documento, monto_cobrado) VALUES (?, 'FACTURA_VENTA', ?, ?, ?, ?)");
+        $insPago = $pg->prepare("INSERT INTO ingresos_pagos (id_ingreso, id_forma_cobro, monto, fecha_cobro, numero_cheque) VALUES (?, ?, ?, ?, ?)");
+
+        $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional
+                  FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND tipo_ing_egr = 'INGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $stmt = $mysql->query($sql);
+
+        while ($ie = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $ie['id_ing_egr'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            $cod = (string) $ie['codigo_documento'];
+            $sec = str_pad(preg_replace('/\D+/', '', (string) $ie['numero_ing_egr']), 9, '0', STR_PAD_LEFT);
+
+            try {
+                $pg->beginTransaction();
+                $detStmt->execute([':cd' => $cod]);
+                $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $idCliente = null;
+                foreach ($dets as $d) {
+                    $idFac = $mapFactura[(string) (int) $d['codigo_documento_cv']] ?? null;
+                    if ($idFac) { $vc->execute([':id' => $idFac]); $idCliente = ($vc->fetchColumn() ?: null); break; }
+                }
+
+                $insCab->execute([$idEmpresa, $idUsuario, substr((string) $ie['fecha_ing_egr'], 0, 10), $sec, (string) $ie['numero_ing_egr'], $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $idUsuario]);
+                $idIng = (int) $insCab->fetchColumn();
+
+                foreach ($dets as $d) {
+                    $idFac = $mapFactura[(string) (int) $d['codigo_documento_cv']] ?? null;
+                    $insDet->execute([$idIng, $idFac, self::nz($d['detalle_ing_egr']), (float) $d['valor_ing_egr'], (float) $d['valor_ing_egr']]);
+                }
+
+                $formaStmt->execute([':cd' => $cod]);
+                foreach ($formaStmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
+                    $idForma = $formaCache[(string) $f['codigo_forma_pago']] ?? $formaDef;
+                    $insPago->execute([$idIng, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), ((int) $f['cheque']) ?: null]);
+                }
+
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idIng, ':cn' => (string) $ie['numero_ing_egr'], ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
+
+    /** Migra pagos (egresos): cabecera + detalle (enlaza compras) + pagos (forma de pago). */
+    private function migrarEgresos(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'egresos', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done      = $this->idsMigrados($pg, $idEmpresa, 'egresos');
+        $mapCompra = $this->mapaDe($pg, $idEmpresa, 'compras');
+        $insMap    = $this->stmtMap($pg, 'egresos');
+
+        // codigo_documento (string, viejo) → id compra nueva
+        $compraPorCod = [];
+        foreach ($mysql->query("SELECT id_encabezado_compra, codigo_documento FROM encabezado_compra WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $c) {
+            $nid = $mapCompra[(string) (int) $c['id_encabezado_compra']] ?? null;
+            if ($nid) { $compraPorCod[(string) $c['codigo_documento']] = $nid; }
+        }
+
+        // Formas de pago (mismo catálogo que cobros)
+        $formaCache = [];
+        foreach ($mysql->query("SELECT id, descripcion FROM opciones_cobros_pagos WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $o) {
+            $formaCache[(string) $o['id']] = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, (string) $o['descripcion'], $pg);
+        }
+        $formaDef = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, 'Efectivo', $pg);
+
+        $detStmt   = $mysql->prepare("SELECT valor_ing_egr, detalle_ing_egr, codigo_documento_cv FROM detalle_ingresos_egresos WHERE codigo_documento = :cd AND tipo_documento = 'EGRESO'");
+        $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, fecha_pago, cheque FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'EGRESO'");
+
+        $cc      = $pg->prepare("SELECT id_proveedor FROM compras_cabecera WHERE id = :id");
+        $insCab  = $pg->prepare("INSERT INTO egresos_cabecera (id_empresa, fecha_emision, numero_egreso, secuencial, tipo_egreso, tipo_sujeto, id_proveedor, monto_total, observaciones, created_by) VALUES (?, ?, ?, ?, 'COMPRA', 'PROVEEDOR', ?, ?, ?, ?) RETURNING id");
+        $insDet  = $pg->prepare("INSERT INTO egresos_detalle (id_egreso, tipo_documento, id_referencia_documento, descripcion, monto_documento, monto_pagado) VALUES (?, 'COMPRA', ?, ?, ?, ?)");
+        $insPago = $pg->prepare("INSERT INTO egresos_pagos (id_egreso, id_forma_pago, monto, fecha_cobro, numero_cheque) VALUES (?, ?, ?, ?, ?)");
+
+        $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional
+                  FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND tipo_ing_egr = 'EGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $stmt = $mysql->query($sql);
+
+        while ($ie = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $ie['id_ing_egr'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            $cod = (string) $ie['codigo_documento'];
+            $sec = str_pad(preg_replace('/\D+/', '', (string) $ie['numero_ing_egr']), 9, '0', STR_PAD_LEFT);
+
+            try {
+                $pg->beginTransaction();
+                $detStmt->execute([':cd' => $cod]);
+                $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $idProv = null;
+                foreach ($dets as $d) {
+                    $idComp = $compraPorCod[(string) $d['codigo_documento_cv']] ?? null;
+                    if ($idComp) { $cc->execute([':id' => $idComp]); $idProv = ($cc->fetchColumn() ?: null); break; }
+                }
+
+                $insCab->execute([$idEmpresa, substr((string) $ie['fecha_ing_egr'], 0, 10), (string) $ie['numero_ing_egr'], $sec, $idProv, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $idUsuario]);
+                $idEgr = (int) $insCab->fetchColumn();
+
+                foreach ($dets as $d) {
+                    $idComp = $compraPorCod[(string) $d['codigo_documento_cv']] ?? null;
+                    $insDet->execute([$idEgr, $idComp, self::nz($d['detalle_ing_egr']), (float) $d['valor_ing_egr'], (float) $d['valor_ing_egr']]);
+                }
+
+                $formaStmt->execute([':cd' => $cod]);
+                foreach ($formaStmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
+                    $idForma = $formaCache[(string) $f['codigo_forma_pago']] ?? $formaDef;
+                    $insPago->execute([$idEgr, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), ((int) $f['cheque']) ?: null]);
+                }
+
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idEgr, ':cn' => (string) $ie['numero_ing_egr'], ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
 
     /** Migra guías de remisión (cabecera + detalle, sin importes). */
     private function migrarGuias(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
