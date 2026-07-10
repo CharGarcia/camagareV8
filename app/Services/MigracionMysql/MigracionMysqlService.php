@@ -36,6 +36,7 @@ class MigracionMysqlService
         'compras'           => ['label' => 'Compras',                          'tabla' => 'encabezado_compra',          'fecha' => 'fecha_compra',   'tipo' => 'documento'],
         'ingresos'          => ['label' => 'Cobros (ingresos)',                 'tabla' => 'ingresos_egresos',           'fecha' => 'fecha_ing_egr',  'tipo' => 'documento', 'filtro' => "tipo_ing_egr = 'INGRESO'"],
         'egresos'           => ['label' => 'Pagos (egresos)',                   'tabla' => 'ingresos_egresos',           'fecha' => 'fecha_ing_egr',  'tipo' => 'documento', 'filtro' => "tipo_ing_egr = 'EGRESO'"],
+        'inventario'        => ['label' => 'Inventario (kardex)',               'tabla' => 'inventarios',                'fecha' => 'fecha_registro', 'tipo' => 'catalogo'],
     ];
 
     /** Segundos estimados por registro según tipo (aprox., calibrado en pruebas). */
@@ -121,6 +122,8 @@ class MigracionMysqlService
                 return $this->migrarIngresos($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'egresos':
                 return $this->migrarEgresos($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
+            case 'inventario':
+                return $this->migrarInventario($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -483,6 +486,74 @@ class MigracionMysqlService
 
     /** % de IVA por código SRI (para derivar impuestos del detalle). */
     private const IVA_PCT = ['0' => 0, '2' => 12, '3' => 14, '4' => 15, '5' => 5, '6' => 0, '7' => 0, '8' => 8, '10' => 13];
+
+    /** Migra el kardex (tabla inventarios) → inventario_kardex, con saldo corrido por producto/bodega. */
+    private function migrarInventario(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'inventario', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done       = $this->idsMigrados($pg, $idEmpresa, 'inventario');
+        $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
+        $prodPorCod = $this->productosPorCodigo($pg, $idEmpresa);
+        $mapBod     = $this->mapaDe($pg, $idEmpresa, 'bodegas');
+        $insMap     = $this->stmtMap($pg, 'inventario');
+
+        $bodDef = (int) $pg->query("SELECT id FROM bodegas WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false ORDER BY id LIMIT 1")->fetchColumn();
+        if ($bodDef <= 0) {
+            throw new \RuntimeException('La empresa no tiene bodegas activas; cree una antes de migrar inventario.');
+        }
+
+        $qStock = $pg->prepare("SELECT COALESCE(SUM(CASE WHEN tipo_movimiento = 'entrada' THEN cantidad ELSE -cantidad END), 0) FROM inventario_kardex WHERE id_empresa = ? AND id_producto = ? AND id_bodega = ? AND eliminado = false");
+        $ins    = $pg->prepare("INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, tipo_movimiento, referencia_tipo, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, observaciones, created_by) VALUES (?, ?, ?, ?, 'migracion', ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+        $stock  = [];
+
+        $sql = "SELECT id_inventario, id_producto, id_bodega, codigo_producto, nombre_producto, cantidad_entrada, cantidad_salida, costo_unitario, precio, operacion, fecha_registro, referencia, lote
+                  FROM inventarios WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_registro', $desde, $hasta, $mysql) . " ORDER BY fecha_registro, id_inventario";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $stmt = $mysql->query($sql);
+
+        while ($iv = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $iv['id_inventario'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+
+            $esEntrada = strtoupper(trim((string) $iv['operacion'])) === 'ENTRADA';
+            $cant = $esEntrada ? (float) $iv['cantidad_entrada'] : (float) $iv['cantidad_salida'];
+            if ($cant <= 0) { $res['omitidos']++; continue; } // movimiento en cero: ruido, no afecta stock
+
+            try {
+                $pg->beginTransaction();
+                $idProd = $this->resolverOCrearProducto($prodPorCod, $mapProd, (int) $iv['id_producto'], (string) $iv['codigo_producto'], (string) $iv['nombre_producto'], '0', $idEmpresa, $idUsuario, $pg);
+                $idBod  = $mapBod[(string) (int) $iv['id_bodega']] ?? $bodDef;
+                $cu     = (float) ($iv['costo_unitario'] ?: $iv['precio']);
+
+                $key = $idProd . '-' . $idBod;
+                if (!isset($stock[$key])) {
+                    $qStock->execute([$idEmpresa, $idProd, $idBod]);
+                    $stock[$key] = (float) $qStock->fetchColumn();
+                }
+                $ant  = $stock[$key];
+                $post = $esEntrada ? $ant + $cant : $ant - $cant;
+                $stock[$key] = $post;
+
+                $ins->execute([$idEmpresa, $idProd, $idBod, $esEntrada ? 'entrada' : 'salida', substr((string) $iv['fecha_registro'], 0, 19), $cant, $cu, $cant * $cu, $ant, $post, self::nz($iv['lote']), self::nz($iv['referencia']), $idUsuario]);
+                $kid = (int) $ins->fetchColumn();
+
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $kid, ':cn' => (string) $old, ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
 
     /** get-or-create de una forma de cobro/pago por nombre. */
     private function getOrCreateFormaPago(int $idEmpresa, int $idUsuario, string $nombre, PDO $pg): int
