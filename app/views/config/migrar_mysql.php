@@ -247,7 +247,14 @@ $base = BASE_URL;
                 if (!res.ok) { logMig(ent, '<span class="text-danger">' + res.mensaje + '</span>'); continue; }
                 const d = res.data;
                 if (d.no_implementado) { logMig(ent, '<span class="text-muted">próximamente</span>'); continue; }
-                logMig(ent, `<span class="text-success fw-bold">migrados ${fmt(d.migrados)}</span> · vinculados ${fmt(d.vinculados)} · ya estaban ${fmt(d.ya_migrados)} · omitidos ${fmt(d.omitidos)} · errores <span class="${d.errores ? 'text-danger fw-bold' : ''}">${fmt(d.errores)}</span> <span class="text-muted">(de ${fmt(d.total)})</span>`);
+                const partes = [`<span class="text-success fw-bold">migrados ${fmt(d.migrados)}</span>`];
+                if (d.vinculados !== undefined) partes.push(`vinculados ${fmt(d.vinculados)}`);
+                partes.push(`ya estaban ${fmt(d.ya_migrados)}`);
+                if (d.omitidos !== undefined) partes.push(`omitidos <b class="${d.omitidos ? 'text-warning' : ''}">${fmt(d.omitidos)}</b>`);
+                partes.push(`errores <b class="${d.errores ? 'text-danger' : ''}">${fmt(d.errores)}</b>`);
+                let html = partes.join(' · ') + ` <span class="text-muted">(de ${fmt(d.total)})</span>`;
+                if (d.error_muestra) html += `<br><span class="text-danger small">⚠ ${d.error_muestra}</span>`;
+                logMig(ent, html);
             } catch (e) { logMig(ent, '<span class="text-danger">' + e.message + '</span>'); }
         }
         btn.disabled = false; btn.innerHTML = '<i class="bi bi-database-down me-1"></i> Migrar seleccionados';

@@ -670,6 +670,11 @@ class MigracionMysqlService
         $mapBodega  = $this->mapaDe($pg, $idEmpresa, 'bodegas');
         $insMap     = $this->stmtMap($pg, 'facturas');
 
+        // Fallback: clientes existentes en el sistema nuevo por identificación (aunque no estén
+        // en el mapa de migración; p.ej. creados por el importador XML). Prefiere el no eliminado.
+        $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
+        $oldCliRuc   = $mysql->prepare("SELECT ruc FROM clientes WHERE id = :id LIMIT 1");
+
         $cuerpoStmt = $mysql->prepare(
             "SELECT id_producto, cantidad_factura, valor_unitario_factura, subtotal_factura, descuento, tarifa_iva, codigo_producto, nombre_producto, id_bodega
                FROM cuerpo_factura WHERE ruc_empresa = :r AND serie_factura = :s AND secuencial_factura = :sec"
@@ -688,7 +693,13 @@ class MigracionMysqlService
             if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
 
             $idCliente = $mapCliente[(string) $ef['id_cliente']] ?? null;
-            if (!$idCliente) { $res['omitidos']++; continue; } // cliente no migrado
+            if (!$idCliente) {
+                // No está en el mapa: resolver por identificación (RUC del cliente viejo)
+                $oldCliRuc->execute([':id' => (int) $ef['id_cliente']]);
+                $rucCli = trim((string) $oldCliRuc->fetchColumn());
+                if ($rucCli !== '') { $idCliente = $cliPorIdent[$rucCli] ?? null; }
+            }
+            if (!$idCliente) { $res['omitidos']++; continue; } // cliente no existe en el nuevo
 
             $serie = trim((string) $ef['serie_factura']);
             $partes = explode('-', $serie);
@@ -1251,6 +1262,18 @@ class MigracionMysqlService
             $c .= " AND DATE(`$col`) <= " . $mysql->quote($hasta);
         }
         return $c;
+    }
+
+    /** Mapa identificacion => id de los clientes del sistema nuevo (prefiere el no eliminado). */
+    private function clientesPorIdentificacion(PDO $pg, int $idEmpresa): array
+    {
+        $m = [];
+        $q = $pg->prepare("SELECT DISTINCT ON (identificacion) identificacion, id FROM clientes WHERE id_empresa = ? ORDER BY identificacion, eliminado, id");
+        $q->execute([$idEmpresa]);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $m[(string) $r['identificacion']] = (int) $r['id'];
+        }
+        return $m;
     }
 
     /** Mapa id_origen(string) => id_destino(int) de una entidad ya migrada. */
