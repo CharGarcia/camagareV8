@@ -79,6 +79,8 @@ class MigracionMysqlService
                 return $this->migrarBodegas($idEmpresa, $ruc, $idUsuario);
             case 'facturas':
                 return $this->migrarFacturas($idEmpresa, $ruc, $idUsuario, $limite);
+            case 'compras':
+                return $this->migrarCompras($idEmpresa, $ruc, $idUsuario, $limite);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -538,6 +540,95 @@ class MigracionMysqlService
                 }
 
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idVenta, ':cn' => "$estab-$pto-$secuencial", ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); }
+            }
+        }
+        return $res;
+    }
+
+    /**
+     * Migra compras (cabecera + detalle + impuestos) resolviendo proveedor vía el mapa.
+     * El cuerpo liga por codigo_documento. $limite>0 = solo pruebas.
+     */
+    private function migrarCompras(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'compras', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done     = $this->idsMigrados($pg, $idEmpresa, 'compras');
+        $mapProv  = $this->mapaDe($pg, $idEmpresa, 'proveedores');
+        $insMap   = $this->stmtMap($pg, 'compras');
+
+        $insCab = $pg->prepare(
+            "INSERT INTO compras_cabecera (id_empresa, id_proveedor, establecimiento_prov, punto_emision_prov, secuencial_prov, numero_autorizacion, fecha_emision, fecha_registro, importe_total, total_sin_impuestos, total_descuento, propina, observaciones, tipo_registro, tipo_ambiente, id_usuario, created_by)
+             VALUES (:e, :prov, :est, :pto, :sec, :aut, :fe, :fr, :tot, :tsi, :tdes, :prop, :obs, 'migrado', '1', :u, :cb) RETURNING id"
+        );
+        $insDet = $pg->prepare(
+            "INSERT INTO compras_detalle (id_compra, id_producto, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)
+             VALUES (:c, NULL, :cod, :desc, :cant, :pu, :desc2, :base) RETURNING id"
+        );
+        $insImp = $pg->prepare(
+            "INSERT INTO compras_detalle_impuestos (id_compra_detalle, codigo_impuesto, codigo_porcentaje, tarifa, base_imponible, valor)
+             VALUES (:d, '2', :cp, :tar, :base, :val)"
+        );
+        $cuerpoStmt = $mysql->prepare("SELECT codigo_producto, detalle_producto, cantidad, precio, descuento, impuesto, subtotal FROM cuerpo_compra WHERE codigo_documento = :cd");
+
+        $sql = "SELECT id_encabezado_compra, codigo_documento, numero_documento, id_proveedor, aut_sri, fecha_compra, fecha_registro, total_compra, propina
+                  FROM encabezado_compra WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_encabezado_compra";
+        if ($limite > 0) {
+            $sql .= " LIMIT " . (int) $limite;
+        }
+        $stmt = $mysql->query($sql);
+
+        while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $ec['id_encabezado_compra'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            $idProv = $mapProv[(string) $ec['id_proveedor']] ?? null;
+            if (!$idProv) { $res['omitidos']++; continue; } // proveedor no migrado
+
+            $num = explode('-', trim((string) $ec['numero_documento']));
+            $est = str_pad($num[0] ?? '', 3, '0', STR_PAD_LEFT);
+            $pto = str_pad($num[1] ?? '', 3, '0', STR_PAD_LEFT);
+            $sec = str_pad(preg_replace('/\D+/', '', $num[2] ?? ''), 9, '0', STR_PAD_LEFT);
+
+            try {
+                $pg->beginTransaction();
+                $cuerpoStmt->execute([':cd' => $ec['codigo_documento']]);
+                $lineas = $cuerpoStmt->fetchAll(PDO::FETCH_ASSOC);
+                $tsi = 0.0; $tdes = 0.0;
+                foreach ($lineas as $l) { $tsi += (float) $l['subtotal'] - (float) $l['descuento']; $tdes += (float) $l['descuento']; }
+
+                $insCab->execute([
+                    ':e' => $idEmpresa, ':prov' => $idProv, ':est' => $est, ':pto' => $pto, ':sec' => $sec,
+                    ':aut' => self::nz($ec['aut_sri']), ':fe' => substr((string) $ec['fecha_compra'], 0, 10),
+                    ':fr' => substr((string) $ec['fecha_registro'], 0, 19) ?: null, ':tot' => (float) $ec['total_compra'],
+                    ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2), ':prop' => (float) $ec['propina'],
+                    ':obs' => null, ':u' => $idUsuario, ':cb' => $idUsuario,
+                ]);
+                $idCompra = (int) $insCab->fetchColumn();
+
+                foreach ($lineas as $l) {
+                    $base_i = (float) $l['subtotal'] - (float) $l['descuento'];
+                    $insDet->execute([
+                        ':c' => $idCompra, ':cod' => (string) $l['codigo_producto'], ':desc' => (string) ($l['detalle_producto'] ?: $l['codigo_producto'] ?: 'ITEM'),
+                        ':cant' => (float) $l['cantidad'], ':pu' => (float) $l['precio'], ':desc2' => (float) $l['descuento'], ':base' => round($base_i, 2),
+                    ]);
+                    $idDet = (int) $insDet->fetchColumn();
+                    $cod = trim((string) $l['impuesto']);
+                    $pct = self::IVA_PCT[$cod] ?? 0;
+                    $insImp->execute([':d' => $idDet, ':cp' => ($cod === '' ? '0' : $cod), ':tar' => $pct, ':base' => round($base_i, 2), ':val' => round($base_i * $pct / 100, 2)]);
+                }
+
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idCompra, ':cn' => "$est-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
                 $pg->commit();
                 $done[(string) $old] = true;
                 $res['migrados']++;
