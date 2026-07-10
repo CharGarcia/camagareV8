@@ -66,7 +66,7 @@ class MigracionMysqlService
      * Migra una entidad de la empresa (idempotente vía migracion_mysql_map).
      * @return array contadores del proceso
      */
-    public function migrar(string $entidad, int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0): array
+    public function migrar(string $entidad, int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
         switch ($entidad) {
             case 'clientes':
@@ -80,17 +80,17 @@ class MigracionMysqlService
             case 'bodegas':
                 return $this->migrarBodegas($idEmpresa, $ruc, $idUsuario);
             case 'facturas':
-                return $this->migrarFacturas($idEmpresa, $ruc, $idUsuario, $limite);
+                return $this->migrarFacturas($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'compras':
-                return $this->migrarCompras($idEmpresa, $ruc, $idUsuario, $limite);
+                return $this->migrarCompras($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'notas_credito':
-                return $this->migrarNotasCredito($idEmpresa, $ruc, $idUsuario, $limite);
+                return $this->migrarNotasCredito($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'retenciones_compra':
-                return $this->migrarRetencionesCompra($idEmpresa, $ruc, $idUsuario, $limite);
+                return $this->migrarRetencionesCompra($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'retenciones_venta':
-                return $this->migrarRetencionesVenta($idEmpresa, $ruc, $idUsuario, $limite);
+                return $this->migrarRetencionesVenta($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'recibos':
-                return $this->migrarRecibos($idEmpresa, $ruc, $idUsuario, $limite);
+                return $this->migrarRecibos($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -458,7 +458,7 @@ class MigracionMysqlService
      * Migra facturas de venta (cabecera + detalle + impuestos) resolviendo cliente/producto/
      * bodega vía el mapa. Requiere clientes/productos migrados. $limite>0 = solo para pruebas.
      */
-    private function migrarFacturas(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0): array
+    private function migrarFacturas(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
         $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
         $mysql = LegacyMysqlConnection::get();
@@ -479,7 +479,7 @@ class MigracionMysqlService
         );
 
         $sql = "SELECT id_encabezado_factura, ruc_empresa, fecha_factura, serie_factura, secuencial_factura, id_cliente, observaciones_factura, estado_sri, total_factura, ambiente, aut_sri, propina
-                  FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_encabezado_factura";
+                  FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_factura', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_factura";
         if ($limite > 0) {
             $sql .= " LIMIT " . (int) $limite;
         }
@@ -566,7 +566,7 @@ class MigracionMysqlService
      * Migra compras (cabecera + detalle + impuestos) resolviendo proveedor vía el mapa.
      * El cuerpo liga por codigo_documento. $limite>0 = solo pruebas.
      */
-    private function migrarCompras(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0): array
+    private function migrarCompras(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
         $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
         $mysql = LegacyMysqlConnection::get();
@@ -592,7 +592,7 @@ class MigracionMysqlService
         $cuerpoStmt = $mysql->prepare("SELECT codigo_producto, detalle_producto, cantidad, precio, descuento, impuesto, subtotal FROM cuerpo_compra WHERE codigo_documento = :cd");
 
         $sql = "SELECT id_encabezado_compra, codigo_documento, numero_documento, id_proveedor, aut_sri, fecha_compra, fecha_registro, total_compra, propina
-                  FROM encabezado_compra WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_encabezado_compra";
+                  FROM encabezado_compra WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_compra', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_compra";
         if ($limite > 0) {
             $sql .= " LIMIT " . (int) $limite;
         }
@@ -652,7 +652,7 @@ class MigracionMysqlService
     }
 
     /** Migra notas de crédito (cabecera + detalle + impuestos). Mismo patrón que facturas. */
-    private function migrarNotasCredito(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0): array
+    private function migrarNotasCredito(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
         $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
         $mysql = LegacyMysqlConnection::get();
@@ -679,7 +679,7 @@ class MigracionMysqlService
         $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad_nc, valor_unitario_nc, subtotal_nc, descuento, tarifa_iva, codigo_producto, nombre_producto FROM cuerpo_nc WHERE ruc_empresa = :r AND serie_nc = :s AND secuencial_nc = :sec");
 
         $sql = "SELECT id_encabezado_nc, ruc_empresa, fecha_nc, serie_nc, secuencial_nc, factura_modificada, id_cliente, estado_sri, total_nc, ambiente, aut_sri, motivo, fecha_factura
-                  FROM encabezado_nc WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_encabezado_nc";
+                  FROM encabezado_nc WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_nc', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_nc";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -744,7 +744,7 @@ class MigracionMysqlService
     }
 
     /** Migra retenciones de compra (cabecera + detalle) resolviendo proveedor vía el mapa. */
-    private function migrarRetencionesCompra(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0): array
+    private function migrarRetencionesCompra(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
         $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
         $mysql = LegacyMysqlConnection::get();
@@ -766,7 +766,7 @@ class MigracionMysqlService
         $cuerpoStmt = $mysql->prepare("SELECT codigo_impuesto, id_retencion, base_imponible, porcentaje_retencion, valor_retenido, nombre_retencion FROM cuerpo_retencion WHERE ruc_empresa = :r AND serie_retencion = :s AND secuencial_retencion = :sec");
 
         $sql = "SELECT id_encabezado_retencion, ruc_empresa, id_proveedor, serie_retencion, secuencial_retencion, total_retencion, aut_sri, fecha_emision, fecha_documento, tipo_comprobante, numero_comprobante, ambiente
-                  FROM encabezado_retencion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_encabezado_retencion";
+                  FROM encabezado_retencion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_emision', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_retencion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -822,7 +822,7 @@ class MigracionMysqlService
     }
 
     /** Migra retenciones de venta (cabecera + detalle) resolviendo cliente vía el mapa. */
-    private function migrarRetencionesVenta(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0): array
+    private function migrarRetencionesVenta(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
         $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
         $mysql = LegacyMysqlConnection::get();
@@ -844,7 +844,7 @@ class MigracionMysqlService
         $cuerpoStmt = $mysql->prepare("SELECT ejercicio_fiscal, base_imponible, codigo_impuesto, impuesto, porcentaje_retencion, valor_retenido, tipo_documento, numero_documento FROM cuerpo_retencion_venta WHERE codigo_unico = :cu");
 
         $sql = "SELECT id_encabezado_retencion, ruc_empresa, id_cliente, serie_retencion, secuencial_retencion, aut_sri, fecha_emision, codigo_unico, numero_documento
-                  FROM encabezado_retencion_venta WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_encabezado_retencion";
+                  FROM encabezado_retencion_venta WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_emision', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_retencion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -905,7 +905,7 @@ class MigracionMysqlService
     }
 
     /** Migra recibos de venta (cabecera + detalle + impuestos). Patrón de facturas. */
-    private function migrarRecibos(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0): array
+    private function migrarRecibos(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
         $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
         $mysql = LegacyMysqlConnection::get();
@@ -933,7 +933,7 @@ class MigracionMysqlService
         $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad, valor_unitario, subtotal, descuento, tarifa_iva, codigo_producto, nombre_producto, id_bodega FROM cuerpo_recibo WHERE id_encabezado_recibo = :id");
 
         $sql = "SELECT id_encabezado_recibo, fecha_recibo, serie_recibo, secuencial_recibo, id_cliente, total_recibo, propina
-                  FROM encabezado_recibo WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_encabezado_recibo";
+                  FROM encabezado_recibo WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_recibo', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_recibo";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
@@ -997,6 +997,19 @@ class MigracionMysqlService
             }
         }
         return $res;
+    }
+
+    /** Cláusula SQL de filtro por rango de fechas (sobre la columna de fecha del documento). */
+    private function clausulaFecha(string $col, ?string $desde, ?string $hasta, PDO $mysql): string
+    {
+        $c = '';
+        if ($desde && preg_match('/^\d{4}-\d{2}-\d{2}$/', $desde)) {
+            $c .= " AND DATE(`$col`) >= " . $mysql->quote($desde);
+        }
+        if ($hasta && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hasta)) {
+            $c .= " AND DATE(`$col`) <= " . $mysql->quote($hasta);
+        }
+        return $c;
     }
 
     /** Mapa id_origen(string) => id_destino(int) de una entidad ya migrada. */

@@ -73,10 +73,20 @@ $base = BASE_URL;
                     Selecciona una empresa y los datos, y pulsa <b>Analizar</b> para ver cuántos registros hay en la base anterior.
                 </div>
                 <div id="zonaMigrar" class="d-none mt-3">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div class="small text-muted">Migra los datos seleccionados desde la base anterior. Es idempotente (no duplica).</div>
-                        <button class="btn btn-success btn-sm" id="btnMigrar"><i class="bi bi-database-down me-1"></i> Migrar seleccionados</button>
+                    <div class="row g-2 align-items-end mb-2">
+                        <div class="col-auto">
+                            <label class="form-label small mb-0">Desde</label>
+                            <input type="date" class="form-control form-control-sm" id="fDesde">
+                        </div>
+                        <div class="col-auto">
+                            <label class="form-label small mb-0">Hasta</label>
+                            <input type="date" class="form-control form-control-sm" id="fHasta">
+                        </div>
+                        <div class="col text-end">
+                            <button class="btn btn-success btn-sm" id="btnMigrar"><i class="bi bi-database-down me-1"></i> Migrar seleccionados</button>
+                        </div>
                     </div>
+                    <div class="small text-muted mb-2"><i class="bi bi-info-circle me-1"></i>El rango de fechas aplica a los <b>documentos</b> (facturas, compras, NC, retenciones, recibos). Los catálogos se migran completos. Vacío = todo el histórico.</div>
                     <div id="zonaMigrarResultado" class="small"></div>
                     <div class="form-text mt-1"><i class="bi bi-info-circle me-1"></i>Por ahora está implementada la migración de <b>clientes</b>; el resto se irá habilitando por fases.</div>
                 </div>
@@ -158,6 +168,7 @@ $base = BASE_URL;
         if (!entidades.length) { alert('Seleccione al menos un dato.'); return; }
         if (!confirm('¿Migrar los datos seleccionados desde la base anterior? Es idempotente (no duplica).')) return;
 
+        const desde = $('fDesde').value, hasta = $('fHasta').value;
         const btn = $('btnMigrar');
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Migrando...';
         $('zonaMigrarResultado').innerHTML = '';
@@ -167,6 +178,8 @@ $base = BASE_URL;
                 const body = new URLSearchParams();
                 body.append('id_empresa', idEmpresa);
                 body.append('entidad', ent);
+                if (desde) body.append('desde', desde);
+                if (hasta) body.append('hasta', hasta);
                 const res = await fetch(base + '/config/migrarMysql?action=migrar', { method: 'POST', body }).then(r => r.json());
                 if (!res.ok) { logMig(ent, '<span class="text-danger">' + res.mensaje + '</span>'); continue; }
                 const d = res.data;

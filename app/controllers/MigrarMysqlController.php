@@ -83,7 +83,9 @@ class MigrarMysqlController extends Controller
                 throw new \RuntimeException('Entidad no válida.');
             }
             $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
-            $data = $this->service->migrar($entidad, $idEmpresa, $ruc, $idUsuario);
+            $desde = !empty($_POST['desde']) ? (string) $_POST['desde'] : null;
+            $hasta = !empty($_POST['hasta']) ? (string) $_POST['hasta'] : null;
+            $data = $this->service->migrar($entidad, $idEmpresa, $ruc, $idUsuario, 0, $desde, $hasta);
             echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
