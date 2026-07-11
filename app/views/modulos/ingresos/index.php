@@ -2559,7 +2559,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
      Modal Secundario: Seleccionar Documentos Pendientes
      ══════════════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="modalSelDocPendientes" tabindex="-1" aria-labelledby="modalSelDocPendientesLabel">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-md-down">
         <div class="modal-content shadow-lg border-0">
             <div class="modal-header bg-light py-3">
                 <h5 class="modal-title fw-bold" id="modalSelDocPendientesLabel">

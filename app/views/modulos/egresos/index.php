@@ -2655,7 +2655,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <!-- ── Modal Secundario: Selección de Documentos Pendientes de Pago ─────────── -->
 <div class="modal fade" id="modalEgDocsPendientes" tabindex="-1" aria-labelledby="modalEgDocsPendientesLabel">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-md-down">
         <div class="modal-content shadow-lg border-0">
             <div class="modal-header bg-light py-3">
                 <h5 class="modal-title fw-bold" id="modalEgDocsPendientesLabel">

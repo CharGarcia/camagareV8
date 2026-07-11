@@ -38,6 +38,8 @@ if (($rutaModulo ?? '') !== 'modulos/empleados') {
 $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
 ?>
 <style>
+    /* Ancho del modal: un poco más angosto que modal-xl, pero suficiente para las pestañas */
+    #modalEmpleado .modal-dialog { max-width: 1000px; }
     /* Grilla estilo "detalle de factura" para Periodos y Rubros Fijos */
     #modalEmpleado .emp-grid th {
         font-size: 0.7rem !important;
@@ -148,31 +150,21 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                         <!-- Panel General -->
                         <div class="tab-pane fade show active" id="tab-general" role="tabpanel">
                             <div class="row g-3">
-                                <div class="col-md-4">
+                                <!-- Fila 1: Tipo ID · Identificación · Sexo · Fecha Nacimiento · Estado -->
+                                <div class="col-md-2">
                                     <label class="form-label mb-1 small fw-bold text-muted">Tipo ID * <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_tipo_id', 'tipo_id') ?></label>
                                     <select class="form-select form-select-sm shadow-none" name="tipo_id" id="emp_tipo_id" required>
                                         <option value="cedula">Cédula</option>
                                         <option value="pasaporte">Pasaporte</option>
                                     </select>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted d-flex align-items-center gap-1">
                                         Identificación *
                                         <span id="empSriBadge" class="badge d-none" style="font-size:0.6rem;"></span>
                                         <span id="empSriSpinner" class="spinner-border spinner-border-sm text-secondary d-none" style="width:0.75rem;height:0.75rem;" role="status" aria-hidden="true"></span>
                                     </label>
                                     <input type="text" class="form-control form-control-sm shadow-none fw-bold" name="identificacion" id="emp_identificacion" required autocomplete="off">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label mb-1 small fw-bold text-muted d-flex align-items-center">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_estado', 'estado') ?></label>
-                                    <select class="form-select form-select-sm shadow-none" name="estado" id="emp_estado">
-                                        <option value="activo">Activo</option>
-                                        <option value="inactivo">Inactivo</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-10">
-                                    <label class="form-label mb-1 small fw-bold text-muted">Nombres y Apellidos *</label>
-                                    <input type="text" class="form-control form-control-sm shadow-none" name="nombres_apellidos" id="emp_nombres_apellidos" required placeholder="JUAN PEREZ">
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label mb-1 small fw-bold text-muted d-flex align-items-center">Sexo <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_sexo', 'sexo') ?></label>
@@ -182,18 +174,31 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                         <option value="O">O</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="form-label mb-1 small fw-bold text-muted">Correo Electrónico</label>
-                                    <input type="email" class="form-control form-control-sm shadow-none" name="email" id="emp_email">
-                                </div>
                                 <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted">Fecha Nacimiento</label>
                                     <input type="date" class="form-control form-control-sm shadow-none" name="fecha_nacimiento" id="emp_fecha_nacimiento">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label mb-1 small fw-bold text-muted d-flex align-items-center">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_estado', 'estado') ?></label>
+                                    <select class="form-select form-select-sm shadow-none" name="estado" id="emp_estado">
+                                        <option value="activo">Activo</option>
+                                        <option value="inactivo">Inactivo</option>
+                                    </select>
+                                </div>
+                                <!-- Fila 2: Nombres y Apellidos · Correo · Teléfono -->
+                                <div class="col-md-5">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Nombres y Apellidos *</label>
+                                    <input type="text" class="form-control form-control-sm shadow-none" name="nombres_apellidos" id="emp_nombres_apellidos" required placeholder="JUAN PEREZ">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Correo Electrónico</label>
+                                    <input type="email" class="form-control form-control-sm shadow-none" name="email" id="emp_email">
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted">Teléfono</label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="telefono" id="emp_telefono">
                                 </div>
+                                <!-- Fila 3: Dirección · Contacto de Emergencia -->
                                 <div class="col-md-6">
                                     <label class="form-label mb-1 small fw-bold text-muted">Dirección</label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="direccion" id="emp_direccion">
@@ -208,7 +213,8 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                         <!-- Panel Laboral -->
                         <div class="tab-pane fade" id="tab-laboral" role="tabpanel">
                             <div class="row g-3">
-                                <div class="col-md-6">
+                                <!-- Fila 1: Fondos de Reserva · Décimo Tercero · Décimo Cuarto · Aporta al IESS -->
+                                <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted">Fondos de Reserva <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_fondos_reserva', 'fondos_reserva') ?></label>
                                     <select class="form-select form-select-sm shadow-none" name="fondos_reserva" id="emp_fondos_reserva">
                                         <option value="no_se_paga">No se paga</option>
@@ -216,48 +222,45 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                         <option value="planilla">Planilla IESS</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="form-label mb-1 small fw-bold text-muted">Aporta al IESS <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_aporta_iess', 'aporta_iess') ?></label>
-                                    <select class="form-select form-select-sm shadow-none" name="aporta_iess" id="emp_aporta_iess" onchange="window.toggleIessFields()">
-                                        <option value="si">Sí</option>
-                                        <option value="no">No</option>
-                                    </select>
-                                </div>
-                                <div class="col-12" id="container-aportes-iess">
-                                    <div class="row g-2">
-                                        <div class="col-6">
-                                            <label class="form-label mb-1 small fw-bold text-muted">Aporte Personal (%)</label>
-                                            <input type="number" step="0.0001" class="form-control form-control-sm shadow-none iess-field" name="aporte_personal" id="emp_aporte_personal">
-                                        </div>
-                                        <div class="col-6">
-                                            <label class="form-label mb-1 small fw-bold text-muted">Aporte Patronal (%)</label>
-                                            <input type="number" step="0.0001" class="form-control form-control-sm shadow-none iess-field" name="aporte_patronal" id="emp_aporte_patronal">
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted">Décimo Tercero <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_decimo_tercero', 'decimo_tercero') ?></label>
                                     <select class="form-select form-select-sm shadow-none" name="decimo_tercero" id="emp_decimo_tercero">
                                         <option value="acumula">Acumula</option>
                                         <option value="mensualiza">Mensualiza</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted">Décimo Cuarto <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_decimo_cuarto', 'decimo_cuarto') ?></label>
                                     <select class="form-select form-select-sm shadow-none" name="decimo_cuarto" id="emp_decimo_cuarto">
                                         <option value="acumula">Acumula</option>
                                         <option value="mensualiza">Mensualiza</option>
                                     </select>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Aporta al IESS <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_aporta_iess', 'aporta_iess') ?></label>
+                                    <select class="form-select form-select-sm shadow-none" name="aporta_iess" id="emp_aporta_iess" onchange="window.toggleIessFields()">
+                                        <option value="si">Sí</option>
+                                        <option value="no">No</option>
+                                    </select>
+                                </div>
+                                <!-- Fila 2: Aporte Personal · Aporte Patronal (condicionales) · Sueldo Base · V. Semanal · V. Quincena -->
+                                <div class="col-md-3 col-aporte-iess">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Aporte Personal (%)</label>
+                                    <input type="number" step="0.0001" class="form-control form-control-sm shadow-none iess-field" name="aporte_personal" id="emp_aporte_personal">
+                                </div>
+                                <div class="col-md-3 col-aporte-iess">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Aporte Patronal (%)</label>
+                                    <input type="number" step="0.0001" class="form-control form-control-sm shadow-none iess-field" name="aporte_patronal" id="emp_aporte_patronal">
+                                </div>
+                                <div class="col-md-2">
                                     <label class="form-label mb-1 small fw-bold text-muted">Sueldo Base ($)</label>
                                     <input type="number" step="0.01" class="form-control form-control-sm shadow-none fw-bold" name="sueldo_base" id="emp_sueldo_base">
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-2">
                                     <label class="form-label mb-1 small fw-bold text-muted">V. Semanal</label>
                                     <input type="number" step="0.01" class="form-control form-control-sm shadow-none" name="valor_semanal" id="emp_valor_semanal">
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-2">
                                     <label class="form-label mb-1 small fw-bold text-muted">V. Quincena</label>
                                     <input type="number" step="0.01" class="form-control form-control-sm shadow-none" name="valor_quincena" id="emp_valor_quincena">
                                 </div>
@@ -267,7 +270,7 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                         <!-- Panel Puesto -->
                         <div class="tab-pane fade" id="tab-puesto" role="tabpanel">
                             <div class="row g-3">
-                                <div class="col-md-6">
+                                <div class="col-md-2">
                                     <label class="form-label mb-1 small fw-bold text-muted">Región <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_region', 'region') ?></label>
                                     <select class="form-select form-select-sm shadow-none" name="region" id="emp_region">
                                         <option value="costa">Costa</option>
@@ -276,23 +279,19 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                         <option value="insular">Insular</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-2">
                                     <label class="form-label mb-1 small fw-bold text-muted">Departamento</label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="departamento" id="emp_departamento">
                                 </div>
-                                <div class="col-12">
+                                <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted">Cargo</label>
                                     <input type="text" class="form-control form-control-sm shadow-none text-uppercase" name="cargo" id="emp_cargo">
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <label class="form-label mb-1 small fw-bold text-muted">Lugar de Trabajo</label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="lugar_trabajo" id="emp_lugar_trabajo">
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="form-label mb-1 small fw-bold text-muted">Horario de Trabajo</label>
-                                    <input type="text" class="form-control form-control-sm shadow-none" name="horario_trabajo" id="emp_horario_trabajo" placeholder="Ej: 08:00-17:00">
-                                </div>
-                                <div class="col-12">
+                                <div class="col-md-2">
                                     <label class="form-label mb-1 small fw-bold text-muted">Cód. Sectorial IESS</label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="codigo_sectorial_iess" id="emp_codigo_sectorial_iess">
                                 </div>

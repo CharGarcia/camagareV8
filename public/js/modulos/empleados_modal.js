@@ -10,12 +10,12 @@
     const formEmp = document.getElementById('formEmpleado');
     const alertElEmp = document.getElementById('modalAlert');
 
-    // Opciones para la pestaña Horario (turnos + puntos). Se cargan una vez y se cachean.
-    let horarioOpts = null;
+    // Opciones para la pestaña Horario (turnos + puntos). Se refrescan en cada apertura
+    // del modal para reflejar los turnos creados recientemente (no se cachean de forma fija).
+    let horarioOpts = { horarios: [], puntos: [] };
     async function cargarOpcionesHorario() {
-        if (horarioOpts) return horarioOpts;
         try {
-            const resp = await fetch(`${urlModuloEmp}/opcionesHorarioAjax`);
+            const resp = await fetch(`${urlModuloEmp}/opcionesHorarioAjax?_=${Date.now()}`);
             const j = await resp.json();
             horarioOpts = j.ok ? { horarios: j.horarios || [], puntos: j.puntos || [] } : { horarios: [], puntos: [] };
         } catch (e) {
@@ -43,7 +43,7 @@
         document.querySelector('#tablaRubros tbody').innerHTML = '';
         const tAsg = document.querySelector('#tablaAsignaciones tbody'); if (tAsg) tAsg.innerHTML = '';
         const asgJson = document.getElementById('asignaciones_horario_json'); if (asgJson) asgJson.value = '[]';
-        cargarOpcionesHorario(); // precarga turnos/puntos para la pestaña Horario
+        cargarOpcionesHorario(); // refresca turnos/puntos (fire-and-forget; se re-consulta al agregar fila)
         if (alertElEmp) alertElEmp.classList.add('d-none');
 
         // Cargar defaults IESS
@@ -125,7 +125,6 @@
                 document.getElementById('emp_departamento').value = d.departamento || '';
                 document.getElementById('emp_cargo').value = d.cargo || '';
                 document.getElementById('emp_lugar_trabajo').value = d.lugar_trabajo || '';
-                document.getElementById('emp_horario_trabajo').value = d.horario_trabajo || '';
                 document.getElementById('emp_codigo_sectorial_iess').value = d.codigo_sectorial_iess || '';
                 var _atr = document.getElementById('emp_atraso_modo'); if (_atr) _atr.value = d.atraso_modo || 'no_descuenta';
 
@@ -156,15 +155,15 @@
 
     window.toggleIessFields = async function() {
         const aporta = document.getElementById('emp_aporta_iess')?.value;
-        const container = document.getElementById('container-aportes-iess');
+        const cols = document.querySelectorAll('.col-aporte-iess');
         const fields = document.querySelectorAll('.iess-field');
-        if (!container) return;
+        if (!cols.length) return;
 
         if (aporta === 'no') {
-            container.classList.add('d-none');
+            cols.forEach(c => c.classList.add('d-none'));
             fields.forEach(f => { f.value = '0'; f.readOnly = true; });
         } else {
-            container.classList.remove('d-none');
+            cols.forEach(c => c.classList.remove('d-none'));
             fields.forEach(f => { f.readOnly = false; });
             const vPers = parseFloat(document.getElementById('emp_aporte_personal')?.value || '0');
             if (vPers === 0) {
@@ -230,25 +229,29 @@
         window.toggleRubroIess(row.querySelector('.rb-tipo'));
     };
 
-    window.agregarFilaAsignacion = function (data = {}) {
+    window.agregarFilaAsignacion = async function (data = {}) {
         const tbody = document.querySelector('#tablaAsignaciones tbody');
         if (!tbody) return;
+        const nuevoClick = Object.keys(data).length === 0;
+        // Al agregar manualmente, refresca los turnos por si se crearon recién.
+        if (nuevoClick || !horarioOpts.horarios.length) await cargarOpcionesHorario();
         const opts = horarioOpts || { horarios: [], puntos: [] };
         const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-        const nuevo = Object.keys(data).length === 0;
-        if (nuevo && !opts.horarios.length) {
+        if (nuevoClick && !opts.horarios.length) {
             if (window.Swal) Swal.fire({ icon: 'info', title: 'No hay turnos', text: 'Primero crea turnos en el módulo «Horarios y turnos».' });
             else alert('Primero crea turnos en el módulo Horarios y turnos.');
             return;
         }
         const optHor = opts.horarios.map(h => `<option value="${h.id}" ${String(data.id_horario) === String(h.id) ? 'selected' : ''}>${esc(h.nombre)}</option>`).join('');
         const optPun = ['<option value="">— Sin punto —</option>'].concat(opts.puntos.map(p => `<option value="${p.id}" ${String(data.id_punto) === String(p.id) ? 'selected' : ''}>${esc(p.nombre)}</option>`)).join('');
+        // "Vigente desde" es obligatorio: en filas nuevas se precarga con hoy para no perderlas al guardar.
+        const desdeVal = data.vigente_desde ? String(data.vigente_desde).substring(0, 10) : (nuevoClick ? new Date().toISOString().slice(0, 10) : '');
         const row = document.createElement('tr');
         row.className = 'row-emp';
         row.innerHTML = `
             <td class="ps-2"><select class="form-select form-select-sm input-emp asg-horario">${optHor}</select></td>
             <td><select class="form-select form-select-sm input-emp asg-punto">${optPun}</select></td>
-            <td><input type="date" class="form-control form-control-sm input-emp asg-desde" value="${(data.vigente_desde || '').substring(0, 10)}"></td>
+            <td><input type="date" class="form-control form-control-sm input-emp asg-desde" value="${desdeVal}"></td>
             <td><input type="date" class="form-control form-control-sm input-emp asg-hasta" value="${(data.vigente_hasta || '').substring(0, 10)}"></td>
             <td class="text-center"><button type="button" class="btn btn-sm p-1 border-0 remove-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
         `;
