@@ -1179,6 +1179,33 @@ class FacturaVentaController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Relaciones de la factura con otros módulos (proforma, etc.) que tengan datos.
+     * Devuelve solo las relaciones aplicables, para armar pestañas dinámicas.
+     */
+    public function getRelacionesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        if (!$id) {
+            echo json_encode(['ok' => true, 'relaciones' => []]);
+            exit;
+        }
+
+        $factura = $this->repository->getPorId($id);
+        if (!$factura || (int) ($factura['id_empresa'] ?? 0) !== $idEmpresa) {
+            echo json_encode(['ok' => false, 'relaciones' => []]);
+            exit;
+        }
+
+        $svc = new \App\Services\modulos\FacturaRelacionesService();
+        echo json_encode(['ok' => true, 'relaciones' => $svc->getRelaciones($factura, $idEmpresa)]);
+        exit;
+    }
+
     public function getClientesAjax(): void
     {
         $this->requireLeer();

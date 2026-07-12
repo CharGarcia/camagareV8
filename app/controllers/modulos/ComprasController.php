@@ -612,8 +612,8 @@ class ComprasController extends BaseModuloController
             $invSrv  = new \App\Services\modulos\InventarioService($invRepo, new \App\Services\LogSistemaService());
 
             foreach ($detalles as $det) {
-                // Revertir movimientos asociados a cada ítem
-                $invSrv->revertirMovimientosPorReferencia('compra_item', (int)$det['id'], $idEmpresa, $idUsuario);
+                // Revertir movimientos asociados a cada ítem (mismo referencia_tipo usado al insertar en procesarInventarioAjax)
+                $invSrv->revertirMovimientosPorReferencia('compra', (int)$det['id'], $idEmpresa, $idUsuario);
             }
 
             // 2. Eliminar la compra (lógico)

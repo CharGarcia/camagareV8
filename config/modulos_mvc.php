@@ -317,6 +317,21 @@ return [
         'id_submodulo' => 39,
         'legacy_rutas' => [],
     ],
+    'modulos/reporte_trazabilidad_productos' => [
+        // Registrar el submódulo en submodulos_menu (id_modulo = 9, Reportes) con
+        // ruta = 'modulos/reporte_trazabilidad_productos', y actualizar este
+        // id_submodulo con el id real. Asignar permisos en /config/permisos-modulos.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+    'modulos/reporte_inventarios' => [
+        // Registrar el submódulo en submodulos_menu (id_modulo = 9, Reportes) con
+        // ruta = 'modulos/reporte_inventarios' (ver database/migrations/
+        // 20260712_create_reporte_inventarios_submodulo.sql), y actualizar este
+        // id_submodulo con el id real. Asignar permisos en /config/permisos-modulos.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
 
     // ─── CUENTAS POR COBRAR ───────────────────────────────────────────────────
     'modulos/cuentas_por_cobrar' => [

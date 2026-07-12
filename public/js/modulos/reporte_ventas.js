@@ -80,88 +80,76 @@ document.addEventListener('DOMContentLoaded', function () {
         }, 300);
     });
 
-    // Buscador predictivo de Productos
-    let debounceTimerProducto;
-    const searchProducto = document.getElementById('rv-search-producto');
-    const dropdownProducto = document.getElementById('rv-dropdown-productos');
-    const chipsProducto = document.getElementById('rv-chips-producto');
-
-    searchProducto.addEventListener('input', function () {
-        clearTimeout(debounceTimerProducto);
-        const search = this.value.trim();
-        
-        if (search.length < 2) {
-            dropdownProducto.classList.add('d-none');
-            return;
-        }
-
-        debounceTimerProducto = setTimeout(() => {
-            fetch(BASE_URL + '/' + RUTA_MODULO + '/getProductosAjax?q=' + encodeURIComponent(search))
-                .then(res => res.json())
-                .then(data => {
-                    dropdownProducto.innerHTML = '';
-                    const items = data.items || data.data || data.rows || data;
-                    if (items && items.length > 0) {
-                        items.forEach(item => {
-                            const btn = document.createElement('button');
-                            btn.type = 'button';
-                            btn.className = 'list-group-item list-group-item-action py-2';
-                            btn.style.fontSize = '0.85rem';
-                            btn.dataset.id = item.id;
-                            const nombre = item.nombre || item.text;
-                            btn.dataset.nombre = nombre;
-                            btn.innerHTML = `<strong>${nombre}</strong><br><small class="text-muted">Cod: ${item.codigo || ''}</small>`;
-                            
-                            btn.addEventListener('click', function() {
-                                searchProducto.value = '';
-                                dropdownProducto.classList.add('d-none');
-                                
-                                if (!chipsProducto.querySelector(`input[value="${item.id}"]`)) {
-                                    const chip = document.createElement('span');
-                                    chip.className = 'badge bg-success bg-opacity-10 text-success border border-success d-flex align-items-center justify-content-between mb-1 text-start';
-                                    chip.style.fontSize = '0.75rem';
-                                    chip.style.width = '100%';
-                                    chip.style.whiteSpace = 'normal';
-                                    chip.innerHTML = `
-                                        <span class="text-truncate me-2">${nombre}</span>
-                                        <input type="hidden" name="id_producto[]" value="${item.id}">
-                                        <button type="button" class="btn-close btn-close-sm flex-shrink-0" style="font-size:0.5rem;"></button>
-                                    `;
-                                    chip.querySelector('button').addEventListener('click', function() {
-                                        chip.remove();
-                                        window.RV_generarReporte();
-                                    });
-                                    chipsProducto.appendChild(chip);
-                                    window.RV_generarReporte();
-                                }
-                            });
-                            
-                            dropdownProducto.appendChild(btn);
-                        });
-                        dropdownProducto.classList.remove('d-none');
-                    } else {
-                        dropdownProducto.innerHTML = '<div class="list-group-item text-muted small">No se encontraron productos</div>';
-                        dropdownProducto.classList.remove('d-none');
-                    }
-                })
-                .catch(err => console.error(err));
-        }, 300);
-    });
+    // ── Buscadores predictivos de texto: Producto (ítems de venta) e Info adicional ──
+    RV_predictivoTexto('rv-producto-texto', 'rv-dropdown-items', 'buscarItemsAjax', 'Sin ítems que coincidan');
+    RV_predictivoTexto('rv-buscar-info',    'rv-dropdown-info',  'buscarInfoAdicionalAjax', 'Sin coincidencias');
 
     // Cerrar dropdowns al hacer clic fuera
     document.addEventListener('click', function (e) {
         if (!searchCliente.contains(e.target) && !dropdownCliente.contains(e.target)) {
             dropdownCliente.classList.add('d-none');
         }
-        if (!searchProducto.contains(e.target) && !dropdownProducto.contains(e.target)) {
-            dropdownProducto.classList.add('d-none');
-        }
+        ['rv-producto-texto|rv-dropdown-items', 'rv-buscar-info|rv-dropdown-info'].forEach(par => {
+            const [inpId, ddId] = par.split('|');
+            const inp = document.getElementById(inpId), dd = document.getElementById(ddId);
+            if (inp && dd && !inp.contains(e.target) && !dd.contains(e.target)) dd.classList.add('d-none');
+        });
     });
 
     // Vincular selectores de Mes y Año
     document.getElementById('rv-mes').addEventListener('change', window.RV_cambiarMesAnio);
     document.getElementById('rv-anio').addEventListener('change', window.RV_cambiarMesAnio);
 });
+
+// Buscador predictivo genérico de texto: rellena el input con el valor elegido y regenera.
+function RV_predictivoTexto(inputId, dropdownId, endpoint, msgVacio) {
+    const input = document.getElementById(inputId);
+    const dd    = document.getElementById(dropdownId);
+    if (!input || !dd) return;
+    let timer;
+    input.addEventListener('input', function () {
+        clearTimeout(timer);
+        const q = this.value.trim();
+        if (q.length < 2) { dd.classList.add('d-none'); return; }
+        timer = setTimeout(() => {
+            fetch(BASE_URL + '/' + RUTA_MODULO + '/' + endpoint + '?q=' + encodeURIComponent(q))
+                .then(r => r.json())
+                .then(data => {
+                    dd.innerHTML = '';
+                    const items = data.data || [];
+                    if (items.length) {
+                        items.forEach(it => {
+                            const btn = document.createElement('button');
+                            btn.type = 'button';
+                            btn.className = 'list-group-item list-group-item-action py-2 px-3';
+                            btn.style.cssText = 'font-size:.82rem;white-space:normal;line-height:1.25;word-break:break-word;';
+                            if (it.sub) {
+                                const s = document.createElement('small');
+                                s.className = 'text-muted text-uppercase d-block';
+                                s.style.cssText = 'font-size:.58rem;letter-spacing:.02em;';
+                                s.textContent = it.sub;
+                                btn.appendChild(s);
+                            }
+                            const main = document.createElement('span');
+                            main.textContent = it.label;
+                            btn.appendChild(main);
+                            btn.title = it.sub ? (it.sub + ': ' + it.label) : it.label;
+                            btn.addEventListener('click', function () {
+                                input.value = it.valor;
+                                dd.classList.add('d-none');
+                                window.RV_generarReporte();
+                            });
+                            dd.appendChild(btn);
+                        });
+                    } else {
+                        dd.innerHTML = `<div class="list-group-item text-muted small">${msgVacio}</div>`;
+                    }
+                    dd.classList.remove('d-none');
+                })
+                .catch(err => console.error(err));
+        }, 300);
+    });
+}
 
 // Maneja el cambio de "Agrupar Por": al elegir "Por Mes" se fuerza el filtro Mes a "Todos".
 window.RV_onAgruparChange = function() {

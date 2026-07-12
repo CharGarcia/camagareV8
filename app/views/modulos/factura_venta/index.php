@@ -2342,6 +2342,8 @@ $totalPages = $totalPagesOriginal;
 
     function fvResetearModal() {
         window.ASIENTO_MANUAL = false;
+        // Quitar pestañas de módulos relacionados de la factura anterior.
+        fvLimpiarPestanhasRelacionadas();
         document.getElementById('formFacturaModal').reset();
         document.getElementById('m-tbodyDetalle').innerHTML = '';
         document.getElementById('m-id-cliente').value = '';
@@ -4448,6 +4450,58 @@ $totalPages = $totalPagesOriginal;
         tr.querySelector('.input-info-concepto').focus();
     };
 
+    // ── Pestañas dinámicas de módulos relacionados (antes de la pestaña SRI) ──
+    function fvLimpiarPestanhasRelacionadas() {
+        document.querySelectorAll('#modalNuevaFactura .fv-rel-tab, #modalNuevaFactura .fv-rel-pane')
+            .forEach(el => el.remove());
+    }
+
+    async function fvCargarPestanhasRelacionadas(idFactura) {
+        fvLimpiarPestanhasRelacionadas();
+        idFactura = parseInt(idFactura) || 0;
+        if (!idFactura) return;
+
+        try {
+            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getRelacionesAjax?id=${idFactura}`);
+            const json = await resp.json();
+            if (!json.ok || !Array.isArray(json.relaciones) || json.relaciones.length === 0) return;
+
+            const nav     = document.getElementById('tabsFacturaVenta');
+            const sriLi    = document.getElementById('tab-fv-sri-btn')?.closest('.nav-item');
+            const content = document.querySelector('#modalNuevaFactura .tab-content.border-top');
+            const sriPane = document.getElementById('m-tab-respuestas-sri');
+            if (!nav || !sriLi || !content || !sriPane) return;
+
+            json.relaciones.forEach(rel => {
+                const paneId = 'm-tab-rel-' + rel.key;
+                const icono  = rel.icono || 'bi-link-45deg';
+
+                // Pestaña (nav), insertada ANTES de la de SRI
+                const li = document.createElement('li');
+                li.className = 'nav-item fv-rel-tab';
+                li.innerHTML = `<a class="nav-link py-2 small" id="tab-fv-rel-${rel.key}-btn" data-bs-toggle="tab" href="#${paneId}" role="tab" style="white-space:nowrap;"><i class="bi ${icono} me-1"></i> ${rel.label}</a>`;
+                nav.insertBefore(li, sriLi);
+
+                // Contenido: resumen (campos) + botón para abrir el documento
+                const r = rel.resumen || {};
+                const campos = (r.campos || []).map(c =>
+                    `<div class="col-6 col-md-4 mb-2"><div class="small text-muted">${c.label}</div><div class="fw-semibold">${(c.valor ?? '')}</div></div>`
+                ).join('');
+                const pane = document.createElement('div');
+                pane.className = 'tab-pane fade p-3 fv-rel-pane';
+                pane.id = paneId;
+                pane.setAttribute('role', 'tabpanel');
+                pane.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <h6 class="fw-bold mb-0"><i class="bi ${icono} me-2 text-primary"></i>${rel.label}${r.numero ? ' · ' + r.numero : ''}</h6>
+                        ${r.url_abrir ? `<a href="${r.url_abrir}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm"><i class="bi bi-box-arrow-up-right me-1"></i>Abrir ${rel.label}</a>` : ''}
+                    </div>
+                    <div class="row">${campos || '<div class="col-12 text-muted small">Sin datos.</div>'}</div>`;
+                content.insertBefore(pane, sriPane);
+            });
+        } catch (e) { /* silencioso: las pestañas relacionadas son informativas */ }
+    }
+
     window.abrirModalFacturaVer = async function(row) {
         const data = JSON.parse(row.dataset.row);
         const id = parseInt(data.id) || 0;
@@ -4456,6 +4510,8 @@ $totalPages = $totalPagesOriginal;
         FV_BLOQUEAR_SECUENCIAL = true;
         fvResetearModal();
         FV_ID_ACTIVO = id;
+        // Pestañas de módulos relacionados (proforma, etc.) — solo las que tengan datos.
+        fvCargarPestanhasRelacionadas(id);
         FV_FECHA_EMISION = (data.fecha_emision || '').split(' ')[0].split('T')[0] || null;
         FV_CLIENTE_RUC   = (data.cliente_ruc || '').trim();
 

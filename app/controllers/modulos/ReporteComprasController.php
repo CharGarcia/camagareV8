@@ -52,7 +52,9 @@ class ReporteComprasController extends BaseModuloController
             'fecha_hasta'       => $_REQUEST['fecha_hasta']       ?? '',
             'id_proveedor'      => $_REQUEST['id_proveedor']      ?? '',
             'id_producto'       => $_REQUEST['id_producto']       ?? '',
+            'producto_texto'    => trim($_REQUEST['producto_texto'] ?? ''),
             'tipo_comprobante'  => $_REQUEST['tipo_comprobante']  ?? '',
+            'buscar_info'       => trim($_REQUEST['buscar_info']  ?? ''),
         ];
     }
 
@@ -229,6 +231,30 @@ class ReporteComprasController extends BaseModuloController
         $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, 'compra');
 
         echo json_encode(['ok' => true, 'data' => $result['rows']]);
+        exit;
+    }
+
+    /** Autocompletado de ítems de compra (descripciones distintas de compras_detalle). */
+    public function buscarItemsAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q = trim($_GET['q'] ?? '');
+        $data = $this->repository->buscarItems($idEmpresa, $q);
+        echo json_encode(['ok' => true, 'data' => $data]);
+        exit;
+    }
+
+    /** Autocompletado de info adicional (nombre/valor distintos de compras_adicional). */
+    public function buscarInfoAdicionalAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q = trim($_GET['q'] ?? '');
+        $data = $this->repository->buscarInfoAdicional($idEmpresa, $q);
+        echo json_encode(['ok' => true, 'data' => $data]);
         exit;
     }
 

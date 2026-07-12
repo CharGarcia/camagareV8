@@ -255,6 +255,12 @@ $base = BASE_URL;
                 let html = partes.join(' · ') + ` <span class="text-muted">(de ${fmt(d.total)})</span>`;
                 if (d.error_muestra) html += `<br><span class="text-danger small">⚠ ${d.error_muestra}</span>`;
                 if (d.omitidos > 0) html += `<br><span class="text-warning small">ℹ ${fmt(d.omitidos)} omitido(s): el documento de origen no tiene cliente/proveedor con identificación (RUC/cédula).</span>`;
+                if (d.vinculados > 0) {
+                    const muestra = (d.vinculados_muestra && d.vinculados_muestra.length)
+                        ? ': ' + d.vinculados_muestra.map(x => String(x).replace(/</g, '&lt;')).join(', ') + (d.vinculados > d.vinculados_muestra.length ? '…' : '')
+                        : '';
+                    html += `<br><span class="text-info small">ℹ ${fmt(d.vinculados)} ya existía(n) en el sistema (mismo nombre/identificación o número) → se vincularon, NO se duplicaron${muestra}</span>`;
+                }
                 logMig(ent, html);
             } catch (e) { logMig(ent, '<span class="text-danger">' + e.message + '</span>'); }
         }

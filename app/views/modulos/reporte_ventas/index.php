@@ -28,7 +28,7 @@
                 <div class="accordion-body bg-light bg-opacity-10 p-3 pt-2">
                     <form id="form-filtros-reporte" onsubmit="event.preventDefault(); window.RV_generarReporte();" class="row g-3">
                         
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label small fw-bold mb-1 text-muted text-uppercase d-flex align-items-center" style="font-size: 0.65rem;">
                                 Tipo de Documento
                                 <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_tipo_documento', 'tipo_documento') ?>
@@ -39,7 +39,7 @@
                             </select>
                         </div>
                         
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label small fw-bold mb-1 text-muted text-uppercase d-flex align-items-center" style="font-size: 0.65rem;">
                                 Agrupar Por
                                 <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_agrupar_por', 'agrupar_por') ?>
@@ -81,6 +81,15 @@
                             </select>
                         </div>
 
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;">Fecha Desde</label>
+                            <input type="date" name="fecha_desde" id="rv-fecha-desde" class="form-control form-control-sm shadow-none border" value="<?php echo date('Y-m-01'); ?>">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;">Fecha Hasta</label>
+                            <input type="date" name="fecha_hasta" id="rv-fecha-hasta" class="form-control form-control-sm shadow-none border" value="<?php echo date('Y-m-t'); ?>">
+                        </div>
+
                         <div class="w-100 d-none d-md-block m-0"></div>
 
                         <div class="col-md-3 position-relative">
@@ -97,24 +106,32 @@
                             <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;">Producto</label>
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                                <input type="text" class="form-control border-start-0 px-1 shadow-none" id="rv-search-producto" placeholder="Buscar productos..." autocomplete="off">
+                                <input type="text" name="producto_texto" id="rv-producto-texto" class="form-control border-start-0 px-1 shadow-none"
+                                       placeholder="Ej: pelota, servicio..." autocomplete="off">
+                                <button type="button" class="btn btn-outline-secondary" title="Limpiar"
+                                        onclick="document.getElementById('rv-producto-texto').value=''; window.RV_generarReporte();"><i class="bi bi-x-lg"></i></button>
                             </div>
-                            <div id="rv-chips-producto" class="d-flex flex-column gap-1 mt-2"></div>
-                            <div id="rv-dropdown-productos" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: calc(100% - 1.5rem); max-height: 250px; overflow-y: auto; margin-top: 2px;"></div>
+                            <div id="rv-dropdown-items" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: calc(100% - 1.5rem); max-height: 250px; overflow-y: auto; margin-top: 2px;"></div>
+                            <small class="text-muted" style="font-size:.62rem;">Busca por el ítem/descripción de las líneas de venta.</small>
                         </div>
 
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;">Fecha Desde</label>
-                            <input type="date" name="fecha_desde" id="rv-fecha-desde" class="form-control form-control-sm shadow-none border" value="<?php echo date('Y-m-01'); ?>">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;">Fecha Hasta</label>
-                            <input type="date" name="fecha_hasta" id="rv-fecha-hasta" class="form-control form-control-sm shadow-none border" value="<?php echo date('Y-m-t'); ?>">
+                        <div class="col-md-3 position-relative">
+                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;"><i class="bi bi-card-text me-1"></i>Buscar en info adicional</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-card-text"></i></span>
+                                <input type="text" name="buscar_info" id="rv-buscar-info" class="form-control border-start-0 px-1 shadow-none"
+                                       placeholder="Ej: placa, referencia..." autocomplete="off">
+                                <button type="button" class="btn btn-outline-secondary" title="Limpiar"
+                                        onclick="document.getElementById('rv-buscar-info').value=''; window.RV_generarReporte();"><i class="bi bi-x-lg"></i></button>
+                            </div>
+                            <div id="rv-dropdown-info" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: calc(100% - 1.5rem); max-height: 250px; overflow-y: auto; margin-top: 2px;"></div>
+                            <small class="text-muted" style="font-size:.62rem;">Campos adicionales del documento (nombre o valor).</small>
                         </div>
 
-                        <div class="col-12 d-flex justify-content-end align-items-center border-top pt-3 mt-4">
-                            <button type="submit" class="btn btn-primary btn-sm shadow-sm px-4" id="btn-generar-reporte">
-                                <i class="bi bi-search me-1"></i> Aplicar Filtros y Generar
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold mb-1 d-block" style="font-size: 0.65rem;">&nbsp;</label>
+                            <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100" id="btn-generar-reporte">
+                                <i class="bi bi-search me-1"></i> Aplicar y Generar
                             </button>
                         </div>
                     </form>

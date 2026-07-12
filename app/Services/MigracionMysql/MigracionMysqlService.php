@@ -39,6 +39,10 @@ class MigracionMysqlService
         'inventario'        => ['label' => 'Inventario (kardex)',               'tabla' => 'inventarios',                'fecha' => 'fecha_registro', 'tipo' => 'catalogo'],
         'contabilidad'      => ['label' => 'Contabilidad (asientos)',            'tabla' => 'encabezado_diario',          'fecha' => 'fecha_asiento',  'tipo' => 'documento'],
         'proformas'         => ['label' => 'Proformas (cotizaciones)',           'tabla' => 'encabezado_proforma',        'fecha' => 'fecha_proforma', 'tipo' => 'documento'],
+        'consignaciones'    => ['label' => 'Consignaciones de venta',            'tabla' => 'encabezado_consignacion',    'fecha' => 'fecha_consignacion', 'tipo' => 'documento', 'filtro' => "operacion = 'ENTRADA'"],
+        'consignaciones_fact' => ['label' => 'Facturación de consignación',       'tabla' => 'encabezado_consignacion',    'fecha' => 'fecha_consignacion', 'tipo' => 'documento', 'filtro' => "operacion = 'FACTURA'"],
+        'consignaciones_ret' => ['label' => 'Retornos de consignación',           'tabla' => 'encabezado_consignacion',    'fecha' => 'fecha_consignacion', 'tipo' => 'documento', 'filtro' => "operacion LIKE 'DEVOL%'"],
+        'cambios_producto'  => ['label' => 'Cambios de productos',               'tabla' => 'cambio_productos_facturados', 'fecha' => 'fecha_cambio',  'tipo' => 'documento'],
     ];
 
     /** Segundos estimados por registro según tipo (aprox., calibrado en pruebas). */
@@ -130,6 +134,14 @@ class MigracionMysqlService
                 return $this->migrarContabilidad($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'proformas':
                 return $this->migrarProformas($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
+            case 'consignaciones':
+                return $this->migrarConsignaciones($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
+            case 'consignaciones_fact':
+                return $this->migrarConsignacionesDerivado($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta, 'FACTURA');
+            case 'consignaciones_ret':
+                return $this->migrarConsignacionesDerivado($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta, 'DEVOLUCION');
+            case 'cambios_producto':
+                return $this->migrarCambiosProducto($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             default:
                 return [
                     'entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'vinculados' => 0,
@@ -145,7 +157,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'clientes', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'clientes', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
 
         // Ya migrados (anti-reproceso)
         $done = [];
@@ -202,6 +214,7 @@ class MigracionMysqlService
                     $idDest = (int) $existente;
                     $vin = true;
                     $res['vinculados']++;
+                    if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = $nombre; }
                 } else {
                     $ins->execute([
                         ':e' => $idEmpresa, ':u' => $idUsuario, ':nom' => $nombre, ':tipo' => $tipo, ':ident' => $ident,
@@ -233,7 +246,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'productos', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'productos', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
 
         $done = [];
         $q = $pg->prepare("SELECT id_origen FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'productos'");
@@ -295,6 +308,7 @@ class MigracionMysqlService
                     $idDest = (int) $existente;
                     $vin = true;
                     $res['vinculados']++;
+                    if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = $codigo . ' · ' . $nombre; }
                 } else {
                     $ins->execute([
                         ':e' => $idEmpresa, ':cod' => $codigo, ':nom' => $nombre,
@@ -327,7 +341,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'proveedores', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'proveedores', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
 
         $done = [];
         $q = $pg->prepare("SELECT id_origen FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'proveedores'");
@@ -383,6 +397,7 @@ class MigracionMysqlService
                     $idDest = (int) $existente;
                     $vin = true;
                     $res['vinculados']++;
+                    if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = $rs; }
                 } else {
                     $ins->execute([
                         ':e' => $idEmpresa, ':u' => $idUsuario, ':rs' => $rs, ':nc' => self::nz($r['nombre_comercial']),
@@ -414,7 +429,7 @@ class MigracionMysqlService
         $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
-        $res = ['entidad' => 'vendedores', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'vendedores', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
 
         $done = $this->idsMigrados($pg, $idEmpresa, 'vendedores');
         $buscar = $pg->prepare("SELECT id FROM vendedores WHERE id_empresa = :e AND identificacion = :ident LIMIT 1");
@@ -435,7 +450,7 @@ class MigracionMysqlService
                 $pg->beginTransaction();
                 $buscar->execute([':e' => $idEmpresa, ':ident' => $ident]);
                 $ex = $buscar->fetchColumn();
-                if ($ex !== false) { $idDest = (int) $ex; $vin = true; $res['vinculados']++; }
+                if ($ex !== false) { $idDest = (int) $ex; $vin = true; $res['vinculados']++; if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = $nombre; } }
                 else {
                     $ins->execute([':e' => $idEmpresa, ':u' => $idUsuario, ':ident' => $ident, ':nom' => $nombre,
                         ':cor' => self::nz($r['correo']), ':tel' => self::nz($r['telefono']), ':dir' => self::nz($r['direccion']), ':cb' => $idUsuario]);
@@ -457,7 +472,7 @@ class MigracionMysqlService
         $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
-        $res = ['entidad' => 'bodegas', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'bodegas', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
 
         $done = $this->idsMigrados($pg, $idEmpresa, 'bodegas');
         $buscar = $pg->prepare("SELECT id FROM bodegas WHERE id_empresa = :e AND nombre = :nom LIMIT 1");
@@ -475,7 +490,7 @@ class MigracionMysqlService
                 $pg->beginTransaction();
                 $buscar->execute([':e' => $idEmpresa, ':nom' => $nombre]);
                 $ex = $buscar->fetchColumn();
-                if ($ex !== false) { $idDest = (int) $ex; $vin = true; $res['vinculados']++; }
+                if ($ex !== false) { $idDest = (int) $ex; $vin = true; $res['vinculados']++; if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = $nombre; } }
                 else {
                     $ins->execute([':e' => $idEmpresa, ':u' => $idUsuario, ':nom' => $nombre, ':cb' => $idUsuario]);
                     $idDest = (int) $ins->fetchColumn(); $vin = false; $res['migrados']++;
@@ -493,6 +508,297 @@ class MigracionMysqlService
     /** % de IVA por código SRI (para derivar impuestos del detalle). */
     private const IVA_PCT = ['0' => 0, '2' => 12, '3' => 14, '4' => 15, '5' => 5, '6' => 0, '7' => 0, '8' => 8, '10' => 13];
 
+    /** get-or-create de un responsable de traslado desde el catálogo viejo (responsable_traslado). */
+    private function getOrCreateResponsableTraslado(int $idEmpresa, int $idUsuario, int $oldRespId, PDO $mysql, PDO $pg, array &$cache): ?int
+    {
+        if ($oldRespId <= 0) { return null; }
+        if (array_key_exists($oldRespId, $cache)) { return $cache[$oldRespId]; }
+        $q = $mysql->prepare("SELECT nombre, correo FROM responsable_traslado WHERE id = :id LIMIT 1");
+        $q->execute([':id' => $oldRespId]);
+        $r = $q->fetch(PDO::FETCH_ASSOC);
+        if (!$r) { return $cache[$oldRespId] = null; }
+        $nombre = trim((string) $r['nombre']) !== '' ? trim((string) $r['nombre']) : ('Responsable ' . $oldRespId);
+        $sel = $pg->prepare("SELECT id FROM responsables_traslado WHERE id_empresa = ? AND nombre = ? LIMIT 1");
+        $sel->execute([$idEmpresa, $nombre]);
+        $ex = $sel->fetchColumn();
+        if ($ex !== false) { return $cache[$oldRespId] = (int) $ex; }
+        $ins = $pg->prepare("INSERT INTO responsables_traslado (id_empresa, nombre, email, created_by) VALUES (?, ?, ?, ?) RETURNING id");
+        $ins->execute([$idEmpresa, $nombre, self::nz($r['correo']), $idUsuario]);
+        return $cache[$oldRespId] = (int) $ins->fetchColumn();
+    }
+
+    /** Migra las consignaciones de venta base (operacion=ENTRADA) → consignaciones_ventas + detalles. */
+    private function migrarConsignaciones(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'consignaciones', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done        = $this->idsMigrados($pg, $idEmpresa, 'consignaciones');
+        $mapCliente  = $this->mapaDe($pg, $idEmpresa, 'clientes');
+        $mapVend     = $this->mapaDe($pg, $idEmpresa, 'vendedores');
+        $mapProd     = $this->mapaDe($pg, $idEmpresa, 'productos');
+        $mapBod      = $this->mapaDe($pg, $idEmpresa, 'bodegas');
+        $prodPorCod  = $this->productosPorCodigo($pg, $idEmpresa);
+        $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
+        $insMap      = $this->stmtMap($pg, 'consignaciones');
+        $respCache   = [];
+
+        $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, descuento, id_bodega, lote, nup FROM detalle_consignacion WHERE codigo_unico = :cu");
+        $insCab  = $pg->prepare(
+            "INSERT INTO consignaciones_ventas (id_empresa, fecha_emision, serie, secuencial, id_cliente, id_vendedor, id_responsable_traslado, punto_partida, punto_llegada, observaciones, estado, subtotal, impuesto, total, establecimiento, punto_emision, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) RETURNING id"
+        );
+        $insDet = $pg->prepare(
+            "INSERT INTO consignaciones_ventas_detalles (id_consignacion, id_empresa, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        );
+
+        $sql = "SELECT id_consignacion, codigo_unico, fecha_consignacion, numero_consignacion, serie_sucursal, id_cli_pro, responsable, traslado_por, punto_partida, punto_llegada, observaciones, status
+                  FROM encabezado_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND operacion = 'ENTRADA'" . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $stmt = $mysql->query($sql);
+
+        while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $ec['id_consignacion'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+
+            $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cli_pro'], $idEmpresa, $idUsuario, $mysql, $pg);
+            if (!$idCliente) { $res['omitidos']++; continue; }
+
+            $partes = explode('-', trim((string) $ec['serie_sucursal']));
+            $estab  = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
+            $pto    = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
+            $sec    = str_pad(preg_replace('/\D+/', '', (string) $ec['numero_consignacion']), 9, '0', STR_PAD_LEFT);
+
+            $ye = $this->docExistente($pg, 'consignaciones_ventas', ['id_empresa' => $idEmpresa, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $sec]);
+            if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$estab-$pto-$sec", $idUsuario); continue; }
+
+            try {
+                $pg->beginTransaction();
+                $idVend = $mapVend[(string) (int) $ec['responsable']] ?? null;
+                $idResp = $this->getOrCreateResponsableTraslado($idEmpresa, $idUsuario, (int) $ec['traslado_por'], $mysql, $pg, $respCache);
+
+                $detStmt->execute([':cu' => (string) $ec['codigo_unico']]);
+                $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
+                $sub = 0.0;
+                foreach ($dets as $d) { $sub += (float) $d['cant_consignacion'] * (float) $d['precio']; }
+                $est = ((int) $ec['status'] === 0) ? 'Anulada' : 'Emitida';
+
+                $insCab->execute([$idEmpresa, substr((string) $ec['fecha_consignacion'], 0, 10), (string) $ec['serie_sucursal'], $sec, $idCliente, $idVend, $idResp, (string) ($ec['punto_partida'] ?? ''), (string) ($ec['punto_llegada'] ?? ''), self::nz($ec['observaciones']), $est, round($sub, 2), round($sub, 2), $estab, $pto, $idUsuario]);
+                $idCons = (int) $insCab->fetchColumn();
+
+                foreach ($dets as $d) {
+                    $idProd = $this->resolverOCrearProducto($prodPorCod, $mapProd, (int) $d['id_producto'], (string) $d['codigo_producto'], (string) $d['nombre_producto'], '0', $idEmpresa, $idUsuario, $pg);
+                    $cant = (float) $d['cant_consignacion'];
+                    $pu   = (float) $d['precio'];
+                    $st   = round($cant * $pu, 2);
+                    $idBod = ((int) $d['id_bodega'] > 0) ? ($mapBod[(string) (int) $d['id_bodega']] ?? null) : null;
+                    $insDet->execute([$idCons, $idEmpresa, $idProd, $cant, $pu, $st, $st, $idBod, self::nz($d['lote']), self::nz($d['nup'])]);
+                }
+
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idCons, ':cn' => (string) $ec['numero_consignacion'], ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
+
+    /**
+     * Migra los documentos derivados de una consignación: FACTURA → consignaciones_facturas,
+     * DEVOLUCION → retornos_cv. Cada línea se enlaza a su ENTRADA por numero_orden_entrada + producto.
+     * Requiere las consignaciones base migradas antes.
+     */
+    private function migrarConsignacionesDerivado(int $idEmpresa, string $ruc, int $idUsuario, int $limite, ?string $desde, ?string $hasta, string $modo): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+        $esFactura = ($modo === 'FACTURA');
+        $entidad   = $esFactura ? 'consignaciones_fact' : 'consignaciones_ret';
+
+        $res = ['entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done       = $this->idsMigrados($pg, $idEmpresa, $entidad);
+        $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
+        $mapVend    = $this->mapaDe($pg, $idEmpresa, 'vendedores');
+        $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
+        $mapFactura = $esFactura ? $this->mapaDe($pg, $idEmpresa, 'facturas') : [];
+        $prodPorCod = $this->productosPorCodigo($pg, $idEmpresa);
+        $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
+        $insMap     = $this->stmtMap($pg, $entidad);
+        $respCache  = [];
+
+        // numero_consignacion (ENTRADA) → id consignación nueva
+        $mapCons = $this->mapaDe($pg, $idEmpresa, 'consignaciones');
+        $mapEntrada = [];
+        foreach ($mysql->query("SELECT id_consignacion, numero_consignacion FROM encabezado_consignacion WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base) . " AND operacion = 'ENTRADA'") as $e) {
+            $nid = $mapCons[(string) (int) $e['id_consignacion']] ?? null;
+            if ($nid) { $mapEntrada[(string) (int) $e['numero_consignacion']] = $nid; }
+        }
+        $lineLookup = $pg->prepare("SELECT id FROM consignaciones_ventas_detalles WHERE id_consignacion = ? AND id_producto = ? AND eliminado = false LIMIT 1");
+        $lineCache = [];
+
+        $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, numero_orden_entrada, id_bodega, lote, nup FROM detalle_consignacion WHERE codigo_unico = :cu");
+        $opFilter = $esFactura ? "operacion = 'FACTURA'" : "operacion LIKE 'DEVOL%'";
+
+        if ($esFactura) {
+            $insCab = $pg->prepare("INSERT INTO consignaciones_facturas (id_empresa, id_consignacion, id_factura, fecha_emision, serie, secuencial, id_cliente, id_vendedor, subtotal, impuesto, total, estado, observaciones, establecimiento, punto_emision, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'Facturada', ?, ?, ?, ?) RETURNING id");
+            $insDet = $pg->prepare("INSERT INTO consignaciones_facturas_detalles (id_consignacion_factura, id_empresa, id_consignacion, id_consignacion_detalle, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        } else {
+            $insCab = $pg->prepare("INSERT INTO retornos_cv (id_empresa, fecha_retorno, serie, secuencial, id_cliente, id_responsable_traslado, punto_partida, punto_llegada, observaciones, estado, subtotal, impuesto, total, establecimiento, punto_emision, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) RETURNING id");
+            $insDet = $pg->prepare("INSERT INTO retornos_cv_detalles (id_retorno, id_empresa, id_consignacion, id_consignacion_detalle, id_producto, cantidad, precio_unitario, subtotal, total, id_bodega, lote, nup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        }
+
+        $sql = "SELECT id_consignacion, codigo_unico, fecha_consignacion, numero_consignacion, serie_sucursal, id_cli_pro, responsable, traslado_por, punto_partida, punto_llegada, observaciones, status, factura_venta
+                  FROM encabezado_consignacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND " . $opFilter . $this->clausulaFecha('fecha_consignacion', $desde, $hasta, $mysql) . " ORDER BY id_consignacion";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $stmt = $mysql->query($sql);
+
+        while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $ec['id_consignacion'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+
+            $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cli_pro'], $idEmpresa, $idUsuario, $mysql, $pg);
+            if (!$idCliente) { $res['omitidos']++; continue; }
+
+            // Resolver todas las líneas contra su ENTRADA origen ANTES de insertar (id_consignacion_detalle es NOT NULL)
+            $detStmt->execute([':cu' => (string) $ec['codigo_unico']]);
+            $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
+            $lineas = [];
+            $sub = 0.0;
+            $incompleto = false;
+            foreach ($dets as $d) {
+                $numEnt  = (int) $d['numero_orden_entrada'];
+                $idCons  = $mapEntrada[(string) $numEnt] ?? null;
+                $idProd  = $this->resolverOCrearProducto($prodPorCod, $mapProd, (int) $d['id_producto'], (string) $d['codigo_producto'], (string) $d['nombre_producto'], '0', $idEmpresa, $idUsuario, $pg);
+                if (!$idCons) { $incompleto = true; break; }
+                $ckey = $idCons . '-' . $idProd;
+                if (!array_key_exists($ckey, $lineCache)) {
+                    $lineLookup->execute([$idCons, $idProd]);
+                    $lineCache[$ckey] = ($lineLookup->fetchColumn() ?: null);
+                }
+                $idConsDet = $lineCache[$ckey];
+                if (!$idConsDet) { $incompleto = true; break; }
+                $cant = (float) $d['cant_consignacion'];
+                $pu   = (float) $d['precio'];
+                $st   = round($cant * $pu, 2);
+                $sub += $st;
+                $idBod = ((int) $d['id_bodega'] > 0) ? null : null; // bodega la toma del origen; se deja null
+                $lineas[] = [$idCons, $idConsDet, $idProd, $cant, $pu, $st, self::nz($d['lote']), self::nz($d['nup'])];
+            }
+            if ($incompleto || !$lineas) { $res['omitidos']++; continue; } // sin ENTRADA origen migrada / línea no casada
+
+            $partes = explode('-', trim((string) $ec['serie_sucursal']));
+            $estab  = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
+            $pto    = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
+            $sec    = str_pad(preg_replace('/\D+/', '', (string) $ec['numero_consignacion']), 9, '0', STR_PAD_LEFT);
+            $fe     = substr((string) $ec['fecha_consignacion'], 0, 10);
+            $idConsCab = $lineas[0][0];
+
+            try {
+                $pg->beginTransaction();
+                if ($esFactura) {
+                    $idFactura = $mapFactura[(string) (int) $ec['factura_venta']] ?? null;
+                    $idVend = $mapVend[(string) (int) $ec['responsable']] ?? null;
+                    $insCab->execute([$idEmpresa, $idConsCab, $idFactura, $fe, (string) $ec['serie_sucursal'], $sec, $idCliente, $idVend, round($sub, 2), round($sub, 2), self::nz($ec['observaciones']), $estab, $pto, $idUsuario]);
+                    $idParent = (int) $insCab->fetchColumn();
+                    foreach ($lineas as $ln) {
+                        $insDet->execute([$idParent, $idEmpresa, $ln[0], $ln[1], $ln[2], $ln[3], $ln[4], $ln[5], $ln[5], null, $ln[6], $ln[7]]);
+                    }
+                } else {
+                    $idResp = $this->getOrCreateResponsableTraslado($idEmpresa, $idUsuario, (int) $ec['traslado_por'], $mysql, $pg, $respCache);
+                    $est = ((int) $ec['status'] === 0) ? 'Anulada' : 'Emitida';
+                    $insCab->execute([$idEmpresa, $fe, (string) $ec['serie_sucursal'], $sec, $idCliente, $idResp, (string) ($ec['punto_partida'] ?? ''), (string) ($ec['punto_llegada'] ?? ''), self::nz($ec['observaciones']), $est, round($sub, 2), $estab, $pto, $idUsuario]);
+                    $idParent = (int) $insCab->fetchColumn();
+                    foreach ($lineas as $ln) {
+                        $insDet->execute([$idParent, $idEmpresa, $ln[0], $ln[1], $ln[2], $ln[3], $ln[4], $ln[5], $ln[5], null, $ln[6], $ln[7]]);
+                    }
+                }
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idParent, ':cn' => (string) $ec['numero_consignacion'], ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
+
+    /** Migra los cambios de productos facturados (cambio_productos_facturados) → cambios_producto_cv (2 líneas: devuelto/entregado). */
+    private function migrarCambiosProducto(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'cambios_producto', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $done        = $this->idsMigrados($pg, $idEmpresa, 'cambios_producto');
+        $mapCliente  = $this->mapaDe($pg, $idEmpresa, 'clientes');
+        $mapProd     = $this->mapaDe($pg, $idEmpresa, 'productos');
+        $mapBod      = $this->mapaDe($pg, $idEmpresa, 'bodegas');
+        $prodPorCod  = $this->productosPorCodigo($pg, $idEmpresa);
+        $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
+        $insMap      = $this->stmtMap($pg, 'cambios_producto');
+        $oldProd     = $mysql->prepare("SELECT codigo_producto, nombre_producto FROM productos_servicios WHERE id_producto = :id LIMIT 1");
+
+        $insCab = $pg->prepare("INSERT INTO cambios_producto_cv (id_empresa, fecha_cambio, serie, secuencial, id_cliente, observaciones, estado, subtotal_devuelto, subtotal_entregado, diferencia, created_by) VALUES (?, ?, ?, ?, ?, ?, 'Emitida', 0, 0, 0, ?) RETURNING id");
+        $insDet = $pg->prepare("INSERT INTO cambios_producto_cv_detalles (id_cambio, id_empresa, tipo_linea, id_producto, cantidad, id_bodega, lote) VALUES (?, ?, ?, ?, ?, ?, ?)");
+
+        $sql = "SELECT id_cambio, fecha_cambio, id_cliente, id_producto_anterior, id_nuevo_producto, cant_cambiada, lote_anterior, nuevo_lote, id_bodega_anterior, id_nueva_bodega, observaciones
+                  FROM cambio_productos_facturados WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_cambio', $desde, $hasta, $mysql) . " ORDER BY id_cambio";
+        if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
+        $stmt = $mysql->query($sql);
+
+        $resolverProd = function (int $oldId) use (&$prodPorCod, $mapProd, $oldProd, $idEmpresa, $idUsuario, $pg) {
+            $oldProd->execute([':id' => $oldId]);
+            $p = $oldProd->fetch(PDO::FETCH_ASSOC) ?: ['codigo_producto' => '', 'nombre_producto' => ''];
+            return $this->resolverOCrearProducto($prodPorCod, $mapProd, $oldId, (string) $p['codigo_producto'], (string) $p['nombre_producto'], '0', $idEmpresa, $idUsuario, $pg);
+        };
+
+        while ($c = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $c['id_cambio'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+
+            $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $c['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
+            if (!$idCliente) { $res['omitidos']++; continue; }
+
+            $sec = str_pad((string) $old, 9, '0', STR_PAD_LEFT);
+            $cant = (float) $c['cant_cambiada'];
+
+            try {
+                $pg->beginTransaction();
+                $prodAnt = $resolverProd((int) $c['id_producto_anterior']);
+                $prodNew = $resolverProd((int) $c['id_nuevo_producto']);
+                $insCab->execute([$idEmpresa, substr((string) $c['fecha_cambio'], 0, 10), '001-001', $sec, $idCliente, self::nz($c['observaciones']), $idUsuario]);
+                $idCambio = (int) $insCab->fetchColumn();
+                $insDet->execute([$idCambio, $idEmpresa, 'devolucion', $prodAnt, $cant, (((int) $c['id_bodega_anterior'] > 0) ? ($mapBod[(string) (int) $c['id_bodega_anterior']] ?? null) : null), self::nz($c['lote_anterior'])]);
+                $insDet->execute([$idCambio, $idEmpresa, 'entrega', $prodNew, $cant, (((int) $c['id_nueva_bodega'] > 0) ? ($mapBod[(string) (int) $c['id_nueva_bodega']] ?? null) : null), self::nz($c['nuevo_lote'])]);
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idCambio, ':cn' => (string) $old, ':vin' => 'f', ':cb' => $idUsuario]);
+                $pg->commit();
+                $done[(string) $old] = true;
+                $res['migrados']++;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
+
     /** Migra proformas (cabecera + detalle + impuestos). El producto es opcional (no se auto-crea). */
     private function migrarProformas(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
@@ -500,7 +806,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'proformas', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'proformas', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
         $done        = $this->idsMigrados($pg, $idEmpresa, 'proformas');
         $mapCliente  = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $mapProd     = $this->mapaDe($pg, $idEmpresa, 'productos');
@@ -538,6 +844,9 @@ class MigracionMysqlService
             $estab  = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
             $pto    = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
             $sec    = str_pad(preg_replace('/\D+/', '', (string) $ep['secuencial_proforma']), 9, '0', STR_PAD_LEFT);
+
+            $ye = $this->docExistente($pg, 'proformas_cabecera', ['id_empresa' => $idEmpresa, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $sec]);
+            if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$estab-$pto-$sec", $idUsuario); continue; }
 
             try {
                 $pg->beginTransaction();
@@ -925,7 +1234,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'guias', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'guias', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
         $done       = $this->idsMigrados($pg, $idEmpresa, 'guias');
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
@@ -961,6 +1270,8 @@ class MigracionMysqlService
             $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
             $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
             $sec   = str_pad(preg_replace('/\D+/', '', (string) $ec['secuencial_gr']), 9, '0', STR_PAD_LEFT);
+            $ye = $this->docExistente($pg, 'guias_remision_cabecera', ['id_empresa' => $idEmpresa, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $sec]);
+            if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$estab-$pto-$sec", $idUsuario); continue; }
             $fe    = substr((string) $ec['fecha_gr'], 0, 10);
             $fini  = self::fechaCorta($ec['fecha_salida']) ?: $fe;
             $ffin  = self::fechaCorta($ec['fecha_llegada']) ?: $fe;
@@ -1013,7 +1324,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'liquidaciones', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'liquidaciones', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
         $done    = $this->idsMigrados($pg, $idEmpresa, 'liquidaciones');
         $mapProv = $this->mapaDe($pg, $idEmpresa, 'proveedores');
         $insMap  = $this->stmtMap($pg, 'liquidaciones');
@@ -1051,6 +1362,9 @@ class MigracionMysqlService
             $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
             $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
             $sec   = str_pad(preg_replace('/\D+/', '', (string) $ec['secuencial_liquidacion']), 9, '0', STR_PAD_LEFT);
+
+            $ye = $this->docExistente($pg, 'liquidaciones_cabecera', ['id_empresa' => $idEmpresa, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $sec]);
+            if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$estab-$pto-$sec", $idUsuario); continue; }
 
             try {
                 $pg->beginTransaction();
@@ -1106,7 +1420,7 @@ class MigracionMysqlService
         $pg    = Database::getConnection();
         $repo  = new \App\repositories\modulos\FacturaVentaRepository();
 
-        $res = ['entidad' => 'facturas', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'facturas', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
 
         $done       = $this->idsMigrados($pg, $idEmpresa, 'facturas');
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
@@ -1145,6 +1459,9 @@ class MigracionMysqlService
             $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
             $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
             $secuencial = str_pad(preg_replace('/\D+/', '', (string) $ef['secuencial_factura']), 9, '0', STR_PAD_LEFT);
+
+            $ye = $this->docExistente($pg, 'ventas_cabecera', ['id_empresa' => $idEmpresa, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $secuencial]);
+            if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$estab-$pto-$secuencial", $idUsuario); continue; }
 
             try {
                 $pg->beginTransaction();
@@ -1219,7 +1536,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'compras', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'compras', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
         $done     = $this->idsMigrados($pg, $idEmpresa, 'compras');
         $mapProv  = $this->mapaDe($pg, $idEmpresa, 'proveedores');
         $insMap   = $this->stmtMap($pg, 'compras');
@@ -1258,6 +1575,9 @@ class MigracionMysqlService
             $est = str_pad($num[0] ?? '', 3, '0', STR_PAD_LEFT);
             $pto = str_pad($num[1] ?? '', 3, '0', STR_PAD_LEFT);
             $sec = str_pad(preg_replace('/\D+/', '', $num[2] ?? ''), 9, '0', STR_PAD_LEFT);
+
+            $ye = $this->docExistente($pg, 'compras_cabecera', ['id_empresa' => $idEmpresa, 'id_proveedor' => $idProv, 'establecimiento_prov' => $est, 'punto_emision_prov' => $pto, 'secuencial_prov' => $sec]);
+            if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$est-$pto-$sec", $idUsuario); continue; }
 
             try {
                 $pg->beginTransaction();
@@ -1307,7 +1627,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'notas_credito', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'notas_credito', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
         $done       = $this->idsMigrados($pg, $idEmpresa, 'notas_credito');
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
@@ -1346,6 +1666,8 @@ class MigracionMysqlService
             $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
             $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
             $sec   = str_pad(preg_replace('/\D+/', '', (string) $ec['secuencial_nc']), 9, '0', STR_PAD_LEFT);
+            $ye = $this->docExistente($pg, 'notas_credito_cabecera', ['id_empresa' => $idEmpresa, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $sec]);
+            if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$estab-$pto-$sec", $idUsuario); continue; }
             $fe    = substr((string) $ec['fecha_nc'], 0, 10);
             $fds   = substr((string) $ec['fecha_factura'], 0, 10);
             if ($fds === '' || strpos($fds, '0000') === 0) { $fds = $fe; }
@@ -1401,7 +1723,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'retenciones_compra', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'retenciones_compra', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
         $done    = $this->idsMigrados($pg, $idEmpresa, 'retenciones_compra');
         $mapProv = $this->mapaDe($pg, $idEmpresa, 'proveedores');
         $insMap  = $this->stmtMap($pg, 'retenciones_compra');
@@ -1435,6 +1757,8 @@ class MigracionMysqlService
             $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
             $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
             $sec   = str_pad(preg_replace('/\D+/', '', (string) $ec['secuencial_retencion']), 9, '0', STR_PAD_LEFT);
+            $ye = $this->docExistente($pg, 'retencion_compra_cabecera', ['id_empresa' => $idEmpresa, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $sec]);
+            if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$estab-$pto-$sec", $idUsuario); continue; }
             $fe    = substr((string) $ec['fecha_emision'], 0, 10);
             $fds   = substr((string) $ec['fecha_documento'], 0, 10);
             if ($fds === '' || strpos($fds, '0000') === 0) { $fds = $fe; }
@@ -1481,7 +1805,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'retenciones_venta', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'retenciones_venta', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
         $done       = $this->idsMigrados($pg, $idEmpresa, 'retenciones_venta');
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $insMap     = $this->stmtMap($pg, 'retenciones_venta');
@@ -1515,6 +1839,8 @@ class MigracionMysqlService
             $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
             $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
             $sec   = str_pad(preg_replace('/\D+/', '', (string) $ec['secuencial_retencion']), 9, '0', STR_PAD_LEFT);
+            $ye = $this->docExistente($pg, 'retencion_venta_cabecera', ['id_empresa' => $idEmpresa, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $sec]);
+            if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$estab-$pto-$sec", $idUsuario); continue; }
             $fe    = substr((string) $ec['fecha_emision'], 0, 10);
             $per   = ($fe !== '' && strpos($fe, '0000') !== 0) ? (substr($fe, 5, 2) . '/' . substr($fe, 0, 4)) : '';
 
@@ -1566,7 +1892,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'recibos', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'recibos', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
         $done       = $this->idsMigrados($pg, $idEmpresa, 'recibos');
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
@@ -1606,6 +1932,9 @@ class MigracionMysqlService
             $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
             $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
             $sec   = str_pad(preg_replace('/\D+/', '', (string) $ec['secuencial_recibo']), 9, '0', STR_PAD_LEFT);
+
+            $ye = $this->docExistente($pg, 'recibos_venta_cabecera', ['id_empresa' => $idEmpresa, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $sec]);
+            if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$estab-$pto-$sec", $idUsuario); continue; }
 
             try {
                 $pg->beginTransaction();
@@ -1857,6 +2186,39 @@ class MigracionMysqlService
         }
         $prodPorCod[$codigo] = $id;
         return $id;
+    }
+
+    /**
+     * ¿Ya existe el documento en el sistema nuevo por su clave natural? Devuelve su id o null.
+     * Las columnas son fijas del código (no entran del usuario). Filtra eliminado = false.
+     */
+    private function docExistente(PDO $pg, string $tabla, array $cond): ?int
+    {
+        $wh = [];
+        $params = [];
+        foreach ($cond as $col => $val) {
+            $wh[] = "$col = :$col";
+            $params[":$col"] = $val;
+        }
+        $st = $pg->prepare("SELECT id FROM $tabla WHERE " . implode(' AND ', $wh) . " AND eliminado = false LIMIT 1");
+        $st->execute($params);
+        $r = $st->fetchColumn();
+        return $r !== false ? (int) $r : null;
+    }
+
+    /**
+     * Registra en el mapa un documento que YA EXISTÍA en el sistema nuevo (vinculado, no duplicado)
+     * y actualiza los contadores del resultado. Devuelve true (para hacer `continue`).
+     */
+    private function marcarVinculado(array &$res, array &$done, PDO $pg, int $idEmpresa, int $old, int $idExistente, string $clave, int $idUsuario): bool
+    {
+        $insMap = $this->stmtMap($pg, (string) $res['entidad']);
+        $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idExistente, ':cn' => substr($clave, 0, 120), ':vin' => 't', ':cb' => $idUsuario]);
+        $done[(string) $old] = true;
+        $res['vinculados'] = ($res['vinculados'] ?? 0) + 1;
+        if (!isset($res['vinculados_muestra'])) { $res['vinculados_muestra'] = []; }
+        if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = $clave; }
+        return true;
     }
 
     /** Mapa id_origen(string) => id_destino(int) de una entidad ya migrada. */

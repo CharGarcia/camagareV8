@@ -106,6 +106,26 @@ class ReporteVentasRepository extends BaseRepository
             }
         }
 
+        // Filtro por Producto = texto de los ítems de la venta (descripción o código de línea)
+        if (!empty($filtros['producto_texto'])) {
+            $where .= " AND EXISTS (
+                SELECT 1 FROM ventas_detalle vdp
+                WHERE vdp.id_venta = {$aliasVenta}.id
+                  AND (vdp.descripcion ILIKE :prodtxt OR vdp.codigo_principal ILIKE :prodtxt)
+            )";
+            $params[':prodtxt'] = '%' . trim($filtros['producto_texto']) . '%';
+        }
+
+        // Filtro por Información Adicional del documento (campos adicionales nombre/valor)
+        if (!empty($filtros['buscar_info'])) {
+            $where .= " AND EXISTS (
+                SELECT 1 FROM ventas_adicional va
+                WHERE va.id_venta = {$aliasVenta}.id
+                  AND (va.nombre ILIKE :info OR va.valor ILIKE :info)
+            )";
+            $params[':info'] = '%' . trim($filtros['buscar_info']) . '%';
+        }
+
         return [$where, $params];
     }
 
@@ -271,6 +291,48 @@ class ReporteVentasRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Autocompletado: descripciones distintas de los ítems de venta (ventas_detalle).
+     */
+    public function buscarItems(int $idEmpresa, string $q, int $limit = 15): array
+    {
+        $sql = "SELECT DISTINCT TRIM(d.descripcion) AS valor
+                FROM ventas_detalle d
+                JOIN ventas_cabecera v ON v.id = d.id_venta
+                WHERE v.id_empresa = :ie AND v.eliminado = false
+                  AND d.descripcion IS NOT NULL AND TRIM(d.descripcion) <> ''
+                  AND d.descripcion ILIKE :q
+                ORDER BY valor
+                LIMIT {$limit}";
+        $st = $this->db->prepare($sql);
+        $st->execute([':ie' => $idEmpresa, ':q' => '%' . $q . '%']);
+        $rows = $st->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        return array_map(fn($v) => ['valor' => $v, 'label' => $v], $rows);
+    }
+
+    /**
+     * Autocompletado: info adicional (nombre/valor distintos de ventas_adicional).
+     */
+    public function buscarInfoAdicional(int $idEmpresa, string $q, int $limit = 15): array
+    {
+        $sql = "SELECT DISTINCT va.nombre, va.valor
+                FROM ventas_adicional va
+                JOIN ventas_cabecera v ON v.id = va.id_venta
+                WHERE v.id_empresa = :ie AND v.eliminado = false
+                  AND COALESCE(va.valor, '') <> ''
+                  AND (va.nombre ILIKE :q OR va.valor ILIKE :q)
+                ORDER BY va.nombre, va.valor
+                LIMIT {$limit}";
+        $st = $this->db->prepare($sql);
+        $st->execute([':ie' => $idEmpresa, ':q' => '%' . $q . '%']);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        return array_map(fn($r) => [
+            'valor' => $r['valor'],
+            'label' => $r['valor'],
+            'sub'   => $r['nombre'],
+        ], $rows);
     }
 
     /**

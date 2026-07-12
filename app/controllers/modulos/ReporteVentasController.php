@@ -57,7 +57,9 @@ class ReporteVentasController extends BaseModuloController
             'fecha_hasta'    => $_REQUEST['fecha_hasta'] ?? '',
             'id_cliente'     => $_REQUEST['id_cliente'] ?? '',
             'id_producto'    => $_REQUEST['id_producto'] ?? '',
+            'producto_texto' => trim($_REQUEST['producto_texto'] ?? ''),
             'estado'         => $_REQUEST['estado'] ?? 'TODOS',
+            'buscar_info'    => trim($_REQUEST['buscar_info'] ?? ''),
         ];
     }
 
@@ -239,6 +241,28 @@ class ReporteVentasController extends BaseModuloController
         $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, 'venta');
 
         echo json_encode(['ok' => true, 'data' => $result['rows']]);
+        exit;
+    }
+
+    /** Autocompletado de ítems de venta (descripciones distintas de ventas_detalle). */
+    public function buscarItemsAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q = trim($_GET['q'] ?? '');
+        echo json_encode(['ok' => true, 'data' => $this->repository->buscarItems($idEmpresa, $q)]);
+        exit;
+    }
+
+    /** Autocompletado de info adicional (nombre/valor distintos de ventas_adicional). */
+    public function buscarInfoAdicionalAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q = trim($_GET['q'] ?? '');
+        echo json_encode(['ok' => true, 'data' => $this->repository->buscarInfoAdicional($idEmpresa, $q)]);
         exit;
     }
 
@@ -466,7 +490,7 @@ class ReporteVentasController extends BaseModuloController
                         <?php else: ?>
                             <th colspan="7" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
                         <?php endif; ?>
-                        
+
                         <th class="text-end" style="font-size: 10pt;"><?= number_format((float)$totales['total_base_0'], 2) ?></th>
                         <th class="text-end" style="font-size: 10pt;"><?= number_format((float)$totales['total_base_iva'], 2) ?></th>
                         <th class="text-end" style="font-size: 10pt;"><?= number_format((float)$totales['total_iva'], 2) ?></th>
