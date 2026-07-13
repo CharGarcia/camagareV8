@@ -912,6 +912,7 @@ class MigracionMysqlService
         if (!$info) { return null; }
         $cod = trim((string) $info['codigo']);
         if ($cod === '') { return null; }
+        $cod = self::codigoCasa($cod); // reformatea al plan nuevo (nivel 3 a 1 dígito)
         if (isset($cuentaPorCod[$cod])) { return $mapCuenta[$oldId] = $cuentaPorCod[$cod]; }
         $nivel = (int) ($info['nivel'] ?: (substr_count($cod, '.') + 1));
         try {
@@ -926,6 +927,22 @@ class MigracionMysqlService
         }
         $cuentaPorCod[$cod] = $id;
         return $mapCuenta[$oldId] = $id;
+    }
+
+    /**
+     * Ajusta un código de cuenta viejo al formato del plan NUEVO (de la casa): el nivel 3 usa 1
+     * dígito, mientras el plan viejo lo trae con 2 (0X). Solo se reduce el 3er segmento cuando es 0X
+     * (valor 1–9); si es >= 10 (no cabe en 1 dígito) se deja igual. Los demás segmentos no cambian.
+     * Las cuentas de movimiento (las que usan los asientos) son todas de nivel 5, p. ej.
+     * '3.1.01.01.001' -> '3.1.1.01.001'.
+     */
+    private static function codigoCasa(string $cod): string
+    {
+        $s = explode('.', $cod);
+        if (count($s) >= 3 && strlen($s[2]) === 2 && $s[2][0] === '0') {
+            $s[2] = (string) (int) $s[2]; // '01'->'1', '09'->'9'
+        }
+        return implode('.', $s);
     }
 
     /**
@@ -959,6 +976,42 @@ class MigracionMysqlService
         return $idDocNuevo ? [$tabla, (int) $idDocNuevo] : null;
     }
 
+    /**
+     * Prepara/migra el PLAN DE CUENTAS viejo hacia la empresa nueva, con el formato de código de la
+     * casa (codigoCasa). Reglas:
+     *   - Si la cuenta (por su código de la casa) YA EXISTE en el plan nuevo: se reusa y se
+     *     sobreescribe su NOMBRE con el del sistema viejo. No se duplica.
+     *   - Si NO existe: se crea SOLO cuando la empresa nueva no tenía plan de cuentas (para no
+     *     ensuciar un plan ya armado). Si la nueva ya tenía plan, las cuentas faltantes se crean
+     *     bajo demanda (resolverOCrearCuenta) únicamente cuando un asiento las referencia.
+     * Deja `$mapCuenta` (id_cuenta viejo → id nuevo) y `$cuentaPorCod` (código casa → id) listos.
+     */
+    private function migrarPlanCuentas(int $idEmpresa, int $idUsuario, PDO $pg, array $oldCuentas, array &$mapCuenta, array &$cuentaPorCod): void
+    {
+        $nuevoVacio = ((int) $pg->query("SELECT COUNT(*) FROM plan_cuentas WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false")->fetchColumn()) === 0;
+        $ins    = $pg->prepare("INSERT INTO plan_cuentas (id_empresa, id_usuario, codigo, nivel, nombre, status, created_by) VALUES (?, ?, ?, ?, ?, 1, ?) RETURNING id");
+        $updNom = $pg->prepare("UPDATE plan_cuentas SET nombre = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        foreach ($oldCuentas as $oldId => $c) {
+            $cod = trim((string) $c['codigo']);
+            if ($cod === '') { continue; }
+            $house  = self::codigoCasa($cod);
+            $nombre = ((string) $c['nombre'] !== '') ? (string) $c['nombre'] : $house;
+            if (isset($cuentaPorCod[$house])) {
+                // Ya existe en el nuevo: reusar y sobreescribir el nombre con el del viejo.
+                $newId = (int) $cuentaPorCod[$house];
+                $updNom->execute([$nombre, $idUsuario, $newId]);
+                $mapCuenta[(int) $oldId] = $newId;
+            } elseif ($nuevoVacio) {
+                // Empresa nueva sin plan: importar la cuenta con el código de la casa.
+                $nivel = (int) ($c['nivel'] ?: (substr_count($house, '.') + 1));
+                $ins->execute([$idEmpresa, $idUsuario, $house, $nivel, $nombre, $idUsuario]);
+                $newId = (int) $ins->fetchColumn();
+                $cuentaPorCod[$house]    = $newId;
+                $mapCuenta[(int) $oldId] = $newId;
+            }
+        }
+    }
+
     /** Migra la contabilidad histórica (encabezado_diario + detalle_diario_contable) → asientos, tal cual (modulo_origen='migracion'). */
     private function migrarContabilidad(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
@@ -980,6 +1033,10 @@ class MigracionMysqlService
             $oldCuentas[(int) $r['id_cuenta']] = ['codigo' => $r['codigo_cuenta'], 'nombre' => $r['nombre_cuenta'], 'nivel' => $r['nivel_cuenta']];
         }
         $mapCuenta = [];
+
+        // Migrar/reconciliar el plan de cuentas viejo al formato de la casa ANTES de los asientos:
+        // deja $mapCuenta y $cuentaPorCod listos (por código de la casa).
+        $this->migrarPlanCuentas($idEmpresa, $idUsuario, $pg, $oldCuentas, $mapCuenta, $cuentaPorCod);
 
         $detStmt = $mysql->prepare("SELECT id_cuenta, debe, haber, detalle_item FROM detalle_diario_contable WHERE codigo_unico = :cu");
         $insCab  = $pg->prepare("INSERT INTO asientos_contables_cabecera (id_empresa, fecha_asiento, tipo_comprobante, numero_comprobante, concepto, estado, modulo_origen, total_debe, total_haber, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, 'migracion', ?, ?, ?, ?) RETURNING id");
