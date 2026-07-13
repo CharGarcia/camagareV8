@@ -437,7 +437,7 @@ class MigracionMysqlService
             "INSERT INTO vendedores (id_empresa, id_usuario, identificacion, nombre, correo, telefono, direccion, created_by)
              VALUES (:e, :u, :ident, :nom, :cor, :tel, :dir, :cb) RETURNING id"
         );
-        $insMap = $this->stmtMap($pg, 'vendedores');
+        $insMap = $this->stmtMap($pg,'vendedores');
 
         $stmt = $mysql->query("SELECT id_vendedor, numero_id, nombre, correo, telefono, direccion FROM vendedores WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base));
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -477,7 +477,7 @@ class MigracionMysqlService
         $done = $this->idsMigrados($pg, $idEmpresa, 'bodegas');
         $buscar = $pg->prepare("SELECT id FROM bodegas WHERE id_empresa = :e AND nombre = :nom LIMIT 1");
         $ins = $pg->prepare("INSERT INTO bodegas (id_empresa, id_usuario, nombre, created_by) VALUES (:e, :u, :nom, :cb) RETURNING id");
-        $insMap = $this->stmtMap($pg, 'bodegas');
+        $insMap = $this->stmtMap($pg,'bodegas');
 
         $stmt = $mysql->query("SELECT id_bodega, nombre_bodega FROM bodega WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base));
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -542,7 +542,7 @@ class MigracionMysqlService
         $mapBod      = $this->mapaDe($pg, $idEmpresa, 'bodegas');
         $prodPorCod  = $this->productosPorCodigo($pg, $idEmpresa);
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
-        $insMap      = $this->stmtMap($pg, 'consignaciones');
+        $insMap      = $this->stmtMap($pg,'consignaciones');
         $respCache   = [];
 
         $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, descuento, id_bodega, lote, nup FROM detalle_consignacion WHERE codigo_unico = :cu");
@@ -633,7 +633,7 @@ class MigracionMysqlService
         $mapFactura = $esFactura ? $this->mapaDe($pg, $idEmpresa, 'facturas') : [];
         $prodPorCod = $this->productosPorCodigo($pg, $idEmpresa);
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
-        $insMap     = $this->stmtMap($pg, $entidad);
+        $insMap     = $this->stmtMap($pg,$entidad);
         $respCache  = [];
 
         // numero_consignacion (ENTRADA) → id consignación nueva
@@ -750,7 +750,7 @@ class MigracionMysqlService
         $mapBod      = $this->mapaDe($pg, $idEmpresa, 'bodegas');
         $prodPorCod  = $this->productosPorCodigo($pg, $idEmpresa);
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
-        $insMap      = $this->stmtMap($pg, 'cambios_producto');
+        $insMap      = $this->stmtMap($pg,'cambios_producto');
         $oldProd     = $mysql->prepare("SELECT codigo_producto, nombre_producto FROM productos_servicios WHERE id_producto = :id LIMIT 1");
 
         $insCab = $pg->prepare("INSERT INTO cambios_producto_cv (id_empresa, fecha_cambio, serie, secuencial, id_cliente, observaciones, estado, subtotal_devuelto, subtotal_entregado, diferencia, created_by) VALUES (?, ?, ?, ?, ?, ?, 'Emitida', 0, 0, 0, ?) RETURNING id");
@@ -770,7 +770,7 @@ class MigracionMysqlService
         while ($c = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $c['id_cambio'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if ($this->yaMigradoDoc($idEmpresa, 'cambios_producto', 'cambios_producto_cv', $old, $pg)) { $res['ya_migrados']++; continue; }
 
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $c['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
@@ -810,12 +810,12 @@ class MigracionMysqlService
         $done        = $this->idsMigrados($pg, $idEmpresa, 'proformas');
         $mapCliente  = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $mapProd     = $this->mapaDe($pg, $idEmpresa, 'productos');
-        $insMap      = $this->stmtMap($pg, 'proformas');
+        $insMap      = $this->stmtMap($pg,'proformas');
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
 
         $insCab = $pg->prepare(
             "INSERT INTO proformas_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, total_sin_impuestos, total_descuento, importe_total, moneda, estado, observaciones, tipo_ambiente, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DOLAR', ?, ?, '1', ?) RETURNING id"
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DOLAR', ?, ?, ?, ?) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO proformas_detalle (id_proforma, id_producto, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)
@@ -835,7 +835,7 @@ class MigracionMysqlService
         while ($ep = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ep['id_encabezado_proforma'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if ($this->yaMigradoDoc($idEmpresa, 'proformas', 'proformas_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
 
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ep['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
@@ -862,7 +862,7 @@ class MigracionMysqlService
                 }
                 $est = (stripos((string) $ep['estado_proforma'], 'anul') !== false) ? 'ANULADA' : 'EMITIDA';
 
-                $insCab->execute([$idEmpresa, $idEst, $idPto, $idCliente, $idUsuario, substr((string) $ep['fecha_proforma'], 0, 10), $estab, $pto, $sec, round($totalSinImp, 2), round($totalDesc, 2), (float) $ep['total_proforma'], $est, null, $idUsuario]);
+                $insCab->execute([$idEmpresa, $idEst, $idPto, $idCliente, $idUsuario, substr((string) $ep['fecha_proforma'], 0, 10), $estab, $pto, $sec, round($totalSinImp, 2), round($totalDesc, 2), (float) $ep['total_proforma'], $est, null, $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario]);
                 $idProf = (int) $insCab->fetchColumn();
 
                 foreach ($lineas as $l) {
@@ -923,7 +923,7 @@ class MigracionMysqlService
 
         $res = ['entidad' => 'contabilidad', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
         $done   = $this->idsMigrados($pg, $idEmpresa, 'contabilidad');
-        $insMap = $this->stmtMap($pg, 'contabilidad');
+        $insMap = $this->stmtMap($pg,'contabilidad');
 
         // Plan de cuentas: código → id nuevo, y old id_cuenta → info (para puentear/crear)
         $cuentaPorCod = [];
@@ -937,7 +937,7 @@ class MigracionMysqlService
         $mapCuenta = [];
 
         $detStmt = $mysql->prepare("SELECT id_cuenta, debe, haber, detalle_item FROM detalle_diario_contable WHERE codigo_unico = :cu");
-        $insCab  = $pg->prepare("INSERT INTO asientos_contables_cabecera (id_empresa, fecha_asiento, tipo_comprobante, numero_comprobante, concepto, estado, modulo_origen, total_debe, total_haber, created_by) VALUES (?, ?, ?, ?, ?, ?, 'migracion', ?, ?, ?) RETURNING id");
+        $insCab  = $pg->prepare("INSERT INTO asientos_contables_cabecera (id_empresa, fecha_asiento, tipo_comprobante, numero_comprobante, concepto, estado, modulo_origen, total_debe, total_haber, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, 'migracion', ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO asientos_contables_detalle (id_empresa, id_asiento, id_cuenta_contable, debe, haber, referencia_detalle, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
 
         $sql = "SELECT id_diario, codigo_unico, fecha_asiento, concepto_general, estado, tipo
@@ -948,7 +948,7 @@ class MigracionMysqlService
         while ($e = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $e['id_diario'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if ($this->yaMigradoDoc($idEmpresa, 'contabilidad', 'asientos_contables_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
 
             $detStmt->execute([':cu' => (string) $e['codigo_unico']]);
             $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -967,7 +967,7 @@ class MigracionMysqlService
                     $th += (float) $d['haber'];
                 }
                 $est = (stripos((string) $e['estado'], 'anul') !== false) ? 'anulado' : 'registrado';
-                $insCab->execute([$idEmpresa, substr((string) $e['fecha_asiento'], 0, 10), (self::nz($e['tipo']) !== null ? (string) $e['tipo'] : 'DIARIO'), (string) $e['codigo_unico'], (self::nz($e['concepto_general']) !== null ? (string) $e['concepto_general'] : (string) $e['codigo_unico']), $est, $td, $th, $idUsuario]);
+                $insCab->execute([$idEmpresa, substr((string) $e['fecha_asiento'], 0, 10), (self::nz($e['tipo']) !== null ? (string) $e['tipo'] : 'DIARIO'), (string) $e['codigo_unico'], (self::nz($e['concepto_general']) !== null ? (string) $e['concepto_general'] : (string) $e['codigo_unico']), $est, $td, $th, $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario]);
                 $idAsiento = (int) $insCab->fetchColumn();
                 foreach ($lineas as $ln) {
                     $insDet->execute([$idEmpresa, $idAsiento, $ln[0], $ln[1], $ln[2], $ln[3], $idUsuario]);
@@ -997,7 +997,7 @@ class MigracionMysqlService
         $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
         $prodPorCod = $this->productosPorCodigo($pg, $idEmpresa);
         $mapBod     = $this->mapaDe($pg, $idEmpresa, 'bodegas');
-        $insMap     = $this->stmtMap($pg, 'inventario');
+        $insMap     = $this->stmtMap($pg,'inventario');
 
         $bodDef = (int) $pg->query("SELECT id FROM bodegas WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false ORDER BY id LIMIT 1")->fetchColumn();
         if ($bodDef <= 0) {
@@ -1005,7 +1005,7 @@ class MigracionMysqlService
         }
 
         $qStock = $pg->prepare("SELECT COALESCE(SUM(CASE WHEN tipo_movimiento = 'entrada' THEN cantidad ELSE -cantidad END), 0) FROM inventario_kardex WHERE id_empresa = ? AND id_producto = ? AND id_bodega = ? AND eliminado = false");
-        $ins    = $pg->prepare("INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, tipo_movimiento, referencia_tipo, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, observaciones, created_by) VALUES (?, ?, ?, ?, 'migracion', ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+        $ins    = $pg->prepare("INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, tipo_movimiento, referencia_tipo, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, 'migracion', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         $stock  = [];
 
         $sql = "SELECT id_inventario, id_producto, id_bodega, codigo_producto, nombre_producto, cantidad_entrada, cantidad_salida, costo_unitario, precio, operacion, fecha_registro, referencia, lote
@@ -1016,7 +1016,7 @@ class MigracionMysqlService
         while ($iv = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $iv['id_inventario'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if ($this->yaMigradoDoc($idEmpresa, 'inventario', 'inventario_kardex', $old, $pg)) { $res['ya_migrados']++; continue; }
 
             $esEntrada = strtoupper(trim((string) $iv['operacion'])) === 'ENTRADA';
             $cant = $esEntrada ? (float) $iv['cantidad_entrada'] : (float) $iv['cantidad_salida'];
@@ -1037,7 +1037,7 @@ class MigracionMysqlService
                 $post = $esEntrada ? $ant + $cant : $ant - $cant;
                 $stock[$key] = $post;
 
-                $ins->execute([$idEmpresa, $idProd, $idBod, $esEntrada ? 'entrada' : 'salida', substr((string) $iv['fecha_registro'], 0, 19), $cant, $cu, $cant * $cu, $ant, $post, self::nz($iv['lote']), self::nz($iv['referencia']), $idUsuario]);
+                $ins->execute([$idEmpresa, $idProd, $idBod, $esEntrada ? 'entrada' : 'salida', substr((string) $iv['fecha_registro'], 0, 19), $cant, $cu, $cant * $cu, $ant, $post, self::nz($iv['lote']), self::nz($iv['referencia']), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario]);
                 $kid = (int) $ins->fetchColumn();
 
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $kid, ':cn' => (string) $old, ':vin' => 'f', ':cb' => $idUsuario]);
@@ -1076,7 +1076,7 @@ class MigracionMysqlService
         $res = ['entidad' => 'ingresos', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
         $done       = $this->idsMigrados($pg, $idEmpresa, 'ingresos');
         $mapFactura = $this->mapaDe($pg, $idEmpresa, 'facturas');
-        $insMap     = $this->stmtMap($pg, 'ingresos');
+        $insMap     = $this->stmtMap($pg,'ingresos');
 
         // Formas de cobro: pre-crear desde el catálogo viejo (fuera de transacción) + una por defecto
         $formaCache = [];
@@ -1089,7 +1089,7 @@ class MigracionMysqlService
         $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, fecha_pago, cheque FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'INGRESO'");
 
         $vc      = $pg->prepare("SELECT id_cliente FROM ventas_cabecera WHERE id = :id");
-        $insCab  = $pg->prepare("INSERT INTO ingresos_cabecera (id_empresa, id_usuario, fecha_emision, secuencial, numero_ingreso, tipo_ingreso, id_cliente, monto_total, observaciones, created_by) VALUES (?, ?, ?, ?, ?, 'FACTURA_VENTA', ?, ?, ?, ?) RETURNING id");
+        $insCab  = $pg->prepare("INSERT INTO ingresos_cabecera (id_empresa, id_usuario, fecha_emision, secuencial, numero_ingreso, tipo_ingreso, id_cliente, monto_total, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, 'FACTURA_VENTA', ?, ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO ingresos_detalle (id_ingreso, tipo_documento, id_referencia_documento, descripcion, monto_documento, monto_cobrado) VALUES (?, 'FACTURA_VENTA', ?, ?, ?, ?)");
         $insPago = $pg->prepare("INSERT INTO ingresos_pagos (id_ingreso, id_forma_cobro, monto, fecha_cobro, numero_cheque) VALUES (?, ?, ?, ?, ?)");
 
@@ -1101,7 +1101,7 @@ class MigracionMysqlService
         while ($ie = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ie['id_ing_egr'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if ($this->yaMigradoDoc($idEmpresa, 'ingresos', 'ingresos_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
             $cod = (string) $ie['codigo_documento'];
             $sec = str_pad(preg_replace('/\D+/', '', (string) $ie['numero_ing_egr']), 9, '0', STR_PAD_LEFT);
 
@@ -1116,7 +1116,7 @@ class MigracionMysqlService
                     if ($idFac) { $vc->execute([':id' => $idFac]); $idCliente = ($vc->fetchColumn() ?: null); break; }
                 }
 
-                $insCab->execute([$idEmpresa, $idUsuario, substr((string) $ie['fecha_ing_egr'], 0, 10), $sec, (string) $ie['numero_ing_egr'], $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $idUsuario]);
+                $insCab->execute([$idEmpresa, $idUsuario, substr((string) $ie['fecha_ing_egr'], 0, 10), $sec, (string) $ie['numero_ing_egr'], $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario]);
                 $idIng = (int) $insCab->fetchColumn();
 
                 foreach ($dets as $d) {
@@ -1153,7 +1153,7 @@ class MigracionMysqlService
         $res = ['entidad' => 'egresos', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
         $done      = $this->idsMigrados($pg, $idEmpresa, 'egresos');
         $mapCompra = $this->mapaDe($pg, $idEmpresa, 'compras');
-        $insMap    = $this->stmtMap($pg, 'egresos');
+        $insMap    = $this->stmtMap($pg,'egresos');
 
         // codigo_documento (string, viejo) → id compra nueva
         $compraPorCod = [];
@@ -1173,7 +1173,7 @@ class MigracionMysqlService
         $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, fecha_pago, cheque FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'EGRESO'");
 
         $cc      = $pg->prepare("SELECT id_proveedor FROM compras_cabecera WHERE id = :id");
-        $insCab  = $pg->prepare("INSERT INTO egresos_cabecera (id_empresa, fecha_emision, numero_egreso, secuencial, tipo_egreso, tipo_sujeto, id_proveedor, monto_total, observaciones, created_by) VALUES (?, ?, ?, ?, 'COMPRA', 'PROVEEDOR', ?, ?, ?, ?) RETURNING id");
+        $insCab  = $pg->prepare("INSERT INTO egresos_cabecera (id_empresa, fecha_emision, numero_egreso, secuencial, tipo_egreso, tipo_sujeto, id_proveedor, monto_total, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, 'COMPRA', 'PROVEEDOR', ?, ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO egresos_detalle (id_egreso, tipo_documento, id_referencia_documento, descripcion, monto_documento, monto_pagado) VALUES (?, 'COMPRA', ?, ?, ?, ?)");
         $insPago = $pg->prepare("INSERT INTO egresos_pagos (id_egreso, id_forma_pago, monto, fecha_cobro, numero_cheque) VALUES (?, ?, ?, ?, ?)");
 
@@ -1185,7 +1185,7 @@ class MigracionMysqlService
         while ($ie = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ie['id_ing_egr'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if ($this->yaMigradoDoc($idEmpresa, 'egresos', 'egresos_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
             $cod = (string) $ie['codigo_documento'];
             $sec = str_pad(preg_replace('/\D+/', '', (string) $ie['numero_ing_egr']), 9, '0', STR_PAD_LEFT);
 
@@ -1200,7 +1200,7 @@ class MigracionMysqlService
                     if ($idComp) { $cc->execute([':id' => $idComp]); $idProv = ($cc->fetchColumn() ?: null); break; }
                 }
 
-                $insCab->execute([$idEmpresa, substr((string) $ie['fecha_ing_egr'], 0, 10), (string) $ie['numero_ing_egr'], $sec, $idProv, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $idUsuario]);
+                $insCab->execute([$idEmpresa, substr((string) $ie['fecha_ing_egr'], 0, 10), (string) $ie['numero_ing_egr'], $sec, $idProv, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario]);
                 $idEgr = (int) $insCab->fetchColumn();
 
                 foreach ($dets as $d) {
@@ -1238,7 +1238,7 @@ class MigracionMysqlService
         $done       = $this->idsMigrados($pg, $idEmpresa, 'guias');
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
-        $insMap     = $this->stmtMap($pg, 'guias');
+        $insMap     = $this->stmtMap($pg,'guias');
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
         $oldCliRuc   = $mysql->prepare("SELECT ruc FROM clientes WHERE id = :id LIMIT 1");
 
@@ -1261,7 +1261,7 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_encabezado_gr'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if ($this->yaMigradoDoc($idEmpresa, 'guias', 'guias_remision_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
 
@@ -1292,7 +1292,7 @@ class MigracionMysqlService
                     ':placa' => (string) ($ec['placa'] ?? ''), ':fini' => $fini, ':ffin' => $ffin,
                     ':dpart' => (string) ($ec['origen'] ?? ''), ':ddest' => (string) ($ec['destino'] ?? ''),
                     ':mot' => (string) ($ec['motivo'] ?: 'Venta'), ':nds' => self::nz($ec['factura_aplica']),
-                    ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1', ':estado' => $this->estadoFacturaSri((string) $ec['estado_sri']), ':cb' => $idUsuario,
+                    ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':estado' => $this->estadoFacturaSri((string) $ec['estado_sri']), ':cb' => $idUsuario,
                 ]);
                 $idGr = (int) $insCab->fetchColumn();
 
@@ -1327,7 +1327,7 @@ class MigracionMysqlService
         $res = ['entidad' => 'liquidaciones', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
         $done    = $this->idsMigrados($pg, $idEmpresa, 'liquidaciones');
         $mapProv = $this->mapaDe($pg, $idEmpresa, 'proveedores');
-        $insMap  = $this->stmtMap($pg, 'liquidaciones');
+        $insMap  = $this->stmtMap($pg,'liquidaciones');
         $provPorIdent = $this->proveedoresPorIdentificacion($pg, $idEmpresa);
         $oldProvRuc   = $mysql->prepare("SELECT ruc_proveedor FROM proveedores WHERE id_proveedor = :id LIMIT 1");
 
@@ -1353,7 +1353,7 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_encabezado_liq'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if ($this->yaMigradoDoc($idEmpresa, 'liquidaciones', 'liquidaciones_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
             $idProv = $this->resolverOCrearProveedor($provPorIdent, $mapProv, (int) $ec['id_proveedor'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idProv) { $res['omitidos']++; continue; }
 
@@ -1380,7 +1380,7 @@ class MigracionMysqlService
                     ':fe' => substr((string) $ec['fecha_liquidacion'], 0, 10), ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec,
                     ':clave' => self::nz($ec['aut_sri']), ':aut' => self::nz($ec['aut_sri']), ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
                     ':tot' => (float) $ec['total_liquidacion'], ':estado' => $this->estadoFacturaSri((string) $ec['estado_sri']),
-                    ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1', ':cb' => $idUsuario,
+                    ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':cb' => $idUsuario,
                 ]);
                 $idLiq = (int) $insCab->fetchColumn();
 
@@ -1426,7 +1426,7 @@ class MigracionMysqlService
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
         $mapBodega  = $this->mapaDe($pg, $idEmpresa, 'bodegas');
-        $insMap     = $this->stmtMap($pg, 'facturas');
+        $insMap     = $this->stmtMap($pg,'facturas');
 
         // Fallback: clientes existentes en el sistema nuevo por identificación (aunque no estén
         // en el mapa de migración; p.ej. creados por el importador XML). Prefiere el no eliminado.
@@ -1449,7 +1449,7 @@ class MigracionMysqlService
         while ($ef = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ef['id_encabezado_factura'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if ($this->yaMigradoDoc($idEmpresa, 'facturas', 'ventas_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
 
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ef['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; } // cliente viejo sin identificación
@@ -1488,7 +1488,7 @@ class MigracionMysqlService
                     'moneda' => 'DOLAR', 'estado' => $estado,
                     'observaciones' => self::nz($ef['observaciones_factura']),
                     'clave_acceso' => self::nz($ef['aut_sri']),
-                    'tipo_ambiente' => ((string) $ef['ambiente'] === '2') ? '2' : '1',
+                    'tipo_ambiente' => $this->ambienteEmpresa($pg, $idEmpresa),
                     'tipo_registro' => 'migrado',
                 ]);
 
@@ -1537,15 +1537,20 @@ class MigracionMysqlService
         $pg    = Database::getConnection();
 
         $res = ['entidad' => 'compras', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
-        $done     = $this->idsMigrados($pg, $idEmpresa, 'compras');
-        $mapProv  = $this->mapaDe($pg, $idEmpresa, 'proveedores');
-        $insMap   = $this->stmtMap($pg, 'compras');
+        $done      = $this->idsMigrados($pg, $idEmpresa, 'compras');
+        $mapCompra = $this->mapaDe($pg, $idEmpresa, 'compras'); // id viejo → id compra nueva (para reconciliar en re-corrida)
+        $mapProv   = $this->mapaDe($pg, $idEmpresa, 'proveedores');
+        $insMap    = $this->stmtMap($pg,'compras');
         $provPorIdent = $this->proveedoresPorIdentificacion($pg, $idEmpresa);
         $oldProvRuc   = $mysql->prepare("SELECT ruc_proveedor FROM proveedores WHERE id_proveedor = :id LIMIT 1");
 
+        // Ids válidos de sustento tributario en el sistema nuevo (para no romper la FK; viejo y nuevo comparten ids)
+        $sustValidos = [];
+        foreach ($pg->query("SELECT id FROM sustento_tributario") as $s) { $sustValidos[(int) $s['id']] = true; }
+
         $insCab = $pg->prepare(
-            "INSERT INTO compras_cabecera (id_empresa, id_proveedor, establecimiento_prov, punto_emision_prov, secuencial_prov, numero_autorizacion, fecha_emision, fecha_registro, importe_total, total_sin_impuestos, total_descuento, propina, observaciones, tipo_registro, tipo_ambiente, id_usuario, created_by)
-             VALUES (:e, :prov, :est, :pto, :sec, :aut, :fe, :fr, :tot, :tsi, :tdes, :prop, :obs, 'migrado', '1', :u, :cb) RETURNING id"
+            "INSERT INTO compras_cabecera (id_empresa, id_proveedor, establecimiento_prov, punto_emision_prov, secuencial_prov, numero_autorizacion, fecha_emision, fecha_registro, importe_total, total_sin_impuestos, total_descuento, propina, observaciones, tipo_registro, id_sustento_tributario, autorizacion_desde, autorizacion_hasta, fecha_caducidad, deducible, tipo_ambiente, id_usuario, created_by)
+             VALUES (:e, :prov, :est, :pto, :sec, :aut, :fe, :fr, :tot, :tsi, :tdes, :prop, :obs, :treg, :sust, :ad, :ah, :fcad, :ded, :amb, :u, :cb) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO compras_detalle (id_compra, id_producto, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)
@@ -1556,8 +1561,10 @@ class MigracionMysqlService
              VALUES (:d, '2', :cp, :tar, :base, :val)"
         );
         $cuerpoStmt = $mysql->prepare("SELECT codigo_producto, detalle_producto, cantidad, precio, descuento, impuesto, subtotal FROM cuerpo_compra WHERE codigo_documento = :cd");
+        // Al re-correr: actualiza el ambiente y los datos tributarios de una compra ya migrada, según la empresa actual
+        $updCab = $pg->prepare("UPDATE compras_cabecera SET tipo_ambiente = :amb, id_sustento_tributario = :sust, autorizacion_desde = :ad, autorizacion_hasta = :ah, fecha_caducidad = :fcad, tipo_registro = :treg, deducible = :ded, updated_at = now(), updated_by = :u WHERE id = :id");
 
-        $sql = "SELECT id_encabezado_compra, codigo_documento, numero_documento, id_proveedor, aut_sri, fecha_compra, fecha_registro, total_compra, propina
+        $sql = "SELECT id_encabezado_compra, codigo_documento, numero_documento, id_proveedor, aut_sri, fecha_compra, fecha_registro, total_compra, propina, id_sustento, `desde`, `hasta`, fecha_caducidad, tipo_comprobante, deducible_en
                   FROM encabezado_compra WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_compra', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_compra";
         if ($limite > 0) {
             $sql .= " LIMIT " . (int) $limite;
@@ -1567,7 +1574,18 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_encabezado_compra'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            // Campos tributarios (para insertar o, en re-corrida, actualizar)
+            $tc   = strtoupper(trim((string) $ec['tipo_comprobante']));
+            $treg = (strpos($tc, 'ELEC') !== false) ? 'electronico' : 'fisica'; // ELECTRÓNICA / FÍSICA
+            $sust = isset($sustValidos[(int) $ec['id_sustento']]) ? (int) $ec['id_sustento'] : null;
+            $ad   = ((int) $ec['desde'] > 0) ? str_pad((string) (int) $ec['desde'], 9, '0', STR_PAD_LEFT) : null;
+            $ah   = ((int) $ec['hasta'] > 0) ? str_pad((string) (int) $ec['hasta'], 9, '0', STR_PAD_LEFT) : null;
+            // Ya migrada: reconciliar ambiente + datos tributarios con la configuración ACTUAL de la empresa (re-corrida)
+            if (isset($mapCompra[(string) $old])) {
+                $updCab->execute([':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':sust' => $sust, ':ad' => $ad, ':ah' => $ah, ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':treg' => $treg, ':ded' => self::nz($ec['deducible_en']), ':u' => $idUsuario, ':id' => (int) $mapCompra[(string) $old]]);
+                $res['ya_migrados']++;
+                continue;
+            }
             $idProv = $this->resolverOCrearProveedor($provPorIdent, $mapProv, (int) $ec['id_proveedor'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idProv) { $res['omitidos']++; continue; } // proveedor no migrado
 
@@ -1591,7 +1609,9 @@ class MigracionMysqlService
                     ':aut' => self::nz($ec['aut_sri']), ':fe' => substr((string) $ec['fecha_compra'], 0, 10),
                     ':fr' => substr((string) $ec['fecha_registro'], 0, 19) ?: null, ':tot' => (float) $ec['total_compra'],
                     ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2), ':prop' => (float) $ec['propina'],
-                    ':obs' => null, ':u' => $idUsuario, ':cb' => $idUsuario,
+                    ':obs' => null, ':treg' => $treg, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah,
+                    ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':ded' => self::nz($ec['deducible_en']),
+                    ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':u' => $idUsuario, ':cb' => $idUsuario,
                 ]);
                 $idCompra = (int) $insCab->fetchColumn();
 
@@ -1631,7 +1651,7 @@ class MigracionMysqlService
         $done       = $this->idsMigrados($pg, $idEmpresa, 'notas_credito');
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
-        $insMap     = $this->stmtMap($pg, 'notas_credito');
+        $insMap     = $this->stmtMap($pg,'notas_credito');
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
         $oldCliRuc   = $mysql->prepare("SELECT ruc FROM clientes WHERE id = :id LIMIT 1");
 
@@ -1657,7 +1677,7 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_encabezado_nc'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if ($this->yaMigradoDoc($idEmpresa, 'notas_credito', 'notas_credito_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
 
@@ -1726,7 +1746,7 @@ class MigracionMysqlService
         $res = ['entidad' => 'retenciones_compra', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
         $done    = $this->idsMigrados($pg, $idEmpresa, 'retenciones_compra');
         $mapProv = $this->mapaDe($pg, $idEmpresa, 'proveedores');
-        $insMap  = $this->stmtMap($pg, 'retenciones_compra');
+        $insMap  = $this->stmtMap($pg,'retenciones_compra');
         $provPorIdent = $this->proveedoresPorIdentificacion($pg, $idEmpresa);
         $oldProvRuc   = $mysql->prepare("SELECT ruc_proveedor FROM proveedores WHERE id_proveedor = :id LIMIT 1");
 
@@ -1748,7 +1768,7 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_encabezado_retencion'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if ($this->yaMigradoDoc($idEmpresa, 'retenciones_compra', 'retencion_compra_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
             $idProv = $this->resolverOCrearProveedor($provPorIdent, $mapProv, (int) $ec['id_proveedor'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idProv) { $res['omitidos']++; continue; }
 
@@ -1808,13 +1828,13 @@ class MigracionMysqlService
         $res = ['entidad' => 'retenciones_venta', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
         $done       = $this->idsMigrados($pg, $idEmpresa, 'retenciones_venta');
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
-        $insMap     = $this->stmtMap($pg, 'retenciones_venta');
+        $insMap     = $this->stmtMap($pg,'retenciones_venta');
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
         $oldCliRuc   = $mysql->prepare("SELECT ruc FROM clientes WHERE id = :id LIMIT 1");
 
         $insCab = $pg->prepare(
             "INSERT INTO retencion_venta_cabecera (id_empresa, id_cliente, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, periodo_fiscal, total_isd, total_iva, total_renta, tipo_ambiente, created_by, updated_by)
-             VALUES (:e, :cli, :fe, :est, :pto, :sec, :clave, :per, :isd, :iva, :renta, '1', :cb, :cb) RETURNING id"
+             VALUES (:e, :cli, :fe, :est, :pto, :sec, :clave, :per, :isd, :iva, :renta, :amb, :cb, :cb) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO retencion_venta_detalle (id_retencion, cod_doc_sustento, fecha_emision_doc_sustento, codigo_impuesto, codigo_retencion, base_imponible, porcentaje_retencion, valor_retenido, num_doc_sustento)
@@ -1830,7 +1850,7 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_encabezado_retencion'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if ($this->yaMigradoDoc($idEmpresa, 'retenciones_venta', 'retencion_venta_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
 
@@ -1859,7 +1879,7 @@ class MigracionMysqlService
                 $insCab->execute([
                     ':e' => $idEmpresa, ':cli' => $idCliente, ':fe' => $fe, ':est' => $estab, ':pto' => $pto, ':sec' => $sec,
                     ':clave' => self::nz($ec['aut_sri']), ':per' => ($per ?: '01/1900'), ':isd' => round($tIsd, 2),
-                    ':iva' => round($tIva, 2), ':renta' => round($tRenta, 2), ':cb' => $idUsuario,
+                    ':iva' => round($tIva, 2), ':renta' => round($tRenta, 2), ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':cb' => $idUsuario,
                 ]);
                 $idRet = (int) $insCab->fetchColumn();
 
@@ -1897,13 +1917,13 @@ class MigracionMysqlService
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
         $mapBodega  = $this->mapaDe($pg, $idEmpresa, 'bodegas');
-        $insMap     = $this->stmtMap($pg, 'recibos');
+        $insMap     = $this->stmtMap($pg,'recibos');
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
         $oldCliRuc   = $mysql->prepare("SELECT ruc FROM clientes WHERE id = :id LIMIT 1");
 
         $insCab = $pg->prepare(
             "INSERT INTO recibos_venta_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, recibo_numero, con_impuestos, total_sin_impuestos, total_descuento, importe_total, propina, moneda, tipo_ambiente, created_by)
-             VALUES (:e, :est, :pto, :cli, :u, :fe, :estc, :ptoc, :sec, :num, :ci, :tsi, :tdes, :tot, :prop, 'DOLAR', '1', :cb) RETURNING id"
+             VALUES (:e, :est, :pto, :cli, :u, :fe, :estc, :ptoc, :sec, :num, :ci, :tsi, :tdes, :tot, :prop, 'DOLAR', :amb, :cb) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO recibos_venta_detalle (id_recibo, id_producto, id_bodega, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)
@@ -1923,7 +1943,7 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_encabezado_recibo'];
-            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            if ($this->yaMigradoDoc($idEmpresa, 'recibos', 'recibos_venta_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
 
@@ -1954,7 +1974,7 @@ class MigracionMysqlService
                     ':e' => $idEmpresa, ':est' => $idEst, ':pto' => $idPto, ':cli' => $idCliente, ':u' => $idUsuario,
                     ':fe' => substr((string) $ec['fecha_recibo'], 0, 10), ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec,
                     ':num' => "$estab-$pto-$sec", ':ci' => $conImp, ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
-                    ':tot' => (float) $ec['total_recibo'], ':prop' => (float) $ec['propina'], ':cb' => $idUsuario,
+                    ':tot' => (float) $ec['total_recibo'], ':prop' => (float) $ec['propina'], ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':cb' => $idUsuario,
                 ]);
                 $idRec = (int) $insCab->fetchColumn();
 
@@ -2188,6 +2208,35 @@ class MigracionMysqlService
         return $id;
     }
 
+    /** tipo_ambiente vigente de la empresa ('1' pruebas / '2' producción). Cacheado. Los documentos
+     *  migrados deben llevar el ambiente de la empresa, porque los listados filtran por él. */
+    private function ambienteEmpresa(PDO $pg, int $idEmpresa): string
+    {
+        static $cache = [];
+        if (isset($cache[$idEmpresa])) { return $cache[$idEmpresa]; }
+        $st = $pg->prepare("SELECT tipo_ambiente FROM empresas WHERE id = ? LIMIT 1");
+        $st->execute([$idEmpresa]);
+        $v = (string) $st->fetchColumn();
+        return $cache[$idEmpresa] = ($v === '2' ? '2' : '1');
+    }
+
+    /**
+     * ¿El documento ya está migrado (en el mapa)? Si sí, reconcilia su tipo_ambiente con la
+     * configuración ACTUAL de la empresa (re-correr la migración = re-estampar el ambiente) y
+     * devuelve true. Si no, false. Cachea el mapa por entidad y el statement por tabla.
+     */
+    private function yaMigradoDoc(int $idEmpresa, string $entidad, string $tabla, int $old, PDO $pg): bool
+    {
+        static $maps = [];
+        $key = $idEmpresa . ':' . $entidad;
+        if (!isset($maps[$key])) { $maps[$key] = $this->mapaDe($pg, $idEmpresa, $entidad); }
+        if (!isset($maps[$key][(string) $old])) { return false; }
+        static $upd = [];
+        if (!isset($upd[$tabla])) { $upd[$tabla] = $pg->prepare("UPDATE $tabla SET tipo_ambiente = ? WHERE id = ?"); }
+        $upd[$tabla]->execute([$this->ambienteEmpresa($pg, $idEmpresa), (int) $maps[$key][(string) $old]]);
+        return true;
+    }
+
     /**
      * ¿Ya existe el documento en el sistema nuevo por su clave natural? Devuelve su id o null.
      * Las columnas son fijas del código (no entran del usuario). Filtra eliminado = false.
@@ -2212,7 +2261,7 @@ class MigracionMysqlService
      */
     private function marcarVinculado(array &$res, array &$done, PDO $pg, int $idEmpresa, int $old, int $idExistente, string $clave, int $idUsuario): bool
     {
-        $insMap = $this->stmtMap($pg, (string) $res['entidad']);
+        $insMap = $this->stmtMap($pg,(string) $res['entidad']);
         $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idExistente, ':cn' => substr($clave, 0, 120), ':vin' => 't', ':cb' => $idUsuario]);
         $done[(string) $old] = true;
         $res['vinculados'] = ($res['vinculados'] ?? 0) + 1;

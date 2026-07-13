@@ -956,10 +956,19 @@ function CMG_agregarFilaDetalle(det) {
     const codDet = (det.impuestos && det.impuestos.length && (det.impuestos[0].codigo_porcentaje ?? '') !== '')
         ? String(det.impuestos[0].codigo_porcentaje) : '';
     const ivaPct = det.impuestos && det.impuestos.length ? parseFloat(det.impuestos[0].tarifa||0) : _ivaDefault;
-    const opcIva = (window.CMG_tarifasIva || []).map(t => {
+    let _ivaMatched = false;
+    let opcIva = (window.CMG_tarifasIva || []).map(t => {
         const sel = codDet !== '' ? String(t.codigo) === codDet : parseFloat(t.porcentaje_iva) === ivaPct;
+        if (sel) _ivaMatched = true;
         return `<option value="${t.codigo}" data-codigo="${t.codigo}" data-tarifa="${t.porcentaje_iva}" ${sel?'selected':''}>${t.tarifa || (t.porcentaje_iva + '%')}</option>`;
     }).join('');
+    if (!_ivaMatched && det.impuestos && det.impuestos.length && !isNaN(ivaPct)) {
+        // Tarifa histórica que ya no está activa en el catálogo (p.ej. IVA 12% de años anteriores,
+        // hoy inactivo): se agrega la opción SOLO para este documento, para mostrar el IVA real con
+        // que se registró. No afecta a documentos nuevos (el catálogo sigue ofreciendo solo activas).
+        const _codH = codDet !== '' ? codDet : (typeof _codigoIvaPorPct === 'function' ? _codigoIvaPorPct(ivaPct) : '');
+        opcIva += `<option value="${_codH}" data-codigo="${_codH}" data-tarifa="${ivaPct}" selected>${ivaPct}%</option>`;
+    }
 
     const tr = document.createElement('tr');
     tr.className = 'row-detalle';

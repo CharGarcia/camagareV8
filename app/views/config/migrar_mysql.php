@@ -209,9 +209,12 @@ $base = BASE_URL;
         }).join('');
         const total  = Object.values(res.data).reduce((a, f) => a + (f.total || 0), 0);
         const estSeg = Object.values(res.data).reduce((a, f) => a + (f.est_segundos || 0), 0);
+        const ambTxt = res.ambiente === '2' ? 'PRODUCCIÓN' : (res.ambiente === '1' ? 'PRUEBAS' : '—');
+        const ambCls = res.ambiente === '2' ? 'text-danger' : 'text-success';
         $('zonaResumen').innerHTML =
             `<div class="alert alert-info py-2 small mb-3">
                 RUC en base anterior: <b>${res.ruc}</b> · Total de registros: <b>${fmt(total)}</b><br>
+                <i class="bi bi-diagram-3 me-1"></i>Ambiente de la empresa (destino): <b class="${ambCls}">${ambTxt}</b>${res.ambiente ? ' (' + res.ambiente + ')' : ''} <span class="text-muted">— los documentos migrados se marcan con este ambiente</span><br>
                 <i class="bi bi-clock me-1"></i>Tiempo estimado de migración (lo marcado): <b>~${fmtTiempo(estSeg)}</b>
                 <span class="text-muted">— aproximado; los catálogos van más rápido que los documentos</span>
              </div>
@@ -230,10 +233,24 @@ $base = BASE_URL;
         const entidades = entsSeleccionadas();
         if (!entidades.length) { alert('Seleccione al menos un dato.'); return; }
 
+        // Consultar ambiente de la empresa + estimaciones ANTES de confirmar (para mostrarlos)
+        const estMap = {}, labelMap = {}, totalMap = {};
+        let ambiente = null;
+        try {
+            const b = new URLSearchParams();
+            b.append('id_empresa', idEmpresa);
+            entidades.forEach(v => b.append('entidades[]', v));
+            const an = await fetch(base + '/config/migrarMysql?action=analizar', { method: 'POST', body: b }).then(r => r.json());
+            if (an.ok) { ambiente = an.ambiente; for (const [k, f] of Object.entries(an.data)) { estMap[k] = f.est_segundos || 0; labelMap[k] = f.label || k; totalMap[k] = f.total || 0; } }
+        } catch (e) { /* sin estimación: se usa un aproximado */ }
+
+        const ambTxt = ambiente === '2' ? 'PRODUCCIÓN' : (ambiente === '1' ? 'PRUEBAS' : 'desconocido');
+        const ambCls = ambiente === '2' ? 'text-danger' : 'text-success';
         const conf = await Swal.fire({
             title: '¿Migrar los datos seleccionados?',
             html: `Se traerán <b>${entidades.length}</b> tipo(s) de dato desde la base anterior.<br>
-                   <span class="text-muted small">Es idempotente: no duplica lo ya migrado.</span>`,
+                   Ambiente de la empresa (destino): <b class="${ambCls}">${ambTxt}</b>${ambiente ? ' (' + ambiente + ')' : ''}<br>
+                   <span class="text-muted small">Es idempotente: no duplica lo ya migrado. Los documentos se marcan con este ambiente.</span>`,
             icon: 'question', showCancelButton: true, confirmButtonText: 'Sí, migrar',
             cancelButtonText: 'Cancelar', confirmButtonColor: '#198754'
         });
@@ -243,16 +260,6 @@ $base = BASE_URL;
         const btn = $('btnMigrar');
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Migrando...';
         $('zonaMigrarResultado').innerHTML = '';
-
-        // Estimaciones de tiempo, nombres y total de registros por entidad
-        const estMap = {}, labelMap = {}, totalMap = {};
-        try {
-            const b = new URLSearchParams();
-            b.append('id_empresa', idEmpresa);
-            entidades.forEach(v => b.append('entidades[]', v));
-            const an = await fetch(base + '/config/migrarMysql?action=analizar', { method: 'POST', body: b }).then(r => r.json());
-            if (an.ok) for (const [k, f] of Object.entries(an.data)) { estMap[k] = f.est_segundos || 0; labelMap[k] = f.label || k; totalMap[k] = f.total || 0; }
-        } catch (e) { /* sin estimación: se usa un aproximado */ }
 
         const totalEnt = entidades.length;
         const totals = { migrados: 0, vinculados: 0, ya: 0, omitidos: 0, errores: 0 };

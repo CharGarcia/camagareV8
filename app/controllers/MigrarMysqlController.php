@@ -62,10 +62,13 @@ class MigrarMysqlController extends Controller
     {
         header('Content-Type: application/json');
         try {
-            [, $ruc] = $this->resolverEmpresa();
+            [$idEmpresa, $ruc] = $this->resolverEmpresa();
             $entidades = $this->entidadesPost();
             $data = $this->service->analizar($ruc, $entidades);
-            echo json_encode(['ok' => true, 'ruc' => $ruc, 'data' => $data], JSON_UNESCAPED_UNICODE);
+            $st = Database::getConnection()->prepare("SELECT tipo_ambiente FROM empresas WHERE id = ? LIMIT 1");
+            $st->execute([$idEmpresa]);
+            $ambiente = ((string) $st->fetchColumn() === '2') ? '2' : '1';
+            echo json_encode(['ok' => true, 'ruc' => $ruc, 'ambiente' => $ambiente, 'data' => $data], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
         }
