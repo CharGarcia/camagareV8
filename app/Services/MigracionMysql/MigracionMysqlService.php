@@ -890,11 +890,25 @@ class MigracionMysqlService
     /**
      * Resuelve la cuenta contable de una línea vieja (id_cuenta) → id de plan_cuentas nuevo,
      * puenteando por código; si el código no existe en el plan nuevo, lo CREA. Null si no hay dato.
+     *
+     * $mysql (opcional): si la cuenta referenciada NO pertenece a la empresa (asientos manuales
+     * viejos que apuntaban a cuentas de OTRA empresa, porque el id_cuenta era global), se busca su
+     * código directamente en el plan viejo y se puentea por código a la empresa actual.
      */
-    private function resolverOCrearCuenta(array &$mapCuenta, array &$cuentaPorCod, array $oldCuentas, int $oldId, int $idEmpresa, int $idUsuario, PDO $pg): ?int
+    private function resolverOCrearCuenta(array &$mapCuenta, array &$cuentaPorCod, array $oldCuentas, int $oldId, int $idEmpresa, int $idUsuario, PDO $pg, ?PDO $mysql = null): ?int
     {
         if (isset($mapCuenta[$oldId])) { return $mapCuenta[$oldId]; }
         $info = $oldCuentas[$oldId] ?? null;
+        // Cuenta de otra empresa (id_cuenta global): traer su código del plan viejo y puentear igual.
+        if (!$info && $mysql) {
+            static $ext = [];
+            if (!array_key_exists($oldId, $ext)) {
+                $q = $mysql->prepare("SELECT codigo_cuenta AS codigo, nombre_cuenta AS nombre, nivel_cuenta AS nivel FROM plan_cuentas WHERE id_cuenta = ? LIMIT 1");
+                $q->execute([$oldId]);
+                $ext[$oldId] = $q->fetch(PDO::FETCH_ASSOC) ?: null;
+            }
+            $info = $ext[$oldId];
+        }
         if (!$info) { return null; }
         $cod = trim((string) $info['codigo']);
         if ($cod === '') { return null; }
@@ -1019,7 +1033,7 @@ class MigracionMysqlService
                 $td = 0.0;
                 $th = 0.0;
                 foreach ($dets as $d) {
-                    $idc = $this->resolverOCrearCuenta($mapCuenta, $cuentaPorCod, $oldCuentas, (int) $d['id_cuenta'], $idEmpresa, $idUsuario, $pg);
+                    $idc = $this->resolverOCrearCuenta($mapCuenta, $cuentaPorCod, $oldCuentas, (int) $d['id_cuenta'], $idEmpresa, $idUsuario, $pg, $mysql);
                     if (!$idc) { throw new \RuntimeException('Cuenta no resuelta (id_cuenta ' . (int) $d['id_cuenta'] . ')'); }
                     // referencia_detalle es varchar(500) (ver database/ensanchar_referencia_detalle.sql);
                     // truncado defensivo por si algún detalle superara ese límite.
