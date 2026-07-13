@@ -810,7 +810,7 @@
                 const pctH = parseFloat(d.porcentaje_iva);
                 opt = document.createElement('option');
                 opt.value = pctH;
-                opt.textContent = pctH + '% (histórico)';
+                opt.textContent = pctH + '%';
                 selIva.appendChild(opt);
             }
             if (opt) selIva.selectedIndex = opt.index;

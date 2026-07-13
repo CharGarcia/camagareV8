@@ -4850,7 +4850,7 @@ $totalPages = $totalPagesOriginal;
                             opt = document.createElement('option');
                             opt.value = pctH;
                             if (codH != null) opt.dataset.codigo = codH;
-                            opt.textContent = pctH + '% (histórico)';
+                            opt.textContent = pctH + '%';
                             selIva.appendChild(opt);
                         }
                     }
