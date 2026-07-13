@@ -914,6 +914,37 @@ class MigracionMysqlService
         return $mapCuenta[$oldId] = $id;
     }
 
+    /**
+     * Resuelve el documento nuevo al que pertenece un asiento del diario viejo, a partir de su
+     * 'tipo' (COMPRAS_SERVICIOS, VENTAS, …) y su codigo_unico (prefijo de letras + id del documento
+     * viejo, p. ej. 'COM375496'). Devuelve [tabla, idDocNuevo] o null si el tipo no lleva documento
+     * (ROL_PAGOS/DIARIO/BALANCE_INICIAL) o el documento no está migrado. `$cache` acumula los mapas
+     * por entidad para no recargarlos en cada llamada.
+     *
+     * @return array{0:string,1:int}|null
+     */
+    private function docDeDiario(PDO $pg, int $idEmpresa, string $tipo, string $codigoUnico, array &$cache): ?array
+    {
+        static $tipoDoc = [
+            'COMPRAS_SERVICIOS'   => ['compras',            'compras_cabecera'],
+            'VENTAS'              => ['facturas',           'ventas_cabecera'],
+            'INGRESOS'            => ['ingresos',           'ingresos_cabecera'],
+            'EGRESOS'             => ['egresos',            'egresos_cabecera'],
+            'RETENCIONES_COMPRAS' => ['retenciones_compra', 'retencion_compra_cabecera'],
+            'RETENCIONES_VENTAS'  => ['retenciones_venta',  'retencion_venta_cabecera'],
+            'RECIBOS'             => ['recibos',            'recibos_venta_cabecera'],
+            'NC_VENTAS'           => ['notas_credito',      'notas_credito_cabecera'],
+        ];
+        $tipo = strtoupper(trim($tipo));
+        if (!isset($tipoDoc[$tipo])) { return null; }
+        [$entidad, $tabla] = $tipoDoc[$tipo];
+        $oldDoc = (int) preg_replace('/\D+/', '', $codigoUnico); // quita el prefijo de letras
+        if ($oldDoc <= 0) { return null; }
+        if (!isset($cache[$entidad])) { $cache[$entidad] = $this->mapaDe($pg, $idEmpresa, $entidad); }
+        $idDocNuevo = $cache[$entidad][(string) $oldDoc] ?? null;
+        return $idDocNuevo ? [$tabla, (int) $idDocNuevo] : null;
+    }
+
     /** Migra la contabilidad histórica (encabezado_diario + detalle_diario_contable) → asientos, tal cual (modulo_origen='migracion'). */
     private function migrarContabilidad(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
@@ -940,6 +971,26 @@ class MigracionMysqlService
         $insCab  = $pg->prepare("INSERT INTO asientos_contables_cabecera (id_empresa, fecha_asiento, tipo_comprobante, numero_comprobante, concepto, estado, modulo_origen, total_debe, total_haber, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, 'migracion', ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO asientos_contables_detalle (id_empresa, id_asiento, id_cuenta_contable, debe, haber, referencia_detalle, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
 
+        // Mapa de la propia contabilidad (id_diario viejo → id asiento nuevo) y ajuste de ambiente,
+        // para reconciliar / (re)enlazar en re-corridas sin re-insertar.
+        $mapContab = $this->mapaDe($pg, $idEmpresa, 'contabilidad');
+        $updAmb    = $pg->prepare("UPDATE asientos_contables_cabecera SET tipo_ambiente = ? WHERE id = ?");
+
+        // Enlace documento ↔ asiento migrado. `docDeDiario()` resuelve el documento nuevo por el
+        // 'tipo' del diario y el codigo_unico (prefijo+id viejo); aquí se setea
+        // documento.id_asiento_contable + asiento.id_referencia_origen (1→1).
+        $docMapCache  = [];
+        $updDocStmts  = [];
+        $updRefOrigen = $pg->prepare("UPDATE asientos_contables_cabecera SET id_referencia_origen = ? WHERE id = ? AND id_empresa = ?");
+        $enlazar = function (array $e, int $idAsiento) use (&$docMapCache, &$updDocStmts, $idEmpresa, $pg, $updRefOrigen): void {
+            $r = $this->docDeDiario($pg, $idEmpresa, (string) $e['tipo'], (string) $e['codigo_unico'], $docMapCache);
+            if ($r === null) { return; }                                             // sin documento o documento no migrado
+            [$tabla, $idDocNuevo] = $r;
+            if (!isset($updDocStmts[$tabla])) { $updDocStmts[$tabla] = $pg->prepare("UPDATE $tabla SET id_asiento_contable = ? WHERE id = ? AND id_empresa = ?"); }
+            $updDocStmts[$tabla]->execute([$idAsiento, $idDocNuevo, $idEmpresa]);
+            $updRefOrigen->execute([$idDocNuevo, $idAsiento, $idEmpresa]);
+        };
+
         // Los asientos ELIMINADOS en el sistema viejo se marcan con estado='Anulado' → NO se migran.
         $sql = "SELECT id_diario, codigo_unico, fecha_asiento, concepto_general, estado, tipo
                   FROM encabezado_diario WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND codigo_unico <> '' AND LOWER(TRIM(estado)) <> 'anulado'" . $this->clausulaFecha('fecha_asiento', $desde, $hasta, $mysql) . " ORDER BY id_diario";
@@ -949,7 +1000,14 @@ class MigracionMysqlService
         while ($e = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $e['id_diario'];
-            if ($this->yaMigradoDoc($idEmpresa, 'contabilidad', 'asientos_contables_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
+            // Ya migrado: reconciliar ambiente y (re)enlazar el documento con su asiento (re-corrida).
+            if (isset($mapContab[(string) $old])) {
+                $idAsientoExist = (int) $mapContab[(string) $old];
+                $updAmb->execute([$this->ambienteEmpresa($pg, $idEmpresa), $idAsientoExist]);
+                $enlazar($e, $idAsientoExist);
+                $res['ya_migrados']++;
+                continue;
+            }
 
             $detStmt->execute([':cu' => (string) $e['codigo_unico']]);
             $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -978,6 +1036,7 @@ class MigracionMysqlService
                     $insDet->execute([$idEmpresa, $idAsiento, $ln[0], $ln[1], $ln[2], $ln[3], $idUsuario]);
                 }
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idAsiento, ':cn' => (string) $e['codigo_unico'], ':vin' => 'f', ':cb' => $idUsuario]);
+                $enlazar($e, $idAsiento); // enlaza el documento nuevo con este asiento (id_asiento_contable)
                 $pg->commit();
                 $done[(string) $old] = true;
                 $res['migrados']++;
