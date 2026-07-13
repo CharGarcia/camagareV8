@@ -127,7 +127,10 @@ class ComprasController extends BaseModuloController
                 $retencion    = (float)($r['total_retencion'] ?? 0);
                 $saldo        = max(0, $importeTotal - $pagado - $nc - $retencion);
 
-                if ($saldo <= 0.01) {
+                if ((string)($r['tipo_comprobante'] ?? '') === '04') {
+                    // Las notas de crédito de compra son un crédito a favor: no se pagan → Pagada.
+                    $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
+                } elseif ($saldo <= 0.01) {
                     $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
                 } elseif (($pagado + $nc + $retencion) > 0) {
                     $estadoPagoBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Abonada</span>';
