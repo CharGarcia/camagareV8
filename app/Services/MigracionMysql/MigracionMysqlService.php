@@ -1563,6 +1563,20 @@ class MigracionMysqlService
         $cuerpoStmt = $mysql->prepare("SELECT codigo_producto, detalle_producto, cantidad, precio, descuento, impuesto, subtotal FROM cuerpo_compra WHERE codigo_documento = :cd");
         // Al re-correr: actualiza el ambiente y los datos tributarios de una compra ya migrada, según la empresa actual
         $updCab = $pg->prepare("UPDATE compras_cabecera SET tipo_ambiente = :amb, id_sustento_tributario = :sust, autorizacion_desde = :ad, autorizacion_hasta = :ah, fecha_caducidad = :fcad, tipo_registro = :treg, deducible = :ded, updated_at = now(), updated_by = :u WHERE id = :id");
+        // Formas de pago SRI de la compra: viejo formas_pago_compras → nuevo compras_pagos (enlaza por codigo_documento)
+        $fpStmt  = $mysql->prepare("SELECT forma_pago, total_pago, plazo_pago, tiempo_pago FROM formas_pago_compras WHERE codigo_documento = :cd");
+        $insPago = $pg->prepare("INSERT INTO compras_pagos (id_compra, forma_pago, total, plazo, unidad_tiempo) VALUES (?, ?, ?, ?, ?)");
+        $delPago = $pg->prepare("DELETE FROM compras_pagos WHERE id_compra = ?");
+        $migrarPagos = function (int $idCompra, string $codigoDoc) use ($fpStmt, $insPago, $delPago) {
+            $delPago->execute([$idCompra]); // idempotente (re-correr no duplica)
+            $fpStmt->execute([':cd' => $codigoDoc]);
+            foreach ($fpStmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
+                $fp = trim((string) $f['forma_pago']);
+                if ($fp === '') { continue; }
+                $ut = (stripos((string) $f['tiempo_pago'], 'mes') !== false) ? 'meses' : 'dias';
+                $insPago->execute([$idCompra, $fp, (float) $f['total_pago'], (is_numeric($f['plazo_pago']) ? (int) $f['plazo_pago'] : 0), $ut]);
+            }
+        };
 
         $sql = "SELECT id_encabezado_compra, codigo_documento, numero_documento, id_proveedor, aut_sri, fecha_compra, fecha_registro, total_compra, propina, id_sustento, `desde`, `hasta`, fecha_caducidad, tipo_comprobante, deducible_en
                   FROM encabezado_compra WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_compra', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_compra";
@@ -1580,9 +1594,12 @@ class MigracionMysqlService
             $sust = isset($sustValidos[(int) $ec['id_sustento']]) ? (int) $ec['id_sustento'] : null;
             $ad   = ((int) $ec['desde'] > 0) ? str_pad((string) (int) $ec['desde'], 9, '0', STR_PAD_LEFT) : null;
             $ah   = ((int) $ec['hasta'] > 0) ? str_pad((string) (int) $ec['hasta'], 9, '0', STR_PAD_LEFT) : null;
+            $ded  = (trim((string) $ec['deducible_en']) === '05') ? 'gasto_personal' : 'declaracion_iva'; // 04=deducible IVA, 05=gasto personal
             // Ya migrada: reconciliar ambiente + datos tributarios con la configuración ACTUAL de la empresa (re-corrida)
             if (isset($mapCompra[(string) $old])) {
-                $updCab->execute([':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':sust' => $sust, ':ad' => $ad, ':ah' => $ah, ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':treg' => $treg, ':ded' => self::nz($ec['deducible_en']), ':u' => $idUsuario, ':id' => (int) $mapCompra[(string) $old]]);
+                $idExist = (int) $mapCompra[(string) $old];
+                $updCab->execute([':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':sust' => $sust, ':ad' => $ad, ':ah' => $ah, ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':treg' => $treg, ':ded' => $ded, ':u' => $idUsuario, ':id' => $idExist]);
+                $migrarPagos($idExist, (string) $ec['codigo_documento']); // formas de pago SRI
                 $res['ya_migrados']++;
                 continue;
             }
@@ -1610,7 +1627,7 @@ class MigracionMysqlService
                     ':fr' => substr((string) $ec['fecha_registro'], 0, 19) ?: null, ':tot' => (float) $ec['total_compra'],
                     ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2), ':prop' => (float) $ec['propina'],
                     ':obs' => null, ':treg' => $treg, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah,
-                    ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':ded' => self::nz($ec['deducible_en']),
+                    ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':ded' => $ded,
                     ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':u' => $idUsuario, ':cb' => $idUsuario,
                 ]);
                 $idCompra = (int) $insCab->fetchColumn();
@@ -1627,6 +1644,7 @@ class MigracionMysqlService
                     $insImp->execute([':d' => $idDet, ':cp' => ($cod === '' ? '0' : $cod), ':tar' => $pct, ':base' => round($base_i, 2), ':val' => round($base_i * $pct / 100, 2)]);
                 }
 
+                $migrarPagos($idCompra, (string) $ec['codigo_documento']); // formas de pago SRI
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idCompra, ':cn' => "$est-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
                 $pg->commit();
                 $done[(string) $old] = true;
