@@ -1087,10 +1087,16 @@ class MigracionMysqlService
 
         $detStmt   = $mysql->prepare("SELECT valor_ing_egr, detalle_ing_egr, codigo_documento_cv FROM detalle_ingresos_egresos WHERE codigo_documento = :cd AND tipo_documento = 'INGRESO'");
         $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, fecha_pago, cheque FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'INGRESO'");
+        $mapCliente  = $this->mapaDe($pg, $idEmpresa, 'clientes');
+        $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
+        $oldFacCli   = $mysql->prepare("SELECT id_cliente FROM encabezado_factura WHERE id_encabezado_factura = :id LIMIT 1");
+        $mapIngreso  = $this->mapaDe($pg, $idEmpresa, 'ingresos'); // para reconciliar al re-correr
+        $updCab      = $pg->prepare("UPDATE ingresos_cabecera SET fecha_emision = ?, id_cliente = ?, monto_total = ?, observaciones = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $delDet      = $pg->prepare("DELETE FROM ingresos_detalle WHERE id_ingreso = ?");
+        $delPag      = $pg->prepare("DELETE FROM ingresos_pagos WHERE id_ingreso = ?");
 
-        $vc      = $pg->prepare("SELECT id_cliente FROM ventas_cabecera WHERE id = :id");
         $insCab  = $pg->prepare("INSERT INTO ingresos_cabecera (id_empresa, id_usuario, fecha_emision, secuencial, numero_ingreso, tipo_ingreso, id_cliente, monto_total, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, 'FACTURA_VENTA', ?, ?, ?, ?, ?) RETURNING id");
-        $insDet  = $pg->prepare("INSERT INTO ingresos_detalle (id_ingreso, tipo_documento, id_referencia_documento, descripcion, monto_documento, monto_cobrado) VALUES (?, 'FACTURA_VENTA', ?, ?, ?, ?)");
+        $insDet  = $pg->prepare("INSERT INTO ingresos_detalle (id_ingreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_cobrado) VALUES (?, 'FACTURA', ?, ?, ?, ?, ?)");
         $insPago = $pg->prepare("INSERT INTO ingresos_pagos (id_ingreso, id_forma_cobro, monto, fecha_cobro, numero_cheque) VALUES (?, ?, ?, ?, ?)");
 
         $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional
@@ -1101,7 +1107,7 @@ class MigracionMysqlService
         while ($ie = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ie['id_ing_egr'];
-            if ($this->yaMigradoDoc($idEmpresa, 'ingresos', 'ingresos_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
+            $idIngExist = $mapIngreso[(string) $old] ?? null;
             $cod = (string) $ie['codigo_documento'];
             $sec = str_pad(preg_replace('/\D+/', '', (string) $ie['numero_ing_egr']), 9, '0', STR_PAD_LEFT);
 
@@ -1110,18 +1116,37 @@ class MigracionMysqlService
                 $detStmt->execute([':cd' => $cod]);
                 $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
 
+                // Cliente: desde la factura vieja referenciada (funciona aunque la factura no se haya migrado)
                 $idCliente = null;
                 foreach ($dets as $d) {
-                    $idFac = $mapFactura[(string) (int) $d['codigo_documento_cv']] ?? null;
-                    if ($idFac) { $vc->execute([':id' => $idFac]); $idCliente = ($vc->fetchColumn() ?: null); break; }
+                    $facOld = (int) $d['codigo_documento_cv'];
+                    if ($facOld <= 0) { continue; }
+                    $oldFacCli->execute([':id' => $facOld]);
+                    $oldCli = (int) $oldFacCli->fetchColumn();
+                    if ($oldCli > 0) {
+                        $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, $oldCli, $idEmpresa, $idUsuario, $mysql, $pg);
+                        if ($idCliente) { break; }
+                    }
                 }
 
-                $insCab->execute([$idEmpresa, $idUsuario, substr((string) $ie['fecha_ing_egr'], 0, 10), $sec, (string) $ie['numero_ing_egr'], $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario]);
-                $idIng = (int) $insCab->fetchColumn();
+                $fe  = substr((string) $ie['fecha_ing_egr'], 0, 10);
+                $amb = $this->ambienteEmpresa($pg, $idEmpresa);
+                if ($idIngExist) { // re-correr: reconciliar cabecera + reconstruir detalle/pagos
+                    $idIng = (int) $idIngExist;
+                    $updCab->execute([$fe, $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $amb, $idUsuario, $idIng]);
+                    $delDet->execute([$idIng]);
+                    $delPag->execute([$idIng]);
+                    $res['ya_migrados']++;
+                } else {
+                    $insCab->execute([$idEmpresa, $idUsuario, $fe, $sec, (string) $ie['numero_ing_egr'], $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $amb, $idUsuario]);
+                    $idIng = (int) $insCab->fetchColumn();
+                    $res['migrados']++;
+                }
 
                 foreach ($dets as $d) {
-                    $idFac = $mapFactura[(string) (int) $d['codigo_documento_cv']] ?? null;
-                    $insDet->execute([$idIng, $idFac, self::nz($d['detalle_ing_egr']), (float) $d['valor_ing_egr'], (float) $d['valor_ing_egr']]);
+                    $idFac  = $mapFactura[(string) (int) $d['codigo_documento_cv']] ?? null;
+                    $numDoc = (preg_match('/(\d{1,3}-\d{1,3}-\d+)/', (string) $d['detalle_ing_egr'], $mnum) ? $mnum[1] : null);
+                    $insDet->execute([$idIng, $idFac, $numDoc, self::nz($d['detalle_ing_egr']), (float) $d['valor_ing_egr'], (float) $d['valor_ing_egr']]);
                 }
 
                 $formaStmt->execute([':cd' => $cod]);
@@ -1130,10 +1155,11 @@ class MigracionMysqlService
                     $insPago->execute([$idIng, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), ((int) $f['cheque']) ?: null]);
                 }
 
-                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idIng, ':cn' => (string) $ie['numero_ing_egr'], ':vin' => 'f', ':cb' => $idUsuario]);
+                if (!$idIngExist) {
+                    $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idIng, ':cn' => (string) $ie['numero_ing_egr'], ':vin' => 'f', ':cb' => $idUsuario]);
+                }
                 $pg->commit();
                 $done[(string) $old] = true;
-                $res['migrados']++;
             } catch (Throwable $ex) {
                 if ($pg->inTransaction()) { $pg->rollBack(); }
                 $res['errores']++;
@@ -1172,9 +1198,16 @@ class MigracionMysqlService
         $detStmt   = $mysql->prepare("SELECT valor_ing_egr, detalle_ing_egr, codigo_documento_cv FROM detalle_ingresos_egresos WHERE codigo_documento = :cd AND tipo_documento = 'EGRESO'");
         $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, fecha_pago, cheque FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'EGRESO'");
 
-        $cc      = $pg->prepare("SELECT id_proveedor FROM compras_cabecera WHERE id = :id");
+        $mapProv     = $this->mapaDe($pg, $idEmpresa, 'proveedores');
+        $provPorIdent = $this->proveedoresPorIdentificacion($pg, $idEmpresa);
+        $oldCompProv = $mysql->prepare("SELECT id_proveedor FROM encabezado_compra WHERE codigo_documento = :cd LIMIT 1");
+        $mapEgreso   = $this->mapaDe($pg, $idEmpresa, 'egresos'); // para reconciliar al re-correr
+        $updCab      = $pg->prepare("UPDATE egresos_cabecera SET fecha_emision = ?, id_proveedor = ?, monto_total = ?, observaciones = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $delDet      = $pg->prepare("DELETE FROM egresos_detalle WHERE id_egreso = ?");
+        $delPag      = $pg->prepare("DELETE FROM egresos_pagos WHERE id_egreso = ?");
+
         $insCab  = $pg->prepare("INSERT INTO egresos_cabecera (id_empresa, fecha_emision, numero_egreso, secuencial, tipo_egreso, tipo_sujeto, id_proveedor, monto_total, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, 'COMPRA', 'PROVEEDOR', ?, ?, ?, ?, ?) RETURNING id");
-        $insDet  = $pg->prepare("INSERT INTO egresos_detalle (id_egreso, tipo_documento, id_referencia_documento, descripcion, monto_documento, monto_pagado) VALUES (?, 'COMPRA', ?, ?, ?, ?)");
+        $insDet  = $pg->prepare("INSERT INTO egresos_detalle (id_egreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_pagado) VALUES (?, 'COMPRA', ?, ?, ?, ?, ?)");
         $insPago = $pg->prepare("INSERT INTO egresos_pagos (id_egreso, id_forma_pago, monto, fecha_cobro, numero_cheque) VALUES (?, ?, ?, ?, ?)");
 
         $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional
@@ -1185,7 +1218,7 @@ class MigracionMysqlService
         while ($ie = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ie['id_ing_egr'];
-            if ($this->yaMigradoDoc($idEmpresa, 'egresos', 'egresos_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
+            $idEgrExist = $mapEgreso[(string) $old] ?? null;
             $cod = (string) $ie['codigo_documento'];
             $sec = str_pad(preg_replace('/\D+/', '', (string) $ie['numero_ing_egr']), 9, '0', STR_PAD_LEFT);
 
@@ -1194,18 +1227,37 @@ class MigracionMysqlService
                 $detStmt->execute([':cd' => $cod]);
                 $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
 
+                // Proveedor: desde la compra vieja referenciada (funciona aunque la compra no se haya migrado)
                 $idProv = null;
                 foreach ($dets as $d) {
-                    $idComp = $compraPorCod[(string) $d['codigo_documento_cv']] ?? null;
-                    if ($idComp) { $cc->execute([':id' => $idComp]); $idProv = ($cc->fetchColumn() ?: null); break; }
+                    $cdv = (string) $d['codigo_documento_cv'];
+                    if ($cdv === '') { continue; }
+                    $oldCompProv->execute([':cd' => $cdv]);
+                    $oldP = (int) $oldCompProv->fetchColumn();
+                    if ($oldP > 0) {
+                        $idProv = $this->resolverOCrearProveedor($provPorIdent, $mapProv, $oldP, $idEmpresa, $idUsuario, $mysql, $pg);
+                        if ($idProv) { break; }
+                    }
                 }
 
-                $insCab->execute([$idEmpresa, substr((string) $ie['fecha_ing_egr'], 0, 10), (string) $ie['numero_ing_egr'], $sec, $idProv, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario]);
-                $idEgr = (int) $insCab->fetchColumn();
+                $fe  = substr((string) $ie['fecha_ing_egr'], 0, 10);
+                $amb = $this->ambienteEmpresa($pg, $idEmpresa);
+                if ($idEgrExist) { // re-correr: reconciliar cabecera + reconstruir detalle/pagos
+                    $idEgr = (int) $idEgrExist;
+                    $updCab->execute([$fe, $idProv, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $amb, $idUsuario, $idEgr]);
+                    $delDet->execute([$idEgr]);
+                    $delPag->execute([$idEgr]);
+                    $res['ya_migrados']++;
+                } else {
+                    $insCab->execute([$idEmpresa, $fe, (string) $ie['numero_ing_egr'], $sec, $idProv, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $amb, $idUsuario]);
+                    $idEgr = (int) $insCab->fetchColumn();
+                    $res['migrados']++;
+                }
 
                 foreach ($dets as $d) {
                     $idComp = $compraPorCod[(string) $d['codigo_documento_cv']] ?? null;
-                    $insDet->execute([$idEgr, $idComp, self::nz($d['detalle_ing_egr']), (float) $d['valor_ing_egr'], (float) $d['valor_ing_egr']]);
+                    $numDoc = (preg_match('/(\d{1,3}-\d{1,3}-\d+)/', (string) $d['detalle_ing_egr'], $mnum) ? $mnum[1] : null);
+                    $insDet->execute([$idEgr, $idComp, $numDoc, self::nz($d['detalle_ing_egr']), (float) $d['valor_ing_egr'], (float) $d['valor_ing_egr']]);
                 }
 
                 $formaStmt->execute([':cd' => $cod]);
@@ -1214,10 +1266,11 @@ class MigracionMysqlService
                     $insPago->execute([$idEgr, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), ((int) $f['cheque']) ?: null]);
                 }
 
-                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idEgr, ':cn' => (string) $ie['numero_ing_egr'], ':vin' => 'f', ':cb' => $idUsuario]);
+                if (!$idEgrExist) {
+                    $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idEgr, ':cn' => (string) $ie['numero_ing_egr'], ':vin' => 'f', ':cb' => $idUsuario]);
+                }
                 $pg->commit();
                 $done[(string) $old] = true;
-                $res['migrados']++;
             } catch (Throwable $ex) {
                 if ($pg->inTransaction()) { $pg->rollBack(); }
                 $res['errores']++;
@@ -1526,6 +1579,122 @@ class MigracionMysqlService
         return $res;
     }
 
+    private static function xmlEsc($v): string
+    {
+        return htmlspecialchars((string) $v, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+    }
+
+    /**
+     * Reconstruye el detalle_xml (sobre de autorización SRI + comprobante factura en CDATA) de una
+     * compra YA migrada, leyendo sus datos del sistema nuevo. Así el PDF (que parsea detalle_xml) y la
+     * descarga del XML funcionan para las compras migradas. Es una reconstrucción SIN firma.
+     */
+    private function generarXmlCompraGuardada(int $idCompra, PDO $pg): void
+    {
+        $q = $pg->prepare(
+            "SELECT cc.establecimiento_prov, cc.punto_emision_prov, cc.secuencial_prov, cc.numero_autorizacion,
+                    cc.fecha_emision, cc.tipo_ambiente, cc.importe_total, cc.total_sin_impuestos,
+                    p.razon_social AS prov_razon, p.identificacion AS prov_ruc, COALESCE(p.direccion,'') AS prov_dir,
+                    COALESCE(NULLIF(e.nombre_comercial,''), e.nombre) AS emp_razon, e.ruc AS emp_ruc, COALESCE(e.direccion,'') AS emp_dir
+               FROM compras_cabecera cc
+               JOIN proveedores p ON p.id = cc.id_proveedor
+               JOIN empresas e ON e.id = cc.id_empresa
+              WHERE cc.id = ? LIMIT 1"
+        );
+        $q->execute([$idCompra]);
+        $c = $q->fetch(PDO::FETCH_ASSOC);
+        if (!$c) { return; }
+
+        $qd = $pg->prepare("SELECT id, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto FROM compras_detalle WHERE id_compra = ? ORDER BY id");
+        $qd->execute([$idCompra]);
+        $qi = $pg->prepare("SELECT codigo_impuesto, codigo_porcentaje, tarifa, base_imponible, valor FROM compras_detalle_impuestos WHERE id_compra_detalle = ? LIMIT 1");
+        $dets = [];
+        foreach ($qd->fetchAll(PDO::FETCH_ASSOC) as $d) {
+            $qi->execute([(int) $d['id']]);
+            $d['imp'] = $qi->fetch(PDO::FETCH_ASSOC) ?: [];
+            $dets[] = $d;
+        }
+        $qp = $pg->prepare("SELECT forma_pago, total, plazo, unidad_tiempo FROM compras_pagos WHERE id_compra = ?");
+        $qp->execute([$idCompra]);
+        $pagos = $qp->fetchAll(PDO::FETCH_ASSOC);
+
+        $xml = $this->construirDetalleXmlCompra($c, $dets, $pagos);
+        $upd = $pg->prepare("UPDATE compras_cabecera SET detalle_xml = ? WHERE id = ?");
+        $upd->execute([$xml, $idCompra]);
+    }
+
+    /** Arma el string del detalle_xml (sobre + comprobante factura) a partir de los datos ya migrados. */
+    private function construirDetalleXmlCompra(array $c, array $dets, array $pagos): string
+    {
+        $amb    = ((string) $c['tipo_ambiente'] === '2') ? '2' : '1';
+        $ambTxt = $amb === '2' ? 'PRODUCCION' : 'PRUEBAS';
+        $fEmi   = ($c['fecha_emision'] ? date('d/m/Y', strtotime((string) $c['fecha_emision'])) : '');
+        $fAut   = ($c['fecha_emision'] ? date('Y-m-d\TH:i:s', strtotime((string) $c['fecha_emision'])) . '-05:00' : '');
+        $n2 = fn($v) => number_format((float) $v, 2, '.', '');
+        $n6 = fn($v) => number_format((float) $v, 6, '.', '');
+
+        $comp  = '<?xml version="1.0" encoding="UTF-8"?><factura id="comprobante" version="1.1.0">';
+        $comp .= '<infoTributaria>';
+        $comp .= '<ambiente>' . $amb . '</ambiente><tipoEmision>1</tipoEmision>';
+        $comp .= '<razonSocial>' . self::xmlEsc($c['prov_razon']) . '</razonSocial>';
+        $comp .= '<ruc>' . self::xmlEsc($c['prov_ruc']) . '</ruc>';
+        $comp .= '<claveAcceso>' . self::xmlEsc($c['numero_autorizacion']) . '</claveAcceso>';
+        $comp .= '<codDoc>01</codDoc>';
+        $comp .= '<estab>' . self::xmlEsc($c['establecimiento_prov']) . '</estab>';
+        $comp .= '<ptoEmi>' . self::xmlEsc($c['punto_emision_prov']) . '</ptoEmi>';
+        $comp .= '<secuencial>' . self::xmlEsc($c['secuencial_prov']) . '</secuencial>';
+        $comp .= '<dirMatriz>' . self::xmlEsc($c['prov_dir']) . '</dirMatriz>';
+        $comp .= '</infoTributaria>';
+        $comp .= '<infoFactura>';
+        $comp .= '<fechaEmision>' . self::xmlEsc($fEmi) . '</fechaEmision>';
+        $comp .= '<tipoIdentificacionComprador>04</tipoIdentificacionComprador>';
+        $comp .= '<razonSocialComprador>' . self::xmlEsc($c['emp_razon']) . '</razonSocialComprador>';
+        $comp .= '<identificacionComprador>' . self::xmlEsc($c['emp_ruc']) . '</identificacionComprador>';
+        $comp .= '<direccionComprador>' . self::xmlEsc($c['emp_dir']) . '</direccionComprador>';
+        $comp .= '<totalSinImpuestos>' . $n2($c['total_sin_impuestos']) . '</totalSinImpuestos>';
+        $comp .= '<importeTotal>' . $n2($c['importe_total']) . '</importeTotal>';
+        if ($pagos) {
+            $comp .= '<pagos>';
+            foreach ($pagos as $p) {
+                $comp .= '<pago><formaPago>' . self::xmlEsc($p['forma_pago']) . '</formaPago><total>' . $n2($p['total']) . '</total>';
+                $comp .= '<plazo>' . (int) $p['plazo'] . '</plazo><unidadTiempo>' . self::xmlEsc($p['unidad_tiempo'] ?: 'dias') . '</unidadTiempo></pago>';
+            }
+            $comp .= '</pagos>';
+        }
+        $comp .= '</infoFactura>';
+        $comp .= '<detalles>';
+        foreach ($dets as $d) {
+            $imp = $d['imp'] ?? [];
+            $comp .= '<detalle>';
+            $comp .= '<codigoPrincipal>' . self::xmlEsc($d['codigo_principal']) . '</codigoPrincipal>';
+            $comp .= '<descripcion>' . self::xmlEsc($d['descripcion']) . '</descripcion>';
+            $comp .= '<cantidad>' . $n6($d['cantidad']) . '</cantidad>';
+            $comp .= '<precioUnitario>' . $n6($d['precio_unitario']) . '</precioUnitario>';
+            $comp .= '<descuento>' . $n2($d['descuento']) . '</descuento>';
+            $comp .= '<precioTotalSinImpuesto>' . $n2($d['precio_total_sin_impuesto']) . '</precioTotalSinImpuesto>';
+            $comp .= '<impuestos><impuesto>';
+            $comp .= '<codigo>' . self::xmlEsc($imp['codigo_impuesto'] ?? '2') . '</codigo>';
+            $comp .= '<codigoPorcentaje>' . self::xmlEsc($imp['codigo_porcentaje'] ?? '0') . '</codigoPorcentaje>';
+            $comp .= '<tarifa>' . $n2($imp['tarifa'] ?? 0) . '</tarifa>';
+            $comp .= '<baseImponible>' . $n2($imp['base_imponible'] ?? $d['precio_total_sin_impuesto']) . '</baseImponible>';
+            $comp .= '<valor>' . $n2($imp['valor'] ?? 0) . '</valor>';
+            $comp .= '</impuesto></impuestos>';
+            $comp .= '</detalle>';
+        }
+        $comp .= '</detalles>';
+        $comp .= '</factura>';
+
+        $x  = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+        $x .= '<autorizaciones><autorizacion>';
+        $x .= '<estado>AUTORIZADO</estado>';
+        $x .= '<numeroAutorizacion>' . self::xmlEsc($c['numero_autorizacion']) . '</numeroAutorizacion>';
+        $x .= '<fechaAutorizacion>' . self::xmlEsc($fAut) . '</fechaAutorizacion>';
+        $x .= '<ambiente>' . $ambTxt . '</ambiente>';
+        $x .= '<comprobante><![CDATA[' . $comp . ']]></comprobante>';
+        $x .= '</autorizacion></autorizaciones>';
+        return $x;
+    }
+
     /**
      * Migra compras (cabecera + detalle + impuestos) resolviendo proveedor vía el mapa.
      * El cuerpo liga por codigo_documento. $limite>0 = solo pruebas.
@@ -1600,6 +1769,7 @@ class MigracionMysqlService
                 $idExist = (int) $mapCompra[(string) $old];
                 $updCab->execute([':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':sust' => $sust, ':ad' => $ad, ':ah' => $ah, ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':treg' => $treg, ':ded' => $ded, ':u' => $idUsuario, ':id' => $idExist]);
                 $migrarPagos($idExist, (string) $ec['codigo_documento']); // formas de pago SRI
+                $this->generarXmlCompraGuardada($idExist, $pg); // reconstruye detalle_xml (PDF/descarga XML)
                 $res['ya_migrados']++;
                 continue;
             }
@@ -1645,6 +1815,7 @@ class MigracionMysqlService
                 }
 
                 $migrarPagos($idCompra, (string) $ec['codigo_documento']); // formas de pago SRI
+                $this->generarXmlCompraGuardada($idCompra, $pg); // reconstruye detalle_xml (PDF/descarga XML)
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idCompra, ':cn' => "$est-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
                 $pg->commit();
                 $done[(string) $old] = true;
