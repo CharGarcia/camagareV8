@@ -7,6 +7,10 @@
 $base      = BASE_URL;
 $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab : 'tareas';
 ?>
+<!-- Página con pestañas + marco + filtros encima de la tabla: NO usar el app-shell
+     (asume una sola tabla que llena el alto y bloquea el scroll del body). El scroll
+     de cada tabla lo maneja .table-scroll con su propio max-height. -->
+<script>document.body.classList.add('cmg-no-app-shell');</script>
 <style>
     /* ── Pestañas (segmented control) ── */
     .nav-tabs-cmg {

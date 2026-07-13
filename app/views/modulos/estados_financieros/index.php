@@ -417,9 +417,26 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
     }
 
     function renderSituacion(data, nivel) {
-        let html = '<table class="tabla-reporte">';
+        const totalActivos = parseFloat(data.totales.activos) || 0;
+        const totalPasivoPatrimonio = parseFloat(data.totales.pasivo_patrimonio) || 0;
+        const diferencia = totalActivos - totalPasivoPatrimonio;
+        const cuadra = Math.abs(diferencia) < 0.01;
+
+        let html = '';
+        if (!cuadra) {
+            html += `<div class="alert alert-danger d-flex align-items-center shadow-sm mb-3" role="alert">
+                <i class="bi bi-exclamation-octagon-fill me-2 fs-5"></i>
+                <div>
+                    <strong>El balance no cuadra con el principio de partida doble.</strong>
+                    Activos (${formatMoney(totalActivos)}) ≠ Pasivo + Patrimonio (${formatMoney(totalPasivoPatrimonio)}) —
+                    diferencia de <strong>${formatMoney(Math.abs(diferencia))}</strong>.
+                </div>
+            </div>`;
+        }
+
+        html += '<table class="tabla-reporte">';
         html += generarCabecera(nivel);
-        
+
         // ACTIVOS
         html += generarFilaGrupo('ACTIVOS', 'bi bi-bank text-primary', nivel);
         data.activos.forEach(item => { html += generarFila(item, nivel); });
@@ -439,7 +456,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
         html += generarFilaEspacio(nivel);
 
         // TOTAL PASIVO + PATRIMONIO
-        html += generarFilaTotal('TOTAL PASIVO + PATRIMONIO', data.totales.pasivo_patrimonio, nivel, '', true);
+        html += generarFilaTotal('TOTAL PASIVO + PATRIMONIO', data.totales.pasivo_patrimonio, nivel, cuadra ? '' : 'text-danger', true);
 
         html += '</tbody></table>';
         document.getElementById('content-reporte').innerHTML = html;

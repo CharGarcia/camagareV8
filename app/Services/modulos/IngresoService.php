@@ -465,7 +465,14 @@ class IngresoService
     {
         $asientoService = $this->asientoContableService();
         $previo = $asientoService->getAsientoPorOrigen('ingreso', $idIngreso, $idEmpresa);
+        // Fallback (documentos migrados): el asiento histórico tiene modulo_origen='migracion', así que
+        // getAsientoPorOrigen no lo halla; se resuelve por el enlace id_asiento_contable del documento.
         if (!$previo) {
+            $row = $this->repository->getPorId($idIngreso, $idEmpresa);
+            $idAsiento = (int) ($row['id_asiento_contable'] ?? 0);
+            if ($idAsiento > 0) {
+                return $asientoService->getDetalleAsiento($idAsiento, $idEmpresa) ?: null;
+            }
             return null;
         }
         $detalle = $asientoService->getDetalleAsiento((int) $previo['id'], $idEmpresa);
