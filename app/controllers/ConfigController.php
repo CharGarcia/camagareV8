@@ -511,6 +511,7 @@ class ConfigController extends Controller
             'analizar'           => 'analizarAjax',
             'probar'             => 'probarAjax',
             'migrar'             => 'migrarAjax',
+            'progreso'           => 'progresoAjax',
             'verificar-anuladas' => 'verificarAnuladasAjax',
             default              => 'index',
         };

@@ -223,19 +223,89 @@ $base = BASE_URL;
         $('zonaMigrarResultado').innerHTML = '';
     }
 
-    // Migrar los datos seleccionados (uno por uno)
+    // Migrar los datos seleccionados (uno por uno) con modal de progreso + tiempo restante
     $('btnMigrar').addEventListener('click', async () => {
         const idEmpresa = $('selEmpresa').value;
         if (!idEmpresa) { alert('Seleccione una empresa.'); return; }
         const entidades = entsSeleccionadas();
         if (!entidades.length) { alert('Seleccione al menos un dato.'); return; }
-        if (!confirm('¿Migrar los datos seleccionados desde la base anterior? Es idempotente (no duplica).')) return;
+
+        const conf = await Swal.fire({
+            title: '¿Migrar los datos seleccionados?',
+            html: `Se traerán <b>${entidades.length}</b> tipo(s) de dato desde la base anterior.<br>
+                   <span class="text-muted small">Es idempotente: no duplica lo ya migrado.</span>`,
+            icon: 'question', showCancelButton: true, confirmButtonText: 'Sí, migrar',
+            cancelButtonText: 'Cancelar', confirmButtonColor: '#198754'
+        });
+        if (!conf.isConfirmed) return;
 
         const desde = $('fDesde').value, hasta = $('fHasta').value;
         const btn = $('btnMigrar');
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Migrando...';
         $('zonaMigrarResultado').innerHTML = '';
-        for (const ent of entidades) {
+
+        // Estimaciones de tiempo, nombres y total de registros por entidad
+        const estMap = {}, labelMap = {}, totalMap = {};
+        try {
+            const b = new URLSearchParams();
+            b.append('id_empresa', idEmpresa);
+            entidades.forEach(v => b.append('entidades[]', v));
+            const an = await fetch(base + '/config/migrarMysql?action=analizar', { method: 'POST', body: b }).then(r => r.json());
+            if (an.ok) for (const [k, f] of Object.entries(an.data)) { estMap[k] = f.est_segundos || 0; labelMap[k] = f.label || k; totalMap[k] = f.total || 0; }
+        } catch (e) { /* sin estimación: se usa un aproximado */ }
+
+        const totalEnt = entidades.length;
+        const totals = { migrados: 0, vinculados: 0, ya: 0, omitidos: 0, errores: 0 };
+        let hecho = 0, entActual = '', restante = 0;
+        let curDone = 0, curTotal = 0, curEst = 0, restBase = 0; // progreso fino (por registros) de la entidad actual
+        const estDespuesDe = (idx) => entidades.slice(idx + 1).reduce((a, e) => a + (estMap[e] || 3), 0);
+        function recalcRestante() {
+            const frac = curTotal > 0 ? Math.min(1, curDone / curTotal) : 0;
+            restante = restBase + curEst * (1 - frac);
+        }
+
+        function pintarSwal() {
+            const body = document.getElementById('migSwalBody');
+            if (!body) return;
+            const pct = Math.round((hecho / totalEnt) * 100);
+            const fracPct = curTotal > 0 ? Math.round(Math.min(1, curDone / curTotal) * 100) : 0;
+            const fino = entActual
+                ? `<div class="small text-muted mt-2 d-flex justify-content-between"><span>Registros de esta etapa</span><span>${fmt(curDone)}${curTotal ? ' / ' + fmt(curTotal) : ''}</span></div>
+                   <div class="progress mt-1" style="height:14px;"><div class="progress-bar bg-info" style="width:${fracPct}%">${fracPct}%</div></div>`
+                : '';
+            body.innerHTML =
+                `<div class="mb-2">${entActual ? ('Procesando: <b>' + (labelMap[entActual] || entActual) + '</b>') : 'Preparando…'}</div>
+                 <div class="progress" style="height:20px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width:${pct}%">${hecho}/${totalEnt} etapas</div>
+                 </div>
+                 ${fino}
+                 <div class="mt-3"><i class="bi bi-clock me-1"></i>Tiempo restante estimado: <b>${fmtTiempo(restante)}</b></div>
+                 <div class="text-muted small mt-1">migrados ${fmt(totals.migrados)} · vinculados ${fmt(totals.vinculados)} · omitidos ${fmt(totals.omitidos)} · errores ${fmt(totals.errores)}</div>`;
+        }
+
+        restBase = estDespuesDe(-1); curEst = 0; recalcRestante();
+        let timer = null;
+        Swal.fire({
+            title: 'Migrando información…',
+            html: '<div id="migSwalBody"></div>',
+            allowOutsideClick: false, allowEscapeKey: false, showConfirmButton: false,
+            didOpen: () => { pintarSwal(); timer = setInterval(() => { restante = Math.max(0, restante - 1); pintarSwal(); }, 1000); }
+        });
+
+        for (let i = 0; i < entidades.length; i++) {
+            const ent = entidades[i];
+            entActual = ent;
+            curTotal = totalMap[ent] || 0; curEst = estMap[ent] || 3; restBase = estDespuesDe(i); curDone = 0;
+            // Sondeo del progreso real (registros ya migrados/vinculados) en paralelo a la migración
+            const sondear = async () => {
+                try {
+                    const p = await fetch(base + '/config/migrarMysql?action=progreso&id_empresa=' + encodeURIComponent(idEmpresa) + '&entidad=' + encodeURIComponent(ent)).then(r => r.json());
+                    if (p.ok) { curDone = p.hechos; recalcRestante(); pintarSwal(); }
+                } catch (e) { /* ignorar */ }
+            };
+            await sondear(); // línea base
+            recalcRestante(); pintarSwal();
+            const sondeo = setInterval(sondear, 800);
             logMig(ent, '<span class="text-muted">migrando…</span>');
             try {
                 const body = new URLSearchParams();
@@ -247,6 +317,8 @@ $base = BASE_URL;
                 if (!res.ok) { logMig(ent, '<span class="text-danger">' + res.mensaje + '</span>'); continue; }
                 const d = res.data;
                 if (d.no_implementado) { logMig(ent, '<span class="text-muted">próximamente</span>'); continue; }
+                totals.migrados += d.migrados || 0; totals.vinculados += d.vinculados || 0;
+                totals.ya += d.ya_migrados || 0; totals.omitidos += d.omitidos || 0; totals.errores += d.errores || 0;
                 const partes = [`<span class="text-success fw-bold">migrados ${fmt(d.migrados)}</span>`];
                 if (d.vinculados !== undefined) partes.push(`vinculados ${fmt(d.vinculados)}`);
                 partes.push(`ya estaban ${fmt(d.ya_migrados)}`);
@@ -263,8 +335,23 @@ $base = BASE_URL;
                 }
                 logMig(ent, html);
             } catch (e) { logMig(ent, '<span class="text-danger">' + e.message + '</span>'); }
+            finally { clearInterval(sondeo); hecho++; if (curTotal) curDone = curTotal; recalcRestante(); pintarSwal(); }
         }
+
+        if (timer) clearInterval(timer);
         btn.disabled = false; btn.innerHTML = '<i class="bi bi-database-down me-1"></i> Migrar seleccionados';
+        Swal.fire({
+            icon: totals.errores ? 'warning' : 'success',
+            title: 'Migración finalizada',
+            html: `<div class="text-start small" style="max-width:280px;margin:0 auto;">
+                    <div><b>${fmt(totals.migrados)}</b> migrados</div>
+                    <div><b>${fmt(totals.vinculados)}</b> vinculados (ya existían)</div>
+                    <div><b>${fmt(totals.ya)}</b> ya estaban</div>
+                    <div><b class="${totals.omitidos ? 'text-warning' : ''}">${fmt(totals.omitidos)}</b> omitidos</div>
+                    <div><b class="${totals.errores ? 'text-danger' : ''}">${fmt(totals.errores)}</b> errores</div>
+                   </div>`,
+            confirmButtonColor: '#198754'
+        });
     });
 
     // Verificar/actualizar facturas anuladas

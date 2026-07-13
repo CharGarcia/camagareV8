@@ -85,8 +85,33 @@ class MigrarMysqlController extends Controller
             $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
             $desde = !empty($_POST['desde']) ? (string) $_POST['desde'] : null;
             $hasta = !empty($_POST['hasta']) ? (string) $_POST['hasta'] : null;
+            // Liberar el lock de la sesión: así el endpoint de progreso puede consultarse en
+            // paralelo mientras esta migración (potencialmente larga) sigue corriendo.
+            if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
             $data = $this->service->migrar($entidad, $idEmpresa, $ruc, $idUsuario, 0, $desde, $hasta);
             echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
+    /**
+     * GET: progreso de una entidad en curso = cuántos registros ya entraron al mapa
+     * (migrados + vinculados + ya migrados). Se consulta en paralelo a la migración.
+     */
+    public function progresoAjax(): void
+    {
+        // Liberar de inmediato el lock de sesión para no bloquear la migración en curso.
+        if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
+        header('Content-Type: application/json');
+        try {
+            $idEmpresa = (int) ($_GET['id_empresa'] ?? $_POST['id_empresa'] ?? 0);
+            $entidad   = (string) ($_GET['entidad'] ?? $_POST['entidad'] ?? '');
+            $db = Database::getConnection();
+            $st = $db->prepare("SELECT COUNT(*) FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = ?");
+            $st->execute([$idEmpresa, $entidad]);
+            echo json_encode(['ok' => true, 'hechos' => (int) $st->fetchColumn()], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
         }

@@ -4546,6 +4546,22 @@ $totalPages = $totalPagesOriginal;
                                   : (d.porcentaje_iva != null && d.porcentaje_iva !== '' ? parseFloat(d.porcentaje_iva) : null);
                         if (pct != null) opt = opts.find(o => Math.abs(parseFloat(o.value) - pct) < 0.001);
                     }
+                    if (!opt) {
+                        // Tarifa histórica que ya no está activa en el catálogo (p.ej. IVA 12% de
+                        // años anteriores, hoy inactivo): se agrega la opción SOLO para este
+                        // documento, para mostrar el IVA real con que se emitió. No afecta a
+                        // documentos nuevos (el catálogo sigue ofreciendo solo tarifas activas).
+                        const codH = (ivaTarifa && ivaTarifa.codigo_porcentaje != null && ivaTarifa.codigo_porcentaje !== '') ? ivaTarifa.codigo_porcentaje : null;
+                        const pctH = ivaTarifa ? parseFloat(ivaTarifa.tarifa)
+                                   : (d.porcentaje_iva != null && d.porcentaje_iva !== '' ? parseFloat(d.porcentaje_iva) : null);
+                        if (pctH != null && !isNaN(pctH)) {
+                            opt = document.createElement('option');
+                            opt.value = pctH;
+                            if (codH != null) opt.dataset.codigo = codH;
+                            opt.textContent = pctH + '% (histórico)';
+                            selIva.appendChild(opt);
+                        }
+                    }
                     if (opt) opt.selected = true;
                 }
 

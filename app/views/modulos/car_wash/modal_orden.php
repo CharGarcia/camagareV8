@@ -805,6 +805,14 @@
         if (selIva) {
             let opt = d.id_tarifa_iva ? Array.from(selIva.options).find(o => o.dataset.id == d.id_tarifa_iva) : null;
             if (!opt) opt = Array.from(selIva.options).find(o => Math.abs(parseFloat(o.value) - parseFloat(d.porcentaje_iva || 0)) < 0.001);
+            if (!opt && d.porcentaje_iva != null && d.porcentaje_iva !== '' && !isNaN(parseFloat(d.porcentaje_iva))) {
+                // Tarifa histórica inactiva: se agrega la opción solo para este documento.
+                const pctH = parseFloat(d.porcentaje_iva);
+                opt = document.createElement('option');
+                opt.value = pctH;
+                opt.textContent = pctH + '% (histórico)';
+                selIva.appendChild(opt);
+            }
             if (opt) selIva.selectedIndex = opt.index;
         }
         cwSyncPrecioIva(tr.querySelector('.input-precio'));
