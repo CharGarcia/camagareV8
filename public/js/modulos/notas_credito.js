@@ -321,10 +321,15 @@
                         const cliN = cab.cliente_nombre ? ` - ${cab.cliente_nombre}` : '';
                         document.getElementById('modalNCTitulo').innerHTML = `<i class="bi bi-file-earmark-minus text-primary me-2"></i>Nota de Crédito ${estN}-${ptoN}-${secN}${cliN}`;
                     }
-                    if (cab.estado) {
-                        actualizarBadgeEstado(cab.estado);
-                        toggleBotonesAccion(true, cab.estado);
-                    }
+                    // Estado efectivo: si el SRI ya autorizó/anuló (estado_sri) pero el
+                    // estado del documento quedó rezagado, se manda igual el real para
+                    // que NO se pueda editar ni reenviar al SRI.
+                    const estadoEfectivo =
+                        (cab.estado === 'autorizado' || cab.estado_sri === 'autorizado') ? 'autorizado' :
+                        (cab.estado === 'anulado'    || cab.estado_sri === 'anulado')    ? 'anulado'    :
+                        (cab.estado || 'borrador');
+                    actualizarBadgeEstado(estadoEfectivo);
+                    toggleBotonesAccion(true, estadoEfectivo);
 
                     // cliente_email solo viene en getPorId (no en el listado), lo tomamos aquí
                     const elCorreo = document.getElementById('nc-sri-correo-cliente');
@@ -334,7 +339,7 @@
                     window.NC_CLIENTE_RUC = (cab.cliente_ruc || '').trim();
 
                     // Modo solo lectura para NC guardadas (ver NC_setModoLectura).
-                    const soloLectura = (data && data._soloLectura === true) || (cab.estado && cab.estado !== 'borrador');
+                    const soloLectura = (data && data._soloLectura === true) || (estadoEfectivo !== 'borrador');
                     NC_setModoLectura(!!soloLectura);
                 }
             } catch (e) {
@@ -785,8 +790,9 @@
             }
         }
         
-        // 5. Fallback: primera tarifa disponible
-        return listadoTarifasIva.length > 0 ? listadoTarifasIva[0].id : 0;
+        // 5. Fallback: primera tarifa ACTIVA (el catálogo ahora incluye inactivas)
+        const act = listadoTarifasIva.find(t => t.status == 1 || t.status === '1');
+        return act ? act.id : (listadoTarifasIva.length > 0 ? listadoTarifasIva[0].id : 0);
     }
 
     function renderDetallesFromFactura(detalles) {
@@ -848,7 +854,7 @@
             </td>
             <td class="py-1">
                 <select name="det_id_tarifa_iva[]" class="input-detalle text-center" onchange="window.NC_calcFila(this)">
-                    ${listadoTarifasIva.map(t => `<option value="${t.id}" data-porcentaje="${t.porcentaje_iva}" data-codigo="${t.codigo}" ${t.id == idTarifaIva ? 'selected' : ''}>${t.tarifa}</option>`).join('')}
+                    ${listadoTarifasIva.filter(t => t.status == 1 || t.status === '1' || t.id == idTarifaIva).map(t => `<option value="${t.id}" data-porcentaje="${t.porcentaje_iva}" data-codigo="${t.codigo}" ${t.id == idTarifaIva ? 'selected' : ''}>${t.tarifa}</option>`).join('')}
                 </select>
             </td>
             <td class="text-end pe-4 fw-bold nc-fila-total py-1">$0.00</td>

@@ -233,6 +233,9 @@ $base = BASE_URL;
         const entidades = entsSeleccionadas();
         if (!entidades.length) { alert('Seleccione al menos un dato.'); return; }
 
+        // Feedback inmediato mientras se consulta el ambiente y se estima (puede tardar en compras)
+        Swal.fire({ title: 'Preparando migración…', html: 'Consultando ambiente y estimando tiempo…', allowOutsideClick: false, allowEscapeKey: false, didOpen: () => Swal.showLoading() });
+
         // Consultar ambiente de la empresa + estimaciones ANTES de confirmar (para mostrarlos)
         const estMap = {}, labelMap = {}, totalMap = {};
         let ambiente = null;
@@ -291,15 +294,14 @@ $base = BASE_URL;
         }
 
         restBase = estDespuesDe(-1); curEst = 0; recalcRestante();
-        let timer = null;
         Swal.fire({
             title: 'Migrando información…',
             html: '<div id="migSwalBody"></div>',
             allowOutsideClick: false, allowEscapeKey: false, showConfirmButton: false,
-            didOpen: () => { pintarSwal(); timer = setInterval(() => { restante = Math.max(0, restante - 1); pintarSwal(); }, 1000); }
-        });
-
-        for (let i = 0; i < entidades.length; i++) {
+            didOpen: async () => {
+              pintarSwal();
+              const timer = setInterval(() => { restante = Math.max(0, restante - 1); pintarSwal(); }, 1000);
+              for (let i = 0; i < entidades.length; i++) {
             const ent = entidades[i];
             entActual = ent;
             curTotal = totalMap[ent] || 0; curEst = estMap[ent] || 3; restBase = estDespuesDe(i); curDone = 0;
@@ -342,22 +344,24 @@ $base = BASE_URL;
                 }
                 logMig(ent, html);
             } catch (e) { logMig(ent, '<span class="text-danger">' + e.message + '</span>'); }
-            finally { clearInterval(sondeo); hecho++; if (curTotal) curDone = curTotal; recalcRestante(); pintarSwal(); }
-        }
+              finally { clearInterval(sondeo); hecho++; if (curTotal) curDone = curTotal; recalcRestante(); pintarSwal(); }
+              }
 
-        if (timer) clearInterval(timer);
-        btn.disabled = false; btn.innerHTML = '<i class="bi bi-database-down me-1"></i> Migrar seleccionados';
-        Swal.fire({
-            icon: totals.errores ? 'warning' : 'success',
-            title: 'Migración finalizada',
-            html: `<div class="text-start small" style="max-width:280px;margin:0 auto;">
-                    <div><b>${fmt(totals.migrados)}</b> migrados</div>
-                    <div><b>${fmt(totals.vinculados)}</b> vinculados (ya existían)</div>
-                    <div><b>${fmt(totals.ya)}</b> ya estaban</div>
-                    <div><b class="${totals.omitidos ? 'text-warning' : ''}">${fmt(totals.omitidos)}</b> omitidos</div>
-                    <div><b class="${totals.errores ? 'text-danger' : ''}">${fmt(totals.errores)}</b> errores</div>
-                   </div>`,
-            confirmButtonColor: '#198754'
+              clearInterval(timer);
+              btn.disabled = false; btn.innerHTML = '<i class="bi bi-database-down me-1"></i> Migrar seleccionados';
+              Swal.fire({
+                  icon: totals.errores ? 'warning' : 'success',
+                  title: 'Migración finalizada',
+                  html: `<div class="text-start small" style="max-width:280px;margin:0 auto;">
+                          <div><b>${fmt(totals.migrados)}</b> migrados</div>
+                          <div><b>${fmt(totals.vinculados)}</b> vinculados (ya existían)</div>
+                          <div><b>${fmt(totals.ya)}</b> ya estaban</div>
+                          <div><b class="${totals.omitidos ? 'text-warning' : ''}">${fmt(totals.omitidos)}</b> omitidos</div>
+                          <div><b class="${totals.errores ? 'text-danger' : ''}">${fmt(totals.errores)}</b> errores</div>
+                         </div>`,
+                  confirmButtonColor: '#198754'
+              });
+            }
         });
     });
 

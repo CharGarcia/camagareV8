@@ -322,7 +322,9 @@ class NotaCreditoRepository extends BaseRepository
 
     public function getTarifasIva(): array
     {
-        $sql = "SELECT * FROM tarifa_iva WHERE status = 1 ORDER BY porcentaje_iva ASC";
+        // Se devuelven TODAS (incluidas inactivas) para poder mostrar el IVA histórico de documentos
+        // viejos (p.ej. 12% ya inactivo). El JS arma el select solo con activas + la del documento.
+        $sql = "SELECT * FROM tarifa_iva ORDER BY status DESC, porcentaje_iva ASC";
         return $this->db->query($sql)->fetchAll(PDO::FETCH_ASSOC);
     }
 

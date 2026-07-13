@@ -27,6 +27,7 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                         <button id="nc-btn-pdf" type="button" class="btn btn-outline-danger btn-sm px-2" onclick="window.NC_exportarPdf()" title="Exportar PDF" disabled><i class="bi bi-file-earmark-pdf"></i></button>
                         <button id="nc-btn-xml" type="button" class="btn btn-outline-success btn-sm px-2" onclick="window.NC_exportarXml()" title="Exportar XML" disabled><i class="bi bi-file-earmark-code"></i></button>
                         <button id="nc-btn-correo" type="button" class="btn btn-outline-info btn-sm px-2" onclick="window.NC_enviarPorCorreo()" title="Enviar por correo" disabled><i class="bi bi-envelope"></i></button>
+                        <button id="btnAnularNC" type="button" class="btn btn-outline-warning btn-sm px-2 d-none" onclick="window.NC_anular()" title="Anular"><i class="bi bi-slash-circle me-1"></i>Anular</button>
                         <div class="vr mx-1"></div>
                         <button type="button" class="btn btn-outline-primary btn-sm px-2 nc-edit-only" onclick="window.NC_abrirModalClienteCrear()" title="Registrar nuevo cliente"><i class="bi bi-person-plus fs-6"></i></button>
 
@@ -422,9 +423,6 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                 <div>
                     <button type="button" class="btn btn-sm btn-outline-danger px-3 d-none" id="btnEliminarNC" onclick="window.NC_eliminar()">
                         <i class="bi bi-trash3 me-1"></i> Eliminar
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-warning px-3 d-none" id="btnAnularNC" onclick="window.NC_anular()">
-                        <i class="bi bi-slash-circle me-1"></i> Anular
                     </button>
                 </div>
                 <div>
