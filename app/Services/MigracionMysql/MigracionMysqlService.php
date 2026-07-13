@@ -988,7 +988,7 @@ class MigracionMysqlService
         // Mapa de la propia contabilidad (id_diario viejo → id asiento nuevo) y ajuste de ambiente,
         // para reconciliar / (re)enlazar en re-corridas sin re-insertar.
         $mapContab = $this->mapaDe($pg, $idEmpresa, 'contabilidad');
-        $updAmb    = $pg->prepare("UPDATE asientos_contables_cabecera SET tipo_ambiente = ? WHERE id = ?");
+        $updAmb    = $pg->prepare("UPDATE asientos_contables_cabecera SET tipo_ambiente = ?, estado = ? WHERE id = ?");
 
         // Enlace documento ↔ asiento migrado. `docDeDiario()` resuelve el documento nuevo por el
         // 'tipo' del diario y el codigo_unico (prefijo+id viejo); aquí se setea
@@ -1014,10 +1014,13 @@ class MigracionMysqlService
         while ($e = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $e['id_diario'];
-            // Ya migrado: reconciliar ambiente y (re)enlazar el documento con su asiento (re-corrida).
+            // Estado del asiento: los migrados se dan por posteados = 'contabilizado' (los anulados
+            // ya se excluyeron arriba; se mantiene el mapeo por robustez).
+            $est = (stripos((string) $e['estado'], 'anul') !== false) ? 'anulado' : 'contabilizado';
+            // Ya migrado: reconciliar ambiente + estado y (re)enlazar el documento con su asiento (re-corrida).
             if (isset($mapContab[(string) $old])) {
                 $idAsientoExist = (int) $mapContab[(string) $old];
-                $updAmb->execute([$this->ambienteEmpresa($pg, $idEmpresa), $idAsientoExist]);
+                $updAmb->execute([$this->ambienteEmpresa($pg, $idEmpresa), $est, $idAsientoExist]);
                 $enlazar($e, $idAsientoExist);
                 $res['ya_migrados']++;
                 continue;
@@ -1043,7 +1046,6 @@ class MigracionMysqlService
                     $td += (float) $d['debe'];
                     $th += (float) $d['haber'];
                 }
-                $est = (stripos((string) $e['estado'], 'anul') !== false) ? 'anulado' : 'registrado';
                 $insCab->execute([$idEmpresa, substr((string) $e['fecha_asiento'], 0, 10), (self::nz($e['tipo']) !== null ? (string) $e['tipo'] : 'DIARIO'), (string) $e['codigo_unico'], (self::nz($e['concepto_general']) !== null ? (string) $e['concepto_general'] : (string) $e['codigo_unico']), $est, $td, $th, $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario]);
                 $idAsiento = (int) $insCab->fetchColumn();
                 foreach ($lineas as $ln) {
