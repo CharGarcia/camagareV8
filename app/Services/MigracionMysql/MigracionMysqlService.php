@@ -963,7 +963,11 @@ class MigracionMysqlService
                 foreach ($dets as $d) {
                     $idc = $this->resolverOCrearCuenta($mapCuenta, $cuentaPorCod, $oldCuentas, (int) $d['id_cuenta'], $idEmpresa, $idUsuario, $pg);
                     if (!$idc) { throw new \RuntimeException('Cuenta no resuelta (id_cuenta ' . (int) $d['id_cuenta'] . ')'); }
-                    $lineas[] = [$idc, (float) $d['debe'], (float) $d['haber'], self::nz($d['detalle_item'])];
+                    // referencia_detalle es varchar(500) (ver database/ensanchar_referencia_detalle.sql);
+                    // truncado defensivo por si algún detalle superara ese límite.
+                    $ref = self::nz($d['detalle_item']);
+                    if ($ref !== null) { $ref = mb_substr((string) $ref, 0, 500); }
+                    $lineas[] = [$idc, (float) $d['debe'], (float) $d['haber'], $ref];
                     $td += (float) $d['debe'];
                     $th += (float) $d['haber'];
                 }
