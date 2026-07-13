@@ -63,10 +63,11 @@ return [
     ],
 
     // Recibos de venta (comprobante interno, NO electrónico / NO SRI).
-    // Actualizar id_submodulo con el id real que retorne database/recibos_venta_tablas.sql
-    // (SELECT id FROM submodulos_menu WHERE ruta = 'modulos/recibo-venta';).
+    // id_submodulo = 0 → el sistema resuelve el id real por la ruta desde
+    // submodulos_menu en CADA entorno (50 en local, otro en producción).
+    // No hardcodear el id: así permisos y asignaciones siempre coinciden.
     'modulos/recibo-venta' => [
-        'id_submodulo' => 50,
+        'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],
 

@@ -1087,6 +1087,8 @@ $totalPages = $totalPagesOriginal;
     const USUARIO_NOMBRE = '<?= htmlspecialchars($_SESSION['nombre'] ?? '', ENT_QUOTES) ?>';
     // Alias cortos para uso frecuente
     const PERM_ACTUALIZAR = <?= !empty($perm['actualizar']) ? 'true' : 'false' ?>;
+    // Facturar desde recibo exige, además, permiso de CREAR en Facturas de venta.
+    const PERM_CREAR_FACTURA = <?= \App\Helpers\Permisos::puedeCrear('modulos/factura-venta') ? 'true' : 'false' ?>;
     const DEC_PRECIO = EMPRESA_CONFIG.decimales_precio;
     const DEC_CANT = EMPRESA_CONFIG.decimales_cantidad;
 
@@ -2007,7 +2009,7 @@ $totalPages = $totalPagesOriginal;
             }
         }
         if (btnGenFac) {
-            if (!esFinalTop && PERM_ACTUALIZAR) {
+            if (!esFinalTop && PERM_ACTUALIZAR && PERM_CREAR_FACTURA) {
                 btnGenFac.classList.remove('d-none');
             } else {
                 btnGenFac.classList.add('d-none');
@@ -4297,8 +4299,8 @@ $totalPages = $totalPagesOriginal;
         }
 
         if (btnGenFac) {
-            // Generar factura de venta: disponible mientras el recibo esté activo.
-            if (!esFinal && PERM_ACTUALIZAR) {
+            // Generar factura: recibo activo + permiso de crear en Facturas de venta.
+            if (!esFinal && PERM_ACTUALIZAR && PERM_CREAR_FACTURA) {
                 btnGenFac.classList.remove('d-none');
             } else {
                 btnGenFac.classList.add('d-none');

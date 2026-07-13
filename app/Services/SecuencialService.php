@@ -46,6 +46,9 @@ class SecuencialService
     {
         // 1. Obtener configuración del secuencial inicial
         $config = $this->repository->getConfigSecuencial($idPuntoEmision, $tipoDocumento);
+        // ¿Existe realmente una configuración de secuencial para este punto+tipo?
+        // (getConfigSecuencial devuelve id=null y secuencial_inicial=1 cuando NO hay.)
+        $configurado = !empty($config['id']);
         $secuencialInicial = max(1, (int) $config['secuencial_inicial']);
 
         // 2. Obtener secuenciales ya usados
@@ -57,6 +60,7 @@ class SecuencialService
                 'secuencial'  => $secuencialInicial,
                 'formateado'  => str_pad((string) $secuencialInicial, 9, '0', STR_PAD_LEFT),
                 'es_gap'      => false,
+                'configurado' => $configurado,
                 'detalle'     => 'Primer documento - secuencial inicial',
             ];
         }
@@ -78,6 +82,7 @@ class SecuencialService
                 'secuencial'  => $gap,
                 'formateado'  => str_pad((string) $gap, 9, '0', STR_PAD_LEFT),
                 'es_gap'      => true,
+                'configurado' => $configurado,
                 'detalle'     => "Número faltante detectado (gap) en la secuencia",
             ];
         }
@@ -90,6 +95,7 @@ class SecuencialService
             'secuencial'  => $siguiente,
             'formateado'  => str_pad((string) $siguiente, 9, '0', STR_PAD_LEFT),
             'es_gap'      => false,
+            'configurado' => $configurado,
             'detalle'     => 'Siguiente número consecutivo',
         ];
     }

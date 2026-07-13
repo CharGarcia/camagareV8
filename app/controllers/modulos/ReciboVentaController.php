@@ -543,6 +543,13 @@ class ReciboVentaController extends BaseModuloController
         $this->requireActualizar();
         header('Content-Type: application/json');
 
+        // Generar una factura desde el recibo exige, además, permiso de CREAR
+        // en el módulo de Facturas de venta.
+        if (!\App\Helpers\Permisos::puedeCrear('modulos/factura-venta')) {
+            echo json_encode(['ok' => false, 'mensaje' => 'No tiene permiso para crear facturas de venta.']);
+            exit;
+        }
+
         $id        = (int) ($_POST['id'] ?? 0);
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];

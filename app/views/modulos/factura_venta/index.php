@@ -1295,6 +1295,8 @@ $totalPages = $totalPagesOriginal;
     const RUTA_MODULO = '<?= $rutaModulo ?>';
     // ID de la factura actualmente abierta en el modal (0 = nueva)
     let FV_ID_ACTIVO = 0;
+    // ¿La serie activa tiene secuenciales configurados? (se actualiza en cargarSecuencial)
+    window.FV_SECUENCIAL_CONFIGURADO = true;
     let FV_FECHA_EMISION = null; // 'YYYY-MM-DD' de la factura activa; null si es nueva
     let FV_CLIENTE_RUC  = '';   // RUC/cédula del cliente activo (9999999999999 = Consumidor Final)
     // Cuando es true, cargarSecuencial no sobreescribe el campo (modo edición de factura existente)
@@ -1510,6 +1512,19 @@ $totalPages = $totalPagesOriginal;
         const idCliente = document.getElementById('m-id-cliente').value;
         const diasCred = parseInt(document.getElementById('m-input-dias-credito')?.value || '0');
         const totalFactura = r2(parseFloat(document.getElementById('m-lbl-total').textContent) || 0);
+
+        // ── Bloqueo: secuenciales no configurados (solo al CREAR una nueva) ──
+        const _esNuevaFactura = (parseInt(FV_ID_ACTIVO) || 0) === 0;
+        if (_esNuevaFactura && window.FV_SECUENCIAL_CONFIGURADO === false) {
+            return Swal.fire({
+                icon: 'warning',
+                title: 'Secuenciales no configurados',
+                html: 'No están configurados los secuenciales para esta serie.<br>Configúrelos en <strong>Empresa → Puntos de emisión</strong> antes de emitir la factura.',
+                confirmButtonText: 'Entendido',
+                confirmButtonColor: '#f39c12',
+                target: document.getElementById('modalNuevaFactura'),
+            });
+        }
 
         // ”€”€ Validaciones de cabecera ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
         if (!fecha) return Swal.fire({
@@ -2083,9 +2098,35 @@ $totalPages = $totalPagesOriginal;
         };
     }
 
+    function fvAvisarSecuencialNoConfigurado(tipo) {
+        if (typeof Swal === 'undefined') return;
+        const html = (tipo === 'serie')
+            ? 'No hay una serie / punto de emisión disponible.<br>Configure los puntos de emisión y sus secuenciales en <strong>Empresa → Puntos de emisión</strong> antes de emitir la factura.'
+            : 'No están configurados los secuenciales para esta serie.<br>Configúrelos en <strong>Empresa → Puntos de emisión</strong> antes de emitir la factura.';
+        Swal.fire({
+            icon: 'warning',
+            title: 'Secuenciales no configurados',
+            html: html,
+            confirmButtonText: 'Entendido',
+            confirmButtonColor: '#f39c12',
+            target: document.getElementById('modalNuevaFactura'),
+        });
+    }
+
     async function cargarSecuencial(idPunto) {
-        if (!idPunto || FV_BLOQUEAR_SECUENCIAL) return;
+        // En edición de una factura existente no se recalcula ni se valida la serie.
+        if (FV_BLOQUEAR_SECUENCIAL) return;
+
         const inputSec = document.getElementById('m-input-secuencial');
+
+        // Sin serie / punto de emisión: no hay secuencial configurable.
+        if (!idPunto) {
+            window.FV_SECUENCIAL_CONFIGURADO = false;
+            if (inputSec) { inputSec.value = ''; inputSec.placeholder = 'Sin serie'; }
+            fvAvisarSecuencialNoConfigurado('serie');
+            return;
+        }
+
         if (inputSec) inputSec.placeholder = 'Cargando...';
         try {
             const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getSecuencialAjax?id_punto_emision=${idPunto}&tipo=factura`);
@@ -2102,9 +2143,20 @@ $totalPages = $totalPagesOriginal;
                     inputSec.classList.remove('border-warning');
                     inputSec.title = json.detalle || 'Siguiente consecutivo';
                 }
+
+                // ¿Está configurado el secuencial para esta serie?
+                window.FV_SECUENCIAL_CONFIGURADO = (json.configurado !== false);
+                if (json.configurado === false) {
+                    inputSec.classList.add('border-danger');
+                    fvAvisarSecuencialNoConfigurado('secuencial');
+                } else {
+                    inputSec.classList.remove('border-danger');
+                }
             } else {
                 inputSec.value = '000000001';
                 inputSec.placeholder = '000000001';
+                window.FV_SECUENCIAL_CONFIGURADO = false;
+                fvAvisarSecuencialNoConfigurado('secuencial');
                 console.warn('getSecuencialAjax respondió ok=false:', json);
             }
         } catch (e) {

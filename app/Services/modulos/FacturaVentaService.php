@@ -121,7 +121,7 @@ class FacturaVentaService
         $saldoAnterior = round((float) $factura['importe_total'] - $totalCobrado, 2);
 
         $numDoc = $factura['establecimiento'] . '-' . $factura['punto_emision'] . '-' . $factura['secuencial'];
-        $obs    = 'Cobro con tarjeta (Payphone) â autorizaciÃ³n ' . ($trans['authorization_code'] ?? '');
+        $obs    = 'Cobro con tarjeta (Payphone) — autorización ' . ($trans['authorization_code'] ?? '');
 
         // NÃºmero de ingreso con formato 000-000-000000000
         $numeroIngreso = str_pad((string) $punto['establecimiento'], 3, '0', STR_PAD_LEFT) . '-'
@@ -289,7 +289,7 @@ class FacturaVentaService
             (string) $data['secuencial'],
             $excluirId
         )) {
-            throw new \Exception('El nÃºmero de secuencial ya existe para este punto de emisiÃ³n. Recargue e intente nuevamente.');
+            throw new \Exception('El número de secuencial ya existe para este punto de emisión. Recargue e intente nuevamente.');
         }
     }
 
