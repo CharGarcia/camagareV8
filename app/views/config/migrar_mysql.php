@@ -234,7 +234,12 @@ $base = BASE_URL;
         if (!entidades.length) { alert('Seleccione al menos un dato.'); return; }
 
         // Feedback inmediato mientras se consulta el ambiente y se estima (puede tardar en compras)
-        Swal.fire({ title: 'Preparando migración…', html: 'Consultando ambiente y estimando tiempo…', allowOutsideClick: false, allowEscapeKey: false, didOpen: () => Swal.showLoading() });
+        Swal.fire({
+            title: 'Preparando migración…',
+            html: '<div class="spinner-border text-success mb-2" role="status" style="width:2.2rem;height:2.2rem;"></div>'
+                + '<div class="text-muted small">Consultando el ambiente de la empresa y estimando el tiempo…</div>',
+            showConfirmButton: false, allowOutsideClick: false, allowEscapeKey: false
+        });
 
         // Consultar ambiente de la empresa + estimaciones ANTES de confirmar (para mostrarlos)
         const estMap = {}, labelMap = {}, totalMap = {};
