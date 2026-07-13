@@ -31,6 +31,25 @@ class SincronizadorAsientosService
             // Ignorar errores si no tiene permisos o ya existen
         }
 
+        // Los documentos traídos por la migración del sistema viejo NO deben generar asiento
+        // automático: su contabilidad viene del histórico migrado (modulo_origen='migracion').
+        // Si existe la tabla del mapa de migración, se excluyen esos documentos de la generación.
+        $tieneMapMig = false;
+        try {
+            $tieneMapMig = (bool) $db->query("SELECT to_regclass('public.migracion_mysql_map')")->fetchColumn();
+        } catch (\Throwable $e) {
+            $tieneMapMig = false;
+        }
+        // Devuelve el fragmento SQL que excluye los documentos INSERTADOS por la migración
+        // (o '' si no aplica). Se excluyen solo los que la migración creó (vinculado IS NOT TRUE);
+        // los 'vinculado'=true son documentos NATIVOS que la migración solo enlazó por número SRI,
+        // así que deben seguir generando su asiento normalmente.
+        // $entidad e $idExpr son literales del código (no entrada de usuario) → seguros de interpolar.
+        $excMig = function (string $entidad, string $idExpr) use ($tieneMapMig): string {
+            if (!$tieneMapMig) { return ''; }
+            return " AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map mm WHERE mm.entidad = '{$entidad}' AND mm.id_destino = {$idExpr} AND mm.vinculado IS NOT TRUE) ";
+        };
+
         // 1. Facturas de Venta
         //    Se (re)generan dos grupos:
         //    (a) las que no tienen ningún asiento todavía, y
@@ -64,7 +83,7 @@ class SincronizadorAsientosService
                                                 WHERE ad.id_asiento = v.id_asiento_contable
                                                   AND ad.id_cuenta_contable IN ($subCosto))
                                 )
-                          )";
+                          )" . $excMig('facturas', 'v.id');
 
         $this->sincronizarModulo(
             $db,
@@ -83,7 +102,7 @@ class SincronizadorAsientosService
         // 2. Liquidaciones de Compra
         $this->sincronizarModulo(
             $db,
-            "SELECT id FROM liquidaciones_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado IN ('autorizado', 'contabilizado')",
+            "SELECT id FROM liquidaciones_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado IN ('autorizado', 'contabilizado')" . $excMig('liquidaciones', 'liquidaciones_cabecera.id'),
             [$idEmpresa],
             function() {
                 return new \App\Services\modulos\LiquidacionCompraService(
@@ -98,7 +117,7 @@ class SincronizadorAsientosService
         // 3. Compras (no tiene columna estado)
         $this->sincronizarModulo(
             $db,
-            "SELECT id FROM compras_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL",
+            "SELECT id FROM compras_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL" . $excMig('compras', 'compras_cabecera.id'),
             [$idEmpresa],
             function() {
                 return new \App\Services\modulos\ComprasService();
@@ -109,7 +128,7 @@ class SincronizadorAsientosService
         // 4. Notas de Crédito
         $this->sincronizarModulo(
             $db,
-            "SELECT id FROM notas_credito_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado IN ('autorizado', 'contabilizado')",
+            "SELECT id FROM notas_credito_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado IN ('autorizado', 'contabilizado')" . $excMig('notas_credito', 'notas_credito_cabecera.id'),
             [$idEmpresa],
             function() {
                 return new \App\Services\modulos\NotaCreditoService(
@@ -124,7 +143,7 @@ class SincronizadorAsientosService
         // 5. Retenciones en Ventas (no se autorizan en SRI: solo se filtra por asiento faltante)
         $this->sincronizarModulo(
             $db,
-            "SELECT id FROM retencion_venta_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL",
+            "SELECT id FROM retencion_venta_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL" . $excMig('retenciones_venta', 'retencion_venta_cabecera.id'),
             [$idEmpresa],
             function() {
                 return new \App\Services\modulos\RetencionVentaService(
@@ -139,7 +158,7 @@ class SincronizadorAsientosService
         // 5b. Retenciones en Compras (emitidas al proveedor; solo se filtra por asiento faltante)
         $this->sincronizarModulo(
             $db,
-            "SELECT id FROM retencion_compra_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL",
+            "SELECT id FROM retencion_compra_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL" . $excMig('retenciones_compra', 'retencion_compra_cabecera.id'),
             [$idEmpresa],
             function() {
                 return new \App\Services\modulos\RetencionCompraService(
@@ -154,7 +173,7 @@ class SincronizadorAsientosService
         // 6. Ingresos (cobros): contrapartida del concepto + formas de cobro
         $this->sincronizarModulo(
             $db,
-            "SELECT id FROM ingresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'anulado'",
+            "SELECT id FROM ingresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'anulado'" . $excMig('ingresos', 'ingresos_cabecera.id'),
             [$idEmpresa],
             function() {
                 return new \App\Services\modulos\IngresoService(
@@ -170,7 +189,7 @@ class SincronizadorAsientosService
         // 7. Egresos (pagos): contrapartida del concepto + formas de pago
         $this->sincronizarModulo(
             $db,
-            "SELECT id FROM egresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'anulado'",
+            "SELECT id FROM egresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'anulado'" . $excMig('egresos', 'egresos_cabecera.id'),
             [$idEmpresa],
             function() {
                 return new \App\Services\modulos\EgresoService(
@@ -187,7 +206,7 @@ class SincronizadorAsientosService
         //     Se generan las que tengan las cuentas configuradas; el resto se avisa abajo.
         $this->sincronizarModulo(
             $db,
-            "SELECT id FROM consignaciones_ventas WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'Anulada'",
+            "SELECT id FROM consignaciones_ventas WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'Anulada'" . $excMig('consignaciones', 'consignaciones_ventas.id'),
             [$idEmpresa],
             function() {
                 return new \App\Services\modulos\ConsignacionVentaService(

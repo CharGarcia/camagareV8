@@ -940,8 +940,9 @@ class MigracionMysqlService
         $insCab  = $pg->prepare("INSERT INTO asientos_contables_cabecera (id_empresa, fecha_asiento, tipo_comprobante, numero_comprobante, concepto, estado, modulo_origen, total_debe, total_haber, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, 'migracion', ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO asientos_contables_detalle (id_empresa, id_asiento, id_cuenta_contable, debe, haber, referencia_detalle, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
 
+        // Los asientos ELIMINADOS en el sistema viejo se marcan con estado='Anulado' → NO se migran.
         $sql = "SELECT id_diario, codigo_unico, fecha_asiento, concepto_general, estado, tipo
-                  FROM encabezado_diario WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND codigo_unico <> ''" . $this->clausulaFecha('fecha_asiento', $desde, $hasta, $mysql) . " ORDER BY id_diario";
+                  FROM encabezado_diario WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND codigo_unico <> '' AND LOWER(TRIM(estado)) <> 'anulado'" . $this->clausulaFecha('fecha_asiento', $desde, $hasta, $mysql) . " ORDER BY id_diario";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
 
