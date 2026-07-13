@@ -244,25 +244,27 @@ class ReporteVentasController extends BaseModuloController
         exit;
     }
 
-    /** Autocompletado de ítems de venta (descripciones distintas de ventas_detalle). */
+    /** Autocompletado de ítems del documento (facturas o recibos). */
     public function buscarItemsAjax(): void
     {
         $this->requireLeer();
         header('Content-Type: application/json');
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        $q = trim($_GET['q'] ?? '');
-        echo json_encode(['ok' => true, 'data' => $this->repository->buscarItems($idEmpresa, $q)]);
+        $q    = trim($_GET['q'] ?? '');
+        $tipo = $_GET['tipo_documento'] ?? 'FACTURA';
+        echo json_encode(['ok' => true, 'data' => $this->repository->buscarItems($idEmpresa, $q, $tipo)]);
         exit;
     }
 
-    /** Autocompletado de info adicional (nombre/valor distintos de ventas_adicional). */
+    /** Autocompletado de info adicional (nombre/valor del documento). */
     public function buscarInfoAdicionalAjax(): void
     {
         $this->requireLeer();
         header('Content-Type: application/json');
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        $q = trim($_GET['q'] ?? '');
-        echo json_encode(['ok' => true, 'data' => $this->repository->buscarInfoAdicional($idEmpresa, $q)]);
+        $q    = trim($_GET['q'] ?? '');
+        $tipo = $_GET['tipo_documento'] ?? 'FACTURA';
+        echo json_encode(['ok' => true, 'data' => $this->repository->buscarInfoAdicional($idEmpresa, $q, $tipo)]);
         exit;
     }
 

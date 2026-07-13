@@ -33,9 +33,9 @@
                                 Tipo de Documento
                                 <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_tipo_documento', 'tipo_documento') ?>
                             </label>
-                            <select name="tipo_documento" id="rv_tipo_documento" class="form-select form-select-sm shadow-none border">
+                            <select name="tipo_documento" id="rv_tipo_documento" class="form-select form-select-sm shadow-none border" onchange="window.RV_generarReporte()">
                                 <option value="FACTURA" selected>Facturas de Venta</option>
-                                <option value="RECIBO" disabled>Recibos (Próximamente)</option>
+                                <option value="RECIBO">Recibos de Venta</option>
                             </select>
                         </div>
                         

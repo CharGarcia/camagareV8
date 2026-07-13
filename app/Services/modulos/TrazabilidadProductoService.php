@@ -83,6 +83,25 @@ class TrazabilidadProductoService
             ];
         }
 
+        // Documentos previos sin impacto en inventario (pedidos, proformas, órdenes
+        // de compra, guías de remisión): informativos, no entran en los KPIs de stock.
+        $documentosPrevios = $this->repo->getDocumentosPrevios($idProducto, $idEmpresa, $filtros);
+        foreach ($documentosPrevios as $d) {
+            $eventos[] = [
+                'tipo'            => 'documento',
+                'fecha_ts'        => strtotime($d['fecha']) ?: 0,
+                'fecha'           => date('d-m-Y H:i:s', strtotime($d['fecha'])),
+                'titulo'          => $d['doc_label'],
+                'cantidad'        => (float) $d['cantidad'],
+                'precio_unitario' => $d['precio_unitario'] !== null ? (float) $d['precio_unitario'] : null,
+                'usuario'         => $d['usuario_nombre'],
+                'doc_numero'      => $d['doc_numero'],
+                'doc_contraparte' => $d['doc_contraparte'],
+                'doc_estado'      => $d['doc_estado'],
+                'doc_ruta'        => $d['doc_ruta'],
+            ];
+        }
+
         usort($eventos, fn ($a, $b) => $a['fecha_ts'] <=> $b['fecha_ts']);
 
         return [

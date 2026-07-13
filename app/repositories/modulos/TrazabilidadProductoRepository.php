@@ -143,6 +143,138 @@ class TrazabilidadProductoRepository extends BaseRepository
     }
 
     /**
+     * Documentos "previos" donde el producto aparece pero que NO generan
+     * movimiento de kardex (pedidos, proformas, órdenes de compra, guías de
+     * remisión). Son informativos: no afectan stock ni entran en los KPIs.
+     * @param array{desde?:string,hasta?:string} $filtros
+     */
+    public function getDocumentosPrevios(int $idProducto, int $idEmpresa, array $filtros = []): array
+    {
+        return array_merge(
+            $this->documentosPedidos($idProducto, $idEmpresa, $filtros),
+            $this->documentosProformas($idProducto, $idEmpresa, $filtros),
+            $this->documentosOrdenesCompra($idProducto, $idEmpresa, $filtros),
+            $this->documentosGuiasRemision($idProducto, $idEmpresa, $filtros)
+        );
+    }
+
+    private function documentosPedidos(int $idProducto, int $idEmpresa, array $filtros): array
+    {
+        [$where, $params] = $this->rangoFecha('pc.fecha_pedido', $filtros);
+        $sql = "SELECT pc.fecha_pedido AS fecha,
+                       pc.establecimiento || '-' || pc.punto_emision || '-' || pc.secuencial AS numero,
+                       pc.estado, cl.nombre AS contraparte, pd.cantidad, pd.precio_unitario,
+                       u.nombre AS usuario_nombre
+                FROM pedidos_detalle pd
+                INNER JOIN pedidos_cabecera pc ON pc.id = pd.id_pedido
+                LEFT JOIN clientes cl ON cl.id = pc.id_cliente
+                LEFT JOIN usuarios u ON u.id = pc.created_by
+                WHERE pd.id_producto = ? AND pd.eliminado = false
+                  AND pc.id_empresa = ? AND pc.eliminado = false
+                  AND pc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
+                  $where
+                ORDER BY pc.fecha_pedido ASC
+                LIMIT 200";
+        return $this->documentosGrupo($sql, array_merge([$idProducto, $idEmpresa, $idEmpresa], $params), 'Pedido', 'modulos/pedidos');
+    }
+
+    private function documentosProformas(int $idProducto, int $idEmpresa, array $filtros): array
+    {
+        [$where, $params] = $this->rangoFecha('pf.fecha_emision', $filtros);
+        $sql = "SELECT pf.fecha_emision AS fecha,
+                       pf.establecimiento || '-' || pf.punto_emision || '-' || pf.secuencial AS numero,
+                       pf.estado, cl.nombre AS contraparte, pd.cantidad, pd.precio_unitario,
+                       u.nombre AS usuario_nombre
+                FROM proformas_detalle pd
+                INNER JOIN proformas_cabecera pf ON pf.id = pd.id_proforma
+                LEFT JOIN clientes cl ON cl.id = pf.id_cliente
+                LEFT JOIN usuarios u ON u.id = pf.created_by
+                WHERE pd.id_producto = ?
+                  AND pf.id_empresa = ? AND pf.eliminado = false
+                  AND pf.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
+                  $where
+                ORDER BY pf.fecha_emision ASC
+                LIMIT 200";
+        return $this->documentosGrupo($sql, array_merge([$idProducto, $idEmpresa, $idEmpresa], $params), 'Proforma', 'modulos/proformas');
+    }
+
+    private function documentosOrdenesCompra(int $idProducto, int $idEmpresa, array $filtros): array
+    {
+        [$where, $params] = $this->rangoFecha('oc.fecha_orden', $filtros);
+        $sql = "SELECT oc.fecha_orden AS fecha, oc.numero_orden AS numero,
+                       oc.estado, p.razon_social AS contraparte, od.cantidad, od.precio_unitario,
+                       u.nombre AS usuario_nombre
+                FROM ordenes_compra_detalle od
+                INNER JOIN ordenes_compra oc ON oc.id = od.id_orden
+                LEFT JOIN proveedores p ON p.id = oc.id_proveedor
+                LEFT JOIN usuarios u ON u.id = oc.created_by
+                WHERE od.id_producto = ?
+                  AND oc.id_empresa = ? AND oc.eliminado = false
+                  AND oc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
+                  $where
+                ORDER BY oc.fecha_orden ASC
+                LIMIT 200";
+        return $this->documentosGrupo($sql, array_merge([$idProducto, $idEmpresa, $idEmpresa], $params), 'Orden de compra', 'modulos/ordenes-compra');
+    }
+
+    private function documentosGuiasRemision(int $idProducto, int $idEmpresa, array $filtros): array
+    {
+        [$where, $params] = $this->rangoFecha('gr.fecha_emision', $filtros);
+        $sql = "SELECT gr.fecha_emision AS fecha,
+                       gr.establecimiento || '-' || gr.punto_emision || '-' || gr.secuencial AS numero,
+                       gr.estado, cl.nombre AS contraparte, gd.cantidad, NULL AS precio_unitario,
+                       u.nombre AS usuario_nombre
+                FROM guias_remision_detalle gd
+                INNER JOIN guias_remision_cabecera gr ON gr.id = gd.id_guia_remision
+                LEFT JOIN clientes cl ON cl.id = gr.id_cliente
+                LEFT JOIN usuarios u ON u.id = gr.created_by
+                WHERE gd.id_producto = ?
+                  AND gr.id_empresa = ? AND gr.eliminado = false
+                  AND gr.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
+                  $where
+                ORDER BY gr.fecha_emision ASC
+                LIMIT 200";
+        return $this->documentosGrupo($sql, array_merge([$idProducto, $idEmpresa, $idEmpresa], $params), 'Guía de remisión', 'modulos/guias_remision');
+    }
+
+    /** Cláusula de rango de fecha con marcadores posicionales (?), para componer con las demás. */
+    private function rangoFecha(string $columna, array $filtros): array
+    {
+        $where = '';
+        $params = [];
+        if (!empty($filtros['desde'])) {
+            $where .= " AND {$columna} >= ?";
+            $params[] = $filtros['desde'] . ' 00:00:00';
+        }
+        if (!empty($filtros['hasta'])) {
+            $where .= " AND {$columna} <= ?";
+            $params[] = $filtros['hasta'] . ' 23:59:59';
+        }
+        return [$where, $params];
+    }
+
+    private function documentosGrupo(string $sql, array $params, string $label, string $ruta): array
+    {
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[] = [
+                'fecha'           => $row['fecha'],
+                'doc_label'       => $label,
+                'doc_numero'      => $row['numero'],
+                'doc_contraparte' => $row['contraparte'],
+                'doc_estado'      => $row['estado'],
+                'doc_ruta'        => $ruta,
+                'cantidad'        => $row['cantidad'],
+                'precio_unitario' => $row['precio_unitario'],
+                'usuario_nombre'  => $row['usuario_nombre'],
+            ];
+        }
+        return $out;
+    }
+
+    /**
      * Enriquece cada movimiento con la etiqueta, número, contraparte, estado y
      * ruta del documento de origen (agrupando por tipo para no hacer N+1 queries).
      */

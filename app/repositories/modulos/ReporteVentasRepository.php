@@ -9,41 +9,84 @@ use PDO;
 
 class ReporteVentasRepository extends BaseRepository
 {
-    /**
-     * Obtiene los años disponibles con ventas autorizadas para la empresa.
-     */
-    public function getAniosDisponibles(int $idEmpresa): array
-    {
-        $sql = "SELECT DISTINCT EXTRACT(YEAR FROM fecha_emision) as anio 
-                FROM ventas_cabecera 
-                WHERE id_empresa = :id_empresa 
-                  AND eliminado = false 
-                  AND estado = 'autorizada'
-                ORDER BY anio DESC";
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([':id_empresa' => $idEmpresa]);
-        return $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [date('Y')];
-    }
-
     public function __construct()
     {
         parent::__construct('ventas_cabecera');
     }
 
     /**
-     * Devuelve el CTE de impuestos para facilitar sumatorias.
+     * Configuración de la fuente de datos según el tipo de documento:
+     * FACTURA (ventas_*) o RECIBO (recibos_venta_*). Las tablas de recibos
+     * son espejo de las de ventas, con FKs distintas y sin retenciones/clave.
      */
-    private function getCteBasesImpuestos(): string
+    private function fuente(array $filtros): array
+    {
+        $esRecibo = (($filtros['tipo_documento'] ?? 'FACTURA') === 'RECIBO');
+
+        if ($esRecibo) {
+            return [
+                'cab'         => 'recibos_venta_cabecera',
+                'det'         => 'recibos_venta_detalle',
+                'imp'         => 'recibos_venta_detalle_impuestos',
+                'adic'        => 'recibos_venta_adicional',
+                'fk_det'      => 'id_recibo',          // detalle.id_recibo = cabecera.id
+                'fk_imp'      => 'id_recibo_detalle',  // impuestos.id_recibo_detalle = detalle.id
+                'fk_adic'     => 'id_recibo',
+                'estado_ok'   => "{alias}.estado NOT IN ('borrador', 'anulado')",
+                'retenciones' => false,
+                'clave'       => false,
+            ];
+        }
+
+        return [
+            'cab'         => 'ventas_cabecera',
+            'det'         => 'ventas_detalle',
+            'imp'         => 'ventas_detalle_impuestos',
+            'adic'        => 'ventas_adicional',
+            'fk_det'      => 'id_venta',
+            'fk_imp'      => 'id_venta_detalle',
+            'fk_adic'     => 'id_venta',
+            'estado_ok'   => "{alias}.estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')",
+            'retenciones' => true,
+            'clave'       => true,
+        ];
+    }
+
+    /**
+     * Años disponibles (facturas autorizadas + recibos emitidos/facturados).
+     */
+    public function getAniosDisponibles(int $idEmpresa): array
+    {
+        $sql = "SELECT DISTINCT anio FROM (
+                    SELECT EXTRACT(YEAR FROM fecha_emision)::int AS anio
+                    FROM ventas_cabecera
+                    WHERE id_empresa = :e AND eliminado = false AND estado IN ('autorizado','autorizada')
+                    UNION
+                    SELECT EXTRACT(YEAR FROM fecha_emision)::int
+                    FROM recibos_venta_cabecera
+                    WHERE id_empresa = :e2 AND eliminado = false AND estado NOT IN ('borrador','anulado')
+                ) t
+                WHERE anio IS NOT NULL
+                ORDER BY anio DESC";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':e' => $idEmpresa, ':e2' => $idEmpresa]);
+        return $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [(int)date('Y')];
+    }
+
+    /**
+     * CTE de bases e impuestos para sumatorias (según la fuente).
+     */
+    private function getCteBasesImpuestos(array $f): string
     {
         return "
-            SELECT 
-                d.id_venta, 
+            SELECT
+                d.{$f['fk_det']} AS id_doc,
                 SUM(CASE WHEN i.tarifa = 0 THEN i.base_imponible ELSE 0 END) as base_0,
                 SUM(CASE WHEN i.tarifa > 0 THEN i.base_imponible ELSE 0 END) as base_iva,
                 SUM(i.valor) as valor_iva
-            FROM ventas_detalle d
-            LEFT JOIN ventas_detalle_impuestos i ON i.id_venta_detalle = d.id
-            GROUP BY d.id_venta
+            FROM {$f['det']} d
+            LEFT JOIN {$f['imp']} i ON i.{$f['fk_imp']} = d.id
+            GROUP BY d.{$f['fk_det']}
         ";
     }
 
@@ -52,16 +95,16 @@ class ReporteVentasRepository extends BaseRepository
      */
     private function buildWhereYParams(int $idEmpresa, array $filtros, string $aliasVenta, string $aliasDetalle = null, bool $filtrarEstado = true): array
     {
-        // Forzamos que solo se listen facturas del ambiente actual de la empresa
-        $where = "{$aliasVenta}.id_empresa = :id_empresa 
-                  AND {$aliasVenta}.eliminado = false 
+        $f = $this->fuente($filtros);
+
+        $where = "{$aliasVenta}.id_empresa = :id_empresa
+                  AND {$aliasVenta}.eliminado = false
                   AND {$aliasVenta}.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
-                  
+
         if ($filtrarEstado) {
-            $where .= " AND {$aliasVenta}.estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')";
+            $where .= " AND " . str_replace('{alias}', $aliasVenta, $f['estado_ok']);
         }
 
-                  
         $params = [':id_empresa' => $idEmpresa];
 
         if (!empty($filtros['fecha_desde'])) {
@@ -82,7 +125,7 @@ class ReporteVentasRepository extends BaseRepository
             }
             $where .= " AND {$aliasVenta}.id_cliente IN (" . implode(',', $inNames) . ")";
         }
-        
+
         if (!empty($filtros['id_producto'])) {
             $productos = is_array($filtros['id_producto']) ? $filtros['id_producto'] : [$filtros['id_producto']];
             $inNames = [];
@@ -94,23 +137,15 @@ class ReporteVentasRepository extends BaseRepository
             if ($aliasDetalle) {
                 $where .= " AND {$aliasDetalle}.id_producto IN (" . implode(',', $inNames) . ")";
             } else {
-                $where .= " AND EXISTS (SELECT 1 FROM ventas_detalle vd WHERE vd.id_venta = {$aliasVenta}.id AND vd.id_producto IN (" . implode(',', $inNames) . "))";
+                $where .= " AND EXISTS (SELECT 1 FROM {$f['det']} vd WHERE vd.{$f['fk_det']} = {$aliasVenta}.id AND vd.id_producto IN (" . implode(',', $inNames) . "))";
             }
         }
 
-        // Filtro por tipo de documento (actualmente solo facturas, pero preparado para recibos)
-        if (!empty($filtros['tipo_documento'])) {
-            if ($filtros['tipo_documento'] === 'FACTURA') {
-                // Asumiendo que el comprobante de factura es 01 o similar, o simplemente lo dejamos sin filtro si toda la tabla es facturas
-                // Actualmente ventas_cabecera almacena facturas.
-            }
-        }
-
-        // Filtro por Producto = texto de los ítems de la venta (descripción o código de línea)
+        // Filtro por Producto = texto de los ítems del documento (descripción o código de línea)
         if (!empty($filtros['producto_texto'])) {
             $where .= " AND EXISTS (
-                SELECT 1 FROM ventas_detalle vdp
-                WHERE vdp.id_venta = {$aliasVenta}.id
+                SELECT 1 FROM {$f['det']} vdp
+                WHERE vdp.{$f['fk_det']} = {$aliasVenta}.id
                   AND (vdp.descripcion ILIKE :prodtxt OR vdp.codigo_principal ILIKE :prodtxt)
             )";
             $params[':prodtxt'] = '%' . trim($filtros['producto_texto']) . '%';
@@ -119,8 +154,8 @@ class ReporteVentasRepository extends BaseRepository
         // Filtro por Información Adicional del documento (campos adicionales nombre/valor)
         if (!empty($filtros['buscar_info'])) {
             $where .= " AND EXISTS (
-                SELECT 1 FROM ventas_adicional va
-                WHERE va.id_venta = {$aliasVenta}.id
+                SELECT 1 FROM {$f['adic']} va
+                WHERE va.{$f['fk_adic']} = {$aliasVenta}.id
                   AND (va.nombre ILIKE :info OR va.valor ILIKE :info)
             )";
             $params[':info'] = '%' . trim($filtros['buscar_info']) . '%';
@@ -130,14 +165,20 @@ class ReporteVentasRepository extends BaseRepository
     }
 
     /**
-     * Reporte detallado (por factura).
+     * Reporte detallado (por documento).
      */
     public function getReporteDetallado(int $idEmpresa, array $filtros): array
     {
+        $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
 
+        $clave = $f['clave'] ? "COALESCE(v.clave_acceso, '')" : "''";
+        $reten = $f['retenciones']
+            ? "COALESCE((SELECT SUM(r.total_iva + r.total_renta + r.total_isd) FROM retencion_venta_cabecera r WHERE r.id_venta = v.id AND r.eliminado = false), 0)"
+            : "0";
+
         $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos() . ")
+            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
             SELECT
                 v.id,
                 v.fecha_emision,
@@ -152,15 +193,11 @@ class ReporteVentasRepository extends BaseRepository
                 COALESCE(vend.nombre, '')   as vendedor_nombre,
                 COALESCE(ucaj.nombre, '')   as cajero_nombre,
                 COALESCE(uusr.nombre, '')   as usuario_nombre,
-                COALESCE(v.clave_acceso, '') as clave_acceso,
-                COALESCE((
-                    SELECT SUM(r.total_iva + r.total_renta + r.total_isd)
-                    FROM retencion_venta_cabecera r
-                    WHERE r.id_venta = v.id AND r.eliminado = false
-                ), 0) as retenciones
-            FROM ventas_cabecera v
+                {$clave} as clave_acceso,
+                {$reten} as retenciones
+            FROM {$f['cab']} v
             JOIN clientes c ON c.id = v.id_cliente
-            LEFT JOIN bases b ON b.id_venta = v.id
+            LEFT JOIN bases b ON b.id_doc = v.id
             LEFT JOIN vendedores  vend ON vend.id = v.id_vendedor
             LEFT JOIN usuarios    ucaj ON ucaj.id = v.id_usuario
             LEFT JOIN usuarios    uusr ON uusr.id = v.created_by
@@ -178,11 +215,12 @@ class ReporteVentasRepository extends BaseRepository
      */
     public function getReporteAgrupadoCliente(int $idEmpresa, array $filtros): array
     {
+        $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
 
         $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos() . ")
-            SELECT 
+            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
+            SELECT
                 c.id as id_cliente,
                 c.identificacion as cliente_ruc,
                 c.nombre as cliente_nombre,
@@ -191,9 +229,9 @@ class ReporteVentasRepository extends BaseRepository
                 SUM(COALESCE(b.base_iva, 0)) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
                 SUM(v.importe_total) as total
-            FROM ventas_cabecera v
+            FROM {$f['cab']} v
             JOIN clientes c ON c.id = v.id_cliente
-            LEFT JOIN bases b ON b.id_venta = v.id
+            LEFT JOIN bases b ON b.id_doc = v.id
             WHERE {$where}
             GROUP BY c.id, c.identificacion, c.nombre
             ORDER BY total DESC
@@ -209,10 +247,11 @@ class ReporteVentasRepository extends BaseRepository
      */
     public function getReporteAgrupadoProducto(int $idEmpresa, array $filtros): array
     {
+        $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v', 'd');
 
         $sql = "
-            SELECT 
+            SELECT
                 d.id_producto,
                 COALESCE(p.codigo, '') as producto_codigo,
                 COALESCE(p.nombre, d.descripcion) as producto_nombre,
@@ -222,10 +261,10 @@ class ReporteVentasRepository extends BaseRepository
                 SUM(CASE WHEN i.tarifa > 0 THEN i.base_imponible ELSE 0 END) as base_iva,
                 SUM(COALESCE(i.valor, 0)) as valor_iva,
                 SUM(d.precio_total_sin_impuesto + COALESCE(i.valor, 0)) as total
-            FROM ventas_detalle d
-            JOIN ventas_cabecera v ON v.id = d.id_venta
+            FROM {$f['det']} d
+            JOIN {$f['cab']} v ON v.id = d.{$f['fk_det']}
             LEFT JOIN productos p ON p.id = d.id_producto
-            LEFT JOIN ventas_detalle_impuestos i ON i.id_venta_detalle = d.id
+            LEFT JOIN {$f['imp']} i ON i.{$f['fk_imp']} = d.id
             WHERE {$where}
             GROUP BY d.id_producto, p.codigo, COALESCE(p.nombre, d.descripcion), COALESCE(i.tarifa, 0)
             ORDER BY cantidad_vendida DESC
@@ -241,20 +280,20 @@ class ReporteVentasRepository extends BaseRepository
      */
     public function getReporteAgrupadoFecha(int $idEmpresa, array $filtros): array
     {
+        $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
 
-        // Por defecto agrupa por día
         $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos() . ")
-            SELECT 
+            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
+            SELECT
                 v.fecha_emision as fecha,
                 COUNT(v.id) as cantidad_facturas,
                 SUM(COALESCE(b.base_0, 0)) as base_0,
                 SUM(COALESCE(b.base_iva, 0)) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
                 SUM(v.importe_total) as total
-            FROM ventas_cabecera v
-            LEFT JOIN bases b ON b.id_venta = v.id
+            FROM {$f['cab']} v
+            LEFT JOIN bases b ON b.id_doc = v.id
             WHERE {$where}
             GROUP BY v.fecha_emision
             ORDER BY v.fecha_emision DESC
@@ -270,10 +309,11 @@ class ReporteVentasRepository extends BaseRepository
      */
     public function getReporteAgrupadoMes(int $idEmpresa, array $filtros): array
     {
+        $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
 
         $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos() . ")
+            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
             SELECT
                 TO_CHAR(v.fecha_emision, 'YYYY-MM') as mes,
                 COUNT(v.id) as cantidad_facturas,
@@ -281,8 +321,8 @@ class ReporteVentasRepository extends BaseRepository
                 SUM(COALESCE(b.base_iva, 0)) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
                 SUM(v.importe_total) as total
-            FROM ventas_cabecera v
-            LEFT JOIN bases b ON b.id_venta = v.id
+            FROM {$f['cab']} v
+            LEFT JOIN bases b ON b.id_doc = v.id
             WHERE {$where}
             GROUP BY TO_CHAR(v.fecha_emision, 'YYYY-MM')
             ORDER BY mes DESC
@@ -294,13 +334,14 @@ class ReporteVentasRepository extends BaseRepository
     }
 
     /**
-     * Autocompletado: descripciones distintas de los ítems de venta (ventas_detalle).
+     * Autocompletado: descripciones distintas de los ítems del documento.
      */
-    public function buscarItems(int $idEmpresa, string $q, int $limit = 15): array
+    public function buscarItems(int $idEmpresa, string $q, string $tipoDocumento = 'FACTURA', int $limit = 15): array
     {
+        $f = $this->fuente(['tipo_documento' => $tipoDocumento]);
         $sql = "SELECT DISTINCT TRIM(d.descripcion) AS valor
-                FROM ventas_detalle d
-                JOIN ventas_cabecera v ON v.id = d.id_venta
+                FROM {$f['det']} d
+                JOIN {$f['cab']} v ON v.id = d.{$f['fk_det']}
                 WHERE v.id_empresa = :ie AND v.eliminado = false
                   AND d.descripcion IS NOT NULL AND TRIM(d.descripcion) <> ''
                   AND d.descripcion ILIKE :q
@@ -313,13 +354,14 @@ class ReporteVentasRepository extends BaseRepository
     }
 
     /**
-     * Autocompletado: info adicional (nombre/valor distintos de ventas_adicional).
+     * Autocompletado: info adicional (nombre/valor distintos del documento).
      */
-    public function buscarInfoAdicional(int $idEmpresa, string $q, int $limit = 15): array
+    public function buscarInfoAdicional(int $idEmpresa, string $q, string $tipoDocumento = 'FACTURA', int $limit = 15): array
     {
+        $f = $this->fuente(['tipo_documento' => $tipoDocumento]);
         $sql = "SELECT DISTINCT va.nombre, va.valor
-                FROM ventas_adicional va
-                JOIN ventas_cabecera v ON v.id = va.id_venta
+                FROM {$f['adic']} va
+                JOIN {$f['cab']} v ON v.id = va.{$f['fk_adic']}
                 WHERE v.id_empresa = :ie AND v.eliminado = false
                   AND COALESCE(va.valor, '') <> ''
                   AND (va.nombre ILIKE :q OR va.valor ILIKE :q)
@@ -340,18 +382,19 @@ class ReporteVentasRepository extends BaseRepository
      */
     public function getEstadisticas(int $idEmpresa, array $filtros): array
     {
+        $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
-        
+
         $sql = "
-            WITH bases AS (" . $this->getCteBasesImpuestos() . ")
-            SELECT 
+            WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
+            SELECT
                 SUM(COALESCE(b.base_0, 0)) as total_base_0,
                 SUM(COALESCE(b.base_iva, 0)) as total_base_iva,
                 SUM(COALESCE(b.valor_iva, 0)) as total_iva,
                 SUM(v.importe_total) as gran_total,
                 COUNT(v.id) as total_documentos
-            FROM ventas_cabecera v
-            LEFT JOIN bases b ON b.id_venta = v.id
+            FROM {$f['cab']} v
+            LEFT JOIN bases b ON b.id_doc = v.id
             WHERE {$where}
         ";
 
@@ -370,13 +413,14 @@ class ReporteVentasRepository extends BaseRepository
 
     public function getResumenEstados(int $idEmpresa, array $filtros): array
     {
+        $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v', null, false);
-        
+
         $sql = "
-            SELECT 
+            SELECT
                 LOWER(estado) as estado,
                 COUNT(*) as cantidad
-            FROM ventas_cabecera v
+            FROM {$f['cab']} v
             WHERE {$where}
             GROUP BY LOWER(estado)
         ";
@@ -394,7 +438,8 @@ class ReporteVentasRepository extends BaseRepository
         foreach ($rows as $row) {
             $estado = $row['estado'];
             $cantidad = (int) $row['cantidad'];
-            if (in_array($estado, ['autorizado', 'autorizada'])) {
+            // "Autorizados" agrupa los documentos emitidos/válidos (facturas autorizadas y recibos emitidos/facturados)
+            if (in_array($estado, ['autorizado', 'autorizada', 'emitido', 'facturado'])) {
                 $resumen['autorizados'] += $cantidad;
             } elseif ($estado === 'anulado') {
                 $resumen['anulados'] += $cantidad;

@@ -112,7 +112,8 @@ function RV_predictivoTexto(inputId, dropdownId, endpoint, msgVacio) {
         const q = this.value.trim();
         if (q.length < 2) { dd.classList.add('d-none'); return; }
         timer = setTimeout(() => {
-            fetch(BASE_URL + '/' + RUTA_MODULO + '/' + endpoint + '?q=' + encodeURIComponent(q))
+            const tipo = document.getElementById('rv_tipo_documento')?.value || 'FACTURA';
+            fetch(BASE_URL + '/' + RUTA_MODULO + '/' + endpoint + '?q=' + encodeURIComponent(q) + '&tipo_documento=' + encodeURIComponent(tipo))
                 .then(r => r.json())
                 .then(data => {
                     dd.innerHTML = '';

@@ -36,6 +36,7 @@ class ReporteTrazabilidadProductosController extends BaseModuloController
             'perm'       => $this->getPermisos(),
             'rutaModulo' => $this->getRutaModulo(),
             'base'       => BASE_URL,
+            'fullWidth'  => true,
         ]);
     }
 

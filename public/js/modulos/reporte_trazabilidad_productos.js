@@ -110,6 +110,7 @@
                 renderKpis(res.data.resumen);
                 renderEventos(res.data.eventos);
                 avisoTruncado.style.display = res.data.truncado ? '' : 'none';
+                document.getElementById('tzp-info-total').textContent = res.data.eventos.length + ' evento' + (res.data.eventos.length === 1 ? '' : 's');
             })
             .catch(() => {
                 tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-danger">Error de conexión.</td></tr>';
@@ -128,6 +129,7 @@
 
     function claseLinea(ev) {
         if (ev.tipo === 'catalogo') return 'catalogo';
+        if (ev.tipo === 'documento') return 'documento';
         if (ev.tipo_movimiento === 'entrada') return 'entrada';
         if (ev.tipo_movimiento === 'salida') return 'salida';
         return 'ajuste';
@@ -147,6 +149,28 @@
                     <td><span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">${escapeHtml(ev.titulo)}</span></td>
                     <td colspan="4" class="small text-muted">${cambios || 'Sin detalle de cambios.'}</td>
                     <td colspan="2"></td>
+                    <td class="small">${escapeHtml(ev.usuario || '-')}</td>
+                </tr>`;
+            }
+
+            if (ev.tipo === 'documento') {
+                const doc = ev.doc_numero
+                    ? (ev.doc_ruta
+                        ? `<a href="${BASE_URL}/${ev.doc_ruta}" target="_blank">${escapeHtml(ev.doc_numero)}</a>`
+                        : escapeHtml(ev.doc_numero))
+                    : '-';
+                return `<tr class="tzp-linea ${claseLinea(ev)}">
+                    <td class="ps-3 text-nowrap small">${escapeHtml(ev.fecha)}</td>
+                    <td class="small">
+                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">${escapeHtml(ev.titulo)}</span>
+                        <span class="text-muted" style="font-size:.65rem;" title="No afecta el inventario">sin stock</span>
+                    </td>
+                    <td class="small">${doc}</td>
+                    <td class="small">${escapeHtml(ev.doc_contraparte || '-')}</td>
+                    <td class="text-center small">${Number(ev.cantidad).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td class="text-center small text-muted">—</td>
+                    <td class="small text-muted">—</td>
+                    <td class="small text-muted">—</td>
                     <td class="small">${escapeHtml(ev.usuario || '-')}</td>
                 </tr>`;
             }
