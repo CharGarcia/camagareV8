@@ -282,8 +282,10 @@ $base = BASE_URL;
         function pintarSwal() {
             const body = document.getElementById('migSwalBody');
             if (!body) return;
-            const pct = Math.round((hecho / totalEnt) * 100);
-            const fracPct = curTotal > 0 ? Math.round(Math.min(1, curDone / curTotal) * 100) : 0;
+            const frac = curTotal > 0 ? Math.min(1, curDone / curTotal) : 0;
+            // La barra general incluye la fracción de la etapa en curso, así avanza de forma continua
+            const pct = Math.round(((hecho + frac) / totalEnt) * 100);
+            const fracPct = Math.round(frac * 100);
             const fino = entActual
                 ? `<div class="small text-muted mt-2 d-flex justify-content-between"><span>Registros de esta etapa</span><span>${fmt(curDone)}${curTotal ? ' / ' + fmt(curTotal) : ''}</span></div>
                    <div class="progress mt-1" style="height:14px;"><div class="progress-bar bg-info" style="width:${fracPct}%">${fracPct}%</div></div>`

@@ -490,6 +490,15 @@ class DocumentoAutomatedRegisterService
         try {
             $fechaEmision = $this->formatearFecha((string)$info->fechaEmision);
 
+            // Para NC (04) y ND (05): documento (factura) que modifican, para que
+            // el saldo de la factura de compra se ajuste (restar NC / sumar ND) en CxP.
+            $docModificado = null;
+            $motivoDoc     = null;
+            if (in_array($codDoc, ['04', '05'], true)) {
+                $docModificado = trim((string)($info->numDocModificado ?? '')) ?: null;
+                $motivoDoc     = trim((string)($info->motivo ?? '')) ?: null;
+            }
+
             // 1. Cabecera
             $idCompra = $this->compraRepo->insertCabecera([
                 'id_empresa' => $idEmpresa,
@@ -497,6 +506,8 @@ class DocumentoAutomatedRegisterService
                 'id_usuario' => $idUsuario,
                 'id_sustento_tributario' => $idSustento,
                 'tipo_comprobante' => $codDoc,
+                'documento_modificado' => $docModificado,
+                'motivo' => $motivoDoc,
                 'establecimiento_prov' => (string)$it->estab,
                 'punto_emision_prov' => (string)$it->ptoEmi,
                 'secuencial_prov' => $secuencial,

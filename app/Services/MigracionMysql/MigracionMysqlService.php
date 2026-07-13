@@ -1601,7 +1601,7 @@ class MigracionMysqlService
     {
         $q = $pg->prepare(
             "SELECT cc.establecimiento_prov, cc.punto_emision_prov, cc.secuencial_prov, cc.numero_autorizacion,
-                    cc.fecha_emision, cc.tipo_ambiente, cc.importe_total, cc.total_sin_impuestos,
+                    cc.fecha_emision, cc.tipo_ambiente, cc.importe_total, cc.total_sin_impuestos, cc.tipo_comprobante,
                     p.razon_social AS prov_razon, p.identificacion AS prov_ruc, COALESCE(p.direccion,'') AS prov_dir,
                     COALESCE(NULLIF(e.nombre_comercial,''), e.nombre) AS emp_razon, e.ruc AS emp_ruc, COALESCE(e.direccion,'') AS emp_dir
                FROM compras_cabecera cc
@@ -1636,24 +1636,27 @@ class MigracionMysqlService
     {
         $amb    = ((string) $c['tipo_ambiente'] === '2') ? '2' : '1';
         $ambTxt = $amb === '2' ? 'PRODUCCION' : 'PRUEBAS';
+        $cod    = trim((string) ($c['tipo_comprobante'] ?? '01')) ?: '01';
+        $mapa   = ['01' => ['factura', 'infoFactura'], '03' => ['liquidacionCompra', 'infoLiquidacionCompra'], '04' => ['notaCredito', 'infoNotaCredito'], '05' => ['notaDebito', 'infoNotaDebito']];
+        [$rootEl, $infoEl] = $mapa[$cod] ?? ['factura', 'infoFactura'];
         $fEmi   = ($c['fecha_emision'] ? date('d/m/Y', strtotime((string) $c['fecha_emision'])) : '');
         $fAut   = ($c['fecha_emision'] ? date('Y-m-d\TH:i:s', strtotime((string) $c['fecha_emision'])) . '-05:00' : '');
         $n2 = fn($v) => number_format((float) $v, 2, '.', '');
         $n6 = fn($v) => number_format((float) $v, 6, '.', '');
 
-        $comp  = '<?xml version="1.0" encoding="UTF-8"?><factura id="comprobante" version="1.1.0">';
+        $comp  = '<?xml version="1.0" encoding="UTF-8"?><' . $rootEl . ' id="comprobante" version="1.1.0">';
         $comp .= '<infoTributaria>';
         $comp .= '<ambiente>' . $amb . '</ambiente><tipoEmision>1</tipoEmision>';
         $comp .= '<razonSocial>' . self::xmlEsc($c['prov_razon']) . '</razonSocial>';
         $comp .= '<ruc>' . self::xmlEsc($c['prov_ruc']) . '</ruc>';
         $comp .= '<claveAcceso>' . self::xmlEsc($c['numero_autorizacion']) . '</claveAcceso>';
-        $comp .= '<codDoc>01</codDoc>';
+        $comp .= '<codDoc>' . $cod . '</codDoc>';
         $comp .= '<estab>' . self::xmlEsc($c['establecimiento_prov']) . '</estab>';
         $comp .= '<ptoEmi>' . self::xmlEsc($c['punto_emision_prov']) . '</ptoEmi>';
         $comp .= '<secuencial>' . self::xmlEsc($c['secuencial_prov']) . '</secuencial>';
         $comp .= '<dirMatriz>' . self::xmlEsc($c['prov_dir']) . '</dirMatriz>';
         $comp .= '</infoTributaria>';
-        $comp .= '<infoFactura>';
+        $comp .= '<' . $infoEl . '>';
         $comp .= '<fechaEmision>' . self::xmlEsc($fEmi) . '</fechaEmision>';
         $comp .= '<tipoIdentificacionComprador>04</tipoIdentificacionComprador>';
         $comp .= '<razonSocialComprador>' . self::xmlEsc($c['emp_razon']) . '</razonSocialComprador>';
@@ -1669,7 +1672,7 @@ class MigracionMysqlService
             }
             $comp .= '</pagos>';
         }
-        $comp .= '</infoFactura>';
+        $comp .= '</' . $infoEl . '>';
         $comp .= '<detalles>';
         foreach ($dets as $d) {
             $imp = $d['imp'] ?? [];
@@ -1690,7 +1693,7 @@ class MigracionMysqlService
             $comp .= '</detalle>';
         }
         $comp .= '</detalles>';
-        $comp .= '</factura>';
+        $comp .= '</' . $rootEl . '>';
 
         $x  = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
         $x .= '<autorizaciones><autorizacion>';
@@ -1724,10 +1727,15 @@ class MigracionMysqlService
         // Ids válidos de sustento tributario en el sistema nuevo (para no romper la FK; viejo y nuevo comparten ids)
         $sustValidos = [];
         foreach ($pg->query("SELECT id FROM sustento_tributario") as $s) { $sustValidos[(int) $s['id']] = true; }
+        // id_comprobante viejo -> código SRI (01 factura, 03 liquidación, 04 NC, 05 ND...). NO todos son facturas.
+        $mapComprobante = [];
+        foreach ($mysql->query("SELECT id_comprobante, codigo_comprobante FROM comprobantes_autorizados") as $cc2) {
+            $mapComprobante[(int) $cc2['id_comprobante']] = trim((string) $cc2['codigo_comprobante']);
+        }
 
         $insCab = $pg->prepare(
-            "INSERT INTO compras_cabecera (id_empresa, id_proveedor, establecimiento_prov, punto_emision_prov, secuencial_prov, numero_autorizacion, fecha_emision, fecha_registro, importe_total, total_sin_impuestos, total_descuento, propina, observaciones, tipo_registro, id_sustento_tributario, autorizacion_desde, autorizacion_hasta, fecha_caducidad, deducible, tipo_ambiente, id_usuario, created_by)
-             VALUES (:e, :prov, :est, :pto, :sec, :aut, :fe, :fr, :tot, :tsi, :tdes, :prop, :obs, :treg, :sust, :ad, :ah, :fcad, :ded, :amb, :u, :cb) RETURNING id"
+            "INSERT INTO compras_cabecera (id_empresa, id_proveedor, establecimiento_prov, punto_emision_prov, secuencial_prov, numero_autorizacion, fecha_emision, fecha_registro, importe_total, total_sin_impuestos, total_descuento, propina, observaciones, tipo_registro, tipo_comprobante, id_sustento_tributario, autorizacion_desde, autorizacion_hasta, fecha_caducidad, deducible, tipo_ambiente, id_usuario, created_by)
+             VALUES (:e, :prov, :est, :pto, :sec, :aut, :fe, :fr, :tot, :tsi, :tdes, :prop, :obs, :treg, :tcomp, :sust, :ad, :ah, :fcad, :ded, :amb, :u, :cb) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO compras_detalle (id_compra, id_producto, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)
@@ -1739,7 +1747,7 @@ class MigracionMysqlService
         );
         $cuerpoStmt = $mysql->prepare("SELECT codigo_producto, detalle_producto, cantidad, precio, descuento, impuesto, subtotal FROM cuerpo_compra WHERE codigo_documento = :cd");
         // Al re-correr: actualiza el ambiente y los datos tributarios de una compra ya migrada, según la empresa actual
-        $updCab = $pg->prepare("UPDATE compras_cabecera SET tipo_ambiente = :amb, id_sustento_tributario = :sust, autorizacion_desde = :ad, autorizacion_hasta = :ah, fecha_caducidad = :fcad, tipo_registro = :treg, deducible = :ded, updated_at = now(), updated_by = :u WHERE id = :id");
+        $updCab = $pg->prepare("UPDATE compras_cabecera SET tipo_ambiente = :amb, tipo_comprobante = :tcomp, id_sustento_tributario = :sust, autorizacion_desde = :ad, autorizacion_hasta = :ah, fecha_caducidad = :fcad, tipo_registro = :treg, deducible = :ded, updated_at = now(), updated_by = :u WHERE id = :id");
         // Formas de pago SRI de la compra: viejo formas_pago_compras → nuevo compras_pagos (enlaza por codigo_documento)
         $fpStmt  = $mysql->prepare("SELECT forma_pago, total_pago, plazo_pago, tiempo_pago FROM formas_pago_compras WHERE codigo_documento = :cd");
         $insPago = $pg->prepare("INSERT INTO compras_pagos (id_compra, forma_pago, total, plazo, unidad_tiempo) VALUES (?, ?, ?, ?, ?)");
@@ -1755,8 +1763,10 @@ class MigracionMysqlService
             }
         };
 
-        $sql = "SELECT id_encabezado_compra, codigo_documento, numero_documento, id_proveedor, aut_sri, fecha_compra, fecha_registro, total_compra, propina, id_sustento, `desde`, `hasta`, fecha_caducidad, tipo_comprobante, deducible_en
-                  FROM encabezado_compra WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_compra', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_compra";
+        // Las liquidaciones de compra (id_comprobante = 3, código '03') NO se migran al
+        // módulo de compras: tienen su propio módulo (migrarLiquidaciones → liquidaciones_cabecera).
+        $sql = "SELECT id_encabezado_compra, codigo_documento, numero_documento, id_proveedor, aut_sri, fecha_compra, fecha_registro, total_compra, propina, id_sustento, `desde`, `hasta`, fecha_caducidad, tipo_comprobante, deducible_en, id_comprobante
+                  FROM encabezado_compra WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND id_comprobante <> 3" . $this->clausulaFecha('fecha_compra', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_compra";
         if ($limite > 0) {
             $sql .= " LIMIT " . (int) $limite;
         }
@@ -1772,10 +1782,11 @@ class MigracionMysqlService
             $ad   = ((int) $ec['desde'] > 0) ? str_pad((string) (int) $ec['desde'], 9, '0', STR_PAD_LEFT) : null;
             $ah   = ((int) $ec['hasta'] > 0) ? str_pad((string) (int) $ec['hasta'], 9, '0', STR_PAD_LEFT) : null;
             $ded  = (trim((string) $ec['deducible_en']) === '05') ? 'gasto_personal' : 'declaracion_iva'; // 04=deducible IVA, 05=gasto personal
+            $tcomp = $mapComprobante[(int) $ec['id_comprobante']] ?? '01'; // 01 factura, 03 liquidación, 04 NC, 05 ND...
             // Ya migrada: reconciliar ambiente + datos tributarios con la configuración ACTUAL de la empresa (re-corrida)
             if (isset($mapCompra[(string) $old])) {
                 $idExist = (int) $mapCompra[(string) $old];
-                $updCab->execute([':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':sust' => $sust, ':ad' => $ad, ':ah' => $ah, ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':treg' => $treg, ':ded' => $ded, ':u' => $idUsuario, ':id' => $idExist]);
+                $updCab->execute([':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':tcomp' => $tcomp, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah, ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':treg' => $treg, ':ded' => $ded, ':u' => $idUsuario, ':id' => $idExist]);
                 $migrarPagos($idExist, (string) $ec['codigo_documento']); // formas de pago SRI
                 $this->generarXmlCompraGuardada($idExist, $pg); // reconstruye detalle_xml (PDF/descarga XML)
                 $res['ya_migrados']++;
@@ -1804,7 +1815,7 @@ class MigracionMysqlService
                     ':aut' => self::nz($ec['aut_sri']), ':fe' => substr((string) $ec['fecha_compra'], 0, 10),
                     ':fr' => substr((string) $ec['fecha_registro'], 0, 19) ?: null, ':tot' => (float) $ec['total_compra'],
                     ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2), ':prop' => (float) $ec['propina'],
-                    ':obs' => null, ':treg' => $treg, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah,
+                    ':obs' => null, ':treg' => $treg, ':tcomp' => $tcomp, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah,
                     ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':ded' => $ded,
                     ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':u' => $idUsuario, ':cb' => $idUsuario,
                 ]);
