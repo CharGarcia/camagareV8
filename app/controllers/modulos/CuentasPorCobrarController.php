@@ -507,42 +507,9 @@ $plantillasFiltradas = [];
 
         $idioma = $plantillaMeta['idioma'];
 
-        // 2. CÁLCULO PRECISO DEL SALDO PENDIENTE
-        $totalFactura = (float)($factura['importe_total'] ?? 0);
-        
-        // Abonos
-        $stmtAbonos = $this->repo->getDb()->prepare("
-            SELECT COALESCE(SUM(id2.monto_cobrado), 0)
-            FROM ingresos_detalle id2
-            INNER JOIN ingresos_cabecera ic ON ic.id = id2.id_ingreso
-            WHERE id2.tipo_documento = 'FACTURA' 
-              AND id2.id_referencia_documento = ?
-              AND ic.estado != 'anulado'
-              AND ic.eliminado = false
-        ");
-        $stmtAbonos->execute([$idVenta]);
-        $totalAbonos = (float)$stmtAbonos->fetchColumn();
-
-        // Notas de Crédito
-        $stmtNC = $this->repo->getDb()->prepare("
-            SELECT COALESCE(SUM(importe_total), 0)
-            FROM notas_credito_cabecera 
-            WHERE id_factura = ? AND id_empresa = ? AND estado = 'autorizado' AND eliminado = false
-        ");
-        $stmtNC->execute([$idVenta, $idEmpresa]);
-        $totalNC = (float)$stmtNC->fetchColumn();
-
-        // Retenciones
-        $stmtRet = $this->repo->getDb()->prepare("
-            SELECT COALESCE(SUM(importe_total), 0)
-            FROM retencion_venta_cabecera 
-            WHERE id_venta = ? AND id_empresa = ? AND estado = 'autorizado' AND eliminado = false
-        ");
-        $stmtRet->execute([$idVenta, $idEmpresa]);
-        $totalRetenciones = (float)$stmtRet->fetchColumn();
-
-        $saldoReal = $totalFactura - $totalAbonos - $totalNC - $totalRetenciones;
-        $saldoReal = max(0, $saldoReal); // No permitir saldo negativo visualmente
+        // 2. SALDO PENDIENTE (ya viene calculado por getFacturaParaCobro con las
+        // mismas CTEs de cobrado/retenido/NC que usa el resto del módulo)
+        $saldoReal = max(0, (float) ($factura['saldo'] ?? 0));
 
         // 3. GENERAR PDF SI ES NECESARIO
         $waService = new WhatsappService();

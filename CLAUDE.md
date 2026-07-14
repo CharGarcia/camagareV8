@@ -194,6 +194,9 @@ eliminado (boolean), deleted_at, deleted_by
 
 **Controles**
 - Todos los botones, inputs, selects, etc. comparten diseño, color y tamaño.
+- **Inputs de búsqueda con selección tipo "chip" (autocomplete que fija un valor, ej. buscador de cuenta/cliente/proveedor)**: cuando el input ya tiene una selección activa (input oculto con el id/código fijado y el texto mostrando una etiqueta tipo "código - nombre"), presionar **Backspace o Delete debe limpiar toda la selección de una vez** (input visible + input oculto + cerrar dropdown), no borrar la etiqueta letra por letra. Referencia de implementación: `setupTypeahead()` en `app/views/modulos/mayores/index.php`.
+
+
 
 **Tarjeta de permisos (badges)**
 - Muestra los badges **VER, CREAR, MODIFICAR, ELIMINAR** y **ACCESO TOTAL**.

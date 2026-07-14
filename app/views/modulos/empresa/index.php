@@ -1221,6 +1221,62 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                         </div>
                                     </div>
                                 </div>
+                                <?php
+                                    $fvAgrupar = (string) ($empresa['factura_agrupar_items'] ?? 'no');
+                                    $fvChk = function ($campo) use ($empresa) {
+                                        $v = $empresa[$campo] ?? false;
+                                        return ($v === 'true' || $v === true) ? 'checked' : '';
+                                    };
+                                ?>
+                                <div class="row pt-3 border-top mt-3">
+                                    <div class="col-12">
+                                        <label class="form-label small fw-bold mb-1">Presentación de los ítems en el PDF y el XML</label>
+                                        <div class="form-text mt-0 sub-text mb-3" style="font-size:0.65rem;">
+                                            Aplica al documento emitido, no al detalle que se captura en el modal. El XML enviado al SRI lleva
+                                            exactamente la misma información que la representación impresa.
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <!-- Ambos switches comparten name: agrupar es excluyente. Si los dos
+                                             quedan apagados no se envía el campo y el servicio asume 'no'. -->
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input sw-agrupar-items" type="checkbox" role="switch" name="factura_agrupar_items" value="lote" id="sw_agrupar_lote" <?= $fvAgrupar === 'lote' ? 'checked' : '' ?>>
+                                            <label class="form-check-label small fw-bold" for="sw_agrupar_lote">Agrupar los ítems por lote</label>
+                                        </div>
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input sw-agrupar-items" type="checkbox" role="switch" name="factura_agrupar_items" value="nup" id="sw_agrupar_nup" <?= $fvAgrupar === 'nup' ? 'checked' : '' ?>>
+                                            <label class="form-check-label small fw-bold" for="sw_agrupar_nup">Agrupar los ítems por NUP / Serie</label>
+                                        </div>
+                                        <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">
+                                            Con los dos apagados se emite una línea por cada ítem. Al agrupar se suman las cantidades y los totales
+                                            de las líneas del mismo producto que comparten el criterio elegido; solo se fusionan si además coinciden
+                                            en precio unitario, unidad de medida e impuestos, para que los totales del comprobante sigan cuadrando.
+                                            Los dos criterios son excluyentes: al encender uno se apaga el otro.
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 ps-4">
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" role="switch" name="factura_item_mostrar_unidad" id="sw_item_unidad" <?= $fvChk('factura_item_mostrar_unidad') ?>>
+                                            <label class="form-check-label small fw-bold" for="sw_item_unidad">Mostrar la unidad de medida en cada ítem</label>
+                                        </div>
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" role="switch" name="factura_item_mostrar_lote" id="sw_item_lote" <?= $fvChk('factura_item_mostrar_lote') ?>>
+                                            <label class="form-check-label small fw-bold" for="sw_item_lote">Mostrar el lote en cada ítem</label>
+                                        </div>
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" role="switch" name="factura_item_mostrar_caducidad" id="sw_item_caducidad" <?= $fvChk('factura_item_mostrar_caducidad') ?>>
+                                            <label class="form-check-label small fw-bold" for="sw_item_caducidad">Mostrar la fecha de caducidad en cada ítem</label>
+                                        </div>
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" role="switch" name="factura_item_mostrar_nup" id="sw_item_nup" <?= $fvChk('factura_item_mostrar_nup') ?>>
+                                            <label class="form-check-label small fw-bold" for="sw_item_nup">Mostrar el NUP / Serie en cada ítem</label>
+                                        </div>
+                                        <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">
+                                            Lo activado se anexa a la descripción del ítem, por ejemplo:
+                                            <em>Aceite 20W50 (Unidad: UND | Lote: L-2024A | Caduca: 31-12-2027)</em>.
+                                        </div>
+                                    </div>
+                                </div>
                                 <div class="row pt-3 border-top mt-3">
                                     <div class="col-md-6">
                                         <label class="form-label small fw-bold">Forma de Pago Predeterminada SRI</label>
@@ -1932,6 +1988,16 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                 });
             }
         <?php endif; ?>
+
+        // Agrupación de ítems: los dos criterios son excluyentes.
+        document.querySelectorAll('.sw-agrupar-items').forEach(sw => {
+            sw.addEventListener('change', () => {
+                if (!sw.checked) return;
+                document.querySelectorAll('.sw-agrupar-items').forEach(otro => {
+                    if (otro !== sw) otro.checked = false;
+                });
+            });
+        });
 
         // Control lógico para "Facturación Libre" vs "Lotes/Caducidad/NUP/Inventario"
         const swLibre = document.getElementById('sw_libre');

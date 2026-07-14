@@ -80,6 +80,7 @@
                                 <label class="form-label small fw-bold mb-1">Operación bancaria</label>
                                 <select id="egl_tipo_op" class="form-select form-select-sm" onchange="window.eglTipoOpChange()">
                                     <option value="TRANSFERENCIA" selected>Transferencia</option>
+                                    <option value="DEPOSITO">Depósito</option>
                                     <option value="CHEQUE">Cheque</option>
                                 </select>
                             </div>

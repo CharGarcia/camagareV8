@@ -324,12 +324,16 @@ class FacturaVentaRepository extends BaseRepository
 
     public function getDetalles(int $idVenta): array
     {
-        $sql = "SELECT d.*, COALESCE(p.nombre, d.descripcion) as producto_nombre, p.codigo as producto_codigo, 
+        // El JOIN de unidades_medida NO filtra por eliminado/status: un documento
+        // histórico debe seguir mostrando su unidad aunque el catálogo cambie.
+        $sql = "SELECT d.*, COALESCE(p.nombre, d.descripcion) as producto_nombre, p.codigo as producto_codigo,
                        p.id_tipo_medida, p.id_medida as id_medida_base,
-                       p.tipo_produccion, p.inventariable
-                FROM ventas_detalle d 
-                LEFT JOIN productos p ON d.id_producto = p.id 
-                WHERE d.id_venta = ? 
+                       p.tipo_produccion, p.inventariable,
+                       um.abreviatura as unidad_abreviatura, um.nombre as unidad_nombre
+                FROM ventas_detalle d
+                LEFT JOIN productos p ON d.id_producto = p.id
+                LEFT JOIN unidades_medida um ON um.id = COALESCE(d.id_unidad_medida, p.id_medida)
+                WHERE d.id_venta = ?
                 ORDER BY d.id ASC";
         return $this->query($sql, [$idVenta])->fetchAll();
     }

@@ -45,6 +45,14 @@ class PlantillasPdfRendererService
         array $empresa,
         string $outputDest = 'D'
     ) {
+        // Agrupación y etiquetas de ítems configuradas por la empresa. Solo aplica
+        // a facturas de venta: este renderer es genérico y el resto de documentos
+        // (egresos, consignaciones, …) no tienen esta configuración.
+        if (($plantilla['tipo_documento'] ?? '') === 'factura_venta') {
+            $detalles = (new \App\Services\modulos\FacturaItemsPresentacionService())
+                ->preparar($detalles, $empresa);
+        }
+
         $config    = json_decode($plantilla['configuracion'] ?? '{}', true) ?? [];
         $pagCfg    = $config['pagina'] ?? [];
         $elementos = $config['elementos'] ?? [];

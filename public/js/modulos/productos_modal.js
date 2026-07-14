@@ -15,6 +15,10 @@
     let componentesObj = [];
     let variantesObj = [];
 
+    // Último código generado automáticamente. Sirve para distinguir un código
+    // autogenerado (que sí se puede reemplazar) de uno escrito por el usuario.
+    let codigoAutogenerado = '';
+
     function getModal() {
         if (!modalInst && typeof bootstrap !== 'undefined') {
             const el = document.getElementById('modalProducto');
@@ -451,6 +455,7 @@
         if (cId) cId.value = '';
         
         preciosObj = []; componentesObj = []; variantesObj = [];
+        codigoAutogenerado = '';
         renderListas();
         window.removerImagen();
         quitarRestriccionesEnUso();
@@ -708,12 +713,20 @@
         // Solo autogenerar si es un producto nuevo (sin ID)
         if (idProd) return;
 
+        const codInp = document.getElementById('prod_codigo');
+        if (!codInp) return;
+
+        // Respetar un código escrito a mano: solo se reemplaza si está vacío o si
+        // todavía conserva el valor que se generó automáticamente.
+        const actual = codInp.value.trim();
+        if (actual !== '' && actual !== codigoAutogenerado) return;
+
         try {
             const resp = await fetch(`${urlBaseProd}/getSiguienteCodigoAjax?tipo=${tipo}`);
             const json = await resp.json();
             if (json.ok) {
-                const codInp = document.getElementById('prod_codigo');
-                if (codInp) codInp.value = json.codigo;
+                codInp.value = json.codigo;
+                codigoAutogenerado = json.codigo;
             }
         } catch (e) { console.error('Error al generar código:', e); }
     };

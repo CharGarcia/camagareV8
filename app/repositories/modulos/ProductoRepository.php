@@ -134,9 +134,11 @@ class ProductoRepository extends BaseRepository
 
     public function existeCodigo(int $idEmpresa, string $codigo, ?int $excluirId = null): bool
     {
-        $sql = "SELECT 1 FROM {$this->table} 
-                WHERE id_empresa = :id_empresa AND codigo = :codigo AND eliminado = false";
-        $params = [':id_empresa' => $idEmpresa, ':codigo' => $codigo];
+        // lower(): concuerda con el índice único productos_codigo_unico_idx, de modo
+        // que 'P001' y 'p001' se consideran el mismo código.
+        $sql = "SELECT 1 FROM {$this->table}
+                WHERE id_empresa = :id_empresa AND lower(codigo) = lower(:codigo) AND eliminado = false";
+        $params = [':id_empresa' => $idEmpresa, ':codigo' => trim($codigo)];
         if ($excluirId !== null && $excluirId > 0) {
             $sql .= " AND id != :id";
             $params[':id'] = $excluirId;
@@ -737,23 +739,34 @@ class ProductoRepository extends BaseRepository
     public function getSiguienteCodigo(int $idEmpresa, string $tipo): string
     {
         $prefijo = ($tipo === '01') ? 'P' : 'S';
-        
-        $sql = "SELECT codigo FROM {$this->table} 
-                WHERE id_empresa = ? AND codigo LIKE ? AND eliminado = false 
-                ORDER BY LENGTH(codigo) DESC, codigo DESC LIMIT 1";
+
+        // Solo se consideran los códigos con el formato autogenerado exacto (P001, S42…).
+        // Un código manual como 'PCFE01' o 'SINCODIGO' no debe mover el consecutivo.
+        // Se limita a 9 dígitos para que el cast a bigint nunca desborde.
+        // No se filtra por 'eliminado' a propósito: el código de un producto borrado
+        // no se recicla.
+        $sql = "SELECT MAX(substring(codigo from 2)::bigint)
+                FROM {$this->table}
+                WHERE id_empresa = :id_empresa AND codigo ~ :patron";
         $st = $this->db->prepare($sql);
-        $st->execute([$idEmpresa, $prefijo . '%']);
-        $row = $st->fetch();
+        $st->execute([':id_empresa' => $idEmpresa, ':patron' => '^' . $prefijo . '[0-9]{1,9}$']);
+        $numero = (int) ($st->fetchColumn() ?: 0);
 
-        $numero = 1;
-        if ($row) {
-            $ultimoCodigo = $row['codigo'];
-            // Extraer solo la parte numérica (asumiendo que empieza con el prefijo)
-            $numActual = (int) preg_replace('/[^0-9]/', '', $ultimoCodigo);
-            $numero = $numActual + 1;
-        }
+        // Saltar códigos ya ocupados por registros manuales (p. ej. 'P002' escrito a mano).
+        $stExiste = $this->db->prepare(
+            "SELECT 1 FROM {$this->table}
+             WHERE id_empresa = :id_empresa AND lower(codigo) = lower(:codigo)
+               AND eliminado = false
+             LIMIT 1"
+        );
 
-        return $prefijo . str_pad((string)$numero, 3, '0', STR_PAD_LEFT);
+        do {
+            $numero++;
+            $codigo = $prefijo . str_pad((string) $numero, 3, '0', STR_PAD_LEFT);
+            $stExiste->execute([':id_empresa' => $idEmpresa, ':codigo' => $codigo]);
+        } while ($stExiste->fetchColumn() && $numero < 999999999);
+
+        return $codigo;
     }
 
     public function searchSimple(int $idEmpresa, string $q, int $limit = 10, string $tipo = '', int $exclude = 0, bool $soloActivos = false): array

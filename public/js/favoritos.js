@@ -299,8 +299,13 @@ window.CMG_initSort = function(modulo, onSort, opts) {
  * necesitan claves de orden propias (p. ej. __ordenColTipos__).
  * @param {string} modulo Nombre del módulo.
  * @param {object} payload Objeto { clave: valor, ... } a guardar.
+ * @param {object} [opts] { reload }. Por defecto recarga la página (listados).
+ *        Pasar { reload: false } en vistas que ya se re-renderizan solas
+ *        (p. ej. el dashboard), para no interrumpir al usuario.
  */
-window.CMG_guardarVista = function(modulo, payload) {
+window.CMG_guardarVista = function(modulo, payload, opts) {
+    opts = opts || {};
+    const recargar = opts.reload !== false;
     const moduloLimpio = modulo.split('/').pop().replace(/-/g, '_');
     const url = typeof APP_VISTAS_URL !== 'undefined' ? APP_VISTAS_URL : '/Preferencias/guardarVistaAjax';
     const fd = new FormData();
@@ -308,7 +313,7 @@ window.CMG_guardarVista = function(modulo, payload) {
     fd.append('vistaPayload', JSON.stringify(payload || {}));
     fetch(url, { method: 'POST', body: fd })
         .then(res => res.json())
-        .then(json => { if (json && json.ok) _cmgReloadPagina(); })
+        .then(json => { if (json && json.ok && recargar) _cmgReloadPagina(); })
         .catch(err => console.error('Error guardando vista:', err));
 };
 

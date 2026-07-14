@@ -20,11 +20,6 @@
             <small class="text-muted">Seguimiento de saldos pendientes, cobros y recordatorios</small>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-            <button class="btn btn-sm fw-semibold" style="background:#25d366;color:#fff;"
-                    onclick="CXC_envioMasivoWA()"
-                    title="Enviar recordatorio WhatsApp a todos los seleccionados">
-                <i class="bi bi-whatsapp me-1"></i>Envío Masivo WA
-            </button>
             <button class="btn btn-outline-primary btn-sm" onclick="CXC_envioMasivoEmail()" title="Enviar correo a todos los seleccionados">
                 <i class="bi bi-envelope me-1"></i>Envío Masivo Email
             </button>
@@ -343,6 +338,7 @@
                                 <label class="form-label small fw-bold mb-1">Op. Bancaria</label>
                                 <select id="cobro-tipo-op" class="form-select form-select-sm shadow-none">
                                     <option value="TRANSFERENCIA">Transferencia</option>
+                                    <option value="DEPOSITO">Depósito</option>
                                     <option value="DEBITO">Débito</option>
                                     <option value="CHEQUE">Cheque</option>
                                 </select>
@@ -499,6 +495,9 @@
         </div>
     </div>
 </div>
+
+<?php // Panel lateral con el detalle del documento (clic sobre una fila)
+require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
 
 <script>
     const RUTA_MODULO_CXC = "<?php echo $rutaModulo; ?>";

@@ -263,6 +263,7 @@ if (!defined('LEAFLET_LOADED')) {
                                     <select class="form-select form-select-sm bg-warning bg-opacity-10 border-warning border-opacity-25" name="tipo_operacion_bancaria_predeterminada" id="prov_tipo_operacion_bancaria">
                                         <option value="">- Seleccione -</option>
                                         <option value="TRANSFERENCIA">Transferencia</option>
+                                        <option value="DEPOSITO">Depósito</option>
                                         <option value="DEBITO">Débito</option>
                                     </select>
                                 </div>

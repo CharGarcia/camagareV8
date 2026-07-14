@@ -519,6 +519,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                         <label class="form-label small fw-bold">Operación Bancaria</label>
                                                         <select id="eg-add-pago-tipo-banco" class="form-select form-select-sm bg-warning bg-opacity-10" onchange="manejarCambioTipoOperacionEgreso(this.value)">
                                                             <option value="TRANSFERENCIA" selected>Transferencia</option>
+                                                            <option value="DEPOSITO">Depósito</option>
                                                             <option value="DEBITO">Débito</option>
                                                             <option value="CHEQUE">Cheque</option>
                                                         </select>

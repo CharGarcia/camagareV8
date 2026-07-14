@@ -754,6 +754,7 @@ $urlBase = $base . '/' . $rutaModulo;
                                 <label class="form-label small fw-bold mb-1">Op. Bancaria</label>
                                 <select id="si-mov-tipo-op" class="form-select form-select-sm shadow-none">
                                     <option value="TRANSFERENCIA">Transferencia</option>
+                                    <option value="DEPOSITO">Depósito</option>
                                     <option value="DEBITO">Débito</option>
                                     <option value="CHEQUE">Cheque</option>
                                 </select>

@@ -303,10 +303,16 @@ class EmpresaService
             'mostrar_unidad_medida',
             'editar_precio_factura', 'editar_iva_factura', 'editar_descuento_factura',
             'mostrar_propina_factura',
+            'factura_item_mostrar_unidad', 'factura_item_mostrar_lote',
+            'factura_item_mostrar_caducidad', 'factura_item_mostrar_nup',
         ];
         foreach ($boolFields as $bf) {
             $data[$bf] = isset($data[$bf]) ? 'true' : 'false';
         }
+
+        // Agrupación de ítems en PDF/XML: solo valores del catálogo cerrado.
+        $agrupar = strtolower(trim((string) ($data['factura_agrupar_items'] ?? 'no')));
+        $data['factura_agrupar_items'] = in_array($agrupar, ['lote', 'nup'], true) ? $agrupar : 'no';
 
         // Forma de pago SRI predeterminada
         $fpSri = $data['id_forma_pago_sri_def'] ?? '';
@@ -316,7 +322,7 @@ class EmpresaService
             $data['id_forma_pago_sri_def'] = 'NULL';
         }
 
-        $fields = array_merge($boolFields, ['valor_limite_consumidor_final', 'id_forma_pago_sri_def', 'calculo_iva_facturacion']);
+        $fields = array_merge($boolFields, ['valor_limite_consumidor_final', 'id_forma_pago_sri_def', 'calculo_iva_facturacion', 'factura_agrupar_items']);
         $filtered = array_intersect_key($data, array_flip($fields));
         return $this->repository->updateEstablecimientoConfig($idEst, $filtered);
     }

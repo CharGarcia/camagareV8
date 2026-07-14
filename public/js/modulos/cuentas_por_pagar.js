@@ -202,7 +202,8 @@ function CXP_filaHtml(r) {
             : `<small class="text-muted">—</small>`;
 
         return `
-        <tr class="${rowClass}" data-id="${r.id}" data-tipo="${cxpEsc(r.tipo_fuente)}"
+        <tr class="${rowClass}" style="cursor:pointer;" title="Clic para ver el detalle"
+            data-id="${r.id}" data-tipo="${cxpEsc(r.tipo_fuente)}"
             data-proveedor="${cxpEsc(r.proveedor_nombre)}" data-doc="${cxpEsc(r.numero_documento)}">
 
             <!-- Documento -->
@@ -874,3 +875,28 @@ function CXP_toast(mensaje, tipo = 'info') {
                     title: mensaje, showConfirmButton: false, timer: 3000 });
     }
 }
+
+/* ════════════════════════════════════════════════════
+   PANEL LATERAL: detalle del documento al hacer clic
+   en una fila. Delegado en document para sobrevivir a
+   los re-render de la tabla (detallada y agrupada).
+════════════════════════════════════════════════════ */
+document.addEventListener('click', function (e) {
+    const tr = e.target.closest('tr[data-tipo]');
+    if (!tr) return;
+    // Los controles de la fila (botones de pago/historial/etc.) conservan su acción.
+    if (e.target.closest('button, a, input, select, label')) return;
+    if (typeof window.CMG_abrirPreviewDoc !== 'function') return;
+
+    const id   = tr.dataset.id;
+    const tipo = tr.dataset.tipo;
+    const r    = CXP_datos.find(x => String(x.id) === String(id) && x.tipo_fuente === tipo) || {};
+
+    window.CMG_abrirPreviewDoc(id, tipo, {
+        numero:      r.numero_documento || tr.dataset.doc || '',
+        fecha:       r.fecha_emision    || '',
+        sujetoLabel: 'Proveedor',
+        sujeto:      r.proveedor_nombre || tr.dataset.proveedor || '',
+        total:       r.total
+    });
+});

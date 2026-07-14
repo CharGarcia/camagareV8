@@ -340,20 +340,32 @@ const fmtN = v => new Intl.NumberFormat('es-EC',{maximumFractionDigits:1}).forma
 
 let chartTend = null, chartProd = null, chartCli = null;
 
-const LS_KEY = 'db_filtros';
+// Preferencias visuales del usuario: se persisten en BD (usuarios_preferencias)
+// vía el servicio centralizado, no en localStorage, para que sigan al usuario
+// entre navegadores y dispositivos.
+const PREF_MESES      = <?= json_encode($prefMeses ?? '6') ?>;
+const PREF_TIPO_CHART = <?= json_encode($prefTipoChart ?? 'bar') ?>;
+
+let _lastSavedPrefs = null;
+
 function saveFilters(){
     // Año y mes NO se persisten: el dashboard siempre arranca en el mes/año actual.
     // Solo se recuerdan las preferencias visuales (rango de tendencia y tipo de gráfico).
-    localStorage.setItem(LS_KEY, JSON.stringify({
-        meses:$('fMeses').value, tipoChart:$('fTipoChart').value
-    }));
+    const meses = $('fMeses').value, tipoChart = $('fTipoChart').value;
+    const firma = meses + '|' + tipoChart;
+    if (firma === _lastSavedPrefs) return; // sin cambios: no reescribir en BD
+    _lastSavedPrefs = firma;
+
+    if (typeof window.CMG_guardarVista === 'function') {
+        // reload:false — el dashboard ya re-renderiza sus gráficos por sí solo.
+        window.CMG_guardarVista('dashboard', { meses, tipoChart }, { reload: false });
+    }
 }
 function loadFilters(){
-    try {
-        const f = JSON.parse(localStorage.getItem(LS_KEY)||'{}');
-        if(f.meses) $('fMeses').value     = f.meses;
-        if(f.tipoChart) $('fTipoChart').value = f.tipoChart;
-    } catch(e){}
+    if(PREF_MESES)      $('fMeses').value     = PREF_MESES;
+    if(PREF_TIPO_CHART) $('fTipoChart').value = PREF_TIPO_CHART;
+    // Evita que la carga inicial reescriba en BD lo que ya venía de ella
+    _lastSavedPrefs = $('fMeses').value + '|' + $('fTipoChart').value;
     // El año y el mes quedan en su valor por defecto del HTML (año y mes actuales)
 }
 function resetFilters(){

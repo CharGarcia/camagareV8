@@ -303,6 +303,9 @@ class EmpresaRepository extends BaseModel
                        id_forma_pago_sri_def,
                        editar_precio_factura, editar_iva_factura, editar_descuento_factura,
                        mostrar_propina_factura, logo_ruta,
+                       factura_agrupar_items, factura_item_mostrar_unidad,
+                       factura_item_mostrar_lote, factura_item_mostrar_caducidad,
+                       factura_item_mostrar_nup,
                        inv_requiere_aprobacion, inv_notificar_correo, inv_usuarios_aprobadores
                 FROM empresa_establecimiento
                 WHERE id = {$id} AND eliminado = false";
@@ -325,6 +328,9 @@ class EmpresaRepository extends BaseModel
             'id_forma_pago_sri_def',
             'editar_precio_factura', 'editar_iva_factura', 'editar_descuento_factura',
             'mostrar_propina_factura',
+            'factura_agrupar_items', 'factura_item_mostrar_unidad',
+            'factura_item_mostrar_lote', 'factura_item_mostrar_caducidad',
+            'factura_item_mostrar_nup',
             'inv_requiere_aprobacion', 'inv_notificar_correo', 'inv_usuarios_aprobadores',
         ];
 

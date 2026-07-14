@@ -189,7 +189,7 @@ function CXC_filaHtml(r) {
         : `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 small px-2">Factura</span>`;
 
     return `
-        <tr class="${rowClass}" data-id="${r.id}" data-origen="${r.origen}" data-cliente="${esc(r.cliente_nombre)}" data-factura="${esc(r.numero_factura)}">
+        <tr class="${rowClass}" style="cursor:pointer;" title="Clic para ver el detalle" data-id="${r.id}" data-origen="${r.origen}" data-cliente="${esc(r.cliente_nombre)}" data-factura="${esc(r.numero_factura)}">
             <td class="text-center p-1">
                 <input class="form-check-input cxc-chk" type="checkbox" value="${r.id}"
                        ${esSaldo ? 'disabled' : (selec ? 'checked' : '')}
@@ -738,22 +738,6 @@ async function CXC_enviarWA() {
 }
 
 /* ════════════════════════════════════════════════════
-   ENVÍO MASIVO WHATSAPP
-════════════════════════════════════════════════════ */
-function CXC_envioMasivoWA() {
-    if (!CXC_TIENE_WA) {
-        CXC_toast('WhatsApp no está configurado para esta empresa. Active el módulo de WhatsApp para usar esta función.', 'warning');
-        return;
-    }
-    const ids = [...CXC_seleccionados];
-    if (!ids.length) {
-        CXC_toast('Seleccione al menos una factura para el envío masivo.', 'warning');
-        return;
-    }
-    CXC_toast('Para envíos masivos de WhatsApp, use el botón individual por cliente.', 'info');
-}
-
-/* ════════════════════════════════════════════════════
    CARGA DE CATÁLOGOS
 ════════════════════════════════════════════════════ */
 async function CXC_cargarCatalogos() {
@@ -942,3 +926,29 @@ function CXC_toast(msg, type = 'info') {
     if (!cfg.showConfirmButton)  opts.showConfirmButton = false;
     Swal.fire(opts);
 }
+
+/* ════════════════════════════════════════════════════
+   PANEL LATERAL: detalle del documento al hacer clic
+   en una fila. Delegado en document para sobrevivir a
+   los re-render de la tabla (detallada y agrupada).
+════════════════════════════════════════════════════ */
+document.addEventListener('click', function (e) {
+    const tr = e.target.closest('tr[data-origen]');
+    if (!tr) return;
+    // Los controles de la fila (checkbox, botones de cobro/historial/email/WA)
+    // conservan su propia acción.
+    if (e.target.closest('button, a, input, select, label')) return;
+    if (typeof window.CMG_abrirPreviewDoc !== 'function') return;
+
+    const id     = tr.dataset.id;
+    const origen = tr.dataset.origen;
+    const r      = CXC_datos.find(x => String(x.id) === String(id) && x.origen === origen) || {};
+
+    window.CMG_abrirPreviewDoc(id, origen, {
+        numero:      r.numero_factura || tr.dataset.factura || '',
+        fecha:       r.fecha_emision  || '',
+        sujetoLabel: 'Cliente',
+        sujeto:      r.cliente_nombre || tr.dataset.cliente || '',
+        total:       r.total
+    });
+});

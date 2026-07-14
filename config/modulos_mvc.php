@@ -245,6 +245,10 @@ return [
         'id_submodulo' => 188,
         'legacy_rutas' => [],
     ],
+    'modulos/mayores' => [
+        'id_submodulo' => 0, // Ajustar con el ID de la base de datos después de la migración
+        'legacy_rutas' => [],
+    ],
     'modulos/empresa' => [
         'legacy_rutas' => ['modulos/empresa.php'],
     ],

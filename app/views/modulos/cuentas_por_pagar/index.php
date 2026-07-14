@@ -381,6 +381,7 @@
                                     <select id="pago-tipo-op" class="form-select form-select-sm shadow-none"
                                             onchange="CXP_toggleTipoOp(this.value)">
                                         <option value="TRANSFERENCIA">Transferencia</option>
+                                        <option value="DEPOSITO">Depósito</option>
                                         <option value="DEBITO">Débito</option>
                                         <option value="CHEQUE">Cheque</option>
                                     </select>
@@ -488,6 +489,9 @@
         </div>
     </div>
 </div>
+
+<?php // Panel lateral con el detalle del documento (clic sobre una fila)
+require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
 
 <script>
     const RUTA_MODULO_CXP = "<?php echo $rutaModulo; ?>";

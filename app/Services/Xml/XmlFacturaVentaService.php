@@ -35,6 +35,13 @@ class XmlFacturaVentaService
         $this->decCantidad = max(0, min(6, (int)($empresa['decimales_cantidad'] ?? 2)));
         $this->decPrecio   = max(0, min(6, (int)($empresa['decimales_precio']   ?? 2)));
 
+        // Agrupación y etiquetas de ítems configuradas por la empresa. Se aplica
+        // antes de construir infoFactura para que los totales se calculen sobre
+        // las mismas líneas que se emiten; es el mismo servicio que usa el PDF,
+        // así el comprobante y la representación impresa no pueden divergir.
+        $detalles = (new \App\Services\modulos\FacturaItemsPresentacionService())
+            ->preparar($detalles, $empresa);
+
         $dom = new \DOMDocument('1.0', 'UTF-8');
         $dom->formatOutput = false;
 

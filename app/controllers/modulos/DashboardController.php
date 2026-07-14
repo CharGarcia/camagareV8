@@ -22,11 +22,17 @@ class DashboardController extends BaseModuloController
     {
         $this->requireLeer();
 
+        // Preferencias visuales del usuario (persistidas en usuarios_preferencias).
+        // El año y el mes NO se persisten: el dashboard siempre arranca en el actual.
+        $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
+
         $this->viewWithLayout('layouts.main', 'modulos/dashboard/index', [
-            'titulo'     => 'Dashboard',
-            'perm'       => $this->getPermisos(),
-            'rutaModulo' => $this->getRutaModulo(),
-            'base'       => BASE_URL,
+            'titulo'        => 'Dashboard',
+            'perm'          => $this->getPermisos(),
+            'rutaModulo'    => $this->getRutaModulo(),
+            'base'          => BASE_URL,
+            'prefMeses'     => (string) ($prefsVista['meses'] ?? '6'),
+            'prefTipoChart' => (string) ($prefsVista['tipoChart'] ?? 'bar'),
         ]);
     }
 

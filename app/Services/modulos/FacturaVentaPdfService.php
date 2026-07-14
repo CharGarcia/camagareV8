@@ -37,9 +37,14 @@ class FacturaVentaPdfService
 
     private function renderizar(array $cabecera, array $detalles, array $pagos, array $infoAdicional, array $empresa): void
     {
-        // Decimales configurados por la empresa (igual que en el sistema/UI).
-        $this->decCantidad = max(0, (int)($empresa['decimales_cantidad'] ?? 2));
-        $this->decPrecio   = max(0, (int)($empresa['decimales_precio']   ?? 2));
+        // Decimales configurados por la empresa (igual que en el sistema/UI),
+        // acotados a 0..6 igual que el XML para que ambos impriman lo mismo.
+        $this->decCantidad = max(0, min(6, (int)($empresa['decimales_cantidad'] ?? 2)));
+        $this->decPrecio   = max(0, min(6, (int)($empresa['decimales_precio']   ?? 2)));
+
+        // Agrupación y etiquetas de ítems configuradas por la empresa. Mismo
+        // servicio que usa XmlFacturaVentaService: PDF y XML no pueden divergir.
+        $detalles = (new FacturaItemsPresentacionService())->preparar($detalles, $empresa);
 
         $this->pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $this->pdf->SetCreator('Sistema');
