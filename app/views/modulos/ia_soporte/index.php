@@ -8,6 +8,7 @@
  * @var array  $perm
  * @var string $rutaModulo
  * @var string $base
+ * @var string|null $nombreEmpresa
  */
 $base = rtrim($base ?? BASE_URL ?? '', '/');
 $urlBase = $base . '/' . ltrim($rutaModulo, '/');
@@ -59,6 +60,12 @@ $urlBase = $base . '/' . ltrim($rutaModulo, '/');
                 <small class="text-white-50">Asistente legal, tributario y contable con IA</small>
             </div>
         </div>
+        <?php if (!empty($nombreEmpresa)): ?>
+            <div class="d-flex align-items-center gap-2 bg-white bg-opacity-10 rounded-pill px-3 py-1" title="Empresa activa">
+                <i class="bi bi-building"></i>
+                <span class="small fw-semibold text-truncate" style="max-width: 320px;"><?= htmlspecialchars($nombreEmpresa) ?></span>
+            </div>
+        <?php endif; ?>
     </div>
 
     <div class="ia-body">

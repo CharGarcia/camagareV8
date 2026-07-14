@@ -54,12 +54,16 @@ class IaSoporteController extends BaseModuloController
     {
         $this->requireLeer();
 
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $empresa = $idEmpresa > 0 ? (new \App\models\Empresa())->getPorId($idEmpresa) : null;
+
         $this->view('modulos.ia_soporte.index', [
-            'titulo'       => 'IA Soporte',
-            'perm'         => $this->getPermisos(),
-            'rutaModulo'   => self::RUTA_MODULO,
-            'base'         => BASE_URL,
-            'esSuperadmin' => (int) ($_SESSION['nivel'] ?? 0) >= 3,
+            'titulo'         => 'IA Soporte',
+            'perm'           => $this->getPermisos(),
+            'rutaModulo'     => self::RUTA_MODULO,
+            'base'           => BASE_URL,
+            'esSuperadmin'   => (int) ($_SESSION['nivel'] ?? 0) >= 3,
+            'nombreEmpresa'  => $empresa['nombre'] ?? null,
         ]);
     }
 
