@@ -584,7 +584,7 @@ function estadoPagoBadge($estado) {
                 <div class="row g-2">
                     <div class="col-md-3">
                         <label class="form-label small fw-bold">Código</label>
-                        <input type="text" name="codigo" id="edit-est-codigo-sistema" class="form-control form-control-sm bg-light fw-bold" readonly maxlength="3">
+                        <input type="text" name="codigo" id="edit-est-codigo-sistema" class="form-control form-control-sm fw-bold solo-numero" maxlength="3" pattern="[0-9]{1,3}" title="3 dígitos (000 a 999)" required>
                     </div>
                     <div class="col-md-9">
                         <label class="form-label small fw-bold">Nombre</label>

@@ -682,7 +682,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                             <div class="row g-3">
                                 <div class="col-md-3">
                                     <label class="form-label small fw-bold">Código</label>
-                                    <input type="text" name="codigo" class="form-control form-control-sm bg-light fw-bold" value="<?= htmlspecialchars((string)($est['codigo'] ?? '')) ?>" readonly>
+                                    <input type="text" name="codigo" class="form-control form-control-sm fw-bold" value="<?= htmlspecialchars((string)($est['codigo'] ?? '')) ?>" maxlength="3" pattern="[0-9]{1,3}" title="3 dígitos (000 a 999)" required>
                                 </div>
                                 <div class="col-md-9">
                                     <label class="form-label small fw-bold">Nombre Establecimiento</label>

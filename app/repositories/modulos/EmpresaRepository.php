@@ -206,9 +206,39 @@ class EmpresaRepository extends BaseModel
         return $this->query($sql);
     }
 
+    /** Normaliza el código a 3 dígitos (000-999). Lanza excepción si el formato es inválido. */
+    private function normalizarCodigoEstablecimiento(string $codigo): string
+    {
+        $codigo = trim($codigo);
+        if (!preg_match('/^\d{1,3}$/', $codigo)) {
+            throw new \Exception('El código del establecimiento debe ser de 3 dígitos (000 a 999).');
+        }
+        return str_pad($codigo, 3, '0', STR_PAD_LEFT);
+    }
+
+    /** ¿Ya existe otro establecimiento con ese código en la misma empresa? */
+    private function existeCodigoEstablecimiento(int $idEmpresa, string $codigo, ?int $excluirId = null): bool
+    {
+        $idEmp = (int) $idEmpresa;
+        $cod   = $this->escape($codigo);
+        $sql = "SELECT 1 FROM empresa_establecimiento
+                WHERE id_empresa = {$idEmp} AND TRIM(codigo) = '{$cod}' AND eliminado = false";
+        if ($excluirId !== null && $excluirId > 0) {
+            $sql .= ' AND id != ' . (int) $excluirId;
+        }
+        return !empty($this->query($sql));
+    }
+
     public function saveEstablecimiento(int $idEmpresa, array $data): int
     {
         $id = (int) $idEmpresa;
+
+        $codNorm = $this->normalizarCodigoEstablecimiento((string) ($data['codigo'] ?? '001'));
+        if ($this->existeCodigoEstablecimiento($id, $codNorm)) {
+            throw new \Exception("Ya existe un establecimiento con el código {$codNorm} en esta empresa.");
+        }
+        $data['codigo'] = $codNorm;
+
         $nom = $this->escape($data['nombre'] ?? '');
         $cod = $this->escape($data['codigo'] ?? '001');
         $dir = $this->escape($data['direccion'] ?? '');
@@ -230,6 +260,12 @@ class EmpresaRepository extends BaseModel
         $user = (int) ($_SESSION['id_usuario'] ?? 0);
 
         // El establecimiento matriz también es editable (código, tipo y estado).
+        // Se valida el formato del código y que no se repita dentro de la misma empresa.
+        $codNorm = $this->normalizarCodigoEstablecimiento((string) ($data['codigo'] ?? '001'));
+        if ($this->existeCodigoEstablecimiento((int) $idEmpresa, $codNorm, $id)) {
+            throw new \Exception("Ya existe otro establecimiento con el código {$codNorm} en esta empresa.");
+        }
+        $data['codigo'] = $codNorm;
 
         $nom = $this->escape($data['nombre'] ?? '');
         $cod = $this->escape($data['codigo'] ?? '001');

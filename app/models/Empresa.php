@@ -361,11 +361,42 @@ class Empresa extends BaseModel
         return $this->query($sql);
     }
 
+    /**
+     * ¿Ya existe otro establecimiento con ese código en la misma empresa?
+     * $excluirId permite ignorar el propio registro al actualizar.
+     */
+    public function existeCodigoEstablecimiento(int $idEmpresa, string $codigo, ?int $excluirId = null): bool
+    {
+        $idEmp = (int) $idEmpresa;
+        $cod   = $this->escape(trim($codigo));
+        if ($idEmp <= 0 || $cod === '') return false;
+        $sql = "SELECT 1 FROM empresa_establecimiento
+                WHERE id_empresa = {$idEmp} AND TRIM(codigo) = '{$cod}' AND eliminado = false";
+        if ($excluirId !== null && $excluirId > 0) {
+            $sql .= ' AND id != ' . (int) $excluirId;
+        }
+        return !empty($this->query($sql));
+    }
+
     public function actualizarEstablecimiento(int $id, array $data): bool
     {
         $id = (int) $id;
-        
+
         // El establecimiento matriz también es editable (código, tipo y estado).
+        // Se valida formato del código y que no se repita dentro de la misma empresa.
+        if (isset($data['codigo'])) {
+            $cod = $this->normalizarEstablecimiento((string) $data['codigo']);
+            if ($cod === null) {
+                throw new \InvalidArgumentException('El código del establecimiento debe ser de 3 dígitos (000 a 999).');
+            }
+            $data['codigo'] = $cod;
+
+            $cur = $this->query("SELECT id_empresa FROM empresa_establecimiento WHERE id = {$id}");
+            $idEmp = (int) ($cur[0]['id_empresa'] ?? 0);
+            if ($idEmp > 0 && $this->existeCodigoEstablecimiento($idEmp, $cod, $id)) {
+                throw new \InvalidArgumentException("Ya existe otro establecimiento con el código {$cod} en esta empresa.");
+            }
+        }
 
         $sets = [];
         $campos = ['nombre', 'codigo', 'direccion', 'tipo', 'estado'];
