@@ -83,8 +83,9 @@ class IaSoporteService
      *
      * @param array<string,mixed> $meta titulo, categoria
      * @param array<string,mixed> $file entrada de $_FILES['archivo']
+     * @param int[] $idsAgentes agentes a los que restringir el documento; vacío = disponible para todos
      */
-    public function subirDocumento(int $idEmpresa, array $meta, array $file, int $idUsuario): int
+    public function subirDocumento(int $idEmpresa, array $meta, array $file, array $idsAgentes, int $idUsuario): int
     {
         $titulo = trim((string) ($meta['titulo'] ?? ''));
         if ($titulo === '') {
@@ -105,14 +106,33 @@ class IaSoporteService
                 'tamano_bytes'    => $guardado['tamano_bytes'],
                 'id_usuario'      => $idUsuario,
             ]);
+            $this->documentoRepo->sincronizarAgentes($id, $idsAgentes);
 
-            $this->logService->registrar($idUsuario, $idEmpresa, 'crear', 'ia_documentos', $id, null, ['titulo' => $titulo]);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'crear', 'ia_documentos', $id, null, ['titulo' => $titulo, 'id_agentes' => $idsAgentes]);
 
             return $id;
         } catch (Exception $e) {
             $this->borrarFisico($idEmpresa, $guardado['archivo']);
             throw new \RuntimeException('No se pudo registrar el documento: ' . $e->getMessage(), 0, $e);
         }
+    }
+
+    /**
+     * Cambia a qué agentes está restringido un documento ya subido.
+     * @param int[] $idsAgentes vacío = disponible para todos los agentes
+     */
+    public function actualizarAgentesDocumento(int $idDocumento, int $idEmpresa, array $idsAgentes, int $idUsuario): void
+    {
+        $actual = $this->documentoRepo->findById($idDocumento, $idEmpresa);
+        if ($actual === null) {
+            throw new Exception('El documento no existe o ya ha sido eliminado.');
+        }
+
+        $antes = $this->documentoRepo->getAgentesDocumento($idDocumento);
+        $this->documentoRepo->sincronizarAgentes($idDocumento, $idsAgentes);
+
+        $this->logService->registrar($idUsuario, $idEmpresa, 'actualizar', 'ia_documentos', $idDocumento,
+            ['id_agentes' => $antes], ['id_agentes' => $idsAgentes]);
     }
 
     public function eliminarDocumento(int $id, int $idEmpresa, int $idUsuario): void
@@ -211,7 +231,7 @@ class IaSoporteService
         );
         $mensajesParaProveedor[] = ['rol' => 'user', 'contenido' => $pregunta];
 
-        $chunks = $this->documentoRepo->buscarChunksRelevantes($idEmpresa, $pregunta, self::MAX_CHUNKS_CONTEXTO);
+        $chunks = $this->documentoRepo->buscarChunksRelevantes($idEmpresa, $pregunta, (int) $conversacion['id_agente'], self::MAX_CHUNKS_CONTEXTO);
         $promptSistema = $agente['prompt_sistema'] . "\n\n" . $this->construirContexto($chunks);
 
         $provider = $this->resolverProveedor((string) $config['proveedor']);

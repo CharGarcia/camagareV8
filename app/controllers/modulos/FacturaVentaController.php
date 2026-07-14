@@ -1179,6 +1179,173 @@ class FacturaVentaController extends BaseModuloController
         exit;
     }
 
+    /** Texto del estado de pago calculado (mismo criterio que el badge del listado). */
+    private function estadoPagoTexto(array $r): string
+    {
+        if (($r['estado'] ?? '') === 'anulado') {
+            return 'Anulado';
+        }
+        $abonos = (float) ($r['total_cobrado'] ?? 0) + (float) ($r['total_nc'] ?? 0) + (float) ($r['total_retencion'] ?? 0);
+        $saldo  = max(0, (float) ($r['importe_total'] ?? 0) - $abonos);
+        if ($saldo <= 0.01) return 'Pagada';
+        if ($abonos > 0)    return 'Abonada';
+        return 'Pendiente';
+    }
+
+    /** Filas del listado con los mismos filtros/orden de la vista, sin paginar. */
+    private function filasParaExport(): array
+    {
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
+        $buscar     = trim($_GET['b'] ?? '');
+        $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_emision');
+        $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        // perPage = 0 => sin LIMIT (todas las filas del filtro actual).
+        $data = $this->repository->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        return $data['rows'] ?? [];
+    }
+
+    /** Exporta el listado (con el filtro/orden actual) a PDF. */
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+        $rows = $this->filasParaExport();
+
+        try {
+            $empresaModel  = new \App\models\Empresa();
+            $empresa       = $empresaModel->getPorId((int) $_SESSION['id_empresa']);
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            ob_start();
+            ?>
+            <style>
+                table { width:100%; border-collapse:collapse; font-family:Arial,sans-serif; font-size:7pt; }
+                th { background:#f2f2f2; border:1px solid #ccc; padding:3px; text-align:left; }
+                td { border:1px solid #ccc; padding:3px; }
+                .r { text-align:right; }
+                h2 { font-family:Arial,sans-serif; font-size:12pt; margin:0 0 2px 0; }
+                .sub { font-family:Arial,sans-serif; font-size:8pt; color:#555; margin-bottom:6px; }
+            </style>
+            <page backtop="8mm" backbottom="8mm" backleft="6mm" backright="6mm">
+                <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
+                <div class="sub">Listado de Facturas de Venta &mdash; <?= date('d-m-Y H:i:s') ?></div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:9%">Nº Factura</th>
+                            <th style="width:7%">Fecha</th>
+                            <th style="width:20%">Cliente</th>
+                            <th style="width:9%">Identificación</th>
+                            <th style="width:7%" class="r">Subtotal</th>
+                            <th style="width:6%" class="r">Desc.</th>
+                            <th style="width:6%" class="r">IVA</th>
+                            <th style="width:7%" class="r">Total</th>
+                            <th style="width:11%">Vendedor</th>
+                            <th style="width:6%">Correo</th>
+                            <th style="width:6%">Pago</th>
+                            <th style="width:6%">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($rows as $r):
+                        $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
+                        $iva = max(0, (float) ($r['importe_total'] ?? 0) - (float) ($r['total_sin_impuestos'] ?? 0) + (float) ($r['total_descuento'] ?? 0) - (float) ($r['total_ice'] ?? 0) - (float) ($r['propina'] ?? 0));
+                    ?>
+                        <tr>
+                            <td><?= htmlspecialchars($numero) ?></td>
+                            <td><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
+                            <td><?= htmlspecialchars((string) ($r['cliente_nombre'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['cliente_ruc'] ?? '')) ?></td>
+                            <td class="r"><?= number_format((float) ($r['total_sin_impuestos'] ?? 0), 2) ?></td>
+                            <td class="r"><?= number_format((float) ($r['total_descuento'] ?? 0), 2) ?></td>
+                            <td class="r"><?= number_format($iva, 2) ?></td>
+                            <td class="r"><?= number_format((float) ($r['importe_total'] ?? 0), 2) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['vendedor_nombre'] ?? '-')) ?></td>
+                            <td><?= ucfirst((string) ($r['estado_correo'] ?? 'pendiente')) ?></td>
+                            <td><?= $this->estadoPagoTexto($r) ?></td>
+                            <td><?= ucfirst((string) ($r['estado'] ?? '')) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </page>
+            <?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Facturas_venta_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar PDF: ' . $e->getMessage();
+            exit;
+        }
+    }
+
+    /** Exporta el listado (con el filtro/orden actual) a Excel. */
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+        $rows = $this->filasParaExport();
+
+        try {
+            $empresaModel  = new \App\models\Empresa();
+            $empresa       = $empresaModel->getPorId((int) $_SESSION['id_empresa']);
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $headers = ['Nº Factura', 'Fecha', 'Cliente', 'Identificación', 'Subtotal', 'Descuento',
+                        'IVA', 'ICE', 'Propina', 'Total', 'Vendedor', 'Usuario', 'Observaciones',
+                        'Correo', 'Pago', 'Estado'];
+
+            $exportData = [];
+            foreach ($rows as $r) {
+                $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
+                $iva = max(0, (float) ($r['importe_total'] ?? 0) - (float) ($r['total_sin_impuestos'] ?? 0) + (float) ($r['total_descuento'] ?? 0) - (float) ($r['total_ice'] ?? 0) - (float) ($r['propina'] ?? 0));
+                $exportData[] = [
+                    $numero,
+                    !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-',
+                    (string) ($r['cliente_nombre'] ?? ''),
+                    (string) ($r['cliente_ruc'] ?? ''),
+                    number_format((float) ($r['total_sin_impuestos'] ?? 0), 2, '.', ''),
+                    number_format((float) ($r['total_descuento'] ?? 0), 2, '.', ''),
+                    number_format($iva, 2, '.', ''),
+                    number_format((float) ($r['total_ice'] ?? 0), 2, '.', ''),
+                    number_format((float) ($r['propina'] ?? 0), 2, '.', ''),
+                    number_format((float) ($r['importe_total'] ?? 0), 2, '.', ''),
+                    (string) ($r['vendedor_nombre'] ?? '-'),
+                    (string) ($r['usuario_nombre'] ?? '-'),
+                    (string) ($r['observaciones'] ?? ''),
+                    ucfirst((string) ($r['estado_correo'] ?? 'pendiente')),
+                    $this->estadoPagoTexto($r),
+                    ucfirst((string) ($r['estado'] ?? '')),
+                ];
+            }
+
+            $reportService = new \App\Services\ReportService();
+            $reportService->exportToExcel('Facturas_de_Venta', $headers, $exportData, 'Facturas de Venta', $nombreEmpresa);
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar Excel: ' . $e->getMessage();
+            exit;
+        }
+    }
+
     /**
      * Relaciones de la factura con otros módulos (proforma, etc.) que tengan datos.
      * Devuelve solo las relaciones aplicables, para armar pestañas dinámicas.

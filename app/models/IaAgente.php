@@ -51,7 +51,7 @@ class IaAgente extends BaseModel
             ':icono'          => $data['icono'] ?: 'bi-robot',
             ':prompt_sistema' => $data['prompt_sistema'],
             ':orden'          => $data['orden'] ?? 0,
-            ':activo'         => $data['activo'] ?? true,
+            ':activo'         => ($data['activo'] ?? true) ? 'true' : 'false',
             ':created_by'     => $data['created_by'] ?? null,
         ]);
         return (int) $st->fetchColumn();
@@ -76,7 +76,7 @@ class IaAgente extends BaseModel
             ':icono'          => $data['icono'] ?: 'bi-robot',
             ':prompt_sistema' => $data['prompt_sistema'],
             ':orden'          => $data['orden'] ?? 0,
-            ':activo'         => $data['activo'] ?? true,
+            ':activo'         => ($data['activo'] ?? true) ? 'true' : 'false',
             ':updated_by'     => $data['updated_by'] ?? null,
             ':id'             => $id,
         ]);

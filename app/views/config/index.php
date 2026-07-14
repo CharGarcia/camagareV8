@@ -443,7 +443,11 @@ unset($_SESSION['config_msg']);
         }
     });
 })();
+</script>
+<?php endif; ?>
 
+<?php if (!empty($opciones)): ?>
+<script>
 // Filtrar tarjetas por texto (nombre, descripción, etiquetas de enlaces)
 (function() {
     var input = document.getElementById('buscar-tarjetas-config');

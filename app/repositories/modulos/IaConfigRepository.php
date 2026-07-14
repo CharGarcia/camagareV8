@@ -47,7 +47,7 @@ class IaConfigRepository extends BaseRepository
                 ':proveedor'  => $data['proveedor'],
                 ':api_key'    => $data['api_key_cifrada'],
                 ':modelo'     => $data['modelo_chat'],
-                ':activo'     => $data['activo'] ?? true,
+                ':activo'     => ($data['activo'] ?? true) ? 'true' : 'false',
                 ':id_usuario' => $idUsuario,
             ]);
             return (int) $this->db->lastInsertId('ia_config_id_seq');
@@ -69,7 +69,7 @@ class IaConfigRepository extends BaseRepository
             ':proveedor'  => $data['proveedor'],
             ':api_key'    => $apiKey,
             ':modelo'     => $data['modelo_chat'],
-            ':activo'     => $data['activo'] ?? true,
+            ':activo'     => ($data['activo'] ?? true) ? 'true' : 'false',
             ':id_usuario' => $idUsuario,
             ':id_empresa' => $idEmpresa,
         ]);

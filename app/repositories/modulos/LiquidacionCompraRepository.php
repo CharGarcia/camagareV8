@@ -78,7 +78,7 @@ class LiquidacionCompraRepository extends BaseRepository
                 LEFT  JOIN usuarios    u ON l.id_usuario   = u.id
                 $where
                 ORDER BY $ordenExpr $ordenDir
-                LIMIT $perPage OFFSET $offset";
+                " . ($perPage > 0 ? "LIMIT $perPage OFFSET $offset" : "");
 
         $rows = $this->query($sql, $params)->fetchAll();
 

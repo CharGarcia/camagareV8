@@ -694,6 +694,149 @@ class LiquidacionCompraController extends BaseModuloController
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Exportación del LISTADO (respeta filtro y orden actuales)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Filas del listado con los mismos filtros/orden de la vista, sin paginar. */
+    private function filasParaExport(): array
+    {
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista($this->getRutaModulo());
+        $buscar     = trim($_GET['b'] ?? '');
+        $ordenCol   = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_emision');
+        $ordenDir   = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        // perPage = 0 => sin LIMIT (todas las filas del filtro actual).
+        $data = $this->repository->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        return $data['rows'] ?? [];
+    }
+
+    /** Exporta el listado a PDF. */
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+        $rows = $this->filasParaExport();
+
+        try {
+            $empresaModel  = new Empresa();
+            $empresa       = $empresaModel->getPorId((int) $_SESSION['id_empresa']);
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            ob_start();
+            ?>
+            <style>
+                table { width:100%; border-collapse:collapse; font-family:Arial,sans-serif; font-size:7.5pt; }
+                th { background:#f2f2f2; border:1px solid #ccc; padding:3px; text-align:left; }
+                td { border:1px solid #ccc; padding:3px; }
+                .r { text-align:right; }
+                h2 { font-family:Arial,sans-serif; font-size:12pt; margin:0 0 2px 0; }
+                .sub { font-family:Arial,sans-serif; font-size:8pt; color:#555; margin-bottom:6px; }
+            </style>
+            <page backtop="8mm" backbottom="8mm" backleft="6mm" backright="6mm">
+                <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
+                <div class="sub">Listado de Liquidaciones de Compra &mdash; <?= date('d-m-Y H:i:s') ?></div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:11%">Nº Liquidación</th>
+                            <th style="width:9%">Fecha</th>
+                            <th style="width:26%">Proveedor</th>
+                            <th style="width:11%">Identificación</th>
+                            <th style="width:9%" class="r">Subtotal</th>
+                            <th style="width:8%" class="r">Descuento</th>
+                            <th style="width:9%" class="r">Total</th>
+                            <th style="width:9%">Usuario</th>
+                            <th style="width:8%">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($rows as $r):
+                        $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
+                    ?>
+                        <tr>
+                            <td><?= htmlspecialchars($numero) ?></td>
+                            <td><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
+                            <td><?= htmlspecialchars((string) ($r['proveedor_nombre'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['proveedor_ruc'] ?? '')) ?></td>
+                            <td class="r"><?= number_format((float) ($r['total_sin_impuestos'] ?? 0), 2) ?></td>
+                            <td class="r"><?= number_format((float) ($r['total_descuento'] ?? 0), 2) ?></td>
+                            <td class="r"><?= number_format((float) ($r['importe_total'] ?? 0), 2) ?></td>
+                            <td><?= htmlspecialchars((string) ($r['usuario_nombre'] ?? '-')) ?></td>
+                            <td><?= ucfirst((string) ($r['estado'] ?? '')) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </page>
+            <?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Liquidaciones_compra_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar PDF: ' . $e->getMessage();
+            exit;
+        }
+    }
+
+    /** Exporta el listado a Excel. */
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+        $rows = $this->filasParaExport();
+
+        try {
+            $empresaModel  = new Empresa();
+            $empresa       = $empresaModel->getPorId((int) $_SESSION['id_empresa']);
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $headers = ['Nº Liquidación', 'Fecha', 'Proveedor', 'Identificación', 'Subtotal',
+                        'Descuento', 'Total', 'Usuario', 'Observaciones', 'Estado'];
+
+            $exportData = [];
+            foreach ($rows as $r) {
+                $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
+                $exportData[] = [
+                    $numero,
+                    !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-',
+                    (string) ($r['proveedor_nombre'] ?? ''),
+                    (string) ($r['proveedor_ruc'] ?? ''),
+                    number_format((float) ($r['total_sin_impuestos'] ?? 0), 2, '.', ''),
+                    number_format((float) ($r['total_descuento'] ?? 0), 2, '.', ''),
+                    number_format((float) ($r['importe_total'] ?? 0), 2, '.', ''),
+                    (string) ($r['usuario_nombre'] ?? '-'),
+                    (string) ($r['observaciones'] ?? ''),
+                    ucfirst((string) ($r['estado'] ?? '')),
+                ];
+            }
+
+            $reportService = new \App\Services\ReportService();
+            $reportService->exportToExcel('Liquidaciones_de_Compra', $headers, $exportData, 'Liquidaciones de Compra', $nombreEmpresa);
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar Excel: ' . $e->getMessage();
+            exit;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // PDF del documento
     // ─────────────────────────────────────────────────────────────────────────
 

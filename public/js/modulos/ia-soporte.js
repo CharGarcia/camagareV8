@@ -6,6 +6,7 @@
 
     let conversacionActualId = null;
     let pollDocumentosTimer = null;
+    let agentesCache = [];
 
     document.addEventListener('DOMContentLoaded', () => {
         initTabs();
@@ -21,8 +22,20 @@
         const formSubirDoc = document.getElementById('iaFormSubirDoc');
         if (formSubirDoc) formSubirDoc.addEventListener('submit', subirDocumento);
 
+        const formDocAgentes = document.getElementById('iaFormDocAgentes');
+        if (formDocAgentes) formDocAgentes.addEventListener('submit', guardarDocAgentes);
+
         const formConfig = document.getElementById('iaFormConfig');
         if (formConfig) formConfig.addEventListener('submit', guardarConfig);
+
+        const btnNuevoPrompt = document.getElementById('iaBtnNuevoPrompt');
+        if (btnNuevoPrompt) btnNuevoPrompt.addEventListener('click', () => abrirModalPrompt(null));
+
+        const formPrompt = document.getElementById('iaFormPrompt');
+        if (formPrompt) formPrompt.addEventListener('submit', guardarPrompt);
+
+        const btnEliminarPrompt = document.getElementById('iaBtnEliminarPrompt');
+        if (btnEliminarPrompt) btnEliminarPrompt.addEventListener('click', eliminarPrompt);
     });
 
     // ── Tabs ─────────────────────────────────────────────────────────────────
@@ -38,6 +51,7 @@
 
                 if (tab === 'documentos') cargarDocumentos();
                 if (tab === 'config') cargarConfig();
+                if (tab === 'prompts') cargarPrompts();
             });
         });
     }
@@ -48,16 +62,41 @@
         fetch(BASE + '/agentesListar')
             .then((r) => r.json())
             .then((res) => {
+                agentesCache = res.data || [];
+
                 const sel = document.getElementById('iaSelectAgente');
-                if (!sel) return;
-                sel.innerHTML = '';
-                (res.data || []).forEach((a) => {
-                    const opt = document.createElement('option');
-                    opt.value = a.id;
-                    opt.textContent = a.nombre;
-                    sel.appendChild(opt);
-                });
+                if (sel) {
+                    sel.innerHTML = '';
+                    agentesCache.forEach((a) => {
+                        const opt = document.createElement('option');
+                        opt.value = a.id;
+                        opt.textContent = a.nombre;
+                        sel.appendChild(opt);
+                    });
+                }
+
+                renderChecksAgentes('iaSubirDocAgentes', []);
             });
+    }
+
+    /** Dibuja checkboxes de agentes en `contenedorId`, marcando los ids en `idsSeleccionados`. */
+    function renderChecksAgentes(contenedorId, idsSeleccionados) {
+        const cont = document.getElementById(contenedorId);
+        if (!cont) return;
+        if (agentesCache.length === 0) {
+            cont.innerHTML = '<p class="text-muted small mb-0">No hay agentes disponibles.</p>';
+            return;
+        }
+        const seleccionados = (idsSeleccionados || []).map(String);
+        cont.innerHTML = agentesCache.map((a) => `
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="id_agentes[]" value="${a.id}"
+                       id="${contenedorId}-a-${a.id}" ${seleccionados.includes(String(a.id)) ? 'checked' : ''}>
+                <label class="form-check-label small" for="${contenedorId}-a-${a.id}">
+                    <i class="bi ${escapeHtml(a.icono || 'bi-robot')}"></i> ${escapeHtml(a.nombre)}
+                </label>
+            </div>
+        `).join('');
     }
 
     // ── Conversaciones ───────────────────────────────────────────────────────
@@ -177,15 +216,24 @@
     }
 
     function renderMensaje(m) {
-        const fuentesHtml = (m.fuentes && m.fuentes.length)
+        const tieneFuentes = Array.isArray(m.fuentes) && m.fuentes.length > 0;
+        const sinContexto = m.rol === 'assistant' && Array.isArray(m.fuentes) && m.fuentes.length === 0;
+
+        const fuentesHtml = tieneFuentes
             ? '<div class="ia-soporte-fuentes"><i class="bi bi-bookmark"></i> Fuentes: ' +
               m.fuentes.map((f) => escapeHtml(f.titulo) + (f.pagina ? ' (pág. ' + f.pagina + ')' : '')).join(' · ') +
               '</div>'
             : '';
+        const avisoHtml = sinContexto
+            ? '<div class="ia-soporte-fuentes text-warning"><i class="bi bi-exclamation-triangle"></i> '
+              + 'No se encontró contenido relevante en los documentos cargados para esta pregunta: '
+              + 'esta respuesta es general, no está basada en sus PDFs.</div>'
+            : '';
+
         return `
             <div class="ia-soporte-msg ${m.rol}">
                 <div class="bubble">${escapeHtml(m.contenido).replace(/\n/g, '<br>')}</div>
-                ${m.rol === 'assistant' ? fuentesHtml : ''}
+                ${m.rol === 'assistant' ? (fuentesHtml || avisoHtml) : ''}
             </div>
         `;
     }
@@ -251,6 +299,12 @@
                     tbody.querySelectorAll('.ia-btn-reintentar-doc').forEach((btn) => {
                         btn.addEventListener('click', () => reintentarDocumento(btn.getAttribute('data-id')));
                     });
+                    tbody.querySelectorAll('.ia-btn-doc-agentes').forEach((btn) => {
+                        btn.addEventListener('click', () => {
+                            const doc = rows.find((r) => r.id == btn.getAttribute('data-id'));
+                            if (doc) abrirModalDocAgentes(doc);
+                        });
+                    });
                 }
 
                 clearTimeout(pollDocumentosTimer);
@@ -267,16 +321,23 @@
         };
         const claseBadge = badges[d.estado] || 'secondary';
         let accionesHtml = '';
+        if (PERM.actualizar) {
+            accionesHtml += `<button type="button" class="btn btn-sm btn-outline-secondary ia-btn-doc-agentes" data-id="${d.id}" title="Agentes que pueden usar este documento"><i class="bi bi-people"></i></button> `;
+        }
         if (d.estado === 'error' && PERM.actualizar) {
             accionesHtml += `<button type="button" class="btn btn-sm btn-outline-warning ia-btn-reintentar-doc" data-id="${d.id}" title="Reintentar"><i class="bi bi-arrow-clockwise"></i></button> `;
         }
         if (PERM.eliminar) {
             accionesHtml += `<button type="button" class="btn btn-sm btn-outline-danger ia-btn-eliminar-doc" data-id="${d.id}" title="Eliminar"><i class="bi bi-trash"></i></button>`;
         }
+        const agentesHtml = (d.agentes && d.agentes.length)
+            ? d.agentes.map((a) => `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 me-1">${escapeHtml(a.nombre)}</span>`).join('')
+            : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Todos</span>';
         return `
             <tr>
                 <td data-col="titulo">${escapeHtml(d.titulo)}</td>
                 <td data-col="categoria">${escapeHtml(d.categoria || '—')}</td>
+                <td data-col="agentes">${agentesHtml}</td>
                 <td data-col="paginas" class="text-center">${d.paginas ?? '—'}</td>
                 <td data-col="estado" class="text-center">
                     <span class="badge bg-${claseBadge} bg-opacity-10 text-${claseBadge} border border-${claseBadge} border-opacity-25">${d.estado}</span>
@@ -340,6 +401,35 @@
             });
     }
 
+    function abrirModalDocAgentes(doc) {
+        document.getElementById('iaDocAgentesId').value = doc.id;
+        document.getElementById('iaDocAgentesError').classList.add('d-none');
+        renderChecksAgentes('iaDocAgentesLista', (doc.agentes || []).map((a) => a.id));
+
+        const modalEl = document.getElementById('iaModalDocAgentes');
+        (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl)).show();
+    }
+
+    function guardarDocAgentes(ev) {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const errBox = document.getElementById('iaDocAgentesError');
+        errBox.classList.add('d-none');
+
+        fetch(BASE + '/documentoAgentesActualizar', { method: 'POST', body: fd })
+            .then((r) => r.json())
+            .then((res) => {
+                if (!res.ok) {
+                    errBox.textContent = res.error || 'No se pudo guardar.';
+                    errBox.classList.remove('d-none');
+                    return;
+                }
+                const modalEl = document.getElementById('iaModalDocAgentes');
+                (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl)).hide();
+                cargarDocumentos();
+            });
+    }
+
     // ── Configuración BYOK ───────────────────────────────────────────────────
 
     function cargarConfig() {
@@ -367,6 +457,104 @@
                     document.getElementById('iaConfigApiKey').value = '';
                     cargarConfig();
                 }
+            });
+    }
+
+    // ── Prompts (catálogo global de agentes, solo superadmin) ──────────────────
+
+    let prompts = [];
+
+    function cargarPrompts() {
+        fetch(BASE + '/promptsListar')
+            .then((r) => r.json())
+            .then((res) => {
+                const tbody = document.getElementById('iaTablaPrompts');
+                if (!res.ok) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">${escapeHtml(res.error || 'Error')}</td></tr>`;
+                    return;
+                }
+                prompts = res.data || [];
+                if (prompts.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No hay prompts registrados.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = prompts.map((p) => `
+                    <tr class="ia-prompt-row" role="button" data-id="${p.id}">
+                        <td class="text-center"><i class="bi ${escapeHtml(p.icono || 'bi-robot')}"></i></td>
+                        <td class="fw-medium">${escapeHtml(p.nombre)}</td>
+                        <td class="text-truncate" style="max-width:360px;">${escapeHtml(p.descripcion || '')}</td>
+                        <td class="text-center">${p.orden ?? 0}</td>
+                        <td class="text-center">
+                            ${p.activo
+                                ? '<span class="badge bg-success">Activo</span>'
+                                : '<span class="badge bg-secondary">Inactivo</span>'}
+                        </td>
+                    </tr>
+                `).join('');
+                tbody.querySelectorAll('.ia-prompt-row').forEach((row) => {
+                    row.addEventListener('click', () => {
+                        const p = prompts.find((x) => x.id == row.getAttribute('data-id'));
+                        if (p) abrirModalPrompt(p);
+                    });
+                });
+            });
+    }
+
+    function abrirModalPrompt(prompt) {
+        const form = document.getElementById('iaFormPrompt');
+        form.reset();
+        document.getElementById('iaPromptId').value = prompt ? prompt.id : '';
+        document.getElementById('iaPromptNombre').value = prompt ? prompt.nombre : '';
+        document.getElementById('iaPromptDescripcion').value = prompt ? (prompt.descripcion || '') : '';
+        document.getElementById('iaPromptIcono').value = prompt ? (prompt.icono || 'bi-robot') : 'bi-robot';
+        document.getElementById('iaPromptOrden').value = prompt ? (prompt.orden || 0) : 0;
+        document.getElementById('iaPromptTexto').value = prompt ? (prompt.prompt_sistema || '') : '';
+        document.getElementById('iaPromptActivo').checked = prompt ? !!prompt.activo : true;
+        document.getElementById('iaModalPromptTitulo').textContent = prompt ? 'Editar prompt' : 'Nuevo prompt';
+        document.getElementById('iaBtnEliminarPrompt').classList.toggle('d-none', !prompt);
+        document.getElementById('iaPromptError').classList.add('d-none');
+
+        const modalEl = document.getElementById('iaModalPrompt');
+        (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl)).show();
+    }
+
+    function guardarPrompt(ev) {
+        ev.preventDefault();
+        const id = document.getElementById('iaPromptId').value;
+        const fd = new FormData(ev.target);
+        const errBox = document.getElementById('iaPromptError');
+        errBox.classList.add('d-none');
+
+        fetch(BASE + (id ? '/promptUpdate' : '/promptStore'), { method: 'POST', body: fd })
+            .then((r) => r.json())
+            .then((res) => {
+                if (!res.ok) {
+                    errBox.textContent = res.error || 'No se pudo guardar el prompt.';
+                    errBox.classList.remove('d-none');
+                    return;
+                }
+                const modalEl = document.getElementById('iaModalPrompt');
+                (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl)).hide();
+                cargarPrompts();
+                cargarAgentes();
+            });
+    }
+
+    function eliminarPrompt() {
+        const id = document.getElementById('iaPromptId').value;
+        if (!id) return;
+        if (!confirm('¿Eliminar este prompt? Ya no estará disponible para nuevas conversaciones.')) return;
+
+        const fd = new FormData();
+        fd.append('id', id);
+        fetch(BASE + '/promptEliminar', { method: 'POST', body: fd })
+            .then((r) => r.json())
+            .then((res) => {
+                if (!res.ok) { alert(res.error || 'No se pudo eliminar.'); return; }
+                const modalEl = document.getElementById('iaModalPrompt');
+                (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl)).hide();
+                cargarPrompts();
+                cargarAgentes();
             });
     }
 

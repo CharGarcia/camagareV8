@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
+use App\models\IaAgente;
 use App\repositories\modulos\IaConfigRepository;
 use App\repositories\modulos\IaConversacionRepository;
 use App\repositories\modulos\IaDocumentoRepository;
@@ -44,16 +45,21 @@ class IaSoporteController extends BaseModuloController
 
     // ── Vista principal ───────────────────────────────────────────────────────
 
+    /**
+     * Página STANDALONE (se abre en ventana aparte desde el ícono del navbar,
+     * igual que Videos de Ayuda): no usa el layout principal, no muestra el
+     * navbar/menú del sistema — solo el contenido del asistente de IA.
+     */
     public function index(): void
     {
         $this->requireLeer();
 
-        $this->viewWithLayout('layouts.main', 'modulos.ia_soporte.index', [
-            'titulo'     => 'IA Soporte',
-            'perm'       => $this->getPermisos(),
-            'rutaModulo' => self::RUTA_MODULO,
-            'base'       => BASE_URL,
-            'fullWidth'  => true,
+        $this->view('modulos.ia_soporte.index', [
+            'titulo'       => 'IA Soporte',
+            'perm'         => $this->getPermisos(),
+            'rutaModulo'   => self::RUTA_MODULO,
+            'base'         => BASE_URL,
+            'esSuperadmin' => (int) ($_SESSION['nivel'] ?? 0) >= 3,
         ]);
     }
 
@@ -143,6 +149,7 @@ class IaSoporteController extends BaseModuloController
                     'categoria' => trim((string) ($_POST['categoria'] ?? '')),
                 ],
                 $_FILES['archivo'] ?? [],
+                $this->idsAgentesDesdePost(),
                 $idUsuario
             );
 
@@ -202,6 +209,37 @@ class IaSoporteController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    public function documentoAgentesActualizar(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $id = (int) ($_POST['id'] ?? 0);
+
+        try {
+            if ($id <= 0) {
+                throw new \Exception('ID de documento no válido.');
+            }
+            $this->service->actualizarAgentesDocumento($id, $idEmpresa, $this->idsAgentesDesdePost(), $idUsuario);
+            echo json_encode(['ok' => true, 'msg' => 'Agentes actualizados correctamente.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** @return int[] */
+    private function idsAgentesDesdePost(): array
+    {
+        $raw = $_POST['id_agentes'] ?? [];
+        if (!is_array($raw)) {
+            return [];
+        }
+        return array_values(array_filter(array_map('intval', $raw), fn (int $v) => $v > 0));
     }
 
     // ── Conversaciones ───────────────────────────────────────────────────────
@@ -304,6 +342,124 @@ class IaSoporteController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    // ── Gestión de prompts (catálogo global de agentes) — solo superadmin ──
+
+    public function promptsListar(): void
+    {
+        $this->requireLeer();
+        $this->requireSuperadminAjax();
+        header('Content-Type: application/json');
+
+        $model = new IaAgente();
+        $rows = $model->getAll('orden', 'ASC', '');
+        echo json_encode(['ok' => true, 'data' => $rows], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    public function promptStore(): void
+    {
+        $this->requireLeer();
+        $this->requireSuperadminAjax();
+        header('Content-Type: application/json');
+
+        $data = $this->recogerDatosPrompt();
+        if ($data['nombre'] === '' || $data['prompt_sistema'] === '') {
+            echo json_encode(['ok' => false, 'error' => 'El nombre y el prompt del sistema son obligatorios.']);
+            exit;
+        }
+
+        try {
+            $data['created_by'] = (int) $_SESSION['id_usuario'];
+            $model = new IaAgente();
+            $id = $model->crear($data);
+            (new LogSistemaService())->registrar((int) $_SESSION['id_usuario'], null, 'crear', 'ia_agentes', $id, null, $data);
+            echo json_encode(['ok' => true, 'id' => $id, 'msg' => 'Prompt creado correctamente.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function promptUpdate(): void
+    {
+        $this->requireLeer();
+        $this->requireSuperadminAjax();
+        header('Content-Type: application/json');
+
+        $id = (int) ($_POST['id'] ?? 0);
+        $data = $this->recogerDatosPrompt();
+        if ($id <= 0 || $data['nombre'] === '' || $data['prompt_sistema'] === '') {
+            echo json_encode(['ok' => false, 'error' => 'Datos inválidos.']);
+            exit;
+        }
+
+        try {
+            $model = new IaAgente();
+            $antes = $model->find($id);
+            $data['updated_by'] = (int) $_SESSION['id_usuario'];
+            if (!$model->actualizar($id, $data)) {
+                throw new \Exception('No se pudo actualizar el prompt.');
+            }
+            (new LogSistemaService())->registrar((int) $_SESSION['id_usuario'], null, 'actualizar', 'ia_agentes', $id, $antes, $data);
+            echo json_encode(['ok' => true, 'msg' => 'Prompt actualizado correctamente.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function promptEliminar(): void
+    {
+        $this->requireLeer();
+        $this->requireSuperadminAjax();
+        header('Content-Type: application/json');
+
+        $id = (int) ($_POST['id'] ?? 0);
+        if ($id <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'ID de prompt no válido.']);
+            exit;
+        }
+
+        try {
+            $model = new IaAgente();
+            $antes = $model->find($id);
+            if (!$antes || !$model->eliminarLogico($id, (int) $_SESSION['id_usuario'])) {
+                throw new \Exception('No se pudo eliminar el prompt.');
+            }
+            (new LogSistemaService())->registrar((int) $_SESSION['id_usuario'], null, 'eliminar', 'ia_agentes', $id, $antes, null);
+            echo json_encode(['ok' => true, 'msg' => 'Prompt eliminado correctamente.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    private function recogerDatosPrompt(): array
+    {
+        return [
+            'nombre'         => trim((string) ($_POST['nombre'] ?? '')),
+            'descripcion'    => trim((string) ($_POST['descripcion'] ?? '')) ?: null,
+            'icono'          => trim((string) ($_POST['icono'] ?? '')) ?: 'bi-robot',
+            'prompt_sistema' => trim((string) ($_POST['prompt_sistema'] ?? '')),
+            'orden'          => (int) ($_POST['orden'] ?? 0),
+            'activo'         => !empty($_POST['activo']),
+        ];
+    }
+
+    /**
+     * El catálogo de agentes es global (no depende de id_empresa ni de los
+     * permisos del submódulo): solo el superadministrador (nivel 3) lo edita.
+     */
+    private function requireSuperadminAjax(): void
+    {
+        if ((int) ($_SESSION['nivel'] ?? 0) < 3) {
+            header('Content-Type: application/json');
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Solo el superadministrador puede gestionar los prompts.']);
+            exit;
+        }
     }
 
     // ── Helpers internos ─────────────────────────────────────────────────────

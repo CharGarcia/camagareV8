@@ -22,6 +22,16 @@
     window.abrirModalLiquidacion = abrirModalLiquidacionFn;
     window.abrirModalLiquidacionVer = abrirModalLiquidacionVerFn;
     window.LC_fetchSearch = fetchSearchFn;
+
+    // Exportación del LISTADO: usa el filtro y el orden vigentes en la vista.
+    function lcUrlExportListado(tipo) {
+        const b    = document.getElementById('buscar')?.value || '';
+        const sort = window.LC_ordenCol || 'fecha_emision';
+        const dir  = window.LC_ordenDir || 'DESC';
+        return `${API_URL}/${tipo}?b=${encodeURIComponent(b)}&sort=${encodeURIComponent(sort)}&dir=${encodeURIComponent(dir)}`;
+    }
+    window.exportarPdfListado   = () => window.open(lcUrlExportListado('export-pdf'), '_blank');
+    window.exportarExcelListado = () => window.open(lcUrlExportListado('export-excel'), '_blank');
     window.LC_agregarFila = agregarFilaFn;
     window.LC_removerFila = removerFilaFn;
     window.seleccionarProveedor = seleccionarProveedorFn;

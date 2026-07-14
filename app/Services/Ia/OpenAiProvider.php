@@ -63,8 +63,7 @@ class OpenAiProvider implements IaProviderInterface
         }
 
         if ($httpCode !== 200) {
-            $mensajeError = $data['error']['message'] ?? ('Error desconocido (HTTP ' . $httpCode . ').');
-            throw new \RuntimeException('OpenAI: ' . $mensajeError);
+            throw new \RuntimeException($this->mensajeError($httpCode, $data));
         }
 
         $contenido = (string) ($data['choices'][0]['message']['content'] ?? '');
@@ -76,5 +75,35 @@ class OpenAiProvider implements IaProviderInterface
             'tokens_entrada' => $tokensEntrada,
             'tokens_salida'  => $tokensSalida,
         ];
+    }
+
+    /**
+     * Traduce el error de OpenAI a un mensaje claro en español, distinguiendo
+     * los casos más comunes (sin saldo/cuota, key inválida, límite de tasa).
+     */
+    private function mensajeError(int $httpCode, array $data): string
+    {
+        $codigo  = (string) ($data['error']['code'] ?? '');
+        $tipo    = (string) ($data['error']['type'] ?? '');
+        $mensaje = (string) ($data['error']['message'] ?? '');
+
+        if ($codigo === 'insufficient_quota' || $tipo === 'insufficient_quota') {
+            return 'La cuenta de OpenAI de esta empresa se quedó sin saldo/cuota disponible. '
+                 . 'Revise el saldo y método de pago en platform.openai.com → Settings → Billing, y vuelva a intentar.';
+        }
+
+        if ($httpCode === 401 || $codigo === 'invalid_api_key') {
+            return 'La API key configurada no es válida o fue revocada. Verifíquela en la pestaña Configuración.';
+        }
+
+        if ($httpCode === 429 || $tipo === 'rate_limit_exceeded') {
+            return 'OpenAI rechazó la solicitud por exceso de solicitudes en poco tiempo. Espere unos segundos e intente de nuevo.';
+        }
+
+        if ($codigo === 'model_not_found' || str_contains($mensaje, 'does not exist')) {
+            return 'El modelo configurado ("' . $mensaje . '") no existe o la cuenta no tiene acceso a él. Cambie el modelo en Configuración (ej. gpt-4o-mini).';
+        }
+
+        return 'OpenAI: ' . ($mensaje !== '' ? $mensaje : 'Error desconocido (HTTP ' . $httpCode . ').');
     }
 }
