@@ -278,6 +278,28 @@ class IaSoporteController extends BaseModuloController
         exit;
     }
 
+    public function conversacionRenombrar(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $id = (int) ($_POST['id'] ?? 0);
+        $titulo = (string) ($_POST['titulo'] ?? '');
+
+        try {
+            if ($id <= 0) {
+                throw new \Exception('ID de conversación no válido.');
+            }
+            $this->service->renombrarConversacion($id, $idEmpresa, $titulo, $idUsuario);
+            echo json_encode(['ok' => true, 'msg' => 'Conversación renombrada.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function conversacionEliminar(): void
     {
         $this->requireEliminar();

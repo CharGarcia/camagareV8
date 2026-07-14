@@ -114,17 +114,20 @@
                 }
                 cont.innerHTML = rows.map((c) => `
                     <div class="ia-soporte-conv-item p-2 mb-1 d-flex justify-content-between align-items-center ${c.id == conversacionActualId ? 'active' : ''}" data-id="${c.id}">
-                        <div class="text-truncate" style="max-width: 200px;">
+                        <div class="text-truncate" style="max-width: 160px;">
                             <i class="bi ${c.icono_agente || 'bi-robot'} me-1"></i>
                             <span class="small">${escapeHtml(c.titulo || 'Conversación')}</span>
                         </div>
-                        ${PERM.eliminar ? `<button type="button" class="btn btn-sm btn-link text-danger p-0 ia-btn-eliminar-conv" data-id="${c.id}" title="Eliminar"><i class="bi bi-trash"></i></button>` : ''}
+                        <div class="d-flex align-items-center flex-shrink-0">
+                            ${PERM.actualizar ? `<button type="button" class="btn btn-sm btn-link text-secondary p-0 me-2 ia-btn-renombrar-conv" data-id="${c.id}" data-titulo="${escapeHtml(c.titulo || '')}" title="Renombrar"><i class="bi bi-pencil"></i></button>` : ''}
+                            ${PERM.eliminar ? `<button type="button" class="btn btn-sm btn-link text-danger p-0 ia-btn-eliminar-conv" data-id="${c.id}" title="Eliminar"><i class="bi bi-trash"></i></button>` : ''}
+                        </div>
                     </div>
                 `).join('');
 
                 cont.querySelectorAll('.ia-soporte-conv-item').forEach((el) => {
                     el.addEventListener('click', (ev) => {
-                        if (ev.target.closest('.ia-btn-eliminar-conv')) return;
+                        if (ev.target.closest('.ia-btn-eliminar-conv') || ev.target.closest('.ia-btn-renombrar-conv')) return;
                         seleccionarConversacion(parseInt(el.getAttribute('data-id'), 10));
                     });
                 });
@@ -132,6 +135,12 @@
                     btn.addEventListener('click', (ev) => {
                         ev.stopPropagation();
                         eliminarConversacion(parseInt(btn.getAttribute('data-id'), 10));
+                    });
+                });
+                cont.querySelectorAll('.ia-btn-renombrar-conv').forEach((btn) => {
+                    btn.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        renombrarConversacion(parseInt(btn.getAttribute('data-id'), 10), btn.getAttribute('data-titulo') || '');
                     });
                 });
 
@@ -160,6 +169,22 @@
             .then((res) => {
                 if (!res.ok) { alert(res.error || 'No se pudo crear la conversación.'); return; }
                 cargarConversaciones(res.id);
+            });
+    }
+
+    function renombrarConversacion(id, tituloActual) {
+        const nuevoTitulo = prompt('Nuevo nombre de la conversación:', tituloActual || '');
+        if (nuevoTitulo === null) return;
+        if (nuevoTitulo.trim() === '') { alert('El nombre no puede estar vacío.'); return; }
+
+        const fd = new FormData();
+        fd.append('id', id);
+        fd.append('titulo', nuevoTitulo.trim());
+        fetch(BASE + '/conversacionRenombrar', { method: 'POST', body: fd })
+            .then((r) => r.json())
+            .then((res) => {
+                if (!res.ok) { alert(res.error || 'No se pudo renombrar.'); return; }
+                cargarConversaciones();
             });
     }
 

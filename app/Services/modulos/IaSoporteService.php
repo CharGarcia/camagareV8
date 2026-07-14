@@ -163,6 +163,23 @@ class IaSoporteService
         return $this->conversacionRepo->create($idEmpresa, $idAgente, $titulo, $idUsuario);
     }
 
+    public function renombrarConversacion(int $id, int $idEmpresa, string $titulo, int $idUsuario): void
+    {
+        $titulo = trim($titulo);
+        if ($titulo === '') {
+            throw new \InvalidArgumentException('El título no puede estar vacío.');
+        }
+
+        $actual = $this->conversacionRepo->findById($id, $idEmpresa);
+        if ($actual === null) {
+            throw new Exception('La conversación no existe o ya ha sido eliminada.');
+        }
+
+        $this->conversacionRepo->actualizarTitulo($id, $idEmpresa, $titulo);
+        $this->logService->registrar($idUsuario, $idEmpresa, 'actualizar', 'ia_conversaciones', $id,
+            ['titulo' => $actual['titulo']], ['titulo' => $titulo]);
+    }
+
     public function eliminarConversacion(int $id, int $idEmpresa, int $idUsuario): void
     {
         $actual = $this->conversacionRepo->findById($id, $idEmpresa);
