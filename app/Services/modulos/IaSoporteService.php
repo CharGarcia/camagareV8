@@ -204,6 +204,20 @@ class IaSoporteService
         return $mensajes;
     }
 
+    /**
+     * Texto exacto de un fragmento citado como fuente, para que el usuario
+     * pueda verificar directamente qué dice el documento (sin depender de
+     * que el modelo lo haya resumido bien).
+     */
+    public function getFragmentoFuente(int $idEmpresa, int $idDocumento, int $chunkIndex): string
+    {
+        $contenido = $this->documentoRepo->getChunkContenido($idEmpresa, $idDocumento, $chunkIndex);
+        if ($contenido === null) {
+            throw new Exception('El fragmento ya no está disponible (el documento pudo haber sido eliminado o reprocesado).');
+        }
+        return $contenido;
+    }
+
     // ── Chat (RAG) ───────────────────────────────────────────────────────────
 
     /**

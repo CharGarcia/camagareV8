@@ -42,6 +42,10 @@ $urlBase = $base . '/' . ltrim($rutaModulo, '/');
         .ia-soporte-msg.user .bubble { background: #0d6efd; color: #fff; }
         .ia-soporte-msg.assistant .bubble { background: #fff; border: 1px solid #dee2e6; }
         .ia-soporte-fuentes { font-size: .72rem; color: #6c757d; margin-top: .25rem; }
+        .ia-fuentes-lista { display: flex; flex-direction: column; gap: .15rem; }
+        .ia-fuente-chip { background: none; border: none; padding: 0; font-size: .72rem; color: #0d6efd; text-align: left; cursor: pointer; }
+        .ia-fuente-chip:hover { text-decoration: underline; }
+        .ia-fuente-texto { font-size: .78rem; color: #495057; background: #fff; border: 1px solid #dee2e6; border-left: 3px solid #0d6efd; border-radius: .3rem; padding: .5rem .6rem; margin: .2rem 0 .4rem 1.1rem; white-space: pre-wrap; }
         .ia-soporte-conv-item { cursor: pointer; border-radius: .4rem; }
         .ia-soporte-conv-item:hover { background: rgba(0,0,0,.04); }
         .ia-soporte-conv-item.active { background: rgba(13,110,253,.12); }

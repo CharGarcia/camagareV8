@@ -36,6 +36,14 @@
 
         const btnEliminarPrompt = document.getElementById('iaBtnEliminarPrompt');
         if (btnEliminarPrompt) btnEliminarPrompt.addEventListener('click', eliminarPrompt);
+
+        const chatMensajes = document.getElementById('iaChatMensajes');
+        if (chatMensajes) {
+            chatMensajes.addEventListener('click', (ev) => {
+                const chip = ev.target.closest('.ia-fuente-chip');
+                if (chip) toggleFragmentoFuente(chip);
+            });
+        }
     });
 
     // ── Tabs ─────────────────────────────────────────────────────────────────
@@ -245,9 +253,17 @@
         const sinContexto = m.rol === 'assistant' && Array.isArray(m.fuentes) && m.fuentes.length === 0;
 
         const fuentesHtml = tieneFuentes
-            ? '<div class="ia-soporte-fuentes"><i class="bi bi-bookmark"></i> Fuentes: ' +
-              m.fuentes.map((f) => escapeHtml(f.titulo) + (f.pagina ? ' (pág. ' + f.pagina + ')' : '')).join(' · ') +
-              '</div>'
+            ? '<div class="ia-soporte-fuentes"><i class="bi bi-bookmark"></i> Fuentes (clic para ver el texto exacto):</div>'
+              + '<div class="ia-fuentes-lista">'
+              + m.fuentes.map((f) => `
+                    <div class="ia-fuente-item">
+                        <button type="button" class="ia-fuente-chip" data-id-documento="${f.id_documento}" data-chunk-index="${f.chunk_index}">
+                            <i class="bi bi-chevron-right"></i> ${escapeHtml(f.titulo)}${f.pagina ? ' (pág. ' + f.pagina + ')' : ''}
+                        </button>
+                        <div class="ia-fuente-texto d-none"></div>
+                    </div>
+                `).join('')
+              + '</div>'
             : '';
         const avisoHtml = sinContexto
             ? '<div class="ia-soporte-fuentes text-warning"><i class="bi bi-exclamation-triangle"></i> '
@@ -261,6 +277,42 @@
                 ${m.rol === 'assistant' ? (fuentesHtml || avisoHtml) : ''}
             </div>
         `;
+    }
+
+    function toggleFragmentoFuente(chip) {
+        const item = chip.closest('.ia-fuente-item');
+        const texto = item.querySelector('.ia-fuente-texto');
+        const icono = chip.querySelector('i');
+
+        if (!texto.classList.contains('d-none')) {
+            texto.classList.add('d-none');
+            icono.className = 'bi bi-chevron-right';
+            return;
+        }
+
+        icono.className = 'bi bi-chevron-down';
+        texto.classList.remove('d-none');
+
+        if (texto.dataset.cargado === '1') return;
+
+        texto.innerHTML = '<span class="text-muted"><span class="spinner-border spinner-border-sm"></span> Cargando…</span>';
+
+        const idDocumento = chip.getAttribute('data-id-documento');
+        const chunkIndex = chip.getAttribute('data-chunk-index');
+
+        fetch(BASE + '/fragmentoVer?id_documento=' + idDocumento + '&chunk_index=' + chunkIndex)
+            .then((r) => r.json())
+            .then((res) => {
+                if (!res.ok) {
+                    texto.innerHTML = '<span class="text-danger">' + escapeHtml(res.error || 'No se pudo cargar el fragmento.') + '</span>';
+                    return;
+                }
+                texto.textContent = res.contenido;
+                texto.dataset.cargado = '1';
+            })
+            .catch(() => {
+                texto.innerHTML = '<span class="text-danger">Error de conexión.</span>';
+            });
     }
 
     function enviarMensaje(ev) {

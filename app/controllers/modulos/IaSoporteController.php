@@ -325,6 +325,27 @@ class IaSoporteController extends BaseModuloController
         exit;
     }
 
+    public function fragmentoVer(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idDocumento = (int) ($_GET['id_documento'] ?? 0);
+        $chunkIndex = (int) ($_GET['chunk_index'] ?? -1);
+
+        try {
+            if ($idDocumento <= 0 || $chunkIndex < 0) {
+                throw new \Exception('Fragmento no válido.');
+            }
+            $contenido = $this->service->getFragmentoFuente($idEmpresa, $idDocumento, $chunkIndex);
+            echo json_encode(['ok' => true, 'contenido' => $contenido], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     // ── Mensajes / chat ──────────────────────────────────────────────────────
 
     public function mensajesListar(): void

@@ -136,6 +136,32 @@ class IaDocumentoRepository extends BaseRepository
 
     // ── Fragmentos (chunks) ─────────────────────────────────────────────────
 
+    /**
+     * Obtiene el texto de un fragmento puntual (para que el usuario vea qué
+     * dice exactamente la fuente citada en una respuesta del chat).
+     * Filtro por id_empresa SIEMPRE presente (aislamiento multiempresa).
+     */
+    public function getChunkContenido(int $idEmpresa, int $idDocumento, int $chunkIndex): ?string
+    {
+        $sql = "SELECT c.contenido
+                FROM ia_documento_chunks c
+                INNER JOIN ia_documentos d ON d.id = c.id_documento
+                WHERE c.id_documento = :id_documento
+                  AND c.chunk_index = :chunk_index
+                  AND c.id_empresa = :id_empresa
+                  AND c.eliminado = false
+                  AND d.id_empresa = :id_empresa
+                  AND d.eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_documento' => $idDocumento,
+            ':chunk_index'  => $chunkIndex,
+            ':id_empresa'   => $idEmpresa,
+        ]);
+        $contenido = $st->fetchColumn();
+        return $contenido !== false ? (string) $contenido : null;
+    }
+
     public function insertarChunk(int $idEmpresa, int $idDocumento, int $chunkIndex, ?int $pagina, string $contenido): void
     {
         $sql = "INSERT INTO ia_documento_chunks (id_empresa, id_documento, chunk_index, pagina, contenido, eliminado)
