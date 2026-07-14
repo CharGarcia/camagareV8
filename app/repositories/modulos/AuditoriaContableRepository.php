@@ -30,58 +30,185 @@ class AuditoriaContableRepository extends BaseRepository
      * Configuración de los orígenes auditables. La clave es el `modulo_origen`
      * tal como lo graban los Services al crear el asiento.
      *
-     *  - tabla         : tabla operativa (cabecera).
-     *  - total         : expresión SQL del total del documento (alias d).
-     *  - estado_filtro : condición de "documento vigente que debe tener asiento"
-     *                    (alias d). Replica el criterio del SincronizadorAsientosService.
-     *  - tiene_estado  : si la cabecera tiene columna `estado` (para estado_incoherente).
+     *  - tabla          : tabla operativa (cabecera).
+     *  - total          : expresión SQL del total del documento (alias d).
+     *  - fecha          : columna de fecha del documento (alias d). Varía por módulo.
+     *  - estado_filtro  : condición de "documento vigente que debe tener asiento"
+     *                     (alias d). Replica el criterio del SincronizadorAsientosService.
+     *  - tiene_estado   : si la cabecera tiene columna `estado` (para estado_incoherente).
+     *  - chequear_monto : false cuando el total del documento NO es comparable con el
+     *                     total del asiento (p. ej. nómina: el asiento incluye aportes;
+     *                     cambios de producto: el asiento va a costo). Solo se detecta faltante.
+     *  - regenerable    : si su Service implementa procesarAsientoContablePorSincronizacion.
+     *                     Los que no, se auditan pero no se pueden regenerar desde aquí.
+     *  - tiene_id_asiento: si la cabecera tiene columna id_asiento_contable (para desvincular).
+     *  - entidad_mig    : valor de `migracion_mysql_map.entidad` de este origen (null si no aplica).
+     *                     Los documentos que la migración desde MySQL INSERTÓ no generan asiento
+     *                     propio (su contabilidad viene del histórico migrado), así que se
+     *                     excluyen de la auditoría y de la regeneración. Mismos nombres que
+     *                     usa SincronizadorAsientosService.
      */
     private array $origenes = [
         'factura_venta' => [
-            'tabla'         => 'ventas_cabecera',
-            'total'         => 'd.importe_total',
-            'estado_filtro' => "d.estado IN ('autorizado','contabilizado')",
-            'tiene_estado'  => true,
+            'tabla'          => 'ventas_cabecera',
+            'total'          => 'd.importe_total',
+            'fecha'          => 'fecha_emision',
+            'estado_filtro'  => "d.estado IN ('autorizado','contabilizado')",
+            'tiene_estado'   => true,
+            'chequear_monto' => true,
+            'regenerable'    => true,
+            'tiene_id_asiento' => true,
+            'entidad_mig'    => 'facturas',
         ],
         'compra' => [
             // compras_cabecera no tiene columna `estado` en BD (igual que el SincronizadorAsientosService,
             // que no filtra por estado para compras). Por eso estado_filtro=1=1 y tiene_estado=false.
-            'tabla'         => 'compras_cabecera',
-            'total'         => 'd.importe_total',
-            'estado_filtro' => '1=1',
-            'tiene_estado'  => false,
+            'tabla'          => 'compras_cabecera',
+            'total'          => 'd.importe_total',
+            'fecha'          => 'fecha_emision',
+            'estado_filtro'  => '1=1',
+            'tiene_estado'   => false,
+            'chequear_monto' => true,
+            'regenerable'    => true,
+            'tiene_id_asiento' => true,
+            'entidad_mig'    => 'compras',
         ],
         'liquidacion_compra' => [
-            'tabla'         => 'liquidaciones_cabecera',
-            'total'         => 'd.importe_total',
-            'estado_filtro' => "d.estado IN ('autorizado','contabilizado')",
-            'tiene_estado'  => true,
+            'tabla'          => 'liquidaciones_cabecera',
+            'total'          => 'd.importe_total',
+            'fecha'          => 'fecha_emision',
+            'estado_filtro'  => "d.estado IN ('autorizado','contabilizado')",
+            'tiene_estado'   => true,
+            'chequear_monto' => true,
+            'regenerable'    => true,
+            'tiene_id_asiento' => true,
+            'entidad_mig'    => 'liquidaciones',
         ],
         'nota_credito' => [
-            'tabla'         => 'notas_credito_cabecera',
-            'total'         => 'd.importe_total',
-            'estado_filtro' => "d.estado IN ('autorizado','contabilizado')",
-            'tiene_estado'  => true,
+            'tabla'          => 'notas_credito_cabecera',
+            'total'          => 'd.importe_total',
+            'fecha'          => 'fecha_emision',
+            'estado_filtro'  => "d.estado IN ('autorizado','contabilizado')",
+            'tiene_estado'   => true,
+            'chequear_monto' => true,
+            'regenerable'    => true,
+            'tiene_id_asiento' => true,
+            'entidad_mig'    => 'notas_credito',
         ],
         'retencion_venta' => [
-            'tabla'         => 'retencion_venta_cabecera',
-            'total'         => '(COALESCE(d.total_isd,0)+COALESCE(d.total_iva,0)+COALESCE(d.total_renta,0))',
-            'estado_filtro' => '1=1',
-            'tiene_estado'  => false,
+            'tabla'          => 'retencion_venta_cabecera',
+            'total'          => '(COALESCE(d.total_isd,0)+COALESCE(d.total_iva,0)+COALESCE(d.total_renta,0))',
+            'fecha'          => 'fecha_emision',
+            'estado_filtro'  => '1=1',
+            'tiene_estado'   => false,
+            'chequear_monto' => true,
+            'regenerable'    => true,
+            'tiene_id_asiento' => true,
+            'entidad_mig'    => 'retenciones_venta',
+        ],
+        'retencion_compra' => [
+            'tabla'          => 'retencion_compra_cabecera',
+            'total'          => 'd.total_retenido',
+            'fecha'          => 'fecha_emision',
+            'estado_filtro'  => '1=1', // el Sincronizador no filtra por estado en retenciones
+            'tiene_estado'   => true,
+            'chequear_monto' => true,
+            'regenerable'    => true,
+            'tiene_id_asiento' => true,
+            'entidad_mig'    => 'retenciones_compra',
         ],
         'ingreso' => [
-            'tabla'         => 'ingresos_cabecera',
-            'total'         => 'd.monto_total',
-            'estado_filtro' => "d.estado <> 'anulado'",
-            'tiene_estado'  => true,
+            'tabla'          => 'ingresos_cabecera',
+            'total'          => 'd.monto_total',
+            'fecha'          => 'fecha_emision',
+            'estado_filtro'  => "d.estado <> 'anulado'",
+            'tiene_estado'   => true,
+            'chequear_monto' => true,
+            'regenerable'    => true,
+            'tiene_id_asiento' => true,
+            'entidad_mig'    => 'ingresos',
         ],
         'egreso' => [
-            'tabla'         => 'egresos_cabecera',
-            'total'         => 'd.monto_total',
-            'estado_filtro' => "d.estado <> 'anulado'",
-            'tiene_estado'  => true,
+            'tabla'          => 'egresos_cabecera',
+            'total'          => 'd.monto_total',
+            'fecha'          => 'fecha_emision',
+            'estado_filtro'  => "d.estado <> 'anulado'",
+            'tiene_estado'   => true,
+            'chequear_monto' => true,
+            'regenerable'    => true,
+            'tiene_id_asiento' => true,
+            'entidad_mig'    => 'egresos',
+        ],
+        'consignacion_venta' => [
+            'tabla'          => 'consignaciones_ventas',
+            'total'          => 'd.total',
+            'fecha'          => 'fecha_emision',
+            'estado_filtro'  => "d.estado <> 'Anulada'",
+            'tiene_estado'   => true,
+            'chequear_monto' => false, // el asiento es reclasificación a costo, no al total de venta
+            'regenerable'    => true,
+            'tiene_id_asiento' => true,
+            'entidad_mig'    => 'consignaciones',
+        ],
+        'recibo_venta' => [
+            'tabla'          => 'recibos_venta_cabecera',
+            'total'          => 'd.importe_total',
+            'fecha'          => 'fecha_emision',
+            'estado_filtro'  => "d.estado NOT IN ('anulado','borrador')",
+            'tiene_estado'   => true,
+            'chequear_monto' => true,
+            'regenerable'    => true,
+            'tiene_id_asiento' => true,
+            'entidad_mig'    => 'recibos',
+        ],
+        'retorno_cv' => [
+            'tabla'          => 'retornos_cv',
+            'total'          => 'd.total',
+            'fecha'          => 'fecha_retorno',
+            'estado_filtro'  => "d.estado <> 'Anulada'",
+            'tiene_estado'   => true,
+            'chequear_monto' => false, // el asiento va a costo del inventario devuelto
+            'regenerable'    => false, // RetornoCvService no expone procesarAsientoContablePorSincronizacion
+            'tiene_id_asiento' => true,
+            'entidad_mig'    => null,
+        ],
+        'cambio_producto_cv' => [
+            'tabla'          => 'cambios_producto_cv',
+            'total'          => '(COALESCE(d.subtotal_devuelto,0)+COALESCE(d.subtotal_entregado,0))',
+            'fecha'          => 'fecha_cambio',
+            'estado_filtro'  => "COALESCE(d.estado,'') <> 'Anulada'",
+            'tiene_estado'   => true,
+            'chequear_monto' => false, // asiento a costo; el total del documento no es comparable
+            'regenerable'    => false,
+            'tiene_id_asiento' => true,
+            'entidad_mig'    => null,
+        ],
+        'FACTURACION_CV' => [
+            'tabla'          => 'consignaciones_facturas',
+            'total'          => 'd.total',
+            'fecha'          => 'fecha_emision',
+            'estado_filtro'  => "d.estado <> 'anulada'",
+            'tiene_estado'   => true,
+            'chequear_monto' => true,
+            'regenerable'    => false, // ConsignacionFacturaService no expone el método de sincronización
+            'tiene_id_asiento' => false, // consignaciones_facturas no tiene id_asiento_contable
+            'entidad_mig'    => null,
+        ],
+        'nomina' => [
+            'tabla'          => 'rol_cabecera',
+            'total'          => 'd.total_neto',
+            'fecha'          => 'fecha_pago',
+            'estado_filtro'  => "d.estado <> 'anulado'",
+            'tiene_estado'   => true,
+            'chequear_monto' => false, // el asiento incluye aportes/provisiones: no cuadra con total_neto
+            'regenerable'    => false, // RolAsientoService::contabilizar() tiene otra firma
+            'tiene_id_asiento' => false, // rol_cabecera no tiene id_asiento_contable
+            'entidad_mig'    => null,
         ],
     ];
+
+    /** Cache de existencia de la tabla del mapa de migración. */
+    private ?bool $tieneMapMig = null;
 
     public function __construct()
     {
@@ -106,6 +233,22 @@ class AuditoriaContableRepository extends BaseRepository
         return $this->origenes[$origen]['tabla'] ?? null;
     }
 
+    /**
+     * ¿Este origen puede regenerar su asiento desde aquí? Solo los módulos cuyo Service
+     * implementa procesarAsientoContablePorSincronizacion. El resto se audita igual,
+     * pero su asiento se corrige desde su propio módulo.
+     */
+    public function esOrigenRegenerable(string $origen): bool
+    {
+        return !empty($this->origenes[$origen]['regenerable']);
+    }
+
+    /** Orígenes que admiten regeneración (para el selector de regeneración masiva). */
+    public function getOrigenesRegenerables(): array
+    {
+        return array_keys(array_filter($this->origenes, fn($c) => !empty($c['regenerable'])));
+    }
+
     /** Ambiente activo de la empresa ('1' Pruebas, '2' Producción). */
     public function getAmbienteEmpresa(int $idEmpresa): string
     {
@@ -121,6 +264,65 @@ class AuditoriaContableRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** ¿Existe la tabla del mapa de migración desde MySQL? (se cachea) */
+    private function tieneMapaMigracion(): bool
+    {
+        if ($this->tieneMapMig === null) {
+            try {
+                $this->tieneMapMig = (bool) $this->db->query("SELECT to_regclass('public.migracion_mysql_map')")->fetchColumn();
+            } catch (\Throwable $e) {
+                $this->tieneMapMig = false;
+            }
+        }
+        return $this->tieneMapMig;
+    }
+
+    /**
+     * Fragmento SQL que excluye los documentos INSERTADOS por la migración desde MySQL.
+     * Replica el criterio de SincronizadorAsientosService: los `vinculado = true` son
+     * documentos NATIVOS que la migración solo enlazó por número SRI y sí generan asiento;
+     * los demás traen su contabilidad del histórico migrado y nunca generan asiento propio.
+     * $origen viene de la whitelist y $idExpr es literal del código → seguros de interpolar.
+     */
+    private function sqlExcluirMigrados(string $origen, string $idExpr): string
+    {
+        $entidad = $this->origenes[$origen]['entidad_mig'] ?? null;
+        if ($entidad === null || !$this->tieneMapaMigracion()) {
+            return '';
+        }
+        return " AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map mm
+                                 WHERE mm.entidad = '{$entidad}'
+                                   AND mm.id_destino = {$idExpr}
+                                   AND mm.vinculado IS NOT TRUE) ";
+    }
+
+    /** ¿Este documento lo insertó la migración desde MySQL? (no debe regenerarse) */
+    public function esDocumentoMigrado(string $origen, int $idDocumento): bool
+    {
+        $entidad = $this->origenes[$origen]['entidad_mig'] ?? null;
+        if ($entidad === null || !$this->tieneMapaMigracion()) {
+            return false;
+        }
+        $st = $this->db->prepare(
+            "SELECT 1 FROM migracion_mysql_map
+             WHERE entidad = :ent AND id_destino = :id AND vinculado IS NOT TRUE LIMIT 1"
+        );
+        $st->execute([':ent' => $entidad, ':id' => $idDocumento]);
+        return $st->fetchColumn() !== false;
+    }
+
+    /**
+     * Fragmento SQL de rango de fechas sobre $col. Añade los binds a $params.
+     * $col es literal del código; las fechas van como parámetros preparados.
+     */
+    private function sqlRangoFecha(string $col, ?string $desde, ?string $hasta, array &$params): string
+    {
+        $sql = '';
+        if (!empty($desde)) { $sql .= " AND {$col} >= :f_desde"; $params[':f_desde'] = $desde; }
+        if (!empty($hasta)) { $sql .= " AND {$col} <= :f_hasta"; $params[':f_hasta'] = $hasta; }
+        return $sql;
+    }
+
     // ==================================================================
     //  DETECCIÓN DE HALLAZGOS
     // ==================================================================
@@ -132,8 +334,11 @@ class AuditoriaContableRepository extends BaseRepository
      *   monto_documento, monto_asiento, diferencia, detalle, fecha_documento
      *
      * @param string|null $soloOrigen Si se indica, limita a ese modulo_origen.
+     * @param string|null $fechaDesde Acota por fecha del documento/asiento (AAAA-MM-DD).
+     * @param string|null $fechaHasta Idem.
      */
-    public function detectarTodos(int $idEmpresa, ?string $soloOrigen = null): array
+    public function detectarTodos(int $idEmpresa, ?string $soloOrigen = null,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
         $origenes = $soloOrigen !== null && $this->esOrigenValido($soloOrigen)
             ? [$soloOrigen]
@@ -141,15 +346,15 @@ class AuditoriaContableRepository extends BaseRepository
 
         $hallazgos = [];
         foreach ($origenes as $origen) {
-            $hallazgos = array_merge($hallazgos, $this->detectarFaltantesYMonto($idEmpresa, $origen));
-            $hallazgos = array_merge($hallazgos, $this->detectarHuerfanos($idEmpresa, $origen));
-            $hallazgos = array_merge($hallazgos, $this->detectarEstadoIncoherente($idEmpresa, $origen));
-            $hallazgos = array_merge($hallazgos, $this->detectarAmbienteIncoherente($idEmpresa, $origen));
+            $hallazgos = array_merge($hallazgos, $this->detectarFaltantesYMonto($idEmpresa, $origen, $fechaDesde, $fechaHasta));
+            $hallazgos = array_merge($hallazgos, $this->detectarHuerfanos($idEmpresa, $origen, $fechaDesde, $fechaHasta));
+            $hallazgos = array_merge($hallazgos, $this->detectarEstadoIncoherente($idEmpresa, $origen, $fechaDesde, $fechaHasta));
+            $hallazgos = array_merge($hallazgos, $this->detectarAmbienteIncoherente($idEmpresa, $origen, $fechaDesde, $fechaHasta));
         }
         // Chequeos sobre el asiento, no dependientes del origen (se limitan a la lista cuando hay filtro).
-        $hallazgos = array_merge($hallazgos, $this->detectarDuplicados($idEmpresa, $soloOrigen));
-        $hallazgos = array_merge($hallazgos, $this->detectarDescuadrados($idEmpresa, $soloOrigen));
-        $hallazgos = array_merge($hallazgos, $this->detectarCabVsDetalle($idEmpresa, $soloOrigen));
+        $hallazgos = array_merge($hallazgos, $this->detectarDuplicados($idEmpresa, $soloOrigen, $fechaDesde, $fechaHasta));
+        $hallazgos = array_merge($hallazgos, $this->detectarDescuadrados($idEmpresa, $soloOrigen, $fechaDesde, $fechaHasta));
+        $hallazgos = array_merge($hallazgos, $this->detectarCabVsDetalle($idEmpresa, $soloOrigen, $fechaDesde, $fechaHasta));
 
         return $hallazgos;
     }
@@ -158,18 +363,23 @@ class AuditoriaContableRepository extends BaseRepository
      * Faltante (documento vigente sin asiento) y monto_no_coincide
      * (documento con asiento cuyo total_debe difiere del total del documento).
      */
-    private function detectarFaltantesYMonto(int $idEmpresa, string $origen): array
+    private function detectarFaltantesYMonto(int $idEmpresa, string $origen,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
         $cfg   = $this->origenes[$origen];
         $tabla = $cfg['tabla'];
         $total = $cfg['total'];
+        $colFecha = $cfg['fecha'];
         $amb   = self::AMB;
+
+        $params = [':id_empresa' => $idEmpresa];
+        $rango  = $this->sqlRangoFecha("d.{$colFecha}", $fechaDesde, $fechaHasta, $params);
 
         $sql = "SELECT d.id AS id_documento,
                        {$total} AS monto_documento,
                        a.id AS id_asiento,
                        a.total_debe AS monto_asiento,
-                       d.fecha_emision AS fecha_documento
+                       d.{$colFecha} AS fecha_documento
                 FROM {$tabla} d
                 LEFT JOIN asientos_contables_cabecera a
                        ON a.modulo_origen = '{$origen}'
@@ -182,9 +392,11 @@ class AuditoriaContableRepository extends BaseRepository
                   AND d.eliminado = false
                   AND CAST(d.tipo_ambiente AS VARCHAR(1)) = {$amb}
                   AND {$cfg['estado_filtro']}
-                  AND COALESCE({$total}, 0) > 0";
+                  AND COALESCE({$total}, 0) > 0
+                  {$rango}"
+             . $this->sqlExcluirMigrados($origen, 'd.id');
 
-        $rows = $this->ejecutar($sql, [':id_empresa' => $idEmpresa]);
+        $rows = $this->ejecutar($sql, $params);
 
         $out = [];
         foreach ($rows as $r) {
@@ -193,6 +405,11 @@ class AuditoriaContableRepository extends BaseRepository
                 $out[] = $this->normalizar('faltante', $origen, (int) $r['id_documento'], null,
                     $montoDoc, null, $montoDoc,
                     "Documento vigente sin asiento contable.", $r['fecha_documento']);
+                continue;
+            }
+            // Orígenes cuyo total no es comparable con el del asiento (nómina, cambios a costo,
+            // consignaciones) solo se auditan por «faltante».
+            if (empty($cfg['chequear_monto'])) {
                 continue;
             }
             $montoAsiento = (float) $r['monto_asiento'];
@@ -209,10 +426,14 @@ class AuditoriaContableRepository extends BaseRepository
     }
 
     /** Asiento huérfano: referencia a un documento inexistente o eliminado. */
-    private function detectarHuerfanos(int $idEmpresa, string $origen): array
+    private function detectarHuerfanos(int $idEmpresa, string $origen,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
         $tabla = $this->origenes[$origen]['tabla'];
         $amb   = self::AMB;
+
+        $params = [':id_empresa' => $idEmpresa];
+        $rango  = $this->sqlRangoFecha('a.fecha_asiento', $fechaDesde, $fechaHasta, $params);
 
         $sql = "SELECT a.id AS id_asiento,
                        a.id_referencia_origen AS id_documento,
@@ -227,9 +448,10 @@ class AuditoriaContableRepository extends BaseRepository
                   AND a.id_referencia_origen IS NOT NULL
                   AND NOT EXISTS (SELECT 1 FROM {$tabla} d
                                   WHERE d.id = a.id_referencia_origen
-                                    AND d.eliminado = false)";
+                                    AND d.eliminado = false)
+                  {$rango}";
 
-        $rows = $this->ejecutar($sql, [':id_empresa' => $idEmpresa]);
+        $rows = $this->ejecutar($sql, $params);
         $out = [];
         foreach ($rows as $r) {
             $out[] = $this->normalizar('huerfano', $origen,
@@ -242,18 +464,23 @@ class AuditoriaContableRepository extends BaseRepository
     }
 
     /** Documento anulado que conserva un asiento vivo (no anulado). */
-    private function detectarEstadoIncoherente(int $idEmpresa, string $origen): array
+    private function detectarEstadoIncoherente(int $idEmpresa, string $origen,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
         if (!$this->origenes[$origen]['tiene_estado']) {
             return [];
         }
         $tabla = $this->origenes[$origen]['tabla'];
+        $colFecha = $this->origenes[$origen]['fecha'];
         $amb   = self::AMB;
+
+        $params = [':id_empresa' => $idEmpresa];
+        $rango  = $this->sqlRangoFecha("d.{$colFecha}", $fechaDesde, $fechaHasta, $params);
 
         $sql = "SELECT a.id AS id_asiento,
                        d.id AS id_documento,
                        a.total_debe AS monto_asiento,
-                       d.fecha_emision AS fecha_documento
+                       d.{$colFecha} AS fecha_documento
                 FROM asientos_contables_cabecera a
                 JOIN {$tabla} d ON d.id = a.id_referencia_origen
                 WHERE a.id_empresa = :id_empresa
@@ -262,9 +489,10 @@ class AuditoriaContableRepository extends BaseRepository
                   AND CAST(a.tipo_ambiente AS VARCHAR(1)) = {$amb}
                   AND a.modulo_origen = '{$origen}'
                   AND d.eliminado = false
-                  AND d.estado = 'anulado'";
+                  AND LOWER(CAST(d.estado AS VARCHAR)) IN ('anulado','anulada')
+                  {$rango}";
 
-        $rows = $this->ejecutar($sql, [':id_empresa' => $idEmpresa]);
+        $rows = $this->ejecutar($sql, $params);
         $out = [];
         foreach ($rows as $r) {
             $out[] = $this->normalizar('estado_incoherente', $origen, (int) $r['id_documento'], (int) $r['id_asiento'],
@@ -279,17 +507,22 @@ class AuditoriaContableRepository extends BaseRepository
      * La incidencia se registra en el ambiente del DOCUMENTO (fuente de verdad),
      * limitándose al ambiente activo de la empresa para encajar con la corrida.
      */
-    private function detectarAmbienteIncoherente(int $idEmpresa, string $origen): array
+    private function detectarAmbienteIncoherente(int $idEmpresa, string $origen,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
         $tabla = $this->origenes[$origen]['tabla'];
+        $colFecha = $this->origenes[$origen]['fecha'];
         $amb   = self::AMB;
+
+        $params = [':id_empresa' => $idEmpresa];
+        $rango  = $this->sqlRangoFecha("d.{$colFecha}", $fechaDesde, $fechaHasta, $params);
 
         $sql = "SELECT a.id AS id_asiento,
                        d.id AS id_documento,
                        a.total_debe AS monto_asiento,
                        CAST(a.tipo_ambiente AS VARCHAR(1)) AS amb_asiento,
                        CAST(d.tipo_ambiente AS VARCHAR(1)) AS amb_doc,
-                       d.fecha_emision AS fecha_documento
+                       d.{$colFecha} AS fecha_documento
                 FROM asientos_contables_cabecera a
                 JOIN {$tabla} d ON d.id = a.id_referencia_origen
                 WHERE a.id_empresa = :id_empresa
@@ -298,9 +531,10 @@ class AuditoriaContableRepository extends BaseRepository
                   AND a.modulo_origen = '{$origen}'
                   AND d.eliminado = false
                   AND CAST(d.tipo_ambiente AS VARCHAR(1)) = {$amb}
-                  AND CAST(a.tipo_ambiente AS VARCHAR(1)) <> CAST(d.tipo_ambiente AS VARCHAR(1))";
+                  AND CAST(a.tipo_ambiente AS VARCHAR(1)) <> CAST(d.tipo_ambiente AS VARCHAR(1))
+                  {$rango}";
 
-        $rows = $this->ejecutar($sql, [':id_empresa' => $idEmpresa]);
+        $rows = $this->ejecutar($sql, $params);
         $out = [];
         foreach ($rows as $r) {
             $out[] = $this->normalizar('ambiente_incoherente', $origen, (int) $r['id_documento'], (int) $r['id_asiento'],
@@ -312,13 +546,17 @@ class AuditoriaContableRepository extends BaseRepository
     }
 
     /** Más de un asiento vivo para el mismo documento (modulo_origen + id_referencia_origen). */
-    private function detectarDuplicados(int $idEmpresa, ?string $soloOrigen): array
+    private function detectarDuplicados(int $idEmpresa, ?string $soloOrigen,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
         $amb = self::AMB;
         $filtroOrigen = '';
         if ($soloOrigen !== null && $this->esOrigenValido($soloOrigen)) {
             $filtroOrigen = " AND modulo_origen = '{$soloOrigen}'";
         }
+
+        $params = [':id_empresa' => $idEmpresa];
+        $rango  = $this->sqlRangoFecha('fecha_asiento', $fechaDesde, $fechaHasta, $params);
 
         $sql = "SELECT modulo_origen,
                        id_referencia_origen AS id_documento,
@@ -333,10 +571,11 @@ class AuditoriaContableRepository extends BaseRepository
                   AND modulo_origen <> 'manual'
                   AND id_referencia_origen IS NOT NULL
                   {$filtroOrigen}
+                  {$rango}
                 GROUP BY modulo_origen, id_referencia_origen
                 HAVING COUNT(*) > 1";
 
-        $rows = $this->ejecutar($sql, [':id_empresa' => $idEmpresa]);
+        $rows = $this->ejecutar($sql, $params);
         $out = [];
         foreach ($rows as $r) {
             $out[] = $this->normalizar('duplicado', (string) $r['modulo_origen'], (int) $r['id_documento'], null,
@@ -347,13 +586,17 @@ class AuditoriaContableRepository extends BaseRepository
     }
 
     /** Cabecera descuadrada: total_debe <> total_haber. */
-    private function detectarDescuadrados(int $idEmpresa, ?string $soloOrigen): array
+    private function detectarDescuadrados(int $idEmpresa, ?string $soloOrigen,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
         $amb = self::AMB;
         $filtroOrigen = '';
         if ($soloOrigen !== null && $this->esOrigenValido($soloOrigen)) {
             $filtroOrigen = " AND modulo_origen = '{$soloOrigen}'";
         }
+
+        $params = [':id_empresa' => $idEmpresa];
+        $rango  = $this->sqlRangoFecha('fecha_asiento', $fechaDesde, $fechaHasta, $params);
 
         $sql = "SELECT id AS id_asiento,
                        modulo_origen,
@@ -366,9 +609,10 @@ class AuditoriaContableRepository extends BaseRepository
                   AND estado <> 'anulado'
                   AND CAST(tipo_ambiente AS VARCHAR(1)) = {$amb}
                   AND ROUND(total_debe, 2) <> ROUND(total_haber, 2)
-                  {$filtroOrigen}";
+                  {$filtroOrigen}
+                  {$rango}";
 
-        $rows = $this->ejecutar($sql, [':id_empresa' => $idEmpresa]);
+        $rows = $this->ejecutar($sql, $params);
         $out = [];
         foreach ($rows as $r) {
             $out[] = $this->normalizar('descuadrado', (string) ($r['modulo_origen'] ?: 'manual'),
@@ -383,13 +627,17 @@ class AuditoriaContableRepository extends BaseRepository
     }
 
     /** Suma del detalle distinta de los totales de la cabecera. */
-    private function detectarCabVsDetalle(int $idEmpresa, ?string $soloOrigen): array
+    private function detectarCabVsDetalle(int $idEmpresa, ?string $soloOrigen,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
         $amb = self::AMB;
         $filtroOrigen = '';
         if ($soloOrigen !== null && $this->esOrigenValido($soloOrigen)) {
             $filtroOrigen = " AND a.modulo_origen = '{$soloOrigen}'";
         }
+
+        $params = [':id_empresa' => $idEmpresa];
+        $rango  = $this->sqlRangoFecha('a.fecha_asiento', $fechaDesde, $fechaHasta, $params);
 
         $sql = "SELECT a.id AS id_asiento,
                        a.modulo_origen,
@@ -406,11 +654,12 @@ class AuditoriaContableRepository extends BaseRepository
                   AND a.estado <> 'anulado'
                   AND CAST(a.tipo_ambiente AS VARCHAR(1)) = {$amb}
                   {$filtroOrigen}
+                  {$rango}
                 GROUP BY a.id, a.modulo_origen, a.id_referencia_origen, a.total_debe, a.total_haber, a.fecha_asiento
                 HAVING ROUND(a.total_debe, 2)  <> ROUND(COALESCE(SUM(ad.debe), 0), 2)
                     OR ROUND(a.total_haber, 2) <> ROUND(COALESCE(SUM(ad.haber), 0), 2)";
 
-        $rows = $this->ejecutar($sql, [':id_empresa' => $idEmpresa]);
+        $rows = $this->ejecutar($sql, $params);
         $out = [];
         foreach ($rows as $r) {
             $out[] = $this->normalizar('cab_vs_detalle', (string) ($r['modulo_origen'] ?: 'manual'),
@@ -456,8 +705,14 @@ class AuditoriaContableRepository extends BaseRepository
      * Incidencias abiertas (no resueltas) del ambiente activo, indexadas por
      * clave lógica → id. Sirve al Service para diferenciar contra la detección.
      */
-    public function getIncidenciasAbiertas(int $idEmpresa, string $ambiente): array
+    public function getIncidenciasAbiertas(int $idEmpresa, string $ambiente,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
+        // Si la corrida se acota por fechas, solo se consideran las incidencias de ese
+        // rango: las de fuera no se detectan en esta pasada y NO deben darse por resueltas.
+        $params = [':id_empresa' => $idEmpresa, ':amb' => $ambiente];
+        $rango  = $this->sqlRangoFecha('fecha_documento', $fechaDesde, $fechaHasta, $params);
+
         $sql = "SELECT id, tipo_hallazgo, modulo_origen,
                        COALESCE(id_documento, 0) AS id_documento,
                        COALESCE(id_asiento, 0)   AS id_asiento
@@ -465,8 +720,9 @@ class AuditoriaContableRepository extends BaseRepository
                 WHERE id_empresa = :id_empresa
                   AND tipo_ambiente = :amb
                   AND eliminado = false
-                  AND estado_revision <> 'resuelta'";
-        $rows = $this->ejecutar($sql, [':id_empresa' => $idEmpresa, ':amb' => $ambiente]);
+                  AND estado_revision <> 'resuelta'
+                  {$rango}";
+        $rows = $this->ejecutar($sql, $params);
         $map = [];
         foreach ($rows as $r) {
             $clave = $r['tipo_hallazgo'] . '|' . $r['modulo_origen'] . '|'
@@ -581,13 +837,15 @@ class AuditoriaContableRepository extends BaseRepository
      */
     public function getListado(int $idEmpresa, string $ambiente, string $buscar = '',
         int $page = 1, int $perPage = 20, string $ordenCol = 'detectado_at',
-        string $ordenDir = 'DESC', ?int $idUsuarioFiltro = null): array
+        string $ordenDir = 'DESC', ?int $idUsuarioFiltro = null,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa, ':amb' => $ambiente];
 
         $where = $this->getBaseWhere($idEmpresa, 'i', $idUsuarioFiltro)
-               . " AND i.tipo_ambiente = :amb";
+               . " AND i.tipo_ambiente = :amb"
+               . $this->sqlRangoFecha('i.fecha_documento', $fechaDesde, $fechaHasta, $params);
 
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
@@ -721,13 +979,16 @@ class AuditoriaContableRepository extends BaseRepository
         if ($fechaDesde !== null) { $rango .= " AND fecha_asiento >= :fd"; $params[':fd'] = $fechaDesde; }
         if ($fechaHasta !== null) { $rango .= " AND fecha_asiento <= :fh"; $params[':fh'] = $fechaHasta; }
 
+        // Los documentos migrados desde MySQL nunca se regeneran: su contabilidad
+        // viene del histórico migrado (mismo criterio que SincronizadorAsientosService).
         $sql = "SELECT id, id_referencia_origen, fecha_asiento
                 FROM asientos_contables_cabecera
                 WHERE id_empresa = :id_empresa
                   AND eliminado = false
                   AND modulo_origen = '{$origen}'
                   AND CAST(tipo_ambiente AS VARCHAR(1)) = {$amb}
-                  {$rango}";
+                  {$rango}"
+             . $this->sqlExcluirMigrados($origen, 'id_referencia_origen');
         return $this->ejecutar($sql, $params);
     }
 
@@ -814,7 +1075,9 @@ class AuditoriaContableRepository extends BaseRepository
     public function desvincularDocumento(string $origen, int $idDocumento, int $idEmpresa): void
     {
         $tabla = $this->getTablaOrigen($origen);
-        if ($tabla === null) {
+        // Algunas cabeceras (rol_cabecera, consignaciones_facturas) no tienen id_asiento_contable:
+        // el vínculo vive solo en el asiento, así que no hay nada que desvincular.
+        if ($tabla === null || empty($this->origenes[$origen]['tiene_id_asiento'])) {
             return;
         }
         $sql = "UPDATE {$tabla} SET id_asiento_contable = NULL,

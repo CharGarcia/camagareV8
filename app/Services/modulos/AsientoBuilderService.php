@@ -722,7 +722,7 @@ class AsientoBuilderService
      * @param array  $reglas   Reglas base del concepto (incluye la regla de ajuste si existe).
      * @param string $etiqueta Texto para los mensajes de error ('ventas', 'compras', …).
      */
-    private function aplicarAjusteRedondeo(array $detalles, array $reglas, string $etiqueta): array
+    private function aplicarAjusteRedondeo(array $detalles, array $reglas, string $etiqueta, array $reglasSinCuenta = []): array
     {
         $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
         $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
@@ -734,6 +734,18 @@ class AsientoBuilderService
 
         // Descuadre mayor al tope = error real de configuración (cuenta/impuesto faltante).
         if (abs($diff) > self::TOPE_AJUSTE_REDONDEO) {
+            // Causa casi siempre real: una regla activa sin cuenta asignada se salta en
+            // silencio y su lado del asiento desaparece. Se nombra para que el mensaje
+            // diga qué hacer en vez de solo "Debe: $0.00, Haber: $905.50".
+            if (!empty($reglasSinCuenta)) {
+                throw new \Exception(
+                    "El asiento no cuadra (Debe: $" . number_format($totalDebe, 2) .
+                    ", Haber: $" . number_format($totalHaber, 2) . "). Falta asignar la cuenta contable de: " .
+                    implode(', ', array_unique($reglasSinCuenta)) .
+                    // Llaves obligatorias: «» son multibyte y PHP los absorbería en el nombre de la variable.
+                    ". Configúrela en Contabilidad → Configuración contable, concepto «{$etiqueta}»."
+                );
+            }
             throw new \Exception(
                 "El asiento no cuadra. Debe: $" . number_format($totalDebe, 2) .
                 ", Haber: $" . number_format($totalHaber, 2) .
@@ -918,14 +930,22 @@ class AsientoBuilderService
         // (ambas cuentas configuradas). Si falta una de las dos, se descarta el bloque de
         // costo para que el asiento comercial se genere igual y no descuadre.
         $costoLineas = [];
+        // Reglas activas sin cuenta configurada: se saltan, pero se recuerdan para poder
+        // decir QUÉ falta si el asiento termina descuadrado (antes solo se veía "Debe: $0").
+        $reglasSinCuenta = [];
 
         foreach ($reglas as $r) {
-            if (empty($r['id_cuenta'])) continue;
+            if (empty($r['id_cuenta'])) {
+                $reglasSinCuenta[] = $r['asiento_tipo_referencia'] ?? $r['concepto']
+                                  ?? $r['asiento_tipo_codigo'] ?? $r['codigo'] ?? 'sin nombre';
+                continue;
+            }
 
             $debe  = 0.00;
             $haber = 0.00;
             $valorMapeado = 0.00;
             $esLineaCosto = false;
+            $esTotalDocumento = false;
 
             $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']    ?? '');
             $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto']  ?? $r['referencia'] ?? '');
@@ -936,6 +956,10 @@ class AsientoBuilderService
             // Cuenta por cobrar → importe total (incluyendo impuestos)
             if (str_contains($codigo, 'PORCOBRAR') || str_contains($concepto, 'cobrar')) {
                 $valorMapeado = $importeTotal;
+                // Ancla del documento: esta línea DEBE valer el total de la factura. El resto
+                // del Debe (costo de ventas, descuento) no forma parte de ese total, por eso
+                // el cuadre contra la factura se mide aquí y no sobre el Debe total.
+                $esTotalDocumento = true;
             }
             // Subtotal / Ventas: neto si no hay desc, bruto si hay cuenta de desc
             elseif (str_contains($codigo, 'SUBTOTAL') || str_contains($concepto, 'subtotal')) {
@@ -1004,6 +1028,7 @@ class AsientoBuilderService
                     'debe'               => round($debe, 2),
                     'haber'              => round($haber, 2),
                     'referencia_detalle' => $r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '',
+                    'es_total_documento' => $esTotalDocumento,
                 ];
 
                 if ($esLineaCosto) {
@@ -1043,7 +1068,7 @@ class AsientoBuilderService
         // Cuadre exacto vía la cuenta de Ajuste por redondeo (la cuenta por cobrar = total del
         // documento es la fuente de verdad; Base + IVA pueden diferir por ±centavos al redondear
         // por separado). Un descuadre > 3 centavos = error real de configuración → excepción.
-        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'ventas');
+        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'ventas', $reglasSinCuenta);
 
         return $detalles;
     }

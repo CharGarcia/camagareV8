@@ -314,19 +314,26 @@ class ReciboVentaController extends BaseModuloController
                     );
                     $cabeceraDb = $asientoService->getDetalleAsiento($idAsiento, $idEmpresa);
                     $detallesDb = $cabeceraDb['detalles'] ?? [];
+                    // Ancla del cuadre: el asiento guardado viene de la BD sin la marca que pone
+                    // el builder, así que la línea de cuenta por cobrar se reconoce por su importe
+                    // (el builder la fija siempre en el total del documento).
+                    $totalDoc = round((float)($reciboDB['importe_total'] ?? 0), 2);
                     $detalles = [];
                     foreach ($detallesDb as $det) {
+                        $debe = (float)$det['debe'];
                         $detalles[] = [
                             'id_cuenta_contable'   => (int)$det['id_cuenta_contable'],
                             'cuenta_codigo'        => $det['codigo_cuenta'] ?? $det['cuenta_codigo'] ?? '',
                             'cuenta_nombre'        => $det['nombre_cuenta'] ?? $det['cuenta_nombre'] ?? '',
-                            'debe'                 => (float)$det['debe'],
+                            'debe'                 => $debe,
                             'haber'                => (float)$det['haber'],
                             'referencia_detalle'   => $det['referencia_detalle'] ?? '',
                             'documento_referencia' => $det['documento_referencia'] ?? '',
+                            'es_total_documento'   => $totalDoc > 0 && abs(round($debe, 2) - $totalDoc) < 0.005,
                         ];
                     }
-                    echo json_encode(['ok' => true, 'data' => $detalles, 'detalles' => $detalles, 'es_guardado' => true]);
+                    echo json_encode(['ok' => true, 'data' => $detalles, 'detalles' => $detalles,
+                                      'es_guardado' => true, 'total_documento' => $totalDoc]);
                     exit;
                 }
             }
@@ -349,37 +356,6 @@ class ReciboVentaController extends BaseModuloController
 
             $detallesSugeridos = $this->service->obtenerAsientoSugerido($idEmpresa, $normalizedData);
             echo json_encode(['ok' => true, 'data' => $detallesSugeridos, 'detalles' => $detallesSugeridos, 'es_guardado' => false]);
-        } catch (\Throwable $e) {
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
-        exit;
-    }
-
-    public function generarAsientoContableAjax(): void
-    {
-        header('Content-Type: application/json');
-
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idUsuario = (int) $_SESSION['id_usuario'];
-        $idRecibo  = (int) ($_POST['id_venta'] ?? $_POST['id_recibo'] ?? 0);
-
-        if ($idRecibo <= 0) {
-            echo json_encode(['ok' => false, 'error' => 'ID de recibo inválido.']);
-            exit;
-        }
-
-        try {
-            $data = $this->service->getPorId($idRecibo, $idEmpresa);
-            if (!$data) {
-                throw new \Exception('Recibo no encontrado.');
-            }
-            $data['id_empresa'] = $idEmpresa;
-            $data['id_usuario'] = $idUsuario;
-
-            $numRecibo = ($data['establecimiento'] ?? '001') . '-' . ($data['punto_emision'] ?? '001') . '-' . str_pad((string)($data['secuencial'] ?? 0), 9, '0', STR_PAD_LEFT);
-            $this->service->procesarAsientoContable($idRecibo, $data, $numRecibo);
-
-            echo json_encode(['ok' => true, 'mensaje' => 'Asiento generado/actualizado con éxito.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

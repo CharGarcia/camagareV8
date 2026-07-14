@@ -65,8 +65,15 @@ class AuditoriaContableController extends BaseModuloController
         'liquidacion_compra' => 'Liquidación de compra',
         'nota_credito'       => 'Nota de crédito',
         'retencion_venta'    => 'Retención en venta',
+        'retencion_compra'   => 'Retención en compra',
         'ingreso'            => 'Ingreso',
         'egreso'             => 'Egreso',
+        'consignacion_venta' => 'Consignación en venta',
+        'recibo_venta'       => 'Recibo de venta',
+        'retorno_cv'         => 'Retorno de CV',
+        'cambio_producto_cv' => 'Cambio de producto',
+        'FACTURACION_CV'     => 'Facturación de consignación',
+        'nomina'             => 'Rol de pagos (nómina)',
     ];
 
     private const REVISION_LABEL = [
@@ -99,10 +106,22 @@ class AuditoriaContableController extends BaseModuloController
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
         $perPage  = 20;
 
+        // Al entrar al módulo (sin parámetros en la URL) se acota por defecto al año en curso:
+        // del 1 de enero a hoy. Si el usuario manda los parámetros —aunque vengan vacíos porque
+        // limpió las fechas— se respeta su elección.
+        if (!isset($_GET['fecha_desde']) && !isset($_GET['fecha_hasta'])) {
+            $fechaDesde = date('Y-01-01');
+            $fechaHasta = date('Y-m-d');
+        } else {
+            $fechaDesde = trim($_GET['fecha_desde'] ?? '') ?: null;
+            $fechaHasta = trim($_GET['fecha_hasta'] ?? '') ?: null;
+        }
+
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir,
+            $idUsuarioFiltro, $fechaDesde, $fechaHasta);
         $totalPages = (int) ceil(($result['total'] ?: 0) / $perPage);
 
         $this->viewWithLayout('layouts.main', 'modulos/auditoria_contable/index', [
@@ -116,6 +135,8 @@ class AuditoriaContableController extends BaseModuloController
             'from'        => $result['total'] > 0 ? (($page - 1) * $perPage) + 1 : 0,
             'to'          => $result['total'] > 0 ? min($page * $perPage, $result['total']) : 0,
             'buscar'      => $buscar,
+            'fechaDesde'  => $fechaDesde,
+            'fechaHasta'  => $fechaHasta,
             'ordenCol'    => $ordenCol,
             'ordenDir'    => $ordenDir,
             'vistaConfig' => $prefsVista,
@@ -123,6 +144,7 @@ class AuditoriaContableController extends BaseModuloController
             'rutaModulo'  => $this->getRutaModulo(),
             'resumen'     => $this->service->getResumen($idEmpresa),
             'origenes'    => $this->service->getOrigenes(),
+            'origenesRegenerables' => $this->service->getOrigenesRegenerables(),
             'origenLabels'=> self::ORIGEN_LABEL,
             'tipoLabels'  => self::TIPO_LABEL,
             'corridas'    => $this->service->getCorridas($idEmpresa, 20),
@@ -147,10 +169,14 @@ class AuditoriaContableController extends BaseModuloController
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
         $perPage  = 20;
 
+        $fechaDesde = trim($_GET['fecha_desde'] ?? $_POST['fecha_desde'] ?? '') ?: null;
+        $fechaHasta = trim($_GET['fecha_hasta'] ?? $_POST['fecha_hasta'] ?? '') ?: null;
+
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir,
+            $idUsuarioFiltro, $fechaDesde, $fechaHasta);
         $total      = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
 
@@ -231,7 +257,10 @@ class AuditoriaContableController extends BaseModuloController
         if ($tipo === 'ambiente_incoherente' && !empty($perm['actualizar'])) {
             $btns[] = '<button class="btn btn-sm btn-outline-info js-aud-ambiente" title="Corregir ambiente"><i class="bi bi-arrow-repeat"></i></button>';
         }
-        if (in_array($tipo, ['monto_no_coincide', 'descuadrado', 'cab_vs_detalle'], true) && !empty($perm['eliminar'])) {
+        // Regenerar solo donde el módulo de origen sabe rehacer su asiento.
+        if (in_array($tipo, ['monto_no_coincide', 'descuadrado', 'cab_vs_detalle'], true)
+            && !empty($perm['eliminar'])
+            && $this->service->esOrigenRegenerable((string) $r['modulo_origen'])) {
             $btns[] = '<button class="btn btn-sm btn-outline-danger js-aud-regen-doc" title="Regenerar este asiento"><i class="bi bi-arrow-clockwise"></i></button>';
         }
         if (!empty($perm['actualizar'])) {
@@ -250,12 +279,14 @@ class AuditoriaContableController extends BaseModuloController
         $this->requireLeer();
         header('Content-Type: application/json');
 
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idUsuario = (int) $_SESSION['id_usuario'];
-        $origen    = trim($_POST['origen'] ?? '') ?: null;
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $idUsuario  = (int) $_SESSION['id_usuario'];
+        $origen     = trim($_POST['origen'] ?? '') ?: null;
+        $fechaDesde = trim($_POST['fecha_desde'] ?? '') ?: null;
+        $fechaHasta = trim($_POST['fecha_hasta'] ?? '') ?: null;
 
         try {
-            $res = $this->service->ejecutarAuditoria($idEmpresa, $idUsuario, $origen);
+            $res = $this->service->ejecutarAuditoria($idEmpresa, $idUsuario, $origen, $fechaDesde, $fechaHasta);
             echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => 'Auditoría ejecutada.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

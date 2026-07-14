@@ -9,11 +9,14 @@
 /** @var int $totalPages */
 /** @var int $perPage */
 /** @var string $buscar */
+/** @var ?string $fechaDesde */
+/** @var ?string $fechaHasta */
 /** @var string $ordenCol */
 /** @var string $ordenDir */
 /** @var array $vistaConfig */
 /** @var array $resumen */
 /** @var array $origenes */
+/** @var array $origenesRegenerables */
 /** @var array $origenLabels */
 /** @var array $tipoLabels */
 /** @var array $corridas */
@@ -31,6 +34,7 @@ $ordenDir   = $ordenDir ?? 'DESC';
 $buscar     = $buscar ?? '';
 $resumen    = $resumen ?? [];
 $origenes   = $origenes ?? [];
+$origenesRegenerables = $origenesRegenerables ?? [];
 $origenLabels = $origenLabels ?? [];
 $tipoLabels   = $tipoLabels ?? [];
 $corridas     = $corridas ?? [];
@@ -61,6 +65,17 @@ $totalIncidencias = array_sum($resumen);
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-clipboard-check me-1 text-primary"></i> <?= htmlspecialchars($titulo) ?></h5>
     <div class="d-flex gap-2 align-items-center flex-wrap">
+        <div class="d-flex align-items-center gap-1">
+            <label class="small text-muted mb-0">Desde</label>
+            <input type="date" id="audFechaDesde" class="form-control form-control-sm" style="width:auto"
+                   value="<?= htmlspecialchars((string) ($fechaDesde ?? '')) ?>" title="Fecha desde">
+            <label class="small text-muted mb-0 ms-1">Hasta</label>
+            <input type="date" id="audFechaHasta" class="form-control form-control-sm" style="width:auto"
+                   value="<?= htmlspecialchars((string) ($fechaHasta ?? '')) ?>" title="Fecha hasta">
+            <button type="button" id="audLimpiarFechas" class="btn btn-sm btn-outline-secondary" title="Limpiar fechas">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
         <select id="audOrigenAuditar" class="form-select form-select-sm" style="width:auto" title="Limitar a un origen">
             <option value="">Todos los orígenes</option>
             <?php foreach ($origenes as $o): ?>
@@ -207,7 +222,9 @@ $totalIncidencias = array_sum($resumen);
                                     <?php if ($tipo === 'ambiente_incoherente' && !empty($perm['actualizar'])): ?>
                                         <button class="btn btn-sm btn-outline-info js-aud-ambiente" title="Corregir ambiente"><i class="bi bi-arrow-repeat"></i></button>
                                     <?php endif; ?>
-                                    <?php if (in_array($tipo, ['monto_no_coincide','descuadrado','cab_vs_detalle'], true) && !empty($perm['eliminar'])): ?>
+                                    <?php if (in_array($tipo, ['monto_no_coincide','descuadrado','cab_vs_detalle'], true)
+                                              && !empty($perm['eliminar'])
+                                              && in_array($origen, ($origenesRegenerables ?? []), true)): ?>
                                         <button class="btn btn-sm btn-outline-danger js-aud-regen-doc" title="Regenerar este asiento"><i class="bi bi-arrow-clockwise"></i></button>
                                     <?php endif; ?>
                                     <?php if (!empty($perm['actualizar'])): ?>
@@ -268,10 +285,11 @@ $totalIncidencias = array_sum($resumen);
                 <div class="mb-2">
                     <label class="form-label small fw-semibold">Origen</label>
                     <select id="regOrigen" class="form-select form-select-sm">
-                        <?php foreach ($origenes as $o): ?>
+                        <?php foreach (($origenesRegenerables ?? $origenes) as $o): ?>
                             <option value="<?= htmlspecialchars($o) ?>"><?= htmlspecialchars($origenLabels[$o] ?? $o) ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <div class="form-text small">Solo se listan los módulos que saben rehacer su asiento.</div>
                 </div>
                 <div class="row g-2">
                     <div class="col">

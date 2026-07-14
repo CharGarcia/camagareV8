@@ -209,21 +209,37 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
             .then(r => r.json())
             .then(json => {
                 box.remove();
-                if (json && json.success && Array.isArray(json.warnings) && json.warnings.length) {
-                    const items = json.warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('');
-                    warnBox.innerHTML =
-                        `<div class="alert alert-warning alert-dismissible fade show shadow-sm mb-3" role="alert">
-                            <strong><i class="bi bi-exclamation-triangle-fill me-2"></i> Atención:</strong>
-                            <ul class="mb-0 mt-2">${items}</ul>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>`;
-                } else if (json && !json.success) {
-                    warnBox.innerHTML =
+                let html = '';
+
+                if (json && !json.success) {
+                    // Falló la corrida completa (no se pudo ni ejecutar la generación).
+                    html =
                         `<div class="alert alert-danger alert-dismissible fade show shadow-sm mb-3" role="alert">
                             <i class="bi bi-x-octagon-fill me-2"></i> No se pudieron generar los asientos pendientes: ${escapeHtml(json.error || 'error')}
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>`;
+                } else if (json && json.success) {
+                    // Asientos generados en esta corrida (aviso informativo).
+                    if (json.generados > 0) {
+                        html +=
+                            `<div class="alert alert-success alert-dismissible fade show shadow-sm mb-3" role="alert">
+                                <i class="bi bi-check-circle-fill me-2"></i> Se generaron <strong>${json.generados}</strong> asiento(s) contable(s) que estaban pendientes.
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>`;
+                    }
+                    // Pendientes con error / avisos de configuración: incluyen el motivo real.
+                    if (Array.isArray(json.warnings) && json.warnings.length) {
+                        const items = json.warnings.map(w => `<li class="mb-1">${escapeHtml(w)}</li>`).join('');
+                        html +=
+                            `<div class="alert alert-warning alert-dismissible fade show shadow-sm mb-3" role="alert">
+                                <strong><i class="bi bi-exclamation-triangle-fill me-2"></i> Asientos pendientes o con error:</strong>
+                                <ul class="mb-0 mt-2">${items}</ul>
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>`;
+                    }
                 }
+
+                warnBox.innerHTML = html;
             })
             .catch(() => {
                 const sp = box.querySelector('.spinner-border'); if (sp) sp.remove();

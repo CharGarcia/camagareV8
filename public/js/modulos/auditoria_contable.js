@@ -15,6 +15,14 @@
         buscar: '',
     };
 
+    /** Rango de fechas activo en la barra superior (aplica al listado y a la auditoría). */
+    function rangoFechas() {
+        return {
+            fecha_desde: document.getElementById('audFechaDesde')?.value || '',
+            fecha_hasta: document.getElementById('audFechaHasta')?.value || '',
+        };
+    }
+
     // ---- Helpers HTTP ----
     function postForm(accion, data) {
         const body = new URLSearchParams(data || {});
@@ -45,7 +53,10 @@
     function fetchSearch(page) {
         if (page) state.page = page;
         const tbody = document.getElementById('audTbody');
-        getJSON('searchAjax', { b: state.buscar, page: state.page, sort: state.sort, dir: state.dir })
+        getJSON('searchAjax', Object.assign(
+            { b: state.buscar, page: state.page, sort: state.sort, dir: state.dir },
+            rangoFechas()
+        ))
             .then((res) => {
                 if (!res.ok) { err(res.error); return; }
                 tbody.innerHTML = res.html;
@@ -74,7 +85,7 @@
         const btn = document.getElementById('btnEjecutarAuditoria');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Ejecutando…';
-        postForm('ejecutarAuditoriaAjax', { origen })
+        postForm('ejecutarAuditoriaAjax', Object.assign({ origen }, rangoFechas()))
             .then((res) => {
                 if (!res.ok) { err(res.error); return; }
                 const d = res.data || {};
@@ -233,6 +244,17 @@
             clearTimeout(t);
             state.buscar = e.target.value.trim();
             t = setTimeout(() => fetchSearch(1), 350);
+        });
+
+        // Filtro por fechas (aplica al listado; también acota la auditoría al ejecutarla)
+        document.getElementById('audFechaDesde')?.addEventListener('change', () => fetchSearch(1));
+        document.getElementById('audFechaHasta')?.addEventListener('change', () => fetchSearch(1));
+        document.getElementById('audLimpiarFechas')?.addEventListener('click', () => {
+            const d = document.getElementById('audFechaDesde');
+            const h = document.getElementById('audFechaHasta');
+            if (d) d.value = '';
+            if (h) h.value = '';
+            fetchSearch(1);
         });
 
         // Ordenamiento por cabecera

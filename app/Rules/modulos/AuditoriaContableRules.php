@@ -41,6 +41,16 @@ class AuditoriaContableRules
         }
     }
 
+    /** Valida un rango de fechas suelto (filtro del listado / corrida acotada). */
+    public function validarRango(?string $fechaDesde, ?string $fechaHasta): void
+    {
+        $d = $this->parsearFecha($fechaDesde, 'fecha desde');
+        $h = $this->parsearFecha($fechaHasta, 'fecha hasta');
+        if ($d !== null && $h !== null && $d > $h) {
+            throw new \Exception('La "fecha desde" no puede ser mayor que la "fecha hasta".');
+        }
+    }
+
     /** Valida un origen contra la whitelist (para acciones por fila). */
     public function validarOrigen(string $origen, array $origenesValidos): void
     {

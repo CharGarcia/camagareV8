@@ -790,13 +790,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                 <th class="ps-3 py-2 small fw-bold text-muted" style="width: 45%;">Cuenta Contable</th>
                                                 <th class="py-2 small fw-bold text-muted text-end pe-3" style="width: 20%;">D&eacute;bito / Debe</th>
                                                 <th class="py-2 small fw-bold text-muted text-end pe-3" style="width: 20%;">Cr&eacute;dito / Haber</th>
-                                                <th class="py-2 small fw-bold text-muted" style="width: 15%;">Referencia</th>
-                                                <th style="width: 40px;"></th>
+                                                <th class="py-2 small fw-bold text-muted pe-3" style="width: 15%;">Referencia</th>
                                             </tr>
                                         </thead>
                                         <tbody id="tbody-asiento-contable">
                                             <tr>
-                                                <td colspan="5" class="text-center py-4 text-muted">Cargando asiento contable...</td>
+                                                <td colspan="4" class="text-center py-4 text-muted">Cargando asiento contable...</td>
                                             </tr>
                                         </tbody>
                                         <tfoot class="bg-light fw-bold border-top sticky-bottom">
@@ -804,10 +803,22 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                 <td class="text-end py-2">Totales:</td>
                                                 <td class="text-end pe-3 py-2 text-primary" id="lbl-asiento-total-debe">0.00</td>
                                                 <td class="text-end pe-3 py-2 text-primary" id="lbl-asiento-total-haber">0.00</td>
-                                                <td colspan="2" class="py-2">
+                                                <td class="py-2">
                                                     <div class="d-flex align-items-center gap-2 justify-content-end pe-3">
                                                         <span class="x-small text-muted">Diferencia: <span id="lbl-asiento-diferencia">0.00</span></span>
                                                         <span id="badge-asiento-cuadre" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2">Cuadrado</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <!-- Cuadre contra la factura: se mide sobre la línea de cuenta por cobrar,
+                                                 no sobre el Debe total, porque el Debe también lleva el costo de ventas
+                                                 y el descuento, que no forman parte del total del documento. -->
+                                            <tr class="border-top">
+                                                <td class="text-end py-2 fw-normal small text-muted">Total de la factura:</td>
+                                                <td class="text-end pe-3 py-2 fw-normal" id="lbl-asiento-total-factura">0.00</td>
+                                                <td colspan="2" class="py-2">
+                                                    <div class="d-flex align-items-center justify-content-end pe-3">
+                                                        <span class="x-small fw-normal" id="lbl-asiento-cuadre-factura"></span>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -815,9 +826,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     </table>
                                 </div>
                                 <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center">
-                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="fvAgregarLineaAsiento()" id="btn-agregar-asiento-linea">
-                                        <i class="bi bi-plus-circle me-1"></i> Agregar línea
-                                    </button>
+                                    <span class="small text-muted ps-2">
+                                        <i class="bi bi-info-circle me-1"></i> El asiento lo calcula el sistema a partir de la factura.
+                                    </span>
                                     <div class="small fw-bold text-muted pe-3">
                                         Líneas: <span id="fv-count-asiento-lineas">0</span>
                                     </div>
@@ -1766,26 +1777,10 @@ $totalPages = $totalPagesOriginal;
             detalles,
             pagos,
             info_adicional: infoAdicional,
-            asiento_detalles: typeof window.fvCapturarDetallesAsiento === 'function' ? window.fvCapturarDetallesAsiento() : []
         };
-
-        // Advertir si el asiento fue editado manualmente y está descuadrado
-        if (window.ASIENTO_MANUAL) {
-            const badgeCuadre = document.getElementById('badge-asiento-cuadre');
-            const estaDescuadrado = badgeCuadre && badgeCuadre.textContent === 'Descuadrado';
-            if (estaDescuadrado) {
-                const confirmar = await Swal.fire({
-                    icon: 'warning',
-                    title: 'Asiento contable descuadrado',
-                    text: 'El asiento contable está descuadrado (Debe ≠ Haber). Si guarda, el asiento no se registrará. ¿Desea continuar de todos modos?',
-                    showCancelButton: true,
-                    confirmButtonColor: '#d33',
-                    confirmButtonText: 'Sí, guardar sin asiento',
-                    cancelButtonText: 'Cancelar y corregir',
-                });
-                if (!confirmar.isConfirmed) return;
-            }
-        }
+        // Nota: no se envía 'asiento_detalles'. El asiento lo regenera siempre el backend
+        // desde la factura (procesarAsientoContable); el que se ve en la pestaña es de solo
+        // lectura. Antes se enviaba y se descartaba en silencio.
 
         // “€”€ Enviar “€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
         btn.disabled = true;
@@ -1837,25 +1832,18 @@ $totalPages = $totalPagesOriginal;
                 }
 
                 // Aviso de asiento pendiente o confirmación breve (no bloqueante).
-                if (json.asiento_warning) {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Factura guardada — asiento pendiente',
-                        html: `La factura se guardó correctamente, pero el asiento contable no pudo generarse:<br><br><small class="text-muted">${json.asiento_warning}</small>`,
-                        confirmButtonText: 'Entendido',
-                        target: document.getElementById('modalNuevaFactura')
-                    });
-                } else {
-                    Swal.fire({
-                        toast: true,
-                        position: 'top-end',
-                        icon: 'success',
-                        title: esActualizacion ? 'Factura actualizada' : 'Factura guardada',
-                        showConfirmButton: false,
-                        timer: 2500,
-                        timerProgressBar: true
-                    });
-                }
+                // El asiento es un efecto automático del documento y no se le reporta al
+                // usuario: si falla, queda en el log del servidor (json.asiento_warning) y la
+                // pestaña Asiento contable lo muestra como "Sin asiento contable".
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'success',
+                    title: esActualizacion ? 'Factura actualizada con éxito' : 'Factura guardada con éxito',
+                    showConfirmButton: false,
+                    timer: 2500,
+                    timerProgressBar: true
+                });
 
                 // Mantener el botón habilitado para seguir editando/guardando.
                 btn.disabled = false;
@@ -2402,7 +2390,6 @@ $totalPages = $totalPagesOriginal;
     }
 
     function fvResetearModal() {
-        window.ASIENTO_MANUAL = false;
         // Quitar pestañas de módulos relacionados de la factura anterior.
         fvLimpiarPestanhasRelacionadas();
         document.getElementById('formFacturaModal').reset();
@@ -5746,8 +5733,6 @@ $totalPages = $totalPagesOriginal;
     }
 
     // â”€â”€ GESTIÃ”N DE ASIENTO CONTABLE INTERACTIVO Y EMULADOR EN CALIENTE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    window.ASIENTO_MANUAL = false;
-
     function debounce(func, wait) {
         let timeout;
         return function(...args) {
@@ -5759,141 +5744,71 @@ $totalPages = $totalPagesOriginal;
     // Regenera el asiento con los valores actuales de la factura (debounced para no spamear).
     // Se llama desde calcTotales() cada vez que cambian productos, precios o cantidades.
     window.fvDebouncedRecalcularAsiento = debounce(function() {
-        window.ASIENTO_MANUAL = false;
         window.fvCargarAsiento(window.FV_ID_ACTIVO || 0, false, true);
     }, 600);
 
-    window.fvAgregarLineaAsiento = function(idCuenta = '', codigo = '', nombre = '', debe = 0, haber = 0, referencia = '') {
+    // El asiento lo calcula SIEMPRE el sistema a partir de la factura: esta pestaña es de
+    // solo lectura. Antes se podía editar, pero el backend regenera el asiento al guardar
+    // (procesarAsientoContable) y descartaba lo editado, así que la edición se retiró.
+    window.fvRenderLineaAsiento = function(idCuenta = '', codigo = '', nombre = '', debe = 0, haber = 0, referencia = '', esTotalDocumento = false) {
         const tbody = document.getElementById('tbody-asiento-contable');
         if (!tbody) return;
 
-        // Remover fila de "Cargando" o "Sin datos"
-        if (tbody.querySelector('td[colspan="4"]')) {
-            tbody.innerHTML = '';
-        }
+        const fmt = v => (parseFloat(v || 0) || 0).toFixed(2);
 
         const tr = document.createElement('tr');
         tr.className = 'asiento-linea-row';
-        tr.innerHTML = `
-            <td class="ps-3 position-relative align-middle p-0">
-                <input type="text" class="form-control border-0 bg-transparent input-cuenta-nombre" placeholder="Escriba código o cuenta contable..." value="${nombre ? (codigo ? codigo + ' - ' + nombre : nombre) : ''}" style="padding:0 4px;height:20px;font-size:0.78rem;">
-                <input type="hidden" class="input-id-cuenta-contable" value="${idCuenta}">
-                <div class="list-group position-absolute w-100 shadow rounded-3 d-none select-cuenta-dropdown" style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
-            </td>
-            <td class="align-middle p-0"><input type="number" step="0.01" class="form-control text-end border-0 bg-transparent fw-medium input-debe text-primary" placeholder="0.00" value="${parseFloat(debe || 0).toFixed(2) === '0.00' ? '' : parseFloat(debe || 0).toFixed(2)}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
-            <td class="align-middle p-0"><input type="number" step="0.01" class="form-control text-end border-0 bg-transparent fw-medium input-haber text-primary" placeholder="0.00" value="${parseFloat(haber || 0).toFixed(2) === '0.00' ? '' : parseFloat(haber || 0).toFixed(2)}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
-            <td class="align-middle p-0"><input type="text" class="form-control border-0 bg-transparent input-referencia text-muted fst-italic" placeholder="Ej: Factura # 001-001-000000001" value="${referencia}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
-            <td class="text-center p-0 align-middle" style="width: 40px;">
-                <button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="this.closest('tr').remove(); window.ASIENTO_MANUAL = true; window.fvRecalcularTotalesAsiento();" title="Eliminar línea">
-                    <i class="bi bi-trash3 fs-6"></i>
-                </button>
-            </td>
-        `;
+        tr.dataset.debe  = fmt(debe);
+        tr.dataset.haber = fmt(haber);
+        if (esTotalDocumento) tr.dataset.totalDocumento = '1';
+
+        const tdCuenta = document.createElement('td');
+        tdCuenta.className = 'ps-3 align-middle small' + (nombre ? '' : ' text-danger fst-italic');
+        tdCuenta.textContent = nombre ? (codigo ? codigo + ' - ' + nombre : nombre) : '(cuenta sin configurar)';
+
+        const tdDebe = document.createElement('td');
+        tdDebe.className = 'text-end pe-3 align-middle small text-primary fw-medium';
+        tdDebe.textContent = parseFloat(debe || 0) ? fmt(debe) : '';
+
+        const tdHaber = document.createElement('td');
+        tdHaber.className = 'text-end pe-3 align-middle small text-primary fw-medium';
+        tdHaber.textContent = parseFloat(haber || 0) ? fmt(haber) : '';
+
+        const tdRef = document.createElement('td');
+        tdRef.className = 'pe-3 align-middle small text-muted fst-italic';
+        tdRef.textContent = referencia || '';
+
+        tr.append(tdCuenta, tdDebe, tdHaber, tdRef);
         tbody.appendChild(tr);
-
-        const inpCuenta = tr.querySelector('.input-cuenta-nombre');
-        const hiddenCuenta = tr.querySelector('.input-id-cuenta-contable');
-        const dropdown = tr.querySelector('.select-cuenta-dropdown');
-        const inpDebe = tr.querySelector('.input-debe');
-        const inpHaber = tr.querySelector('.input-haber');
-        const inpRef = tr.querySelector('.input-referencia');
-
-        // Autocompletado predictivo para cuentas de movimiento (nivel 5)
-        inpCuenta.addEventListener('input', debounce(async (e) => {
-            const q = e.target.value.trim();
-            if (q.length < 2) {
-                dropdown.classList.add('d-none');
-                return;
-            }
-
-            try {
-                const resp = await fetch(`${B_URL}/modulos/plan-cuentas/searchAjaxCuentas?q=${encodeURIComponent(q)}`);
-                const json = await resp.json();
-
-                dropdown.innerHTML = '';
-                if (json.data && json.data.length > 0) {
-                    json.data.forEach(cuenta => {
-                        const btn = document.createElement('button');
-                        btn.type = 'button';
-                        btn.className = 'list-group-item list-group-item-action py-1 px-2 border-0 small text-start';
-                        btn.innerHTML = `<code class="text-secondary me-2">${cuenta.codigo}</code> <span class="fw-medium">${cuenta.nombre}</span>`;
-                        btn.onmousedown = (evt) => {
-                            evt.preventDefault();
-                            hiddenCuenta.value = cuenta.id;
-                            inpCuenta.value = `${cuenta.codigo} - ${cuenta.nombre}`;
-                            dropdown.classList.add('d-none');
-                            window.ASIENTO_MANUAL = true;
-                        };
-                        dropdown.appendChild(btn);
-                    });
-                    dropdown.classList.remove('d-none');
-                } else {
-                    dropdown.innerHTML = '<div class="list-group-item small text-muted text-center py-2">No se encontraron cuentas contables</div>';
-                    dropdown.classList.remove('d-none');
-                }
-            } catch (err) {
-                console.error('Error al autocompletar cuentas:', err);
-            }
-        }, 250));
-
-        // Cerrar dropdown al perder el foco
-        inpCuenta.addEventListener('blur', () => {
-            setTimeout(() => dropdown.classList.add('d-none'), 200);
-        });
-
-        // Event listeners para cambios manuales en montos y referencias
-        inpDebe.addEventListener('input', () => {
-            if (parseFloat(inpDebe.value) > 0) {
-                inpHaber.value = '';
-            }
-            window.ASIENTO_MANUAL = true;
-            fvRecalcularTotalesAsiento();
-        });
-
-        inpHaber.addEventListener('input', () => {
-            if (parseFloat(inpHaber.value) > 0) {
-                inpDebe.value = '';
-            }
-            window.ASIENTO_MANUAL = true;
-            fvRecalcularTotalesAsiento();
-        });
-
-        inpRef.addEventListener('input', () => {
-            window.ASIENTO_MANUAL = true;
-        });
-
-        fvRecalcularTotalesAsiento();
     };
 
     window.fvRecalcularTotalesAsiento = function() {
-        let totalDebe = 0;
+        let totalDebe  = 0;
         let totalHaber = 0;
+        let debeAncla  = null;   // línea de cuenta por cobrar = total del documento
 
-        document.querySelectorAll('.asiento-linea-row').forEach(tr => {
-            const debe = parseFloat(tr.querySelector('.input-debe').value) || 0;
-            const haber = parseFloat(tr.querySelector('.input-haber').value) || 0;
-            totalDebe += debe;
+        const filas = document.querySelectorAll('.asiento-linea-row');
+        filas.forEach(tr => {
+            const debe  = parseFloat(tr.dataset.debe)  || 0;
+            const haber = parseFloat(tr.dataset.haber) || 0;
+            totalDebe  += debe;
             totalHaber += haber;
+            if (tr.dataset.totalDocumento === '1') debeAncla = (debeAncla || 0) + debe;
         });
 
-        const lblDebe = document.getElementById('lbl-asiento-total-debe');
-        const lblHaber = document.getElementById('lbl-asiento-total-haber');
+        const lblDebe       = document.getElementById('lbl-asiento-total-debe');
+        const lblHaber      = document.getElementById('lbl-asiento-total-haber');
         const lblDiferencia = document.getElementById('lbl-asiento-diferencia');
-        const badgeCuadre = document.getElementById('badge-asiento-cuadre');
+        const badgeCuadre   = document.getElementById('badge-asiento-cuadre');
 
-        if (lblDebe) lblDebe.textContent = totalDebe.toFixed(2);
+        if (lblDebe)  lblDebe.textContent  = totalDebe.toFixed(2);
         if (lblHaber) lblHaber.textContent = totalHaber.toFixed(2);
 
         const diff = Math.abs(totalDebe - totalHaber);
         if (lblDiferencia) {
             lblDiferencia.textContent = diff.toFixed(2);
-            if (diff >= 0.005) {
-                lblDiferencia.classList.add('text-danger');
-                lblDiferencia.classList.remove('text-success');
-            } else {
-                lblDiferencia.classList.remove('text-danger');
-                lblDiferencia.classList.add('text-success');
-            }
+            lblDiferencia.classList.toggle('text-danger',  diff >= 0.005);
+            lblDiferencia.classList.toggle('text-success', diff <  0.005);
         }
 
         if (badgeCuadre) {
@@ -5906,18 +5821,40 @@ $totalPages = $totalPagesOriginal;
             }
         }
 
+        // Cuadre contra el total de la factura. Se mide sobre la línea de cuenta por cobrar,
+        // que es la que el sistema fija en el total del documento. El Debe total NO sirve
+        // como referencia: también incluye el costo de ventas y el descuento.
+        const totalFactura  = parseFloat(document.getElementById('m-lbl-total')?.textContent) || 0;
+        const lblTotalFact  = document.getElementById('lbl-asiento-total-factura');
+        const lblCuadreFact = document.getElementById('lbl-asiento-cuadre-factura');
+
+        if (lblTotalFact) lblTotalFact.textContent = totalFactura.toFixed(2);
+
+        if (lblCuadreFact) {
+            if (filas.length === 0) {
+                lblCuadreFact.textContent = '';
+                lblCuadreFact.className = 'x-small fw-normal';
+            } else if (debeAncla === null) {
+                lblCuadreFact.textContent = 'El asiento no tiene la línea de cuenta por cobrar';
+                lblCuadreFact.className = 'x-small fw-bold text-danger';
+            } else if (Math.abs(debeAncla - totalFactura) < 0.005) {
+                lblCuadreFact.textContent = 'Coincide con la cuenta por cobrar del asiento';
+                lblCuadreFact.className = 'x-small fw-normal text-success';
+            } else {
+                lblCuadreFact.textContent = 'Cuenta por cobrar del asiento: ' + debeAncla.toFixed(2)
+                                          + ' · diferencia: ' + Math.abs(debeAncla - totalFactura).toFixed(2);
+                lblCuadreFact.className = 'x-small fw-bold text-danger';
+            }
+        }
+
         const countLineas = document.getElementById('fv-count-asiento-lineas');
-        if (countLineas) countLineas.textContent = document.querySelectorAll('.asiento-linea-row').length;
+        if (countLineas) countLineas.textContent = filas.length;
     };
 
 
     window.fvCargarAsiento = async function(idVenta = 0, sugerir = false, forceRecalculate = false) {
         const tbody = document.getElementById('tbody-asiento-contable');
         if (!tbody) return;
-
-        // Si ya está marcado como manual por edición del usuario, respetar y no sobreescribir.
-        // forceRecalculate=true se usa cuando cambian valores de la factura: siempre regenerar.
-        if (window.ASIENTO_MANUAL && !forceRecalculate) return;
 
         try {
             // Hot values de la factura para propuesta en caliente
@@ -5960,47 +5897,28 @@ $totalPages = $totalPagesOriginal;
             if (json.ok && json.detalles && json.detalles.length > 0) {
                 tbody.innerHTML = '';
                 json.detalles.forEach(det => {
-                    window.fvAgregarLineaAsiento(
+                    window.fvRenderLineaAsiento(
                         det.id_cuenta_contable,
                         det.cuenta_codigo || det.codigo_cuenta || '',
                         det.cuenta_nombre || det.nombre_cuenta || '',
                         parseFloat(det.debe || 0),
                         parseFloat(det.haber || 0),
-                        det.documento_referencia || det.referencia_detalle || det.referencia || ''
+                        det.documento_referencia || det.referencia_detalle || det.referencia || '',
+                        det.es_total_documento === true
                     );
                 });
-                window.ASIENTO_MANUAL = false;
                 fvRecalcularTotalesAsiento();
 
             } else {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> Sin asiento contable, guarda o actualiza este documento para generar el asiento.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted"><i class="bi bi-info-circle me-1"></i> Sin asiento contable, guarda o actualiza este documento para generar el asiento.</td></tr>';
+                fvRecalcularTotalesAsiento();
             }
         } catch (err) {
             console.error('Error al cargar asiento contable:', err);
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i> Error al cargar datos del asiento contable.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i> Error al cargar datos del asiento contable.</td></tr>';
         }
     };
 
-    
-    window.fvCapturarDetallesAsiento = function() {
-        const detalles = [];
-        document.querySelectorAll('.asiento-linea-row').forEach(tr => {
-            const idCuenta = tr.querySelector('.input-id-cuenta-contable').value;
-            const debe = parseFloat(tr.querySelector('.input-debe').value) || 0;
-            const haber = parseFloat(tr.querySelector('.input-haber').value) || 0;
-            const referencia = tr.querySelector('.input-referencia').value;
-
-            if (idCuenta) {
-                detalles.push({
-                    id_cuenta_contable: parseInt(idCuenta),
-                    debe: debe,
-                    haber: haber,
-                    referencia_detalle: referencia
-                });
-            }
-        });
-        return detalles;
-    };
 
     // ─── Pestaña Pagos / Cobros ────────────────────────────────────────────────
     let _fvIngresoDeps        = null;

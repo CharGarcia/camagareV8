@@ -412,19 +412,38 @@ class SincronizadorAsientosService
             return;
         }
 
-        $errorCount = 0;
+        // Se agrupan los fallos por MOTIVO real (mensaje de la excepción) para que el aviso diga
+        // qué corregir. Antes se descartaba el mensaje y siempre se culpaba a las cuentas, lo que
+        // ocultaba errores reales (p. ej. de BD) detrás de un "Configure las cuentas".
+        $errores = [];
 
         foreach ($ids as $id) {
             try {
                 $service->procesarAsientoContablePorSincronizacion((int)$id);
                 $this->generados++;
-            } catch (\Exception $e) {
-                $errorCount++;
+            } catch (\Throwable $e) {
+                $motivo = trim($e->getMessage());
+                if ($motivo === '') {
+                    $motivo = 'Error no especificado (' . get_class($e) . ')';
+                }
+                $errores[$motivo][] = (int) $id;
             }
         }
 
-        if ($errorCount > 0) {
-            $this->warnings[] = "Faltan $errorCount asientos contables por generar en $nombreModulo. Configure las cuentas correspondientes en $dondeConfigurar.";
+        foreach ($errores as $motivo => $idsFallidos) {
+            $n       = count($idsFallidos);
+            $muestra = array_slice($idsFallidos, 0, 5);
+            $listado = '#' . implode(', #', $muestra);
+            if ($n > count($muestra)) {
+                $listado .= ' y ' . ($n - count($muestra)) . ' más';
+            }
+
+            $this->warnings[] = "No se pudieron generar {$n} asiento(s) contable(s) en {$nombreModulo}. "
+                . "Motivo: «{$motivo}». Documento(s): {$listado}. "
+                . "Si es por cuentas sin configurar, revise {$dondeConfigurar}; "
+                . "puede reintentar desde Auditoría Contable (Regenerar) o al volver a abrir Estados Financieros.";
+
+            error_log("[SincronizadorAsientos] {$nombreModulo}: {$n} fallo(s) — {$motivo} — ids: " . implode(',', $idsFallidos));
         }
     }
 

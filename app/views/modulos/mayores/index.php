@@ -167,6 +167,18 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
         return num < 0 ? `<span class="monto-negativo">${formatted}</span>` : formatted;
     };
 
+    // Fetch con el header que el backend usa para detectar peticiones AJAX (ver
+    // PermisoModuloTrait::esAjaxRequest) y validación explícita de la respuesta,
+    // para que un 403/redirect no falle en silencio como un JSON.parse roto.
+    async function fetchJson(url) {
+        const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const contentType = resp.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            throw new Error(`Respuesta no-JSON (HTTP ${resp.status}) de ${url}`);
+        }
+        return resp.json();
+    }
+
     // ── Typeahead genérico (cuenta / tercero) ───────────────────────────────
     function setupTypeahead(inputEl, dropdownEl, hiddenEl, fetchFn, renderLabel) {
         let debounceTimer;
@@ -188,7 +200,15 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
             const q = inputEl.value.trim();
             if (q.length < 1) { dropdownEl.style.display = 'none'; dropdownEl.innerHTML = ''; return; }
             debounceTimer = setTimeout(async () => {
-                const items = await fetchFn(q);
+                let items = [];
+                try {
+                    items = await fetchFn(q);
+                } catch (e) {
+                    console.error('Error buscando sugerencias:', e);
+                    dropdownEl.innerHTML = '<span class="list-group-item text-danger small">Error al buscar. Revise la consola.</span>';
+                    dropdownEl.style.display = 'block';
+                    return;
+                }
                 if (!items || !items.length) { dropdownEl.style.display = 'none'; dropdownEl.innerHTML = ''; return; }
                 dropdownEl.innerHTML = items.map(it => {
                     const label = renderLabel(it);
@@ -215,8 +235,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
         document.getElementById('dropdown_cuenta'),
         document.getElementById('filtro_cuenta_id'),
         async (q) => {
-            const resp = await fetch(`${urlBase}/getCuentasAjax?q=${encodeURIComponent(q)}`);
-            const json = await resp.json();
+            const json = await fetchJson(`${urlBase}/getCuentasAjax?q=${encodeURIComponent(q)}`);
             return json.success ? json.data : [];
         },
         (it) => `${it.codigo} - ${it.nombre}`
@@ -235,8 +254,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
         async (q) => {
             const tipo = document.getElementById('filtro_tipo_entidad').value;
             if (!tipo) return [];
-            const resp = await fetch(`${urlBase}/${terceroEndpoints[tipo]}?q=${encodeURIComponent(q)}`);
-            const json = await resp.json();
+            const json = await fetchJson(`${urlBase}/${terceroEndpoints[tipo]}?q=${encodeURIComponent(q)}`);
             return json.success ? json.data : [];
         },
         (it) => it.identificacion ? `${it.nombre} (${it.identificacion})` : it.nombre
@@ -284,8 +302,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
             document.getElementById('content-reporte').innerHTML = '';
 
             const params = new URLSearchParams(getFiltrosActuales());
-            const resp = await fetch(`${urlBase}/generarAjax?${params.toString()}`);
-            const json = await resp.json();
+            const json = await fetchJson(`${urlBase}/generarAjax?${params.toString()}`);
             if (json.success) {
                 renderMayor(json.data);
             } else {
@@ -293,7 +310,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
             }
         } catch (e) {
             console.error(e);
-            Swal.fire({ icon: 'error', title: 'Error', text: 'Error de red o servidor al generar el reporte.' });
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Error de red o servidor al generar el reporte: ' + e.message });
         } finally {
             document.getElementById('loader-reporte').classList.add('d-none');
             btn.disabled = false;

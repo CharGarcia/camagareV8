@@ -87,7 +87,11 @@ class EstadosFinancierosController extends BaseModuloController
             $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
             $sincronizador->sincronizar($idEmpresa, $idUsuario);
 
-            echo json_encode(['success' => true, 'warnings' => $sincronizador->getWarnings()]);
+            echo json_encode([
+                'success'   => true,
+                'warnings'  => $sincronizador->getWarnings(),
+                'generados' => $sincronizador->getGenerados(),
+            ]);
         } catch (\Throwable $th) {
             echo json_encode(['success' => false, 'error' => $th->getMessage()]);
         }

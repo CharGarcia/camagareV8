@@ -411,19 +411,26 @@ class FacturaVentaController extends BaseModuloController
                     
                     $cabeceraDb = $asientoService->getDetalleAsiento($idAsiento, $idEmpresa);
                     $detallesDb = $cabeceraDb['detalles'] ?? [];
+                    // Ancla del cuadre: el asiento guardado viene de la BD sin la marca que
+                    // pone el builder, así que se reconoce la línea de cuenta por cobrar por
+                    // su importe (el builder la fija siempre en el total del documento).
+                    $totalDoc = round((float)($ventaDB['importe_total'] ?? 0), 2);
                     $detalles = [];
                     foreach ($detallesDb as $det) {
+                        $debe = (float)$det['debe'];
                         $detalles[] = [
                             'id_cuenta_contable'  => (int)$det['id_cuenta_contable'],
                             'cuenta_codigo'        => $det['codigo_cuenta'] ?? $det['cuenta_codigo'] ?? '',
                             'cuenta_nombre'        => $det['nombre_cuenta'] ?? $det['cuenta_nombre'] ?? '',
-                            'debe'                 => (float)$det['debe'],
+                            'debe'                 => $debe,
                             'haber'                => (float)$det['haber'],
                             'referencia_detalle'   => $det['referencia_detalle'] ?? '',
                             'documento_referencia' => $det['documento_referencia'] ?? '',
+                            'es_total_documento'   => $totalDoc > 0 && abs(round($debe, 2) - $totalDoc) < 0.005,
                         ];
                     }
-                    echo json_encode(['ok' => true, 'data' => $detalles, 'detalles' => $detalles, 'es_guardado' => true]);
+                    echo json_encode(['ok' => true, 'data' => $detalles, 'detalles' => $detalles,
+                                      'es_guardado' => true, 'total_documento' => $totalDoc]);
                     exit;
                 }
             }
@@ -448,45 +455,6 @@ class FacturaVentaController extends BaseModuloController
 
             $detallesSugeridos = $this->service->obtenerAsientoSugerido($idEmpresa, $normalizedData);
             echo json_encode(['ok' => true, 'data' => $detallesSugeridos, 'detalles' => $detallesSugeridos, 'es_guardado' => false]);
-        } catch (\Throwable $e) {
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
-        exit;
-    }
-
-    public function generarAsientoContableAjax(): void
-    {
-        // $this->requireModificar();
-        header('Content-Type: application/json');
-
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idUsuario = (int) $_SESSION['id_usuario'];
-        $idVenta   = (int) ($_POST['id_venta'] ?? 0);
-
-        if ($idVenta <= 0) {
-            echo json_encode(['ok' => false, 'error' => 'ID de factura inválido.']);
-            exit;
-        }
-
-        try {
-            // Obtener datos completos de la factura para generar el asiento
-            $data = $this->service->getPorId($idVenta, $idEmpresa);
-            if (!$data) {
-                throw new \Exception("Factura no encontrada.");
-            }
-            
-            // Adjuntar detalles necesarios para la cabecera del asiento y recálculo
-            $data['id_empresa'] = $idEmpresa;
-            $data['id_usuario'] = $idUsuario;
-            $data['id_venta'] = $idVenta;
-            
-            // Construir numFactura para la referencia
-            $numFactura = ($data['establecimiento'] ?? '001') . '-' . ($data['punto_emision'] ?? '001') . '-' . str_pad((string)($data['secuencial'] ?? 0), 9, '0', STR_PAD_LEFT);
-
-            // Generar o actualizar el asiento
-            $this->service->procesarAsientoContable($idVenta, $data, $numFactura);
-
-            echo json_encode(['ok' => true, 'mensaje' => 'Asiento generado/actualizado con �exito.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

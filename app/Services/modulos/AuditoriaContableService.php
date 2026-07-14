@@ -39,15 +39,19 @@ class AuditoriaContableService
      * tabla de incidencias. Devuelve el resumen por tipo + totales de la corrida.
      *
      * @param string|null $soloOrigen Limita a un modulo_origen (opcional).
+     * @param string|null $fechaDesde Acota la auditoría por fecha (AAAA-MM-DD).
+     * @param string|null $fechaHasta Idem.
      */
-    public function ejecutarAuditoria(int $idEmpresa, int $idUsuario, ?string $soloOrigen = null): array
+    public function ejecutarAuditoria(int $idEmpresa, int $idUsuario, ?string $soloOrigen = null,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
+        $this->rules->validarRango($fechaDesde, $fechaHasta);
         $ambiente = $this->repo->getAmbienteEmpresa($idEmpresa);
 
         $this->repo->beginTransaction();
         try {
-            $abiertas  = $this->repo->getIncidenciasAbiertas($idEmpresa, $ambiente);
-            $hallazgos = $this->repo->detectarTodos($idEmpresa, $soloOrigen);
+            $abiertas  = $this->repo->getIncidenciasAbiertas($idEmpresa, $ambiente, $fechaDesde, $fechaHasta);
+            $hallazgos = $this->repo->detectarTodos($idEmpresa, $soloOrigen, $fechaDesde, $fechaHasta);
 
             $clavesVigentes = [];
             foreach ($hallazgos as $h) {
@@ -77,6 +81,8 @@ class AuditoriaContableService
                 'tipo_ambiente'    => $ambiente,
                 'tipo_corrida'     => 'auditoria',
                 'modulo_origen'    => $soloOrigen,
+                'fecha_desde'      => $fechaDesde,
+                'fecha_hasta'      => $fechaHasta,
                 'total_detectadas' => count($hallazgos),
                 'estado'           => 'ok',
                 'mensaje'          => $resueltas > 0 ? "{$resueltas} incidencia(s) resuelta(s)." : null,
@@ -208,7 +214,8 @@ class AuditoriaContableService
      */
     public function regenerarMasivo(int $idEmpresa, int $idUsuario, string $origen, ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
-        $this->rules->validarRegeneracion($origen, $this->repo->getOrigenes(), $fechaDesde, $fechaHasta);
+        // Solo se ofrecen (y aceptan) orígenes cuyo Service sabe regenerar el asiento.
+        $this->rules->validarRegeneracion($origen, $this->repo->getOrigenesRegenerables(), $fechaDesde, $fechaHasta);
 
         $ambiente = $this->repo->getAmbienteEmpresa($idEmpresa);
         $asientos = $this->repo->getAsientosDeOrigen($idEmpresa, $origen, $fechaDesde, $fechaHasta);
@@ -308,9 +315,21 @@ class AuditoriaContableService
         $origen = (string) $inc['modulo_origen'];
         $this->rules->validarOrigen($origen, $this->repo->getOrigenes());
 
+        if (!$this->repo->esOrigenRegenerable($origen)) {
+            throw new \Exception('Este tipo de documento no admite regenerar su asiento desde '
+                . 'Auditoría Contable; corríjalo desde su propio módulo.');
+        }
+
         $idDoc = (int) ($inc['id_documento'] ?? 0);
         if ($idDoc <= 0) {
             throw new \Exception('La incidencia no tiene documento asociado para regenerar.');
+        }
+
+        // Los documentos traídos por la migración desde la BD vieja NO se regeneran:
+        // su contabilidad viene del histórico migrado, no del generador de asientos.
+        if ($this->repo->esDocumentoMigrado($origen, $idDoc)) {
+            throw new \Exception('Este documento proviene de la migración de la base anterior: '
+                . 'su contabilidad es la del histórico migrado y no puede regenerarse.');
         }
 
         $asientos = $this->repo->getAsientosDeDocumento($idEmpresa, $origen, $idDoc);
@@ -367,10 +386,13 @@ class AuditoriaContableService
     }
 
     public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20,
-        string $ordenCol = 'detectado_at', string $ordenDir = 'DESC', ?int $idUsuarioFiltro = null): array
+        string $ordenCol = 'detectado_at', string $ordenDir = 'DESC', ?int $idUsuarioFiltro = null,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
+        $this->rules->validarRango($fechaDesde, $fechaHasta);
         $ambiente = $this->repo->getAmbienteEmpresa($idEmpresa);
-        return $this->repo->getListado($idEmpresa, $ambiente, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        return $this->repo->getListado($idEmpresa, $ambiente, $buscar, $page, $perPage,
+            $ordenCol, $ordenDir, $idUsuarioFiltro, $fechaDesde, $fechaHasta);
     }
 
     public function getCorridas(int $idEmpresa, int $limit = 50): array
@@ -382,6 +404,18 @@ class AuditoriaContableService
     public function getOrigenes(): array
     {
         return $this->repo->getOrigenes();
+    }
+
+    /** Orígenes que admiten regeneración (los demás se corrigen en su propio módulo). */
+    public function getOrigenesRegenerables(): array
+    {
+        return $this->repo->getOrigenesRegenerables();
+    }
+
+    /** ¿Este origen admite regenerar su asiento desde el módulo? */
+    public function esOrigenRegenerable(string $origen): bool
+    {
+        return $this->repo->esOrigenRegenerable($origen);
     }
 
     /** Asientos vivos de un documento (para el modal de resolución de duplicados). */
@@ -438,8 +472,27 @@ class AuditoriaContableService
                     new \App\Rules\modulos\EgresoRules(),
                     $log
                 );
+            case 'retencion_compra':
+                return new RetencionCompraService(
+                    new \App\repositories\modulos\RetencionCompraRepository(),
+                    new \App\Rules\modulos\RetencionCompraRules(),
+                    $log
+                );
+            case 'consignacion_venta':
+                return new ConsignacionVentaService(
+                    new \App\repositories\modulos\ConsignacionVentaRepository(),
+                    new \App\Rules\modulos\ConsignacionVentaRules(),
+                    $log
+                );
+            case 'recibo_venta':
+                return new ReciboVentaService(
+                    new \App\repositories\modulos\ReciboVentaRepository(),
+                    new \App\Rules\modulos\ReciboVentaRules(),
+                    $log
+                );
             default:
-                throw new \Exception("No hay generador de asientos para el origen «{$origen}».");
+                throw new \Exception("El origen «{$origen}» no admite regenerar su asiento desde "
+                    . "Auditoría Contable; corríjalo desde su propio módulo.");
         }
     }
 }
