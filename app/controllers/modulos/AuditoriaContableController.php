@@ -90,6 +90,25 @@ class AuditoriaContableController extends BaseModuloController
         'resuelta'    => 'bg-success bg-opacity-10 text-success border-success',
     ];
 
+    /**
+     * Devuelve la fecha solo si es un AAAA-MM-DD real; si no, null.
+     * Los <input type="date"> emiten valores intermedios mientras se teclea a mano
+     * ('0000-01-01', años de 5 dígitos, cadenas incompletas). Esos se ignoran en vez
+     * de romper la consulta (PostgreSQL rechaza el año 0 con Datetime field overflow).
+     */
+    private function normalizarFecha(?string $fecha): ?string
+    {
+        $fecha = trim((string) $fecha);
+        if ($fecha === '' || !preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $fecha, $m)) {
+            return null;
+        }
+        $anio = (int) $m[1];
+        if ($anio < 1900 || $anio > 2999 || !checkdate((int) $m[2], (int) $m[3], $anio)) {
+            return null;
+        }
+        return $fecha;
+    }
+
     // ==================================================================
     //  VISTA PRINCIPAL
     // ==================================================================
@@ -113,8 +132,8 @@ class AuditoriaContableController extends BaseModuloController
             $fechaDesde = date('Y-01-01');
             $fechaHasta = date('Y-m-d');
         } else {
-            $fechaDesde = trim($_GET['fecha_desde'] ?? '') ?: null;
-            $fechaHasta = trim($_GET['fecha_hasta'] ?? '') ?: null;
+            $fechaDesde = $this->normalizarFecha($_GET['fecha_desde'] ?? null);
+            $fechaHasta = $this->normalizarFecha($_GET['fecha_hasta'] ?? null);
         }
 
         $perm = $this->getPermisos();
@@ -169,37 +188,42 @@ class AuditoriaContableController extends BaseModuloController
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
         $perPage  = 20;
 
-        $fechaDesde = trim($_GET['fecha_desde'] ?? $_POST['fecha_desde'] ?? '') ?: null;
-        $fechaHasta = trim($_GET['fecha_hasta'] ?? $_POST['fecha_hasta'] ?? '') ?: null;
+        $fechaDesde = $this->normalizarFecha($_GET['fecha_desde'] ?? $_POST['fecha_desde'] ?? null);
+        $fechaHasta = $this->normalizarFecha($_GET['fecha_hasta'] ?? $_POST['fecha_hasta'] ?? null);
 
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir,
-            $idUsuarioFiltro, $fechaDesde, $fechaHasta);
-        $total      = $result['total'];
-        $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
+        try {
+            $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir,
+                $idUsuarioFiltro, $fechaDesde, $fechaHasta);
+            $total      = $result['total'];
+            $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
 
-        $html = '';
-        if (empty($result['rows'])) {
-            $html = '<tr><td colspan="10" class="text-center py-5 text-muted">'
-                  . '<i class="bi bi-clipboard-check fs-3 d-block mb-2"></i>Sin incidencias. Ejecute la auditoría para verificar.</td></tr>';
-        } else {
-            foreach ($result['rows'] as $r) {
-                $html .= $this->construirFila($r, $perm);
+            $html = '';
+            if (empty($result['rows'])) {
+                $html = '<tr><td colspan="10" class="text-center py-5 text-muted">'
+                      . '<i class="bi bi-clipboard-check fs-3 d-block mb-2"></i>Sin incidencias. Ejecute la auditoría para verificar.</td></tr>';
+            } else {
+                foreach ($result['rows'] as $r) {
+                    $html .= $this->construirFila($r, $perm);
+                }
             }
-        }
 
-        echo json_encode([
-            'ok'         => true,
-            'html'       => $html,
-            'total'      => $total,
-            'page'       => $page,
-            'totalPages' => $totalPages,
-            'from'       => $total > 0 ? (($page - 1) * $perPage) + 1 : 0,
-            'to'         => $total > 0 ? min($page * $perPage, $total) : 0,
-            'resumen'    => $this->service->getResumen($idEmpresa),
-        ]);
+            echo json_encode([
+                'ok'         => true,
+                'html'       => $html,
+                'total'      => $total,
+                'page'       => $page,
+                'totalPages' => $totalPages,
+                'from'       => $total > 0 ? (($page - 1) * $perPage) + 1 : 0,
+                'to'         => $total > 0 ? min($page * $perPage, $total) : 0,
+                'resumen'    => $this->service->getResumen($idEmpresa),
+            ]);
+        } catch (\Throwable $e) {
+            // Nunca devolver HTML a un fetch: el JS espera JSON siempre.
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
         exit;
     }
 
@@ -282,8 +306,8 @@ class AuditoriaContableController extends BaseModuloController
         $idEmpresa  = (int) $_SESSION['id_empresa'];
         $idUsuario  = (int) $_SESSION['id_usuario'];
         $origen     = trim($_POST['origen'] ?? '') ?: null;
-        $fechaDesde = trim($_POST['fecha_desde'] ?? '') ?: null;
-        $fechaHasta = trim($_POST['fecha_hasta'] ?? '') ?: null;
+        $fechaDesde = $this->normalizarFecha($_POST['fecha_desde'] ?? null);
+        $fechaHasta = $this->normalizarFecha($_POST['fecha_hasta'] ?? null);
 
         try {
             $res = $this->service->ejecutarAuditoria($idEmpresa, $idUsuario, $origen, $fechaDesde, $fechaHasta);

@@ -15,27 +15,65 @@
         buscar: '',
     };
 
+    /**
+     * Una fecha solo se envía cuando está completa: al teclearla a mano el input emite
+     * valores intermedios ('0002-...', años de 5 dígitos) que no deben llegar al servidor.
+     */
+    function fechaCompleta(v) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+        const anio = Number(v.slice(0, 4));
+        return anio >= 1900 && anio <= 2999;
+    }
+
     /** Rango de fechas activo en la barra superior (aplica al listado y a la auditoría). */
     function rangoFechas() {
+        const d = document.getElementById('audFechaDesde')?.value || '';
+        const h = document.getElementById('audFechaHasta')?.value || '';
         return {
-            fecha_desde: document.getElementById('audFechaDesde')?.value || '',
-            fecha_hasta: document.getElementById('audFechaHasta')?.value || '',
+            fecha_desde: fechaCompleta(d) ? d : '',
+            fecha_hasta: fechaCompleta(h) ? h : '',
         };
     }
 
     // ---- Helpers HTTP ----
+    // El backend (PermisoModuloTrait::esAjaxRequest) reconoce una petición AJAX por estas
+    // cabeceras. Sin ellas, un fallo de permiso/sesión responde con un redirect HTML en vez
+    // de JSON 403 y el fetch revienta con "Unexpected token '<'".
+    const AJAX_HEADERS = {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json',
+    };
+
+    /** Convierte la respuesta a JSON; si llega HTML (login/redirect/error), da un mensaje legible. */
+    function parseJson(r) {
+        const ct = r.headers.get('content-type') || '';
+        if (ct.includes('application/json')) {
+            return r.json().then((data) => {
+                // Sesión expirada (401) o sin permiso (403): el núcleo responde {ok:false, mensaje|error}
+                if (!r.ok && data && data.ok === false) {
+                    throw new Error(data.error || data.mensaje || 'No autorizado.');
+                }
+                return data;
+            });
+        }
+        return r.text().then(() => {
+            throw new Error('La sesión expiró o el servidor devolvió una respuesta inesperada. '
+                + 'Recargue la página e inicie sesión nuevamente.');
+        });
+    }
+
     function postForm(accion, data) {
         const body = new URLSearchParams(data || {});
         return fetch(`${urlBase}/${accion}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            headers: Object.assign({ 'Content-Type': 'application/x-www-form-urlencoded' }, AJAX_HEADERS),
             body,
-        }).then((r) => r.json());
+        }).then(parseJson);
     }
 
     function getJSON(accion, params) {
         const qs = new URLSearchParams(params || {}).toString();
-        return fetch(`${urlBase}/${accion}${qs ? '?' + qs : ''}`).then((r) => r.json());
+        return fetch(`${urlBase}/${accion}${qs ? '?' + qs : ''}`, { headers: AJAX_HEADERS }).then(parseJson);
     }
 
     function toast(icon, title) {
@@ -109,13 +147,15 @@
         }).then((r) => {
             if (!r.isConfirmed) return;
             postForm('generarFaltanteAjax', { id: tr.dataset.id })
-                .then((res) => { if (res.ok) { toast('success', res.mensaje); fetchSearch(); } else err(res.error); });
+                .then((res) => { if (res.ok) { toast('success', res.mensaje); fetchSearch(); } else err(res.error); })
+                .catch((e) => err(e.message));
         });
     }
 
     function corregirAmbiente(tr) {
         postForm('corregirAmbienteAjax', { id: tr.dataset.id })
-            .then((res) => { if (res.ok) { toast('success', res.mensaje); fetchSearch(); } else err(res.error); });
+            .then((res) => { if (res.ok) { toast('success', res.mensaje); fetchSearch(); } else err(res.error); })
+            .catch((e) => err(e.message));
     }
 
     function regenerarDocumento(tr) {
@@ -126,7 +166,8 @@
         }).then((r) => {
             if (!r.isConfirmed) return;
             postForm('regenerarDocumentoAjax', { id: tr.dataset.id })
-                .then((res) => { if (res.ok) { toast('success', res.mensaje); fetchSearch(); } else err(res.error); });
+                .then((res) => { if (res.ok) { toast('success', res.mensaje); fetchSearch(); } else err(res.error); })
+                .catch((e) => err(e.message));
         });
     }
 
@@ -148,7 +189,7 @@
                 bootstrap.Modal.getInstance(document.getElementById('modalRevision')).hide();
                 toast('success', res.mensaje); fetchSearch();
             } else err(res.error);
-        });
+        }).catch((e) => err(e.message));
     }
 
     // ---- Duplicados ----
@@ -195,7 +236,8 @@
                         bootstrap.Modal.getInstance(document.getElementById('modalDuplicados')).hide();
                         toast('success', res.mensaje); fetchSearch();
                     } else err(res.error);
-                });
+                })
+                .catch((e) => err(e.message));
         });
     }
 

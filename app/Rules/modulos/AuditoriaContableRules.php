@@ -64,9 +64,19 @@ class AuditoriaContableRules
         if ($fecha === null || $fecha === '') {
             return null;
         }
-        $dt = \DateTimeImmutable::createFromFormat('Y-m-d', $fecha);
-        if ($dt === false) {
+        // '!' fija la hora a 00:00 y getLastErrors detecta desbordes como 2026-13-45,
+        // que createFromFormat aceptaría desplazando el mes/día.
+        $dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $fecha);
+        $errores = \DateTimeImmutable::getLastErrors();
+        $hayErrores = is_array($errores) && (($errores['warning_count'] ?? 0) > 0 || ($errores['error_count'] ?? 0) > 0);
+
+        if ($dt === false || $hayErrores || $dt->format('Y-m-d') !== $fecha) {
             throw new \Exception("El formato de la {$etiqueta} debe ser AAAA-MM-DD.");
+        }
+        // PostgreSQL rechaza años fuera de rango (p. ej. el año 0 → Datetime field overflow).
+        $anio = (int) $dt->format('Y');
+        if ($anio < 1900 || $anio > 2999) {
+            throw new \Exception("El año de la {$etiqueta} no es válido.");
         }
         return $dt;
     }
