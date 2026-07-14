@@ -155,6 +155,15 @@ class IaDocumentoRepository extends BaseRepository
      * documentos de la empresa, usando búsqueda de texto completo en español.
      * Filtro por id_empresa SIEMPRE presente (aislamiento multiempresa).
      *
+     * La consulta se arma en modo OR entre las palabras significativas de la
+     * pregunta (no AND estricto de plainto_tsquery): una pregunta natural como
+     * "qué datos son obligatorios para una factura de venta" no debe exigir que
+     * las 4 palabras aparezcan juntas en el mismo fragmento — basta con que el
+     * fragmento contenga varias de ellas, y ts_rank ya prioriza los que más
+     * coincidencias tienen. Con AND estricto, muchos fragmentos relevantes
+     * quedaban fuera solo porque el documento no repetía las mismas palabras
+     * exactas de la pregunta en un mismo párrafo.
+     *
      * Solo considera documentos disponibles para $idAgente: los que NO tienen
      * ninguna restricción (disponibles para todos) o los restringidos que
      * incluyen explícitamente a este agente (tabla ia_documento_agentes).
@@ -163,15 +172,20 @@ class IaDocumentoRepository extends BaseRepository
      */
     public function buscarChunksRelevantes(int $idEmpresa, string $pregunta, int $idAgente, int $limite = 8): array
     {
-        $sql = "SELECT c.id_documento, d.titulo, c.pagina, c.chunk_index, c.contenido,
-                       ts_rank(c.contenido_tsv, plainto_tsquery('spanish', :pregunta)) AS relevancia
+        $sql = "WITH consulta AS (
+                    SELECT NULLIF(replace(plainto_tsquery('spanish', :pregunta)::text, ' & ', ' | '), '')::tsquery AS q
+                )
+                SELECT c.id_documento, d.titulo, c.pagina, c.chunk_index, c.contenido,
+                       ts_rank(c.contenido_tsv, consulta.q) AS relevancia
                 FROM ia_documento_chunks c
                 INNER JOIN ia_documentos d ON d.id = c.id_documento
+                CROSS JOIN consulta
                 WHERE c.id_empresa = :id_empresa
                   AND c.eliminado = false
                   AND d.id_empresa = :id_empresa
                   AND d.eliminado = false
-                  AND c.contenido_tsv @@ plainto_tsquery('spanish', :pregunta)
+                  AND consulta.q IS NOT NULL
+                  AND c.contenido_tsv @@ consulta.q
                   AND (
                         NOT EXISTS (SELECT 1 FROM ia_documento_agentes da WHERE da.id_documento = d.id)
                         OR EXISTS (SELECT 1 FROM ia_documento_agentes da WHERE da.id_documento = d.id AND da.id_agente = :id_agente)
