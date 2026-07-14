@@ -22,7 +22,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
             <div class="col position-relative">
                 <label class="form-label small fw-bold text-muted mb-1">Cuenta</label>
                 <input type="text" class="form-control form-control-sm shadow-none" id="filtro_cuenta_texto" placeholder="Código o nombre" autocomplete="off">
-                <input type="hidden" id="filtro_cuenta_codigo" value="">
+                <input type="hidden" id="filtro_cuenta_id" value="">
                 <div id="dropdown_cuenta" class="list-group position-absolute shadow-sm" style="z-index:1050; max-height:220px; overflow:auto; display:none; width:100%;"></div>
             </div>
             <div class="col">
@@ -213,7 +213,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
     setupTypeahead(
         document.getElementById('filtro_cuenta_texto'),
         document.getElementById('dropdown_cuenta'),
-        document.getElementById('filtro_cuenta_codigo'),
+        document.getElementById('filtro_cuenta_id'),
         async (q) => {
             const resp = await fetch(`${urlBase}/getCuentasAjax?q=${encodeURIComponent(q)}`);
             const json = await resp.json();
@@ -260,7 +260,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
         return {
             fecha_inicio: document.getElementById('fecha_inicio').value,
             fecha_fin: document.getElementById('fecha_fin').value,
-            codigo_cuenta: document.getElementById('filtro_cuenta_codigo').value,
+            id_cuenta: document.getElementById('filtro_cuenta_id').value,
             tipo_entidad: document.getElementById('filtro_tipo_entidad').value,
             id_entidad: document.getElementById('filtro_tercero_id').value,
             centro_costo: document.getElementById('filtro_centro_costo').value,

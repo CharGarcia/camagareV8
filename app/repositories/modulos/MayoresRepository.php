@@ -21,7 +21,7 @@ class MayoresRepository
      * tercero (cliente/proveedor/empleado) resueltos por id_entidad/tipo_entidad. Mismos
      * filtros de estado/eliminado/tipo_ambiente que el resto de reportes contables.
      *
-     * $filtros admite: fecha_inicio, fecha_fin, codigo_cuenta (prefijo, opcional),
+     * $filtros admite: fecha_inicio, fecha_fin, id_cuenta (ID exacto de la cuenta, opcional),
      * tipo_entidad + id_entidad (opcional), id_centro_costo, id_proyecto (opcional).
      */
     public function getMovimientos(int $idEmpresa, array $filtros): array
@@ -41,9 +41,9 @@ class MayoresRepository
             ':f_fin' => $filtros['fecha_fin'],
         ];
 
-        if (!empty($filtros['codigo_cuenta'])) {
-            $whereSql .= " AND pc.codigo LIKE :codigo_cuenta";
-            $params[':codigo_cuenta'] = $filtros['codigo_cuenta'] . '%';
+        if (!empty($filtros['id_cuenta'])) {
+            $whereSql .= " AND pc.id = :id_cuenta";
+            $params[':id_cuenta'] = (int) $filtros['id_cuenta'];
         }
 
         if (!empty($filtros['tipo_entidad']) && !empty($filtros['id_entidad'])) {

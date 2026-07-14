@@ -55,7 +55,7 @@ class MayoresController extends BaseModuloController
         return [
             'fecha_inicio' => $_GET['fecha_inicio'] ?? date('Y-01-01'),
             'fecha_fin' => $_GET['fecha_fin'] ?? date('Y-12-31'),
-            'codigo_cuenta' => trim($_GET['codigo_cuenta'] ?? ''),
+            'id_cuenta' => !empty($_GET['id_cuenta']) ? (int) $_GET['id_cuenta'] : null,
             'tipo_entidad' => trim($_GET['tipo_entidad'] ?? ''),
             'id_entidad' => !empty($_GET['id_entidad']) ? (int) $_GET['id_entidad'] : null,
             'id_centro_costo' => !empty($_GET['centro_costo']) ? (int) $_GET['centro_costo'] : null,
