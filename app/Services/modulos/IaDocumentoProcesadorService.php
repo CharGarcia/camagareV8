@@ -28,8 +28,10 @@ class IaDocumentoProcesadorService
     }
 
     /**
-     * Procesa (o reprocesa, si quedó en error) un documento. Idempotente si
-     * ya está 'listo'.
+     * Procesa (o reprocesa) un documento. Solo evita ejecutarse si ya hay un
+     * procesamiento en curso para el mismo documento (concurrencia); reprocesar
+     * uno ya 'listo' es válido (ej. al mejorar el trozado) y borra sus
+     * fragmentos anteriores antes de regenerarlos.
      */
     public function procesar(int $idDocumento): void
     {
@@ -37,10 +39,11 @@ class IaDocumentoProcesadorService
         if ($doc === null) {
             throw new \RuntimeException("Documento {$idDocumento} no encontrado.");
         }
-        if ($doc['estado'] === 'listo') {
+        if ($doc['estado'] === 'procesando') {
             return;
         }
 
+        $this->repo->eliminarChunks($idDocumento);
         $this->repo->updateEstado($idDocumento, 'procesando');
 
         $ruta = MVC_ROOT . '/storage/ia_soporte/' . $doc['id_empresa'] . '/' . $doc['archivo'];
@@ -88,25 +91,57 @@ class IaDocumentoProcesadorService
     }
 
     /**
-     * Trocea un texto en fragmentos de tamaño acotado con solape, para dar
-     * mejor contexto a la búsqueda de texto completo sin cortar frases a la mitad.
+     * Trocea un texto en fragmentos de tamaño acotado con solape, agrupando
+     * por PALABRAS COMPLETAS (nunca corta una palabra a la mitad al inicio o
+     * al final de un fragmento) — a diferencia de cortar por cantidad fija de
+     * caracteres, que podía partir palabras arbitrariamente.
      * @return string[]
      */
     private function trocear(string $texto): array
     {
-        $chunks = [];
-        $largo  = mb_strlen($texto);
-        $inicio = 0;
-        $paso   = self::CHUNK_SIZE - self::CHUNK_OVERLAP;
+        $palabras = preg_split('/\s+/u', trim($texto), -1, PREG_SPLIT_NO_EMPTY);
+        if (empty($palabras)) {
+            return [];
+        }
 
-        while ($inicio < $largo) {
-            $trozo = trim(mb_substr($texto, $inicio, self::CHUNK_SIZE));
-            if ($trozo !== '') {
-                $chunks[] = $trozo;
+        $chunks = [];
+        $actual = [];
+        $largoActual = 0;
+
+        foreach ($palabras as $palabra) {
+            $largoPalabra = mb_strlen($palabra) + 1; // +1 por el espacio separador
+            if ($largoActual + $largoPalabra > self::CHUNK_SIZE && !empty($actual)) {
+                $chunks[] = implode(' ', $actual);
+                $actual = $this->ultimasPalabras($actual, self::CHUNK_OVERLAP);
+                $largoActual = empty($actual) ? 0 : mb_strlen(implode(' ', $actual)) + 1;
             }
-            $inicio += $paso;
+            $actual[] = $palabra;
+            $largoActual += $largoPalabra;
+        }
+        if (!empty($actual)) {
+            $chunks[] = implode(' ', $actual);
         }
         return $chunks;
+    }
+
+    /**
+     * Devuelve las últimas palabras de un fragmento que quepan dentro de
+     * $maxCaracteres, para usarlas como solape con el siguiente fragmento.
+     * @param string[] $palabras
+     * @return string[]
+     */
+    private function ultimasPalabras(array $palabras, int $maxCaracteres): array
+    {
+        $resultado = [];
+        $largo = 0;
+        for ($i = count($palabras) - 1; $i >= 0; $i--) {
+            $largo += mb_strlen($palabras[$i]) + 1;
+            if ($largo > $maxCaracteres) {
+                break;
+            }
+            array_unshift($resultado, $palabras[$i]);
+        }
+        return $resultado;
     }
 
     private function obtenerDocumento(int $id): ?array

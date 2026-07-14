@@ -374,7 +374,10 @@
                         btn.addEventListener('click', () => eliminarDocumento(btn.getAttribute('data-id')));
                     });
                     tbody.querySelectorAll('.ia-btn-reintentar-doc').forEach((btn) => {
-                        btn.addEventListener('click', () => reintentarDocumento(btn.getAttribute('data-id')));
+                        btn.addEventListener('click', () => {
+                            const doc = rows.find((r) => r.id == btn.getAttribute('data-id'));
+                            reintentarDocumento(btn.getAttribute('data-id'), doc ? doc.estado : null);
+                        });
                     });
                     tbody.querySelectorAll('.ia-btn-doc-agentes').forEach((btn) => {
                         btn.addEventListener('click', () => {
@@ -401,8 +404,9 @@
         if (PERM.actualizar) {
             accionesHtml += `<button type="button" class="btn btn-sm btn-outline-secondary ia-btn-doc-agentes" data-id="${d.id}" title="Agentes que pueden usar este documento"><i class="bi bi-people"></i></button> `;
         }
-        if (d.estado === 'error' && PERM.actualizar) {
-            accionesHtml += `<button type="button" class="btn btn-sm btn-outline-warning ia-btn-reintentar-doc" data-id="${d.id}" title="Reintentar"><i class="bi bi-arrow-clockwise"></i></button> `;
+        if (PERM.actualizar && (d.estado === 'error' || d.estado === 'listo')) {
+            const titulo = d.estado === 'error' ? 'Reintentar' : 'Reprocesar (regenerar fragmentos)';
+            accionesHtml += `<button type="button" class="btn btn-sm btn-outline-warning ia-btn-reintentar-doc" data-id="${d.id}" title="${titulo}"><i class="bi bi-arrow-clockwise"></i></button> `;
         }
         if (PERM.eliminar) {
             accionesHtml += `<button type="button" class="btn btn-sm btn-outline-danger ia-btn-eliminar-doc" data-id="${d.id}" title="Eliminar"><i class="bi bi-trash"></i></button>`;
@@ -458,7 +462,10 @@
             });
     }
 
-    function reintentarDocumento(id) {
+    function reintentarDocumento(id, estadoActual) {
+        if (estadoActual === 'listo' && !confirm('Esto regenerará los fragmentos del documento (útil tras una mejora del sistema). ¿Continuar?')) {
+            return;
+        }
         const fd = new FormData();
         fd.append('id', id);
         fetch(BASE + '/documentoReintentar', { method: 'POST', body: fd })

@@ -137,6 +137,17 @@ class IaDocumentoRepository extends BaseRepository
     // ── Fragmentos (chunks) ─────────────────────────────────────────────────
 
     /**
+     * Borra los fragmentos existentes de un documento (previo a reindexarlo).
+     * Es un borrado físico a propósito: son datos derivados/regenerables del
+     * PDF, no un registro de negocio sujeto a eliminación lógica.
+     */
+    public function eliminarChunks(int $idDocumento): void
+    {
+        $st = $this->db->prepare('DELETE FROM ia_documento_chunks WHERE id_documento = :id');
+        $st->execute([':id' => $idDocumento]);
+    }
+
+    /**
      * Obtiene el texto de un fragmento puntual (para que el usuario vea qué
      * dice exactamente la fuente citada en una respuesta del chat).
      * Filtro por id_empresa SIEMPRE presente (aislamiento multiempresa).
