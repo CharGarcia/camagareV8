@@ -71,6 +71,33 @@ class EstadosFinancierosRepository
     }
 
     /**
+     * Cuentas configuradas del tipo "Cierre del Ejercicio" (modulos/configuracion_contable):
+     * cuenta de Utilidad y cuenta de Pérdida (ambas de patrimonio) donde el Balance muestra el
+     * resultado según el signo. Devuelve ['utilidad' => [...]|null, 'perdida' => [...]|null].
+     */
+    public function getCuentasCierreEjercicio(int $idEmpresa): array
+    {
+        $sql = "SELECT at.codigo AS slot, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre, pc.id AS id_cuenta
+                FROM asientos_tipo at
+                JOIN asientos_programados ap
+                  ON ap.id_asiento_tipo = at.id AND ap.id_empresa = :emp
+                 AND ap.id_referencia = at.id
+                 AND (ap.tipo_referencia = 'asientos tipo' OR ap.tipo_referencia = at.tipo_asiento)
+                 AND ap.eliminado = false
+                JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                WHERE at.tipo_asiento = 'cierre_ejercicio' AND at.eliminado = false
+                  AND at.codigo IN ('UTILIDADEJERCICIOCIERRE', 'PERDIDAEJERCICIOCIERRE')";
+        $st = $this->db->prepare($sql);
+        $st->execute([':emp' => $idEmpresa]);
+        $res = ['utilidad' => null, 'perdida' => null];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $key = $r['slot'] === 'UTILIDADEJERCICIOCIERRE' ? 'utilidad' : 'perdida';
+            $res[$key] = ['codigo' => $r['cuenta_codigo'], 'nombre' => $r['cuenta_nombre'], 'id' => (int) $r['id_cuenta']];
+        }
+        return $res;
+    }
+
+    /**
      * Obtiene los años distintos en los que existen asientos contables aprobados para la empresa.
      */
     public function getAniosDisponibles(int $idEmpresa): array

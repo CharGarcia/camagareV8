@@ -191,19 +191,39 @@ class EstadosFinancierosService
             }
         }
 
-        // Obtener la Utilidad del Ejercicio
+        // Obtener la Utilidad del Ejercicio (de las cuentas 4/5/6)
         $resultados = $this->getEstadoResultados($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
         $utilidadNeta = $resultados['totales']['utilidad_neta'];
-        
-        $lblNeta = $utilidadNeta >= 0 ? 'Utilidad del Ejercicio' : 'Pérdida del Ejercicio';
+
+        // CIERRE VIRTUAL: los datos migrados dejaron el resultado en la cuenta PIVOT (clase 7 =
+        // "Resumen de Resultados", que ningún reporte muestra). Se suma su saldo (haber - debe) al
+        // resultado para que el Balance cuadre. No hay doble conteo: el resultado está en 4/5/6
+        // (utilidadNeta) o en la clase 7, nunca en ambos.
+        $saldoPivot = 0.0;
+        foreach ($saldos as $s) {
+            if ((int) $s['nivel'] === 5 && str_starts_with((string) $s['codigo'], '7')) {
+                $saldoPivot += (float) $s['total_haber'] - (float) $s['total_debe'];
+            }
+        }
+        $resultado = $utilidadNeta + $saldoPivot;
+
+        // Cuenta de patrimonio configurada según el signo (Cierre del Ejercicio en Config. Contable)
+        $ctasCierre = $this->repository->getCuentasCierreEjercicio($idEmpresa);
+        if ($resultado >= 0) {
+            $cta = $ctasCierre['utilidad'] ?? null;
+            $lblNeta = 'Utilidad del Ejercicio';
+        } else {
+            $cta = $ctasCierre['perdida'] ?? null;
+            $lblNeta = 'Pérdida del Ejercicio';
+        }
         $patrimonio[] = [
-            'codigo' => '',
-            'nombre' => $lblNeta,
-            'saldo_final' => $utilidadNeta,
+            'codigo' => $cta['codigo'] ?? '',
+            'nombre' => $cta['nombre'] ?? $lblNeta,
+            'saldo_final' => $resultado,
             'nivel' => 1
         ];
-        
-        $totalPatrimonio += $utilidadNeta;
+
+        $totalPatrimonio += $resultado;
         $totalPasivoPatrimonio = $totalPasivos + $totalPatrimonio;
 
         return [

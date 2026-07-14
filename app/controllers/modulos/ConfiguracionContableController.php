@@ -101,7 +101,8 @@ class ConfiguracionContableController extends BaseModuloController
             'retenciones_compra' => 'Retenciones en Compra',
             'ingresos_egresos' => 'Ingresos y Egresos',
             'cobros_pagos' => 'Cobros y Pagos',
-            'nomina' => 'Nómina'
+            'nomina' => 'Nómina',
+            'cierre_ejercicio' => 'Cierre del Ejercicio'
         ];
 
         ob_start();

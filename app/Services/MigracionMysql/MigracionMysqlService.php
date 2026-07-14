@@ -1144,7 +1144,104 @@ class MigracionMysqlService
                 if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
             }
         }
+        // Cierre del ejercicio POR AÑO: salda las cuentas PIVOT (clase 7 = RESUMEN RESULTADOS)
+        // contra la cuenta de Utilidad/Pérdida configurada en 'cierre_ejercicio'.
+        $this->cerrarEjercicioMigrado($idEmpresa, $idUsuario, $pg, $res);
         return $res;
+    }
+
+    /** Cuentas configuradas del tipo 'cierre_ejercicio': id de la cuenta de Utilidad y de Pérdida. */
+    private function cuentasCierreConfig(int $idEmpresa, PDO $pg): array
+    {
+        $st = $pg->prepare(
+            "SELECT at.codigo AS slot, ap.id_cuenta
+               FROM asientos_tipo at
+               JOIN asientos_programados ap
+                 ON ap.id_asiento_tipo = at.id AND ap.id_empresa = ?
+                AND ap.id_referencia = at.id
+                AND (ap.tipo_referencia = 'asientos tipo' OR ap.tipo_referencia = at.tipo_asiento)
+                AND ap.eliminado = false
+              WHERE at.tipo_asiento = 'cierre_ejercicio' AND at.eliminado = false
+                AND at.codigo IN ('UTILIDADEJERCICIOCIERRE', 'PERDIDAEJERCICIOCIERRE')"
+        );
+        $st->execute([$idEmpresa]);
+        $r = ['utilidad' => null, 'perdida' => null];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $x) {
+            $k = $x['slot'] === 'UTILIDADEJERCICIOCIERRE' ? 'utilidad' : 'perdida';
+            $r[$k] = (int) $x['id_cuenta'];
+        }
+        return $r;
+    }
+
+    /**
+     * Genera, por cada año fiscal, un asiento de cierre (fechado 31-dic) que salda las cuentas PIVOT
+     * (clase 7, nivel 5) contra la cuenta de Utilidad (resultado positivo) o Pérdida (negativo)
+     * configurada. IDEMPOTENTE: el saldo de clase 7 se calcula incluyendo cierres previos
+     * (modulo_origen='migracion'), así al re-correr el neto es 0 y no duplica. El reset de
+     * contabilidad borra estos cierres (son 'migracion') para regenerarlos.
+     */
+    private function cerrarEjercicioMigrado(int $idEmpresa, int $idUsuario, PDO $pg, array &$res): void
+    {
+        $ctas = $this->cuentasCierreConfig($idEmpresa, $pg);
+        if (!$ctas['utilidad'] && !$ctas['perdida']) {
+            $res['cierre_aviso'] = 'Cuentas de cierre (Utilidad/Pérdida) no configuradas en Configuración Contable: no se generó el cierre del ejercicio.';
+            return;
+        }
+
+        // Saldo de clase 7 (nivel 5) por año y cuenta, sobre todos los asientos vivos de la empresa.
+        $q = $pg->prepare(
+            "SELECT EXTRACT(YEAR FROM a.fecha_asiento)::int AS anio, d.id_cuenta_contable AS idc,
+                    ROUND(SUM(d.haber) - SUM(d.debe), 2) AS saldo
+               FROM asientos_contables_cabecera a
+               JOIN asientos_contables_detalle d ON d.id_asiento = a.id AND d.eliminado = false
+               JOIN plan_cuentas pc ON pc.id = d.id_cuenta_contable
+              WHERE a.id_empresa = ? AND a.eliminado = false
+                AND pc.id_empresa = ? AND pc.codigo LIKE '7%' AND pc.nivel = '5'
+              GROUP BY anio, d.id_cuenta_contable"
+        );
+        $q->execute([$idEmpresa, $idEmpresa]);
+        $porAnio = [];
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $x) {
+            $s = (float) $x['saldo'];
+            if ($s != 0.0) { $porAnio[(int) $x['anio']][(int) $x['idc']] = $s; }
+        }
+        if (!$porAnio) { return; }
+
+        $amb    = $this->ambienteEmpresa($pg, $idEmpresa);
+        $insCab = $pg->prepare("INSERT INTO asientos_contables_cabecera (id_empresa, fecha_asiento, tipo_comprobante, numero_comprobante, concepto, estado, modulo_origen, total_debe, total_haber, tipo_ambiente, created_by) VALUES (?, ?, 'cierre', ?, ?, 'contabilizado', 'migracion', ?, ?, ?, ?) RETURNING id");
+        $insDet = $pg->prepare("INSERT INTO asientos_contables_detalle (id_empresa, id_asiento, id_cuenta_contable, debe, haber, referencia_detalle, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
+
+        ksort($porAnio);
+        foreach ($porAnio as $anio => $cuentas) {
+            $neto = round(array_sum($cuentas), 2);
+            if ($neto == 0.0) { continue; }
+            $ctaResultado = $neto > 0 ? $ctas['utilidad'] : $ctas['perdida'];
+            if (!$ctaResultado) { $res['cierre_omitidos'] = ($res['cierre_omitidos'] ?? 0) + 1; continue; }
+
+            try {
+                $pg->beginTransaction();
+                $lineas = []; $td = 0.0; $th = 0.0;
+                foreach ($cuentas as $idc => $s) {          // reverso de cada cuenta clase-7
+                    $debe = $s > 0 ? $s : 0.0;               // saldo crédito -> debitar para saldar
+                    $haber = $s < 0 ? -$s : 0.0;             // saldo débito  -> acreditar
+                    $lineas[] = [$idc, $debe, $haber]; $td += $debe; $th += $haber;
+                }
+                if ($neto > 0) { $lineas[] = [$ctaResultado, 0.0, $neto]; $th += $neto; }   // utilidad = crédito a patrimonio
+                else           { $lineas[] = [$ctaResultado, -$neto, 0.0]; $td += -$neto; } // pérdida  = débito a patrimonio
+
+                $insCab->execute([$idEmpresa, "$anio-12-31", "CIERRE-$anio", "Cierre del ejercicio $anio (migración)", round($td, 2), round($th, 2), $amb, $idUsuario]);
+                $idAsiento = (int) $insCab->fetchColumn();
+                foreach ($lineas as $ln) {
+                    $insDet->execute([$idEmpresa, $idAsiento, $ln[0], round($ln[1], 2), round($ln[2], 2), "Cierre del ejercicio $anio", $idUsuario]);
+                }
+                $pg->commit();
+                $res['cierres_generados'] = ($res['cierres_generados'] ?? 0) + 1;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
     }
 
     /** Migra el kardex (tabla inventarios) → inventario_kardex, con saldo corrido por producto/bodega. */

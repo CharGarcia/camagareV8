@@ -94,6 +94,7 @@ $base = BASE_URL;
                     <option value="ingresos_egresos">Ingresos y Egresos (Transacciones directas)</option>
                     <option value="cobros_pagos">Cobros y Pagos</option>
                     <option value="nomina">Nómina</option>
+                    <option value="cierre_ejercicio">Cierre del Ejercicio (Saldo de resultados a patrimonio)</option>
                 </select>
             </div>
             <div class="col-md-6 col-lg-3">
