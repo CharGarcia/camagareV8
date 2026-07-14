@@ -52,9 +52,7 @@ class EstadosFinancierosRepository
                 pc.nivel,
                 pc.codigo_sri,
                 COALESCE(SUM(CASE WHEN ac.estado = 'contabilizado' AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin THEN ad.debe ELSE 0 END), 0) AS total_debe,
-                COALESCE(SUM(CASE WHEN ac.estado = 'contabilizado' AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin THEN ad.haber ELSE 0 END), 0) AS total_haber,
-                COALESCE(SUM(CASE WHEN ac.estado = 'contabilizado' AND ac.fecha_asiento < :fecha_inicio THEN ad.debe ELSE 0 END), 0) AS inicial_debe,
-                COALESCE(SUM(CASE WHEN ac.estado = 'contabilizado' AND ac.fecha_asiento < :fecha_inicio THEN ad.haber ELSE 0 END), 0) AS inicial_haber
+                COALESCE(SUM(CASE WHEN ac.estado = 'contabilizado' AND ac.fecha_asiento BETWEEN :fecha_inicio AND :fecha_fin THEN ad.haber ELSE 0 END), 0) AS total_haber
             FROM plan_cuentas pc
             LEFT JOIN asientos_contables_detalle ad ON pc.id = ad.id_cuenta_contable AND ad.eliminado = false
                 $centroCostoFilter

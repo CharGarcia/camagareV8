@@ -125,7 +125,9 @@ class EstadosFinancierosService
      */
     public function getEstadoSituacionFinanciera(int $idEmpresa, string $fechaInicio, string $fechaFin, ?int $idCentroCosto = null, ?int $idProyecto = null, int $nivelReporte = 5): array
     {
-        // Para la situación financiera necesitamos el saldo acumulado (inicial + movimiento)
+        // El saldo inicial de cada período se registra manualmente como un asiento de apertura
+        // (no se arrastra automáticamente del histórico anterior a fecha_inicio); por eso solo
+        // se usa el movimiento dentro del rango filtrado, igual que el Estado de Resultados.
         $saldos = $this->repository->getSaldos($idEmpresa, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
 
         $activos = [];
@@ -139,8 +141,8 @@ class EstadosFinancierosService
         // 1. Calcular saldos directos
         foreach ($saldos as &$saldo) {
             $codigoStr = (string)$saldo['codigo'];
-            $debe = (float)$saldo['inicial_debe'] + (float)$saldo['total_debe'];
-            $haber = (float)$saldo['inicial_haber'] + (float)$saldo['total_haber'];
+            $debe = (float)$saldo['total_debe'];
+            $haber = (float)$saldo['total_haber'];
 
             if (str_starts_with($codigoStr, '1')) {
                 $saldo['saldo_directo'] = $debe - $haber;
