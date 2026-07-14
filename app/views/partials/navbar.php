@@ -340,6 +340,12 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
             </a>
             
             <a href="<?= $base ?>/perfil" class="text-white text-decoration-none" style="font-size:0.8rem" title="Mi perfil"><i class="bi bi-person-fill me-1"></i><?= htmlspecialchars($nombre) ?></a>
+            <?php if (\App\Helpers\Permisos::puedeVer('modulos/ia-soporte')): ?>
+            <a href="<?= $base ?>/modulos/ia-soporte" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="IA Soporte"
+               target="_blank" rel="noopener">
+                <i class="bi bi-robot"></i>
+            </a>
+            <?php endif; ?>
             <a href="<?= $base ?>/videos-ayuda" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Videos de ayuda"
                target="_blank" rel="noopener">
                 <i class="bi bi-question-circle-fill"></i>
@@ -464,6 +470,12 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
             </div>
 
             <div class="d-flex gap-2">
+                <?php if (\App\Helpers\Permisos::puedeVer('modulos/ia-soporte')): ?>
+                <a href="<?= $base ?>/modulos/ia-soporte" class="btn btn-outline-primary btn-sm flex-grow-1"
+                   target="_blank" rel="noopener">
+                    <i class="bi bi-robot me-1"></i>IA Soporte
+                </a>
+                <?php endif; ?>
                 <a href="<?= $base ?>/videos-ayuda" class="btn btn-outline-primary btn-sm flex-grow-1"
                    target="_blank" rel="noopener">
                     <i class="bi bi-question-circle-fill me-1"></i>Ayuda

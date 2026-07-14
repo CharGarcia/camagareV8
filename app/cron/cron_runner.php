@@ -36,6 +36,25 @@ if (file_exists($lockFile)) {
 
 file_put_contents($lockFile, getmypid());
 
+// ── Tareas (FIJO, no configurable) ────────────────────────────────────────────
+//    1) En CADA tick: marcar vencidas por fecha (barato; mantiene el estado al día).
+//    2) Recordatorio por correo a responsables: se autolimita a UN envío/día (06:00).
+try {
+    $svcTareas = new \App\Services\TareaRecordatorioService();
+
+    $nVenc = $svcTareas->marcarVencidas();
+    if ($nVenc > 0) {
+        echo "[" . date('Y-m-d H:i:s') . "] Tareas marcadas vencidas: {$nVenc}.\n";
+    }
+
+    $rec = $svcTareas->ejecutarSiCorresponde();
+    if (!empty($rec['ejecutado'])) {
+        echo "[" . date('Y-m-d H:i:s') . "] Recordatorio tareas: {$rec['correos']} correo(s), {$rec['tareas']} tarea(s).\n";
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error en tareas (vencidas/recordatorio): " . $e->getMessage() . "\n";
+}
+
 // ── Ejecutar ──────────────────────────────────────────────────────────────────
 try {
     $repository = new AutomatizacionesRepository();

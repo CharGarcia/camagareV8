@@ -628,6 +628,55 @@ class TareaRepository extends BaseRepository
         return (int)$st->fetchColumn();
     }
 
+    /**
+     * Tareas VENCIDAS o POR VENCER (fecha dentro de $dias) con su responsable resuelto
+     * (correo + nombre). Devuelve una fila por (tarea, responsable). Es GLOBAL: la tabla
+     * `tareas` no depende de empresa. Para el recordatorio diario por correo.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function getTareasVencidasYPorVencer(int $dias): array
+    {
+        $sql = "SELECT t.id,
+                       t.cliente_nombre,
+                       t.fecha_tarea,
+                       t.estado,
+                       co.nombre AS obligacion,
+                       LOWER(COALESCE(NULLIF(TRIM(u.mail), ''), NULLIF(TRIM(rt.correo), ''), NULLIF(TRIM(tr.correo_cache), '')))  AS resp_correo,
+                       COALESCE(NULLIF(TRIM(u.nombre), ''), NULLIF(TRIM(rt.nombre), ''), NULLIF(TRIM(tr.nombre_cache), ''))        AS resp_nombre
+                FROM tareas t
+                JOIN tareas_responsables tr    ON tr.id_tarea = t.id
+                LEFT JOIN usuarios u           ON u.id  = tr.id_usuario
+                LEFT JOIN responsables_tareas rt ON rt.id = tr.id_resp_tarea
+                LEFT JOIN cat_obligaciones co  ON co.id = t.id_obligacion
+                WHERE t.eliminado = false
+                  AND t.archivada = false
+                  AND (
+                        t.estado = 'vencida'
+                        OR (t.estado = 'por_realizar' AND t.fecha_tarea <= CURRENT_DATE + CAST(:dias AS INTEGER))
+                      )
+                ORDER BY resp_correo, t.fecha_tarea ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':dias' => $dias]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Marca como 'vencida' toda tarea 'por_realizar' cuya fecha ya pasó.
+     * Mantiene la columna estado consistente con la fecha (para filtros/reportes).
+     * @return int Número de tareas actualizadas.
+     */
+    public function marcarVencidasPorFecha(): int
+    {
+        $sql = "UPDATE tareas
+                   SET estado = 'vencida', updated_at = NOW()
+                 WHERE estado = 'por_realizar'
+                   AND fecha_tarea < CURRENT_DATE
+                   AND eliminado = false
+                   AND archivada = false";
+        return (int) $this->db->exec($sql);
+    }
+
     // ─── Clientes: listado + combo de obligaciones vigentes ──────
 
     /**

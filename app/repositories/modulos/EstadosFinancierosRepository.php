@@ -157,4 +157,51 @@ class EstadosFinancierosRepository
         $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
+
+    /**
+     * Saldo acumulado de la cuenta ANTES de fecha_inicio, con los mismos filtros que getMayorAuxiliar().
+     * Equivalente a inicial_debe/inicial_haber de getSaldos(), para que el Mayor Auxiliar arranque
+     * su saldo arrastrado desde el mismo punto que usa el total del balance.
+     */
+    public function getSaldoInicialCuenta(
+        int $idEmpresa,
+        string $codigoCuenta,
+        string $fechaInicio,
+        ?int $idCentroCosto = null,
+        ?int $idProyecto = null
+    ): array {
+        $whereSql = "WHERE ac.id_empresa = :id_empresa
+                     AND ac.estado = 'contabilizado'
+                     AND ac.eliminado = false
+                     AND ad.eliminado = false
+                     AND ac.fecha_asiento < :f_inicio
+                     AND pc.codigo LIKE :codigo_cuenta
+                     AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+
+        $params = [
+            ':id_empresa' => $idEmpresa,
+            ':f_inicio' => $fechaInicio,
+            ':codigo_cuenta' => $codigoCuenta . '%'
+        ];
+
+        if ($idCentroCosto) {
+            $whereSql .= " AND ad.id_centro_costo = :id_centro_costo";
+            $params[':id_centro_costo'] = $idCentroCosto;
+        }
+
+        if ($idProyecto) {
+            $whereSql .= " AND ad.id_proyecto = :id_proyecto";
+            $params[':id_proyecto'] = $idProyecto;
+        }
+
+        $sql = "SELECT COALESCE(SUM(ad.debe), 0) AS debe, COALESCE(SUM(ad.haber), 0) AS haber
+                FROM asientos_contables_detalle ad
+                INNER JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
+                INNER JOIN plan_cuentas pc ON ad.id_cuenta_contable = pc.id
+                $whereSql";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: ['debe' => 0, 'haber' => 0];
+    }
 }

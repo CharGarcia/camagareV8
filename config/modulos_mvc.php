@@ -53,6 +53,14 @@ return [
         ],
     ],
 
+    // IA Soporte (asistente legal/tributario/contable con IA, BYOK).
+    // id_submodulo = 0 → se resuelve por la ruta desde submodulos_menu en cada
+    // entorno (200 en local, otro id en producción). No hardcodear el id.
+    'modulos/ia-soporte' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     'modulos/factura-venta' => [
         'id_submodulo' => 149,
         'legacy_rutas' => [

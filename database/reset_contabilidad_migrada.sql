@@ -20,10 +20,23 @@ DECLARE
   v_emp   INT := 1;   -- <<< AJUSTAR: id de la empresa
   v_user  INT := 1;   -- deleted_by
   v_asi   INT[];
-  v_docs  TEXT[] := ARRAY[
-    'compras_cabecera','ventas_cabecera','ingresos_cabecera','egresos_cabecera',
-    'retencion_venta_cabecera','retencion_compra_cabecera','notas_credito_cabecera',
-    'recibos_venta_cabecera','liquidaciones_cabecera','consignaciones_ventas'
+  -- TODAS las tablas que guardan un id de asiento (tabla, columna). Se limpian por el id del
+  -- asiento migrado (v_asi ya está acotado a la empresa), así funciona aunque la tabla no tenga id_empresa.
+  v_docs  TEXT[][] := ARRAY[
+    ARRAY['compras_cabecera','id_asiento_contable'],
+    ARRAY['ventas_cabecera','id_asiento_contable'],
+    ARRAY['ingresos_cabecera','id_asiento_contable'],
+    ARRAY['egresos_cabecera','id_asiento_contable'],
+    ARRAY['retencion_venta_cabecera','id_asiento_contable'],
+    ARRAY['retencion_compra_cabecera','id_asiento_contable'],
+    ARRAY['notas_credito_cabecera','id_asiento_contable'],
+    ARRAY['recibos_venta_cabecera','id_asiento_contable'],
+    ARRAY['liquidaciones_cabecera','id_asiento_contable'],
+    ARRAY['consignaciones_ventas','id_asiento_contable'],
+    ARRAY['cambios_producto_cv','id_asiento_contable'],
+    ARRAY['retornos_cv','id_asiento_contable'],
+    ARRAY['rol_cabecera','id_asiento'],
+    ARRAY['auditoria_contable_incidencias','id_asiento']
   ];
   v_refs  TEXT[][] := ARRAY[
     ARRAY['asientos_contables_detalle','id_cuenta_contable'],
@@ -35,7 +48,7 @@ DECLARE
     ARRAY['productos','id_cuenta_ingreso'],
     ARRAY['proveedores','id_cuenta_gasto']
   ];
-  t       TEXT;
+  dd      TEXT[];
   cc      TEXT[];
   r       RECORD;
   v_new   INT;
@@ -48,8 +61,8 @@ BEGIN
   WHERE id_empresa = v_emp AND modulo_origen = 'migracion';
 
   IF v_asi IS NOT NULL THEN
-    FOREACH t IN ARRAY v_docs LOOP
-      EXECUTE format('UPDATE %I SET id_asiento_contable = NULL WHERE id_empresa = %s AND id_asiento_contable = ANY($1)', t, v_emp) USING v_asi;
+    FOREACH dd SLICE 1 IN ARRAY v_docs LOOP
+      EXECUTE format('UPDATE %I SET %I = NULL WHERE %I = ANY($1)', dd[1], dd[2], dd[2]) USING v_asi;
     END LOOP;
     DELETE FROM asientos_contables_detalle WHERE id_asiento = ANY(v_asi);
     GET DIAGNOSTICS n_det = ROW_COUNT;

@@ -98,6 +98,26 @@ class ConfigController extends Controller
         (new BancosEcuadorController())->store();
     }
 
+    public function iaAgentes(): void
+    {
+        (new IaAgentesController())->index();
+    }
+
+    public function iaAgentesStore(): void
+    {
+        (new IaAgentesController())->store();
+    }
+
+    public function iaAgentesUpdate(): void
+    {
+        (new IaAgentesController())->update();
+    }
+
+    public function iaAgentesDelete(): void
+    {
+        (new IaAgentesController())->delete();
+    }
+
     public function tarifaIva(): void
     {
         (new TarifaIvaController())->index();
