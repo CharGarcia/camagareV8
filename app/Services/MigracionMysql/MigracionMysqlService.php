@@ -946,6 +946,30 @@ class MigracionMysqlService
     }
 
     /**
+     * Mapea el `tipo` del diario viejo (MAYÚSCULAS, p. ej. 'DIARIO', 'COMPRAS_SERVICIOS') al
+     * vocabulario de `tipo_comprobante` del sistema nuevo (minúsculas: 'diario', 'compras', …),
+     * para que el asiento migrado se reconozca/filtre igual que los nativos.
+     */
+    private static function tipoComprobanteCasa(?string $tipo): string
+    {
+        static $mapa = [
+            'COMPRAS_SERVICIOS'   => 'compras',
+            'VENTAS'              => 'ventas',
+            'INGRESOS'            => 'ingresos',
+            'EGRESOS'             => 'egresos',
+            'RETENCIONES_COMPRAS' => 'retenciones_compras',
+            'RETENCIONES_VENTAS'  => 'retenciones_ventas',
+            'RECIBOS'             => 'ventas',
+            'NC_VENTAS'           => 'ventas',
+            'DIARIO'              => 'diario',
+            'BALANCE_INICIAL'     => 'apertura',
+            'ROL_PAGOS'           => 'nomina',
+        ];
+        $t = strtoupper(trim((string) $tipo));
+        return $mapa[$t] ?? 'diario';
+    }
+
+    /**
      * Resuelve el documento nuevo al que pertenece un asiento del diario viejo, a partir de su
      * 'tipo' (COMPRAS_SERVICIOS, VENTAS, …) y su codigo_unico (prefijo de letras + id del documento
      * viejo, p. ej. 'COM375496'). Devuelve [tabla, idDocNuevo] o null si el tipo no lleva documento
@@ -1045,7 +1069,7 @@ class MigracionMysqlService
         // Mapa de la propia contabilidad (id_diario viejo → id asiento nuevo) y ajuste de ambiente,
         // para reconciliar / (re)enlazar en re-corridas sin re-insertar.
         $mapContab = $this->mapaDe($pg, $idEmpresa, 'contabilidad');
-        $updAmb    = $pg->prepare("UPDATE asientos_contables_cabecera SET tipo_ambiente = ?, estado = ? WHERE id = ?");
+        $updAmb    = $pg->prepare("UPDATE asientos_contables_cabecera SET tipo_ambiente = ?, estado = ?, tipo_comprobante = ? WHERE id = ?");
 
         // Enlace documento ↔ asiento migrado. `docDeDiario()` resuelve el documento nuevo por el
         // 'tipo' del diario y el codigo_unico (prefijo+id viejo); aquí se setea
@@ -1074,10 +1098,11 @@ class MigracionMysqlService
             // Estado del asiento: los migrados se dan por posteados = 'contabilizado' (los anulados
             // ya se excluyeron arriba; se mantiene el mapeo por robustez).
             $est = (stripos((string) $e['estado'], 'anul') !== false) ? 'anulado' : 'contabilizado';
-            // Ya migrado: reconciliar ambiente + estado y (re)enlazar el documento con su asiento (re-corrida).
+            $tcomp = self::tipoComprobanteCasa($e['tipo'] ?? null); // vocabulario del sistema nuevo
+            // Ya migrado: reconciliar ambiente + estado + tipo y (re)enlazar el documento (re-corrida).
             if (isset($mapContab[(string) $old])) {
                 $idAsientoExist = (int) $mapContab[(string) $old];
-                $updAmb->execute([$this->ambienteEmpresa($pg, $idEmpresa), $est, $idAsientoExist]);
+                $updAmb->execute([$this->ambienteEmpresa($pg, $idEmpresa), $est, $tcomp, $idAsientoExist]);
                 $enlazar($e, $idAsientoExist);
                 $res['ya_migrados']++;
                 continue;
@@ -1103,7 +1128,7 @@ class MigracionMysqlService
                     $td += (float) $d['debe'];
                     $th += (float) $d['haber'];
                 }
-                $insCab->execute([$idEmpresa, substr((string) $e['fecha_asiento'], 0, 10), (self::nz($e['tipo']) !== null ? (string) $e['tipo'] : 'DIARIO'), (string) $e['codigo_unico'], (self::nz($e['concepto_general']) !== null ? (string) $e['concepto_general'] : (string) $e['codigo_unico']), $est, $td, $th, $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario]);
+                $insCab->execute([$idEmpresa, substr((string) $e['fecha_asiento'], 0, 10), $tcomp, (string) $e['codigo_unico'], (self::nz($e['concepto_general']) !== null ? (string) $e['concepto_general'] : (string) $e['codigo_unico']), $est, $td, $th, $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario]);
                 $idAsiento = (int) $insCab->fetchColumn();
                 foreach ($lineas as $ln) {
                     $insDet->execute([$idEmpresa, $idAsiento, $ln[0], $ln[1], $ln[2], $ln[3], $idUsuario]);
