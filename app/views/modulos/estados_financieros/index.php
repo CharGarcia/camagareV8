@@ -508,19 +508,6 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
                     const de = parseFloat(item.debe) || 0;
                     const ha = parseFloat(item.haber) || 0;
 
-                    if (item.es_saldo_inicial) {
-                        html += `<tr class="table-light">
-                            <td class="text-center text-muted">—</td>
-                            <td class="text-center text-muted">—</td>
-                            <td></td>
-                            <td><strong><small>${item.concepto}</small></strong></td>
-                            <td class="text-end ${de > 0 ? 'text-dark' : 'text-muted'}">${formatMoney(de)}</td>
-                            <td class="text-end ${ha > 0 ? 'text-dark' : 'text-muted'}">${formatMoney(ha)}</td>
-                            <td class="text-end fw-bold">${formatMoney(item.saldo_acumulado)}</td>
-                        </tr>`;
-                        return;
-                    }
-
                     html += `<tr>
                         <td class="text-center">${item.fecha_asiento}</td>
                         <td class="text-center"><a href="#" onclick="event.preventDefault(); ASIENTO_abrirModal(${item.id_asiento});" class="text-decoration-none fw-bold" title="Ver asiento contable">${item.numero_comprobante || 'S/N'}</a></td>

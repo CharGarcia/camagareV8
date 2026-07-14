@@ -426,47 +426,15 @@ class EstadosFinancierosService
     ): array {
         $movimientos = $this->repository->getMayorAuxiliar($idEmpresa, $codigoCuenta, $fechaInicio, $fechaFin, $idCentroCosto, $idProyecto);
 
-        // 1=Activo (Deudora), 2=Pasivo (Acreedora), 3=Patrimonio (Acreedora), 4=Ingresos (Acreedora), 5=Costos (Deudora), 6=Gastos (Deudora)
-        $prefijoCuenta = $codigoCuenta !== '' ? $codigoCuenta[0] : '1';
-        $naturalezaCuenta = in_array($prefijoCuenta, ['1', '5', '6']) ? 'deudora' : 'acreedora';
+        $saldoArrastrado = 0.0;
 
-        // Solo las cuentas de Balance (Activo/Pasivo/Patrimonio) acumulan saldo entre períodos.
-        // Las cuentas de Resultados (Ingresos/Costos/Gastos) se reinician cada período: el Estado
-        // de Resultados solo usa el movimiento del rango filtrado (sin arrastre), así que el Mayor
-        // debe coincidir con eso y NO sumar histórico previo a fecha_inicio.
-        $esCuentaBalance = in_array($prefijoCuenta, ['1', '2', '3']);
-
-        $debeIni = 0.0;
-        $haberIni = 0.0;
-        if ($esCuentaBalance) {
-            $saldoInicial = $this->repository->getSaldoInicialCuenta($idEmpresa, $codigoCuenta, $fechaInicio, $idCentroCosto, $idProyecto);
-            $debeIni = (float)$saldoInicial['debe'];
-            $haberIni = (float)$saldoInicial['haber'];
-        }
-        $saldoArrastrado = $naturalezaCuenta === 'deudora' ? ($debeIni - $haberIni) : ($haberIni - $debeIni);
-
-        $resultado = [];
-        if ($esCuentaBalance && ($debeIni !== 0.0 || $haberIni !== 0.0)) {
-            $resultado[] = [
-                'id_asiento' => null,
-                'fecha_asiento' => null,
-                'numero_comprobante' => null,
-                'concepto' => 'Saldo del periodo anterior',
-                'referencia_detalle' => null,
-                'documento_referencia' => null,
-                'debe' => $debeIni,
-                'haber' => $haberIni,
-                'codigo_cuenta' => $codigoCuenta,
-                'saldo_acumulado' => $saldoArrastrado,
-                'es_saldo_inicial' => true,
-            ];
-        }
-
-        foreach ($movimientos as $mov) {
+        foreach ($movimientos as &$mov) {
             $debe = (float)$mov['debe'];
             $haber = (float)$mov['haber'];
             $cod = (string)$mov['codigo_cuenta'];
             $prefijo = $cod !== '' ? $cod[0] : '1';
+
+            // 1=Activo (Deudora), 2=Pasivo (Acreedora), 3=Patrimonio (Acreedora), 4=Ingresos (Acreedora), 5=Costos (Deudora), 6=Gastos (Deudora)
             $naturaleza = in_array($prefijo, ['1', '5', '6']) ? 'deudora' : 'acreedora';
 
             if ($naturaleza === 'deudora') {
@@ -476,10 +444,8 @@ class EstadosFinancierosService
             }
 
             $mov['saldo_acumulado'] = $saldoArrastrado;
-            $mov['es_saldo_inicial'] = false;
-            $resultado[] = $mov;
         }
 
-        return $resultado;
+        return $movimientos;
     }
 }
