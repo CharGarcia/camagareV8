@@ -1025,7 +1025,7 @@ class MigracionMysqlService
 
         // Plan de cuentas: código → id nuevo, y old id_cuenta → info (para puentear/crear)
         $cuentaPorCod = [];
-        $qn = $pg->prepare("SELECT codigo, id FROM plan_cuentas WHERE id_empresa = ?");
+        $qn = $pg->prepare("SELECT codigo, id FROM plan_cuentas WHERE id_empresa = ? AND eliminado = false");
         $qn->execute([$idEmpresa]);
         foreach ($qn->fetchAll(PDO::FETCH_ASSOC) as $r) { $cuentaPorCod[(string) $r['codigo']] = (int) $r['id']; }
         $oldCuentas = [];
