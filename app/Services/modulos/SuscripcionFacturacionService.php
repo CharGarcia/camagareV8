@@ -6,30 +6,34 @@ namespace App\Services\modulos;
 use App\Services\SecuencialService;
 
 /**
- * Genera una factura de venta a partir de una suscripción y su detalle.
- * Extraído de SuscripcionesController::generarFacturasManualAjax para que
- * tanto el botón manual como el cron de automatizaciones usen la misma lógica.
+ * Genera el documento de venta de una suscripción (Factura de Venta o Recibo de
+ * Venta, según suscripciones.tipo_comprobante) a partir de su detalle.
+ * Es el ÚNICO punto de generación: lo usan tanto el botón manual del módulo
+ * (SuscripcionesController::generarFacturasManualAjax) como el cron de
+ * automatizaciones (SuscripcionesHandler).
  *
- * NOTA: solo CREA la factura (estado borrador). El envío al SRI lo hace
- * la automatización separada de "Facturas de venta → Enviar al SRI".
+ * NOTA: solo CREA el documento (estado borrador). El envío al SRI de las
+ * facturas lo hace la automatización separada "Facturas de venta → Enviar al SRI".
+ * El recibo de venta no se envía al SRI.
  */
 class SuscripcionFacturacionService
 {
     public function __construct(
         private FacturaVentaService $facturaService,
-        private SecuencialService   $secService
+        private SecuencialService   $secService,
+        private ReciboVentaService  $reciboService
     ) {}
 
     /**
-     * Genera una factura para UN período de la suscripción.
+     * Genera el documento de UN período de la suscripción.
      *
-     * @param array $susc          Fila de la suscripción (id_cliente, forma_cobro, ...)
+     * @param array $susc          Fila de la suscripción (id_cliente, forma_cobro, tipo_comprobante, ...)
      * @param array $detalle       Ítems (de SuscripcionesRepository::getDetalle)
      * @param array $estabConfig   Establecimiento + punto de emisión (de getSeriesActivas + datos)
      * @param array $empresaConfig Config de empresa (Empresa::getPorId)
      * @param array  $extras        ['texto_item','info_concepto','info_detalle']
      * @param string $periodoFecha  Fecha del período facturado (Y-m-d) para los placeholders
-     * @return array{id_factura:int, importe:float}
+     * @return array{id_factura:?int, id_recibo:?int, tipo:string, importe:float}
      */
     public function generarUnPeriodo(
         int $idEmpresa,
@@ -96,7 +100,11 @@ class SuscripcionFacturacionService
             throw new \RuntimeException("La suscripción #{$susc['id']} no tiene ítems con monto.");
         }
 
-        $secRes     = $this->secService->obtenerSiguienteSecuencial((int)$estabConfig['id_punto_emision'], 'Facturas de venta');
+        // Tipo de documento configurado en la suscripción. Cada tipo tiene su
+        // propio secuencial en el mismo punto de emisión.
+        $esRecibo   = ($susc['tipo_comprobante'] ?? 'factura') === 'recibo';
+        $tipoSec    = $esRecibo ? 'Recibos de venta' : 'Facturas de venta';
+        $secRes     = $this->secService->obtenerSiguienteSecuencial((int)$estabConfig['id_punto_emision'], $tipoSec);
         $secuencial = $secRes['formateado'];
 
         $infoAdicional = [];
@@ -129,7 +137,9 @@ class SuscripcionFacturacionService
             $infoAdicional[] = ['nombre' => 'correo del cliente', 'valor' => $emailCliente];
         }
 
-        $facturaData = [
+        $formaPago = ($susc['forma_cobro'] ?? '') === 'tarjeta' ? '16' : '20';
+
+        $documentoData = [
             'id_empresa'          => $idEmpresa,
             'id_usuario'          => $idUsuario,
             'id_cliente'          => $susc['id_cliente'],
@@ -143,7 +153,7 @@ class SuscripcionFacturacionService
             'empresa_config'      => $empresaConfig,
             'detalles'            => $detallesFactura,
             'pagos'               => [[
-                'forma_pago' => ($susc['forma_cobro'] ?? '') === 'tarjeta' ? '16' : '20',
+                'forma_pago' => $formaPago,
                 'total'      => $importe,
                 'plazo'      => 0,
             ]],
@@ -155,8 +165,25 @@ class SuscripcionFacturacionService
             'observaciones'       => '',
         ];
 
-        $idFactura = $this->facturaService->crear($facturaData);
-        return ['id_factura' => $idFactura, 'importe' => $importe];
+        if (!$esRecibo) {
+            $idFactura = $this->facturaService->crear($documentoData);
+            return ['id_factura' => $idFactura, 'id_recibo' => null, 'tipo' => 'factura', 'importe' => $importe];
+        }
+
+        // Recibo de venta: mismos ítems/totales; el recibo no va al SRI y nace en
+        // borrador. Se emite CON impuestos porque el detalle de la suscripción
+        // guarda el IVA por línea (espejo de la factura).
+        $documentoData['con_impuestos'] = true;
+        $documentoData['estado']        = 'borrador';
+        $documentoData['moneda']        = 'DOLAR';
+        $documentoData['id_vendedor']   = null;
+        $documentoData['dias_credito']  = 0;
+        $documentoData['plazo']         = 0;
+        $documentoData['total_ice']     = 0;
+        $documentoData['pagos'][0]['unidad_tiempo'] = 'dias';
+
+        $idRecibo = $this->reciboService->crear($documentoData);
+        return ['id_factura' => null, 'id_recibo' => $idRecibo, 'tipo' => 'recibo', 'importe' => $importe];
     }
 
     private const MESES = [

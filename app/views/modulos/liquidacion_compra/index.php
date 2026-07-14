@@ -606,8 +606,9 @@ $pestanasConfigLiq = [
                                                             <div class="border border-warning border-opacity-25 rounded-2 p-2 bg-warning bg-opacity-10 mb-1 row g-2">
                                                                 <div class="col-6">
                                                                     <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Op. Bancaria</label>
-                                                                    <select class="form-select form-select-sm" id="pagoTipoOp">
+                                                                    <select class="form-select form-select-sm" id="pagoTipoOp" onchange="LC_toggleChequeFecha(this.value)">
                                                                         <option value="TRANSFERENCIA">Transferencia</option>
+                                                                        <option value="DEPOSITO">Depósito</option>
                                                                         <option value="DEBITO">Débito</option>
                                                                         <option value="CHEQUE">Cheque</option>
                                                                     </select>
@@ -615,6 +616,11 @@ $pestanasConfigLiq = [
                                                                 <div class="col-6">
                                                                     <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Nº Referencia</label>
                                                                     <input type="text" class="form-control form-control-sm" id="pagoNumOp" placeholder="Nº doc / Transf">
+                                                                </div>
+                                                                <!-- Solo para CHEQUE: fecha en que se podrá cobrar (posfechados) -->
+                                                                <div class="col-6 d-none" id="pagoWrapFechaCobro">
+                                                                    <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;"><i class="bi bi-calendar-date me-1"></i>Fecha de cobro</label>
+                                                                    <input type="date" class="form-control form-control-sm" id="pagoFechaCobro">
                                                                 </div>
                                                                 <div class="col-12">
                                                                     <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Banco</label>

@@ -229,6 +229,8 @@ class RolesPagoController extends BaseModuloController
                 'id_punto_emision'         => (int) ($_POST['id_punto_emision'] ?? 0),
                 'tipo_operacion_bancaria'  => trim($_POST['tipo_operacion_bancaria'] ?? ''),
                 'numero_cheque_inicial'    => (int) ($_POST['numero_cheque_inicial'] ?? 0),
+                // Fecha de cobro del cheque, aplica a todo el lote (control de posfechados)
+                'fecha_cobro'              => trim($_POST['fecha_cobro'] ?? ''),
             ];
             $svc = new \App\Services\modulos\RolEgresoLoteService(new LogSistemaService());
             $res = $svc->generar($idRol, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $opts);

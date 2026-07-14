@@ -84,10 +84,16 @@
                                     <option value="CHEQUE">Cheque</option>
                                 </select>
                             </div>
-                            <div class="col-6 d-none" id="egl_cheque_wrap">
+                            <div class="col-6 d-none egl-cheque-campo" id="egl_cheque_wrap">
                                 <label class="form-label small fw-bold mb-1">N° inicial de cheque</label>
                                 <input type="number" id="egl_cheque_ini" class="form-control form-control-sm" min="1" step="1" placeholder="Ej. 1001">
                                 <small class="text-muted">Se numera consecutivo por empleado.</small>
+                            </div>
+                            <!-- Solo para CHEQUE: fecha de cobro (aplica a todo el lote; control de posfechados) -->
+                            <div class="col-6 d-none egl-cheque-campo" id="egl_cheque_fecha_wrap">
+                                <label class="form-label small fw-bold mb-1"><i class="bi bi-calendar-date me-1"></i>Fecha de cobro</label>
+                                <input type="date" id="egl_cheque_fecha" class="form-control form-control-sm">
+                                <small class="text-muted">Se aplica a todos los cheques del lote.</small>
                             </div>
                         </div>
                     </div>

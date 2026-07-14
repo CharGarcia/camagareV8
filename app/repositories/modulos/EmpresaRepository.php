@@ -229,22 +229,7 @@ class EmpresaRepository extends BaseModel
         $id = (int) $idEst;
         $user = (int) ($_SESSION['id_usuario'] ?? 0);
 
-        // Validar si es matriz 001
-        $current = $this->query("SELECT codigo, tipo FROM empresa_establecimiento WHERE id = {$id} AND id_empresa = {$idEmpresa}");
-        if (!empty($current)) {
-            $estActual = $current[0];
-            if ($estActual['codigo'] === '001' || strtolower($estActual['tipo']) === 'matriz') {
-                if (isset($data['codigo']) && $data['codigo'] !== $estActual['codigo']) {
-                    throw new \Exception('El código del establecimiento matriz no puede ser cambiado.');
-                }
-                if (isset($data['tipo']) && strtolower($data['tipo']) !== 'matriz') {
-                    throw new \Exception('El tipo del establecimiento matriz no puede ser cambiado.');
-                }
-                if (isset($data['estado']) && strtolower($data['estado']) !== 'activo') {
-                    throw new \Exception('El establecimiento matriz debe estar siempre activo.');
-                }
-            }
-        }
+        // El establecimiento matriz también es editable (código, tipo y estado).
 
         $nom = $this->escape($data['nombre'] ?? '');
         $cod = $this->escape($data['codigo'] ?? '001');

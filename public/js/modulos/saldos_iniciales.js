@@ -1055,16 +1055,36 @@ function SI_toggleBancoMov(idForma) {
     document.getElementById('si-mov-div-banco').classList.toggle('d-none', tipo !== 'BANCO');
 }
 
+// Muestra la fecha de cobro del cheque solo cuando la operación bancaria es CHEQUE (posfechados).
+function SI_toggleChequeFecha(val) {
+    const wrap = document.getElementById('si-mov-wrap-fecha-cheque');
+    if (!wrap) return;
+    const esCheque = (val === 'CHEQUE');
+    wrap.classList.toggle('d-none', !esCheque);
+    if (!esCheque) document.getElementById('si-mov-fecha-cheque').value = '';
+}
+
 async function SI_guardarMovimiento() {
     const tipo    = document.getElementById('si-mov-tipo').value;
     const idSaldo = document.getElementById('si-mov-id').value;
+    const divBanco = document.getElementById('si-mov-div-banco');
+    const tipoOp   = document.getElementById('si-mov-tipo-op').value;
+
+    // Cheque: la fecha de cobro es obligatoria (insumo del control de posfechados)
+    let fechaCheque = '';
+    if (divBanco && !divBanco.classList.contains('d-none') && tipoOp === 'CHEQUE') {
+        fechaCheque = document.getElementById('si-mov-fecha-cheque').value;
+        if (!fechaCheque) { SI_toast('Indique la fecha de cobro del cheque.', 'warning'); return; }
+    }
+
     const fd = new FormData();
     fd.append('id_saldo',    idSaldo);
     fd.append('id_punto_emision', document.getElementById('si-mov-punto').value);
     fd.append('monto',       document.getElementById('si-mov-monto').value);
     fd.append('observaciones', document.getElementById('si-mov-obs').value);
-    fd.append('tipo_operacion_bancaria', document.getElementById('si-mov-tipo-op').value);
+    fd.append('tipo_operacion_bancaria', tipoOp);
     fd.append('numero_operacion', document.getElementById('si-mov-num-op')?.value || '');
+    fd.append('fecha_cheque', fechaCheque);
 
     if (tipo === 'CXC') {
         fd.append('id_forma_cobro',      document.getElementById('si-mov-forma').value);

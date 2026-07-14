@@ -363,11 +363,6 @@ class SuscripcionesController extends BaseModuloController
     public function generarFacturasManualAjax(): void
     {
         $this->requireCrear();
-        set_error_handler(function($errno, $errstr, $errfile, $errline) {
-            file_put_contents('debug_warnings.txt', "[$errno] $errstr in $errfile on line $errline\n", FILE_APPEND);
-            return false; // let it continue
-        });
-
         header('Content-Type: application/json');
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -427,12 +422,29 @@ class SuscripcionesController extends BaseModuloController
                 return;
             }
 
-            $factService = new \App\Services\modulos\FacturaVentaService(
-                new \App\repositories\modulos\FacturaVentaRepository(),
-                new \App\Rules\modulos\FacturaVentaRules(),
-                new \App\Services\LogSistemaService()
+            // Generación unificada: el service decide Factura o Recibo de Venta
+            // según el tipo_comprobante de cada suscripción. Es el mismo punto de
+            // generación que usa la automatización/cron (SuscripcionesHandler).
+            $facturacion = new \App\Services\modulos\SuscripcionFacturacionService(
+                new \App\Services\modulos\FacturaVentaService(
+                    new \App\repositories\modulos\FacturaVentaRepository(),
+                    new \App\Rules\modulos\FacturaVentaRules(),
+                    new \App\Services\LogSistemaService()
+                ),
+                new \App\Services\SecuencialService(),
+                new \App\Services\modulos\ReciboVentaService(
+                    new \App\repositories\modulos\ReciboVentaRepository(),
+                    new \App\Rules\modulos\ReciboVentaRules(),
+                    new \App\Services\LogSistemaService()
+                )
             );
-            $secService = new \App\Services\SecuencialService();
+
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $extras = [
+                'texto_item'    => $textoItem,
+                'info_concepto' => $infoConcepto,
+                'info_detalle'  => $infoDetalle,
+            ];
 
             $generadas = 0;
             $errores   = 0;
@@ -441,134 +453,34 @@ class SuscripcionesController extends BaseModuloController
             foreach ($suscripciones as $susc) {
                 $idSusc = (int) $susc['id'];
                 $meses  = (int) ($susc['periodicidad_meses'] ?? 1);
-                
+                $codigo = (string) ($susc['periodicidad_codigo'] ?? '');
+
                 try {
                     $detalle = $suscRepo->getDetalle($idSusc);
-                    $detallesFactura = [];
-                    $totalSinImp     = 0.0;
-                    $totalIva        = 0.0;
+                    if (empty($detalle)) continue;
 
-                    foreach ($detalle as $det) {
-                        $base = round((float) $det['cantidad'] * (float) $det['precio_unitario'], 2);
-                        $pct  = (float) ($det['porcentaje_iva'] ?? 0);
-                        $iva  = round($base * ($pct / 100), 2);
-                        $totalSinImp += $base;
-                        $totalIva    += $iva;
+                    // El período generado alimenta los placeholders ({mes}, {anio}, ...)
+                    $periodo = (string) $susc['proximo_cobro'];
 
-                        // codigo_porcentaje viene del JOIN con tarifa_iva.
-                        // Fallback: '0' para 0%, '2' para cualquier otro (comportamiento anterior).
-                        $codigoPorcentaje = $det['codigo_porcentaje']
-                            ?? ($pct > 0 ? '2' : '0');
-
-                        $descripcionItem = $det['descripcion'] ?? $det['nombre_producto'];
-
-                        $infoAdicionalItem = null;
-                        if (!empty($textoItem)) {
-                            $infoAdicionalItem = $textoItem;
-                        }
-
-                        $detallesFactura[] = [
-                            'id_producto'               => $det['id_producto'],
-                            'codigo_principal'          => $det['codigo_producto'] ?? '000',
-                            'descripcion'               => $descripcionItem,
-                            'info_adicional'            => $infoAdicionalItem,
-                            'cantidad'                  => $det['cantidad'],
-                            'precio_unitario'           => $det['precio_unitario'],
-                            'descuento'                 => 0,
-                            'precio_total_sin_impuesto' => $base,
-                            // Siempre se incluye el impuesto, independientemente del porcentaje.
-                            // Necesario para: XML SRI (requiere <impuestos> por ítem) y
-                            // sincronizarCasilleros (mapea codigo_porcentaje al casillero correcto).
-                            'impuestos' => [[
-                                'codigo_impuesto'   => '2',
-                                'codigo_porcentaje' => $codigoPorcentaje,
-                                'tarifa'            => $pct,
-                                'base_imponible'    => $base,
-                                'valor'             => $iva,
-                            ]],
-                        ];
-                    }
-
-                    $importe = round($totalSinImp + $totalIva, 2);
-                    if ($importe <= 0) continue;
-
-                    // Avanzar próximo cobro
-                    $codigo       = $susc['periodicidad_codigo'] ?? '';
-                    $proximoCobro = $this->service->calcularProximoCobro($susc['proximo_cobro'], $meses, $codigo);
-                    $suscRepo->updateProximoCobro($idSusc, $proximoCobro);
-
-                    $secRes = $secService->obtenerSiguienteSecuencial(
-                        (int) $estabConfig['id_punto_emision'],
-                        'Facturas de venta'
+                    $res = $facturacion->generarUnPeriodo(
+                        $idEmpresa, $idUsuario, $susc, $detalle, $estabConfig, $empresaConfig, $extras, $periodo
                     );
-                    $secuencial = $secRes['formateado'];
 
-                    $infoAdicional = [];
+                    // Avanzar el próximo cobro SOLO si el documento se creó.
+                    $suscRepo->updateProximoCobro(
+                        $idSusc,
+                        $this->service->calcularProximoCobro($periodo, $meses, $codigo)
+                    );
 
-                    // Información adicional propia de la suscripción (concepto/detalle),
-                    // capturada en el modal. Se traslada tal cual a la factura.
-                    $infoSusc = $susc['info_adicional'] ?? null;
-                    if (is_string($infoSusc) && $infoSusc !== '') {
-                        $infoSusc = json_decode($infoSusc, true);
-                    }
-                    if (is_array($infoSusc)) {
-                        foreach ($infoSusc as $fila) {
-                            $nombre = trim((string) ($fila['concepto'] ?? ''));
-                            $valor  = trim((string) ($fila['detalle']  ?? ''));
-                            if ($nombre !== '' && $valor !== '') {
-                                $infoAdicional[] = ['nombre' => $nombre, 'valor' => $valor];
-                            }
-                        }
-                    }
-
-                    if (!empty($infoConcepto) && !empty($infoDetalle)) {
-                        $infoAdicional[] = ['nombre' => $infoConcepto, 'valor' => $infoDetalle];
-                    }
-
-                    // Correo del cliente: campo fijo, usa el nombre 'correo del cliente' que la vista
-                    // reconoce como fila no eliminable (data-tipo="correo-cliente", sin botón borrar).
-                    $emailCliente = trim((string)($susc['cliente_email'] ?? ''));
-                    if ($emailCliente !== '') {
-                        $infoAdicional[] = ['nombre' => 'correo del cliente', 'valor' => $emailCliente];
-                    }
-
-                    $facturaData = [
-                        'id_empresa'          => $idEmpresa,
-                        'id_usuario'          => (int) $_SESSION['id_usuario'],
-                        'id_cliente'          => $susc['id_cliente'],
-                        'id_establecimiento'  => $estabConfig['id'],
-                        'id_punto_emision'    => $estabConfig['id_punto_emision'],
-                        'id_bodega'           => null,
-                        'fecha_emision'       => date('Y-m-d'),
-                        'establecimiento'     => $estabConfig['codigo'],
-                        'punto_emision'       => $estabConfig['punto_emision_codigo'],
-                        'secuencial'          => $secuencial,
-                        'empresa_config'      => $empresaConfig,
-                        'detalles'            => $detallesFactura,
-                        'pagos'               => [[
-                            'forma_pago' => $susc['forma_cobro'] === 'tarjeta' ? '16' : '20',
-                            'total'      => $importe,
-                            'plazo'      => 0,
-                        ]],
-                        'info_adicional'      => $infoAdicional,
-                        'total_sin_impuestos' => $totalSinImp,
-                        'total_descuento'     => 0,
-                        'importe_total'       => $importe,
-                        'propina'             => 0,
-                        'observaciones'       => '',
-                    ];
-
-                    $idFactura = $factService->crear($facturaData);
-                    
-                    // Opcional: Registrar pago en suscripciones_pagos
                     $suscRepo->insertPago([
                         'id_suscripcion' => $idSusc,
                         'id_empresa'     => $idEmpresa,
-                        'id_factura'     => $idFactura,
+                        'id_factura'     => $res['id_factura'],
+                        'id_recibo'      => $res['id_recibo'],
                         'fecha_cobro'    => date('Y-m-d'),
-                        'monto'          => $importe,
+                        'monto'          => $res['importe'],
                         'estado'         => 'exitoso',
-                        'id_usuario'     => (int) $_SESSION['id_usuario'],
+                        'id_usuario'     => $idUsuario,
                     ]);
 
                     $generadas++;
@@ -579,16 +491,14 @@ class SuscripcionesController extends BaseModuloController
             }
 
             if ($generadas === 0) {
-                file_put_contents('debug_errors.txt', print_r($errorMsgs, true));
-                echo json_encode(['ok' => false, 'mensaje' => 'No se pudieron generar facturas. Detalles: ' . implode(' | ', $errorMsgs)], JSON_INVALID_UTF8_SUBSTITUTE);
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudieron generar documentos. Detalles: ' . implode(' | ', $errorMsgs)], JSON_INVALID_UTF8_SUBSTITUTE);
                 return;
             }
 
-            if ($generadas > 0) {
-                echo json_encode(['ok' => true, 'mensaje' => "Se generaron $generadas facturas correctamente." . ($errores > 0 ? " (Hubo $errores errores)." : '')], JSON_INVALID_UTF8_SUBSTITUTE);
-            } else {
-                echo json_encode(['ok' => false, 'mensaje' => 'No se pudieron generar facturas. Revise los errores en el servidor.'], JSON_INVALID_UTF8_SUBSTITUTE);
-            }
+            echo json_encode([
+                'ok'      => true,
+                'mensaje' => "Se generaron $generadas documento(s) correctamente." . ($errores > 0 ? " (Hubo $errores con error)." : ''),
+            ], JSON_INVALID_UTF8_SUBSTITUTE);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
         }

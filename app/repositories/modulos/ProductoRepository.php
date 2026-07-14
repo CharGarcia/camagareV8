@@ -106,6 +106,8 @@ class ProductoRepository extends BaseRepository
                            mar.nombre AS nombre_marca,
                            ti.tarifa AS nombre_tarifa_iva,
                            ti.porcentaje_iva AS porcentaje_iva_final,
+                           ti.codigo AS codigo_iva_final,
+                           ti.status AS status_iva_final,
                            um.nombre AS nombre_medida,
                            um.id_tipo AS id_tipo_medida,
                            ((p.precio_base + COALESCE(p.valor_ice, 0)) * (COALESCE(ti.porcentaje_iva, 0)::numeric / 100)) AS valor_iva,
@@ -743,11 +745,12 @@ class ProductoRepository extends BaseRepository
         // Solo se consideran los códigos con el formato autogenerado exacto (P001, S42…).
         // Un código manual como 'PCFE01' o 'SINCODIGO' no debe mover el consecutivo.
         // Se limita a 9 dígitos para que el cast a bigint nunca desborde.
-        // No se filtra por 'eliminado' a propósito: el código de un producto borrado
-        // no se recicla.
+        // Se cuentan únicamente los productos NO eliminados: el código de un producto
+        // borrado queda libre para reutilizarse.
         $sql = "SELECT MAX(substring(codigo from 2)::bigint)
                 FROM {$this->table}
-                WHERE id_empresa = :id_empresa AND codigo ~ :patron";
+                WHERE id_empresa = :id_empresa AND codigo ~ :patron
+                  AND eliminado = false";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa, ':patron' => '^' . $prefijo . '[0-9]{1,9}$']);
         $numero = (int) ($st->fetchColumn() ?: 0);

@@ -961,8 +961,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                             <div class="border border-warning border-opacity-25 rounded-2 p-2 bg-warning bg-opacity-10 mb-1 row g-2">
                                                                 <div class="col-6">
                                                                     <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Op. Bancaria</label>
-                                                                    <select class="form-select form-select-sm shadow-none" id="fvPagoTipoOp">
+                                                                    <select class="form-select form-select-sm shadow-none" id="fvPagoTipoOp" onchange="fvToggleChequeFecha(this.value)">
                                                                         <option value="TRANSFERENCIA">Transferencia</option>
+                                                                        <option value="DEPOSITO">Depósito</option>
                                                                         <option value="DEBITO">Débito</option>
                                                                         <option value="CHEQUE">Cheque</option>
                                                                     </select>
@@ -970,6 +971,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                                 <div class="col-6">
                                                                     <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Nº Referencia / Cheque</label>
                                                                     <input type="text" class="form-control form-control-sm shadow-none" id="fvPagoNumOp" placeholder="Nº transf / cheque">
+                                                                </div>
+                                                                <!-- Solo para CHEQUE: fecha en que se podrá cobrar (cheques posfechados) -->
+                                                                <div class="col-6 d-none" id="fvPagoWrapFechaCheque">
+                                                                    <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;"><i class="bi bi-calendar-date me-1"></i>Fecha de cobro</label>
+                                                                    <input type="date" class="form-control form-control-sm shadow-none" id="fvPagoFechaCobro">
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -1640,6 +1646,9 @@ $totalPages = $totalPagesOriginal;
                 precio_unitario: tr.querySelector('.input-precio').value,
                 descuento: descVal.toFixed(2),
                 porcentaje_iva: ivaPct,
+                // Tarifa exacta elegida en la fila: permite reabrir el documento con
+                // su IVA real aunque esa tarifa se desactive más adelante.
+                id_tarifa_iva: selIva?.selectedOptions[0]?.dataset.id || '',
                 lista_precios: tr.querySelector('.input-lista-precios').value,
                 precio_total_sin_impuesto: subtotalNeto.toFixed(2),
                 casillero: tr.querySelector('.input-casillero').value,
@@ -3739,36 +3748,41 @@ $totalPages = $totalPagesOriginal;
                 cargarLotesFila(row);
             }
 
-            // Asignar IVA (priorizar porcentaje_iva_final de join unificado)
-            let pctFinal = null;
-            if (p.porcentaje_iva_final !== undefined && p.porcentaje_iva_final !== null) {
-                pctFinal = parseFloat(p.porcentaje_iva_final);
-            } else if (p.porcentaje_iva !== undefined && p.porcentaje_iva !== null) {
-                pctFinal = parseFloat(p.porcentaje_iva);
-            } else if (p.porcentaje !== undefined && p.porcentaje !== null) {
-                pctFinal = parseFloat(p.porcentaje);
-            } else if (p.tarifa_iva) {
-                const tFound = TARIFAS_IVA.find(t => t.id == p.tarifa_iva);
-                if (tFound) pctFinal = parseFloat(tFound.porcentaje_iva_final || tFound.porcentaje_iva || tFound.porcentaje);
-            }
+            // Tarifa IVA del producto. Se respeta SIEMPRE la que tenga guardada,
+            // aunque hoy esté inactiva en el catálogo (p. ej. el 12% histórico):
+            // el select solo se llena con tarifas activas, así que en ese caso la
+            // opción se inyecta en esta fila.
+            const selIva = row.querySelector('.input-iva');
+            if (selIva) {
+                const opts = Array.from(selIva.options);
 
-            if (pctFinal !== null || p.tarifa_iva) {
-                const selIva = row.querySelector('.input-iva');
-                if (selIva) {
-                    // Prioridad 1: Buscar por ID directo de tarifa_iva
-                    let opt = p.tarifa_iva ? Array.from(selIva.options).find(o => o.dataset.id == p.tarifa_iva) : null;
+                const pctProd = [p.porcentaje_iva_final, p.porcentaje_iva, p.porcentaje]
+                    .map(v => (v === undefined || v === null || v === '' ? null : parseFloat(v)))
+                    .find(v => v !== null && !isNaN(v));
+                const codProd = (p.codigo_iva_final !== undefined && p.codigo_iva_final !== null && p.codigo_iva_final !== '')
+                    ? p.codigo_iva_final : null;
 
-                    // Prioridad 2: Buscar por porcentaje (fallback)
-                    if (!opt && pctFinal !== null) {
-                        opt = Array.from(selIva.options).find(o => Math.abs(parseFloat(o.value) - pctFinal) < 0.001);
-                    }
+                // 1) Por id de tarifa: es exactamente lo guardado en el producto.
+                let opt = p.tarifa_iva ? opts.find(o => o.dataset.id == p.tarifa_iva) : null;
+                // 2) Por codigoPorcentaje del SRI: 0%, "No objeto" y "Exento" comparten
+                //    tarifa 0 y no se distinguen por el porcentaje.
+                if (!opt && codProd !== null) opt = opts.find(o => o.dataset.codigo == codProd);
+                // 3) Por porcentaje: último recurso, ambiguo si hay tarifas repetidas.
+                if (!opt && pctProd != null) opt = opts.find(o => Math.abs(parseFloat(o.value) - pctProd) < 0.001);
 
-                    if (opt) {
-                        selIva.selectedIndex = opt.index;
-                    } else if (pctFinal === 0) {
-                        selIva.value = "0";
-                    }
+                // 4) Tarifa inactiva: no está en el catálogo. Se agrega solo en esta
+                //    fila para no cambiarle el IVA al producto por la espalda; el
+                //    resto de filas sigue ofreciendo únicamente tarifas activas.
+                if (!opt && pctProd != null) {
+                    opt = document.createElement('option');
+                    opt.value = pctProd;
+                    if (codProd !== null) opt.dataset.codigo = codProd;
+                    if (p.tarifa_iva) opt.dataset.id = p.tarifa_iva;
+                    opt.textContent = p.nombre_tarifa_iva || (pctProd + '%');
+                    selIva.appendChild(opt);
                 }
+
+                if (opt) opt.selected = true;
             }
 
             // Manejo de Medidas
@@ -6348,6 +6362,15 @@ $totalPages = $totalPagesOriginal;
         }
     }
 
+    // Muestra la fecha de cobro solo cuando la operación bancaria es CHEQUE (posfechados).
+    function fvToggleChequeFecha(val) {
+        const wrap = document.getElementById('fvPagoWrapFechaCheque');
+        if (!wrap) return;
+        const esCheque = (val === 'CHEQUE');
+        wrap.classList.toggle('d-none', !esCheque);
+        if (!esCheque) document.getElementById('fvPagoFechaCobro').value = '';
+    }
+
     async function fvRegistrarCobro() {
         const idFact = parseInt(FV_ID_ACTIVO) || 0;
         if (!idFact) return;
@@ -6369,6 +6392,14 @@ $totalPages = $totalPagesOriginal;
             payload.tipo_operacion_bancaria = document.getElementById('fvPagoTipoOp').value || null;
             payload.numero_operacion        = document.getElementById('fvPagoNumOp').value  || null;
             payload.referencia              = document.getElementById('fvPagoNumOp').value  || null;
+            // Cheque: fecha en que se podrá cobrar (insumo para el control de posfechados)
+            if (payload.tipo_operacion_bancaria === 'CHEQUE') {
+                const fc = document.getElementById('fvPagoFechaCobro').value;
+                if (!fc) {
+                    return Swal.fire('Cheque', 'Indique la fecha de cobro del cheque.', 'warning');
+                }
+                payload.fecha_cobro = fc;
+            }
         }
 
         if (!payload.id_punto_emision) {

@@ -908,8 +908,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                             <div class="border border-warning border-opacity-25 rounded-2 p-2 bg-warning bg-opacity-10 mb-1 row g-2">
                                                                 <div class="col-6">
                                                                     <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Op. Bancaria</label>
-                                                                    <select class="form-select form-select-sm shadow-none" id="fvPagoTipoOp">
+                                                                    <select class="form-select form-select-sm shadow-none" id="fvPagoTipoOp" onchange="fvToggleChequeFecha(this.value)">
                                                                         <option value="TRANSFERENCIA">Transferencia</option>
+                                                                        <option value="DEPOSITO">Depósito</option>
                                                                         <option value="DEBITO">Débito</option>
                                                                         <option value="CHEQUE">Cheque</option>
                                                                     </select>
@@ -917,6 +918,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                                 <div class="col-6">
                                                                     <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Nº Referencia / Cheque</label>
                                                                     <input type="text" class="form-control form-control-sm shadow-none" id="fvPagoNumOp" placeholder="Nº transf / cheque">
+                                                                </div>
+                                                                <!-- Solo para CHEQUE: fecha en que se podrá cobrar (cheques posfechados) -->
+                                                                <div class="col-6 d-none" id="fvPagoWrapFechaCheque">
+                                                                    <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;"><i class="bi bi-calendar-date me-1"></i>Fecha de cobro</label>
+                                                                    <input type="date" class="form-control form-control-sm shadow-none" id="fvPagoFechaCobro">
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -6065,6 +6071,15 @@ $totalPages = $totalPagesOriginal;
         }
     }
 
+    // Muestra la fecha de cobro solo cuando la operación bancaria es CHEQUE (posfechados).
+    function fvToggleChequeFecha(val) {
+        const wrap = document.getElementById('fvPagoWrapFechaCheque');
+        if (!wrap) return;
+        const esCheque = (val === 'CHEQUE');
+        wrap.classList.toggle('d-none', !esCheque);
+        if (!esCheque) document.getElementById('fvPagoFechaCobro').value = '';
+    }
+
     async function fvRegistrarCobro() {
         const idFact = parseInt(RV_ID_ACTIVO) || 0;
         if (!idFact) return;
@@ -6086,6 +6101,14 @@ $totalPages = $totalPagesOriginal;
             payload.tipo_operacion_bancaria = document.getElementById('fvPagoTipoOp').value || null;
             payload.numero_operacion        = document.getElementById('fvPagoNumOp').value  || null;
             payload.referencia              = document.getElementById('fvPagoNumOp').value  || null;
+            // Cheque: fecha en que se podrá cobrar (insumo para el control de posfechados)
+            if (payload.tipo_operacion_bancaria === 'CHEQUE') {
+                const fc = document.getElementById('fvPagoFechaCobro').value;
+                if (!fc) {
+                    return Swal.fire('Cheque', 'Indique la fecha de cobro del cheque.', 'warning');
+                }
+                payload.fecha_cobro = fc;
+            }
         }
 
         if (!payload.id_punto_emision) {

@@ -280,11 +280,8 @@ class Empresa extends BaseModel
                 throw new \InvalidArgumentException('Establecimiento debe ser de 3 dígitos (000 a 999).');
             }
             
-            // Si el actual es 001, NO permitir cambiarlo
-            if ($estActual === '001' && $estNorm !== '001') {
-                throw new \InvalidArgumentException('El establecimiento matriz (001) no puede ser cambiado.');
-            }
-
+            // El establecimiento (incluido el 001/matriz) sí es editable; solo se valida
+            // el formato y que no se repita la combinación RUC + establecimiento.
             if ($this->existePorRucYEstablecimiento($ruc, $estNorm, $id)) {
                 throw new \InvalidArgumentException('Ya existe una empresa con el mismo RUC y establecimiento.');
             }
@@ -368,23 +365,7 @@ class Empresa extends BaseModel
     {
         $id = (int) $id;
         
-        // Verificar si es el 001 o tipo Matriz para restringir cambios
-        $sqlCheck = "SELECT codigo, tipo FROM empresa_establecimiento WHERE id = {$id}";
-        $check = $this->query($sqlCheck);
-        if (!empty($check)) {
-            $estActual = $check[0];
-            if ($estActual['codigo'] === '001' || strtolower($estActual['tipo']) === 'matriz') {
-                if (isset($data['codigo']) && $data['codigo'] !== $estActual['codigo']) {
-                    throw new \Exception('No se puede cambiar el código del establecimiento matriz.');
-                }
-                if (isset($data['tipo']) && strtolower($data['tipo']) !== 'matriz') {
-                    throw new \Exception('No se puede cambiar el tipo del establecimiento matriz.');
-                }
-                if (isset($data['estado']) && strtolower($data['estado']) !== 'activo') {
-                    throw new \Exception('El establecimiento matriz debe permanecer activo.');
-                }
-            }
-        }
+        // El establecimiento matriz también es editable (código, tipo y estado).
 
         $sets = [];
         $campos = ['nombre', 'codigo', 'direccion', 'tipo', 'estado'];

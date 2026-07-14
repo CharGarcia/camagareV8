@@ -1449,6 +1449,15 @@
         else divBanco.classList.add('d-none');
     };
 
+    // Muestra la fecha de cobro solo cuando la operación bancaria es CHEQUE (posfechados).
+    window.LC_toggleChequeFecha = function(val) {
+        const wrap = document.getElementById('pagoWrapFechaCobro');
+        if (!wrap) return;
+        const esCheque = (val === 'CHEQUE');
+        wrap.classList.toggle('d-none', !esCheque);
+        if (!esCheque) document.getElementById('pagoFechaCobro').value = '';
+    };
+
     window.LC_registrarPagoEgre = async function(e) {
         if (e) e.preventDefault();
         const idLiq = document.getElementById('liq-id').value;
@@ -1467,6 +1476,14 @@
             banco_id: document.getElementById('pagoBancoId').value,
             observaciones: document.getElementById('pagoObservaciones').value
         };
+
+        // Cheque: fecha en que se podrá cobrar (insumo para el control de posfechados)
+        const divBancoLC = document.getElementById('pagoDivDetalleBanco');
+        if (divBancoLC && !divBancoLC.classList.contains('d-none') && payload.tipo_operacion_bancaria === 'CHEQUE') {
+            const fc = document.getElementById('pagoFechaCobro').value;
+            if (!fc) { return Swal.fire('Cheque', 'Indique la fecha de cobro del cheque.', 'warning'); }
+            payload.fecha_cobro = fc;
+        }
 
         btn.disabled = true;
         try {

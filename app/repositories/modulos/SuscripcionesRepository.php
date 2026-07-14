@@ -428,10 +428,10 @@ class SuscripcionesRepository extends BaseRepository
     public function insertPago(array $data): int
     {
         $sql = "INSERT INTO suscripciones_pagos
-                    (id_suscripcion, id_empresa, fecha_cobro, monto, estado, id_factura,
+                    (id_suscripcion, id_empresa, fecha_cobro, monto, estado, id_factura, id_recibo,
                      kushki_transaction_id, kushki_response, intentos, created_by, created_at, eliminado)
                 VALUES
-                    (:id_suscripcion, :id_empresa, :fecha_cobro, :monto, :estado, :id_factura,
+                    (:id_suscripcion, :id_empresa, :fecha_cobro, :monto, :estado, :id_factura, :id_recibo,
                      :kushki_transaction_id, :kushki_response, :intentos, :created_by, CURRENT_TIMESTAMP, false)";
         $st = $this->db->prepare($sql);
         $st->execute([
@@ -441,6 +441,7 @@ class SuscripcionesRepository extends BaseRepository
             ':monto'                 => $data['monto'],
             ':estado'                => $data['estado'] ?? 'pendiente',
             ':id_factura'            => $data['id_factura'] ?? null,
+            ':id_recibo'             => $data['id_recibo'] ?? null,
             ':kushki_transaction_id' => $data['kushki_transaction_id'] ?? null,
             ':kushki_response'       => isset($data['kushki_response']) ? json_encode($data['kushki_response']) : null,
             ':intentos'              => $data['intentos'] ?? 0,
@@ -470,9 +471,16 @@ class SuscripcionesRepository extends BaseRepository
 
     public function getPagosPorSuscripcion(int $idSuscripcion): array
     {
-        $sql = "SELECT sp.*, vc.factura_numero, vc.estado AS estado_factura
+        // El pago apunta a una factura (id_factura → ventas_cabecera) o a un recibo
+        // (id_recibo → recibos_venta_cabecera), según el tipo_comprobante de la
+        // suscripción. Se expone el número/estado del documento que corresponda.
+        $sql = "SELECT sp.*,
+                       COALESCE(vc.factura_numero, rv.recibo_numero) AS factura_numero,
+                       COALESCE(vc.estado, rv.estado)                AS estado_factura,
+                       CASE WHEN sp.id_recibo IS NOT NULL THEN 'recibo' ELSE 'factura' END AS tipo_documento
                 FROM suscripciones_pagos sp
-                LEFT JOIN ventas_cabecera vc ON vc.id = sp.id_factura
+                LEFT JOIN ventas_cabecera vc        ON vc.id = sp.id_factura
+                LEFT JOIN recibos_venta_cabecera rv ON rv.id = sp.id_recibo
                 WHERE sp.id_suscripcion = :id AND sp.eliminado = false
                 ORDER BY sp.fecha_cobro DESC, sp.id DESC";
         $st = $this->db->prepare($sql);

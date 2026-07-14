@@ -373,8 +373,8 @@ function estadoPagoBadge($estado) {
                                 </div>
                                 <div class="col-md-3">
                                     <label for="edit-establecimiento" class="form-label">Establecimiento</label>
-                                    <input type="text" id="edit-establecimiento" name="establecimiento" class="form-control form-control-sm solo-numero" placeholder="001" maxlength="3" readonly>
-                                    <div class="form-text small" style="font-size: 0.6rem;">El establecimiento matriz no es editable.</div>
+                                    <input type="text" id="edit-establecimiento" name="establecimiento" class="form-control form-control-sm solo-numero" placeholder="001" maxlength="3" pattern="[0-9]{1,3}" title="3 dígitos (000 a 999)">
+                                    <div class="form-text small" style="font-size: 0.6rem;">3 dígitos (000-999). No puede repetirse el mismo RUC + establecimiento.</div>
                                 </div>
                                 <div class="col-md-3">
                                     <label for="edit-estado" class="form-label">Estado</label>

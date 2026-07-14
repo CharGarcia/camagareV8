@@ -135,7 +135,7 @@
 
             if (d.ok) {
                 bootstrap.Modal.getInstance(document.getElementById('modalGenerarDocumentos')).hide();
-                Swal.fire('Proceso Completado', d.mensaje || 'Las facturas han sido generadas exitosamente.', 'success');
+                Swal.fire('Proceso Completado', d.mensaje || 'Los documentos han sido generados exitosamente.', 'success');
                 if (window.fetchSearch) window.fetchSearch(); // Recargar tabla
             } else {
                 Swal.fire('Atención', d.mensaje || 'Error al generar facturas.', 'warning');

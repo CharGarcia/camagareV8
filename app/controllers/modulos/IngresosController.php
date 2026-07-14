@@ -580,6 +580,8 @@ class IngresosController extends BaseModuloController
                         'referencia'              => $data['referencia'] ?? null,
                         'tipo_operacion_bancaria' => $data['tipo_operacion_bancaria'] ?? null,
                         'numero_cheque'           => $data['numero_operacion'] ?? null,
+                        // Fecha en que se podrá cobrar el cheque (control de posfechados)
+                        'fecha_cobro'             => !empty($data['fecha_cobro']) ? $data['fecha_cobro'] : null,
                     ]
                 ],
             ];

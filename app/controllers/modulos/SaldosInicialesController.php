@@ -605,6 +605,8 @@ class SaldosInicialesController extends BaseModuloController
                 'observaciones'          => $_POST['observaciones'] ?? '',
                 'tipo_operacion_bancaria'=> $_POST['tipo_operacion_bancaria'] ?? '',
                 'numero_operacion'       => $_POST['numero_operacion'] ?? '',
+                // Fecha en que se podrá cobrar el cheque (control de posfechados)
+                'fecha_cheque'           => $_POST['fecha_cheque'] ?? '',
             ]);
             $this->jsonOk(array_merge($result, ['mensaje' => "Cobro registrado. Ingreso: {$result['numero_ingreso']}"]));
         } catch (\Throwable $e) {
@@ -653,6 +655,8 @@ class SaldosInicialesController extends BaseModuloController
                 'observaciones'          => $_POST['observaciones'] ?? '',
                 'tipo_operacion_bancaria'=> $_POST['tipo_operacion_bancaria'] ?? '',
                 'numero_operacion'       => $_POST['numero_operacion'] ?? '',
+                // Fecha en que se podrá cobrar el cheque (control de posfechados)
+                'fecha_cheque'           => $_POST['fecha_cheque'] ?? '',
             ]);
             $this->jsonOk(array_merge($result, ['mensaje' => "Pago registrado. Egreso: {$result['numero_egreso']}"]));
         } catch (\Throwable $e) {

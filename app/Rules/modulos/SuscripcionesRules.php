@@ -37,7 +37,7 @@ class SuscripcionesRules
             throw new \InvalidArgumentException('El estado no es válido.|#susc_estado');
         }
 
-        $comprobantesValidos = ['factura'];
+        $comprobantesValidos = ['factura', 'recibo'];
         if (!in_array($data['tipo_comprobante'] ?? 'factura', $comprobantesValidos, true)) {
             throw new \InvalidArgumentException('El tipo de comprobante no es válido.|#susc_tipo_comprobante');
         }

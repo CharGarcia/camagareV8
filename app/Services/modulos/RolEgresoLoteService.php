@@ -55,6 +55,8 @@ class RolEgresoLoteService
         if ($tipoOp === 'CHEQUE' && $chequeNum <= 0) {
             throw new \Exception('Ingrese el número inicial del cheque.');
         }
+        // Fecha en que se podrá cobrar el cheque (posfechados). Si no viene, se usa la fecha del egreso.
+        $fechaCobro = trim((string) ($opts['fecha_cobro'] ?? ''));
 
         // Concepto de egreso de Nómina (comportamiento ROL).
         $stC = $db->prepare("SELECT id FROM empresa_opciones_ingreso_egreso
@@ -97,7 +99,7 @@ class RolEgresoLoteService
                     $pago['tipo_operacion_bancaria'] = $tipoOp;
                     if ($tipoOp === 'CHEQUE') {
                         $pago['numero_cheque'] = (string) $chequeNum;
-                        $pago['fecha_cobro']   = $fecha;
+                        $pago['fecha_cobro']   = $fechaCobro !== '' ? $fechaCobro : $fecha;
                     }
                 }
 

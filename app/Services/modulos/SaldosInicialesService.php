@@ -872,7 +872,10 @@ class SaldosInicialesService
             'pagos' => [[
                 'id_forma_cobro'         => (int)$datos['id_forma_cobro'],
                 'monto'                  => $monto,
-                'fecha_cobro'            => $datos['fecha_cobro'] ?: date('Y-m-d'),
+                // Si es cheque, la fecha de cobro es la del cheque (posfechados); si no, la del movimiento.
+                'fecha_cobro'            => !empty($datos['fecha_cheque'])
+                                                ? $datos['fecha_cheque']
+                                                : ($datos['fecha_cobro'] ?: date('Y-m-d')),
                 'observaciones'          => $datos['observaciones'] ?: null,
                 'tipo_operacion_bancaria'=> $datos['tipo_operacion_bancaria'] ?? null,
                 'numero_cheque'          => $datos['numero_operacion'] ?? null,
@@ -959,6 +962,8 @@ class SaldosInicialesService
                 'referencia'             => $datos['numero_operacion'] ?? null,
                 'tipo_operacion_bancaria'=> $datos['tipo_operacion_bancaria'] ?? null,
                 'numero_cheque'          => $datos['numero_operacion'] ?? null,
+                // Fecha en que se podrá cobrar el cheque (control de posfechados)
+                'fecha_cobro'            => !empty($datos['fecha_cheque']) ? $datos['fecha_cheque'] : null,
             ]],
         ];
 

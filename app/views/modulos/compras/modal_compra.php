@@ -502,6 +502,7 @@
                                 <label class="form-label fw-bold mb-0 text-dark" style="font-size:0.7rem;">Op. Bancaria</label>
                                 <select class="form-select form-select-sm" id="pagoTipoOp" onchange="CMG_toggleTipoOp(this.value)">
                                   <option value="TRANSFERENCIA">Transferencia</option>
+                                  <option value="DEPOSITO">Depósito</option>
                                   <option value="DEBITO">Débito</option>
                                   <option value="CHEQUE">Cheque</option>
                                 </select>

@@ -135,6 +135,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                         <label>Comprobante *</label>
                                         <select class="form-select form-select-sm" name="tipo_comprobante" id="susc_tipo_comprobante" required>
                                             <option value="factura">Factura de Venta</option>
+                                            <option value="recibo">Recibo de Venta</option>
                                         </select>
                                     </div>
                                     <div class="col-md-2">

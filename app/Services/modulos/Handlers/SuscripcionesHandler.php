@@ -5,10 +5,13 @@ namespace App\Services\modulos\Handlers;
 
 use App\repositories\modulos\SuscripcionesRepository;
 use App\repositories\modulos\FacturaVentaRepository;
+use App\repositories\modulos\ReciboVentaRepository;
 use App\Rules\modulos\FacturaVentaRules;
+use App\Rules\modulos\ReciboVentaRules;
 use App\Services\LogSistemaService;
 use App\Services\SecuencialService;
 use App\Services\modulos\FacturaVentaService;
+use App\Services\modulos\ReciboVentaService;
 use App\Services\modulos\SuscripcionFacturacionService;
 use App\Services\modulos\SuscripcionesService;
 use App\Rules\modulos\SuscripcionesRules;
@@ -57,7 +60,8 @@ class SuscripcionesHandler extends BaseHandler
 
         $facturacion = new SuscripcionFacturacionService(
             new FacturaVentaService(new FacturaVentaRepository(), new FacturaVentaRules(), new LogSistemaService()),
-            new SecuencialService()
+            new SecuencialService(),
+            new ReciboVentaService(new ReciboVentaRepository(), new ReciboVentaRules(), new LogSistemaService())
         );
         $suscService = new SuscripcionesService($suscRepo, new SuscripcionesRules(), new LogSistemaService());
 
@@ -103,7 +107,8 @@ class SuscripcionesHandler extends BaseHandler
                 }
 
                 try {
-                    // 1. Crear la factura (FacturaVentaService maneja su propia transacción)
+                    // 1. Crear el documento: factura o recibo según tipo_comprobante
+                    //    (cada service maneja su propia transacción).
                     //    $proximo = fecha del período facturado → alimenta los placeholders {mes}, {anio}, etc.
                     $res = $facturacion->generarUnPeriodo(
                         $idEmpresa, $idUsuario, $susc, $detalle, $estabConfig, $empresaConfig, $extras, $proximo
@@ -112,11 +117,12 @@ class SuscripcionesHandler extends BaseHandler
                     // 2. Avanzar el próximo cobro
                     $suscRepo->updateProximoCobro($idSusc, $nuevoProximo);
 
-                    // 3. Registrar el pago/factura generada
+                    // 3. Registrar el pago con el documento generado
                     $suscRepo->insertPago([
                         'id_suscripcion' => $idSusc,
                         'id_empresa'     => $idEmpresa,
                         'id_factura'     => $res['id_factura'],
+                        'id_recibo'      => $res['id_recibo'],
                         'fecha_cobro'    => $hoy,
                         'monto'          => $res['importe'],
                         'estado'         => 'exitoso',
@@ -133,7 +139,7 @@ class SuscripcionesHandler extends BaseHandler
             }
         }
 
-        $msg = "Se generaron {$generadas} factura(s) de suscripciones.";
+        $msg = "Se generaron {$generadas} documento(s) de suscripciones.";
         if ($errores > 0) $msg .= " ({$errores} suscripción(es) con error)";
         return ['registros' => $generadas, 'mensaje' => $msg];
     }

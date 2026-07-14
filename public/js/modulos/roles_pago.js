@@ -205,7 +205,8 @@
     };
     window.eglTipoOpChange = function () {
         const esCheque = $('egl_tipo_op').value === 'CHEQUE';
-        $('egl_cheque_wrap').classList.toggle('d-none', !esCheque);
+        document.querySelectorAll('.egl-cheque-campo').forEach(el => el.classList.toggle('d-none', !esCheque));
+        if (!esCheque) { const f = $('egl_cheque_fecha'); if (f) f.value = ''; }
     };
 
     window.confirmarEgresoLote = async function () {
@@ -215,12 +216,14 @@
         if (!fecha || !idPunto || !idForma) { Swal.fire('Requerido', 'Complete fecha, punto y forma de pago.', 'warning'); return; }
         // Datos bancarios (si aplica).
         const esBanco = !$('egl_banco_wrap').classList.contains('d-none');
-        let tipoOp = '', chequeIni = '';
+        let tipoOp = '', chequeIni = '', chequeFecha = '';
         if (esBanco) {
             tipoOp = $('egl_tipo_op').value;
             if (tipoOp === 'CHEQUE') {
                 chequeIni = $('egl_cheque_ini').value;
                 if (!chequeIni || parseInt(chequeIni, 10) <= 0) { Swal.fire('Requerido', 'Ingrese el número inicial del cheque.', 'warning'); return; }
+                chequeFecha = $('egl_cheque_fecha').value;
+                if (!chequeFecha) { Swal.fire('Requerido', 'Indique la fecha de cobro del cheque.', 'warning'); return; }
             }
         }
         const conf = await Swal.fire({ icon: 'question', title: '¿Generar egresos?', text: 'Se creará un egreso por cada empleado con saldo pendiente.', showCancelButton: true, confirmButtonText: 'Sí, generar', cancelButtonText: 'Cancelar' });
@@ -229,7 +232,7 @@
         try {
             const fd = new FormData();
             fd.append('id_rol', rolActual.id); fd.append('fecha', fecha); fd.append('id_punto_emision', idPunto); fd.append('id_forma_pago', idForma);
-            if (esBanco) { fd.append('tipo_operacion_bancaria', tipoOp); if (tipoOp === 'CHEQUE') fd.append('numero_cheque_inicial', chequeIni); }
+            if (esBanco) { fd.append('tipo_operacion_bancaria', tipoOp); if (tipoOp === 'CHEQUE') { fd.append('numero_cheque_inicial', chequeIni); fd.append('fecha_cobro', chequeFecha); } }
             const resp = await fetch(`${urlModulo}/generarEgresosLoteAjax`, { method: 'POST', body: fd });
             const res = await resp.json();
             if (!res.ok) { Swal.fire('Atención', res.error || 'No se pudo generar.', 'error'); }

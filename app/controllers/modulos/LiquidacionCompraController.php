@@ -597,6 +597,9 @@ class LiquidacionCompraController extends BaseModuloController
                         'monto'                   => (float)$data['monto_pagar'],
                         'referencia'              => $data['numero_operacion'] ?? '',
                         'tipo_operacion_bancaria' => $data['tipo_operacion_bancaria'] ?? null,
+                        // Cheque: número y fecha en que se podrá cobrar (control de posfechados)
+                        'numero_cheque'           => (($data['tipo_operacion_bancaria'] ?? '') === 'CHEQUE') ? ($data['numero_operacion'] ?? null) : null,
+                        'fecha_cobro'             => !empty($data['fecha_cobro']) ? $data['fecha_cobro'] : null,
                         'banco_id'                => !empty($data['banco_id']) ? (int)$data['banco_id'] : null
                     ]
                 ]

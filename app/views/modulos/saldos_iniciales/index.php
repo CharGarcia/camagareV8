@@ -752,7 +752,7 @@ $urlBase = $base . '/' . $rutaModulo;
                         <div class="border border-warning border-opacity-25 rounded-2 p-2 bg-warning bg-opacity-10 row g-2">
                             <div class="col-6">
                                 <label class="form-label small fw-bold mb-1">Op. Bancaria</label>
-                                <select id="si-mov-tipo-op" class="form-select form-select-sm shadow-none">
+                                <select id="si-mov-tipo-op" class="form-select form-select-sm shadow-none" onchange="SI_toggleChequeFecha(this.value)">
                                     <option value="TRANSFERENCIA">Transferencia</option>
                                     <option value="DEPOSITO">Depósito</option>
                                     <option value="DEBITO">Débito</option>
@@ -763,6 +763,11 @@ $urlBase = $base . '/' . $rutaModulo;
                                 <label class="form-label small fw-bold mb-1">Nº Referencia</label>
                                 <input type="text" id="si-mov-num-op" class="form-control form-control-sm shadow-none"
                                        placeholder="Nº transf / cheque" maxlength="100">
+                            </div>
+                            <!-- Solo para CHEQUE: fecha en que se podrá cobrar (posfechados) -->
+                            <div class="col-6 d-none" id="si-mov-wrap-fecha-cheque">
+                                <label class="form-label small fw-bold mb-1"><i class="bi bi-calendar-date me-1"></i>Fecha de cobro del cheque</label>
+                                <input type="date" id="si-mov-fecha-cheque" class="form-control form-control-sm shadow-none">
                             </div>
                         </div>
                     </div>
