@@ -1058,7 +1058,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'contabilidad', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'asiento sin detalle en el diario viejo (huérfano)', 'errores' => 0];
+        $res = ['entidad' => 'contabilidad', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'asiento roto en el diario viejo: sin detalle, o con líneas sin cuenta contable (id_cuenta 0)', 'errores' => 0];
         $done   = $this->idsMigrados($pg, $idEmpresa, 'contabilidad');
         $insMap = $this->stmtMap($pg,'contabilidad');
 
@@ -1132,9 +1132,13 @@ class MigracionMysqlService
                 $lineas = [];
                 $td = 0.0;
                 $th = 0.0;
+                $sinCuenta = false;
                 foreach ($dets as $d) {
                     $idc = $this->resolverOCrearCuenta($mapCuenta, $cuentaPorCod, $oldCuentas, (int) $d['id_cuenta'], $idEmpresa, $idUsuario, $pg, $mysql);
-                    if (!$idc) { throw new \RuntimeException('Cuenta no resuelta (id_cuenta ' . (int) $d['id_cuenta'] . ')'); }
+                    // Línea sin cuenta en el diario viejo (id_cuenta 0 o inexistente): el asiento está
+                    // roto/incompleto en origen (a veces sin NINGUNA cuenta y descuadrado). No se puede
+                    // migrar sin inventar datos → se OMITE entero (no es un error de la migración).
+                    if (!$idc) { $sinCuenta = true; break; }
                     // referencia_detalle es varchar(500) (ver database/ensanchar_referencia_detalle.sql);
                     // truncado defensivo por si algún detalle superara ese límite.
                     $ref = self::nz($d['detalle_item']);
@@ -1142,6 +1146,11 @@ class MigracionMysqlService
                     $lineas[] = [$idc, (float) $d['debe'], (float) $d['haber'], $ref];
                     $td += (float) $d['debe'];
                     $th += (float) $d['haber'];
+                }
+                if ($sinCuenta) {
+                    $pg->rollBack();
+                    $res['omitidos']++;
+                    continue;
                 }
                 $insCab->execute([$idEmpresa, substr((string) $e['fecha_asiento'], 0, 10), $tcomp, (string) $e['codigo_unico'], (self::nz($e['concepto_general']) !== null ? (string) $e['concepto_general'] : (string) $e['codigo_unico']), $est, $td, $th, $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario]);
                 $idAsiento = (int) $insCab->fetchColumn();
