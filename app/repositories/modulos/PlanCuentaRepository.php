@@ -332,28 +332,30 @@ class PlanCuentaRepository extends BaseRepository
                 'pasivo' => '2',
                 'patrimonio' => '3',
                 'ingreso' => '4',
-                'costo' => '5',
-                // En este plan (modelo Supercías) costos y gastos viven juntos en el grupo 5
-                // ("COSTOS Y GASTOS"); no hay grupo 6. Por eso "Gasto" también apunta al 5.
-                'gasto' => '5'
             ];
 
-            if ($tipo === 'costo_gasto') {
-                $whereTipo = " AND (codigo LIKE '5%' OR codigo LIKE '6%')";
-            } else {
-                $partes = array_map('trim', explode(',', strtolower($tipo)));
-                $condiciones = [];
-                foreach ($partes as $idx => $p) {
-                    if (isset($tiposMapeados[$p])) {
-                        $prefijo = $tiposMapeados[$p];
-                        $paramName = ":pref_{$idx}";
-                        $condiciones[] = "codigo LIKE {$paramName}";
-                        $params[$paramName] = "{$prefijo}%";
+            $partes = array_map('trim', explode(',', strtolower($tipo)));
+            $condiciones = [];
+            $yaAgregoCostoGasto = false;
+            foreach ($partes as $idx => $p) {
+                if ($p === 'costo' || $p === 'gasto' || $p === 'costo_gasto') {
+                    // Costo y Gasto conviven según el plan de cuentas de cada empresa: unas los
+                    // agrupan juntos en la clase 5 (modelo Supercías), otras los separan en 5/6
+                    // (plan clásico). Buscar ambos prefijos cubre los dos casos sin excluir cuentas
+                    // válidas — antes "gasto" solo mapeaba a 5% y ocultaba las cuentas 6% reales.
+                    if (!$yaAgregoCostoGasto) {
+                        $condiciones[] = "(codigo LIKE '5%' OR codigo LIKE '6%')";
+                        $yaAgregoCostoGasto = true;
                     }
+                } elseif (isset($tiposMapeados[$p])) {
+                    $prefijo = $tiposMapeados[$p];
+                    $paramName = ":pref_{$idx}";
+                    $condiciones[] = "codigo LIKE {$paramName}";
+                    $params[$paramName] = "{$prefijo}%";
                 }
-                if (!empty($condiciones)) {
-                    $whereTipo = " AND (" . implode(" OR ", $condiciones) . ")";
-                }
+            }
+            if (!empty($condiciones)) {
+                $whereTipo = " AND (" . implode(" OR ", $condiciones) . ")";
             }
         }
 

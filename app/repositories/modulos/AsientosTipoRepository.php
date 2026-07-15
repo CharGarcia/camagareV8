@@ -34,8 +34,11 @@ class AsientosTipoRepository
                 
         $params = [];
 
+        // El filtro va en la consulta EXTERNA (la subconsulta ya cerró su propio WHERE), por eso
+        // debe empezar con WHERE y no con AND: con AND el SQL quedaba inválido y la búsqueda
+        // reventaba con "error de sintaxis en o cerca de «AND»".
         if ($buscar !== '') {
-            $sql .= " AND (codigo ILIKE :buscar OR referencia ILIKE :buscar OR detalle ILIKE :buscar OR tipo_asiento ILIKE :buscar)";
+            $sql .= " WHERE (codigo ILIKE :buscar OR referencia ILIKE :buscar OR detalle ILIKE :buscar OR tipo_asiento ILIKE :buscar)";
             $params[':buscar'] = "%$buscar%";
         }
 

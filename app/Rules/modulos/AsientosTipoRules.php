@@ -9,7 +9,9 @@ class AsientosTipoRules
 {
     private const TIPOS_PERMITIDOS = [
         'ventas_factura',
-        'ventas_recibo',
+        // Ojo: el valor canónico es 'recibos_venta' (lo usan ReciboVentaService, el builder y los
+        // asientos_tipo ya creados). 'ventas_recibo' era un residuo que no coincidía con nada.
+        'recibos_venta',
         'adquisiciones_compras',
         'retenciones_venta',
         'retenciones_compra',

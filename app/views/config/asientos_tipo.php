@@ -105,7 +105,7 @@ $base = BASE_URL;
                             <select class="form-select form-select-sm" id="asientoTipoSelect" name="tipo_asiento" onchange="ASIENTOTIPO_onSelectChange()" required>
                                 <option value="" disabled selected>-- Seleccione Tipo --</option>
                                 <option value="ventas_factura">Ventas con Factura</option>
-                                <option value="ventas_recibo">Ventas con Recibo</option>
+                                <option value="recibos_venta">Ventas con Recibo</option>
                                 <option value="adquisiciones_compras">Adquisiciones de Compras/Servicios</option>
                                 <option value="retenciones_venta">Retenciones en Venta</option>
                                 <option value="retenciones_compra">Retenciones en Compra</option>

@@ -981,7 +981,7 @@ class ConfigController extends Controller
 
         $tiposTextos = [
             'ventas_factura' => 'Ventas con Factura',
-            'ventas_recibo' => 'Ventas con Recibo',
+            'recibos_venta' => 'Ventas con Recibo',
             'adquisiciones_compras' => 'Adquisiciones de Compras/Servicios',
             'retenciones_venta' => 'Retenciones en Venta',
             'retenciones_compra' => 'Retenciones en Compra',
