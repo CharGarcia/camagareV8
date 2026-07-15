@@ -838,10 +838,9 @@ class ReciboVentaService
 
     public function obtenerAsientoSugerido(int $idEmpresa, array $invoiceData): array
     {
-        // Reutiliza la plantilla de asiento de facturas de venta (mismas cuentas:
-        // CxC/caja al debe, ventas + IVA al haber).
+        // Catálogo de cuentas PROPIO e independiente de Facturas de Venta (tipo_asiento='recibos_venta').
         $builder = new AsientoBuilderService();
-        return $builder->generarAsientoSugerido($idEmpresa, 'ventas_factura', $invoiceData);
+        return $builder->generarAsientoSugerido($idEmpresa, 'recibos_venta', $invoiceData);
     }
 
     public function procesarAsientoContablePorSincronizacion(int $idRecibo): void
@@ -862,7 +861,10 @@ class ReciboVentaService
         $cliente = $clienteRepo->findById((int)$data['id_cliente'], $idEmpresa);
         $clienteNombre = $cliente['nombre'] ?? 'Consumidor Final';
 
-        $data['id_venta'] = $idRecibo;
+        // NUNCA usar 'id_venta' aquí: recibos_venta_cabecera tiene su propia numeración de IDs,
+        // separada de ventas_cabecera. Usar id_venta=idRecibo contabilizaría los datos de una
+        // venta ajena si el ID coincidiera por casualidad (bug real ya detectado y corregido).
+        $data['id_recibo'] = $idRecibo;
         $detallesSugeridos = $this->obtenerAsientoSugerido($idEmpresa, $data);
 
         $detalles = [];

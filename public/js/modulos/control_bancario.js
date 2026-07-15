@@ -8,6 +8,13 @@
         dir: 'ASC',
     };
 
+    // Contador de peticiones a getSaldosAjax: si el usuario cambia de filtro rápido
+    // (p. ej. año completo -> enero) antes de que responda la primera llamada, esa
+    // respuesta vieja puede llegar después que la nueva y pisar el valor correcto.
+    // Con este contador, solo se aplica la respuesta de la petición más reciente.
+    let saldosRequestSeq = 0;
+    let searchRequestSeq = 0;
+
     async function fetchJson(url) {
         const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         const contentType = resp.headers.get('content-type') || '';
@@ -50,20 +57,192 @@
     window.CB_cambiarCuenta = function (idForma) {
         state.forma = parseInt(idForma, 10) || 0;
         if (!state.forma) {
-            document.getElementById('cb-tbody').innerHTML = '<tr><td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-bank fs-3 d-block mb-2"></i>Seleccione una cuenta bancaria.</td></tr>';
+            document.getElementById('cb-tbody').innerHTML = '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-bank fs-3 d-block mb-2"></i>Seleccione una cuenta bancaria.</td></tr>';
             return;
         }
-        cargarSaldos();
         window.CB_fetchSearch(1);
+    };
+
+    function fmtMoney(v) {
+        return '$' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // La Conciliación siempre es del período completo (no del texto de búsqueda de la tabla),
+    // por eso solo lleva forma + fechas, sin "b".
+    function actualizarUrlsConciliacion() {
+        if (!state.forma) return;
+        const fechaInicio = document.getElementById('cb-fecha-inicio').value;
+        const fechaFin = document.getElementById('cb-fecha-fin').value;
+        const params = new URLSearchParams({ forma: state.forma, fecha_inicio: fechaInicio, fecha_fin: fechaFin });
+        document.getElementById('cb-btn-conciliacion-pdf').href = `${CB_URL_BASE}/exportarConciliacionPdfAjax?${params.toString()}`;
+        document.getElementById('cb-btn-conciliacion-excel').href = `${CB_URL_BASE}/exportarConciliacionExcelAjax?${params.toString()}`;
+    }
+
+    // ── Conciliación (bloqueo de período) ───────────────────────────────────
+    async function actualizarBadgeConciliacion() {
+        if (!state.forma) return;
+        const fechaInicio = document.getElementById('cb-fecha-inicio').value;
+        const fechaFin = document.getElementById('cb-fecha-fin').value;
+        const badge = document.getElementById('cb-badge-conciliacion');
+        const btnConciliar = document.getElementById('cb-btn-conciliar');
+        try {
+            const params = new URLSearchParams({ forma: state.forma, fecha_inicio: fechaInicio, fecha_fin: fechaFin });
+            const json = await fetchJson(`${CB_URL_BASE}/conciliacionActualAjax?${params.toString()}`);
+            if (json.ok && json.data) {
+                const d = json.data;
+                badge.innerHTML = `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-2">
+                    <i class="bi bi-lock-fill me-1"></i> Período conciliado (${fmtDateDisplay(d.fecha_inicio)} al ${fmtDateDisplay(d.fecha_fin)}) — saldo final $${Number(d.saldo_final).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}
+                </span>`;
+                btnConciliar.disabled = true;
+                btnConciliar.title = 'El período mostrado ya está conciliado. Reábrelo desde el historial para volver a editar.';
+            } else {
+                badge.innerHTML = '';
+                btnConciliar.disabled = false;
+                btnConciliar.title = '';
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    window.CB_abrirModalConciliar = function () {
+        const cuentaTexto = document.getElementById('cb-forma').selectedOptions[0]?.textContent.trim() || '';
+        const fechaInicio = document.getElementById('cb-fecha-inicio').value;
+        const fechaFin = document.getElementById('cb-fecha-fin').value;
+        document.getElementById('cbc-info-cuenta').textContent = cuentaTexto;
+        document.getElementById('cbc-info-periodo').textContent = `${fmtDateDisplay(fechaInicio)} al ${fmtDateDisplay(fechaFin)}`;
+        document.getElementById('cbc-info-saldo-sistema').textContent = document.getElementById('cb-stat-saldo-final').textContent;
+        document.getElementById('cbc-saldo-banco').value = '';
+        document.getElementById('cbc-observaciones').value = '';
+        new bootstrap.Modal(document.getElementById('modalConciliarCB')).show();
+    };
+
+    window.CB_confirmarConciliar = async function () {
+        const fechaInicio = document.getElementById('cb-fecha-inicio').value;
+        const fechaFin = document.getElementById('cb-fecha-fin').value;
+        const saldoBancoStr = document.getElementById('cbc-saldo-banco').value;
+        const saldoSistemaStr = document.getElementById('cb-stat-saldo-final').textContent.replace(/[^0-9.-]/g, '');
+        const saldoSistema = parseFloat(saldoSistemaStr) || 0;
+
+        if (saldoBancoStr !== '') {
+            const saldoBanco = parseFloat(saldoBancoStr);
+            if (Math.abs(saldoBanco - saldoSistema) > 0.01) {
+                const result = await Swal.fire({
+                    icon: 'warning', title: 'El saldo no coincide',
+                    html: `Saldo del sistema: <b>$${saldoSistema.toFixed(2)}</b><br>Saldo indicado del banco: <b>$${saldoBanco.toFixed(2)}</b><br><br>¿Deseas conciliar de todas formas?`,
+                    showCancelButton: true, confirmButtonText: 'Sí, conciliar igual', cancelButtonText: 'Cancelar',
+                });
+                if (!result.isConfirmed) return;
+            }
+        }
+
+        const payload = {
+            id_forma_pago: state.forma,
+            fecha_inicio: fechaInicio,
+            fecha_fin: fechaFin,
+            saldo_banco: saldoBancoStr,
+            observaciones: document.getElementById('cbc-observaciones').value || null,
+        };
+
+        try {
+            const resp = await fetch(`${CB_URL_BASE}/conciliarPeriodoAjax`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify(payload),
+            });
+            const json = await resp.json();
+            if (!json.ok) {
+                Swal.fire({ icon: 'error', title: 'No se pudo conciliar', text: json.error || 'Error desconocido.' });
+                return;
+            }
+            bootstrap.Modal.getInstance(document.getElementById('modalConciliarCB')).hide();
+            Swal.fire({ icon: 'success', title: 'Período conciliado', timer: 1800, showConfirmButton: false });
+            actualizarBadgeConciliacion();
+        } catch (e) {
+            console.error(e);
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Error de red o servidor.' });
+        }
+    };
+
+    function renderConciliaciones(rows) {
+        const tbody = document.getElementById('cb-tbody-conciliaciones');
+        if (!rows || !rows.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Sin conciliaciones registradas.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            const vigente = !r.eliminado;
+            const estadoBadge = vigente
+                ? (r.desactualizada
+                    ? '<span class="badge bg-warning bg-opacity-25 text-warning-emphasis border border-warning">Desactualizada</span>'
+                    : '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Vigente</span>')
+                : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Reabierta</span>';
+            const accion = (vigente && CB_PERM_ELIMINAR)
+                ? `<button type="button" class="btn btn-outline-danger btn-sm py-0 px-1" onclick="window.CB_reabrirConciliacion(${r.id})"><i class="bi bi-unlock-fill"></i> Reabrir</button>`
+                : '';
+            return `<tr>
+                <td>${fmtDateDisplay(r.fecha_inicio)} al ${fmtDateDisplay(r.fecha_fin)}</td>
+                <td class="text-end">$${Number(r.saldo_final).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                <td class="text-end">${r.saldo_banco !== null ? '$' + Number(r.saldo_banco).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—'}</td>
+                <td>${r.usuario_nombre || ''}</td>
+                <td>${estadoBadge}</td>
+                <td class="text-center">${accion}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    window.CB_abrirModalHistorialConciliaciones = async function () {
+        if (!state.forma) return;
+        new bootstrap.Modal(document.getElementById('modalHistorialConciliacionesCB')).show();
+        try {
+            const json = await fetchJson(`${CB_URL_BASE}/listarConciliacionesAjax?forma=${state.forma}`);
+            renderConciliaciones(json.ok ? json.data : []);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    window.CB_reabrirConciliacion = async function (id) {
+        const result = await Swal.fire({
+            icon: 'warning', title: '¿Reabrir esta conciliación?',
+            text: 'El período volverá a permitir reclasificar sus movimientos.',
+            showCancelButton: true, confirmButtonText: 'Sí, reabrir', cancelButtonText: 'Cancelar',
+        });
+        if (!result.isConfirmed) return;
+
+        try {
+            const resp = await fetch(`${CB_URL_BASE}/reabrirConciliacionAjax`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ id }),
+            });
+            const json = await resp.json();
+            if (!json.ok) {
+                Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'No se pudo reabrir.' });
+                return;
+            }
+            window.CB_abrirModalHistorialConciliaciones();
+            actualizarBadgeConciliacion();
+        } catch (e) {
+            console.error(e);
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Error de red o servidor.' });
+        }
     };
 
     async function cargarSaldos() {
         if (!state.forma) return;
+        const fechaInicio = document.getElementById('cb-fecha-inicio').value;
+        const fechaFin = document.getElementById('cb-fecha-fin').value;
+        const miSeq = ++saldosRequestSeq;
         try {
-            const json = await fetchJson(`${CB_URL_BASE}/getSaldosAjax?forma=${state.forma}`);
+            const params = new URLSearchParams({ forma: state.forma, fecha_inicio: fechaInicio, fecha_fin: fechaFin });
+            const json = await fetchJson(`${CB_URL_BASE}/getSaldosAjax?${params.toString()}`);
+            if (miSeq !== saldosRequestSeq) return; // llegó una respuesta más nueva antes: descartar esta
             if (json.ok) {
-                document.getElementById('cb-stat-saldo-inicial').textContent = '$' + Number(json.data.saldo_inicial).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                document.getElementById('cb-stat-saldo-actual').textContent = '$' + Number(json.data.saldo_actual).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                document.getElementById('cb-stat-saldo-inicial').textContent = fmtMoney(json.data.saldo_inicial);
+                document.getElementById('cb-stat-creditos').textContent = fmtMoney(json.data.creditos);
+                document.getElementById('cb-stat-debitos').textContent = fmtMoney(json.data.debitos);
+                document.getElementById('cb-stat-saldo-final').textContent = fmtMoney(json.data.saldo_final);
             }
         } catch (e) {
             console.error(e);
@@ -78,8 +257,13 @@
         const fechaInicio = document.getElementById('cb-fecha-inicio').value;
         const fechaFin = document.getElementById('cb-fecha-fin').value;
 
+        cargarSaldos();
+        actualizarUrlsConciliacion();
+        actualizarBadgeConciliacion();
+
+        const miSeq = ++searchRequestSeq;
         const tbody = document.getElementById('cb-tbody');
-        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-5"><span class="spinner-border spinner-border-sm text-primary"></span></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-5"><span class="spinner-border spinner-border-sm text-primary"></span></td></tr>';
 
         const params = new URLSearchParams({
             forma: state.forma,
@@ -93,8 +277,9 @@
 
         try {
             const json = await fetchJson(`${CB_URL_BASE}/searchAjax?${params.toString()}`);
+            if (miSeq !== searchRequestSeq) return; // llegó una respuesta más nueva antes: descartar esta
             if (!json.ok) {
-                tbody.innerHTML = `<tr><td colspan="12" class="text-center py-5 text-danger">${json.error || 'Error al cargar movimientos.'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-danger">${json.error || 'Error al cargar movimientos.'}</td></tr>`;
                 return;
             }
             tbody.innerHTML = json.rows;
@@ -104,7 +289,9 @@
             document.getElementById('cb-btn-excel').href = json.excel_url;
         } catch (e) {
             console.error(e);
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-5 text-danger">Error de red o servidor.</td></tr>';
+            if (miSeq === searchRequestSeq) {
+                tbody.innerHTML = '<tr><td colspan="11" class="text-center py-5 text-danger">Error de red o servidor.</td></tr>';
+            }
         }
     };
 

@@ -10,7 +10,6 @@ class SincronizadorAsientosService
 {
     private array $warnings = [];
     /** Notas informativas (no son errores): explican comportamientos intencionales. */
-    private array $info = [];
     private int $generados = 0;
 
     public function sincronizar(int $idEmpresa, int $idUsuario): void
@@ -316,52 +315,6 @@ class SincronizadorAsientosService
         // 9. Verificación proactiva: facturas con costo en Kardex que no se puede contabilizar
         //    porque faltan las cuentas de Costo de Ventas e Inventario.
         $this->verificarCosteoVentasPendiente($db, $idEmpresa);
-
-        // 10. Nota informativa: documentos migrados que por diseño no generan asiento propio.
-        $this->verificarDocumentosMigrados($db, $idEmpresa);
-    }
-
-    /**
-     * Nota INFORMATIVA (no es un error): documentos que la migración desde MySQL INSERTÓ y que,
-     * por diseño, NO generan asiento propio — su contabilidad ya vino en el histórico importado
-     * (asientos con modulo_origen='migracion'). Generárselos duplicaría la contabilidad.
-     *
-     * El sincronizador los excluye ANTES de intentar generar (ver $excMig), así que nunca aparecen
-     * en los avisos de error. Sin esta nota el usuario los ve "sin asiento contable" y sin ninguna
-     * explicación, indistinguibles de un fallo real.
-     */
-    private function verificarDocumentosMigrados(\PDO $db, int $idEmpresa): void
-    {
-        try {
-            $sql = "SELECT entidad, COUNT(*) AS n
-                    FROM migracion_mysql_map
-                    WHERE id_empresa = ?
-                      AND vinculado IS NOT TRUE
-                      AND entidad IN ('facturas','compras','liquidaciones','notas_credito',
-                                      'retenciones_venta','retenciones_compra','ingresos',
-                                      'egresos','consignaciones','recibos')
-                    GROUP BY entidad
-                    ORDER BY entidad";
-            $st = $db->prepare($sql);
-            $st->execute([$idEmpresa]);
-
-            $partes = [];
-            $total  = 0;
-            while ($r = $st->fetch(\PDO::FETCH_ASSOC)) {
-                $n = (int) $r['n'];
-                $total += $n;
-                $partes[] = str_replace('_', ' ', (string) $r['entidad']) . ': ' . $n;
-            }
-
-            if ($total > 0) {
-                $this->info[] = "{$total} documento(s) traídos del sistema anterior no generan asiento propio "
-                    . "porque su contabilidad ya vino en el histórico migrado (" . implode(', ', $partes) . "). "
-                    . "Es intencional: generarles un asiento duplicaría la contabilidad. Por eso aparecen sin "
-                    . "asiento contable y no se reportan como pendientes.";
-            }
-        } catch (\Throwable $e) {
-            // Sin tabla de migración (instalación sin histórico importado): no aplica.
-        }
     }
 
     /**
@@ -622,12 +575,6 @@ class SincronizadorAsientosService
     public function getWarnings(): array
     {
         return $this->warnings;
-    }
-
-    /** Notas informativas de la última corrida (no son errores ni pendientes). */
-    public function getInfo(): array
-    {
-        return $this->info;
     }
 
     /** Cantidad de asientos efectivamente generados en la última corrida de sincronizar(). */

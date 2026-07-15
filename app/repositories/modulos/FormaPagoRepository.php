@@ -15,6 +15,25 @@ class FormaPagoRepository extends BaseRepository
     public function __construct()
     {
         parent::__construct('empresa_formas_pago');
+        $this->runMigrations();
+    }
+
+    /**
+     * Inyecta tipo_cuenta_contable si no existe: filtro opcional del buscador de cuentas
+     * (CSV de activo/pasivo/patrimonio/ingreso/costo/gasto; vacío = sin restricción).
+     * No puede llamarse "tipo_cuenta" porque esa columna ya existe con otro significado
+     * (AHORROS/CORRIENTE/VIRTUAL, subtipo de cuenta bancaria).
+     */
+    private function runMigrations(): void
+    {
+        try {
+            $check = $this->db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'empresa_formas_pago' AND column_name = 'tipo_cuenta_contable'");
+            if (!$check->fetch()) {
+                $this->db->exec("ALTER TABLE empresa_formas_pago ADD COLUMN tipo_cuenta_contable VARCHAR(50) NULL");
+            }
+        } catch (\Throwable $e) {
+            // Silent catch for runtime safety
+        }
     }
 
     public function getListado(
@@ -119,10 +138,10 @@ class FormaPagoRepository extends BaseRepository
     {
         $sql = "INSERT INTO {$this->table} (
                     id_empresa, nombre, tipo, aplica_en, id_banco, tipo_cuenta, numero_cuenta,
-                    modalidad_tarjeta, id_cuenta_contable, activo, created_by, created_at
+                    modalidad_tarjeta, id_cuenta_contable, tipo_cuenta_contable, activo, created_by, created_at
                 ) VALUES (
                     :id_empresa, :nombre, :tipo, :aplica_en, :id_banco, :tipo_cuenta, :numero_cuenta,
-                    :modalidad_tarjeta, :id_cuenta_contable, :activo, :created_by, CURRENT_TIMESTAMP
+                    :modalidad_tarjeta, :id_cuenta_contable, :tipo_cuenta_contable, :activo, :created_by, CURRENT_TIMESTAMP
                 )";
 
         $st = $this->db->prepare($sql);
@@ -136,6 +155,7 @@ class FormaPagoRepository extends BaseRepository
             ':numero_cuenta'      => !empty($data['numero_cuenta']) ? $data['numero_cuenta'] : null,
             ':modalidad_tarjeta'  => !empty($data['modalidad_tarjeta']) ? $data['modalidad_tarjeta'] : null,
             ':id_cuenta_contable' => !empty($data['id_cuenta_contable']) ? $data['id_cuenta_contable'] : null,
+            ':tipo_cuenta_contable' => !empty($data['tipo_cuenta_contable']) ? $data['tipo_cuenta_contable'] : null,
             ':activo'             => !empty($data['activo']) ? 'true' : 'false',
             ':created_by'         => $data['usuario_id'] ?? null
         ]);
@@ -153,6 +173,7 @@ class FormaPagoRepository extends BaseRepository
                     numero_cuenta = :numero_cuenta,
                     modalidad_tarjeta = :modalidad_tarjeta,
                     id_cuenta_contable = :id_cuenta_contable,
+                    tipo_cuenta_contable = :tipo_cuenta_contable,
                     activo = :activo,
                     updated_by = :updated_by,
                     updated_at = CURRENT_TIMESTAMP
@@ -168,6 +189,7 @@ class FormaPagoRepository extends BaseRepository
             ':numero_cuenta'      => !empty($data['numero_cuenta']) ? $data['numero_cuenta'] : null,
             ':modalidad_tarjeta'  => !empty($data['modalidad_tarjeta']) ? $data['modalidad_tarjeta'] : null,
             ':id_cuenta_contable' => !empty($data['id_cuenta_contable']) ? $data['id_cuenta_contable'] : null,
+            ':tipo_cuenta_contable' => !empty($data['tipo_cuenta_contable']) ? $data['tipo_cuenta_contable'] : null,
             ':activo'             => !empty($data['activo']) ? 'true' : 'false',
             ':updated_by'         => $data['usuario_id'] ?? null,
             ':id'                 => $id,

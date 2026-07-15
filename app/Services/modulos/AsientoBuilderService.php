@@ -52,13 +52,15 @@ class AsientoBuilderService
         //    conceptos que configuró; lo no configurado queda en General y NO se reparte por línea.
         //    Si la entidad no tiene reglas, recién ahí se reparte por línea (producto → categoría → marca).
         $entidadTipo = match ($tipoAsiento) {
-            'ventas_factura'        => 'cliente',
+            'ventas_factura', 'recibos_venta' => 'cliente',
             'adquisiciones_compras' => 'proveedor',
             default                 => '',
         };
 
         // Asegurar el id de la entidad en documentData (si no vino, leerlo de la cabecera).
-        if ($entidadTipo === 'cliente' && empty($documentData['id_cliente']) && !empty($documentData['id_venta'])) {
+        if ($entidadTipo === 'cliente' && empty($documentData['id_cliente']) && !empty($documentData['id_recibo'])) {
+            $documentData['id_cliente'] = $this->buscarEntidadDocumento('recibos_venta_cabecera', 'id_cliente', (int)$documentData['id_recibo']);
+        } elseif ($entidadTipo === 'cliente' && empty($documentData['id_cliente']) && !empty($documentData['id_venta'])) {
             $documentData['id_cliente'] = $this->buscarEntidadDocumento('ventas_cabecera', 'id_cliente', (int)$documentData['id_venta']);
         } elseif ($entidadTipo === 'proveedor' && empty($documentData['id_proveedor'])) {
             $idCompra = (int)($documentData['id_compra'] ?? $documentData['id'] ?? 0);
@@ -89,6 +91,9 @@ class AsientoBuilderService
         $documentData['__reparte_por_linea__'] = !$entidadTieneReglas;
         $asientoResult = match ($tipoAsiento) {
             'ventas_factura' => $this->armarDistribucionVentasFactura($reglasBase, $documentData),
+            // Recibos de Venta tiene su propio catálogo de cuentas (independiente de ventas_factura)
+            // pero sus datos viven en tablas separadas (recibos_venta_*, no ventas_*) — ver ReciboVentaService.
+            'recibos_venta' => $this->armarDistribucionRecibosVenta($reglasBase, $documentData),
             'adquisiciones_compras' => $this->armarDistribucionCompras($reglasBase, $documentData),
             // Utilizar la distribución dinámica para el resto de módulos por defecto
             default => $this->armarDistribucionDinamica($reglasBase, $documentData),
@@ -625,6 +630,79 @@ class AsientoBuilderService
     }
 
     /**
+     * Igual que repartirVentasCascada() pero para RECIBOS DE VENTA, que guardan sus líneas en
+     * recibos_venta_detalle (tabla separada de ventas_detalle, con su propia numeración de IDs).
+     *
+     * @return array<int,array{id_cuenta:int,cuenta_codigo:string,cuenta_nombre:string,monto:float}>
+     */
+    private function repartirRecibosCascada(\PDO $db, int $idEmpresa, int $idRecibo, int $idAsientoTipo, array $cuentaBase, float $montoTotal): array
+    {
+        $baseLinea = [
+            'id_cuenta'     => (int)($cuentaBase['id_cuenta'] ?? 0),
+            'cuenta_codigo' => $cuentaBase['cuenta_codigo'] ?? '',
+            'cuenta_nombre' => $cuentaBase['cuenta_nombre'] ?? '',
+            'monto'         => round($montoTotal, 2),
+        ];
+        if ($idRecibo <= 0 || $montoTotal <= 0 || empty($baseLinea['id_cuenta'])) {
+            return [$baseLinea];
+        }
+
+        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
+                       pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
+                       ROUND(SUM(d.precio_total_sin_impuesto)::numeric, 2) AS monto
+                FROM recibos_venta_detalle d
+                LEFT JOIN productos p ON p.id = d.id_producto
+                LEFT JOIN asientos_programados ap_p
+                       ON ap_p.id_referencia = d.id_producto AND ap_p.tipo_referencia = 'producto'
+                      AND ap_p.id_asiento_tipo = :id_tipo1 AND ap_p.id_empresa = :emp1 AND ap_p.eliminado = false
+                LEFT JOIN asientos_programados ap_c
+                       ON ap_c.id_referencia = p.id_categoria AND ap_c.tipo_referencia = 'categoria'
+                      AND ap_c.id_asiento_tipo = :id_tipo2 AND ap_c.id_empresa = :emp2 AND ap_c.eliminado = false
+                LEFT JOIN asientos_programados ap_m
+                       ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
+                      AND ap_m.id_asiento_tipo = :id_tipo3 AND ap_m.id_empresa = :emp3 AND ap_m.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta)
+                WHERE d.id_recibo = :id_doc
+                GROUP BY COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta), pc.codigo, pc.nombre";
+        $st = $db->prepare($sql);
+        $st->execute([
+            ':id_tipo1' => $idAsientoTipo, ':emp1' => $idEmpresa,
+            ':id_tipo2' => $idAsientoTipo, ':emp2' => $idEmpresa,
+            ':id_tipo3' => $idAsientoTipo, ':emp3' => $idEmpresa,
+            ':id_doc'   => $idRecibo,
+        ]);
+
+        $mapa  = [];
+        $total = 0.0;
+        while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
+            $monto = round((float)$row['monto'], 2);
+            if ($monto == 0.0) continue;
+            $tieneCta = !empty($row['dim_cuenta']);
+            $idCta = $tieneCta ? (int)$row['dim_cuenta'] : (int)$baseLinea['id_cuenta'];
+            $cod   = $tieneCta ? ($row['dim_codigo'] ?? '') : $baseLinea['cuenta_codigo'];
+            $nom   = $tieneCta ? ($row['dim_nombre'] ?? '') : $baseLinea['cuenta_nombre'];
+            if (!isset($mapa[$idCta])) {
+                $mapa[$idCta] = ['id_cuenta' => $idCta, 'cuenta_codigo' => $cod, 'cuenta_nombre' => $nom, 'monto' => 0.0];
+            }
+            $mapa[$idCta]['monto'] = round($mapa[$idCta]['monto'] + $monto, 2);
+            $total = round($total + $monto, 2);
+        }
+
+        if (empty($mapa)) {
+            return [$baseLinea];
+        }
+
+        $dif = round($montoTotal - $total, 2);
+        if (abs($dif) >= 0.01) {
+            $keys = array_keys($mapa);
+            $ult = end($keys);
+            $mapa[$ult]['monto'] = round($mapa[$ult]['monto'] + $dif, 2);
+        }
+
+        return array_values($mapa);
+    }
+
+    /**
      * Reparto POR LÍNEA del gasto de COMPRAS por NOMBRE del ítem: cada línea NO inventariable toma la
      * cuenta de la regla 'item_compra' cuya `referencia_texto` coincide con su descripción; si no, la de
      * su categoría; si no, la de su marca; si ninguna, la cuenta base (General de gasto). Incluye los
@@ -867,24 +945,45 @@ class AsientoBuilderService
             $stIvaSum->execute([$idVenta]);
             $totalIvaTotal = round((float)$stIvaSum->fetchColumn(), 2);
 
-            // 3b. IVA por tasa con cuenta específica en asientos_programados
+            // 3b. IVA por tasa con cuenta específica en asientos_programados. Cascada de especificidad
+            // (cliente > producto > categoría > marca > general) igual filosofía que el resto del motor:
+            // si hay un override de IVA configurado para esa tarifa en algún nivel, se usa esa cuenta;
+            // si no hay ninguno, COALESCE cae en ap_gen (la regla general), idéntico al comportamiento previo.
+            $idCliente = (int) ($data['id_cliente'] ?? 0);
             $sqlIva = "SELECT i.codigo_porcentaje,
                               SUM(i.valor)    AS total_valor,
-                              ap.id_cuenta    AS id_cuenta_contable,
+                              COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta_contable,
                               pc.codigo       AS cuenta_codigo,
                               pc.nombre       AS cuenta_nombre
                        FROM ventas_detalle_impuestos i
                        JOIN ventas_detalle d ON i.id_venta_detalle = d.id
-                       JOIN asientos_programados ap
-                            ON ap.id_referencia   = CAST(i.codigo_porcentaje AS INTEGER)
-                           AND ap.tipo_referencia = 'iva_ventas_factura'
-                           AND ap.id_empresa      = :id_empresa
-                           AND ap.eliminado       = false
-                       LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                       LEFT JOIN productos p ON p.id = d.id_producto
+                       LEFT JOIN asientos_programados ap_cli
+                              ON ap_cli.id_referencia = :id_cliente AND ap_cli.tipo_referencia = 'cliente'
+                             AND ap_cli.id_asiento_tipo = 0 AND ap_cli.codigo_tarifa_iva = i.codigo_porcentaje::text
+                             AND ap_cli.direccion_iva = 'venta' AND ap_cli.id_empresa = :id_empresa AND ap_cli.eliminado = false
+                       LEFT JOIN asientos_programados ap_p
+                              ON ap_p.id_referencia = d.id_producto AND ap_p.tipo_referencia = 'producto'
+                             AND ap_p.id_asiento_tipo = 0 AND ap_p.codigo_tarifa_iva = i.codigo_porcentaje::text
+                             AND ap_p.direccion_iva = 'venta' AND ap_p.id_empresa = :id_empresa AND ap_p.eliminado = false
+                       LEFT JOIN asientos_programados ap_c
+                              ON ap_c.id_referencia = p.id_categoria AND ap_c.tipo_referencia = 'categoria'
+                             AND ap_c.id_asiento_tipo = 0 AND ap_c.codigo_tarifa_iva = i.codigo_porcentaje::text
+                             AND ap_c.direccion_iva = 'venta' AND ap_c.id_empresa = :id_empresa AND ap_c.eliminado = false
+                       LEFT JOIN asientos_programados ap_m
+                              ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
+                             AND ap_m.id_asiento_tipo = 0 AND ap_m.codigo_tarifa_iva = i.codigo_porcentaje::text
+                             AND ap_m.direccion_iva = 'venta' AND ap_m.id_empresa = :id_empresa AND ap_m.eliminado = false
+                       LEFT JOIN asientos_programados ap_gen
+                              ON ap_gen.id_referencia   = CAST(i.codigo_porcentaje AS INTEGER)
+                             AND ap_gen.tipo_referencia = 'iva_ventas_factura'
+                             AND ap_gen.id_empresa      = :id_empresa
+                             AND ap_gen.eliminado       = false
+                       LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta)
                        WHERE d.id_venta = :id_venta AND i.codigo_impuesto = '2'
-                       GROUP BY i.codigo_porcentaje, ap.id_cuenta, pc.codigo, pc.nombre";
+                       GROUP BY i.codigo_porcentaje, COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta), pc.codigo, pc.nombre";
             $stIva = $db->prepare($sqlIva);
-            $stIva->execute([':id_empresa' => $idEmpresa, ':id_venta' => $idVenta]);
+            $stIva->execute([':id_empresa' => $idEmpresa, ':id_venta' => $idVenta, ':id_cliente' => $idCliente]);
 
             while ($row = $stIva->fetch(\PDO::FETCH_ASSOC)) {
                 $valorIva = round((float)$row['total_valor'], 2);
@@ -902,22 +1001,40 @@ class AsientoBuilderService
             }
             $totalIvaMapeado = round($totalIvaMapeado, 2);
 
-            // 3c. Tarifas de IVA que la factura USA pero que NO tienen cuenta configurada.
-            //     Es la causa más común de descuadre (ese IVA no llega al Haber y el asiento
-            //     no se genera). Se nombran para que el aviso diga exactamente qué configurar.
+            // 3c. Tarifas de IVA que la factura USA pero que NO tienen cuenta configurada (en ningún
+            //     nivel de la cascada: cliente/producto/categoría/marca/general). Es la causa más común
+            //     de descuadre. Se nombran para que el aviso diga exactamente qué configurar.
             $sqlIvaSin = "SELECT DISTINCT i.codigo_porcentaje, t.tarifa
                           FROM ventas_detalle_impuestos i
                           JOIN ventas_detalle d ON i.id_venta_detalle = d.id
+                          LEFT JOIN productos p ON p.id = d.id_producto
                           LEFT JOIN tarifa_iva t ON CAST(t.codigo AS INTEGER) = CAST(i.codigo_porcentaje AS INTEGER)
-                          LEFT JOIN asientos_programados ap
-                                 ON ap.id_referencia   = CAST(i.codigo_porcentaje AS INTEGER)
-                                AND ap.tipo_referencia = 'iva_ventas_factura'
-                                AND ap.id_empresa      = :id_empresa
-                                AND ap.eliminado       = false
+                          LEFT JOIN asientos_programados ap_cli
+                                 ON ap_cli.id_referencia = :id_cliente AND ap_cli.tipo_referencia = 'cliente'
+                                AND ap_cli.id_asiento_tipo = 0 AND ap_cli.codigo_tarifa_iva = i.codigo_porcentaje::text
+                                AND ap_cli.direccion_iva = 'venta' AND ap_cli.id_empresa = :id_empresa AND ap_cli.eliminado = false
+                          LEFT JOIN asientos_programados ap_p
+                                 ON ap_p.id_referencia = d.id_producto AND ap_p.tipo_referencia = 'producto'
+                                AND ap_p.id_asiento_tipo = 0 AND ap_p.codigo_tarifa_iva = i.codigo_porcentaje::text
+                                AND ap_p.direccion_iva = 'venta' AND ap_p.id_empresa = :id_empresa AND ap_p.eliminado = false
+                          LEFT JOIN asientos_programados ap_c
+                                 ON ap_c.id_referencia = p.id_categoria AND ap_c.tipo_referencia = 'categoria'
+                                AND ap_c.id_asiento_tipo = 0 AND ap_c.codigo_tarifa_iva = i.codigo_porcentaje::text
+                                AND ap_c.direccion_iva = 'venta' AND ap_c.id_empresa = :id_empresa AND ap_c.eliminado = false
+                          LEFT JOIN asientos_programados ap_m
+                                 ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
+                                AND ap_m.id_asiento_tipo = 0 AND ap_m.codigo_tarifa_iva = i.codigo_porcentaje::text
+                                AND ap_m.direccion_iva = 'venta' AND ap_m.id_empresa = :id_empresa AND ap_m.eliminado = false
+                          LEFT JOIN asientos_programados ap_gen
+                                 ON ap_gen.id_referencia   = CAST(i.codigo_porcentaje AS INTEGER)
+                                AND ap_gen.tipo_referencia = 'iva_ventas_factura'
+                                AND ap_gen.id_empresa      = :id_empresa
+                                AND ap_gen.eliminado       = false
                           WHERE d.id_venta = :id_venta AND i.codigo_impuesto = '2'
-                            AND i.valor > 0 AND ap.id IS NULL";
+                            AND i.valor > 0
+                            AND ap_cli.id IS NULL AND ap_p.id IS NULL AND ap_c.id IS NULL AND ap_m.id IS NULL AND ap_gen.id IS NULL";
             $stIvaSin = $db->prepare($sqlIvaSin);
-            $stIvaSin->execute([':id_empresa' => $idEmpresa, ':id_venta' => $idVenta]);
+            $stIvaSin->execute([':id_empresa' => $idEmpresa, ':id_venta' => $idVenta, ':id_cliente' => $idCliente]);
             while ($row = $stIvaSin->fetch(\PDO::FETCH_ASSOC)) {
                 $ivaTarifasSinCuenta[] = 'IVA tarifa ' . ($row['tarifa'] ?: $row['codigo_porcentaje']);
             }
@@ -1099,6 +1216,318 @@ class AsientoBuilderService
     }
 
     /**
+     * Igual que armarDistribucionVentasFactura() pero para RECIBOS DE VENTA: reutiliza el MISMO
+     * catálogo de cuentas (tipo_asiento='ventas_factura' — misma plantilla, mismas cuentas CxC/
+     * Subtotal/IVA/Costo), pero lee los datos del documento de recibos_venta_cabecera/
+     * recibos_venta_detalle/recibos_venta_detalle_impuestos, que son tablas separadas con su
+     * propia numeración de IDs (NO ventas_cabecera/ventas_detalle — usar esas tablas con el ID
+     * de un recibo contabilizaba los montos de una venta ajena que coincidiera con ese mismo ID).
+     */
+    private function armarDistribucionRecibosVenta(array $reglas, array $data): array
+    {
+        $idRecibo  = (int)($data['id_recibo'] ?? 0);
+        $idEmpresa = (int)($data['id_empresa'] ?? 0);
+        // Cascada: solo se reparte la línea de Ventas por producto/categoría/marca si el cliente NO
+        // tiene reglas propias (cuando las tiene, manda el cliente y no se reparte — Opción 2).
+        $repartePorLinea = (bool)($data['__reparte_por_linea__'] ?? false);
+        $db = \App\core\Database::getConnection();
+
+        // ── 1. Totales: leer SIEMPRE desde la BD cuando hay id_recibo (fuente de verdad) ──
+        if ($idRecibo > 0) {
+            $stCab = $db->prepare(
+                "SELECT importe_total,
+                        total_sin_impuestos,
+                        total_descuento,
+                        COALESCE(total_ice, 0) AS total_ice,
+                        COALESCE(propina, 0)   AS propina
+                 FROM recibos_venta_cabecera
+                 WHERE id = ?"
+            );
+            $stCab->execute([$idRecibo]);
+            $cab = $stCab->fetch(\PDO::FETCH_ASSOC) ?: [];
+
+            $importeTotal = round((float)($cab['importe_total']        ?? 0), 2);
+            $subtotal     = round((float)($cab['total_sin_impuestos']   ?? 0), 2);
+            $descuento    = round((float)($cab['total_descuento']        ?? 0), 2);
+            $totalIce     = round((float)($cab['total_ice']             ?? 0), 2);
+            $propina      = round((float)($cab['propina']               ?? 0), 2);
+        } else {
+            $importeTotal = round((float)($data['importe_total'] ?? $data['total']    ?? 0), 2);
+            $subtotal     = round((float)($data['total_sin_impuestos'] ?? $data['subtotal'] ?? 0), 2);
+            $descuento    = round((float)($data['total_descuento']      ?? $data['descuento'] ?? 0), 2);
+            $totalIce     = round((float)($data['total_ice']  ?? 0), 2);
+            $propina      = round((float)($data['propina']    ?? 0), 2);
+        }
+
+        // ── 2. Costo de Ventas desde Kardex (referencia_tipo='recibo_venta', ver ReciboVentaService::REF_TIPO) ──
+        $costoRealInventario = 0.0;
+        if ($idRecibo > 0) {
+            $stCosto = $db->prepare(
+                "SELECT COALESCE(SUM(costo_total), 0)
+                 FROM inventario_kardex
+                 WHERE referencia_tipo = 'recibo_venta'
+                   AND referencia_id   = ?
+                   AND tipo_movimiento = 'salida'
+                   AND eliminado       = false"
+            );
+            $stCosto->execute([$idRecibo]);
+            $costoRealInventario = round((float)$stCosto->fetchColumn(), 2);
+        }
+
+        // ── 3. IVA: mapeo por tasa → cuenta específica (asientos_programados) ──
+        $detalles        = [];   // líneas del asiento
+        $totalIvaTotal   = 0.0; // IVA total del documento
+        $totalIvaMapeado = 0.0; // IVA ya asignado a cuentas específicas
+        $ivaTarifasSinCuenta = []; // tarifas usadas por el recibo sin cuenta configurada
+
+        if ($idRecibo > 0) {
+            // 3a. Total IVA del documento (todas las tasas)
+            $stIvaSum = $db->prepare(
+                "SELECT COALESCE(SUM(i.valor), 0)
+                 FROM recibos_venta_detalle_impuestos i
+                 JOIN recibos_venta_detalle d ON i.id_recibo_detalle = d.id
+                 WHERE d.id_recibo = ? AND i.codigo_impuesto = '2'"
+            );
+            $stIvaSum->execute([$idRecibo]);
+            $totalIvaTotal = round((float)$stIvaSum->fetchColumn(), 2);
+
+            // 3b. IVA por tasa con cuenta específica en asientos_programados. Misma cascada de
+            // especificidad (cliente > producto > categoría > marca > general) que en facturas, pero
+            // con catálogo PROPIO e independiente: tipo_referencia='iva_recibos_venta' y
+            // direccion_iva='recibo' (no 'iva_ventas_factura'/'venta' — esos son de Facturas).
+            $idCliente = (int) ($data['id_cliente'] ?? 0);
+            $sqlIva = "SELECT i.codigo_porcentaje,
+                              SUM(i.valor)    AS total_valor,
+                              COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta_contable,
+                              pc.codigo       AS cuenta_codigo,
+                              pc.nombre       AS cuenta_nombre
+                       FROM recibos_venta_detalle_impuestos i
+                       JOIN recibos_venta_detalle d ON i.id_recibo_detalle = d.id
+                       LEFT JOIN productos p ON p.id = d.id_producto
+                       LEFT JOIN asientos_programados ap_cli
+                              ON ap_cli.id_referencia = :id_cliente AND ap_cli.tipo_referencia = 'cliente'
+                             AND ap_cli.id_asiento_tipo = 0 AND ap_cli.codigo_tarifa_iva = i.codigo_porcentaje::text
+                             AND ap_cli.direccion_iva = 'recibo' AND ap_cli.id_empresa = :id_empresa AND ap_cli.eliminado = false
+                       LEFT JOIN asientos_programados ap_p
+                              ON ap_p.id_referencia = d.id_producto AND ap_p.tipo_referencia = 'producto'
+                             AND ap_p.id_asiento_tipo = 0 AND ap_p.codigo_tarifa_iva = i.codigo_porcentaje::text
+                             AND ap_p.direccion_iva = 'recibo' AND ap_p.id_empresa = :id_empresa AND ap_p.eliminado = false
+                       LEFT JOIN asientos_programados ap_c
+                              ON ap_c.id_referencia = p.id_categoria AND ap_c.tipo_referencia = 'categoria'
+                             AND ap_c.id_asiento_tipo = 0 AND ap_c.codigo_tarifa_iva = i.codigo_porcentaje::text
+                             AND ap_c.direccion_iva = 'recibo' AND ap_c.id_empresa = :id_empresa AND ap_c.eliminado = false
+                       LEFT JOIN asientos_programados ap_m
+                              ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
+                             AND ap_m.id_asiento_tipo = 0 AND ap_m.codigo_tarifa_iva = i.codigo_porcentaje::text
+                             AND ap_m.direccion_iva = 'recibo' AND ap_m.id_empresa = :id_empresa AND ap_m.eliminado = false
+                       LEFT JOIN asientos_programados ap_gen
+                              ON ap_gen.id_referencia   = CAST(i.codigo_porcentaje AS INTEGER)
+                             AND ap_gen.tipo_referencia = 'iva_recibos_venta'
+                             AND ap_gen.id_empresa      = :id_empresa
+                             AND ap_gen.eliminado       = false
+                       LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta)
+                       WHERE d.id_recibo = :id_recibo AND i.codigo_impuesto = '2'
+                       GROUP BY i.codigo_porcentaje, COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta), pc.codigo, pc.nombre";
+            $stIva = $db->prepare($sqlIva);
+            $stIva->execute([':id_empresa' => $idEmpresa, ':id_recibo' => $idRecibo, ':id_cliente' => $idCliente]);
+
+            while ($row = $stIva->fetch(\PDO::FETCH_ASSOC)) {
+                $valorIva = round((float)$row['total_valor'], 2);
+                if ($valorIva <= 0 || empty($row['id_cuenta_contable'])) continue;
+
+                $detalles[] = [
+                    'id_cuenta_contable' => (int)$row['id_cuenta_contable'],
+                    'cuenta_codigo'      => $row['cuenta_codigo'],
+                    'cuenta_nombre'      => $row['cuenta_nombre'],
+                    'debe'               => 0.0,
+                    'haber'              => $valorIva,
+                    'referencia_detalle' => 'IVA Recibo de Venta',
+                ];
+                $totalIvaMapeado += $valorIva;
+            }
+            $totalIvaMapeado = round($totalIvaMapeado, 2);
+
+            // 3c. Tarifas de IVA que el recibo USA pero que NO tienen cuenta configurada (en ningún
+            //     nivel de la cascada: cliente/producto/categoría/marca/general).
+            $sqlIvaSin = "SELECT DISTINCT i.codigo_porcentaje, t.tarifa
+                          FROM recibos_venta_detalle_impuestos i
+                          JOIN recibos_venta_detalle d ON i.id_recibo_detalle = d.id
+                          LEFT JOIN productos p ON p.id = d.id_producto
+                          LEFT JOIN tarifa_iva t ON CAST(t.codigo AS INTEGER) = CAST(i.codigo_porcentaje AS INTEGER)
+                          LEFT JOIN asientos_programados ap_cli
+                                 ON ap_cli.id_referencia = :id_cliente AND ap_cli.tipo_referencia = 'cliente'
+                                AND ap_cli.id_asiento_tipo = 0 AND ap_cli.codigo_tarifa_iva = i.codigo_porcentaje::text
+                                AND ap_cli.direccion_iva = 'recibo' AND ap_cli.id_empresa = :id_empresa AND ap_cli.eliminado = false
+                          LEFT JOIN asientos_programados ap_p
+                                 ON ap_p.id_referencia = d.id_producto AND ap_p.tipo_referencia = 'producto'
+                                AND ap_p.id_asiento_tipo = 0 AND ap_p.codigo_tarifa_iva = i.codigo_porcentaje::text
+                                AND ap_p.direccion_iva = 'recibo' AND ap_p.id_empresa = :id_empresa AND ap_p.eliminado = false
+                          LEFT JOIN asientos_programados ap_c
+                                 ON ap_c.id_referencia = p.id_categoria AND ap_c.tipo_referencia = 'categoria'
+                                AND ap_c.id_asiento_tipo = 0 AND ap_c.codigo_tarifa_iva = i.codigo_porcentaje::text
+                                AND ap_c.direccion_iva = 'recibo' AND ap_c.id_empresa = :id_empresa AND ap_c.eliminado = false
+                          LEFT JOIN asientos_programados ap_m
+                                 ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
+                                AND ap_m.id_asiento_tipo = 0 AND ap_m.codigo_tarifa_iva = i.codigo_porcentaje::text
+                                AND ap_m.direccion_iva = 'recibo' AND ap_m.id_empresa = :id_empresa AND ap_m.eliminado = false
+                          LEFT JOIN asientos_programados ap_gen
+                                 ON ap_gen.id_referencia   = CAST(i.codigo_porcentaje AS INTEGER)
+                                AND ap_gen.tipo_referencia = 'iva_recibos_venta'
+                                AND ap_gen.id_empresa      = :id_empresa
+                                AND ap_gen.eliminado       = false
+                          WHERE d.id_recibo = :id_recibo AND i.codigo_impuesto = '2'
+                            AND i.valor > 0
+                            AND ap_cli.id IS NULL AND ap_p.id IS NULL AND ap_c.id IS NULL AND ap_m.id IS NULL AND ap_gen.id IS NULL";
+            $stIvaSin = $db->prepare($sqlIvaSin);
+            $stIvaSin->execute([':id_empresa' => $idEmpresa, ':id_recibo' => $idRecibo, ':id_cliente' => $idCliente]);
+            while ($row = $stIvaSin->fetch(\PDO::FETCH_ASSOC)) {
+                $ivaTarifasSinCuenta[] = 'IVA tarifa ' . ($row['tarifa'] ?: $row['codigo_porcentaje']);
+            }
+        } else {
+            // Sin id_recibo (preview): calcular IVA por diferencia
+            $totalIvaTotal = round(max(0.0, $importeTotal - $subtotal - $totalIce - $propina), 2);
+        }
+
+        // IVA no asignado a cuenta específica → irá a la cuenta IVA general de las reglas base
+        $ivaParaCuentaGeneral = round($totalIvaTotal - $totalIvaMapeado, 2);
+
+        // ── 4. Pre-scan: ¿existe regla de DESCUENTO? ──
+        $tieneReglaDescuento = false;
+        if ($descuento > 0) {
+            foreach ($reglas as $r) {
+                $c  = strtoupper($r['asiento_tipo_codigo']      ?? $r['codigo']     ?? '');
+                $cv = strtolower($r['asiento_tipo_referencia']  ?? $r['concepto']   ?? $r['referencia'] ?? '');
+                if (str_contains($c, 'DESC') || str_contains($cv, 'descuento')) {
+                    $tieneReglaDescuento = true;
+                    break;
+                }
+            }
+        }
+
+        // ── 5. Procesar reglas base (idéntico a armarDistribucionVentasFactura) ──
+        $costoLineas = [];
+        $reglasSinCuenta = $ivaTarifasSinCuenta;
+
+        foreach ($reglas as $r) {
+            $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']    ?? '');
+            $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto']  ?? $r['referencia'] ?? '');
+
+            if (str_contains($codigo, 'REDONDEO')) continue;
+
+            if (empty($r['id_cuenta'])) {
+                $reglasSinCuenta[] = $r['asiento_tipo_referencia'] ?? $r['concepto']
+                                  ?? $r['asiento_tipo_codigo'] ?? $r['codigo'] ?? 'sin nombre';
+                continue;
+            }
+
+            $debe  = 0.00;
+            $haber = 0.00;
+            $valorMapeado = 0.00;
+            $esLineaCosto = false;
+            $esTotalDocumento = false;
+
+            if (str_contains($codigo, 'PORCOBRAR') || str_contains($concepto, 'cobrar')) {
+                $valorMapeado = $importeTotal;
+                $esTotalDocumento = true;
+            }
+            elseif (str_contains($codigo, 'SUBTOTAL') || str_contains($concepto, 'subtotal')) {
+                $valorMapeado = $tieneReglaDescuento ? ($subtotal + $descuento) : $subtotal;
+                if ($repartePorLinea && !$tieneReglaDescuento && $idRecibo > 0 && $valorMapeado > 0) {
+                    $lado = (($r['debe_haber'] ?? 'haber') === 'debe') ? 'debe' : 'haber';
+                    $partes = $this->repartirRecibosCascada(
+                        $db, $idEmpresa, $idRecibo, (int)$r['id_asiento_tipo'],
+                        ['id_cuenta' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'] ?? '', 'cuenta_nombre' => $r['cuenta_nombre'] ?? ''],
+                        $valorMapeado
+                    );
+                    $refBase = $r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? 'Ventas';
+                    foreach ($partes as $pte) {
+                        $detalles[] = [
+                            'id_cuenta_contable' => $pte['id_cuenta'],
+                            'cuenta_codigo'      => $pte['cuenta_codigo'],
+                            'cuenta_nombre'      => $pte['cuenta_nombre'],
+                            'debe'               => $lado === 'debe' ? round($pte['monto'], 2) : 0.0,
+                            'haber'              => $lado === 'debe' ? 0.0 : round($pte['monto'], 2),
+                            'referencia_detalle' => $refBase . ' · por línea',
+                        ];
+                    }
+                    continue;
+                }
+            }
+            elseif (str_contains($codigo, 'DESC') || str_contains($concepto, 'descuento')) {
+                $valorMapeado = $descuento;
+            }
+            elseif (str_contains($codigo, 'ICE') || str_contains($concepto, 'ice')) {
+                $valorMapeado = $totalIce;
+            }
+            elseif (str_contains($codigo, 'PROPINA') || str_contains($concepto, 'propina')) {
+                $valorMapeado = $propina;
+            }
+            elseif (str_contains($codigo, 'COSTO') || str_contains($concepto, 'costo')) {
+                $valorMapeado = $costoRealInventario;
+                $esLineaCosto = true;
+            }
+            elseif (str_contains($codigo, 'INVENTARIO') || str_contains($concepto, 'inventario')) {
+                $valorMapeado = $costoRealInventario;
+                $esLineaCosto = true;
+            }
+            elseif (str_contains($codigo, 'IVA') || str_contains($concepto, 'iva')) {
+                $valorMapeado = $ivaParaCuentaGeneral > 0 ? $ivaParaCuentaGeneral : 0.0;
+            }
+
+            if ($valorMapeado > 0) {
+                if (($r['debe_haber'] ?? 'debe') === 'debe') {
+                    $debe = $valorMapeado;
+                } else {
+                    $haber = $valorMapeado;
+                }
+
+                $linea = [
+                    'id_cuenta_contable' => (int)$r['id_cuenta'],
+                    'cuenta_codigo'      => $r['cuenta_codigo'],
+                    'cuenta_nombre'      => $r['cuenta_nombre'],
+                    'debe'               => round($debe, 2),
+                    'haber'              => round($haber, 2),
+                    'referencia_detalle' => $r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '',
+                    'es_total_documento' => $esTotalDocumento,
+                ];
+
+                if ($esLineaCosto) {
+                    $costoLineas[] = $linea;
+                } else {
+                    $detalles[] = $linea;
+                }
+            }
+        }
+
+        // ── 5.1 Bloque de costo: solo se agrega si está COMPLETO y CUADRADO ──
+        if (!empty($costoLineas)) {
+            $debeCosto  = round(array_sum(array_column($costoLineas, 'debe')),  2);
+            $haberCosto = round(array_sum(array_column($costoLineas, 'haber')), 2);
+            if ($debeCosto > 0 && $debeCosto === $haberCosto) {
+                $detalles = array_merge($detalles, $costoLineas);
+            } else {
+                error_log(
+                    "[AsientoBuilder] Bloque de costo de recibo de venta omitido por configuración incompleta " .
+                    "(Debe: $debeCosto, Haber: $haberCosto). Configure ambas cuentas (Costo de Ventas e Inventario) " .
+                    "para contabilizar el costo. El asiento comercial se generó igualmente."
+                );
+            }
+        }
+
+        // ── 6. Validación de balance ──
+        $totalDebe  = round(array_sum(array_column($detalles, 'debe')),  2);
+        $totalHaber = round(array_sum(array_column($detalles, 'haber')), 2);
+
+        if ($totalDebe === 0.0 && $totalHaber === 0.0) {
+            throw new \Exception("No se ha configurado ninguna cuenta para este asiento o los montos son cero.");
+        }
+
+        $detalles = $this->aplicarAjusteRedondeo($detalles, $reglas, 'recibos de venta', $reglasSinCuenta);
+
+        return $detalles;
+    }
+
+    /**
      * Clasifica la dirección del asiento de un documento de compra según su tipo de comprobante
      * (catálogo comprobantes_autorizados / SRI):
      *   - 'reversa'  : Notas de crédito (devolución/descuento al proveedor) → se invierte Debe/Haber.
@@ -1204,26 +1633,47 @@ class AsientoBuilderService
             $subGasto = round($subGasto + $diferencia, 2);
         }
 
-        // ── 3. IVA crédito tributario por tarifa (cuenta configurada en iva_compras_factura) ──
+        // ── 3. IVA crédito tributario por tarifa (cuenta configurada en iva_compras_factura). Cascada
+        // de especificidad (proveedor > ítem > categoría > marca > general), misma filosofía que ventas.
+        // La dimensión "Producto" en Compras siempre usa la clave de TEXTO del ítem (item_compra),
+        // igual que repartirComprasPorItem() — no hay dimensión por id_producto en Compras.
         $ivaRows = [];
         if ($idCompra > 0) {
+            $idProveedor = (int) ($data['id_proveedor'] ?? 0);
             $sqlIva = "SELECT i.codigo_porcentaje,
                               SUM(i.valor)  AS total_valor,
-                              ap.id_cuenta,
+                              COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta,
                               pc.codigo     AS cuenta_codigo,
                               pc.nombre     AS cuenta_nombre
                        FROM compras_detalle_impuestos i
                        JOIN compras_detalle d ON i.id_compra_detalle = d.id
-                       JOIN asientos_programados ap
-                            ON ap.id_referencia   = CAST(i.codigo_porcentaje AS INTEGER)
-                           AND ap.tipo_referencia = 'iva_compras_factura'
-                           AND ap.id_empresa      = :emp
-                           AND ap.eliminado       = false
-                       LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                       LEFT JOIN productos p ON p.id = d.id_producto
+                       LEFT JOIN asientos_programados ap_prov
+                              ON ap_prov.id_referencia = :id_proveedor AND ap_prov.tipo_referencia = 'proveedor'
+                             AND ap_prov.id_asiento_tipo = 0 AND ap_prov.codigo_tarifa_iva = i.codigo_porcentaje::text
+                             AND ap_prov.direccion_iva = 'compra' AND ap_prov.id_empresa = :emp AND ap_prov.eliminado = false
+                       LEFT JOIN asientos_programados ap_item
+                              ON TRIM(ap_item.referencia_texto) = TRIM(d.descripcion) AND ap_item.tipo_referencia = 'item_compra'
+                             AND ap_item.id_asiento_tipo = 0 AND ap_item.codigo_tarifa_iva = i.codigo_porcentaje::text
+                             AND ap_item.direccion_iva = 'compra' AND ap_item.id_empresa = :emp AND ap_item.eliminado = false
+                       LEFT JOIN asientos_programados ap_c
+                              ON ap_c.id_referencia = p.id_categoria AND ap_c.tipo_referencia = 'categoria'
+                             AND ap_c.id_asiento_tipo = 0 AND ap_c.codigo_tarifa_iva = i.codigo_porcentaje::text
+                             AND ap_c.direccion_iva = 'compra' AND ap_c.id_empresa = :emp AND ap_c.eliminado = false
+                       LEFT JOIN asientos_programados ap_m
+                              ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
+                             AND ap_m.id_asiento_tipo = 0 AND ap_m.codigo_tarifa_iva = i.codigo_porcentaje::text
+                             AND ap_m.direccion_iva = 'compra' AND ap_m.id_empresa = :emp AND ap_m.eliminado = false
+                       LEFT JOIN asientos_programados ap_gen
+                              ON ap_gen.id_referencia   = CAST(i.codigo_porcentaje AS INTEGER)
+                             AND ap_gen.tipo_referencia = 'iva_compras_factura'
+                             AND ap_gen.id_empresa      = :emp
+                             AND ap_gen.eliminado       = false
+                       LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta)
                        WHERE d.id_compra = :id AND i.codigo_impuesto = '2'
-                       GROUP BY i.codigo_porcentaje, ap.id_cuenta, pc.codigo, pc.nombre";
+                       GROUP BY i.codigo_porcentaje, COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta), pc.codigo, pc.nombre";
             $stIva = $db->prepare($sqlIva);
-            $stIva->execute([':emp' => $idEmpresa, ':id' => $idCompra]);
+            $stIva->execute([':emp' => $idEmpresa, ':id' => $idCompra, ':id_proveedor' => $idProveedor]);
             while ($row = $stIva->fetch(\PDO::FETCH_ASSOC)) {
                 $ivaRows[] = [
                     'id_cuenta'     => $row['id_cuenta'],
@@ -1363,11 +1813,12 @@ class AsientoBuilderService
         $db = \App\core\Database::getConnection();
 
         // 1. Totales (la liquidación siempre va en dirección normal de adquisición)
-        $stCab = $db->prepare("SELECT importe_total, total_sin_impuestos FROM liquidaciones_cabecera WHERE id = ?");
+        $stCab = $db->prepare("SELECT importe_total, total_sin_impuestos, id_proveedor FROM liquidaciones_cabecera WHERE id = ?");
         $stCab->execute([$idLiquidacion]);
         $cab = $stCab->fetch(\PDO::FETCH_ASSOC) ?: [];
         $importeTotal = round((float)($cab['importe_total']      ?? 0), 2);
         $subtotal     = round((float)($cab['total_sin_impuestos'] ?? 0), 2);
+        $idProveedor  = (int) ($cab['id_proveedor'] ?? 0);
         if ($importeTotal <= 0.0 && $subtotal <= 0.0) {
             return [];
         }
@@ -1401,25 +1852,43 @@ class AsientoBuilderService
             $subGasto = round($subGasto + $diferencia, 2);
         }
 
-        // 3. IVA crédito por tarifa (reutiliza la config de compras: iva_compras_factura)
+        // 3. IVA crédito por tarifa (reutiliza la config de compras: iva_compras_factura), con la misma
+        // cascada proveedor > ítem > categoría > marca > general que una compra normal.
         $ivaRows = [];
         $sqlIva = "SELECT i.codigo_porcentaje,
                           SUM(i.valor)  AS total_valor,
-                          ap.id_cuenta,
+                          COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta,
                           pc.codigo     AS cuenta_codigo,
                           pc.nombre     AS cuenta_nombre
                    FROM liquidaciones_detalle_impuestos i
                    JOIN liquidaciones_detalle d ON i.id_detalle = d.id
-                   JOIN asientos_programados ap
-                        ON ap.id_referencia   = CAST(i.codigo_porcentaje AS INTEGER)
-                       AND ap.tipo_referencia = 'iva_compras_factura'
-                       AND ap.id_empresa      = :emp
-                       AND ap.eliminado       = false
-                   LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                   LEFT JOIN productos p ON p.id = d.id_producto
+                   LEFT JOIN asientos_programados ap_prov
+                          ON ap_prov.id_referencia = :id_proveedor AND ap_prov.tipo_referencia = 'proveedor'
+                         AND ap_prov.id_asiento_tipo = 0 AND ap_prov.codigo_tarifa_iva = i.codigo_porcentaje::text
+                         AND ap_prov.direccion_iva = 'compra' AND ap_prov.id_empresa = :emp AND ap_prov.eliminado = false
+                   LEFT JOIN asientos_programados ap_item
+                          ON TRIM(ap_item.referencia_texto) = TRIM(d.descripcion) AND ap_item.tipo_referencia = 'item_compra'
+                         AND ap_item.id_asiento_tipo = 0 AND ap_item.codigo_tarifa_iva = i.codigo_porcentaje::text
+                         AND ap_item.direccion_iva = 'compra' AND ap_item.id_empresa = :emp AND ap_item.eliminado = false
+                   LEFT JOIN asientos_programados ap_c
+                          ON ap_c.id_referencia = p.id_categoria AND ap_c.tipo_referencia = 'categoria'
+                         AND ap_c.id_asiento_tipo = 0 AND ap_c.codigo_tarifa_iva = i.codigo_porcentaje::text
+                         AND ap_c.direccion_iva = 'compra' AND ap_c.id_empresa = :emp AND ap_c.eliminado = false
+                   LEFT JOIN asientos_programados ap_m
+                          ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
+                         AND ap_m.id_asiento_tipo = 0 AND ap_m.codigo_tarifa_iva = i.codigo_porcentaje::text
+                         AND ap_m.direccion_iva = 'compra' AND ap_m.id_empresa = :emp AND ap_m.eliminado = false
+                   LEFT JOIN asientos_programados ap_gen
+                          ON ap_gen.id_referencia   = CAST(i.codigo_porcentaje AS INTEGER)
+                         AND ap_gen.tipo_referencia = 'iva_compras_factura'
+                         AND ap_gen.id_empresa      = :emp
+                         AND ap_gen.eliminado       = false
+                   LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta)
                    WHERE d.id_cabecera = :id AND i.codigo_impuesto = '2'
-                   GROUP BY i.codigo_porcentaje, ap.id_cuenta, pc.codigo, pc.nombre";
+                   GROUP BY i.codigo_porcentaje, COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta), pc.codigo, pc.nombre";
         $stIva = $db->prepare($sqlIva);
-        $stIva->execute([':emp' => $idEmpresa, ':id' => $idLiquidacion]);
+        $stIva->execute([':emp' => $idEmpresa, ':id' => $idLiquidacion, ':id_proveedor' => $idProveedor]);
         while ($row = $stIva->fetch(\PDO::FETCH_ASSOC)) {
             $ivaRows[] = [
                 'id_cuenta'     => $row['id_cuenta'],
@@ -1529,13 +1998,14 @@ class AsientoBuilderService
 
         // ── 1. Totales de la NC ──
         $stCab = $db->prepare(
-            "SELECT importe_total, total_sin_impuestos, COALESCE(total_descuento,0) AS total_descuento
+            "SELECT importe_total, total_sin_impuestos, COALESCE(total_descuento,0) AS total_descuento, id_cliente
              FROM notas_credito_cabecera WHERE id = ?"
         );
         $stCab->execute([$idNotaCredito]);
         $cab = $stCab->fetch(\PDO::FETCH_ASSOC) ?: [];
         $importeTotal = round((float)($cab['importe_total']      ?? 0), 2);
         $subtotal     = round((float)($cab['total_sin_impuestos'] ?? 0), 2);
+        $idCliente    = (int) ($cab['id_cliente'] ?? 0);
         if ($importeTotal <= 0.0 && $subtotal <= 0.0) {
             return [];
         }
@@ -1553,20 +2023,39 @@ class AsientoBuilderService
         $comercial   = []; // por cobrar + ventas + IVA (lado natural)
         $costoLineas = []; // costo + inventario (lado natural)
 
-        // ── 3. IVA por tarifa: mismas cuentas que la factura (iva_ventas_factura), lado natural HABER ──
+        // ── 3. IVA por tarifa: mismas cuentas que la factura (iva_ventas_factura), lado natural HABER,
+        // con la misma cascada cliente > producto > categoría > marca > general que una factura de venta ──
         $sqlIva = "SELECT i.codigo_porcentaje, SUM(i.valor) AS total_valor,
-                          ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                          COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta,
+                          pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
                    FROM notas_credito_detalle_impuestos i
                    JOIN notas_credito_detalle d ON i.id_nota_credito_detalle = d.id
-                   JOIN asientos_programados ap
-                        ON ap.id_referencia   = CAST(i.codigo_porcentaje AS INTEGER)
-                       AND ap.tipo_referencia = 'iva_ventas_factura'
-                       AND ap.id_empresa      = :emp AND ap.eliminado = false
-                   LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                   LEFT JOIN productos p ON p.id = d.id_producto
+                   LEFT JOIN asientos_programados ap_cli
+                          ON ap_cli.id_referencia = :id_cliente AND ap_cli.tipo_referencia = 'cliente'
+                         AND ap_cli.id_asiento_tipo = 0 AND ap_cli.codigo_tarifa_iva = i.codigo_porcentaje::text
+                         AND ap_cli.direccion_iva = 'venta' AND ap_cli.id_empresa = :emp AND ap_cli.eliminado = false
+                   LEFT JOIN asientos_programados ap_p
+                          ON ap_p.id_referencia = d.id_producto AND ap_p.tipo_referencia = 'producto'
+                         AND ap_p.id_asiento_tipo = 0 AND ap_p.codigo_tarifa_iva = i.codigo_porcentaje::text
+                         AND ap_p.direccion_iva = 'venta' AND ap_p.id_empresa = :emp AND ap_p.eliminado = false
+                   LEFT JOIN asientos_programados ap_c
+                          ON ap_c.id_referencia = p.id_categoria AND ap_c.tipo_referencia = 'categoria'
+                         AND ap_c.id_asiento_tipo = 0 AND ap_c.codigo_tarifa_iva = i.codigo_porcentaje::text
+                         AND ap_c.direccion_iva = 'venta' AND ap_c.id_empresa = :emp AND ap_c.eliminado = false
+                   LEFT JOIN asientos_programados ap_m
+                          ON ap_m.id_referencia = p.id_marca AND ap_m.tipo_referencia = 'marca'
+                         AND ap_m.id_asiento_tipo = 0 AND ap_m.codigo_tarifa_iva = i.codigo_porcentaje::text
+                         AND ap_m.direccion_iva = 'venta' AND ap_m.id_empresa = :emp AND ap_m.eliminado = false
+                   LEFT JOIN asientos_programados ap_gen
+                          ON ap_gen.id_referencia   = CAST(i.codigo_porcentaje AS INTEGER)
+                         AND ap_gen.tipo_referencia = 'iva_ventas_factura'
+                         AND ap_gen.id_empresa      = :emp AND ap_gen.eliminado = false
+                   LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta)
                    WHERE d.id_nota_credito = :id AND i.codigo_impuesto = '2'
-                   GROUP BY i.codigo_porcentaje, ap.id_cuenta, pc.codigo, pc.nombre";
+                   GROUP BY i.codigo_porcentaje, COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta), pc.codigo, pc.nombre";
         $stIva = $db->prepare($sqlIva);
-        $stIva->execute([':emp' => $idEmpresa, ':id' => $idNotaCredito]);
+        $stIva->execute([':emp' => $idEmpresa, ':id' => $idNotaCredito, ':id_cliente' => $idCliente]);
         while ($row = $stIva->fetch(\PDO::FETCH_ASSOC)) {
             $valorIva = round((float)$row['total_valor'], 2);
             if ($valorIva <= 0 || empty($row['id_cuenta'])) continue;

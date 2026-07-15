@@ -7,7 +7,7 @@
 /** @var array $aniosDisponibles */
 /** @var string $fechaInicio */
 /** @var string $fechaFin */
-/** @var array $saldos */
+/** @var array $resumen */
 /** @var array $vistaConfig */
 
 $base = BASE_URL;
@@ -33,6 +33,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
         box-shadow: 0 1px 0 #dee2e6;
         white-space: nowrap;
     }
+    .cb-row { cursor: pointer; }
     .cb-row:hover { background-color: rgba(0,0,0,.04); }
 </style>
 
@@ -43,10 +44,20 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
             <h5 class="mb-0 fw-bold"><i class="bi bi-bank me-2 text-primary"></i><?= htmlspecialchars($titulo) ?></h5>
             <small class="text-muted">Detalle de transacciones por cuenta bancaria, conciliación y seguimiento de cheques posfechados</small>
         </div>
-        <button type="button" class="btn btn-outline-warning btn-sm" onclick="CB_abrirModalPosfechados()">
-            <i class="bi bi-calendar-event me-1"></i> Cheques Posfechados
-        </button>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-warning btn-sm" onclick="CB_abrirModalPosfechados()">
+                <i class="bi bi-calendar-event me-1"></i> Cheques Posfechados
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="CB_abrirModalHistorialConciliaciones()">
+                <i class="bi bi-clock-history me-1"></i> Historial de Conciliaciones
+            </button>
+            <button type="button" class="btn btn-success btn-sm" id="cb-btn-conciliar" onclick="CB_abrirModalConciliar()">
+                <i class="bi bi-check2-circle me-1"></i> Marcar Período como Conciliado
+            </button>
+        </div>
     </div>
+
+    <div id="cb-badge-conciliacion" class="mb-2"></div>
 
     <!-- ── Selector de cuenta + filtros de fecha ── -->
     <div class="card border-0 shadow-sm rounded-3 mb-3">
@@ -97,21 +108,37 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
         </div>
     </div>
 
-    <!-- ── KPI Saldos ── -->
+    <!-- ── KPI del período seleccionado ── -->
     <div class="row g-3 mb-3">
         <div class="col-6 col-md-3">
             <div class="card border-0 rounded-4 shadow-sm h-100">
                 <div class="card-body p-3">
                     <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Saldo Inicial</div>
-                    <div class="fw-bold fs-5" id="cb-stat-saldo-inicial">$<?= number_format($saldos['saldo_inicial'] ?? 0, 2) ?></div>
+                    <div class="fw-bold fs-5" id="cb-stat-saldo-inicial">$<?= number_format($resumen['saldo_inicial'] ?? 0, 2) ?></div>
                 </div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="card border-0 rounded-4 shadow-sm h-100">
                 <div class="card-body p-3">
-                    <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Saldo Actual</div>
-                    <div class="fw-bold fs-5 text-primary" id="cb-stat-saldo-actual">$<?= number_format($saldos['saldo_actual'] ?? 0, 2) ?></div>
+                    <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Créditos (entradas)</div>
+                    <div class="fw-bold fs-5 text-success" id="cb-stat-creditos">$<?= number_format($resumen['creditos'] ?? 0, 2) ?></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 rounded-4 shadow-sm h-100">
+                <div class="card-body p-3">
+                    <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Débitos (salidas)</div>
+                    <div class="fw-bold fs-5 text-danger" id="cb-stat-debitos">$<?= number_format($resumen['debitos'] ?? 0, 2) ?></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 rounded-4 shadow-sm h-100">
+                <div class="card-body p-3">
+                    <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Saldo Final</div>
+                    <div class="fw-bold fs-5 text-primary" id="cb-stat-saldo-final">$<?= number_format($resumen['saldo_final'] ?? 0, 2) ?></div>
                 </div>
             </div>
         </div>
@@ -148,6 +175,11 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <a id="cb-btn-pdf" href="#" class="btn btn-outline-danger" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
                         <a id="cb-btn-excel" href="#" class="btn btn-outline-success" title="Descargar Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
                     </div>
+                    <div class="vr mx-1"></div>
+                    <div class="btn-group btn-group-sm">
+                        <a id="cb-btn-conciliacion-pdf" href="#" class="btn btn-outline-danger" title="Conciliación (PDF)"><i class="bi bi-file-earmark-pdf"></i> Conciliación</a>
+                        <a id="cb-btn-conciliacion-excel" href="#" class="btn btn-outline-success" title="Conciliación (Excel)"><i class="bi bi-file-earmark-spreadsheet"></i> Conciliación</a>
+                    </div>
                 </div>
                 <div class="d-flex align-items-center gap-3">
                     <span id="cb-pagination-info" class="text-muted small fw-medium"></span>
@@ -171,11 +203,10 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                             <th class="text-end sortable-header" role="button" data-sort="debe" data-col="debe">Debe <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="text-end sortable-header" role="button" data-sort="haber" data-col="haber">Haber <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="text-end pe-3" data-col="saldo">Saldo</th>
-                            <th class="text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="cb-tbody">
-                        <tr><td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-bank fs-3 d-block mb-2"></i>Seleccione una cuenta bancaria.</td></tr>
+                        <tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-bank fs-3 d-block mb-2"></i>Seleccione una cuenta bancaria.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -296,7 +327,72 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     </div>
 </div>
 
+<!-- ═══════════════════ MODAL: Conciliar Período ═══════════════════ -->
+<div class="modal fade" id="modalConciliarCB" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:480px;">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-success text-white py-2 px-3">
+                <h6 class="modal-title fw-bold"><i class="bi bi-check2-circle me-2"></i>Marcar Período como Conciliado</h6>
+                <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="p-2 border rounded-3 bg-light mb-3 small">
+                    <div><span class="text-muted">Cuenta:</span> <span id="cbc-info-cuenta" class="fw-bold"></span></div>
+                    <div><span class="text-muted">Período:</span> <span id="cbc-info-periodo" class="fw-bold"></span></div>
+                    <div><span class="text-muted">Saldo final según el sistema:</span> <span id="cbc-info-saldo-sistema" class="fw-bold"></span></div>
+                </div>
+                <div class="row g-2">
+                    <div class="col-12">
+                        <label class="form-label small fw-bold mb-1">Saldo según estado de cuenta del banco (opcional)</label>
+                        <input type="number" step="0.01" id="cbc-saldo-banco" class="form-control form-control-sm shadow-none" placeholder="0.00">
+                        <div class="form-text">Si lo indicas y no coincide con el saldo del sistema, se te avisará antes de confirmar.</div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold mb-1">Observaciones</label>
+                        <textarea id="cbc-observaciones" class="form-control form-control-sm shadow-none" rows="2" maxlength="500"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2 px-3">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success btn-sm px-4" onclick="window.CB_confirmarConciliar()">
+                    <i class="bi bi-lock-fill me-1"></i> Conciliar y Bloquear Período
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════ MODAL: Historial de Conciliaciones ═══════════════════ -->
+<div class="modal fade" id="modalHistorialConciliacionesCB" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-secondary text-white py-2 px-3">
+                <h6 class="modal-title fw-bold"><i class="bi bi-clock-history me-2"></i>Historial de Conciliaciones</h6>
+                <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="table-responsive" style="max-height:420px;overflow-y:auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Período</th><th class="text-end">Saldo Final</th><th class="text-end">Saldo Banco</th>
+                                <th>Usuario</th><th>Estado</th><th class="text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cb-tbody-conciliaciones"><tr><td colspan="6" class="text-center text-muted py-4">Cargando…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2 px-3">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+    const CB_PERM_ELIMINAR = <?= !empty($perm['eliminar']) ? 'true' : 'false' ?>;
     const RUTA_MODULO_CB = "<?= $rutaModulo ?>";
     const CB_URL_BASE = "<?= $urlBase ?>";
     window.BASE_URL = '<?= $base ?>';

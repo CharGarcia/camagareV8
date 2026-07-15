@@ -41,4 +41,28 @@ class ControlBancarioRules
             }
         }
     }
+
+    public function validarConciliacion(array $data): void
+    {
+        if (empty($data['id_forma_pago'])) {
+            throw new \Exception('Falta indicar la cuenta bancaria.');
+        }
+
+        foreach (['fecha_inicio', 'fecha_fin'] as $campo) {
+            $valor = (string) ($data[$campo] ?? '');
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $valor)) {
+                throw new \Exception('Debe indicar un rango de fechas válido para conciliar.');
+            }
+        }
+
+        if ($data['fecha_inicio'] > $data['fecha_fin']) {
+            throw new \Exception('La fecha de inicio no puede ser posterior a la fecha de fin.');
+        }
+
+        if (isset($data['saldo_banco']) && $data['saldo_banco'] !== null && $data['saldo_banco'] !== '') {
+            if (!is_numeric($data['saldo_banco'])) {
+                throw new \Exception('El saldo del banco debe ser un valor numérico.');
+            }
+        }
+    }
 }

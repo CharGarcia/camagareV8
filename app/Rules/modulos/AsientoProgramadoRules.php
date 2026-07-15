@@ -19,8 +19,12 @@ class AsientoProgramadoRules
         $tipoRef = trim($data['tipo_referencia'] ?? '');
 
         // Tipos de referencia que no dependen de un asiento tipo base (id_asiento_tipo = 0)
-        $tiposSinAsientoBase = ['iva_ventas_factura', 'iva_compras_factura', 'retenciones_venta_debe', 'retenciones_venta_haber', 'retenciones_compra_debe', 'retenciones_compra_haber', 'opcion_ingreso', 'opcion_egreso', 'forma_cobro', 'forma_pago'];
-        if ($idAsientoTipo <= 0 && !in_array($tipoRef, $tiposSinAsientoBase, true)) {
+        $tiposSinAsientoBase = ['iva_ventas_factura', 'iva_compras_factura', 'iva_recibos_venta', 'retenciones_venta_debe', 'retenciones_venta_haber', 'retenciones_compra_debe', 'retenciones_compra_haber', 'opcion_ingreso', 'opcion_egreso', 'forma_cobro', 'forma_pago'];
+        // Override de cuenta de IVA por dimensión (cliente/proveedor/producto/categoria/marca, o
+        // 'item_compra' cuando la dimensión Producto de Compras usa clave de texto): tampoco depende
+        // de un concepto de asientos_tipo, se identifica por codigo_tarifa_iva en su lugar.
+        $esOverrideIvaDimension = !empty($data['codigo_tarifa_iva']) && in_array($tipoRef, ['cliente', 'proveedor', 'producto', 'categoria', 'marca', 'item_compra'], true);
+        if ($idAsientoTipo <= 0 && !in_array($tipoRef, $tiposSinAsientoBase, true) && !$esOverrideIvaDimension) {
             $errores[] = 'El tipo de asiento base es obligatorio.';
         }
 
@@ -34,9 +38,9 @@ class AsientoProgramadoRules
 
         if ($tipoRef !== '') {
             $allowedTypes = [
-                'cliente', 'proveedor', 'empleado', 'asientos tipo', 'producto', 'categoria', 'marca', 'iva', 'iva_ventas_factura', 'iva_compras_factura',
+                'cliente', 'proveedor', 'empleado', 'asientos tipo', 'producto', 'categoria', 'marca', 'iva', 'iva_ventas_factura', 'iva_compras_factura', 'iva_recibos_venta',
                 'item_compra',
-                'ventas_factura', 'ventas_recibo', 'adquisiciones_compras', 'retenciones_venta', 'retenciones_compra',
+                'ventas_factura', 'ventas_recibo', 'recibos_venta', 'adquisiciones_compras', 'retenciones_venta', 'retenciones_compra',
                 'ingresos_egresos', 'cobros_pagos', 'nomina', 'retenciones_venta_debe', 'retenciones_venta_haber',
                 'retenciones_compra_debe', 'retenciones_compra_haber',
                 'opcion_ingreso', 'opcion_egreso', 'forma_cobro', 'forma_pago'

@@ -324,6 +324,10 @@ class ConfiguracionContableController extends BaseModuloController
                     // IVA crédito tributario por tarifa (espejo de ventas, cuenta de activo)
                     $reglasIva = $this->repository->getReglasIvaCompras($idEmpresa);
                     $reglas = array_merge($reglas, $reglasIva);
+                } elseif ($tipoAsiento === 'recibos_venta') {
+                    // Catálogo de IVA propio de Recibos de Venta (independiente de ventas_factura)
+                    $reglasIva = $this->repository->getReglasIvaRecibosVenta($idEmpresa);
+                    $reglas = array_merge($reglas, $reglasIva);
                 }
             }
 
@@ -358,7 +362,7 @@ class ConfiguracionContableController extends BaseModuloController
         }
 
         try {
-            if ($tipoReferencia === 'iva_ventas_factura' || $tipoReferencia === 'iva_compras_factura') {
+            if ($tipoReferencia === 'iva_ventas_factura' || $tipoReferencia === 'iva_compras_factura' || $tipoReferencia === 'iva_recibos_venta') {
                 if ($idReferencia <= 0) {
                     echo json_encode(['ok' => false, 'error' => 'ID de referencia de tarifa inválido.']);
                     exit;
@@ -479,7 +483,7 @@ class ConfiguracionContableController extends BaseModuloController
         $idReferencia = (int) ($_POST['id_referencia'] ?? 0);
 
         try {
-            if ($tipoReferencia === 'iva_ventas_factura' || $tipoReferencia === 'iva_compras_factura') {
+            if ($tipoReferencia === 'iva_ventas_factura' || $tipoReferencia === 'iva_compras_factura' || $tipoReferencia === 'iva_recibos_venta') {
                 $db = Database::getConnection();
                 $stCheck = $db->prepare("SELECT id FROM asientos_programados
                                          WHERE id_empresa = ? AND id_referencia = ? AND tipo_referencia = ? AND eliminado = false LIMIT 1");
@@ -1068,20 +1072,44 @@ class ConfiguracionContableController extends BaseModuloController
         $referenciaTexto = trim($_POST['referencia_texto'] ?? '');
 
         // 'item_compra' (regla por nombre del ítem de compra) usa clave de TEXTO, no id entero.
+        // En Compras, la dimensión "Producto" SIEMPRE usa esta clave de texto (ítems no catalogados),
+        // así que un override de IVA por producto en Compras también llega aquí con tipo_referencia='item_compra'.
         $esItem = ($tipoReferencia === 'item_compra');
 
-        if ($idAsientoTipo <= 0 || $idCuenta <= 0 || $tipoReferencia === '' || ($esItem ? $referenciaTexto === '' : $idReferencia <= 0)) {
+        // Override de cuenta de IVA por dimensión: no depende de un concepto de asientos_tipo
+        // (id_asiento_tipo=0), se identifica por codigo_tarifa_iva + direccion_iva en su lugar.
+        $codigoTarifaIva = trim($_POST['codigo_tarifa_iva'] ?? '');
+        $esOverrideIva = $codigoTarifaIva !== '' && ($esItem || in_array($tipoReferencia, ['cliente', 'proveedor', 'producto', 'categoria', 'marca'], true));
+        $tipoAsientoPost = trim($_POST['tipo_asiento'] ?? '');
+        // 'recibo' es distinto de 'venta' a propósito: sin esto, un override de IVA por producto en
+        // Facturas y otro en Recibos para el mismo producto+tarifa colisionarían en la misma fila.
+        $direccionIva = match ($tipoAsientoPost) {
+            'adquisiciones_compras' => 'compra',
+            'recibos_venta' => 'recibo',
+            default => 'venta',
+        };
+
+        if (($idAsientoTipo <= 0 && !$esOverrideIva) || $idCuenta <= 0 || $tipoReferencia === '' || ($esItem ? $referenciaTexto === '' : $idReferencia <= 0)) {
             echo json_encode(['ok' => false, 'error' => 'Parámetros incompletos. Debe seleccionar una entidad/ítem y una cuenta válida.']);
             exit;
         }
 
         try {
             // Comprobar si ya existe una regla para esa dimensión específica y asiento tipo
+            // (o, si es IVA, para esa dimensión/ítem + tarifa: id_asiento_tipo=0 se comparte entre tarifas).
             $db = Database::getConnection();
-            if ($esItem) {
+            if ($esOverrideIva && $esItem) {
+                $stCheck = $db->prepare("SELECT id FROM asientos_programados
+                                         WHERE id_empresa = ? AND id_asiento_tipo = 0 AND tipo_referencia = 'item_compra' AND TRIM(referencia_texto) = ? AND codigo_tarifa_iva = ? AND eliminado = false");
+                $stCheck->execute([$idEmpresa, $referenciaTexto, $codigoTarifaIva]);
+            } elseif ($esItem) {
                 $stCheck = $db->prepare("SELECT id FROM asientos_programados
                                          WHERE id_empresa = ? AND id_asiento_tipo = ? AND tipo_referencia = ? AND TRIM(referencia_texto) = ? AND eliminado = false");
                 $stCheck->execute([$idEmpresa, $idAsientoTipo, $tipoReferencia, $referenciaTexto]);
+            } elseif ($esOverrideIva) {
+                $stCheck = $db->prepare("SELECT id FROM asientos_programados
+                                         WHERE id_empresa = ? AND id_asiento_tipo = 0 AND id_referencia = ? AND tipo_referencia = ? AND codigo_tarifa_iva = ? AND eliminado = false");
+                $stCheck->execute([$idEmpresa, $idReferencia, $tipoReferencia, $codigoTarifaIva]);
             } else {
                 $stCheck = $db->prepare("SELECT id FROM asientos_programados
                                          WHERE id_empresa = ? AND id_asiento_tipo = ? AND id_referencia = ? AND tipo_referencia = ? AND eliminado = false");
@@ -1090,11 +1118,13 @@ class ConfiguracionContableController extends BaseModuloController
             $idExistente = $stCheck->fetchColumn();
 
             $dataRule = [
-                'id_asiento_tipo'  => $idAsientoTipo,
+                'id_asiento_tipo'  => $esOverrideIva ? 0 : $idAsientoTipo,
                 'id_cuenta'        => $idCuenta,
                 'id_referencia'    => $esItem ? null : $idReferencia,
                 'tipo_referencia'  => $tipoReferencia,
-                'referencia_texto' => $esItem ? $referenciaTexto : null
+                'referencia_texto' => $esItem ? $referenciaTexto : null,
+                'codigo_tarifa_iva' => $esOverrideIva ? $codigoTarifaIva : null,
+                'direccion_iva'    => $esOverrideIva ? $direccionIva : null,
             ];
 
             if ($idExistente) {
@@ -1175,7 +1205,30 @@ class ConfiguracionContableController extends BaseModuloController
                         ORDER BY dimension_nombre ASC";
                 $st = $db->prepare($sql);
                 $st->execute([$idEmpresa, $tipoAsiento]);
-                echo json_encode(['ok' => true, 'data' => $st->fetchAll(PDO::FETCH_ASSOC)]);
+                $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+                // Overrides de IVA por ítem (id_asiento_tipo=0, se identifican por codigo_tarifa_iva).
+                $direccionIva = match ($tipoAsiento) {
+                    'adquisiciones_compras' => 'compra',
+                    'recibos_venta' => 'recibo',
+                    default => 'venta',
+                };
+                $sqlIva = "SELECT ap.id, ap.id_asiento_tipo, ap.id_cuenta, ap.id_referencia, ap.tipo_referencia,
+                                  ap.codigo_tarifa_iva,
+                                  CONCAT('IVA ', COALESCE(ti.tarifa, ap.codigo_tarifa_iva || '%')) AS asiento_tipo_referencia,
+                                  pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
+                                  ap.referencia_texto AS dimension_nombre
+                           FROM asientos_programados ap
+                           INNER JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                           LEFT JOIN tarifa_iva ti ON ti.codigo::integer = ap.codigo_tarifa_iva::integer
+                           WHERE ap.id_empresa = ? AND ap.id_asiento_tipo = 0 AND ap.tipo_referencia = 'item_compra'
+                             AND ap.codigo_tarifa_iva IS NOT NULL AND ap.direccion_iva = ? AND ap.eliminado = false
+                           ORDER BY dimension_nombre ASC";
+                $stIva = $db->prepare($sqlIva);
+                $stIva->execute([$idEmpresa, $direccionIva]);
+                $rows = array_merge($rows, $stIva->fetchAll(PDO::FETCH_ASSOC));
+
+                echo json_encode(['ok' => true, 'data' => $rows]);
                 exit;
             }
 
@@ -1239,6 +1292,41 @@ class ConfiguracionContableController extends BaseModuloController
             $st = $db->prepare($sql);
             $st->execute([$idEmpresa, $tipoAsiento, $tipoReferencia]);
             $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+            // Overrides de cuenta de IVA por esta misma dimensión (cliente/proveedor/producto/categoria/
+            // marca): no tienen fila en asientos_tipo (id_asiento_tipo=0), así que no los trae el SELECT
+            // de arriba. Se identifican por codigo_tarifa_iva + direccion_iva y se anexan aparte.
+            if (in_array($tipoReferencia, ['cliente', 'proveedor', 'producto', 'categoria', 'marca'], true)) {
+                $direccionIva = match ($tipoAsiento) {
+                    'adquisiciones_compras' => 'compra',
+                    'recibos_venta' => 'recibo',
+                    default => 'venta',
+                };
+                $sqlIva = "SELECT ap.id,
+                                  ap.id_asiento_tipo,
+                                  ap.id_cuenta,
+                                  ap.id_referencia,
+                                  ap.tipo_referencia,
+                                  ap.codigo_tarifa_iva,
+                                  CONCAT('IVA ', COALESCE(ti.tarifa, ap.codigo_tarifa_iva || '%')) AS asiento_tipo_referencia,
+                                  pc.codigo AS cuenta_codigo,
+                                  pc.nombre AS cuenta_nombre,
+                                  ref.{$joinField} AS dimension_nombre
+                           FROM asientos_programados ap
+                           INNER JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                           INNER JOIN {$joinTable} ref ON ref.id = ap.id_referencia
+                           LEFT JOIN tarifa_iva ti ON ti.codigo::integer = ap.codigo_tarifa_iva::integer
+                           WHERE ap.id_empresa = ?
+                             AND ap.id_asiento_tipo = 0
+                             AND ap.tipo_referencia = ?
+                             AND ap.codigo_tarifa_iva IS NOT NULL
+                             AND ap.direccion_iva = ?
+                             AND ap.eliminado = false
+                           ORDER BY dimension_nombre ASC";
+                $stIva = $db->prepare($sqlIva);
+                $stIva->execute([$idEmpresa, $tipoReferencia, $direccionIva]);
+                $rows = array_merge($rows, $stIva->fetchAll(PDO::FETCH_ASSOC));
+            }
 
             echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {

@@ -78,23 +78,83 @@ class ControlBancarioRepository extends BaseRepository
     }
 
     /**
+     * Resumen de la cuenta para el rango de fechas seleccionado:
+     *   - delta_antes: suma (debe-haber) de todo lo anterior a fecha_inicio (para arrastrar el saldo).
+     *   - creditos: suma de "debe" (entradas: depósitos/transferencias recibidas) dentro del rango.
+     *   - debitos: suma de "haber" (salidas: cheques/transferencias emitidas) dentro del rango.
+     * El saldo inicial del período = saldoInicialCuenta + delta_antes; el saldo final = ese saldo + créditos - débitos.
+     */
+    public function getResumenPeriodo(int $idEmpresa, int $idCuentaContable, string $fechaInicio, string $fechaFin): array
+    {
+        $sql = "SELECT
+                    COALESCE(SUM(CASE WHEN ac.fecha_asiento < :f_ini THEN ad.debe - ad.haber ELSE 0 END), 0) AS delta_antes,
+                    COALESCE(SUM(CASE WHEN ac.fecha_asiento BETWEEN :f_ini AND :f_fin THEN ad.debe ELSE 0 END), 0) AS creditos,
+                    COALESCE(SUM(CASE WHEN ac.fecha_asiento BETWEEN :f_ini AND :f_fin THEN ad.haber ELSE 0 END), 0) AS debitos
+                FROM asientos_contables_detalle ad
+                INNER JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
+                WHERE ac.id_empresa = :id_empresa
+                  AND ac.estado = 'contabilizado'
+                  AND ac.eliminado = FALSE
+                  AND ad.eliminado = FALSE
+                  AND ad.id_cuenta_contable = :id_cuenta
+                  AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_empresa' => $idEmpresa,
+            ':id_cuenta' => $idCuentaContable,
+            ':f_ini' => $fechaInicio,
+            ':f_fin' => $fechaFin,
+        ]);
+        $row = $st->fetch(PDO::FETCH_ASSOC) ?: ['delta_antes' => 0, 'creditos' => 0, 'debitos' => 0];
+        return [
+            'delta_antes' => (float) $row['delta_antes'],
+            'creditos' => (float) $row['creditos'],
+            'debitos' => (float) $row['debitos'],
+        ];
+    }
+
+    /**
      * Fragmento SQL común: deriva tipo/dirección/número de cheque/fechas desde la
      * clasificación manual (control_bancario_movimientos) o, si no existe, desde
      * ingresos_pagos/egresos_pagos (vía modulo_origen + id_referencia_origen del asiento).
+     *
+     * Para el tipo de transacción: si el cobro/pago ya trae un dato más específico
+     * (ip.tipo_operacion_bancaria: DEPOSITO/TRANSFERENCIA/CHEQUE/DEBITO) se usa ese.
+     * Si no, y el asiento viene de un documento real del sistema (ingreso, egreso,
+     * recibo_venta, factura_venta, compra, etc. — cualquiera menos 'migracion'/'manual'),
+     * se usa el TIPO de la forma de pago de la cuenta (fp.tipo: BANCO→Transferencia,
+     * CHEQUE→Cheque), porque esa línea SÍ es un movimiento bancario real aunque el
+     * documento de origen (p. ej. Recibo de Venta) no guarde el detalle del método de
+     * cobro. Solo queda "OTRO" para asientos migrados o manuales, donde no hay
+     * ningún documento de negocio detrás que sustente la inferencia.
      */
     private function selectDerivado(): string
     {
         return "
             COALESCE(cbm.tipo_transaccion,
-                     CASE WHEN ip.id IS NOT NULL THEN COALESCE(NULLIF(ip.tipo_operacion_bancaria, ''), 'OTRO')
-                          ELSE 'OTRO' END) AS tipo_transaccion,
+                     CASE
+                         WHEN ip.id IS NOT NULL AND NULLIF(ip.tipo_operacion_bancaria, '') IS NOT NULL
+                             THEN UPPER(ip.tipo_operacion_bancaria)
+                         WHEN ac.modulo_origen NOT IN ('migracion', 'manual') THEN
+                             CASE fp.tipo
+                                 WHEN 'CHEQUE' THEN 'CHEQUE'
+                                 WHEN 'BANCO'  THEN 'TRANSFERENCIA'
+                                 ELSE 'OTRO'
+                             END
+                         ELSE 'OTRO'
+                     END) AS tipo_transaccion,
             COALESCE(cbm.cheque_direccion,
-                     CASE WHEN ip.id IS NOT NULL THEN 'RECIBIDO'
-                          WHEN ep.id IS NOT NULL THEN 'EMITIDO'
-                          ELSE NULL END) AS cheque_direccion,
+                     CASE
+                         WHEN ip.id IS NOT NULL THEN 'RECIBIDO'
+                         WHEN ep.id IS NOT NULL THEN 'EMITIDO'
+                         WHEN ac.modulo_origen NOT IN ('migracion', 'manual') THEN
+                             CASE WHEN ad.debe > 0 THEN 'RECIBIDO' WHEN ad.haber > 0 THEN 'EMITIDO' ELSE NULL END
+                         ELSE NULL
+                     END) AS cheque_direccion,
             COALESCE(cbm.numero_cheque, ip.numero_cheque, ep.referencia) AS numero_cheque,
             COALESCE(cbm.fecha_cheque, ip.fecha_cobro) AS fecha_cheque,
             COALESCE(cbm.fecha_banco, ac.fecha_asiento) AS fecha_banco,
+            cbm.fecha_banco AS fecha_banco_manual,
             cbm.id AS id_clasificacion,
             cbm.observacion AS observacion";
     }
@@ -294,6 +354,73 @@ class ControlBancarioRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
+    /** Base común (parametrizada) para las dos consultas de conciliación de cheques emitidos de una cuenta. */
+    private function baseChequesEmitidos(): string
+    {
+        return "SELECT
+                    ad.id AS id_asiento_detalle,
+                    ac.id AS id_asiento,
+                    ac.fecha_asiento,
+                    ac.numero_comprobante,
+                    ac.concepto,
+                    ad.referencia_detalle,
+                    ad.documento_referencia,
+                    ad.debe,
+                    ad.haber,
+                    COALESCE(cli.nombre, prov.razon_social) AS nombre_entidad,
+                    {$this->selectDerivado()}
+                FROM asientos_contables_detalle ad
+                INNER JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
+                INNER JOIN empresa_formas_pago fp ON fp.id = :id_forma_pago
+                LEFT JOIN clientes cli ON ad.tipo_entidad = 'cliente' AND ad.id_entidad = cli.id
+                LEFT JOIN proveedores prov ON ad.tipo_entidad = 'proveedor' AND ad.id_entidad = prov.id
+                {$this->joinsDerivado()}
+                WHERE ac.id_empresa = :id_empresa
+                  AND ac.estado = 'contabilizado'
+                  AND ac.eliminado = FALSE
+                  AND ad.eliminado = FALSE
+                  AND ad.id_cuenta_contable = :id_cuenta
+                  AND ac.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+    }
+
+    /**
+     * Cheques EMITIDOS durante el período (fecha del asiento dentro del rango) que, al cierre
+     * del período (fecha_fin), todavía no tienen fecha de banco registrada o esta es posterior
+     * — es decir, "en circulación" / no cobrados por el banco todavía.
+     */
+    public function getChequesEmitidosNoCobrados(int $idEmpresa, int $idFormaPago, int $idCuentaContable, string $fechaInicio, string $fechaFin): array
+    {
+        $sql = "SELECT * FROM ({$this->baseChequesEmitidos()}) x
+                WHERE x.tipo_transaccion = 'CHEQUE' AND x.cheque_direccion = 'EMITIDO'
+                  AND x.fecha_asiento BETWEEN :f_ini AND :f_fin
+                  AND (x.fecha_banco_manual IS NULL OR x.fecha_banco_manual > :f_fin)
+                ORDER BY x.fecha_asiento ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_empresa' => $idEmpresa, ':id_forma_pago' => $idFormaPago, ':id_cuenta' => $idCuentaContable,
+            ':f_ini' => $fechaInicio, ':f_fin' => $fechaFin,
+        ]);
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /**
+     * Cheques EMITIDOS que el banco hizo efectivos (fecha_banco) dentro del período,
+     * sin importar cuándo se emitieron/registraron (pueden venir de un período anterior).
+     */
+    public function getChequesEmitidosCobradosEnPeriodo(int $idEmpresa, int $idFormaPago, int $idCuentaContable, string $fechaInicio, string $fechaFin): array
+    {
+        $sql = "SELECT * FROM ({$this->baseChequesEmitidos()}) x
+                WHERE x.tipo_transaccion = 'CHEQUE' AND x.cheque_direccion = 'EMITIDO'
+                  AND x.fecha_banco_manual BETWEEN :f_ini AND :f_fin
+                ORDER BY x.fecha_banco_manual ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_empresa' => $idEmpresa, ':id_forma_pago' => $idFormaPago, ':id_cuenta' => $idCuentaContable,
+            ':f_ini' => $fechaInicio, ':f_fin' => $fechaFin,
+        ]);
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
     public function getClasificacionPorAsientoDetalle(int $idAsientoDetalle, int $idEmpresa): ?array
     {
         $sql = "SELECT * FROM control_bancario_movimientos
@@ -314,6 +441,19 @@ class ControlBancarioRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $idAsientoDetalle, ':id_empresa' => $idEmpresa, ':id_cuenta' => $idCuentaContable]);
         return (int) $st->fetchColumn() > 0;
+    }
+
+    /** Fecha del asiento al que pertenece la línea (para saber si cae en un período ya conciliado). */
+    public function getFechaAsientoDeDetalle(int $idAsientoDetalle, int $idEmpresa, int $idCuentaContable): ?string
+    {
+        $sql = "SELECT ac.fecha_asiento FROM asientos_contables_detalle ad
+                INNER JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
+                WHERE ad.id = :id AND ac.id_empresa = :id_empresa AND ad.id_cuenta_contable = :id_cuenta
+                  AND ad.eliminado = FALSE AND ac.eliminado = FALSE";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $idAsientoDetalle, ':id_empresa' => $idEmpresa, ':id_cuenta' => $idCuentaContable]);
+        $val = $st->fetchColumn();
+        return $val !== false ? (string) $val : null;
     }
 
     public function upsertClasificacion(array $data): int
@@ -392,5 +532,95 @@ class ControlBancarioRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
         return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN) ?: []);
+    }
+
+    // ── Conciliaciones (bloqueo de período ya cuadrado con el banco) ─────────
+
+    /** true si [fechaInicio, fechaFin] se solapa con alguna conciliación vigente (no reabierta) de la forma. */
+    public function existeSolapamientoConciliacion(int $idFormaPago, string $fechaInicio, string $fechaFin, ?int $excluirId = null): bool
+    {
+        $sql = "SELECT COUNT(*) FROM control_bancario_conciliaciones
+                WHERE id_forma_pago = :id_forma_pago AND eliminado = FALSE
+                  AND fecha_inicio <= :f_fin AND fecha_fin >= :f_ini";
+        $params = [':id_forma_pago' => $idFormaPago, ':f_ini' => $fechaInicio, ':f_fin' => $fechaFin];
+        if ($excluirId !== null) {
+            $sql .= " AND id != :excluir_id";
+            $params[':excluir_id'] = $excluirId;
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return (int) $st->fetchColumn() > 0;
+    }
+
+    /** Conciliación vigente (no reabierta) que cubre una fecha puntual, si existe. */
+    public function getConciliacionVigentePorFecha(int $idFormaPago, string $fecha): ?array
+    {
+        $sql = "SELECT * FROM control_bancario_conciliaciones
+                WHERE id_forma_pago = :id_forma_pago AND eliminado = FALSE
+                  AND :fecha BETWEEN fecha_inicio AND fecha_fin
+                ORDER BY fecha_inicio DESC LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_forma_pago' => $idFormaPago, ':fecha' => $fecha]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function crearConciliacion(array $data): int
+    {
+        $sql = "INSERT INTO control_bancario_conciliaciones (
+                    id_empresa, id_forma_pago, fecha_inicio, fecha_fin,
+                    saldo_inicial, saldo_final, saldo_banco, observaciones,
+                    created_by, updated_by
+                ) VALUES (
+                    :id_empresa, :id_forma_pago, :fecha_inicio, :fecha_fin,
+                    :saldo_inicial, :saldo_final, :saldo_banco, :observaciones,
+                    :usuario, :usuario
+                ) RETURNING id";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_empresa' => $data['id_empresa'],
+            ':id_forma_pago' => $data['id_forma_pago'],
+            ':fecha_inicio' => $data['fecha_inicio'],
+            ':fecha_fin' => $data['fecha_fin'],
+            ':saldo_inicial' => $data['saldo_inicial'],
+            ':saldo_final' => $data['saldo_final'],
+            ':saldo_banco' => $data['saldo_banco'] ?? null,
+            ':observaciones' => $data['observaciones'] ?? null,
+            ':usuario' => $data['usuario_id'],
+        ]);
+        return (int) $st->fetchColumn();
+    }
+
+    public function getConciliacionPorId(int $id, int $idEmpresa): ?array
+    {
+        $sql = "SELECT * FROM control_bancario_conciliaciones WHERE id = :id AND id_empresa = :id_empresa";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function reabrirConciliacion(int $id, int $idEmpresa, int $idUsuario): bool
+    {
+        $sql = "UPDATE control_bancario_conciliaciones SET
+                    eliminado = TRUE, deleted_at = CURRENT_TIMESTAMP, deleted_by = :usuario
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = FALSE";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $id, ':id_empresa' => $idEmpresa, ':usuario' => $idUsuario]);
+        return $st->rowCount() > 0;
+    }
+
+    /** Historial de conciliaciones de una cuenta (vigentes y reabiertas), con el usuario que la creó. */
+    public function listarConciliaciones(int $idEmpresa, int $idFormaPago): array
+    {
+        $sql = "SELECT c.*, u.nombre AS usuario_nombre, ur.nombre AS reabierto_por_nombre
+                FROM control_bancario_conciliaciones c
+                LEFT JOIN usuarios u ON u.id = c.created_by
+                LEFT JOIN usuarios ur ON ur.id = c.deleted_by
+                WHERE c.id_empresa = :id_empresa AND c.id_forma_pago = :id_forma_pago
+                ORDER BY c.fecha_inicio DESC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':id_forma_pago' => $idFormaPago]);
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 }

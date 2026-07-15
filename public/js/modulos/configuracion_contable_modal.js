@@ -9,6 +9,7 @@
     // la resolución de cuentas elige el más específico configurado, cayendo a General).
     const ACORDEONES_DIM = {
         ventas_factura:        ['accItemCliente', 'accItemProducto', 'accItemCategoria', 'accItemMarca'],
+        recibos_venta:         ['accItemCliente', 'accItemProducto', 'accItemCategoria', 'accItemMarca'],
         adquisiciones_compras: ['accItemProveedor', 'accItemProducto', 'accItemCategoria', 'accItemMarca'],
         nomina:                ['accItemEmpleado']
     };
@@ -203,7 +204,7 @@
                             ASIENTOPROG_vincularAutocomplete(0, inputDebeId, hiddenDebeId, sugDebeId, retTipoCuenta, `${retPrefix}_debe`, item.id_referencia);
                             ASIENTOPROG_vincularAutocomplete(0, inputHaberId, hiddenHaberId, sugHaberId, retTipoCuenta, `${retPrefix}_haber`, item.id_referencia);
                         } else {
-                            const safeSuffix = (item.tipo_referencia === 'iva_ventas_factura' || item.tipo_referencia === 'iva_compras_factura') ? `iva_${item.id_referencia}` : `at_${item.id_asiento_tipo}`;
+                            const safeSuffix = ASIENTOPROG_esConceptoIva(item) ? `iva_${item.id_referencia}` : `at_${item.id_asiento_tipo}`;
                             const inputId = `cuenta_search_${safeSuffix}`;
                             const hiddenId = `cuenta_hidden_${safeSuffix}`;
                             const sugId = `sug_${safeSuffix}`;
@@ -341,7 +342,7 @@
     window.ASIENTOPROG_guardarAlVuelo = async function (idAsientoTipo, idCuenta, inputElement, tipoReferencia = '', idReferencia = 0) {
         // Tipos que se guardan sin id_asiento_tipo base (IVA por tarifa y retenciones venta/compra).
         const sinAsientoBase = [
-            'iva_ventas_factura', 'iva_compras_factura',
+            'iva_ventas_factura', 'iva_compras_factura', 'iva_recibos_venta',
             'retenciones_venta', 'retenciones_venta_debe', 'retenciones_venta_haber',
             'retenciones_compra', 'retenciones_compra_debe', 'retenciones_compra_haber'
         ];
@@ -407,7 +408,7 @@
      */
     window.ASIENTOPROG_eliminarAlVuelo = async function (idAsientoTipo, inputId, hiddenId, tipoReferencia = '', idReferencia = 0) {
         const sinAsientoBase = [
-            'iva_ventas_factura', 'iva_compras_factura',
+            'iva_ventas_factura', 'iva_compras_factura', 'iva_recibos_venta',
             'retenciones_venta', 'retenciones_venta_debe', 'retenciones_venta_haber',
             'retenciones_compra', 'retenciones_compra_debe', 'retenciones_compra_haber'
         ];
@@ -500,6 +501,23 @@
         ).join('');
     }
 
+    // Mapa de valor de checkbox -> [label, color] para armar badges a partir de un CSV guardado
+    const ASIENTOPROG_TIPO_MAP = {
+        activo: ['Activo', 'success'], pasivo: ['Pasivo', 'danger'], patrimonio: ['Patrimonio', 'dark'],
+        ingreso: ['Ingresos', 'primary'], costo: ['Costos', 'info'], gasto: ['Gastos', 'warning']
+    };
+
+    /**
+     * Badges de tipo de cuenta a partir del CSV configurado en la opción/forma (item.tipo_cuenta_contable).
+     * Vacío o sin coincidencias = sin restricción, se muestran los 6 tipos como referencia (igual que antes).
+     */
+    function ASIENTOPROG_badgesPorTipoCuenta(csv) {
+        const partes = (csv || '').split(',').map(p => p.trim().toLowerCase()).filter(Boolean);
+        if (!partes.length) return ASIENTOPROG_badgesTipoCuenta(ASIENTOPROG_TIPOS_TODOS);
+        const tipos = partes.map(p => ASIENTOPROG_TIPO_MAP[p]).filter(Boolean);
+        return ASIENTOPROG_badgesTipoCuenta(tipos.length ? tipos : ASIENTOPROG_TIPOS_TODOS);
+    }
+
     /**
      * Badge de naturaleza contable ('debe' | 'haber').
      */
@@ -539,11 +557,12 @@
     function ASIENTOPROG_renderModoIngresoEgreso(res, selector) {
         ASIENTOPROG_prepararModoEspecial('acordeonIngresoEgreso', selector);
 
+        // El tipo de cuenta esperado (badges + filtro del buscador) se calcula por cada opción
+        // individual dentro de ASIENTOPROG_renderReferencias, a partir de item.tipo_cuenta_contable
+        // (configurado en el modal de Opciones de Ingresos y Egresos) — no hay un tipo fijo por sección.
         const base = {
             idKey: 'id_opcion', refParam: 'id_opcion', selectorParam: 'naturaleza',
             detalle: 'Configurado en Opciones de Ingresos y Egresos',
-            badgesHtml: ASIENTOPROG_badgesTipoCuenta(ASIENTOPROG_TIPOS_TODOS),
-            tipoCuentaFiltro: '',
             endpointGuardar: 'guardarReglaOpcionAjax', endpointEliminar: 'eliminarReglaOpcionAjax'
         };
 
@@ -565,13 +584,11 @@
     function ASIENTOPROG_renderModoCobroPago(res, selector) {
         ASIENTOPROG_prepararModoEspecial('acordeonCobroPago', selector);
 
+        // Igual que en Ingresos/Egresos: el tipo esperado se calcula por cada forma individual
+        // en ASIENTOPROG_renderReferencias, a partir de item.tipo_cuenta_contable.
         const base = {
             idKey: 'id_forma', refParam: 'id_forma', selectorParam: 'flujo',
             detalle: 'Configurado en Formas de Cobros y Pagos',
-            // Todos los tipos de cuenta (activo, pasivo, patrimonio, ingreso, costo, gasto),
-            // igual que Ingresos/Egresos: el selector no filtra por tipo.
-            badgesHtml: ASIENTOPROG_badgesTipoCuenta(ASIENTOPROG_TIPOS_TODOS),
-            tipoCuentaFiltro: '',
             endpointGuardar: 'guardarReglaFormaAjax', endpointEliminar: 'eliminarReglaFormaAjax'
         };
 
@@ -612,11 +629,18 @@
             const cuentaVal = item.id_cuenta ? `${item.cuenta_codigo} - ${item.cuenta_nombre}` : '';
             const borderClass = idCuentaVal ? '' : 'is-invalid border-danger';
 
+            // Tipo esperado por ESTA opción/forma específica (configurado en su propio modal admin).
+            // Vacío = sin restricción, igual comportamiento que antes.
+            const cfgItem = Object.assign({}, cfg, {
+                tipoCuentaFiltro: item.tipo_cuenta_contable || '',
+                badgesHtml: ASIENTOPROG_badgesPorTipoCuenta(item.tipo_cuenta_contable)
+            });
+
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td class="ps-4 fw-bold text-dark">${ASIENTOPROG_esc(item.concepto)}</td>
                 <td class="small text-muted">${cfg.detalle}</td>
-                <td>${cfg.badgesHtml}</td>
+                <td>${cfgItem.badgesHtml}</td>
                 <td class="text-center">${cfg.naturalezaBadge}</td>
                 <td class="autocomplete-celda">
                     <input type="text" class="form-control form-control-sm ${borderClass}" id="${inputId}" placeholder="Escriba código o nombre..." value="${ASIENTOPROG_esc(cuentaVal)}" autocomplete="off">
@@ -630,10 +654,10 @@
                 </td>
             `;
             const btnDel = tr.querySelector('.btn-eliminar-ref');
-            if (btnDel) btnDel.addEventListener('click', () => ASIENTOPROG_eliminarRefAlVuelo(idRef, inputId, hiddenId, cfg));
+            if (btnDel) btnDel.addEventListener('click', () => ASIENTOPROG_eliminarRefAlVuelo(idRef, inputId, hiddenId, cfgItem));
             tbody.appendChild(tr);
 
-            ASIENTOPROG_vincularAutoRef(idRef, inputId, hiddenId, sugId, cfg);
+            ASIENTOPROG_vincularAutoRef(idRef, inputId, hiddenId, sugId, cfgItem);
         });
     }
 
@@ -769,6 +793,22 @@
         }
     }
 
+    /** ¿Este concepto (de CONCEPTOS_CONFIGURADOS) es un override de IVA por tarifa? */
+    function ASIENTOPROG_esConceptoIva(item) {
+        return !!item && (
+            item.tipo_referencia === 'iva_ventas_factura' ||
+            item.tipo_referencia === 'iva_compras_factura' ||
+            item.tipo_referencia === 'iva_recibos_venta'
+        );
+    }
+
+    // Clave única por concepto para IDs de elementos e input hidden: los conceptos normales usan su
+    // id_asiento_tipo (siempre > 0); las tarifas de IVA comparten id_asiento_tipo=0 entre todas ellas,
+    // así que se distinguen por su tarifa (id_referencia) en su lugar.
+    function ASIENTOPROG_dimKey(item) {
+        return ASIENTOPROG_esConceptoIva(item) ? `iva_${item.id_referencia}` : item.id_asiento_tipo;
+    }
+
     /**
      * Carga dinámicamente las reglas correspondientes a una dimensión contable.
      */
@@ -781,7 +821,7 @@
         if (tipo === 'proveedor' || tipo === 'cliente' || tipo === 'producto') {
             const modulo = (tipo === 'cliente') ? 'ventas'
                          : (tipo === 'proveedor') ? 'compras'
-                         : (tipoAsiento === 'ventas_factura' ? 'ventas' : 'compras');
+                         : ((tipoAsiento === 'ventas_factura' || tipoAsiento === 'recibos_venta') ? 'ventas' : 'compras');
             try {
                 const ra = await fetch(`${API_PROG}/getAniosMovimientosAjax?modulo=${modulo}`);
                 const ja = await ra.json();
@@ -795,20 +835,24 @@
         }
 
         // Renderizar los inputs de cuenta en dos columnas (Debe | Haber), igual que la sección General.
-        // Se excluye el IVA por tarifa (id_asiento_tipo = 0): ese se configura en General, no por dimensión.
+        // Incluye tanto los conceptos normales (id_asiento_tipo > 0) como las tarifas de IVA (overrides
+        // por dimensión, id_asiento_tipo = 0 con tipo_referencia iva_ventas_factura/iva_compras_factura/iva_recibos_venta).
         const container = document.getElementById(`inputsDinamicos_${tipo}`);
         if (container) {
-            const conceptos = (window.CONCEPTOS_CONFIGURADOS || []).filter(c => parseInt(c.id_asiento_tipo) > 0);
+            const conceptos = (window.CONCEPTOS_CONFIGURADOS || []).filter(c => parseInt(c.id_asiento_tipo) > 0 || ASIENTOPROG_esConceptoIva(c));
             if (conceptos.length > 0) {
-                const tarjeta = (item) => `
+                const tarjeta = (item) => {
+                    const key = ASIENTOPROG_dimKey(item);
+                    return `
                     <div class="mb-2">
                         <label class="form-label small fw-bold text-dark mb-1"><i class="bi bi-journal-bookmark text-primary me-1"></i> ${item.concepto}</label>
                         <div class="position-relative">
-                            <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_cuenta_search_${tipo}_${item.id_asiento_tipo}" placeholder="Buscar cuenta..." autocomplete="off">
-                            <input type="hidden" id="dim_cuenta_id_${tipo}_${item.id_asiento_tipo}">
-                            <div class="list-group sugerencias-flotantes" id="dim_cuenta_sug_${tipo}_${item.id_asiento_tipo}" style="display: none;"></div>
+                            <input type="text" class="form-control form-control-sm bg-white text-dark" id="dim_cuenta_search_${tipo}_${key}" placeholder="Buscar cuenta..." autocomplete="off">
+                            <input type="hidden" id="dim_cuenta_id_${tipo}_${key}">
+                            <div class="list-group sugerencias-flotantes" id="dim_cuenta_sug_${tipo}_${key}" style="display: none;"></div>
                         </div>
                     </div>`;
+                };
                 const esDebe = (c) => (c.debe_haber || 'debe').toLowerCase() === 'debe';
                 const debeHtml  = conceptos.filter(esDebe).map(tarjeta).join('')          || '<div class="text-muted small py-1">Sin conceptos.</div>';
                 const haberHtml = conceptos.filter(c => !esDebe(c)).map(tarjeta).join('')  || '<div class="text-muted small py-1">Sin conceptos.</div>';
@@ -965,9 +1009,10 @@
         // Autocomplete de Cuentas Contables dinámicas según conceptos configurados
         if (window.CONCEPTOS_CONFIGURADOS) {
             window.CONCEPTOS_CONFIGURADOS.forEach(item => {
-                const inputId = `dim_cuenta_search_${tipo}_${item.id_asiento_tipo}`;
-                const hiddenId = `dim_cuenta_id_${tipo}_${item.id_asiento_tipo}`;
-                const sugId = `dim_cuenta_sug_${tipo}_${item.id_asiento_tipo}`;
+                const key = ASIENTOPROG_dimKey(item);
+                const inputId = `dim_cuenta_search_${tipo}_${key}`;
+                const hiddenId = `dim_cuenta_id_${tipo}_${key}`;
+                const sugId = `dim_cuenta_sug_${tipo}_${key}`;
                 const tipoCuenta = item.tipo_cuenta || '';
 
                 const cInput = document.getElementById(inputId);
@@ -1049,12 +1094,14 @@
             } catch (e) { /* fallback: usar lo que ya está en memoria */ }
         }
 
-        const aplicables = conceptos.filter(c => parseInt(c.id_asiento_tipo) > 0 && c.id_cuenta);
-        const sinCuenta  = conceptos.filter(c => parseInt(c.id_asiento_tipo) > 0 && !c.id_cuenta).length;
+        const esConceptoValido = (c) => parseInt(c.id_asiento_tipo) > 0 || ASIENTOPROG_esConceptoIva(c);
+        const aplicables = conceptos.filter(c => esConceptoValido(c) && c.id_cuenta);
+        const sinCuenta  = conceptos.filter(c => esConceptoValido(c) && !c.id_cuenta).length;
         let copiadas = 0;
         aplicables.forEach(item => {
-            const search = document.getElementById(`dim_cuenta_search_${tipo}_${item.id_asiento_tipo}`);
-            const hidden = document.getElementById(`dim_cuenta_id_${tipo}_${item.id_asiento_tipo}`);
+            const key = ASIENTOPROG_dimKey(item);
+            const search = document.getElementById(`dim_cuenta_search_${tipo}_${key}`);
+            const hidden = document.getElementById(`dim_cuenta_id_${tipo}_${key}`);
             if (search && hidden) {
                 search.value = `${item.cuenta_codigo} - ${item.cuenta_nombre}`;
                 hidden.value = item.id_cuenta;
@@ -1100,7 +1147,7 @@
         // Para producto, el listado depende del módulo: en compras son los productos HOMOLOGADOS
         // (los ítems de compra son texto libre y entran al catálogo vía homologación); en ventas, los vendidos.
         const tipoAsiento = (document.getElementById('tipoAsientoSelector') || {}).value || '';
-        const modulo = (tipoAsiento === 'ventas_factura') ? 'ventas' : 'compras';
+        const modulo = (tipoAsiento === 'ventas_factura' || tipoAsiento === 'recibos_venta') ? 'ventas' : 'compras';
         let etiqueta = ETIQUETA_ENTIDAD[tipo] || 'Entidades';
         if (tipo === 'producto') etiqueta = (modulo === 'compras') ? 'Productos homologados (compras)' : 'Productos vendidos';
 
@@ -1259,7 +1306,8 @@
 
         if (window.CONCEPTOS_CONFIGURADOS) {
             window.CONCEPTOS_CONFIGURADOS.forEach(item => {
-                const hiddenInput = document.getElementById(`dim_cuenta_id_${tipo}_${item.id_asiento_tipo}`);
+                const key = ASIENTOPROG_dimKey(item);
+                const hiddenInput = document.getElementById(`dim_cuenta_id_${tipo}_${key}`);
                 const idCuenta = hiddenInput ? hiddenInput.value : '';
 
                 if (idCuenta) {
@@ -1267,6 +1315,11 @@
                     const fd = new FormData();
                     fd.append('id_asiento_tipo', item.id_asiento_tipo.toString());
                     fd.append('id_cuenta', idCuenta);
+                    fd.append('tipo_asiento', tipoAsiento);
+                    if (ASIENTOPROG_esConceptoIva(item)) {
+                        // Override de cuenta de IVA por esta tarifa, para esta dimensión/ítem específico.
+                        fd.append('codigo_tarifa_iva', item.id_referencia.toString());
+                    }
                     if (esItem) {
                         // La clave de la regla es el NOMBRE del ítem (texto), no un id.
                         fd.append('tipo_referencia', 'item_compra');

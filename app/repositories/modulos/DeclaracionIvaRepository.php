@@ -128,12 +128,25 @@ class DeclaracionIvaRepository extends BaseRepository
     }
     /**
      * Obtiene los años que tienen registros de ventas para la empresa.
+     * Si no hay ventas, se obtienen los años a partir de compras.
      */
     public function getAniosConVentas(int $idEmpresa): array
     {
-        $sql = "SELECT DISTINCT EXTRACT(YEAR FROM fecha_emision) as anio 
-                FROM ventas_cabecera 
-                WHERE id_empresa = ? AND eliminado = false 
+        $sql = "SELECT DISTINCT EXTRACT(YEAR FROM fecha_emision) as anio
+                FROM ventas_cabecera
+                WHERE id_empresa = ? AND eliminado = false
+                ORDER BY anio DESC";
+        $st = $this->db->prepare($sql);
+        $st->execute([$idEmpresa]);
+        $anios = $st->fetchAll(\PDO::FETCH_COLUMN);
+
+        if (!empty($anios)) {
+            return $anios;
+        }
+
+        $sql = "SELECT DISTINCT EXTRACT(YEAR FROM fecha_emision) as anio
+                FROM compras_cabecera
+                WHERE id_empresa = ? AND eliminado = false
                 ORDER BY anio DESC";
         $st = $this->db->prepare($sql);
         $st->execute([$idEmpresa]);

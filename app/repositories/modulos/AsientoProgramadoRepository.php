@@ -29,6 +29,17 @@ class AsientoProgramadoRepository extends BaseRepository
         } catch (\Throwable $e) {
             // Catch exceptions silently
         }
+
+        // Override de cuenta de IVA por dimensión (cliente/proveedor/producto/categoria/marca):
+        // una fila de asientos_programados con id_asiento_tipo=0, tipo_referencia=dimensión y estas
+        // dos columnas informadas identifica "cuenta de IVA de esta tarifa para esta entidad puntual".
+        // NULL en todas las filas normales (reglas de concepto y regla general de IVA) — no rompe nada.
+        try {
+            $this->db->exec("ALTER TABLE asientos_programados ADD COLUMN IF NOT EXISTS codigo_tarifa_iva VARCHAR(10) NULL");
+            $this->db->exec("ALTER TABLE asientos_programados ADD COLUMN IF NOT EXISTS direccion_iva VARCHAR(10) NULL");
+        } catch (\Throwable $e) {
+            // Catch exceptions silently
+        }
     }
 
     /**
@@ -125,10 +136,10 @@ class AsientoProgramadoRepository extends BaseRepository
     {
         $sql = "INSERT INTO {$this->table} (
                     id_empresa, id_usuario, id_asiento_tipo, id_cuenta, id_referencia, tipo_referencia,
-                    referencia_texto, created_by, created_at, eliminado
+                    referencia_texto, codigo_tarifa_iva, direccion_iva, created_by, created_at, eliminado
                 ) VALUES (
                     :id_empresa, :id_usuario, :id_asiento_tipo, :id_cuenta, :id_referencia, :tipo_referencia,
-                    :referencia_texto, :created_by, CURRENT_TIMESTAMP, false
+                    :referencia_texto, :codigo_tarifa_iva, :direccion_iva, :created_by, CURRENT_TIMESTAMP, false
                 )";
         $st = $this->db->prepare($sql);
         $st->execute([
@@ -139,6 +150,8 @@ class AsientoProgramadoRepository extends BaseRepository
             ':id_referencia'    => $data['id_referencia'] ?: null,
             ':tipo_referencia'  => $data['tipo_referencia'] ?: null,
             ':referencia_texto' => !empty($data['referencia_texto']) ? trim((string) $data['referencia_texto']) : null,
+            ':codigo_tarifa_iva' => !empty($data['codigo_tarifa_iva']) ? trim((string) $data['codigo_tarifa_iva']) : null,
+            ':direccion_iva'    => !empty($data['direccion_iva']) ? trim((string) $data['direccion_iva']) : null,
             ':created_by'       => $data['created_by']
         ]);
         return $this->lastInsertId();
@@ -155,6 +168,8 @@ class AsientoProgramadoRepository extends BaseRepository
                     id_referencia = :id_referencia,
                     tipo_referencia = :tipo_referencia,
                     referencia_texto = :referencia_texto,
+                    codigo_tarifa_iva = :codigo_tarifa_iva,
+                    direccion_iva = :direccion_iva,
                     updated_by = :updated_by,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
@@ -165,6 +180,8 @@ class AsientoProgramadoRepository extends BaseRepository
             ':id_referencia'    => $data['id_referencia'] ?: null,
             ':tipo_referencia'  => $data['tipo_referencia'] ?: null,
             ':referencia_texto' => !empty($data['referencia_texto']) ? trim((string) $data['referencia_texto']) : null,
+            ':codigo_tarifa_iva' => !empty($data['codigo_tarifa_iva']) ? trim((string) $data['codigo_tarifa_iva']) : null,
+            ':direccion_iva'    => !empty($data['direccion_iva']) ? trim((string) $data['direccion_iva']) : null,
             ':updated_by'       => $data['updated_by'],
             ':id'               => $id,
             ':id_empresa'       => $idEmpresa
@@ -192,7 +209,7 @@ class AsientoProgramadoRepository extends BaseRepository
     /**
      * Verifica si ya existe una regla para el mismo Asiento Tipo y misma Referencia (evitar duplicaciones).
      */
-    public function existeRegla(int $idEmpresa, int $idAsientoTipo, ?int $idReferencia, ?string $tipoReferencia, ?int $idExcluir = null, ?string $referenciaTexto = null): bool
+    public function existeRegla(int $idEmpresa, int $idAsientoTipo, ?int $idReferencia, ?string $tipoReferencia, ?int $idExcluir = null, ?string $referenciaTexto = null, ?string $codigoTarifaIva = null): bool
     {
         $sql = "SELECT COUNT(*) FROM {$this->table}
                 WHERE id_empresa = :id_empresa
@@ -229,6 +246,14 @@ class AsientoProgramadoRepository extends BaseRepository
             $params[':tipo_ref'] = $tipoReferencia;
         } else {
             $sql .= " AND id_referencia IS NULL";
+        }
+
+        // Overrides de IVA por dimensión comparten id_asiento_tipo=0 entre todas las tarifas de una
+        // misma entidad: sin este filtro, "tarifa 15% para el cliente X" y "tarifa 0% para el cliente X"
+        // se detectarían como duplicados entre sí.
+        if ($codigoTarifaIva !== null && $codigoTarifaIva !== '') {
+            $sql .= " AND codigo_tarifa_iva = :tarifa";
+            $params[':tarifa'] = $codigoTarifaIva;
         }
 
         if ($idExcluir !== null && $idExcluir > 0) {
@@ -318,6 +343,7 @@ class AsientoProgramadoRepository extends BaseRepository
         $sql = "SELECT o.id AS id_opcion,
                        o.nombre AS concepto,
                        o.comportamiento,
+                       o.tipo_cuenta_contable,
                        ap.id AS id_programado,
                        COALESCE(ap.id_cuenta, o.id_cuenta_contable) AS id_cuenta,
                        pc.codigo AS cuenta_codigo,
@@ -357,6 +383,7 @@ class AsientoProgramadoRepository extends BaseRepository
         $sql = "SELECT f.id AS id_forma,
                        f.nombre AS concepto,
                        f.aplica_en,
+                       f.tipo_cuenta_contable,
                        ap.id AS id_programado,
                        COALESCE(ap.id_cuenta, f.id_cuenta_contable) AS id_cuenta,
                        pc.codigo AS cuenta_codigo,
@@ -543,6 +570,39 @@ class AsientoProgramadoRepository extends BaseRepository
                 FROM tarifa_iva t
                 LEFT JOIN {$this->table} ap ON ap.id_referencia = CAST(t.codigo AS INTEGER)
                                            AND ap.tipo_referencia = 'iva_compras_factura'
+                                           AND ap.id_empresa = :id_empresa
+                                           AND ap.eliminado = false
+                LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                WHERE t.porcentaje_iva > 0
+                ORDER BY t.tarifa ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Reglas de IVA por tarifa para RECIBOS DE VENTA. Independiente de getReglasIvaVentas():
+     * catálogo propio (tipo_asiento='recibos_venta', tipo_referencia='iva_recibos_venta') para
+     * que una empresa pueda configurar cuentas de IVA distintas para Recibos que para Facturas.
+     */
+    public function getReglasIvaRecibosVenta(int $idEmpresa): array
+    {
+        $sql = "SELECT 0 AS id_asiento_tipo,
+                       'recibos_venta' AS tipo_asiento,
+                       'Tarifa iva ' || t.tarifa AS concepto,
+                       'Tarifa de iva en recibos de venta ' || t.tarifa AS detalle,
+                       'IVA-' || t.codigo AS codigo,
+                       'pasivo' AS tipo_cuenta,
+                       'haber' AS debe_haber,
+                       ap.id AS id_programado,
+                       ap.id_cuenta,
+                       CAST(t.codigo AS INTEGER) AS id_referencia,
+                       'iva_recibos_venta' AS tipo_referencia,
+                       pc.codigo AS cuenta_codigo,
+                       pc.nombre AS cuenta_nombre
+                FROM tarifa_iva t
+                LEFT JOIN {$this->table} ap ON ap.id_referencia = CAST(t.codigo AS INTEGER)
+                                           AND ap.tipo_referencia = 'iva_recibos_venta'
                                            AND ap.id_empresa = :id_empresa
                                            AND ap.eliminado = false
                 LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta

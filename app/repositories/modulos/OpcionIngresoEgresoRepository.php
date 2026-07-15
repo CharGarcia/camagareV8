@@ -31,7 +31,8 @@ class OpcionIngresoEgresoRepository extends BaseRepository
                         comportamiento VARCHAR(50) DEFAULT 'GENERAL',
                         id_cuenta_contable INT NULL REFERENCES plan_cuentas(id) ON DELETE SET NULL,
                         estado VARCHAR(20) DEFAULT 'ACTIVO',
-                        
+                        tipo_cuenta_contable VARCHAR(50) NULL,
+
                         eliminado BOOLEAN DEFAULT FALSE,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -48,6 +49,13 @@ class OpcionIngresoEgresoRepository extends BaseRepository
                 $check = $this->db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'empresa_opciones_ingreso_egreso' AND column_name = 'comportamiento'");
                 if (!$check->fetch()) {
                     $this->db->exec("ALTER TABLE empresa_opciones_ingreso_egreso ADD COLUMN comportamiento VARCHAR(50) DEFAULT 'GENERAL'");
+                }
+
+                // Inyectar columna tipo_cuenta_contable si no existe (filtro opcional del buscador
+                // de cuentas: CSV de activo/pasivo/patrimonio/ingreso/costo/gasto; vacío = sin restricción)
+                $checkTc = $this->db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'empresa_opciones_ingreso_egreso' AND column_name = 'tipo_cuenta_contable'");
+                if (!$checkTc->fetch()) {
+                    $this->db->exec("ALTER TABLE empresa_opciones_ingreso_egreso ADD COLUMN tipo_cuenta_contable VARCHAR(50) NULL");
                 }
             }
         } catch (Exception $e) {
@@ -115,11 +123,11 @@ class OpcionIngresoEgresoRepository extends BaseRepository
     public function create(array $data): int
     {
         $sql = "INSERT INTO empresa_opciones_ingreso_egreso (
-                    id_empresa, nombre, aplica_ingresos, aplica_egresos, comportamiento, id_cuenta_contable, estado, created_by
+                    id_empresa, nombre, aplica_ingresos, aplica_egresos, comportamiento, id_cuenta_contable, estado, tipo_cuenta_contable, created_by
                 ) VALUES (
-                    :id_empresa, :nombre, :ingresos, :egresos, :comp, :id_cuenta, :estado, :usr
+                    :id_empresa, :nombre, :ingresos, :egresos, :comp, :id_cuenta, :estado, :tipo_cuenta, :usr
                 ) RETURNING id";
-        
+
         $st = $this->db->prepare($sql);
         $st->execute([
             ':id_empresa' => (int) $data['id_empresa'],
@@ -129,6 +137,7 @@ class OpcionIngresoEgresoRepository extends BaseRepository
             ':comp'       => $data['comportamiento'] ?? 'GENERAL',
             ':id_cuenta'  => !empty($data['id_cuenta_contable']) ? (int)$data['id_cuenta_contable'] : null,
             ':estado'     => $data['estado'] ?? 'ACTIVO',
+            ':tipo_cuenta' => !empty($data['tipo_cuenta_contable']) ? $data['tipo_cuenta_contable'] : null,
             ':usr'        => (int)$data['id_usuario']
         ]);
         return (int)$st->fetchColumn();
@@ -143,10 +152,11 @@ class OpcionIngresoEgresoRepository extends BaseRepository
                     comportamiento = :comp,
                     id_cuenta_contable = :id_cuenta,
                     estado = :estado,
+                    tipo_cuenta_contable = :tipo_cuenta,
                     updated_by = :usr,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = FALSE";
-        
+
         $st = $this->db->prepare($sql);
         return $st->execute([
             ':nombre'     => trim($data['nombre']),
@@ -155,6 +165,7 @@ class OpcionIngresoEgresoRepository extends BaseRepository
             ':comp'       => $data['comportamiento'] ?? 'GENERAL',
             ':id_cuenta'  => !empty($data['id_cuenta_contable']) ? (int)$data['id_cuenta_contable'] : null,
             ':estado'     => $data['estado'] ?? 'ACTIVO',
+            ':tipo_cuenta' => !empty($data['tipo_cuenta_contable']) ? $data['tipo_cuenta_contable'] : null,
             ':usr'        => (int)$data['id_usuario'],
             ':id'         => $id,
             ':id_empresa' => $idEmpresa

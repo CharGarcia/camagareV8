@@ -84,9 +84,7 @@ $base = BASE_URL;
                 <select class="form-select form-select-sm border shadow-none" id="tipoAsientoSelector">
                     <option value="" disabled selected>-- Elija un Tipo de Asiento --</option>
                     <option value="ventas_factura">Ventas con Factura (Facturas y notas de crédito)</option>
-                    <!-- Oculto hasta crear el módulo de Ventas con Recibo:
-                    <option value="ventas_recibo">Ventas con Recibo (Recibos no autorizados)</option>
-                    -->
+                    <option value="recibos_venta">Recibos de Venta (Recibos y su IVA)</option>
                     <option value="consignacion_venta">Consignaciones en Ventas (Reclasificación de inventario a costo)</option>
                     <option value="adquisiciones_compras">Adquisiciones de Compras/Servicios (Documentos recibidos)</option>
                     <option value="retenciones_venta">Retenciones en Venta</option>

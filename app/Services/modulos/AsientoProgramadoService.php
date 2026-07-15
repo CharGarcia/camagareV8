@@ -48,7 +48,8 @@ class AsientoProgramadoService
         }
 
         // Validar si ya existe una regla idéntica para evitar redundancia
-        if ($this->repo->existeRegla($idEmpresa, $idAsientoTipo, $idReferencia, $tipoReferencia, null, $referenciaTexto)) {
+        $codigoTarifaIva = !empty($data['codigo_tarifa_iva']) ? trim((string) $data['codigo_tarifa_iva']) : null;
+        if ($this->repo->existeRegla($idEmpresa, $idAsientoTipo, $idReferencia, $tipoReferencia, null, $referenciaTexto, $codigoTarifaIva)) {
             throw new Exception('Ya existe un asiento programado con la misma configuración para el tipo de asiento y entidad seleccionados.');
         }
 
@@ -104,7 +105,8 @@ class AsientoProgramadoService
         }
 
         // Validar si ya existe otra regla idéntica que no sea la actual
-        if ($this->repo->existeRegla($idEmpresa, $idAsientoTipo, $idReferencia, $tipoReferencia, $id, $referenciaTexto)) {
+        $codigoTarifaIva = !empty($data['codigo_tarifa_iva']) ? trim((string) $data['codigo_tarifa_iva']) : null;
+        if ($this->repo->existeRegla($idEmpresa, $idAsientoTipo, $idReferencia, $tipoReferencia, $id, $referenciaTexto, $codigoTarifaIva)) {
             throw new Exception('Ya existe otro asiento programado configurado con el mismo tipo de asiento y entidad seleccionados.');
         }
 

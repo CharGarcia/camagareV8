@@ -237,17 +237,6 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
                                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                             </div>`;
                     }
-                    // Notas informativas: comportamientos intencionales (p. ej. documentos migrados
-                    // que no generan asiento propio). No son errores: van aparte y en azul.
-                    if (Array.isArray(json.info) && json.info.length) {
-                        const items = json.info.map(w => `<li class="mb-1">${escapeHtml(w)}</li>`).join('');
-                        html +=
-                            `<div class="alert alert-info alert-dismissible fade show shadow-sm mb-3" role="alert">
-                                <strong><i class="bi bi-info-circle-fill me-2"></i> Información:</strong>
-                                <ul class="mb-0 mt-2">${items}</ul>
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                            </div>`;
-                    }
                 }
 
                 warnBox.innerHTML = html;

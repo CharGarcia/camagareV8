@@ -142,6 +142,39 @@ try {
                                 <label class="form-check-label fw-bold small" for="fp-activo-sw">Estado: Activo</label>
                             </div>
                         </div>
+
+                        <!-- Tipo de cuenta esperado: restringe el buscador de cuenta en Configuración Contable -->
+                        <div class="col-12">
+                            <label class="form-label small fw-bold d-block">Tipo de cuenta esperado (opcional):</label>
+                            <div class="d-flex flex-wrap gap-3 mt-1">
+                                <div class="form-check form-check-inline mb-0">
+                                    <input class="form-check-input tc-fp-checkbox shadow-none" type="checkbox" id="fp-tc-activo" value="activo">
+                                    <label class="form-check-label small fw-medium" for="fp-tc-activo">Activo</label>
+                                </div>
+                                <div class="form-check form-check-inline mb-0">
+                                    <input class="form-check-input tc-fp-checkbox shadow-none" type="checkbox" id="fp-tc-pasivo" value="pasivo">
+                                    <label class="form-check-label small fw-medium" for="fp-tc-pasivo">Pasivo</label>
+                                </div>
+                                <div class="form-check form-check-inline mb-0">
+                                    <input class="form-check-input tc-fp-checkbox shadow-none" type="checkbox" id="fp-tc-patrimonio" value="patrimonio">
+                                    <label class="form-check-label small fw-medium" for="fp-tc-patrimonio">Patrimonio</label>
+                                </div>
+                                <div class="form-check form-check-inline mb-0">
+                                    <input class="form-check-input tc-fp-checkbox shadow-none" type="checkbox" id="fp-tc-ingreso" value="ingreso">
+                                    <label class="form-check-label small fw-medium" for="fp-tc-ingreso">Ingreso</label>
+                                </div>
+                                <div class="form-check form-check-inline mb-0">
+                                    <input class="form-check-input tc-fp-checkbox shadow-none" type="checkbox" id="fp-tc-costo" value="costo">
+                                    <label class="form-check-label small fw-medium" for="fp-tc-costo">Costo</label>
+                                </div>
+                                <div class="form-check form-check-inline mb-0">
+                                    <input class="form-check-input tc-fp-checkbox shadow-none" type="checkbox" id="fp-tc-gasto" value="gasto">
+                                    <label class="form-check-label small fw-medium" for="fp-tc-gasto">Gasto</label>
+                                </div>
+                            </div>
+                            <input type="hidden" id="fp-tipo-cuenta-contable" value="">
+                            <div class="form-text text-muted" style="font-size: 0.7rem;">Seleccione uno o más tipos para restringir la selección contable en Configuración Contable. Si no marca ninguno, se permitirán todos.</div>
+                        </div>
                     </div>
                 </div>
 
@@ -280,6 +313,11 @@ try {
                     formData.set('modalidad_tarjeta', '');
                 }
 
+                const tcChecked = Array.from(document.querySelectorAll('.tc-fp-checkbox:checked')).map(cb => cb.value);
+                const tcStr = tcChecked.join(',');
+                document.getElementById('fp-tipo-cuenta-contable').value = tcStr;
+                formData.set('tipo_cuenta_contable', tcStr);
+
                 fetch(`${URL_FP_SHARED}/guardarAjax`, {
                         method: 'POST',
                         body: formData
@@ -380,6 +418,8 @@ try {
         document.getElementById('fp-id').value = '';
         document.getElementById('btnEliminarFP').classList.add('d-none');
         selectCuenta(null);
+        document.querySelectorAll('.tc-fp-checkbox').forEach(cb => cb.checked = false);
+        document.getElementById('fp-tipo-cuenta-contable').value = '';
         document.getElementById('fp-tipo').value = 'EFECTIVO';
         toggleCamposBanco('EFECTIVO');
 
@@ -438,6 +478,12 @@ try {
                                 nombre: d.cuenta_contable_nombre
                             });
                         }
+
+                        const tcParts = (d.tipo_cuenta_contable || '').split(',').map(p => p.trim().toLowerCase());
+                        document.querySelectorAll('.tc-fp-checkbox').forEach(cb => {
+                            cb.checked = tcParts.includes(cb.value);
+                        });
+                        document.getElementById('fp-tipo-cuenta-contable').value = d.tipo_cuenta_contable || '';
 
                         document.getElementById('btnEliminarFP').classList.remove('d-none');
                         if (modalInstanciaFP) modalInstanciaFP.show();
