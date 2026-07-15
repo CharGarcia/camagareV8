@@ -76,6 +76,9 @@ class AuditoriaContableService
             }
             $resueltas = $this->repo->marcarResueltas($idsResolver, $idUsuario);
 
+            // Completa número/entidad en incidencias antiguas (las resueltas ya no se re-detectan).
+            $this->repo->backfillDatosDocumento($idEmpresa, $ambiente);
+
             $corridaId = $this->repo->registrarCorrida([
                 'id_empresa'       => $idEmpresa,
                 'tipo_ambiente'    => $ambiente,
@@ -387,12 +390,22 @@ class AuditoriaContableService
 
     public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20,
         string $ordenCol = 'detectado_at', string $ordenDir = 'DESC', ?int $idUsuarioFiltro = null,
-        ?string $fechaDesde = null, ?string $fechaHasta = null): array
+        ?string $fechaDesde = null, ?string $fechaHasta = null, string $vista = 'pendientes'): array
     {
         $this->rules->validarRango($fechaDesde, $fechaHasta);
         $ambiente = $this->repo->getAmbienteEmpresa($idEmpresa);
         return $this->repo->getListado($idEmpresa, $ambiente, $buscar, $page, $perPage,
-            $ordenCol, $ordenDir, $idUsuarioFiltro, $fechaDesde, $fechaHasta);
+            $ordenCol, $ordenDir, $idUsuarioFiltro, $fechaDesde, $fechaHasta, $vista);
+    }
+
+    /** Contadores para las pestañas «Por corregir» / «Corregidas». */
+    public function getContadores(int $idEmpresa, ?string $fechaDesde = null, ?string $fechaHasta = null): array
+    {
+        $ambiente = $this->repo->getAmbienteEmpresa($idEmpresa);
+        return [
+            'pendientes' => $this->repo->contarPorVista($idEmpresa, $ambiente, 'pendientes', $fechaDesde, $fechaHasta),
+            'corregidas' => $this->repo->contarPorVista($idEmpresa, $ambiente, 'corregidas', $fechaDesde, $fechaHasta),
+        ];
     }
 
     public function getCorridas(int $idEmpresa, int $limit = 50): array

@@ -15,6 +15,8 @@
 /** @var string $ordenDir */
 /** @var array $vistaConfig */
 /** @var array $resumen */
+/** @var string $vista */
+/** @var array $contadores */
 /** @var array $origenes */
 /** @var array $origenesRegenerables */
 /** @var array $origenLabels */
@@ -35,6 +37,8 @@ $buscar     = $buscar ?? '';
 $resumen    = $resumen ?? [];
 $origenes   = $origenes ?? [];
 $origenesRegenerables = $origenesRegenerables ?? [];
+$vista      = $vista ?? 'pendientes';
+$contadores = $contadores ?? ['pendientes' => 0, 'corregidas' => 0];
 $origenLabels = $origenLabels ?? [];
 $tipoLabels   = $tipoLabels ?? [];
 $corridas     = $corridas ?? [];
@@ -107,7 +111,28 @@ $totalIncidencias = array_sum($resumen);
     <?php endforeach; ?>
 </div>
 
-<div class="card w-100 border-0 shadow-sm rounded-3">
+<!-- Pestañas: lo corregido sale del listado principal y queda en su propio histórico -->
+<ul class="nav nav-tabs mb-0" id="audTabs">
+    <li class="nav-item">
+        <button class="nav-link <?= $vista === 'pendientes' ? 'active' : '' ?>" data-vista="pendientes" type="button">
+            <i class="bi bi-exclamation-triangle me-1"></i> Por corregir
+            <span class="badge bg-danger bg-opacity-75 ms-1" id="audCntPendientes"><?= (int) ($contadores['pendientes'] ?? 0) ?></span>
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link <?= $vista === 'corregidas' ? 'active' : '' ?>" data-vista="corregidas" type="button">
+            <i class="bi bi-check2-circle me-1"></i> Corregidas
+            <span class="badge bg-success bg-opacity-75 ms-1" id="audCntCorregidas"><?= (int) ($contadores['corregidas'] ?? 0) ?></span>
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link <?= $vista === 'todas' ? 'active' : '' ?>" data-vista="todas" type="button">
+            <i class="bi bi-list-ul me-1"></i> Todas
+        </button>
+    </li>
+</ul>
+
+<div class="card w-100 border-0 shadow-sm rounded-3 rounded-top-0">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">
             <input type="text" id="audBuscar" class="form-control form-control-sm" style="width:360px"
@@ -119,6 +144,7 @@ $totalIncidencias = array_sum($resumen);
                     'tipo'            => 'Tipo',
                     'origen'          => 'Origen',
                     'documento'       => 'Documento',
+                    'entidad'         => 'Cliente / Proveedor',
                     'asiento'         => 'Asiento',
                     'monto_documento' => 'Monto doc.',
                     'monto_asiento'   => 'Monto asiento',
@@ -146,13 +172,15 @@ $totalIncidencias = array_sum($resumen);
                     <tr>
                         <?php
                         $ths = [
-                            'tipo' => 'Tipo', 'origen' => 'Origen', 'documento' => 'Documento', 'asiento' => 'Asiento',
+                            'tipo' => 'Tipo', 'origen' => 'Origen', 'documento' => 'Documento',
+                            'entidad' => 'Cliente / Proveedor', 'asiento' => 'Asiento',
                             'monto_documento' => 'Monto doc.', 'monto_asiento' => 'Monto asiento', 'diferencia' => 'Diferencia',
                             'fecha' => 'Fecha', 'revision' => 'Revisión',
                         ];
                         $sortMap = [
-                            'tipo' => 'tipo_hallazgo', 'origen' => 'modulo_origen', 'documento' => 'id_documento',
-                            'asiento' => 'id_asiento', 'monto_documento' => 'diferencia', 'monto_asiento' => 'diferencia',
+                            'tipo' => 'tipo_hallazgo', 'origen' => 'modulo_origen', 'documento' => 'documento_numero',
+                            'entidad' => 'entidad_nombre', 'asiento' => 'id_asiento',
+                            'monto_documento' => 'diferencia', 'monto_asiento' => 'diferencia',
                             'diferencia' => 'diferencia', 'fecha' => 'fecha_documento', 'revision' => 'estado_revision',
                         ];
                         foreach ($ths as $col => $label):
@@ -170,9 +198,11 @@ $totalIncidencias = array_sum($resumen);
                 </thead>
                 <tbody id="audTbody">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="10" class="text-center py-5 text-muted">
+                        <tr><td colspan="11" class="text-center py-5 text-muted">
                             <i class="bi bi-clipboard-check fs-3 d-block mb-2"></i>
-                            Sin incidencias. Pulse «Ejecutar auditoría» para verificar.
+                            <?= $vista === 'corregidas'
+                                ? 'Todavía no hay incidencias corregidas.'
+                                : 'Sin incidencias pendientes. Pulse «Ejecutar auditoría» para verificar.' ?>
                         </td></tr>
                     <?php else: ?>
                         <?php
@@ -204,8 +234,12 @@ $totalIncidencias = array_sum($resumen);
                                 data-doc="<?= (int) ($r['id_documento'] ?? 0) ?>" data-asiento="<?= (int) ($r['id_asiento'] ?? 0) ?>">
                                 <td data-col="tipo"><span class="badge <?= $tipoClase[$tipo] ?? 'bg-secondary' ?> border"><?= htmlspecialchars($tipoLabels[$tipo] ?? $tipo) ?></span></td>
                                 <td data-col="origen"><?= htmlspecialchars($origenLabels[$origen] ?? $origen) ?></td>
-                                <?php $numDoc = trim((string) ($r['documento_numero'] ?? '')); ?>
+                                <?php
+                                $numDoc = trim((string) ($r['documento_numero'] ?? ''));
+                                $entidadNom = trim((string) ($r['entidad_nombre'] ?? ''));
+                                ?>
                                 <td data-col="documento" class="text-center"><?= $numDoc !== '' ? htmlspecialchars($numDoc) : ($r['id_documento'] !== null ? '#' . (int) $r['id_documento'] : '—') ?></td>
+                                <td data-col="entidad" class="text-truncate" style="max-width:220px" title="<?= htmlspecialchars($entidadNom) ?>"><?= $entidadNom !== '' ? htmlspecialchars($entidadNom) : '—' ?></td>
                                 <td data-col="asiento" class="text-center"><?= $r['id_asiento'] !== null ? '#' . (int) $r['id_asiento'] : '—' ?></td>
                                 <td data-col="monto_documento" class="text-end"><?= $r['monto_documento'] !== null ? number_format((float) $r['monto_documento'], 2) : '—' ?></td>
                                 <td data-col="monto_asiento" class="text-end"><?= $r['monto_asiento'] !== null ? number_format((float) $r['monto_asiento'], 2) : '—' ?></td>
@@ -366,6 +400,7 @@ $totalIncidencias = array_sum($resumen);
         rutaModulo: '<?= $rutaModulo ?>',
         urlBase: '<?= $urlBase ?>',
         perm: <?= json_encode($perm) ?>,
+        vista: '<?= $vista ?>',
         ordenCol: '<?= $ordenCol ?>',
         ordenDir: '<?= $ordenDir ?>',
         page: <?= (int) $page ?>,

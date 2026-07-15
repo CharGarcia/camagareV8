@@ -13,6 +13,7 @@
         sort: cfg.ordenCol || 'detectado_at',
         dir: cfg.ordenDir || 'DESC',
         buscar: '',
+        vista: cfg.vista || 'pendientes', // pendientes | corregidas | todas
     };
 
     /**
@@ -92,7 +93,7 @@
         if (page) state.page = page;
         const tbody = document.getElementById('audTbody');
         getJSON('searchAjax', Object.assign(
-            { b: state.buscar, page: state.page, sort: state.sort, dir: state.dir },
+            { b: state.buscar, page: state.page, sort: state.sort, dir: state.dir, vista: state.vista },
             rangoFechas()
         ))
             .then((res) => {
@@ -104,8 +105,18 @@
                 state.page = res.page;
                 state.totalPages = res.totalPages;
                 actualizarResumen(res.resumen);
+                actualizarContadores(res.contadores);
             })
             .catch((e) => err(e.message));
+    }
+
+    /** Refresca los badges de las pestañas: al corregir, baja «Por corregir» y sube «Corregidas». */
+    function actualizarContadores(c) {
+        if (!c) return;
+        const p = document.getElementById('audCntPendientes');
+        const r = document.getElementById('audCntCorregidas');
+        if (p) p.textContent = c.pendientes ?? 0;
+        if (r) r.textContent = c.corregidas ?? 0;
     }
 
     function actualizarResumen(resumen) {
@@ -286,6 +297,16 @@
             clearTimeout(t);
             state.buscar = e.target.value.trim();
             t = setTimeout(() => fetchSearch(1), 350);
+        });
+
+        // Pestañas: por corregir / corregidas / todas
+        document.querySelectorAll('#audTabs [data-vista]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#audTabs [data-vista]').forEach((b) => b.classList.remove('active'));
+                btn.classList.add('active');
+                state.vista = btn.dataset.vista;
+                fetchSearch(1);
+            });
         });
 
         // Filtro por fechas (aplica al listado; también acota la auditoría al ejecutarla)

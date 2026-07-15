@@ -96,7 +96,28 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Facturas de Venta'
+            'Facturas de Venta',
+            tablaVerif: 'ventas_cabecera'
+        );
+
+        // 1b. Recibos de Venta (espejo de la factura, reusa el concepto 'ventas_factura').
+        //     Mismo criterio que la factura: solo se contabiliza el documento vigente ya emitido,
+        //     nunca el borrador. Estados: borrador → emitido → facturado/anulado.
+        //     Se excluyen además 'facturado' y 'anulado' porque su asiento se anula al facturar
+        //     (ahí manda el de la factura, para no duplicar la venta) y al anular/eliminar.
+        $this->sincronizarModulo(
+            $db,
+            "SELECT id FROM recibos_venta_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'emitido'" . $excMig('recibos', 'recibos_venta_cabecera.id'),
+            [$idEmpresa],
+            function() {
+                return new \App\Services\modulos\ReciboVentaService(
+                    new \App\repositories\modulos\ReciboVentaRepository(),
+                    new \App\Rules\modulos\ReciboVentaRules(),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'Recibos de Venta',
+            tablaVerif: 'recibos_venta_cabecera'
         );
 
         // 2. Liquidaciones de Compra
@@ -111,7 +132,8 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Liquidaciones de Compra'
+            'Liquidaciones de Compra',
+            tablaVerif: 'liquidaciones_cabecera'
         );
 
         // 3. Compras (no tiene columna estado)
@@ -122,7 +144,8 @@ class SincronizadorAsientosService
             function() {
                 return new \App\Services\modulos\ComprasService();
             },
-            'Facturas de Compra'
+            'Facturas de Compra',
+            tablaVerif: 'compras_cabecera'
         );
 
         // 4. Notas de Crédito
@@ -137,7 +160,8 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Notas de Crédito'
+            'Notas de Crédito',
+            tablaVerif: 'notas_credito_cabecera'
         );
 
         // 5. Retenciones en Ventas (no se autorizan en SRI: solo se filtra por asiento faltante)
@@ -152,7 +176,8 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Retenciones en Ventas'
+            'Retenciones en Ventas',
+            tablaVerif: 'retencion_venta_cabecera'
         );
 
         // 5b. Retenciones en Compras (emitidas al proveedor; solo se filtra por asiento faltante)
@@ -167,7 +192,8 @@ class SincronizadorAsientosService
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Retenciones en Compras'
+            'Retenciones en Compras',
+            tablaVerif: 'retencion_compra_cabecera'
         );
 
         // 6. Ingresos (cobros): contrapartida del concepto + formas de cobro
@@ -183,7 +209,8 @@ class SincronizadorAsientosService
                 );
             },
             'Ingresos',
-            'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)'
+            'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)',
+            'ingresos_cabecera'
         );
 
         // 7. Egresos (pagos): contrapartida del concepto + formas de pago
@@ -199,7 +226,8 @@ class SincronizadorAsientosService
                 );
             },
             'Egresos',
-            'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)'
+            'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)',
+            'egresos_cabecera'
         );
 
         // 7b. Consignaciones en Ventas (reclasificación de inventario a costo).
@@ -216,7 +244,63 @@ class SincronizadorAsientosService
                 );
             },
             'Consignaciones en Ventas',
-            'Configuración Contable (Consignaciones en Ventas)'
+            'Configuración Contable (Consignaciones en Ventas)',
+            'consignaciones_ventas'
+        );
+
+        // 7c. Retornos de Consignaciones en Ventas (devolución del cliente: entrada de inventario).
+        //     Solo los 'Emitida' tienen impacto contable (Borrador/Anulada no se contabilizan).
+        $this->sincronizarModulo(
+            $db,
+            "SELECT id FROM retornos_cv WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'Emitida'" . $excMig('retornos_cv', 'retornos_cv.id'),
+            [$idEmpresa],
+            function() {
+                return new \App\Services\modulos\RetornoCvService(
+                    new \App\repositories\modulos\RetornoCvRepository(),
+                    new \App\Rules\modulos\RetornoCvRules(),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'Retornos de Consignaciones',
+            'Configuración Contable (Retornos de Consignaciones)',
+            'retornos_cv'
+        );
+
+        // 7c-bis. Cambios de productos (devuelve/entrega): asiento a costo del inventario movido.
+        //         Solo los 'Emitida' tienen impacto contable (Borrador/Anulada no se contabilizan).
+        $this->sincronizarModulo(
+            $db,
+            "SELECT id FROM cambios_producto_cv WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'Emitida'",
+            [$idEmpresa],
+            function() {
+                return new \App\Services\modulos\CambioProductoCvService(
+                    new \App\repositories\modulos\CambioProductoCvRepository(),
+                    new \App\Rules\modulos\CambioProductoCvRules(),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'Cambios de Productos',
+            'Configuración Contable (Cambios de productos)',
+            'cambios_producto_cv'
+        );
+
+        // 7d. Facturación de Consignaciones (asiento INVERSO del reingreso de inventario).
+        //     Solo las ya 'facturada' lo tienen; el enlace es id_asiento_reingreso (no id_asiento_contable).
+        $this->sincronizarModulo(
+            $db,
+            "SELECT id FROM consignaciones_facturas WHERE id_empresa = ? AND eliminado = false AND id_asiento_reingreso IS NULL AND estado = 'facturada'",
+            [$idEmpresa],
+            function() {
+                return new \App\Services\modulos\ConsignacionFacturaService(
+                    new \App\repositories\modulos\ConsignacionFacturaRepository(),
+                    new \App\Rules\modulos\ConsignacionFacturaRules(),
+                    new \App\Services\LogSistemaService()
+                );
+            },
+            'Facturación de Consignaciones',
+            'Configuración Contable (Consignaciones en Ventas)',
+            'consignaciones_facturas',
+            'id_asiento_reingreso'
         );
 
         // 8. Verificación proactiva: conceptos y formas SIN cuenta contable configurada
@@ -389,7 +473,16 @@ class SincronizadorAsientosService
         }
     }
 
-    private function sincronizarModulo(\PDO $db, string $sql, array $params, callable $serviceFactory, string $nombreModulo, string $dondeConfigurar = 'Asientos Programados'): void
+    /**
+     * @param string|null $tablaVerif Tabla cabecera del módulo. Si se indica, tras intentar generar
+     *                                se comprueba DOCUMENTO POR DOCUMENTO que realmente haya quedado
+     *                                con asiento. Necesario porque varios services retornan en
+     *                                silencio (sin excepción) cuando el asiento queda vacío, y sin
+     *                                esto se contarían como generados.
+     * @param string $colAsiento      Columna que enlaza el documento con su asiento. Casi todos usan
+     *                                'id_asiento_contable'; Facturación CV usa 'id_asiento_reingreso'.
+     */
+    private function sincronizarModulo(\PDO $db, string $sql, array $params, callable $serviceFactory, string $nombreModulo, string $dondeConfigurar = 'Asientos Programados', ?string $tablaVerif = null, string $colAsiento = 'id_asiento_contable'): void
     {
         try {
             $st = $db->prepare($sql);
@@ -415,12 +508,13 @@ class SincronizadorAsientosService
         // Se agrupan los fallos por MOTIVO real (mensaje de la excepción) para que el aviso diga
         // qué corregir. Antes se descartaba el mensaje y siempre se culpaba a las cuentas, lo que
         // ocultaba errores reales (p. ej. de BD) detrás de un "Configure las cuentas".
-        $errores = [];
+        $errores    = [];
+        $intentados = [];
 
         foreach ($ids as $id) {
             try {
                 $service->procesarAsientoContablePorSincronizacion((int)$id);
-                $this->generados++;
+                $intentados[] = (int) $id;
             } catch (\Throwable $e) {
                 $motivo = trim($e->getMessage());
                 if ($motivo === '') {
@@ -430,21 +524,51 @@ class SincronizadorAsientosService
             }
         }
 
-        foreach ($errores as $motivo => $idsFallidos) {
-            $n       = count($idsFallidos);
-            $muestra = array_slice($idsFallidos, 0, 5);
-            $listado = '#' . implode(', #', $muestra);
-            if ($n > count($muestra)) {
-                $listado .= ' y ' . ($n - count($muestra)) . ' más';
+        // Comprobación DOCUMENTO POR DOCUMENTO: varios services retornan en silencio (sin excepción)
+        // cuando el asiento queda vacío —p. ej. sin reglas/cuentas configuradas el builder devuelve []
+        // y FacturaVentaService hace `if (empty($detalles)) return;`—. Sin esto, esos documentos se
+        // contarían como generados y el usuario no vería ningún aviso pese a quedarse sin asiento.
+        $sinAsiento = [];
+        if ($tablaVerif !== null && !empty($intentados)) {
+            try {
+                $in  = implode(',', array_map('intval', $intentados));
+                $stV = $db->query("SELECT id FROM {$tablaVerif} WHERE id IN ({$in}) AND {$colAsiento} IS NULL");
+                $sinAsiento = array_map('intval', $stV->fetchAll(\PDO::FETCH_COLUMN));
+            } catch (\Throwable $e) {
+                // Sin tabla/columna para verificar: se omite la comprobación sin romper la carga.
             }
+        }
 
+        $this->generados += count($intentados) - count($sinAsiento);
+
+        foreach ($errores as $motivo => $idsFallidos) {
+            $n = count($idsFallidos);
             $this->warnings[] = "No se pudieron generar {$n} asiento(s) contable(s) en {$nombreModulo}. "
-                . "Motivo: «{$motivo}». Documento(s): {$listado}. "
+                . "Motivo: «{$motivo}». Documento(s): " . $this->listarIds($idsFallidos) . ". "
                 . "Si es por cuentas sin configurar, revise {$dondeConfigurar}; "
                 . "puede reintentar desde Auditoría Contable (Regenerar) o al volver a abrir Estados Financieros.";
 
             error_log("[SincronizadorAsientos] {$nombreModulo}: {$n} fallo(s) — {$motivo} — ids: " . implode(',', $idsFallidos));
         }
+
+        if (!empty($sinAsiento)) {
+            $n = count($sinAsiento);
+            $this->warnings[] = "Quedaron {$n} documento(s) SIN asiento contable en {$nombreModulo}: "
+                . $this->listarIds($sinAsiento) . ". No se generó ninguna línea contable "
+                . "(normalmente porque faltan cuentas por configurar): revise {$dondeConfigurar}. "
+                . "Al volver a abrir Estados Financieros se reintentará automáticamente.";
+
+            error_log("[SincronizadorAsientos] {$nombreModulo}: {$n} documento(s) siguen sin asiento — ids: " . implode(',', $sinAsiento));
+        }
+    }
+
+    /** Formatea una lista de ids para los avisos: "#3, #5, #8 y 9 más". */
+    private function listarIds(array $ids, int $max = 5): string
+    {
+        $muestra = array_slice($ids, 0, $max);
+        $txt     = '#' . implode(', #', $muestra);
+        $resto   = count($ids) - count($muestra);
+        return $resto > 0 ? $txt . ' y ' . $resto . ' más' : $txt;
     }
 
     public function getWarnings(): array

@@ -136,11 +136,14 @@ class AuditoriaContableController extends BaseModuloController
             $fechaHasta = $this->normalizarFecha($_GET['fecha_hasta'] ?? null);
         }
 
+        $vista = in_array($_GET['vista'] ?? '', ['pendientes', 'corregidas', 'todas'], true)
+            ? $_GET['vista'] : 'pendientes';
+
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
         $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir,
-            $idUsuarioFiltro, $fechaDesde, $fechaHasta);
+            $idUsuarioFiltro, $fechaDesde, $fechaHasta, $vista);
         $totalPages = (int) ceil(($result['total'] ?: 0) / $perPage);
 
         $this->viewWithLayout('layouts.main', 'modulos/auditoria_contable/index', [
@@ -156,6 +159,8 @@ class AuditoriaContableController extends BaseModuloController
             'buscar'      => $buscar,
             'fechaDesde'  => $fechaDesde,
             'fechaHasta'  => $fechaHasta,
+            'vista'       => $vista,
+            'contadores'  => $this->service->getContadores($idEmpresa, $fechaDesde, $fechaHasta),
             'ordenCol'    => $ordenCol,
             'ordenDir'    => $ordenDir,
             'vistaConfig' => $prefsVista,
@@ -194,15 +199,18 @@ class AuditoriaContableController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
+        $vista = in_array($_GET['vista'] ?? $_POST['vista'] ?? '', ['pendientes', 'corregidas', 'todas'], true)
+            ? ($_GET['vista'] ?? $_POST['vista']) : 'pendientes';
+
         try {
             $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir,
-                $idUsuarioFiltro, $fechaDesde, $fechaHasta);
+                $idUsuarioFiltro, $fechaDesde, $fechaHasta, $vista);
             $total      = $result['total'];
             $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
 
             $html = '';
             if (empty($result['rows'])) {
-                $html = '<tr><td colspan="10" class="text-center py-5 text-muted">'
+                $html = '<tr><td colspan="11" class="text-center py-5 text-muted">'
                       . '<i class="bi bi-clipboard-check fs-3 d-block mb-2"></i>Sin incidencias. Ejecute la auditoría para verificar.</td></tr>';
             } else {
                 foreach ($result['rows'] as $r) {
@@ -219,6 +227,7 @@ class AuditoriaContableController extends BaseModuloController
                 'from'       => $total > 0 ? (($page - 1) * $perPage) + 1 : 0,
                 'to'         => $total > 0 ? min($page * $perPage, $total) : 0,
                 'resumen'    => $this->service->getResumen($idEmpresa),
+                'contadores' => $this->service->getContadores($idEmpresa, $fechaDesde, $fechaHasta),
             ]);
         } catch (\Throwable $e) {
             // Nunca devolver HTML a un fetch: el JS espera JSON siempre.
@@ -243,6 +252,8 @@ class AuditoriaContableController extends BaseModuloController
         $doc = $numeroDoc !== ''
             ? htmlspecialchars($numeroDoc)
             : ($r['id_documento'] !== null ? '#' . (int) $r['id_documento'] : '—');
+        $entidad = trim((string) ($r['entidad_nombre'] ?? ''));
+        $entidad = $entidad !== '' ? htmlspecialchars($entidad) : '—';
         $asiento = $r['id_asiento'] !== null ? '#' . (int) $r['id_asiento'] : '—';
         $mDoc    = $r['monto_documento'] !== null ? number_format((float) $r['monto_documento'], 2) : '—';
         $mAsi    = $r['monto_asiento'] !== null ? number_format((float) $r['monto_asiento'], 2) : '—';
@@ -257,6 +268,7 @@ class AuditoriaContableController extends BaseModuloController
             . '<td data-col="tipo">' . $tipoBadge . '</td>'
             . '<td data-col="origen">' . $origenLabel . '</td>'
             . '<td data-col="documento" class="text-center">' . $doc . '</td>'
+            . '<td data-col="entidad" class="text-truncate" style="max-width:220px" title="' . $entidad . '">' . $entidad . '</td>'
             . '<td data-col="asiento" class="text-center">' . $asiento . '</td>'
             . '<td data-col="monto_documento" class="text-end">' . $mDoc . '</td>'
             . '<td data-col="monto_asiento" class="text-end">' . $mAsi . '</td>'

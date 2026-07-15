@@ -731,9 +731,55 @@ class ConsignacionFacturaService
         }
     }
 
+    /**
+     * Genera el asiento de reingreso de un documento ya facturado, por sincronización masiva
+     * (control de asientos de Estados Financieros / Auditoría Contable). Toma empresa, usuario
+     * y datos del documento de la propia cabecera y PROPAGA la excepción si no se puede generar
+     * —al revés que procesarAsientoReingresoSeguro()—, para que la corrida lo reporte con su motivo.
+     * Solo los documentos 'facturada' tienen asiento de reingreso.
+     */
+    public function procesarAsientoContablePorSincronizacion(int $idDoc): void
+    {
+        $db = Database::getConnection();
+        $st = $db->prepare(
+            "SELECT cf.id_empresa, cf.created_by, cf.serie, cf.secuencial, cf.estado,
+                    COALESCE(c.nombre, 'Cliente') AS cliente_nombre
+             FROM consignaciones_facturas cf
+             LEFT JOIN clientes c ON c.id = cf.id_cliente
+             WHERE cf.id = ? AND cf.eliminado = false"
+        );
+        $st->execute([$idDoc]);
+        $doc = $st->fetch(\PDO::FETCH_ASSOC);
+        if (!$doc || ($doc['estado'] ?? '') !== 'facturada') {
+            return;
+        }
+
+        $numDoc = ($doc['serie'] ?? '') . '-' . ($doc['secuencial'] ?? '');
+        $this->procesarAsientoReingreso(
+            $idDoc,
+            (int) $doc['id_empresa'],
+            (int) ($doc['created_by'] ?? 0),
+            $numDoc,
+            (string) $doc['cliente_nombre']
+        );
+    }
+
+    /** Genera el asiento de reingreso sin propagar errores (no debe tumbar la facturación). */
     private function procesarAsientoReingresoSeguro(int $idDoc, int $idEmpresa, int $idUsuario, string $numDoc, string $clienteNombre): void
     {
         try {
+            $this->procesarAsientoReingreso($idDoc, $idEmpresa, $idUsuario, $numDoc, $clienteNombre);
+        } catch (\Throwable $e) {
+            error_log("[FacturacionCV] Asiento de reingreso no generado para documento $idDoc: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Persiste el asiento inverso del reingreso de inventario. PROPAGA los errores: los llamadores
+     * que no deben fallar por esto usan procesarAsientoReingresoSeguro().
+     */
+    public function procesarAsientoReingreso(int $idDoc, int $idEmpresa, int $idUsuario, string $numDoc, string $clienteNombre): void
+    {
             $builder = new AsientoBuilderService();
             $fuente  = $builder->generarAsientoReingresoFacturacion($idEmpresa, $idDoc);
 
@@ -767,9 +813,6 @@ class ConsignacionFacturaService
                 'observaciones'        => null,
             ], $detalles, $idEmpresa, $idUsuario);
             $this->repository->updateAsientoReingreso($idDoc, $idEmpresa, $idAsiento);
-        } catch (\Throwable $e) {
-            error_log("[FacturacionCV] Asiento de reingreso no generado para documento $idDoc: " . $e->getMessage());
-        }
     }
 
     private function getAsientoService(): AsientoContableService

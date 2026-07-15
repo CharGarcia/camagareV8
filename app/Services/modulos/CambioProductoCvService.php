@@ -416,6 +416,28 @@ class CambioProductoCvService
         }
     }
 
+    /**
+     * Genera el asiento del cambio por sincronización masiva (control de asientos de Estados
+     * Financieros / Auditoría Contable). Toma empresa y usuario de la propia cabecera y PROPAGA
+     * la excepción si no se puede generar —al revés que procesarAsientoSeguro()—, para que la
+     * corrida lo reporte como pendiente con su motivo.
+     * Solo los cambios 'Emitida' tienen impacto contable; procesarAsientoContable() ya lo valida.
+     */
+    public function procesarAsientoContablePorSincronizacion(int $idCambio): void
+    {
+        $db = Database::getConnection();
+        $st = $db->prepare("SELECT id_empresa, created_by FROM cambios_producto_cv WHERE id = ? AND eliminado = false");
+        $st->execute([$idCambio]);
+        $row = $st->fetch(\PDO::FETCH_ASSOC);
+        if (!$row) {
+            return;
+        }
+        $this->procesarAsientoContable($idCambio, [
+            'id_empresa' => (int) $row['id_empresa'],
+            'id_usuario' => (int) ($row['created_by'] ?? 0),
+        ]);
+    }
+
     public function procesarAsientoContable(int $idCambio, array $data): void
     {
         $idEmpresa = (int) $data['id_empresa'];

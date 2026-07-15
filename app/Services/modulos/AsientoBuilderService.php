@@ -854,6 +854,7 @@ class AsientoBuilderService
         $detalles        = [];   // líneas del asiento
         $totalIvaTotal   = 0.0; // IVA total del documento
         $totalIvaMapeado = 0.0; // IVA ya asignado a cuentas específicas
+        $ivaTarifasSinCuenta = []; // tarifas usadas por la factura sin cuenta configurada
 
         if ($idVenta > 0) {
             // 3a. Total IVA del documento (todas las tasas)
@@ -900,6 +901,26 @@ class AsientoBuilderService
                 $totalIvaMapeado += $valorIva;
             }
             $totalIvaMapeado = round($totalIvaMapeado, 2);
+
+            // 3c. Tarifas de IVA que la factura USA pero que NO tienen cuenta configurada.
+            //     Es la causa más común de descuadre (ese IVA no llega al Haber y el asiento
+            //     no se genera). Se nombran para que el aviso diga exactamente qué configurar.
+            $sqlIvaSin = "SELECT DISTINCT i.codigo_porcentaje, t.tarifa
+                          FROM ventas_detalle_impuestos i
+                          JOIN ventas_detalle d ON i.id_venta_detalle = d.id
+                          LEFT JOIN tarifa_iva t ON CAST(t.codigo AS INTEGER) = CAST(i.codigo_porcentaje AS INTEGER)
+                          LEFT JOIN asientos_programados ap
+                                 ON ap.id_referencia   = CAST(i.codigo_porcentaje AS INTEGER)
+                                AND ap.tipo_referencia = 'iva_ventas_factura'
+                                AND ap.id_empresa      = :id_empresa
+                                AND ap.eliminado       = false
+                          WHERE d.id_venta = :id_venta AND i.codigo_impuesto = '2'
+                            AND i.valor > 0 AND ap.id IS NULL";
+            $stIvaSin = $db->prepare($sqlIvaSin);
+            $stIvaSin->execute([':id_empresa' => $idEmpresa, ':id_venta' => $idVenta]);
+            while ($row = $stIvaSin->fetch(\PDO::FETCH_ASSOC)) {
+                $ivaTarifasSinCuenta[] = 'IVA tarifa ' . ($row['tarifa'] ?: $row['codigo_porcentaje']);
+            }
         } else {
             // Sin id_venta (preview): calcular IVA por diferencia
             $totalIvaTotal = round(max(0.0, $importeTotal - $subtotal - $totalIce - $propina), 2);
@@ -932,9 +953,19 @@ class AsientoBuilderService
         $costoLineas = [];
         // Reglas activas sin cuenta configurada: se saltan, pero se recuerdan para poder
         // decir QUÉ falta si el asiento termina descuadrado (antes solo se veía "Debe: $0").
-        $reglasSinCuenta = [];
+        // Arranca con las tarifas de IVA sin cuenta: son la causa más frecuente del descuadre.
+        $reglasSinCuenta = $ivaTarifasSinCuenta;
 
         foreach ($reglas as $r) {
+            $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']    ?? '');
+            $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto']  ?? $r['referencia'] ?? '');
+
+            // La cuenta de Ajuste por redondeo no se mapea aquí (se aplica al final) NI se reporta
+            // como faltante: su ausencia solo importa en descuadres de centavos, y para ese caso
+            // aplicarAjusteRedondeo() ya emite su propio mensaje. Reportarla en un descuadre grande
+            // desviaba el diagnóstico de la cuenta que realmente falta (p. ej. el IVA de una tarifa).
+            if (str_contains($codigo, 'REDONDEO')) continue;
+
             if (empty($r['id_cuenta'])) {
                 $reglasSinCuenta[] = $r['asiento_tipo_referencia'] ?? $r['concepto']
                                   ?? $r['asiento_tipo_codigo'] ?? $r['codigo'] ?? 'sin nombre';
@@ -946,12 +977,6 @@ class AsientoBuilderService
             $valorMapeado = 0.00;
             $esLineaCosto = false;
             $esTotalDocumento = false;
-
-            $codigo   = strtoupper($r['asiento_tipo_codigo']     ?? $r['codigo']    ?? '');
-            $concepto = strtolower($r['asiento_tipo_referencia'] ?? $r['concepto']  ?? $r['referencia'] ?? '');
-
-            // La cuenta de Ajuste por redondeo no se mapea aquí: se aplica al final para cuadrar.
-            if (str_contains($codigo, 'REDONDEO')) continue;
 
             // Cuenta por cobrar → importe total (incluyendo impuestos)
             if (str_contains($codigo, 'PORCOBRAR') || str_contains($concepto, 'cobrar')) {

@@ -429,6 +429,28 @@ class RetornoCvService
     }
 
     /**
+     * Genera el asiento del retorno por sincronización masiva (control de asientos de Estados
+     * Financieros / Auditoría Contable). Toma empresa y usuario de la propia cabecera y PROPAGA
+     * la excepción si no se puede generar —al revés que procesarAsientoSeguro()—, para que la
+     * corrida lo reporte como pendiente con su motivo.
+     * Solo los retornos 'Emitida' tienen impacto contable; procesarAsientoContable() ya lo valida.
+     */
+    public function procesarAsientoContablePorSincronizacion(int $idRetorno): void
+    {
+        $db = Database::getConnection();
+        $st = $db->prepare("SELECT id_empresa, created_by FROM retornos_cv WHERE id = ? AND eliminado = false");
+        $st->execute([$idRetorno]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return;
+        }
+        $this->procesarAsientoContable($idRetorno, [
+            'id_empresa' => (int) $row['id_empresa'],
+            'id_usuario' => (int) ($row['created_by'] ?? 0),
+        ]);
+    }
+
+    /**
      * Persiste el asiento del retorno (solo si está en Emitida y queda completo y cuadrado).
      * Prioriza el asiento editado en la pestaña; si no viene completo, usa la sugerencia.
      */

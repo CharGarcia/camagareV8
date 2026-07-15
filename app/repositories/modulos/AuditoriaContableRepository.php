@@ -154,7 +154,10 @@ class AuditoriaContableRepository extends BaseRepository
             'tabla'          => 'recibos_venta_cabecera',
             'total'          => 'd.importe_total',
             'fecha'          => 'fecha_emision',
-            'estado_filtro'  => "d.estado NOT IN ('anulado','borrador')",
+            // Igual que la factura: solo el documento vigente ya emitido debe tener asiento.
+            // 'facturado' NO entra: al facturar se anula el asiento del recibo y manda el de la
+            // factura (si se incluyera, se reportaría como faltante un asiento anulado a propósito).
+            'estado_filtro'  => "d.estado = 'emitido'",
             'tiene_estado'   => true,
             'chequear_monto' => true,
             'regenerable'    => true,
@@ -165,10 +168,12 @@ class AuditoriaContableRepository extends BaseRepository
             'tabla'          => 'retornos_cv',
             'total'          => 'd.total',
             'fecha'          => 'fecha_retorno',
-            'estado_filtro'  => "d.estado <> 'Anulada'",
+            // Solo los 'Emitida' tienen impacto contable (RetornoCvService::procesarAsientoContable
+            // retorna sin generar en Borrador). Con "<> 'Anulada'" los Borrador salían como faltantes.
+            'estado_filtro'  => "d.estado = 'Emitida'",
             'tiene_estado'   => true,
             'chequear_monto' => false, // el asiento va a costo del inventario devuelto
-            'regenerable'    => false, // RetornoCvService no expone procesarAsientoContablePorSincronizacion
+            'regenerable'    => true,  // RetornoCvService ya expone procesarAsientoContablePorSincronizacion
             'tiene_id_asiento' => true,
             'entidad_mig'    => null,
         ],
@@ -176,10 +181,11 @@ class AuditoriaContableRepository extends BaseRepository
             'tabla'          => 'cambios_producto_cv',
             'total'          => '(COALESCE(d.subtotal_devuelto,0)+COALESCE(d.subtotal_entregado,0))',
             'fecha'          => 'fecha_cambio',
-            'estado_filtro'  => "COALESCE(d.estado,'') <> 'Anulada'",
+            // Solo los 'Emitida' tienen impacto contable (el service no genera en Borrador).
+            'estado_filtro'  => "COALESCE(d.estado,'') = 'Emitida'",
             'tiene_estado'   => true,
             'chequear_monto' => false, // asiento a costo; el total del documento no es comparable
-            'regenerable'    => false,
+            'regenerable'    => true,  // CambioProductoCvService ya expone procesarAsientoContablePorSincronizacion
             'tiene_id_asiento' => true,
             'entidad_mig'    => null,
         ],
@@ -190,8 +196,8 @@ class AuditoriaContableRepository extends BaseRepository
             'estado_filtro'  => "d.estado <> 'anulada'",
             'tiene_estado'   => true,
             'chequear_monto' => true,
-            'regenerable'    => false, // ConsignacionFacturaService no expone el método de sincronización
-            'tiene_id_asiento' => false, // consignaciones_facturas no tiene id_asiento_contable
+            'regenerable'    => true,  // ConsignacionFacturaService ya expone procesarAsientoContablePorSincronizacion
+            'tiene_id_asiento' => false, // el enlace es id_asiento_reingreso, no id_asiento_contable
             'entidad_mig'    => null,
         ],
         'nomina' => [
@@ -312,6 +318,108 @@ class AuditoriaContableRepository extends BaseRepository
     }
 
     /**
+     * SQL para obtener el número del documento (serie-secuencial) y el nombre de la
+     * entidad (cliente / proveedor / empleado) de cada origen. El alias del documento es `d`.
+     * Todo es literal del código, nunca entrada del usuario.
+     */
+    private function sqlDocumentoInfo(string $origen): array
+    {
+        $serie   = "CONCAT(d.establecimiento,'-',d.punto_emision,'-',d.secuencial)";
+        $joinCli = 'LEFT JOIN clientes e ON e.id = d.id_cliente';
+        $joinPrv = 'LEFT JOIN proveedores e ON e.id = d.id_proveedor';
+
+        return match ($origen) {
+            // Documentos de cliente con serie estándar
+            'factura_venta', 'nota_credito', 'retencion_venta', 'consignacion_venta',
+            'recibo_venta', 'retorno_cv', 'cambio_producto_cv', 'FACTURACION_CV' => [
+                'numero' => $serie, 'entidad_join' => $joinCli, 'entidad' => 'e.nombre',
+            ],
+            // Compras guarda la serie del proveedor en columnas *_prov
+            'compra' => [
+                'numero' => "CONCAT(d.establecimiento_prov,'-',d.punto_emision_prov,'-',d.secuencial_prov)",
+                'entidad_join' => $joinPrv, 'entidad' => 'e.razon_social',
+            ],
+            'liquidacion_compra', 'retencion_compra' => [
+                'numero' => $serie, 'entidad_join' => $joinPrv, 'entidad' => 'e.razon_social',
+            ],
+            // Ingresos: cliente o, si no hay, el texto libre "recibo de"
+            'ingreso' => [
+                'numero' => $serie, 'entidad_join' => $joinCli,
+                'entidad' => 'COALESCE(e.nombre, d.recibo_de)',
+            ],
+            // Egresos: puede ser a proveedor o a empleado
+            'egreso' => [
+                'numero' => $serie,
+                'entidad_join' => 'LEFT JOIN proveedores e ON e.id = d.id_proveedor '
+                                . 'LEFT JOIN empleados em ON em.id = d.id_empleado',
+                'entidad' => 'COALESCE(e.razon_social, em.nombres_apellidos)',
+            ],
+            // El rol de pagos no tiene entidad única: se identifica por su descripción/período
+            'nomina' => [
+                'numero' => "COALESCE(NULLIF(d.descripcion,''), CONCAT('Rol ', d.periodo_mes, '/', d.periodo_anio))",
+                'entidad_join' => '', 'entidad' => 'NULL',
+            ],
+            default => ['numero' => 'NULL', 'entidad_join' => '', 'entidad' => 'NULL'],
+        };
+    }
+
+    /**
+     * Completa los hallazgos con el número del documento y el nombre de la entidad.
+     * Hace una sola consulta por origen presente (no una por fila).
+     */
+    private function enriquecerHallazgos(array $hallazgos): array
+    {
+        $porOrigen = [];
+        foreach ($hallazgos as $i => $h) {
+            $origen = (string) $h['modulo_origen'];
+            if (!empty($h['id_documento']) && $this->esOrigenValido($origen)) {
+                $porOrigen[$origen][(int) $h['id_documento']][] = $i;
+            }
+        }
+
+        foreach ($porOrigen as $origen => $mapIds) {
+            $datos = $this->getDatosDocumentos($origen, array_keys($mapIds));
+            foreach ($mapIds as $idDoc => $indices) {
+                foreach ($indices as $i) {
+                    $hallazgos[$i]['documento_numero'] = $datos[$idDoc]['numero'] ?? null;
+                    $hallazgos[$i]['entidad_nombre']   = $datos[$idDoc]['entidad'] ?? null;
+                }
+            }
+        }
+        return $hallazgos;
+    }
+
+    /** @return array<int,array{numero:?string,entidad:?string}> indexado por id de documento */
+    private function getDatosDocumentos(string $origen, array $ids): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (empty($ids) || !$this->esOrigenValido($origen)) {
+            return [];
+        }
+        $info  = $this->sqlDocumentoInfo($origen);
+        $tabla = $this->origenes[$origen]['tabla'];
+        $ph    = implode(',', array_fill(0, count($ids), '?'));
+
+        $sql = "SELECT d.id,
+                       NULLIF(REPLACE({$info['numero']}, '--', ''), '') AS numero,
+                       {$info['entidad']} AS entidad
+                FROM {$tabla} d
+                {$info['entidad_join']}
+                WHERE d.id IN ($ph)";
+        try {
+            $rows = $this->ejecutar($sql, $ids);
+        } catch (\Throwable $e) {
+            return []; // un origen sin esas columnas no debe romper la auditoría
+        }
+
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(int) $r['id']] = ['numero' => $r['numero'], 'entidad' => $r['entidad']];
+        }
+        return $out;
+    }
+
+    /**
      * Fragmento SQL de rango de fechas sobre $col. Añade los binds a $params.
      * $col es literal del código; las fechas van como parámetros preparados.
      */
@@ -356,7 +464,8 @@ class AuditoriaContableRepository extends BaseRepository
         $hallazgos = array_merge($hallazgos, $this->detectarDescuadrados($idEmpresa, $soloOrigen, $fechaDesde, $fechaHasta));
         $hallazgos = array_merge($hallazgos, $this->detectarCabVsDetalle($idEmpresa, $soloOrigen, $fechaDesde, $fechaHasta));
 
-        return $hallazgos;
+        // Número de documento y nombre del cliente/proveedor, para que el listado sea legible.
+        return $this->enriquecerHallazgos($hallazgos);
     }
 
     /**
@@ -678,15 +787,18 @@ class AuditoriaContableRepository extends BaseRepository
         ?float $montoDoc, ?float $montoAsiento, ?float $diferencia, string $detalle, ?string $fecha): array
     {
         return [
-            'tipo_hallazgo'   => $tipo,
-            'modulo_origen'   => $origen,
-            'id_documento'    => $idDoc,
-            'id_asiento'      => $idAsiento,
-            'monto_documento' => $montoDoc,
-            'monto_asiento'   => $montoAsiento,
-            'diferencia'      => $diferencia,
-            'detalle'         => $detalle,
-            'fecha_documento' => $fecha,
+            'tipo_hallazgo'    => $tipo,
+            'modulo_origen'    => $origen,
+            'id_documento'     => $idDoc,
+            'id_asiento'       => $idAsiento,
+            'monto_documento'  => $montoDoc,
+            'monto_asiento'    => $montoAsiento,
+            'diferencia'       => $diferencia,
+            'detalle'          => $detalle,
+            'fecha_documento'  => $fecha,
+            // Los completa enriquecerHallazgos() antes de persistir.
+            'documento_numero' => null,
+            'entidad_nombre'   => null,
         ];
     }
 
@@ -745,6 +857,7 @@ class AuditoriaContableRepository extends BaseRepository
             $sql = "UPDATE auditoria_contable_incidencias
                     SET monto_documento = :md, monto_asiento = :ma, diferencia = :dif,
                         detalle = :det, fecha_documento = :fec,
+                        documento_numero = :num, entidad_nombre = :ent,
                         detectado_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP,
                         updated_by = :uid, estado = 'activo'
                     WHERE id = :id";
@@ -752,6 +865,7 @@ class AuditoriaContableRepository extends BaseRepository
             $st->execute([
                 ':md'  => $h['monto_documento'], ':ma' => $h['monto_asiento'], ':dif' => $h['diferencia'],
                 ':det' => $h['detalle'], ':fec' => $h['fecha_documento'],
+                ':num' => $h['documento_numero'] ?? null, ':ent' => $h['entidad_nombre'] ?? null,
                 ':uid' => $idUsuario, ':id' => $existenteId,
             ]);
             return;
@@ -760,19 +874,23 @@ class AuditoriaContableRepository extends BaseRepository
         $sql = "INSERT INTO auditoria_contable_incidencias
                     (id_empresa, tipo_ambiente, tipo_hallazgo, modulo_origen,
                      id_documento, id_asiento, monto_documento, monto_asiento, diferencia,
-                     detalle, fecha_documento, estado_revision, detectado_at,
+                     detalle, fecha_documento, documento_numero, entidad_nombre,
+                     estado_revision, detectado_at,
                      created_at, updated_at, created_by, updated_by)
                 VALUES
                     (:emp, :amb, :tipo, :origen,
                      :iddoc, :idas, :md, :ma, :dif,
-                     :det, :fec, 'pendiente', CURRENT_TIMESTAMP,
+                     :det, :fec, :num, :ent,
+                     'pendiente', CURRENT_TIMESTAMP,
                      CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, :uid, :uid)";
         $st = $this->db->prepare($sql);
         $st->execute([
             ':emp' => $idEmpresa, ':amb' => $ambiente, ':tipo' => $h['tipo_hallazgo'], ':origen' => $h['modulo_origen'],
             ':iddoc' => $h['id_documento'], ':idas' => $h['id_asiento'],
             ':md' => $h['monto_documento'], ':ma' => $h['monto_asiento'], ':dif' => $h['diferencia'],
-            ':det' => $h['detalle'], ':fec' => $h['fecha_documento'], ':uid' => $idUsuario,
+            ':det' => $h['detalle'], ':fec' => $h['fecha_documento'],
+            ':num' => $h['documento_numero'] ?? null, ':ent' => $h['entidad_nombre'] ?? null,
+            ':uid' => $idUsuario,
         ]);
     }
 
@@ -832,13 +950,81 @@ class AuditoriaContableRepository extends BaseRepository
     }
 
     /**
+     * Completa número de documento y nombre de entidad en incidencias que aún no los tienen
+     * (las ya resueltas no se vuelven a detectar, así que no se enriquecen solas).
+     * Se ejecuta al correr la auditoría. Devuelve cuántas actualizó.
+     */
+    public function backfillDatosDocumento(int $idEmpresa, string $ambiente): int
+    {
+        $sql = "SELECT id, modulo_origen, id_documento
+                FROM auditoria_contable_incidencias
+                WHERE id_empresa = :emp AND tipo_ambiente = :amb AND eliminado = false
+                  AND id_documento IS NOT NULL AND documento_numero IS NULL";
+        $pendientes = $this->ejecutar($sql, [':emp' => $idEmpresa, ':amb' => $ambiente]);
+        if (empty($pendientes)) {
+            return 0;
+        }
+
+        $porOrigen = [];
+        foreach ($pendientes as $p) {
+            $porOrigen[(string) $p['modulo_origen']][(int) $p['id_documento']][] = (int) $p['id'];
+        }
+
+        $st = $this->db->prepare(
+            "UPDATE auditoria_contable_incidencias
+             SET documento_numero = :num, entidad_nombre = :ent, updated_at = CURRENT_TIMESTAMP
+             WHERE id = :id"
+        );
+
+        $n = 0;
+        foreach ($porOrigen as $origen => $mapIds) {
+            if (!$this->esOrigenValido($origen)) {
+                continue;
+            }
+            $datos = $this->getDatosDocumentos($origen, array_keys($mapIds));
+            foreach ($mapIds as $idDoc => $idsIncidencia) {
+                if (!isset($datos[$idDoc])) {
+                    continue;
+                }
+                foreach ($idsIncidencia as $idInc) {
+                    $st->execute([
+                        ':num' => $datos[$idDoc]['numero'],
+                        ':ent' => $datos[$idDoc]['entidad'],
+                        ':id'  => $idInc,
+                    ]);
+                    $n++;
+                }
+            }
+        }
+        return $n;
+    }
+
+    /** Cuenta incidencias por estado ('pendientes' | 'corregidas') para las pestañas. */
+    public function contarPorVista(int $idEmpresa, string $ambiente, string $vista,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): int
+    {
+        $params = [':emp' => $idEmpresa, ':amb' => $ambiente];
+        $cond = $vista === 'corregidas' ? "= 'resuelta'" : "<> 'resuelta'";
+        $rango = $this->sqlRangoFecha('fecha_documento', $fechaDesde, $fechaHasta, $params);
+
+        $sql = "SELECT COUNT(*) AS n FROM auditoria_contable_incidencias
+                WHERE id_empresa = :emp AND tipo_ambiente = :amb AND eliminado = false
+                  AND estado_revision {$cond} {$rango}";
+        return (int) ($this->ejecutar($sql, $params)[0]['n'] ?? 0);
+    }
+
+    /**
      * Listado paginado de incidencias con buscador (FiltrosBusqueda) y ordenamiento.
      * Filtra por id_empresa + tipo_ambiente activo (y registros propios si aplica).
+     */
+    /**
+     * @param string $vista 'pendientes' (default): lo que falta por corregir;
+     *                      'corregidas': el histórico ya resuelto; 'todas': ambas.
      */
     public function getListado(int $idEmpresa, string $ambiente, string $buscar = '',
         int $page = 1, int $perPage = 20, string $ordenCol = 'detectado_at',
         string $ordenDir = 'DESC', ?int $idUsuarioFiltro = null,
-        ?string $fechaDesde = null, ?string $fechaHasta = null): array
+        ?string $fechaDesde = null, ?string $fechaHasta = null, string $vista = 'pendientes'): array
     {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa, ':amb' => $ambiente];
@@ -847,13 +1033,28 @@ class AuditoriaContableRepository extends BaseRepository
                . " AND i.tipo_ambiente = :amb"
                . $this->sqlRangoFecha('i.fecha_documento', $fechaDesde, $fechaHasta, $params);
 
+        // Una incidencia corregida deja de aparecer en el listado principal y pasa a «Corregidas».
+        if ($vista === 'pendientes') {
+            $where .= " AND i.estado_revision <> 'resuelta'";
+        } elseif ($vista === 'corregidas') {
+            $where .= " AND i.estado_revision = 'resuelta'";
+        }
+
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (i.detalle ILIKE :buscar OR i.modulo_origen ILIKE :buscar)";
+            $where .= " AND (i.detalle ILIKE :buscar OR i.modulo_origen ILIKE :buscar
+                          OR i.entidad_nombre ILIKE :buscar OR i.documento_numero ILIKE :buscar)";
             $params[':buscar'] = '%' . $parsed['texto_libre'] . '%';
         }
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
-            'texto'    => ['detalle' => 'i.detalle'],
+            'texto'    => [
+                'detalle'   => 'i.detalle',
+                'cliente'   => 'i.entidad_nombre',
+                'proveedor' => 'i.entidad_nombre',
+                'nombre'    => 'i.entidad_nombre',
+                'numero'    => 'i.documento_numero',
+                'nro'       => 'i.documento_numero',
+            ],
             'exacto'   => [
                 'tipo'   => 'i.tipo_hallazgo', 'tipo_hallazgo' => 'i.tipo_hallazgo',
                 'origen' => 'i.modulo_origen', 'modulo' => 'i.modulo_origen',
@@ -867,35 +1068,17 @@ class AuditoriaContableRepository extends BaseRepository
         $total = (int) $this->ejecutar($sqlCount, $params)[0]['count'];
 
         $allowed = ['detectado_at', 'tipo_hallazgo', 'modulo_origen', 'id_documento', 'id_asiento',
-                    'diferencia', 'fecha_documento', 'estado_revision'];
+                    'diferencia', 'fecha_documento', 'estado_revision', 'documento_numero',
+                    'entidad_nombre', 'revisado_at'];
         if (!in_array($ordenCol, $allowed, true)) {
             $ordenCol = 'detectado_at';
         }
         $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
 
-        // Número completo del documento (serie-secuencial) resuelto por origen.
-        // compras usa columnas *_prov; el resto establecimiento/punto_emision/secuencial.
-        $numeroCase = "CASE i.modulo_origen
-                        WHEN 'factura_venta'      THEN CONCAT(o_fv.establecimiento,'-',o_fv.punto_emision,'-',o_fv.secuencial)
-                        WHEN 'compra'             THEN CONCAT(o_co.establecimiento_prov,'-',o_co.punto_emision_prov,'-',o_co.secuencial_prov)
-                        WHEN 'liquidacion_compra' THEN CONCAT(o_lq.establecimiento,'-',o_lq.punto_emision,'-',o_lq.secuencial)
-                        WHEN 'nota_credito'       THEN CONCAT(o_nc.establecimiento,'-',o_nc.punto_emision,'-',o_nc.secuencial)
-                        WHEN 'retencion_venta'    THEN CONCAT(o_rv.establecimiento,'-',o_rv.punto_emision,'-',o_rv.secuencial)
-                        WHEN 'ingreso'            THEN CONCAT(o_in.establecimiento,'-',o_in.punto_emision,'-',o_in.secuencial)
-                        WHEN 'egreso'             THEN CONCAT(o_eg.establecimiento,'-',o_eg.punto_emision,'-',o_eg.secuencial)
-                       END";
-
-        $sql = "SELECT i.*, u.nombre AS revisado_por_nombre,
-                       NULLIF(REPLACE($numeroCase, '--', ''), '') AS documento_numero
+        // documento_numero y entidad_nombre se guardan al detectar (ver enriquecerHallazgos).
+        $sql = "SELECT i.*, u.nombre AS revisado_por_nombre
                 FROM auditoria_contable_incidencias i
                 LEFT JOIN usuarios u ON i.revisado_por = u.id
-                LEFT JOIN ventas_cabecera          o_fv ON i.modulo_origen = 'factura_venta'      AND o_fv.id = i.id_documento
-                LEFT JOIN compras_cabecera         o_co ON i.modulo_origen = 'compra'             AND o_co.id = i.id_documento
-                LEFT JOIN liquidaciones_cabecera   o_lq ON i.modulo_origen = 'liquidacion_compra' AND o_lq.id = i.id_documento
-                LEFT JOIN notas_credito_cabecera   o_nc ON i.modulo_origen = 'nota_credito'       AND o_nc.id = i.id_documento
-                LEFT JOIN retencion_venta_cabecera o_rv ON i.modulo_origen = 'retencion_venta'    AND o_rv.id = i.id_documento
-                LEFT JOIN ingresos_cabecera        o_in ON i.modulo_origen = 'ingreso'            AND o_in.id = i.id_documento
-                LEFT JOIN egresos_cabecera         o_eg ON i.modulo_origen = 'egreso'             AND o_eg.id = i.id_documento
                 $where
                 ORDER BY i.$ordenCol $ordenDir
                 LIMIT $perPage OFFSET $offset";
