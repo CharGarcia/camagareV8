@@ -2026,7 +2026,11 @@ class MigracionMysqlService
             "INSERT INTO compras_detalle_impuestos (id_compra_detalle, codigo_impuesto, codigo_porcentaje, tarifa, base_imponible, valor)
              VALUES (:d, '2', :cp, :tar, :base, :val)"
         );
-        $cuerpoStmt = $mysql->prepare("SELECT codigo_producto, detalle_producto, cantidad, precio, descuento, impuesto, subtotal FROM cuerpo_compra WHERE codigo_documento = :cd");
+        $cuerpoStmt = $mysql->prepare("SELECT codigo_producto, detalle_producto, cantidad, precio, descuento, impuesto, det_impuesto, subtotal FROM cuerpo_compra WHERE codigo_documento = :cd");
+        // (Re)construye el detalle + impuestos de una compra desde el cuerpo viejo. Se usa al
+        // RECONCILIAR (re-corrida) para corregir corridas viejas que guardaron mal el IVA.
+        $delDetImp = $pg->prepare("DELETE FROM compras_detalle_impuestos WHERE id_compra_detalle IN (SELECT id FROM compras_detalle WHERE id_compra = ?)");
+        $delDet    = $pg->prepare("DELETE FROM compras_detalle WHERE id_compra = ?");
         // Al re-correr: actualiza el ambiente y los datos tributarios de una compra ya migrada, según la empresa actual
         $updCab = $pg->prepare("UPDATE compras_cabecera SET tipo_ambiente = :amb, tipo_comprobante = :tcomp, documento_modificado = :docmod, id_sustento_tributario = :sust, autorizacion_desde = :ad, autorizacion_hasta = :ah, fecha_caducidad = :fcad, tipo_registro = :treg, deducible = :ded, updated_at = now(), updated_by = :u WHERE id = :id");
         // Formas de pago SRI de la compra: viejo formas_pago_compras → nuevo compras_pagos (enlaza por codigo_documento)
@@ -2069,9 +2073,36 @@ class MigracionMysqlService
             // Ya migrada: reconciliar ambiente + datos tributarios con la configuración ACTUAL de la empresa (re-corrida)
             if (isset($mapCompra[(string) $old])) {
                 $idExist = (int) $mapCompra[(string) $old];
-                $updCab->execute([':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':tcomp' => $tcomp, ':docmod' => $docmod, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah, ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':treg' => $treg, ':ded' => $ded, ':u' => $idUsuario, ':id' => $idExist]);
-                $migrarPagos($idExist, (string) $ec['codigo_documento']); // formas de pago SRI
-                $this->generarXmlCompraGuardada($idExist, $pg); // reconstruye detalle_xml (PDF/descarga XML)
+                try {
+                    $pg->beginTransaction();
+                    $updCab->execute([':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':tcomp' => $tcomp, ':docmod' => $docmod, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah, ':fcad' => self::fechaCorta($ec['fecha_caducidad']), ':treg' => $treg, ':ded' => $ded, ':u' => $idUsuario, ':id' => $idExist]);
+                    // Rehacer detalle + impuestos desde el cuerpo viejo: corrige el IVA de corridas
+                    // viejas que usaban `impuesto` (siempre '2'=12%) en vez de `det_impuesto`.
+                    $delDetImp->execute([$idExist]);
+                    $delDet->execute([$idExist]);
+                    $cuerpoStmt->execute([':cd' => $ec['codigo_documento']]);
+                    foreach ($cuerpoStmt->fetchAll(PDO::FETCH_ASSOC) as $l) {
+                        $base_i = (float) $l['subtotal'] - (float) $l['descuento'];
+                        $insDet->execute([
+                            ':c' => $idExist, ':cod' => (string) $l['codigo_producto'],
+                            ':desc' => (string) ($l['detalle_producto'] ?: $l['codigo_producto'] ?: 'ITEM'),
+                            ':cant' => (float) $l['cantidad'], ':pu' => (float) $l['precio'],
+                            ':desc2' => (float) $l['descuento'], ':base' => round($base_i, 2),
+                        ]);
+                        $idDet = (int) $insDet->fetchColumn();
+                        $cod = (trim((string) $l['impuesto']) === '2') ? trim((string) $l['det_impuesto']) : '0';
+                        if (!isset(self::IVA_PCT[$cod])) { $cod = '0'; }
+                        $pct = self::IVA_PCT[$cod];
+                        $insImp->execute([':d' => $idDet, ':cp' => $cod, ':tar' => $pct, ':base' => round($base_i, 2), ':val' => round($base_i * $pct / 100, 2)]);
+                    }
+                    $migrarPagos($idExist, (string) $ec['codigo_documento']); // formas de pago SRI
+                    $this->generarXmlCompraGuardada($idExist, $pg); // reconstruye detalle_xml (PDF/descarga XML)
+                    $pg->commit();
+                } catch (Throwable $ex) {
+                    if ($pg->inTransaction()) { $pg->rollBack(); }
+                    $res['errores']++;
+                    if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); }
+                }
                 $res['ya_migrados']++;
                 continue;
             }
@@ -2111,9 +2142,13 @@ class MigracionMysqlService
                         ':cant' => (float) $l['cantidad'], ':pu' => (float) $l['precio'], ':desc2' => (float) $l['descuento'], ':base' => round($base_i, 2),
                     ]);
                     $idDet = (int) $insDet->fetchColumn();
-                    $cod = trim((string) $l['impuesto']);
-                    $pct = self::IVA_PCT[$cod] ?? 0;
-                    $insImp->execute([':d' => $idDet, ':cp' => ($cod === '' ? '0' : $cod), ':tar' => $pct, ':base' => round($base_i, 2), ':val' => round($base_i * $pct / 100, 2)]);
+                    // OJO: en el viejo `impuesto` es el CÓDIGO DEL IMPUESTO SRI (2=IVA, 3=ICE), NO la
+                    // tarifa; el codigoPorcentaje (0,2,3,4,5,6,7,8,10) vive en `det_impuesto`. Usar
+                    // `impuesto` daba siempre '2' => 12%, cuando lo real suele ser '4' => 15%.
+                    $cod = (trim((string) $l['impuesto']) === '2') ? trim((string) $l['det_impuesto']) : '0';
+                    if (!isset(self::IVA_PCT[$cod])) { $cod = '0'; } // ICE u otro: sin IVA
+                    $pct = self::IVA_PCT[$cod];
+                    $insImp->execute([':d' => $idDet, ':cp' => $cod, ':tar' => $pct, ':base' => round($base_i, 2), ':val' => round($base_i * $pct / 100, 2)]);
                 }
 
                 $migrarPagos($idCompra, (string) $ec['codigo_documento']); // formas de pago SRI

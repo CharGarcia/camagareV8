@@ -9,12 +9,14 @@ declare(strict_types=1);
 namespace App\controllers;
 
 use App\core\Controller;
+use App\core\Database;
 use App\models\Empresa;
 use App\models\EmpresaAsignada;
 use App\models\EmpresaDocumento;
 use App\models\Provincia;
 use App\models\Ciudad;
 use App\Services\SriIdentificationService;
+use PDO;
 
 class EmpresasSistemaController extends Controller
 {
