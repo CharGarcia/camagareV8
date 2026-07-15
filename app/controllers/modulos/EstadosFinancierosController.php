@@ -90,6 +90,7 @@ class EstadosFinancierosController extends BaseModuloController
             echo json_encode([
                 'success'   => true,
                 'warnings'  => $sincronizador->getWarnings(),
+                'info'      => $sincronizador->getInfo(),
                 'generados' => $sincronizador->getGenerados(),
             ]);
         } catch (\Throwable $th) {
