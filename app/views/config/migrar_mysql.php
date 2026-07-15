@@ -342,7 +342,12 @@ $base = BASE_URL;
                 partes.push(`errores <b class="${d.errores ? 'text-danger' : ''}">${fmt(d.errores)}</b>`);
                 let html = partes.join(' · ') + ` <span class="text-muted">(de ${fmt(d.total)})</span>`;
                 if (d.error_muestra) html += `<br><span class="text-danger small">⚠ ${d.error_muestra}</span>`;
-                if (d.omitidos > 0) html += `<br><span class="text-warning small">ℹ ${fmt(d.omitidos)} omitido(s): el documento de origen no tiene cliente/proveedor con identificación (RUC/cédula).</span>`;
+                if (d.omitidos > 0) {
+                    // Cada entidad informa su propio motivo (omitidos_motivo). Si no lo trae, es un
+                    // documento y el motivo es el cliente/proveedor sin identificación.
+                    const motivo = d.omitidos_motivo || 'el documento de origen no tiene cliente/proveedor con identificación (RUC/cédula)';
+                    html += `<br><span class="text-warning small">ℹ ${fmt(d.omitidos)} omitido(s): ${motivo}.</span>`;
+                }
                 if (d.vinculados > 0) {
                     const muestra = (d.vinculados_muestra && d.vinculados_muestra.length)
                         ? ': ' + d.vinculados_muestra.map(x => String(x).replace(/</g, '&lt;')).join(', ') + (d.vinculados > d.vinculados_muestra.length ? '…' : '')

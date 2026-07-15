@@ -157,7 +157,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'clientes', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'clientes', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'cliente sin identificación (RUC/cédula)', 'errores' => 0];
 
         // Ya migrados (anti-reproceso)
         $done = [];
@@ -246,7 +246,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'productos', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'productos', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'producto sin código ni nombre', 'errores' => 0];
 
         $done = []; // id_origen => ['id' => id_destino, 'vin' => bool]
         $q = $pg->prepare("SELECT id_origen, id_destino, vinculado FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'productos'");
@@ -347,7 +347,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'proveedores', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'proveedores', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'proveedor sin identificación (RUC/cédula)', 'errores' => 0];
 
         $done = []; // id_origen => ['id' => id_destino, 'vin' => bool]
         $q = $pg->prepare("SELECT id_origen, id_destino, vinculado FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'proveedores'");
@@ -487,7 +487,7 @@ class MigracionMysqlService
         $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
-        $res = ['entidad' => 'bodegas', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'bodegas', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'bodega sin nombre', 'errores' => 0];
 
         $done = $this->idsMigrados($pg, $idEmpresa, 'bodegas');
         $buscar = $pg->prepare("SELECT id FROM bodegas WHERE id_empresa = :e AND nombre = :nom LIMIT 1");
@@ -640,7 +640,7 @@ class MigracionMysqlService
         $esFactura = ($modo === 'FACTURA');
         $entidad   = $esFactura ? 'consignaciones_fact' : 'consignaciones_ret';
 
-        $res = ['entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => $entidad, 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'sin la consignación de origen migrada, o línea no casada', 'errores' => 0];
         $done       = $this->idsMigrados($pg, $idEmpresa, $entidad);
         $mapCliente = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $mapVend    = $this->mapaDe($pg, $idEmpresa, 'vendedores');
@@ -1058,7 +1058,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'contabilidad', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'contabilidad', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'asiento sin detalle en el diario viejo (huérfano)', 'errores' => 0];
         $done   = $this->idsMigrados($pg, $idEmpresa, 'contabilidad');
         $insMap = $this->stmtMap($pg,'contabilidad');
 
@@ -1266,7 +1266,7 @@ class MigracionMysqlService
         $mysql = LegacyMysqlConnection::get();
         $pg    = Database::getConnection();
 
-        $res = ['entidad' => 'inventario', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+        $res = ['entidad' => 'inventario', 'total' => 0, 'migrados' => 0, 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'movimientos en cero (no afectan el stock)', 'errores' => 0];
         $done       = $this->idsMigrados($pg, $idEmpresa, 'inventario');
         $mapProd    = $this->mapaDe($pg, $idEmpresa, 'productos');
         $prodPorCod = $this->productosPorCodigo($pg, $idEmpresa);
