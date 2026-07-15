@@ -252,6 +252,29 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                                 </a>
                                             </div>
                                             <div class="mt-2">Pulsa el botón, luego <strong>«Añadir a Chrome»</strong> y confirma con <strong>«Agregar extensión»</strong>. Al terminar, <strong>recarga esta página</strong> y ya puedes usar "Generar descarga del SRI".</div>
+
+                                            <!-- La extensión toma este token sola al cargar la página. Se muestra aquí
+                                                 (oculto tras el ojo) por si hace falta pegarlo a mano. -->
+                                            <div class="mt-3">
+                                                <label class="form-label small fw-semibold mb-1" for="inpToken">
+                                                    <i class="bi bi-key me-1"></i>Token de la extensión
+                                                </label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="password" class="form-control font-monospace" id="inpToken" autocomplete="off" readonly
+                                                           value="<?= htmlspecialchars($agenteToken ?? '', ENT_QUOTES) ?>">
+                                                    <button class="btn btn-outline-secondary" type="button" id="btnVerToken" title="Mostrar u ocultar el token">
+                                                        <i class="bi bi-eye" id="icoVerToken"></i>
+                                                    </button>
+                                                    <button class="btn btn-outline-secondary" type="button" id="btnCopiarToken" title="Copiar el token">
+                                                        <i class="bi bi-clipboard"></i>
+                                                    </button>
+                                                </div>
+                                                <div class="form-text">
+                                                    Normalmente no necesitas usarlo: la extensión lo toma sola al abrir esta página. Si no se conecta,
+                                                    cópialo desde aquí y pégalo en el ícono de la extensión → <strong>Configuración avanzada</strong> →
+                                                    <strong>Token</strong> → <strong>Guardar</strong>. No lo compartas: permite registrar comprobantes en tus empresas.
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -365,6 +388,48 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
     try {
         window.postMessage({ source: 'cmg-sistema', token: t, servidorUrl: servidor }, window.location.origin);
     } catch (e) {}
+})();
+
+// Token de la extensión: ojo para mostrar/ocultar y botón para copiar (respaldo manual; la
+// extensión normalmente lo toma sola del elemento #cmg-config al cargar esta página).
+(function () {
+    var inp = document.getElementById('inpToken');
+    if (!inp) return;
+
+    var btnVer = document.getElementById('btnVerToken');
+    if (btnVer) {
+        btnVer.addEventListener('click', function () {
+            var oculto = inp.type === 'password';
+            inp.type = oculto ? 'text' : 'password';
+            document.getElementById('icoVerToken').className = oculto ? 'bi bi-eye-slash' : 'bi bi-eye';
+        });
+    }
+
+    var btnCop = document.getElementById('btnCopiarToken');
+    if (btnCop) {
+        btnCop.addEventListener('click', function () {
+            var ok = function () {
+                btnCop.innerHTML = '<i class="bi bi-check2"></i>';
+                setTimeout(function () { btnCop.innerHTML = '<i class="bi bi-clipboard"></i>'; }, 1500);
+            };
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(inp.value).then(ok, function () { copiarLegacy(inp); ok(); });
+            } else {
+                copiarLegacy(inp);
+                ok();
+            }
+        });
+    }
+
+    // Respaldo para navegadores sin clipboard API: select() no funciona en type=password.
+    function copiarLegacy(campo) {
+        var tipo = campo.type;
+        campo.type = 'text';
+        campo.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        campo.type = tipo;
+        if (window.getSelection) window.getSelection().removeAllRanges();
+    }
 })();
 </script>
 

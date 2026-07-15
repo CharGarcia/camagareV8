@@ -419,6 +419,8 @@ class ConfigController extends Controller
             'provincias' => 'provinciasJson',
             'ciudades' => 'ciudadesJson',
             'sriIdentificacion' => 'sriIdentificacionJson',
+            'buscarEmpresas' => 'buscarEmpresasJson',
+            'buscarClientes' => 'buscarClientesJson',
             'delete' => 'delete',
             default => 'index',
         };

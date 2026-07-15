@@ -172,7 +172,9 @@ function estadoPagoBadge($estado) {
                         data-max-usuarios="<?= (int)($r['max_usuarios'] ?? 3) ?>"
                         data-id-empresa-suscripciones="<?= (int)($r['id_empresa_suscripciones'] ?? 0) ?>"
                         data-es-administradora="<?= !empty($r['es_administradora_suscripciones']) ? '1' : '0' ?>"
-                        data-id-empresa-facturada="<?= (int)($r['id_empresa_facturada'] ?? 0) ?>"
+                        data-id-cliente-facturado="<?= (int)($r['id_cliente_facturado'] ?? 0) ?>"
+                        data-ctrl-label="<?= htmlspecialchars(trim(($r['ctrl_nombre'] ?? '') . (!empty($r['ctrl_ruc']) ? ' — ' . $r['ctrl_ruc'] . ' (' . ($r['ctrl_estab'] ?? '') . ')' : ''))) ?>"
+                        data-fact-label="<?= htmlspecialchars(trim(($r['cli_nombre'] ?? '') . (!empty($r['cli_identificacion']) ? ' — ' . $r['cli_identificacion'] : ''))) ?>"
                         data-usuarios="<?= count($usuarios) ?>">
                         <td><?= htmlspecialchars($r['nombre'] ?? '-') ?></td>
                         <td><?= htmlspecialchars($r['nombre_comercial'] ?? '-') ?></td>
@@ -281,16 +283,21 @@ function estadoPagoBadge($estado) {
                             <label for="crear-telefono" class="form-label">Teléfono</label>
                             <input type="text" id="crear-telefono" name="telefono" class="form-control form-control-sm" placeholder="Teléfono">
                         </div>
-                        <div class="col-md-8">
-                            <label for="crear-empresa-suscripciones" class="form-label">Empresa que controla las suscripciones</label>
-                            <select id="crear-empresa-suscripciones" name="id_empresa_suscripciones" class="form-select form-select-sm">
-                                <option value="">— Sin vínculo —</option>
-                                <?php foreach (($empresasLista ?? []) as $emp): ?>
-                                    <option value="<?= (int) $emp['id'] ?>" <?= ((int) $emp['id'] === (int) ($idAdminSuscripciones ?? 0)) ? 'selected' : '' ?>>
-                                        <?= htmlspecialchars(($emp['nombre_comercial'] ?: $emp['nombre']) . ' — ' . ($emp['ruc'] ?? '')) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                        <?php
+                        // Etiqueta preseleccionada de la administradora por defecto.
+                        $adminLabel = '';
+                        foreach (($empresasLista ?? []) as $emp) {
+                            if ((int) $emp['id'] === (int) ($idAdminSuscripciones ?? 0)) {
+                                $adminLabel = ($emp['nombre_comercial'] ?: $emp['nombre']) . ' — ' . ($emp['ruc'] ?? '');
+                                break;
+                            }
+                        }
+                        ?>
+                        <div class="col-md-8 position-relative">
+                            <label for="crear-ctrl-texto" class="form-label">Empresa que controla las suscripciones</label>
+                            <input type="text" id="crear-ctrl-texto" class="form-control form-control-sm" placeholder="Buscar empresa por nombre o RUC…" autocomplete="off" value="<?= htmlspecialchars($adminLabel) ?>">
+                            <input type="hidden" id="crear-ctrl-id" name="id_empresa_suscripciones" value="<?= (int) ($idAdminSuscripciones ?? 0) ?: '' ?>">
+                            <div id="crear-ctrl-dropdown" class="list-group position-absolute w-100 shadow" style="display:none;z-index:2000;max-height:220px;overflow:auto;"></div>
                             <div class="form-text">Empresa cuyas suscripciones se cruzarán por RUC para esta nueva empresa.</div>
                         </div>
                         <div class="col-md-4">
@@ -301,17 +308,12 @@ function estadoPagoBadge($estado) {
                                 <label class="form-check-label small" for="crear-es-administradora">Es la empresa administradora (por defecto)</label>
                             </div>
                         </div>
-                        <div class="col-md-8">
-                            <label for="crear-empresa-facturada" class="form-label">Empresa a la que facturamos (reventa)</label>
-                            <select id="crear-empresa-facturada" name="id_empresa_facturada" class="form-select form-select-sm">
-                                <option value="">— No aplica (relación por RUC propio) —</option>
-                                <?php foreach (($empresasLista ?? []) as $emp): ?>
-                                    <option value="<?= (int) $emp['id'] ?>">
-                                        <?= htmlspecialchars(($emp['nombre_comercial'] ?: $emp['nombre']) . ' — ' . ($emp['ruc'] ?? '')) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                            <div class="form-text">Si la suscripción se factura a otra empresa (reventa), la ficha mostrará solo estado, periodicidad y vigencia (sin montos).</div>
+                        <div class="col-md-8 position-relative">
+                            <label for="crear-fact-texto" class="form-label">Empresa a la que facturamos (reventa)</label>
+                            <input type="text" id="crear-fact-texto" class="form-control form-control-sm" placeholder="Buscar cliente por nombre o identificación…" autocomplete="off">
+                            <input type="hidden" id="crear-fact-id" name="id_cliente_facturado" value="">
+                            <div id="crear-fact-dropdown" class="list-group position-absolute w-100 shadow" style="display:none;z-index:2000;max-height:220px;overflow:auto;"></div>
+                            <div class="form-text">Busca entre los <strong>clientes de la empresa controladora</strong>. Si eliges uno, esa selección manda (ficha sin montos); si lo dejas vacío, se usa la regla por RUC propio.</div>
                         </div>
                         <input type="hidden" name="tipo" value="01">
                         <input type="hidden" name="nom_rep_legal" value="">
@@ -490,16 +492,11 @@ function estadoPagoBadge($estado) {
                                     <input type="date" id="edit-vigencia-hasta" name="periodo_vigencia_hasta" class="form-control form-control-sm" placeholder="YYYY-MM-DD">
                                 </div>
                                 <div class="col-12"><hr class="my-1"><small class="text-muted fw-bold"><i class="bi bi-arrow-repeat"></i> Suscripción del sistema</small></div>
-                                <div class="col-md-8">
-                                    <label for="edit-empresa-suscripciones" class="form-label">Empresa que controla las suscripciones</label>
-                                    <select id="edit-empresa-suscripciones" name="id_empresa_suscripciones" class="form-select form-select-sm">
-                                        <option value="">— Sin vínculo —</option>
-                                        <?php foreach (($empresasLista ?? []) as $emp): ?>
-                                            <option value="<?= (int) $emp['id'] ?>">
-                                                <?= htmlspecialchars(($emp['nombre_comercial'] ?: $emp['nombre']) . ' — ' . ($emp['ruc'] ?? '')) ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
+                                <div class="col-md-8 position-relative">
+                                    <label for="edit-ctrl-texto" class="form-label">Empresa que controla las suscripciones</label>
+                                    <input type="text" id="edit-ctrl-texto" class="form-control form-control-sm" placeholder="Buscar empresa por nombre o RUC…" autocomplete="off">
+                                    <input type="hidden" id="edit-ctrl-id" name="id_empresa_suscripciones" value="">
+                                    <div id="edit-ctrl-dropdown" class="list-group position-absolute w-100 shadow" style="display:none;z-index:2000;max-height:220px;overflow:auto;"></div>
                                     <div class="form-text">Se cruza por RUC contra los clientes de esa empresa para mostrar la suscripción real.</div>
                                 </div>
                                 <div class="col-md-4">
@@ -510,17 +507,12 @@ function estadoPagoBadge($estado) {
                                         <label class="form-check-label small" for="edit-es-administradora">Es la empresa administradora (por defecto)</label>
                                     </div>
                                 </div>
-                                <div class="col-12">
-                                    <label for="edit-empresa-facturada" class="form-label">Empresa a la que facturamos (reventa)</label>
-                                    <select id="edit-empresa-facturada" name="id_empresa_facturada" class="form-select form-select-sm">
-                                        <option value="">— No aplica (relación por RUC propio) —</option>
-                                        <?php foreach (($empresasLista ?? []) as $emp): ?>
-                                            <option value="<?= (int) $emp['id'] ?>">
-                                                <?= htmlspecialchars(($emp['nombre_comercial'] ?: $emp['nombre']) . ' — ' . ($emp['ruc'] ?? '')) ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                    <div class="form-text">Para casos de reventa: la suscripción se relaciona con esta empresa (no con el RUC propio) y la ficha muestra solo estado, periodicidad y vigencia (sin montos).</div>
+                                <div class="col-12 position-relative">
+                                    <label for="edit-fact-texto" class="form-label">Empresa a la que facturamos (reventa)</label>
+                                    <input type="text" id="edit-fact-texto" class="form-control form-control-sm" placeholder="Buscar cliente por nombre o identificación…" autocomplete="off">
+                                    <input type="hidden" id="edit-fact-id" name="id_cliente_facturado" value="">
+                                    <div id="edit-fact-dropdown" class="list-group position-absolute w-100 shadow" style="display:none;z-index:2000;max-height:220px;overflow:auto;"></div>
+                                    <div class="form-text">Busca entre los <strong>clientes de la empresa controladora</strong> seleccionada arriba. Si eliges uno, esa selección manda y la ficha muestra solo estado, periodicidad y vigencia (sin montos). Si lo dejas vacío, se aplica la regla por RUC propio.</div>
                                 </div>
                                 <div class="col-12">
                                     <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg"></i> Guardar cambios</button>
@@ -707,12 +699,24 @@ function estadoPagoBadge($estado) {
         document.getElementById('edit-vigencia-desde').value = el.dataset.periodoVigenciaDesde || '';
         document.getElementById('edit-vigencia-hasta').value = el.dataset.periodoVigenciaHasta || '';
         document.getElementById('edit-estado-pago').value = el.dataset.estadoPago || 'pendiente';
-        var selSusc = document.getElementById('edit-empresa-suscripciones');
-        if (selSusc) selSusc.value = (el.dataset.idEmpresaSuscripciones && el.dataset.idEmpresaSuscripciones !== '0') ? el.dataset.idEmpresaSuscripciones : '';
+        // Buscador: empresa que controla las suscripciones (precarga id + etiqueta)
+        var ctrlId = document.getElementById('edit-ctrl-id');
+        var ctrlTxt = document.getElementById('edit-ctrl-texto');
+        if (ctrlId && ctrlTxt) {
+            var hasCtrl = el.dataset.idEmpresaSuscripciones && el.dataset.idEmpresaSuscripciones !== '0';
+            ctrlId.value  = hasCtrl ? el.dataset.idEmpresaSuscripciones : '';
+            ctrlTxt.value = hasCtrl ? (el.dataset.ctrlLabel || '') : '';
+        }
         var chkAdmin = document.getElementById('edit-es-administradora');
         if (chkAdmin) chkAdmin.checked = (el.dataset.esAdministradora === '1');
-        var selFact = document.getElementById('edit-empresa-facturada');
-        if (selFact) selFact.value = (el.dataset.idEmpresaFacturada && el.dataset.idEmpresaFacturada !== '0') ? el.dataset.idEmpresaFacturada : '';
+        // Buscador: cliente al que facturamos (reventa)
+        var factId = document.getElementById('edit-fact-id');
+        var factTxt = document.getElementById('edit-fact-texto');
+        if (factId && factTxt) {
+            var hasFact = el.dataset.idClienteFacturado && el.dataset.idClienteFacturado !== '0';
+            factId.value  = hasFact ? el.dataset.idClienteFacturado : '';
+            factTxt.value = hasFact ? (el.dataset.factLabel || '') : '';
+        }
         document.getElementById('tab-empresas-general').click();
         cargarUsuarios();
         cargarUsuariosDisponibles();
@@ -1115,5 +1119,115 @@ function estadoPagoBadge($estado) {
         });
     };
 
+})();
+
+/* ---------------------------------------------------------
+   Buscadores (typeahead) de suscripciones:
+   - Empresa que controla las suscripciones → busca empresas.
+   - Empresa a la que facturamos (reventa)  → busca CLIENTES de la controladora.
+   Con una selección activa, Backspace/Delete limpia toda la selección.
+--------------------------------------------------------- */
+(function () {
+    var base = '<?= $base ?>';
+
+    function setupTypeahead(inputEl, dropdownEl, hiddenEl, fetchFn, onPick) {
+        if (!inputEl || !dropdownEl || !hiddenEl) return;
+        var debounceTimer;
+
+        inputEl.addEventListener('keydown', function (e) {
+            if ((e.key === 'Backspace' || e.key === 'Delete') && hiddenEl.value !== '') {
+                e.preventDefault();
+                hiddenEl.value = '';
+                inputEl.value = '';
+                dropdownEl.style.display = 'none';
+                dropdownEl.innerHTML = '';
+                if (onPick) onPick(null);
+            }
+        });
+
+        inputEl.addEventListener('input', function () {
+            hiddenEl.value = '';
+            if (onPick) onPick(null);
+            clearTimeout(debounceTimer);
+            var q = inputEl.value.trim();
+            if (q.length < 1) { dropdownEl.style.display = 'none'; dropdownEl.innerHTML = ''; return; }
+            debounceTimer = setTimeout(async function () {
+                var res;
+                try { res = await fetchFn(q); } catch (err) {
+                    dropdownEl.innerHTML = '<span class="list-group-item text-danger small py-1 px-2">Error al buscar.</span>';
+                    dropdownEl.style.display = 'block';
+                    return;
+                }
+                if (res && res.error) {
+                    dropdownEl.innerHTML = '<span class="list-group-item text-muted small py-1 px-2">' + res.error + '</span>';
+                    dropdownEl.style.display = 'block';
+                    return;
+                }
+                var items = (res && res.data) || [];
+                if (!items.length) {
+                    dropdownEl.innerHTML = '<span class="list-group-item text-muted small py-1 px-2">Sin resultados.</span>';
+                    dropdownEl.style.display = 'block';
+                    return;
+                }
+                dropdownEl.innerHTML = items.map(function (it) {
+                    var label = String(it.label).replace(/</g, '&lt;');
+                    return '<a href="#" class="list-group-item list-group-item-action py-1 px-2 small" data-id="' + it.id + '" data-label="' + label.replace(/"/g, '&quot;') + '">' + label + '</a>';
+                }).join('');
+                dropdownEl.style.display = 'block';
+            }, 300);
+        });
+
+        dropdownEl.addEventListener('click', function (e) {
+            var a = e.target.closest('a[data-id]');
+            if (!a) return;
+            e.preventDefault();
+            hiddenEl.value = a.dataset.id;
+            inputEl.value = a.dataset.label;
+            dropdownEl.style.display = 'none';
+            if (onPick) onPick(a.dataset.id);
+        });
+
+        document.addEventListener('click', function (e) {
+            if (e.target !== inputEl && !dropdownEl.contains(e.target)) dropdownEl.style.display = 'none';
+        });
+    }
+
+    async function fetchJson(url) {
+        var r = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        return await r.json();
+    }
+
+    // Limpia el cliente facturado cuando cambia la controladora (sus clientes son otros).
+    function limpiarFacturado(prefijo) {
+        var fId = document.getElementById(prefijo + '-fact-id');
+        var fTx = document.getElementById(prefijo + '-fact-texto');
+        if (fId) fId.value = '';
+        if (fTx) fTx.value = '';
+    }
+
+    ['crear', 'edit'].forEach(function (p) {
+        // Controladora → empresas
+        setupTypeahead(
+            document.getElementById(p + '-ctrl-texto'),
+            document.getElementById(p + '-ctrl-dropdown'),
+            document.getElementById(p + '-ctrl-id'),
+            function (q) { return fetchJson(base + '/config/empresas-sistema?action=buscarEmpresas&q=' + encodeURIComponent(q)); },
+            function () { limpiarFacturado(p); }
+        );
+        // Facturada → CLIENTES de la controladora seleccionada
+        setupTypeahead(
+            document.getElementById(p + '-fact-texto'),
+            document.getElementById(p + '-fact-dropdown'),
+            document.getElementById(p + '-fact-id'),
+            function (q) {
+                var ctrl = document.getElementById(p + '-ctrl-id');
+                var idEmp = ctrl ? ctrl.value : '';
+                if (!idEmp) {
+                    return Promise.resolve({ error: 'Seleccione primero la empresa que controla las suscripciones.' });
+                }
+                return fetchJson(base + '/config/empresas-sistema?action=buscarClientes&q=' + encodeURIComponent(q) + '&id_empresa=' + encodeURIComponent(idEmp));
+            }
+        );
+    });
 })();
 </script>

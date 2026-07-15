@@ -34,11 +34,13 @@ class EmpresaService
             }
         }
 
-        // Suscripción del sistema — prioridad de resolución:
-        //   1) Empresa controladora + relación DIRECTA por RUC propio (con montos y detalle).
-        //   2) Si no hay, empresa de reventa (id_empresa_facturada): se cruza por el RUC de
-        //      ESA empresa y la tarjeta muestra solo estado/periodicidad/vigencia (sin montos).
-        //   3) Si tampoco, la vista cae al fallback manual (datos de la tabla empresas).
+        // Suscripción del sistema — regla de resolución:
+        //   a) Si hay CLIENTE de reventa seleccionado (id_cliente_facturado), esa selección
+        //      manda: se busca la suscripción de ese cliente en la controladora y la tarjeta
+        //      muestra solo estado/periodicidad/vigencia (sin montos, para no exponer precio).
+        //   b) Si no hay selección, se aplica la regla por RUC propio contra la controladora
+        //      (con montos y detalle).
+        //   c) Si no encuentra nada, la vista cae al fallback manual (datos de `empresas`).
         // La controladora se resuelve por RUC (vínculo directo, empresa hermana con el mismo
         // RUC, o administradora por defecto).
         $suscripcionInfo = [];
@@ -53,23 +55,19 @@ class EmpresaService
 
                 if ($idControladora > 0) {
                     $suscRepo = new SuscripcionesRepository();
+                    $idClienteFact = isset($empresa['id_cliente_facturado']) && (int) $empresa['id_cliente_facturado'] > 0
+                        ? (int) $empresa['id_cliente_facturado'] : 0;
 
-                    // 1) Prioridad: relación directa por RUC propio (con montos y detalle).
-                    $suscripcionInfo = $suscRepo->getResumenPorControladoraYRuc($idControladora, $rucEmpresa);
-
-                    // 2) Si no hay, empresa de reventa (por su RUC, modo sin valores).
-                    if (empty($suscripcionInfo)) {
-                        $idFacturada = isset($empresa['id_empresa_facturada']) && (int) $empresa['id_empresa_facturada'] > 0
-                            ? (int) $empresa['id_empresa_facturada'] : 0;
-                        if ($idFacturada > 0) {
-                            $rucFact = $this->repository->getRucPorId($idFacturada);
-                            if ($rucFact !== null && trim($rucFact) !== '') {
-                                $suscripcionInfo = $suscRepo->getResumenPorControladoraYRuc($idControladora, trim($rucFact));
-                                if (!empty($suscripcionInfo)) {
-                                    $sinValores = true;
-                                }
-                            }
+                    if ($idClienteFact > 0) {
+                        // 1) Hay cliente de reventa seleccionado: esa selección manda
+                        //    (y se muestra sin valores para no exponer el precio).
+                        $suscripcionInfo = $suscRepo->getResumenPorControladoraYCliente($idControladora, $idClienteFact);
+                        if (!empty($suscripcionInfo)) {
+                            $sinValores = true;
                         }
+                    } else {
+                        // 2) Sin selección: regla por RUC propio contra la controladora.
+                        $suscripcionInfo = $suscRepo->getResumenPorControladoraYRuc($idControladora, $rucEmpresa);
                     }
                 }
             } catch (\Throwable $e) {

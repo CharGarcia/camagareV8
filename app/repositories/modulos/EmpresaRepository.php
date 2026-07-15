@@ -13,7 +13,7 @@ class EmpresaRepository extends BaseModel
                        resolucion_contribuyente, id_tipo_regimen, tipo_ambiente, agente_retencion, tipo_emision,
                        nom_rep_legal, ced_rep_legal, nombre_contador, ruc_contador, cod_prov, cod_ciudad,
                        tipo, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, estado,
-                       cancelar_renovacion, obligado_contabilidad, id_empresa_suscripciones, id_empresa_facturada,
+                       cancelar_renovacion, obligado_contabilidad, id_empresa_suscripciones, id_cliente_facturado,
                        COALESCE(max_usuarios, 3) AS max_usuarios
                 FROM empresas
                 WHERE id = {$id} AND eliminado = false";

@@ -95,13 +95,37 @@ class SuscripcionesRepository extends BaseRepository
      * ficha de empresa. Devuelve monto, periodicidad, próximo cobro, estado y el
      * último pago registrado (suscripciones_pagos).
      */
+    /**
+     * Igual que getResumenPorControladoraYRuc pero apuntando a un CLIENTE concreto
+     * de la controladora (selección explícita de "empresa a la que facturamos").
+     */
+    public function getResumenPorControladoraYCliente(int $idControladora, int $idCliente): array
+    {
+        if ($idControladora <= 0 || $idCliente <= 0) {
+            return [];
+        }
+        return $this->getResumenPorControladora($idControladora, 'c.id = :filtro', [':filtro' => $idCliente]);
+    }
+
     public function getResumenPorControladoraYRuc(int $idControladora, string $ruc): array
     {
         $ruc = preg_replace('/\D/', '', (string) $ruc);
         if ($idControladora <= 0 || $ruc === '') {
             return [];
         }
+        return $this->getResumenPorControladora(
+            $idControladora,
+            "regexp_replace(c.identificacion, '[^0-9]', '', 'g') = :filtro",
+            [':filtro' => $ruc]
+        );
+    }
 
+    /**
+     * Núcleo del resumen: aplica el filtro de cliente indicado (por id o por RUC)
+     * y adjunta ítems y estado real de pago.
+     */
+    private function getResumenPorControladora(int $idControladora, string $filtroCliente, array $paramsFiltro): array
+    {
         $sql = "SELECT s.id,
                        s.estado,
                        s.fecha_inicio,
@@ -131,10 +155,10 @@ class SuscripcionesRepository extends BaseRepository
                 WHERE s.id_empresa = :ctrl
                   AND s.eliminado = false
                   AND c.eliminado = false
-                  AND regexp_replace(c.identificacion, '[^0-9]', '', 'g') = :ruc
+                  AND {$filtroCliente}
                 ORDER BY (s.estado = 'activo') DESC, s.proximo_cobro ASC";
         $st = $this->db->prepare($sql);
-        $st->execute([':ctrl' => $idControladora, ':ruc' => $ruc]);
+        $st->execute(array_merge([':ctrl' => $idControladora], $paramsFiltro));
         $suscripciones = $st->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($suscripciones)) {

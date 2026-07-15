@@ -65,9 +65,14 @@ class Empresa extends BaseModel
                 e.cod_prov, e.cod_ciudad, e.estado, e.valor_cobro, e.periodo_vigencia_desde, e.periodo_vigencia_hasta, e.estado_pago,
                 e.obligado_contabilidad, COALESCE(e.max_usuarios, 3) AS max_usuarios,
                 e.id_empresa_suscripciones, COALESCE(e.es_administradora_suscripciones, false) AS es_administradora_suscripciones,
-                e.id_empresa_facturada,
+                e.id_cliente_facturado,
+                COALESCE(NULLIF(ctrl.nombre_comercial,''), ctrl.nombre) AS ctrl_nombre, ctrl.ruc AS ctrl_ruc, ctrl.establecimiento AS ctrl_estab,
+                cli.nombre AS cli_nombre, cli.identificacion AS cli_identificacion,
                 p.nombre AS nombre_provincia, c.nombre AS nombre_ciudad
-            FROM {$from} {$joinProv} {$joinCiud} {$where}
+            FROM {$from} {$joinProv} {$joinCiud}
+                LEFT JOIN empresas ctrl ON ctrl.id = e.id_empresa_suscripciones
+                LEFT JOIN clientes cli  ON cli.id = e.id_cliente_facturado
+            {$where}
             ORDER BY {$col} {$dir}
             LIMIT {$perPage} OFFSET {$offset}";
         $rows = $this->query($sql);
@@ -234,11 +239,11 @@ class Empresa extends BaseModel
         $esAdminSql = $esAdminSusc ? 'true' : 'false';
 
         // Empresa a la que facturamos la suscripción (reventa): relaciona por esa empresa, no por RUC propio.
-        $idEmpFact = isset($data['id_empresa_facturada']) && $data['id_empresa_facturada'] !== '' && (int) $data['id_empresa_facturada'] > 0
-            ? (int) $data['id_empresa_facturada'] : null;
+        $idEmpFact = isset($data['id_cliente_facturado']) && $data['id_cliente_facturado'] !== '' && (int) $data['id_cliente_facturado'] > 0
+            ? (int) $data['id_cliente_facturado'] : null;
         $idEmpFactSql = $idEmpFact !== null ? (string) $idEmpFact : 'NULL';
 
-        $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, obligado_contabilidad, max_usuarios, id_empresa_suscripciones, es_administradora_suscripciones, id_empresa_facturada)
+        $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, obligado_contabilidad, max_usuarios, id_empresa_suscripciones, es_administradora_suscripciones, id_cliente_facturado)
             VALUES ('{$nombre}', '{$nombreComercial}', '{$ruc}', '{$estEsc}', '{$direccion}', '{$telefono}', '{$tipo}', '{$nomRepLegal}', '{$cedRepLegal}', '{$mail}', '{$codProv}', '{$codCiudad}', '{$estado}', NOW(), '{$idUsuario}', '{$nombreContador}', '{$rucContador}', {$valCobroSql}, {$vigenciaDesde}, {$vigenciaHasta}, {$estadoPago}, '{$obligadoCont}', {$maxUsuarios}, {$idEmpSuscSql}, {$esAdminSql}, {$idEmpFactSql})";
         $this->execute($sql);
         $id = $this->lastInsertId('empresas_id_seq');
@@ -296,7 +301,7 @@ class Empresa extends BaseModel
         }
 
         $sets = [];
-        $campos = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_empresa_facturada'];
+        $campos = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_cliente_facturado'];
         foreach ($campos as $c) {
             if (array_key_exists($c, $data)) {
                 if (in_array($c, ['valor_cobro'], true)) {
@@ -305,7 +310,7 @@ class Empresa extends BaseModel
                 } elseif ($c === 'max_usuarios') {
                     $v = (int) ($data[$c] ?? 3);
                     $sets[] = "{$c} = " . ($v > 0 ? $v : 3);
-                } elseif (in_array($c, ['id_empresa_suscripciones', 'id_empresa_facturada'], true)) {
+                } elseif (in_array($c, ['id_empresa_suscripciones', 'id_cliente_facturado'], true)) {
                     $v = $data[$c];
                     $sets[] = "{$c} = " . ($v === '' || $v === null || (int) $v <= 0 ? 'NULL' : (int) $v);
                 } elseif ($c === 'es_administradora_suscripciones') {

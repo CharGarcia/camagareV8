@@ -248,15 +248,18 @@ class MigracionMysqlService
 
         $res = ['entidad' => 'productos', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
 
-        $done = [];
-        $q = $pg->prepare("SELECT id_origen FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'productos'");
+        $done = []; // id_origen => ['id' => id_destino, 'vin' => bool]
+        $q = $pg->prepare("SELECT id_origen, id_destino, vinculado FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'productos'");
         $q->execute([$idEmpresa]);
-        foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $o) {
-            $done[(string) $o] = true;
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $o) {
+            $done[(string) $o['id_origen']] = ['id' => (int) $o['id_destino'], 'vin' => (bool) $o['vinculado']];
         }
 
         // Dedup por (id_empresa, codigo) — no hay unique constraint, se controla aquí.
         $buscar = $pg->prepare("SELECT id FROM productos WHERE id_empresa = :e AND codigo = :cod LIMIT 1");
+        // Al re-migrar: corrige el IVA de los productos que insertó la migración (corridas viejas
+        // guardaban el CÓDIGO SRI donde va el id de tarifa_iva).
+        $updIva = $pg->prepare("UPDATE productos SET tarifa_iva = ?, updated_at = now(), updated_by = ? WHERE id = ? AND id_empresa = ?");
         $ins = $pg->prepare(
             "INSERT INTO productos (id_empresa, codigo, nombre, codigo_auxiliar, codigo_barras, precio_base, tipo_produccion, tarifa_iva, status, inventariable, id_usuario, created_by)
              VALUES (:e, :cod, :nom, :aux, :barras, :precio, :tipo, :iva, :status, :inv, :u, :cb) RETURNING id"
@@ -266,7 +269,6 @@ class MigracionMysqlService
              VALUES (:e, 'productos', :o, :d, :cn, :vin, :cb) ON CONFLICT (id_empresa, entidad, id_origen) DO NOTHING"
         );
 
-        $ivaValidos = ['0', '2', '3', '4', '5', '6', '7', '8', '10'];
         $stmt = $mysql->query(
             "SELECT id, codigo_producto, nombre_producto, codigo_auxiliar, precio_producto, tipo_produccion, tarifa_iva, status
                FROM productos_servicios WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base)
@@ -276,6 +278,12 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $r['id'];
             if (isset($done[(string) $old])) {
+                // Ya migrado: reconciliar el IVA solo si lo INSERTÓ la migración (los 'vinculado' son
+                // productos nativos del sistema nuevo y no se tocan).
+                if (!$done[(string) $old]['vin']) {
+                    $ivaOk = $this->ivaIdPorCodigo($pg, (string) $r['tarifa_iva']);
+                    if ($ivaOk !== null) { $updIva->execute([$ivaOk, $idUsuario, $done[(string) $old]['id'], $idEmpresa]); }
+                }
                 $res['ya_migrados']++;
                 continue;
             }
@@ -295,10 +303,8 @@ class MigracionMysqlService
             if ($tipo === '') {
                 $tipo = '01';
             }
-            $iva = trim((string) $r['tarifa_iva']);
-            if (!in_array($iva, $ivaValidos, true)) {
-                $iva = '0';
-            }
+            // IVA por CÓDIGO SRI → id de tarifa_iva (ver ivaIdPorCodigo: nunca por porcentaje).
+            $iva = $this->ivaIdPorCodigo($pg, (string) $r['tarifa_iva']);
 
             try {
                 $pg->beginTransaction();
@@ -313,7 +319,7 @@ class MigracionMysqlService
                     $ins->execute([
                         ':e' => $idEmpresa, ':cod' => $codigo, ':nom' => $nombre,
                         ':aux' => trim((string) ($r['codigo_auxiliar'] ?? '')), ':barras' => '',
-                        ':precio' => (float) ($r['precio_producto'] ?? 0), ':tipo' => $tipo, ':iva' => (int) $iva,
+                        ':precio' => (float) ($r['precio_producto'] ?? 0), ':tipo' => $tipo, ':iva' => $iva,
                         ':status' => (int) ($r['status'] ?? 1), ':inv' => $tipo === '01' ? 't' : 'f',
                         ':u' => $idUsuario, ':cb' => $idUsuario,
                     ]);
@@ -323,7 +329,7 @@ class MigracionMysqlService
                 }
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idDest, ':cn' => substr($codigo, 0, 120), ':vin' => $vin ? 't' : 'f', ':cb' => $idUsuario]);
                 $pg->commit();
-                $done[(string) $old] = true;
+                $done[(string) $old] = ['id' => $idDest, 'vin' => $vin];
             } catch (Throwable $ex) {
                 if ($pg->inTransaction()) {
                     $pg->rollBack();
@@ -343,15 +349,17 @@ class MigracionMysqlService
 
         $res = ['entidad' => 'proveedores', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
 
-        $done = [];
-        $q = $pg->prepare("SELECT id_origen FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'proveedores'");
+        $done = []; // id_origen => ['id' => id_destino, 'vin' => bool]
+        $q = $pg->prepare("SELECT id_origen, id_destino, vinculado FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'proveedores'");
         $q->execute([$idEmpresa]);
-        foreach ($q->fetchAll(PDO::FETCH_COLUMN) as $o) {
-            $done[(string) $o] = true;
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $o) {
+            $done[(string) $o['id_origen']] = ['id' => (int) $o['id_destino'], 'vin' => (bool) $o['vinculado']];
         }
 
         // Dedup por (id_empresa, identificacion) — sin unique constraint, se controla aquí.
         $buscar = $pg->prepare("SELECT id FROM proveedores WHERE id_empresa = :e AND identificacion = :ident LIMIT 1");
+        // Al re-migrar: corrige "parte relacionada" de los proveedores que insertó la migración.
+        $updRel = $pg->prepare("UPDATE proveedores SET relacionado = false, updated_at = now(), updated_by = ? WHERE id = ? AND id_empresa = ?");
         $ins = $pg->prepare(
             "INSERT INTO proveedores (id_empresa, id_usuario, razon_social, nombre_comercial, tipo_id_proveedor, identificacion, email, direccion, telefono, tipo_empresa, plazo, unidad_tiempo, relacionado, tipo_cta, numero_cta, created_by)
              VALUES (:e, :u, :rs, :nc, :tipo, :ident, :mail, :dir, :tel, :temp, :plazo, :ut, :rel, :tcta, :ncta, :cb) RETURNING id"
@@ -370,6 +378,11 @@ class MigracionMysqlService
             $res['total']++;
             $old = (int) $r['id_proveedor'];
             if (isset($done[(string) $old])) {
+                // Ya migrado: corregir "parte relacionada" a NO solo si lo INSERTÓ la migración
+                // (los 'vinculado' son proveedores nativos del sistema nuevo y no se tocan).
+                if (!$done[(string) $old]['vin']) {
+                    $updRel->execute([$idUsuario, $done[(string) $old]['id'], $idEmpresa]);
+                }
                 $res['ya_migrados']++;
                 continue;
             }
@@ -386,7 +399,9 @@ class MigracionMysqlService
             if ($tipo === '') {
                 $tipo = self::inferirTipoId($ident);
             }
-            $rel = in_array(strtolower(trim((string) $r['relacionado'])), ['1', 'si', 'true', 't'], true) ? 't' : 'f';
+            // "Parte relacionada" (concepto tributario SRI): el campo `relacionado` del sistema viejo
+            // NO significa eso (48.683 proveedores traen '1'), así que se migra SIEMPRE como NO.
+            $rel = 'f';
             $plazo = is_numeric($r['plazo']) ? (int) $r['plazo'] : null;
 
             try {
@@ -412,7 +427,7 @@ class MigracionMysqlService
                 }
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idDest, ':cn' => substr($ident, 0, 120), ':vin' => $vin ? 't' : 'f', ':cb' => $idUsuario]);
                 $pg->commit();
-                $done[(string) $old] = true;
+                $done[(string) $old] = ['id' => $idDest, 'vin' => $vin];
             } catch (Throwable $ex) {
                 if ($pg->inTransaction()) {
                     $pg->rollBack();
@@ -2672,6 +2687,34 @@ class MigracionMysqlService
      * Resuelve el producto de una línea: mapa → código → y si no existe, lo CREA
      * (ventas_detalle.id_producto es NOT NULL). Devuelve siempre un id válido.
      */
+    /**
+     * id de `tarifa_iva` a partir del CÓDIGO SRI del IVA. Regla del sistema: SIEMPRE por código,
+     * nunca por porcentaje (los códigos 0/6/7 comparten 0% y por % serían indistinguibles).
+     * `productos.tarifa_iva` guarda ese **id**, NO el código (el id no coincide con el código: p. ej.
+     * código '4'=15% es id 7, mientras el id 4 es el código '6'=0%). Respaldo: si el valor no es un
+     * código válido pero sí un % inequívoco (dato sucio viejo, p. ej. '15'), se usa. Si no, 0%.
+     * `tarifa_iva` es catálogo global → cache estático.
+     */
+    private function ivaIdPorCodigo(PDO $pg, string $valor): ?int
+    {
+        static $porCodigo = null, $porPct = null, $default = null;
+        if ($porCodigo === null) {
+            $porCodigo = []; $porPct = []; $cnt = [];
+            foreach ($pg->query("SELECT id, codigo, porcentaje_iva FROM tarifa_iva") as $t) {
+                $porCodigo[trim((string) $t['codigo'])] = (int) $t['id'];
+                $p = (string) (int) $t['porcentaje_iva'];
+                $cnt[$p] = ($cnt[$p] ?? 0) + 1;
+                $porPct[$p] = (int) $t['id'];
+            }
+            foreach ($cnt as $p => $n) { if ($n > 1) { unset($porPct[$p]); } } // 0% ambiguo (0/6/7)
+            $default = $porCodigo['0'] ?? null;
+        }
+        $v = trim($valor);
+        if (isset($porCodigo[$v])) { return $porCodigo[$v]; }   // 1º: código SRI
+        if ($v !== '' && isset($porPct[$v])) { return $porPct[$v]; } // 2º: % inequívoco (dato sucio)
+        return $default;
+    }
+
     private function resolverOCrearProducto(array &$prodPorCod, array $mapProd, int $oldId, string $codigo, string $nombre, string $ivaCode, int $idEmpresa, int $idUsuario, PDO $pg): int
     {
         if (isset($mapProd[(string) $oldId])) {
@@ -2681,10 +2724,10 @@ class MigracionMysqlService
         if (isset($prodPorCod[$codigo])) {
             return $prodPorCod[$codigo];
         }
-        $iva = in_array($ivaCode, ['0', '2', '3', '4', '5', '6', '7', '8', '10'], true) ? $ivaCode : '0';
+        $iva = $this->ivaIdPorCodigo($pg, $ivaCode); // id de tarifa_iva por CÓDIGO SRI (no el código)
         try {
             $ins = $pg->prepare("INSERT INTO productos (id_empresa, codigo, nombre, codigo_auxiliar, codigo_barras, precio_base, tipo_produccion, tarifa_iva, status, inventariable, id_usuario, created_by) VALUES (?, ?, ?, '', '', 0, '01', ?, 1, false, ?, ?) RETURNING id");
-            $ins->execute([$idEmpresa, $codigo, ($nombre !== '' ? $nombre : $codigo), (int) $iva, $idUsuario, $idUsuario]);
+            $ins->execute([$idEmpresa, $codigo, ($nombre !== '' ? $nombre : $codigo), $iva, $idUsuario, $idUsuario]);
             $id = (int) $ins->fetchColumn();
         } catch (Throwable $e) {
             $q = $pg->prepare("SELECT id FROM productos WHERE id_empresa = ? AND codigo = ? LIMIT 1");

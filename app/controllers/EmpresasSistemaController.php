@@ -107,7 +107,7 @@ class EmpresasSistemaController extends Controller
             'max_usuarios' => (int) ($_POST['max_usuarios'] ?? 3),
             'id_empresa_suscripciones' => $_POST['id_empresa_suscripciones'] ?? null,
             'es_administradora_suscripciones' => !empty($_POST['es_administradora_suscripciones']) ? '1' : '0',
-            'id_empresa_facturada' => $_POST['id_empresa_facturada'] ?? null,
+            'id_cliente_facturado' => $_POST['id_cliente_facturado'] ?? null,
         ];
 
         $esAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
@@ -181,7 +181,7 @@ class EmpresasSistemaController extends Controller
             }
         }
 
-        $allKeys = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_empresa_facturada'];
+        $allKeys = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_cliente_facturado'];
         $data = [];
         foreach ($allKeys as $k) {
             if (array_key_exists($k, $_POST)) {
@@ -230,6 +230,71 @@ class EmpresasSistemaController extends Controller
         }
 
         $this->redirect(BASE_URL . self::BASE_PATH);
+    }
+
+    /**
+     * AJAX: buscador de empresas (para "Empresa que controla las suscripciones").
+     * GET: q → [{id, label}]
+     */
+    public function buscarEmpresasJson(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+
+        $q = trim($_GET['q'] ?? '');
+        $db = Database::getConnection();
+        $st = $db->prepare(
+            "SELECT id, COALESCE(NULLIF(nombre_comercial,''), nombre) AS nombre, ruc, establecimiento
+             FROM empresas
+             WHERE eliminado = false
+               AND (nombre ILIKE :q OR nombre_comercial ILIKE :q OR ruc ILIKE :q)
+             ORDER BY nombre_comercial, nombre
+             LIMIT 20"
+        );
+        $st->execute([':q' => '%' . $q . '%']);
+
+        $data = array_map(static fn($r) => [
+            'id'    => (int) $r['id'],
+            'label' => $r['nombre'] . ' — ' . $r['ruc'] . ' (' . $r['establecimiento'] . ')',
+        ], $st->fetchAll(PDO::FETCH_ASSOC));
+
+        $this->json(['ok' => true, 'data' => $data]);
+    }
+
+    /**
+     * AJAX: buscador de clientes de la empresa controladora
+     * (para "Empresa a la que facturamos / reventa").
+     * GET: q, id_empresa (controladora) → [{id, label}]
+     */
+    public function buscarClientesJson(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+
+        $q = trim($_GET['q'] ?? '');
+        $idEmpresa = (int) ($_GET['id_empresa'] ?? 0);
+        if ($idEmpresa <= 0) {
+            $this->json(['ok' => false, 'error' => 'Seleccione primero la empresa que controla las suscripciones.', 'data' => []]);
+            return;
+        }
+
+        $db = Database::getConnection();
+        $st = $db->prepare(
+            "SELECT id, nombre, identificacion
+             FROM clientes
+             WHERE id_empresa = :e AND eliminado = false
+               AND (nombre ILIKE :q OR identificacion ILIKE :q)
+             ORDER BY nombre
+             LIMIT 20"
+        );
+        $st->execute([':e' => $idEmpresa, ':q' => '%' . $q . '%']);
+
+        $data = array_map(static fn($r) => [
+            'id'    => (int) $r['id'],
+            'label' => $r['nombre'] . ' — ' . $r['identificacion'],
+        ], $st->fetchAll(PDO::FETCH_ASSOC));
+
+        $this->json(['ok' => true, 'data' => $data]);
     }
 
     /**

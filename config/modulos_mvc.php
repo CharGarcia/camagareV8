@@ -249,6 +249,10 @@ return [
         'id_submodulo' => 0, // Ajustar con el ID de la base de datos después de la migración
         'legacy_rutas' => [],
     ],
+    'modulos/control-bancario' => [
+        'id_submodulo' => 0, // Ajustar con el ID real tras ejecutar database/migrations/20260716_menu_control_bancario.sql
+        'legacy_rutas' => [],
+    ],
     'modulos/empresa' => [
         'legacy_rutas' => ['modulos/empresa.php'],
     ],
