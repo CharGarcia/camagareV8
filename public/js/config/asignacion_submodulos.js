@@ -14,8 +14,12 @@ window.addEventListener('load', function () {
     const resultadoEl = document.getElementById('asigsub-resultado');
     const totalesEl = document.getElementById('asigsub-totales');
     const tbody = document.getElementById('asigsub-tbody');
+    const checkTodos = document.getElementById('asigsub-check-todos');
     const btnPrevisualizar = document.getElementById('btn-previsualizar');
     const btnAplicar = document.getElementById('btn-aplicar');
+
+    let excluidos = new Set();
+    let ultimoResumen = {};
 
     let tsSubmodulo = null;
     let tsUsuarios = null;
@@ -139,22 +143,62 @@ window.addEventListener('load', function () {
         return fd;
     }
 
+    function claveDestino(f) {
+        return f.id_usuario + ':' + f.id_empresa;
+    }
+
     function renderPreview(res) {
         const filas = res.filas || [];
         const mostrar = filas.slice(0, MAX_FILAS_RENDER);
+        excluidos = new Set(); // toda previsualización nueva arranca con todo seleccionado
+        if (checkTodos) checkTodos.checked = true;
+
         tbody.innerHTML = mostrar.map(function (f) {
             const badge = f.ya_asignado
                 ? '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Ya asignado</span>'
                 : '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Nuevo</span>';
-            return '<tr><td>' + escapeHtml(f.nombre_usuario) + '</td><td>' + escapeHtml(f.nombre_empresa) + '</td><td class="text-center">' + badge + '</td></tr>';
+            return '<tr data-key="' + claveDestino(f) + '">'
+                + '<td><input type="checkbox" class="form-check-input asigsub-check-fila" checked></td>'
+                + '<td>' + escapeHtml(f.nombre_usuario) + '</td><td>' + escapeHtml(f.nombre_empresa) + '</td>'
+                + '<td class="text-center">' + badge + '</td></tr>';
         }).join('');
 
-        let totalesTxt = 'Total: <strong>' + res.total + '</strong> &middot; Nuevos: <strong class="text-success">' + res.nuevos + '</strong> &middot; Ya asignados: <strong class="text-secondary">' + res.ya_asignados + '</strong>';
-        if (filas.length > MAX_FILAS_RENDER) {
-            totalesTxt += '<br><span class="text-muted">Mostrando los primeros ' + MAX_FILAS_RENDER + ' de ' + filas.length + ' en la vista previa; la asignación se aplicará sobre todos.</span>';
-        }
-        totalesEl.innerHTML = totalesTxt;
+        tbody.querySelectorAll('.asigsub-check-fila').forEach(function (chk) {
+            chk.addEventListener('change', function () {
+                const clave = chk.closest('tr').getAttribute('data-key');
+                if (chk.checked) excluidos.delete(clave); else excluidos.add(clave);
+                if (checkTodos) checkTodos.checked = (excluidos.size === 0);
+                actualizarTotales();
+            });
+        });
+
+        ultimoResumen = { total: res.total, nuevos: res.nuevos, yaAsignados: res.ya_asignados, mostrados: mostrar.length, truncado: filas.length > MAX_FILAS_RENDER, totalFilas: filas.length };
+        actualizarTotales();
         resultadoEl.classList.remove('d-none');
+    }
+
+    function actualizarTotales() {
+        const seleccionados = ultimoResumen.mostrados - excluidos.size;
+        let txt = 'Seleccionados: <strong>' + seleccionados + '</strong> de ' + ultimoResumen.total
+            + ' &middot; Nuevos: <strong class="text-success">' + ultimoResumen.nuevos + '</strong>'
+            + ' &middot; Ya asignados: <strong class="text-secondary">' + ultimoResumen.yaAsignados + '</strong>';
+        if (ultimoResumen.truncado) {
+            txt += '<br><span class="text-muted">Mostrando los primeros ' + MAX_FILAS_RENDER + ' de ' + ultimoResumen.totalFilas + '; solo se pueden excluir los que se muestran aquí.</span>';
+        }
+        totalesEl.innerHTML = txt;
+        btnAplicar.disabled = seleccionados <= 0;
+    }
+
+    if (checkTodos) {
+        checkTodos.addEventListener('change', function () {
+            const marcar = checkTodos.checked;
+            tbody.querySelectorAll('.asigsub-check-fila').forEach(function (chk) {
+                chk.checked = marcar;
+                const clave = chk.closest('tr').getAttribute('data-key');
+                if (marcar) excluidos.delete(clave); else excluidos.add(clave);
+            });
+            actualizarTotales();
+        });
     }
 
     function escapeHtml(s) {
@@ -177,8 +221,6 @@ window.addEventListener('load', function () {
                     return;
                 }
                 renderPreview(res);
-                btnAplicar.disabled = false;
-                btnAplicar.dataset.totales = JSON.stringify({ total: res.total, nuevos: res.nuevos, yaAsignados: res.ya_asignados });
             })
             .catch(function () {
                 btnPrevisualizar.disabled = false;
@@ -188,16 +230,15 @@ window.addEventListener('load', function () {
 
     btnAplicar.addEventListener('click', function () {
         setError('');
-        let resumen = {};
-        try { resumen = JSON.parse(btnAplicar.dataset.totales || '{}'); } catch (e) {}
         const sobrescribir = document.getElementById('asigsub-sobrescribir').checked;
-        const confirmMsg = 'Se asignará el submódulo a ' + (resumen.total || 0) + ' combinación(es) usuario/empresa: '
-            + (resumen.nuevos || 0) + ' nueva(s)'
-            + (sobrescribir ? ' y ' + (resumen.yaAsignados || 0) + ' se sobrescribirán' : ' (' + (resumen.yaAsignados || 0) + ' ya asignadas se omitirán)')
+        const seleccionados = (ultimoResumen.mostrados || 0) - excluidos.size;
+        const confirmMsg = 'Se asignará el submódulo a ' + seleccionados + ' combinación(es) usuario/empresa seleccionada(s)'
+            + (sobrescribir ? ' (incluye sobrescribir las que ya estaban asignadas)' : ' (las ya asignadas se omitirán)')
             + '.\n\n¿Confirma aplicar la asignación?';
         if (!window.confirm(confirmMsg)) return;
 
         const fd = construirFormData();
+        excluidos.forEach(function (clave) { fd.append('excluidos[]', clave); });
         btnAplicar.disabled = true;
         fetch(`${API}?action=aplicar`, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(function (r) { return r.json(); })

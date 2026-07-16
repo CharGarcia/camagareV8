@@ -1490,6 +1490,9 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     <div class="col-md-8">
                         <label class="form-label small fw-bold">Código Punto</label>
                         <input type="text" name="codigo_punto" class="form-control form-control-sm" required placeholder="001" maxlength="3">
+                        <div id="punto-codigo-hint" class="form-text text-warning small" style="display:none;font-size:0.62rem;">
+                            <i class="bi bi-lock"></i> Este punto ya tiene documentos: el código no se puede cambiar (solo nombre y estado).
+                        </div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label small fw-bold">Estado</label>
@@ -1558,9 +1561,16 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
 
 
     function nuevoPunto() {
-        document.getElementById('form-punto').reset();
+        const form = document.getElementById('form-punto');
+        form.reset();
         document.getElementById('punto-id').value = '';
         document.getElementById('btn-eliminar-punto').classList.add('d-none');
+        // Rehabilitar el código (por si se venía de editar un punto en uso).
+        const codigoInput = form.querySelector('[name=codigo_punto]');
+        codigoInput.readOnly = false;
+        codigoInput.classList.remove('bg-light');
+        const hint = document.getElementById('punto-codigo-hint');
+        if (hint) hint.style.display = 'none';
         const modal = new bootstrap.Modal(document.getElementById('modalPunto'));
         modal.show();
     }
@@ -1571,10 +1581,18 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         form.querySelector('[name=id]').value = data.id || '';
         // El id_establecimiento ahora es fijo por el campo hidden en el modal
         form.querySelector('[name=nombre]').value = data.nombre || '';
-        form.querySelector('[name=codigo_punto]').value = data.codigo_punto || '';
+        const codigoInput = form.querySelector('[name=codigo_punto]');
+        codigoInput.value = data.codigo_punto || '';
         form.querySelector('[name=estado]').value = data.estado || 'activo';
 
-        document.getElementById('btn-eliminar-punto').classList.remove('d-none');
+        // Si el punto ya tiene documentos: el código no se puede cambiar y no se puede
+        // eliminar. Sí se permite cambiar nombre y estado (activar/inhabilitar).
+        const enUso = data.en_uso === true || data.en_uso === 1 || data.en_uso === '1';
+        codigoInput.readOnly = enUso;
+        codigoInput.classList.toggle('bg-light', enUso);
+        const hint = document.getElementById('punto-codigo-hint');
+        if (hint) hint.style.display = enUso ? 'block' : 'none';
+        document.getElementById('btn-eliminar-punto').classList.toggle('d-none', enUso);
 
         const modal = new bootstrap.Modal(document.getElementById('modalPunto'));
         modal.show();

@@ -406,6 +406,15 @@ class EmpresaRepository extends BaseModel
         return $this->lastInsertId('empresa_punto_emision_id_seq');
     }
 
+    /** Datos actuales de un punto de emisión (para validar qué cambió). */
+    public function getPuntoEmision(int $idPunto, int $idEmpresa): ?array
+    {
+        $id = (int) $idPunto; $ide = (int) $idEmpresa;
+        $r = $this->query("SELECT id, id_establecimiento, nombre, codigo_punto, estado
+                           FROM empresa_punto_emision WHERE id = {$id} AND id_empresa = {$ide} AND eliminado = false");
+        return $r[0] ?? null;
+    }
+
     public function updatePuntoEmision(int $idPunto, int $idEmpresa, array $data): bool
     {
         $id = (int) $idPunto;

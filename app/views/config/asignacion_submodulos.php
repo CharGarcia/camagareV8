@@ -168,6 +168,7 @@ unset($_SESSION['config_msg']);
                 <table class="table table-sm table-hover mb-0">
                     <thead class="table-light">
                         <tr>
+                            <th style="width:36px"><input type="checkbox" class="form-check-input" id="asigsub-check-todos" checked title="Seleccionar/deseleccionar todos"></th>
                             <th>Usuario</th>
                             <th>Empresa</th>
                             <th class="text-center" style="width:140px">Estado</th>

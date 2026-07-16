@@ -68,7 +68,7 @@ class AsignacionSubmodulosController extends Controller
         $this->requireAuth();
         $this->requireNivel(3);
 
-        [$errores, $idModulo, $idSubmodulo, $nombreSubmodulo, $permisos, $modo, $params, $sobrescribir] = $this->leerYValidarSeleccion();
+        [$errores, $idModulo, $idSubmodulo, $nombreSubmodulo, $permisos, $modo, $params] = $this->leerYValidarSeleccion();
         if (!empty($errores)) {
             $this->json(['ok' => false, 'error' => implode(' ', $errores)]);
         }
@@ -87,16 +87,23 @@ class AsignacionSubmodulosController extends Controller
         $this->requireAuth();
         $this->requireNivel(3);
 
-        [$errores, $idModulo, $idSubmodulo, $nombreSubmodulo, $permisos, $modo, $params, $sobrescribir] = $this->leerYValidarSeleccion();
+        [$errores, $idModulo, $idSubmodulo, $nombreSubmodulo, $permisos, $modo, $params, $sobrescribir, $excluidos] = $this->leerYValidarSeleccion();
         if (!empty($errores)) {
             $this->json(['ok' => false, 'error' => implode(' ', $errores)]);
         }
 
         // Se vuelve a resolver en el servidor: nunca se confía en una lista de pares
-        // usuario/empresa enviada desde el navegador.
+        // usuario/empresa enviada desde el navegador. Los "excluidos" (desmarcados en
+        // la previsualización) solo pueden ACHICAR el resultado, nunca ampliarlo.
         $destinos = $this->service->resolverDestinos($modo, $params);
+        if (!empty($excluidos)) {
+            $destinos = array_values(array_filter(
+                $destinos,
+                static fn (array $d) => !isset($excluidos[$d['id_usuario'] . ':' . $d['id_empresa']])
+            ));
+        }
         if (empty($destinos)) {
-            $this->json(['ok' => false, 'error' => 'No se encontraron destinatarios con los criterios elegidos.']);
+            $this->json(['ok' => false, 'error' => 'No quedó ningún destinatario para asignar.']);
         }
 
         $idActual = (int) ($_SESSION['id_usuario'] ?? 0);
@@ -110,7 +117,7 @@ class AsignacionSubmodulosController extends Controller
     }
 
     /**
-     * @return array{0: string[], 1: int, 2: int, 3: string, 4: array, 5: string, 6: array, 7: bool}
+     * @return array{0: string[], 1: int, 2: int, 3: string, 4: array, 5: string, 6: array, 7: bool, 8: array}
      */
     private function leerYValidarSeleccion(): array
     {
@@ -136,9 +143,18 @@ class AsignacionSubmodulosController extends Controller
         ];
         $sobrescribir = !empty($_POST['sobrescribir']);
 
+        // Pares "idUsuario:idEmpresa" que el usuario desmarcó en la previsualización.
+        $excluidos = [];
+        foreach ((array) ($_POST['excluidos'] ?? []) as $clave) {
+            $clave = trim((string) $clave);
+            if (preg_match('/^\d+:\d+$/', $clave)) {
+                $excluidos[$clave] = true;
+            }
+        }
+
         $errores = $this->rules->validar($idSubmodulo, $idModulo, $permisos, $modo, $params);
 
-        return [$errores, $idModulo, $idSubmodulo, $nombreSubmodulo, $permisos, $modo, $params, $sobrescribir];
+        return [$errores, $idModulo, $idSubmodulo, $nombreSubmodulo, $permisos, $modo, $params, $sobrescribir, $excluidos];
     }
 
     /** Agrupa el catálogo plano (id_modulo, id_submodulo, ...) en módulo => submódulos. */

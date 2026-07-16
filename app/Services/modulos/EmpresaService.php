@@ -77,6 +77,14 @@ class EmpresaService
             }
         }
 
+        // Puntos de emisión, marcando cuáles ya tienen documentos (para la UI:
+        // bloquear código y ocultar "Eliminar" en esos).
+        $puntos = $this->repository->getPuntosEmision($idEmpresa);
+        foreach ($puntos as &$pto) {
+            $pto['en_uso'] = !empty($this->repository->puntoEmisionEnUso((int) $pto['id'], $idEmpresa));
+        }
+        unset($pto);
+
         return [
             'empresa'               => $empresa,
             'suscripcion_info'      => $suscripcionInfo,
@@ -85,7 +93,7 @@ class EmpresaService
             'correo'                => $this->repository->getCorreoConfig($idEmpresa),
             'firmas'                => $this->repository->getFirmas($idEmpresa),
             'establecimientos'      => $establecimientos,
-            'puntos'                => $this->repository->getPuntosEmision($idEmpresa),
+            'puntos'                => $puntos,
             'iva_casilleros'        => $this->repository->getIvaCasilleros($idEmpresa),
             'ices'                  => $this->repository->getIces($idEmpresa),
             'retenciones_sri_iva'   => $this->repository->getRetencionesSriIva(),
@@ -506,13 +514,28 @@ class EmpresaService
     {
         $idPunto = (int) ($data['id'] ?? 0);
         if ($idPunto > 0) {
-            // No permitir editar un punto de emisión que ya tiene documentos asociados
+            // Si el punto ya tiene documentos, se puede cambiar el NOMBRE y el ESTADO
+            // (activar/inhabilitar), pero NO el código ni el establecimiento, porque eso
+            // rompería la numeración/identidad de los documentos ya emitidos.
             $usos = $this->repository->puntoEmisionEnUso($idPunto, $idEmpresa);
             if (!empty($usos)) {
-                throw new \Exception(
-                    'No se puede editar este punto de emisión porque ya está siendo utilizado en: ' .
-                    implode(', ', $usos) . '. Puede crear uno nuevo si lo requiere.'
-                );
+                $actual = $this->repository->getPuntoEmision($idPunto, $idEmpresa) ?? [];
+                $normCod = static fn($v) => str_pad((string) (int) preg_replace('/\D/', '', (string) $v), 3, '0', STR_PAD_LEFT);
+                $codNuevo = isset($data['codigo_punto']) ? $normCod($data['codigo_punto']) : $normCod($actual['codigo_punto'] ?? '');
+                $codActual = $normCod($actual['codigo_punto'] ?? '');
+                $estNuevo = (int) ($data['id_establecimiento'] ?? ($actual['id_establecimiento'] ?? 0));
+                $estActual = (int) ($actual['id_establecimiento'] ?? 0);
+
+                if ($codNuevo !== $codActual || $estNuevo !== $estActual) {
+                    throw new \Exception(
+                        'Este punto de emisión ya está siendo utilizado en: ' . implode(', ', $usos) .
+                        '. No se puede cambiar su código ni su establecimiento (rompería la numeración). ' .
+                        'Sí puede cambiar el nombre o inhabilitarlo. Para otro código, cree un punto nuevo.'
+                    );
+                }
+                // Solo cambió nombre/estado: se fuerza a conservar código y establecimiento.
+                $data['codigo_punto']       = $codActual;
+                $data['id_establecimiento'] = $estActual;
             }
             $ok = $this->repository->updatePuntoEmision($idPunto, $idEmpresa, $data);
             return ['ok' => $ok];
