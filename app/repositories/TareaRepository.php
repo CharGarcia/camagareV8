@@ -441,12 +441,29 @@ class TareaRepository extends BaseRepository
 
     public function findResponsableTareaByNameEmail(string $nombre, string $email): ?array
     {
-        $sql = "SELECT * FROM responsables_tareas 
-                WHERE (UPPER(nombre) = UPPER(:nombre) OR UPPER(correo) = UPPER(:email)) 
-                  AND eliminado = false 
-                LIMIT 1";
-        $st  = $this->db->prepare($sql);
-        $st->execute([':nombre' => $nombre, ':email' => $email]);
+        $nombre = trim($nombre);
+        $email  = trim($email);
+        if ($nombre === '') {
+            return null;
+        }
+        // Dedup por ENTIDAD: mismo nombre (y mismo correo si se proporcionó).
+        // NO deduplicar solo por correo: dos responsables pueden compartir un correo
+        // (p. ej. un correo de empresa), y hacerlo reutilizaba/pisaba al equivocado.
+        if ($email !== '') {
+            $sql = "SELECT * FROM responsables_tareas
+                    WHERE UPPER(nombre) = UPPER(:nombre) AND UPPER(correo) = UPPER(:email)
+                      AND eliminado = false
+                    LIMIT 1";
+            $params = [':nombre' => $nombre, ':email' => $email];
+        } else {
+            $sql = "SELECT * FROM responsables_tareas
+                    WHERE UPPER(nombre) = UPPER(:nombre)
+                      AND eliminado = false
+                    LIMIT 1";
+            $params = [':nombre' => $nombre];
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }
@@ -570,12 +587,29 @@ class TareaRepository extends BaseRepository
 
     public function findClienteTareaByNameEmail(string $nombre, string $email): ?array
     {
-        $sql = "SELECT * FROM clientes_tareas 
-                WHERE (UPPER(nombre) = UPPER(:nombre) OR UPPER(correo) = UPPER(:email)) 
-                  AND eliminado = false 
-                LIMIT 1";
-        $st  = $this->db->prepare($sql);
-        $st->execute([':nombre' => $nombre, ':email' => $email]);
+        $nombre = trim($nombre);
+        $email  = trim($email);
+        if ($nombre === '') {
+            return null;
+        }
+        // Dedup por ENTIDAD: mismo nombre (y mismo correo si se proporcionó).
+        // NO deduplicar solo por correo: dos empresas/clientes pueden compartir un correo,
+        // y hacerlo pisaba el nombre nuevo con el del otro registro al actualizar.
+        if ($email !== '') {
+            $sql = "SELECT * FROM clientes_tareas
+                    WHERE UPPER(nombre) = UPPER(:nombre) AND UPPER(correo) = UPPER(:email)
+                      AND eliminado = false
+                    LIMIT 1";
+            $params = [':nombre' => $nombre, ':email' => $email];
+        } else {
+            $sql = "SELECT * FROM clientes_tareas
+                    WHERE UPPER(nombre) = UPPER(:nombre)
+                      AND eliminado = false
+                    LIMIT 1";
+            $params = [':nombre' => $nombre];
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }

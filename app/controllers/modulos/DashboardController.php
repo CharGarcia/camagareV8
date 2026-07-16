@@ -56,9 +56,12 @@ class DashboardController extends BaseModuloController
             $anio      = (int) ($_POST['anio']       ?? 0);
             $mes       = isset($_POST['mes']) ? (int) $_POST['mes'] : 0;
             $cantMeses = (int) ($_POST['cant_meses'] ?? 6);
+            // Rango de fechas (opcional): si llega, manda sobre año/mes.
+            $desde     = trim((string) ($_POST['desde'] ?? '')) ?: null;
+            $hasta     = trim((string) ($_POST['hasta'] ?? '')) ?: null;
 
             $service = new DashboardService();
-            $data = $service->getDashboardData($idEmpresa, $tipoAmbiente, $anio, $mes, $cantMeses);
+            $data = $service->getDashboardData($idEmpresa, $tipoAmbiente, $anio, $mes, $cantMeses, $desde, $hasta);
             $data['tipo_ambiente']       = $tipoAmbiente;
             $data['tipo_ambiente_label'] = $tipoAmbiente === '2' ? 'Producción' : 'Pruebas';
             echo json_encode(['ok' => true, 'data' => $data]);

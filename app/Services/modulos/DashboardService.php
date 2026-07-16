@@ -22,19 +22,32 @@ class DashboardService
      * @param int    $cantMeses 3, 6 o 12 — meses para el gráfico de tendencia
      */
     public function getDashboardData(
-        int    $idEmpresa,
-        string $tipoAmbiente = '1',
-        int    $anio         = 0,
-        int    $mes          = 0,
-        int    $cantMeses    = 6
+        int     $idEmpresa,
+        string  $tipoAmbiente = '1',
+        int     $anio         = 0,
+        int     $mes          = 0,
+        int     $cantMeses    = 6,
+        ?string $rangoDesde   = null,
+        ?string $rangoHasta   = null
     ): array {
-        $anio      = $anio > 0 ? $anio : (int) date('Y');
-        $mes       = ($mes >= -1 && $mes !== 0) ? $mes : (int) date('n');
-        $cantMeses = in_array($cantMeses, [3, 6, 12]) ? $cantMeses : 6;
+        $cantMeses = in_array($cantMeses, [3, 6, 12, 24]) ? $cantMeses : 6;
 
-        $desde             = $this->fechaDesde($anio, $mes);
-        $hasta             = $this->fechaHasta($anio, $mes);
-        [$antDes, $antHas] = $this->periodoAnterior($anio, $mes);
+        // Modo rango de fechas: si llegan desde/hasta válidos, mandan sobre año/mes.
+        $modoRango = $this->fechaValida($rangoDesde) && $this->fechaValida($rangoHasta);
+        if ($modoRango) {
+            $desde = $rangoDesde;
+            $hasta = $rangoHasta;
+            if ($desde > $hasta) { [$desde, $hasta] = [$hasta, $desde]; }
+            [$antDes, $antHas] = $this->rangoAnterior($desde, $hasta);
+            $label = date('d/m/Y', strtotime($desde)) . ' – ' . date('d/m/Y', strtotime($hasta));
+        } else {
+            $anio  = $anio > 0 ? $anio : (int) date('Y');
+            $mes   = ($mes >= -1 && $mes !== 0) ? $mes : (int) date('n');
+            $desde = $this->fechaDesde($anio, $mes);
+            $hasta = $this->fechaHasta($anio, $mes);
+            [$antDes, $antHas] = $this->periodoAnterior($anio, $mes);
+            $label = $mes === -1 ? "Año {$anio}" : $this->nombreMes($mes) . " {$anio}";
+        }
 
         return [
             // Ventas
@@ -49,6 +62,9 @@ class DashboardService
             // Egresos
             'egresos_mes_actual'    => $this->sumEgresos($idEmpresa, $tipoAmbiente, $desde, $hasta),
             'egresos_mes_anterior'  => $this->sumEgresos($idEmpresa, $tipoAmbiente, $antDes, $antHas),
+            // Nómina (roles de pago del período)
+            'nomina_mes_actual'     => $this->sumNomina($idEmpresa, $tipoAmbiente, $desde, $hasta),
+            'nomina_mes_anterior'   => $this->sumNomina($idEmpresa, $tipoAmbiente, $antDes, $antHas),
             // CxC / CxP filtradas por período seleccionado
             'cxc_total'             => $this->getCxcTotal($idEmpresa, $tipoAmbiente, $desde, $hasta),
             'cxp_total'             => $this->getCxpTotal($idEmpresa, $tipoAmbiente, $desde, $hasta),
@@ -67,13 +83,16 @@ class DashboardService
             'tendencia'             => $this->getTendenciaMensual($idEmpresa, $cantMeses, $tipoAmbiente),
             'top_productos'         => $this->getTopProductos($idEmpresa, $tipoAmbiente, $desde, $hasta, 5),
             'top_clientes'          => $this->getTopClientes($idEmpresa, $tipoAmbiente, $desde, $hasta, 5),
+            'top_proveedores'       => $this->getTopProveedores($idEmpresa, $tipoAmbiente, $desde, $hasta, 5),
+            'egresos_por_concepto'  => $this->getEgresosPorConcepto($idEmpresa, $tipoAmbiente, $desde, $hasta, 6),
             // Meta
-            'anio'          => $anio,
-            'mes'           => $mes,
+            'anio'          => $modoRango ? (int) date('Y', strtotime($desde)) : $anio,
+            'mes'           => $modoRango ? 0 : $mes,
             'cant_meses'    => $cantMeses,
-            'label_periodo' => $mes === -1
-                ? "Año {$anio}"
-                : $this->nombreMes($mes) . " {$anio}",
+            'modo_rango'    => $modoRango,
+            'rango_desde'   => $desde,
+            'rango_hasta'   => $hasta,
+            'label_periodo' => $label,
         ];
     }
 
@@ -99,6 +118,25 @@ class DashboardService
         $a = $anio;
         if ($m < 1) { $m = 12; $a--; }
         return [$this->fechaDesde($a, $m), $this->fechaHasta($a, $m)];
+    }
+
+    /** Valida un string 'Y-m-d'. */
+    private function fechaValida(?string $f): bool
+    {
+        if (!$f) return false;
+        $d = \DateTime::createFromFormat('Y-m-d', $f);
+        return $d && $d->format('Y-m-d') === $f;
+    }
+
+    /** Ventana anterior de igual longitud, terminando el día antes de $desde. */
+    private function rangoAnterior(string $desde, string $hasta): array
+    {
+        $d1 = new \DateTime($desde);
+        $d2 = new \DateTime($hasta);
+        $dias = (int) $d1->diff($d2)->days;             // longitud - 1
+        $antHas = (clone $d1)->modify('-1 day');
+        $antDes = (clone $antHas)->modify('-' . $dias . ' day');
+        return [$antDes->format('Y-m-d'), $antHas->format('Y-m-d')];
     }
 
     private function nombreMes(int $mes): string
@@ -156,6 +194,26 @@ class DashboardService
              WHERE id_empresa = ? AND eliminado = false AND estado != 'anulado'
                AND tipo_ambiente = ?
                AND CAST(fecha_emision AS DATE) BETWEEN ? AND ?"
+        );
+        $st->execute([$e, $ta, $d, $h]);
+        return (float) $st->fetchColumn();
+    }
+
+    /**
+     * Nómina del período: total devengado (total_ingresos) de los roles de pago
+     * del módulo Roles de Pago (rol_cabecera), filtrado por el ambiente de la
+     * empresa. Se ubica el rol por su período (make_date(anio,mes,1)) y se
+     * excluyen borradores y anulados.
+     */
+    private function sumNomina(int $e, string $ta, string $d, string $h): float
+    {
+        $st = $this->db->prepare(
+            "SELECT COALESCE(SUM(total_ingresos), 0)
+             FROM rol_cabecera
+             WHERE id_empresa = ? AND eliminado = false
+               AND estado NOT IN ('anulado', 'borrador')
+               AND COALESCE(tipo_ambiente, '1') = ?
+               AND make_date(periodo_anio, periodo_mes, 1) BETWEEN ? AND ?"
         );
         $st->execute([$e, $ta, $d, $h]);
         return (float) $st->fetchColumn();
@@ -726,9 +784,24 @@ class DashboardService
                 'mes'      => date('M Y', strtotime("-{$i} months")),
                 'ventas'   => 0, 'compras'  => 0,
                 'ingresos' => 0, 'egresos'  => 0,
+                'nomina'   => 0,
             ];
         }
         $desde = date('Y-m-01', strtotime('-' . ($meses - 1) . ' months'));
+
+        // Nómina mensual (rol_cabecera por período; filtra por ambiente)
+        $stN = $this->db->prepare(
+            "SELECT TO_CHAR(make_date(periodo_anio, periodo_mes, 1),'YYYY-MM') k, SUM(total_ingresos) t
+             FROM rol_cabecera
+             WHERE id_empresa=? AND eliminado=false AND estado NOT IN ('anulado','borrador')
+               AND COALESCE(tipo_ambiente,'1')=?
+               AND make_date(periodo_anio, periodo_mes, 1) >= ?
+             GROUP BY k"
+        );
+        $stN->execute([$e, $ta, $desde]);
+        foreach ($stN->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            if (isset($data[$r['k']])) $data[$r['k']]['nomina'] = (float) $r['t'];
+        }
 
         // Ventas y Compras (filtran por tipoAmbiente)
         foreach ([
@@ -795,6 +868,43 @@ class DashboardService
                AND COALESCE(v.tipo_ambiente, '1') = ?
                AND CAST(v.fecha_emision AS DATE) BETWEEN ? AND ?
              GROUP BY cl.nombre
+             ORDER BY total DESC
+             LIMIT ?"
+        );
+        $st->execute([$e, $ta, $d, $h, $lim]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Top proveedores por monto de compras del período. */
+    private function getTopProveedores(int $e, string $ta, string $d, string $h, int $lim): array
+    {
+        $st = $this->db->prepare(
+            "SELECT p.razon_social AS nombre, SUM(c.importe_total) AS total, COUNT(c.id) AS compras
+             FROM compras_cabecera c
+             INNER JOIN proveedores p ON p.id = c.id_proveedor
+             WHERE c.id_empresa = ? AND c.eliminado = false
+               AND COALESCE(c.tipo_ambiente::text, '1') = ?
+               AND CAST(c.fecha_emision AS DATE) BETWEEN ? AND ?
+             GROUP BY p.razon_social
+             ORDER BY total DESC
+             LIMIT ?"
+        );
+        $st->execute([$e, $ta, $d, $h, $lim]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Egresos del período agrupados por concepto (para gráfico de dona). */
+    private function getEgresosPorConcepto(int $e, string $ta, string $d, string $h, int $lim): array
+    {
+        $st = $this->db->prepare(
+            "SELECT COALESCE(op.nombre, 'Sin concepto') AS nombre,
+                    SUM(eg.monto_total) AS total
+             FROM egresos_cabecera eg
+             LEFT JOIN empresa_opciones_ingreso_egreso op ON op.id = eg.id_egreso_concepto
+             WHERE eg.id_empresa = ? AND eg.eliminado = false AND eg.estado != 'anulado'
+               AND eg.tipo_ambiente = ?
+               AND CAST(eg.fecha_emision AS DATE) BETWEEN ? AND ?
+             GROUP BY COALESCE(op.nombre, 'Sin concepto')
              ORDER BY total DESC
              LIMIT ?"
         );

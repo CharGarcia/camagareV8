@@ -55,6 +55,14 @@ $mesActual  = (int) date('n');
 <div class="db-filters mb-3">
     <div class="row g-2 align-items-end">
         <div class="col-auto">
+            <label class="form-label small fw-semibold mb-1">Filtro</label>
+            <select id="fModo" class="form-select form-select-sm" style="width:150px">
+                <option value="periodo" selected>Por período</option>
+                <option value="rango">Rango de fechas</option>
+            </select>
+        </div>
+        <!-- Grupo: por período -->
+        <div class="col-auto grp-periodo">
             <label class="form-label small fw-semibold mb-1">Año</label>
             <select id="fAnio" class="form-select form-select-sm" style="width:100px">
                 <?php for ($y = $anioActual; $y >= $anioActual - 5; $y--): ?>
@@ -62,7 +70,7 @@ $mesActual  = (int) date('n');
                 <?php endfor; ?>
             </select>
         </div>
-        <div class="col-auto">
+        <div class="col-auto grp-periodo">
             <label class="form-label small fw-semibold mb-1">Mes</label>
             <select id="fMes" class="form-select form-select-sm" style="width:140px">
                 <option value="-1">Todo el año</option>
@@ -74,12 +82,31 @@ $mesActual  = (int) date('n');
                 <?php endfor; ?>
             </select>
         </div>
+        <!-- Grupo: rango de fechas -->
+        <div class="col-auto grp-rango d-none">
+            <label class="form-label small fw-semibold mb-1">Desde</label>
+            <input type="date" id="fDesde" class="form-control form-control-sm" style="width:150px">
+        </div>
+        <div class="col-auto grp-rango d-none">
+            <label class="form-label small fw-semibold mb-1">Hasta</label>
+            <input type="date" id="fHasta" class="form-control form-control-sm" style="width:150px">
+        </div>
+        <div class="col-auto grp-rango d-none">
+            <label class="form-label small fw-semibold mb-1 d-block">Rápido</label>
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn btn-outline-secondary" onclick="quickRange('mes')">Mes</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="quickRange('trim')">Trim.</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="quickRange('anio')">Año</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="quickRange('30d')">30 días</button>
+            </div>
+        </div>
         <div class="col-auto">
             <label class="form-label small fw-semibold mb-1">Tendencia</label>
             <select id="fMeses" class="form-select form-select-sm" style="width:110px">
                 <option value="3">3 meses</option>
                 <option value="6" selected>6 meses</option>
                 <option value="12">12 meses</option>
+                <option value="24">24 meses</option>
             </select>
         </div>
         <div class="col-auto">
@@ -100,9 +127,9 @@ $mesActual  = (int) date('n');
     </div>
 </div>
 
-<!-- ── Fila 1: Ventas / Compras / Utilidad / Margen ── -->
+<!-- ── Fila 1: Ventas / Compras / Nómina / Utilidad / Margen ── -->
 <div class="row g-3 mb-3">
-    <div class="col-6 col-xl-3">
+    <div class="col-6 col-xl">
         <div class="db-metric-card">
             <div class="d-flex justify-content-between align-items-start mb-2">
                 <div><p class="db-metric-label mb-1">Ventas</p><div class="db-metric-value text-tr sk" id="mValVentas">$0.00</div></div>
@@ -111,7 +138,7 @@ $mesActual  = (int) date('n');
             <div class="db-metric-change ch-neu text-tr sk mt-2" id="mChgVentas">—</div>
         </div>
     </div>
-    <div class="col-6 col-xl-3">
+    <div class="col-6 col-xl">
         <div class="db-metric-card">
             <div class="d-flex justify-content-between align-items-start mb-2">
                 <div><p class="db-metric-label mb-1">Compras</p><div class="db-metric-value text-tr sk" id="mValCompras">$0.00</div></div>
@@ -120,7 +147,16 @@ $mesActual  = (int) date('n');
             <div class="db-metric-change ch-neu text-tr sk mt-2" id="mChgCompras">—</div>
         </div>
     </div>
-    <div class="col-6 col-xl-3">
+    <div class="col-6 col-xl">
+        <div class="db-metric-card">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div><p class="db-metric-label mb-1">Nómina</p><div class="db-metric-value text-tr sk" id="mValNomina">$0.00</div></div>
+                <div class="db-metric-icon bg-secondary bg-opacity-10 text-secondary"><i class="bi bi-people"></i></div>
+            </div>
+            <div class="db-metric-change ch-neu text-tr sk mt-2" id="mChgNomina">—</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl">
         <div class="db-metric-card">
             <div class="d-flex justify-content-between align-items-start mb-2">
                 <div><p class="db-metric-label mb-1">Utilidad Bruta</p><div class="db-metric-value text-tr sk" id="mValUtilidad">$0.00</div></div>
@@ -129,7 +165,7 @@ $mesActual  = (int) date('n');
             <div class="db-metric-change ch-neu text-tr sk mt-2" id="mChgUtilidad">—</div>
         </div>
     </div>
-    <div class="col-6 col-xl-3">
+    <div class="col-6 col-xl">
         <div class="db-metric-card">
             <div class="d-flex justify-content-between align-items-start mb-2">
                 <div><p class="db-metric-label mb-1">Margen</p><div class="db-metric-value text-tr sk" id="mValMargen">0%</div></div>
@@ -215,12 +251,30 @@ $mesActual  = (int) date('n');
     </div>
 </div>
 
-<!-- ── Gráfico tendencia + Top Productos ── -->
+<!-- ── Gráfico comparativo (tendencia) + Top Productos ── -->
 <div class="row g-3 mb-3">
     <div class="col-xl-8">
         <div class="db-panel h-100">
-            <div class="db-panel-header">
-                <h6 class="db-panel-title"><i class="bi bi-bar-chart-line me-2 text-primary"></i>Tendencia Financiera</h6>
+            <div class="db-panel-header flex-wrap gap-2">
+                <h6 class="db-panel-title"><i class="bi bi-bar-chart-line me-2 text-primary"></i>Comparativo mensual</h6>
+                <div id="cmpSeries" class="d-flex flex-wrap gap-2">
+                    <?php
+                    $series = [
+                        ['k'=>'ventas',  'lbl'=>'Ventas',   'on'=>true],
+                        ['k'=>'compras', 'lbl'=>'Compras',  'on'=>true],
+                        ['k'=>'nomina',  'lbl'=>'Nómina',   'on'=>true],
+                        ['k'=>'ingresos','lbl'=>'Ingresos', 'on'=>false],
+                        ['k'=>'egresos', 'lbl'=>'Egresos',  'on'=>false],
+                        ['k'=>'utilidad','lbl'=>'Utilidad', 'on'=>false],
+                    ];
+                    foreach ($series as $s): ?>
+                    <div class="form-check form-check-inline m-0">
+                        <input class="form-check-input cmp-serie" type="checkbox" id="cmp_<?= $s['k'] ?>"
+                               value="<?= $s['k'] ?>" <?= $s['on'] ? 'checked' : '' ?>>
+                        <label class="form-check-label small" for="cmp_<?= $s['k'] ?>"><?= $s['lbl'] ?></label>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
             </div>
             <div class="p-3" style="height:280px"><canvas id="chartTendencia"></canvas></div>
         </div>
@@ -231,6 +285,26 @@ $mesActual  = (int) date('n');
                 <h6 class="db-panel-title"><i class="bi bi-box-seam me-2 text-warning"></i>Top Productos</h6>
             </div>
             <div class="p-3" style="height:280px"><canvas id="chartTopProductos"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Top Proveedores + Egresos por Concepto ── -->
+<div class="row g-3 mb-3">
+    <div class="col-xl-8">
+        <div class="db-panel h-100">
+            <div class="db-panel-header">
+                <h6 class="db-panel-title"><i class="bi bi-truck me-2 text-danger"></i>Top Proveedores (compras)</h6>
+            </div>
+            <div class="p-3" style="height:260px"><canvas id="chartTopProveedores"></canvas></div>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="db-panel h-100">
+            <div class="db-panel-header">
+                <h6 class="db-panel-title"><i class="bi bi-pie-chart me-2 text-warning"></i>Egresos por Concepto</h6>
+            </div>
+            <div class="p-3" style="height:260px"><canvas id="chartEgresosConcepto"></canvas></div>
         </div>
     </div>
 </div>
@@ -338,7 +412,18 @@ const $ = id => document.getElementById(id);
 const fmt  = v => new Intl.NumberFormat('es-EC',{style:'currency',currency:'USD'}).format(v);
 const fmtN = v => new Intl.NumberFormat('es-EC',{maximumFractionDigits:1}).format(v);
 
-let chartTend = null, chartProd = null, chartCli = null;
+let chartTend = null, chartProd = null, chartCli = null, chartProv = null, chartEgr = null;
+
+// Definición de series del comparativo (color + cómo obtener el valor por mes)
+const CMP_SERIES = {
+    ventas:   {label:'Ventas',   color:'#3b82f6', val:d=>+d.ventas||0},
+    compras:  {label:'Compras',  color:'#ef4444', val:d=>+d.compras||0},
+    nomina:   {label:'Nómina',   color:'#6b7280', val:d=>+d.nomina||0},
+    ingresos: {label:'Ingresos', color:'#10b981', val:d=>+d.ingresos||0},
+    egresos:  {label:'Egresos',  color:'#f59e0b', val:d=>+d.egresos||0},
+    utilidad: {label:'Utilidad', color:'#8b5cf6', val:d=>(+d.ventas||0)-(+d.compras||0)},
+};
+const PALETA = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#0ea5e9','#ec4899','#14b8a6'];
 
 // Preferencias visuales del usuario: se persisten en BD (usuarios_preferencias)
 // vía el servicio centralizado, no en localStorage, para que sigan al usuario
@@ -369,10 +454,14 @@ function loadFilters(){
     // El año y el mes quedan en su valor por defecto del HTML (año y mes actuales)
 }
 function resetFilters(){
+    $('fModo').value      = 'periodo';
     $('fAnio').value      = '<?= $anioActual ?>';
     $('fMes').value       = '<?= $mesActual ?>';
+    $('fDesde').value     = '';
+    $('fHasta').value     = '';
     $('fMeses').value     = '6';
     $('fTipoChart').value = 'bar';
+    toggleModo();
     saveFilters();
     applyFilters();
 }
@@ -382,6 +471,37 @@ $('fTipoChart').addEventListener('change', () => {
     saveFilters();
     if(chartTend && window._lastTendencia) renderTendencia(window._lastTendencia, $('fTipoChart').value);
 });
+
+// ── Casillas del comparativo: re-render sin recargar datos ──
+document.querySelectorAll('.cmp-serie').forEach(chk => {
+    chk.addEventListener('change', () => {
+        if(window._lastTendencia) renderTendencia(window._lastTendencia, $('fTipoChart').value);
+    });
+});
+
+// ── Alternar Período / Rango de fechas ──
+function toggleModo(){
+    const rango = $('fModo').value === 'rango';
+    document.querySelectorAll('.grp-periodo').forEach(el=>el.classList.toggle('d-none', rango));
+    document.querySelectorAll('.grp-rango').forEach(el=>el.classList.toggle('d-none', !rango));
+    if(rango && !$('fDesde').value){ quickRange('mes'); }
+}
+$('fModo').addEventListener('change', toggleModo);
+
+// ── Rangos rápidos ──
+function pad2(n){ return String(n).padStart(2,'0'); }
+function isoDate(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function quickRange(tipo){
+    const hoy = new Date();
+    let d, h = hoy;
+    if(tipo==='mes'){        d = new Date(hoy.getFullYear(), hoy.getMonth(), 1); h = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0); }
+    else if(tipo==='trim'){  const q = Math.floor(hoy.getMonth()/3)*3; d = new Date(hoy.getFullYear(), q, 1); h = new Date(hoy.getFullYear(), q+3, 0); }
+    else if(tipo==='anio'){  d = new Date(hoy.getFullYear(), 0, 1); h = new Date(hoy.getFullYear(), 11, 31); }
+    else if(tipo==='30d'){   d = new Date(hoy); d.setDate(d.getDate()-29); }
+    $('fDesde').value = isoDate(d);
+    $('fHasta').value = isoDate(h);
+    applyFilters();
+}
 
 // ── Skeletons ──
 function setSk(ids){
@@ -447,19 +567,31 @@ function renderVenc(id, rows, keyNombre){
     </tr>`).join('');
 }
 
-// ── Gráfico tendencia ──
+// ── Gráfico comparativo (tendencia) — series configurables por casillas ──
+function seriesSeleccionadas(){
+    const sel = Array.from(document.querySelectorAll('.cmp-serie:checked')).map(c=>c.value);
+    return sel.length ? sel : ['ventas']; // al menos una
+}
+function hexToRgba(hex, a){
+    const n = parseInt(hex.slice(1),16);
+    return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+}
 function renderTendencia(data, tipo){
     window._lastTendencia = data;
     const ctx = $('chartTendencia');
     if(chartTend) chartTend.destroy();
-    const labels  = data.map(d=>d.mes);
-    const isFill  = tipo==='line';
-    const ds = [
-        {label:'Ventas',   data:data.map(d=>d.ventas),   borderColor:'#3b82f6',backgroundColor:isFill?'rgba(59,130,246,.15)':'rgba(59,130,246,.8)',  fill:isFill,tension:.3,borderRadius:4,borderWidth:isFill?2:0},
-        {label:'Compras',  data:data.map(d=>d.compras),  borderColor:'#ef4444',backgroundColor:isFill?'rgba(239,68,68,.12)':'rgba(239,68,68,.8)',     fill:isFill,tension:.3,borderRadius:4,borderWidth:isFill?2:0},
-        {label:'Ingresos', data:data.map(d=>d.ingresos), borderColor:'#10b981',backgroundColor:isFill?'rgba(16,185,129,.12)':'rgba(16,185,129,.8)',   fill:isFill,tension:.3,borderRadius:4,borderWidth:isFill?2:0},
-        {label:'Egresos',  data:data.map(d=>d.egresos),  borderColor:'#f59e0b',backgroundColor:isFill?'rgba(245,158,11,.12)':'rgba(245,158,11,.8)',   fill:isFill,tension:.3,borderRadius:4,borderWidth:isFill?2:0},
-    ];
+    const labels = data.map(d=>d.mes);
+    const isFill = tipo==='line';
+    const ds = seriesSeleccionadas().map(k=>{
+        const s = CMP_SERIES[k];
+        return {
+            label: s.label,
+            data: data.map(s.val),
+            borderColor: s.color,
+            backgroundColor: isFill ? hexToRgba(s.color,.14) : hexToRgba(s.color,.8),
+            fill:isFill, tension:.3, borderRadius:4, borderWidth:isFill?2:0
+        };
+    });
     chartTend = new Chart(ctx,{
         type: tipo==='line' ? 'line' : 'bar',
         data:{labels,datasets:ds},
@@ -474,6 +606,43 @@ function renderTendencia(data, tipo){
                 y:{beginAtZero:true,grid:{color:'#f3f4f6'},ticks:{callback:v=>v>=1000?'$'+(v/1000)+'k':'$'+v}},
                 x:{grid:{display:false},ticks:{font:{size:11}}}
             }
+        }
+    });
+}
+
+// ── Gráfico Top Proveedores (compras) ──
+function renderTopProveedores(data){
+    const ctx = $('chartTopProveedores');
+    if(chartProv) chartProv.destroy();
+    if(!data||!data.length){ ctx.parentElement.innerHTML='<p class="text-muted text-center pt-5 small">Sin datos</p>'; return; }
+    chartProv = new Chart(ctx,{
+        type:'bar',
+        data:{
+            labels:data.map(d=>(d.nombre||'').substring(0,24)),
+            datasets:[{label:'Compras',data:data.map(d=>d.total),backgroundColor:PALETA,borderRadius:4}]
+        },
+        options:{
+            indexAxis:'y',responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${fmt(c.parsed.x)}`}}},
+            scales:{x:{beginAtZero:true,ticks:{callback:v=>v>=1000?'$'+(v/1000)+'k':'$'+v}},y:{ticks:{font:{size:11}}}}
+        }
+    });
+}
+
+// ── Gráfico Egresos por Concepto (dona) ──
+function renderEgresosConcepto(data){
+    const ctx = $('chartEgresosConcepto');
+    if(chartEgr) chartEgr.destroy();
+    if(!data||!data.length){ ctx.parentElement.innerHTML='<p class="text-muted text-center pt-5 small">Sin datos</p>'; return; }
+    chartEgr = new Chart(ctx,{
+        type:'doughnut',
+        data:{
+            labels:data.map(d=>(d.nombre||'').substring(0,22)),
+            datasets:[{data:data.map(d=>d.total),backgroundColor:PALETA,borderWidth:2}]
+        },
+        options:{
+            responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{position:'bottom',labels:{boxWidth:11,font:{size:11}}},tooltip:{callbacks:{label:c=>` ${fmt(c.raw)}`}}}
         }
     });
 }
@@ -555,12 +724,14 @@ function renderSaldosCaja(sc){
 // ── Carga principal ──
 async function applyFilters(){
     saveFilters();
+    const modo  = $('fModo').value;
     const anio  = $('fAnio').value;
     const mes   = $('fMes').value;
     const meses = $('fMeses').value;
     const tipo  = $('fTipoChart').value;
 
     setSk(['mValVentas','mChgVentas','mValCompras','mChgCompras',
+           'mValNomina','mChgNomina',
            'mValUtilidad','mChgUtilidad','mValMargen','mChgMargen',
            'mValIngresos','mChgIngresos','mValEgresos','mChgEgresos',
            'mValCxc','mValCxp','siAntClientes','siAntProveedores']);
@@ -574,6 +745,11 @@ async function applyFilters(){
         fd.append('anio', anio);
         fd.append('mes', mes);
         fd.append('cant_meses', meses);
+        // Modo rango: enviar desde/hasta (el backend les da prioridad sobre año/mes)
+        if(modo === 'rango' && $('fDesde').value && $('fHasta').value){
+            fd.append('desde', $('fDesde').value);
+            fd.append('hasta', $('fHasta').value);
+        }
 
         const res = await fetch(URL_DB, {method:'POST', body:fd, headers:{'X-Requested-With':'XMLHttpRequest'}});
         const json = await res.json();
@@ -599,12 +775,15 @@ async function applyFilters(){
         const mrgnAnt = d.ventas_mes_anterior>0?(utilAnt/d.ventas_mes_anterior)*100:0;
 
         clrSk(['mValVentas','mChgVentas','mValCompras','mChgCompras',
+               'mValNomina','mChgNomina',
                'mValUtilidad','mChgUtilidad','mValMargen','mChgMargen']);
 
         $('mValVentas').textContent   = fmt(d.ventas_mes_actual);
         $('mChgVentas').innerHTML     = chg(d.ventas_mes_actual, d.ventas_mes_anterior);
         $('mValCompras').textContent  = fmt(d.compras_mes_actual);
         $('mChgCompras').innerHTML    = chg(d.compras_mes_actual, d.compras_mes_anterior);
+        $('mValNomina').textContent   = fmt(d.nomina_mes_actual);
+        $('mChgNomina').innerHTML     = chg(d.nomina_mes_actual, d.nomina_mes_anterior);
         $('mValUtilidad').textContent = fmt(util);
         $('mChgUtilidad').innerHTML   = chg(util, utilAnt);
         $('mValMargen').textContent   = fmtN(mrgn)+'%';
@@ -623,6 +802,8 @@ async function applyFilters(){
         renderTendencia(d.tendencia, tipo);
         renderTopProductos(d.top_productos);
         renderTopClientes(d.top_clientes);
+        renderTopProveedores(d.top_proveedores);
+        renderEgresosConcepto(d.egresos_por_concepto);
 
         // Tablas recientes
         renderTbl('tVentas',   d.facturas_recientes);
