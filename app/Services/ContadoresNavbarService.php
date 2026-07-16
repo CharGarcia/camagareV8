@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Helpers\Cache;
+use App\models\PermisoSubmodulo;
 use App\repositories\ContadoresNavbarRepository;
 use App\repositories\TareaRepository;
 
@@ -118,6 +119,20 @@ class ContadoresNavbarService
         return 'cmg_conteos_perm_' . $idEmpresa . '_' . $idUsuario;
     }
 
+    private static function claveSubmodulosNuevos(int $idEmpresa, int $idUsuario): string
+    {
+        return 'cmg_submod_nuevos_' . $idEmpresa . '_' . $idUsuario;
+    }
+
+    /** Invalida el aviso "submódulo nuevo" de un usuario+empresa puntual. */
+    public static function invalidarSubmodulosNuevos(int $idUsuario, int $idEmpresa): void
+    {
+        if ($idUsuario <= 0 || $idEmpresa <= 0) {
+            return;
+        }
+        Cache::delete(self::claveSubmodulosNuevos($idEmpresa, $idUsuario));
+    }
+
     /**
      * Invalida la caché de contadores de una empresa si la tabla afectada es relevante.
      * Se llama desde LogSistemaService::registrar() en cada acción auditada.
@@ -180,6 +195,26 @@ class ContadoresNavbarService
         $det['total'] = $det['vencidas'] + $det['por_vencer'];
         Cache::set(self::claveTareas($idUsuario), $det, self::TTL_CONTADORES);
         return $det;
+    }
+
+    /**
+     * Submódulos con permiso asignado que el usuario aún no ha visitado (caché por
+     * empresa+usuario, TTL corto). Alimenta el aviso "submódulo nuevo" del navbar.
+     * @return array<int, array{id_submodulo:int,nombre_submodulo:string,ruta:string,nombre_modulo:string}>
+     */
+    private function submodulosNuevos(int $idEmpresa, int $idUsuario): array
+    {
+        $cache = Cache::get(self::claveSubmodulosNuevos($idEmpresa, $idUsuario));
+        if (is_array($cache)) {
+            return $cache;
+        }
+        try {
+            $datos = (new PermisoSubmodulo())->getSubmodulosNuevosDeUsuario($idUsuario, $idEmpresa);
+        } catch (\Throwable $e) {
+            $datos = [];
+        }
+        Cache::set(self::claveSubmodulosNuevos($idEmpresa, $idUsuario), $datos, self::TTL_CONTADORES);
+        return $datos;
     }
 
     /**
@@ -271,6 +306,12 @@ class ContadoresNavbarService
                     }
                 }
             }
+        }
+
+        // Submódulos nuevos (sin visitar): global por usuario+empresa, no depende de permiso 'ver'
+        // sobre otro módulo (el permiso YA es sobre el submódulo mismo).
+        if ($idEmpresa > 0 && $idUsuario > 0) {
+            $out['submodulos_nuevos'] = $this->submodulosNuevos($idEmpresa, $idUsuario);
         }
 
         // Tareas: global por usuario, siempre incluido (solo requiere sesión).

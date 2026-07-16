@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\controllers;
 
 use App\core\Controller;
+use App\models\PermisoSubmodulo;
 use App\Services\ContadoresNavbarService;
 use App\Traits\PermisoModuloTrait;
 
@@ -52,6 +53,33 @@ class ContadoresController extends Controller
         } catch (\Throwable $e) {
             error_log('ContadoresController::navbarAjax ' . $e->getMessage());
             $this->json(['ok' => false, 'contadores' => (object) []]);
+        }
+    }
+
+    /**
+     * POST /contadores/marcarSubmoduloVistoAjax — el navbar la dispara cuando detecta
+     * que la ruta actual coincide con un submódulo "nuevo" (ver navbar.php). Marca
+     * la visita para que deje de aparecer en el aviso. Nunca debe romper la página.
+     */
+    public function marcarSubmoduloVistoAjax(): void
+    {
+        $this->requireAuth();
+
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $ruta = trim((string) ($_POST['ruta'] ?? ''));
+
+        try {
+            if ($idUsuario > 0 && $idEmpresa > 0 && $ruta !== '') {
+                $model = new PermisoSubmodulo();
+                $idSubmodulo = $model->getIdSubmoduloPorRutaMvc($ruta);
+                if ($idSubmodulo !== null) {
+                    $model->marcarSubmoduloVisto($idUsuario, $idEmpresa, $idSubmodulo);
+                }
+            }
+            $this->json(['ok' => true]);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => true]);
         }
     }
 }

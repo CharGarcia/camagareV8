@@ -228,6 +228,38 @@ class EmpresaAsignada extends BaseModel
     }
 
     /**
+     * Usuarios activos de uno o varios niveles (p. ej. [2] = todos los administradores).
+     * Usado por la asignación masiva de submódulos (superadmin).
+     */
+    public function getUsuariosPorNiveles(array $niveles, string $buscar = ''): array
+    {
+        $niveles = array_values(array_unique(array_map('intval', $niveles)));
+        if (empty($niveles)) return [];
+        $niveles = implode(',', $niveles);
+
+        $where = "WHERE u.estado = 1 AND u.nivel IN ({$niveles})";
+        if ($buscar !== '') {
+            $b = $this->escape($buscar);
+            $where .= " AND (u.nombre LIKE '%{$b}%' OR u.cedula LIKE '%{$b}%')";
+        }
+        return $this->query("SELECT u.id AS id_usuario, u.nombre, u.cedula, u.nivel FROM usuarios u {$where} ORDER BY u.nombre");
+    }
+
+    /**
+     * Todas las empresas activas del sistema, para el selector "por empresa"
+     * de la asignación masiva de submódulos (herramienta exclusiva de superadmin).
+     */
+    public function getTodasEmpresasParaSelect(string $buscar = '', int $limit = 200): array
+    {
+        $where = "WHERE e.eliminado = false AND e.estado = '1'";
+        if ($buscar !== '') {
+            $b = $this->escape($buscar);
+            $where .= " AND (e.nombre_comercial LIKE '%{$b}%' OR e.ruc LIKE '%{$b}%')";
+        }
+        return $this->query("SELECT e.id AS id_empresa, e.nombre_comercial, e.ruc FROM empresas e {$where} ORDER BY e.nombre_comercial LIMIT " . (int) $limit);
+    }
+
+    /**
      * Obtener usuario por ID (para permisos, etc.)
      */
     public function getUsuarioPorId(int $id): ?array

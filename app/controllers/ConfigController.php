@@ -58,6 +58,23 @@ class ConfigController extends Controller
         }
     }
 
+    public function asignacionSubmodulos(): void
+    {
+        $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
+        $c = new AsignacionSubmodulosController();
+        $method = match ($sub) {
+            'usuarios'      => 'usuariosJson',
+            'previsualizar' => 'previsualizarAjax',
+            'aplicar'       => 'aplicarAjax',
+            default         => 'index',
+        };
+        if (method_exists($c, $method)) {
+            $c->$method();
+        } else {
+            $c->index();
+        }
+    }
+
     public function moduloStoreModulo(): void { (new ModuloController())->storeModulo(); }
     public function moduloUpdateModulo(): void { (new ModuloController())->updateModulo(); }
     public function moduloDeleteModulo(): void { (new ModuloController())->deleteModulo(); }

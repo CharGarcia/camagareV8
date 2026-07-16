@@ -338,7 +338,11 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                 <i class="bi bi-whatsapp" style="font-size: 1.1rem;"></i>
                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white whatsapp-unread-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
             </a>
-            
+            <a href="#" data-bs-toggle="modal" data-bs-target="#modalSubmodulosNuevos" class="text-white text-decoration-none position-relative me-3 d-none cmg-submod-nuevos-icon" title="Módulos nuevos asignados">
+                <i class="bi bi-stars" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-success cmg-submod-nuevos-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
+
             <a href="<?= $base ?>/perfil" class="text-white text-decoration-none" style="font-size:0.8rem" title="Mi perfil"><i class="bi bi-person-fill me-1"></i><?= htmlspecialchars($nombre) ?></a>
             <?php if (\App\Helpers\Permisos::puedeVer('modulos/ia-soporte')): ?>
             <a href="<?= $base ?>/modulos/ia-soporte" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="IA Soporte"
@@ -467,6 +471,11 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                     <span class="position-absolute badge rounded-pill bg-danger text-white whatsapp-unread-badge">0</span>
                     <small>WhatsApp</small>
                 </a>
+                <a href="#" data-bs-toggle="modal" data-bs-target="#modalSubmodulosNuevos" class="cmg-submod-nuevos-icon d-none">
+                    <i class="bi bi-stars"></i>
+                    <span class="position-absolute badge rounded-pill bg-success cmg-submod-nuevos-badge">0</span>
+                    <small>Nuevos</small>
+                </a>
             </div>
 
             <div class="d-flex gap-2">
@@ -529,14 +538,33 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
     </div>
 </div>
 
+<!-- Modal: submódulos nuevos asignados sin visitar -->
+<div class="modal fade" id="modalSubmodulosNuevos" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-stars text-success me-1"></i> Módulos nuevos asignados</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body p-0">
+                <ul class="list-group list-group-flush" id="cmg-submod-nuevos-list">
+                    <li class="list-group-item text-muted small text-center py-4">Sin novedades.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-    // Safari/iOS FIX: Mover el offcanvas al final del body para escapar 
+    // Safari/iOS FIX: Mover el offcanvas y el modal al final del body para escapar
     // de cualquier restricción de position: sticky del header padre.
     document.addEventListener("DOMContentLoaded", function() {
-        var offcanvasMenu = document.getElementById('offcanvasMobileMenu');
-        if (offcanvasMenu && offcanvasMenu.parentNode !== document.body) {
-            document.body.appendChild(offcanvasMenu);
-        }
+        ['offcanvasMobileMenu', 'modalSubmodulosNuevos'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el && el.parentNode !== document.body) {
+                document.body.appendChild(el);
+            }
+        });
     });
     // Las funciones de contadores del navbar viven ahora UNIFICADAS dentro del
     // DOMContentLoaded de más abajo (window.CMG_refreshContadores + alias de
@@ -685,9 +713,83 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                     const titTareas = v + ' vencida' + (v === 1 ? '' : 's') + ' · ' + p + ' por vencer';
                     document.querySelectorAll('.tareas-alertas-link').forEach(function(l) { l.setAttribute('title', titTareas); });
                 }
+
+                // Submódulos nuevos asignados (sin visitar): badge + lista del modal.
+                CMG_renderSubmodulosNuevos(Array.isArray(c.submodulos_nuevos) ? c.submodulos_nuevos : []);
             } catch (e) {}
             finally { CMG_contadoresEnVuelo = false; }
         };
+
+        // Ruta MVC actual (ej. "modulos/clientes"), para detectar si el usuario ya
+        // entró a alguno de sus submódulos nuevos.
+        function CMG_rutaActual() {
+            var base = '<?= $base ?>';
+            var path = window.location.pathname;
+            if (base && path.indexOf(base) === 0) path = path.slice(base.length);
+            var partes = path.split('/').filter(Boolean);
+            return partes.slice(0, 2).join('/').toLowerCase();
+        }
+
+        var CMG_submodNuevosYaMarcados = {};
+        function CMG_marcarSubmoduloVisto(ruta) {
+            if (CMG_submodNuevosYaMarcados[ruta]) return;
+            CMG_submodNuevosYaMarcados[ruta] = true;
+            var fd = new FormData();
+            fd.append('ruta', ruta);
+            fetch('<?= $base ?>/contadores/marcarSubmoduloVistoAjax', {
+                method: 'POST', body: fd, credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            }).catch(function() {});
+        }
+
+        // Pinta el badge + la lista del modal, y marca como visto el submódulo si
+        // el usuario ya está parado en su ruta (así el aviso desaparece al entrar).
+        function CMG_renderSubmodulosNuevos(lista) {
+            var rutaActual = CMG_rutaActual();
+            var pendientes = lista.filter(function(item) {
+                var ruta = String(item.ruta || '').toLowerCase().replace(/^\/+/, '');
+                if (ruta === rutaActual) {
+                    CMG_marcarSubmoduloVisto(item.ruta);
+                    return false;
+                }
+                return true;
+            });
+
+            var iconos = document.querySelectorAll('.cmg-submod-nuevos-icon');
+            var badges = document.querySelectorAll('.cmg-submod-nuevos-badge');
+            if (pendientes.length > 0) {
+                badges.forEach(function(b) { b.textContent = pendientes.length > 99 ? '99+' : pendientes.length; });
+                iconos.forEach(function(i) { i.classList.remove('d-none'); });
+            } else {
+                iconos.forEach(function(i) { i.classList.add('d-none'); });
+            }
+
+            var lista_el = document.getElementById('cmg-submod-nuevos-list');
+            if (!lista_el) return;
+            if (pendientes.length === 0) {
+                lista_el.innerHTML = '<li class="list-group-item text-muted small text-center py-4">Sin novedades.</li>';
+                return;
+            }
+            var base = '<?= $base ?>';
+            lista_el.innerHTML = pendientes.map(function(item) {
+                var href = String(item.ruta || '#');
+                if (href !== '#' && !/^https?:\/\//.test(href) && href.charAt(0) !== '/') {
+                    href = base.replace(/\/+$/, '') + '/' + href.replace(/^\/+/, '');
+                }
+                var nombre = escapeHtmlNav(item.nombre_submodulo || '');
+                var modulo = escapeHtmlNav(item.nombre_modulo || '');
+                return '<a href="' + href + '" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">'
+                    + '<span><i class="bi bi-stars text-success me-2"></i>' + nombre + '</span>'
+                    + '<span class="badge bg-light text-muted border">' + modulo + '</span>'
+                    + '</a>';
+            }).join('');
+        }
+
+        function escapeHtmlNav(s) {
+            var d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
+        }
 
         // Compatibilidad: las funciones antiguas ahora refrescan TODO vía el endpoint unificado.
         window.updateTareasBadge =

@@ -13,6 +13,19 @@ namespace App\models;
 class PermisoSubmodulo extends BaseModel
 {
     /**
+     * Invalida la caché del aviso "submódulo nuevo" tras cualquier escritura en
+     * modulos_asignados. Nunca debe romper el guardado si la caché falla.
+     */
+    private function invalidarAvisoNuevo(int $idUsuario, int $idEmpresa): void
+    {
+        try {
+            \App\Services\ContadoresNavbarService::invalidarSubmodulosNuevos($idUsuario, $idEmpresa);
+        } catch (\Throwable $e) {
+            // Silencioso a propósito.
+        }
+    }
+
+    /**
      * Módulos con submódulos según nivel del actual:
      * Super admin: asignados (modulos_asignados) + todos de submodulos_menu.
      * Admin/usuario: solo modulos_asignados (relacionados con submodulos_menu).
@@ -186,6 +199,7 @@ class PermisoSubmodulo extends BaseModel
             }
 
             $this->db->commit();
+            $this->invalidarAvisoNuevo($ud, $ed);
             return true;
         } catch (\Throwable $e) {
             $this->db->rollBack();
@@ -228,6 +242,7 @@ class PermisoSubmodulo extends BaseModel
                     VALUES ({$idU}, {$idE}, {$idM}, {$idS}, {$r}, {$w}, {$u}, {$d}, {$t})");
             }
             $this->db->commit();
+            $this->invalidarAvisoNuevo($idU, $idE);
             return true;
         } catch (\Throwable $e) {
             $this->db->rollBack();
@@ -274,10 +289,101 @@ class PermisoSubmodulo extends BaseModel
             }
 
             $this->db->commit();
+            $this->invalidarAvisoNuevo($idU, $idE);
             return true;
         } catch (\Throwable $e) {
             $this->db->rollBack();
             return false;
+        }
+    }
+
+    /**
+     * Catálogo completo de submódulos agrupado por módulo, sin depender de un
+     * usuario/empresa real. Usado por la asignación masiva (selector "qué submódulo asignar").
+     */
+    public function getCatalogoSubmodulos(): array
+    {
+        return $this->getModulosSuperAdmin(0, 0);
+    }
+
+    /**
+     * Pares (id_usuario, id_empresa) que YA tienen una fila para ese submódulo.
+     * Retorna un set indexado "idUsuario:idEmpresa" => true, para cruzar en PHP
+     * contra la lista de destinos resuelta (evita SQL de tuplas dinámico).
+     */
+    public function getAsignacionesExistentes(int $idSubmodulo): array
+    {
+        $idS = (int) $idSubmodulo;
+        if ($idS <= 0) return [];
+        $rows = $this->query("SELECT id_usuario, id_empresa FROM modulos_asignados WHERE id_submodulo = {$idS}");
+        $set = [];
+        foreach ($rows as $r) {
+            $set[(int)$r['id_usuario'] . ':' . (int)$r['id_empresa']] = true;
+        }
+        return $set;
+    }
+
+    /**
+     * Asigna un submódulo en lote a una lista de destinos [ ['id_usuario'=>, 'id_empresa'=>], ... ].
+     * Si el destino ya tiene ese submódulo asignado: se omite, salvo que $sobrescribir sea true
+     * (en cuyo caso se actualizan sus permisos). Transaccional.
+     *
+     * @return array{insertados:int,actualizados:int,omitidos:int}
+     */
+    public function asignarSubmoduloEnLote(int $idModulo, int $idSubmodulo, array $destinos, array $permisosDefault, bool $sobrescribir): array
+    {
+        $idM = (int) $idModulo;
+        $idS = (int) $idSubmodulo;
+        $resultado = ['insertados' => 0, 'actualizados' => 0, 'omitidos' => 0];
+        if ($idM <= 0 || $idS <= 0 || empty($destinos)) return $resultado;
+
+        $r = !empty($permisosDefault['ver']) ? 1 : 0;
+        $w = !empty($permisosDefault['crear']) ? 1 : 0;
+        $u = !empty($permisosDefault['actualizar']) ? 1 : 0;
+        $d = !empty($permisosDefault['eliminar']) ? 1 : 0;
+        $t = !empty($permisosDefault['t']) ? 1 : 0;
+        if ($r + $w + $u + $d + $t === 0) return $resultado;
+
+        $existentes = $this->getAsignacionesExistentes($idS);
+
+        $this->db->beginTransaction();
+        try {
+            foreach ($destinos as $dest) {
+                $idU = (int) ($dest['id_usuario'] ?? 0);
+                $idE = (int) ($dest['id_empresa'] ?? 0);
+                if ($idU <= 0 || $idE <= 0) continue;
+                $clave = $idU . ':' . $idE;
+
+                if (isset($existentes[$clave])) {
+                    if (!$sobrescribir) {
+                        $resultado['omitidos']++;
+                        continue;
+                    }
+                    $this->execute("UPDATE modulos_asignados SET r = {$r}, w = {$w}, u = {$u}, d = {$d}, t = {$t}
+                        WHERE id_usuario = {$idU} AND id_empresa = {$idE} AND id_submodulo = {$idS}");
+                    $resultado['actualizados']++;
+                } else {
+                    $this->execute("INSERT INTO modulos_asignados (id_usuario, id_empresa, id_modulo, id_submodulo, r, w, u, d, t)
+                        VALUES ({$idU}, {$idE}, {$idM}, {$idS}, {$r}, {$w}, {$u}, {$d}, {$t})");
+                    $existentes[$clave] = true;
+                    $resultado['insertados']++;
+                }
+            }
+            $this->db->commit();
+            $invalidados = [];
+            foreach ($destinos as $dest) {
+                $idU = (int) ($dest['id_usuario'] ?? 0);
+                $idE = (int) ($dest['id_empresa'] ?? 0);
+                if ($idU <= 0 || $idE <= 0) continue;
+                $clave = $idU . ':' . $idE;
+                if (isset($invalidados[$clave])) continue;
+                $invalidados[$clave] = true;
+                $this->invalidarAvisoNuevo($idU, $idE);
+            }
+            return $resultado;
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
         }
     }
 
@@ -351,5 +457,58 @@ class PermisoSubmodulo extends BaseModel
         }
 
         return null;
+    }
+
+    /**
+     * Submódulos con permiso 'ver' que el usuario aún NO ha visitado (sin fila en
+     * submodulos_vistos). Alimenta el aviso del navbar "submódulo nuevo asignado".
+     */
+    public function getSubmodulosNuevosDeUsuario(int $idUsuario, int $idEmpresa, int $limite = 30): array
+    {
+        $idU = (int) $idUsuario;
+        $idE = (int) $idEmpresa;
+        if ($idU <= 0 || $idE <= 0) return [];
+        $lim = max(1, $limite);
+
+        $queries = [
+            "SELECT sm.id_submodulo, sm.nombre_submodulo, sm.ruta, mm.nombre_modulo
+                FROM modulos_asignados ma
+                INNER JOIN submodulos_menu sm ON sm.id_submodulo = ma.id_submodulo AND COALESCE(sm.status, 1) = 1
+                INNER JOIN modulos_menu mm ON mm.id_modulo = ma.id_modulo
+                LEFT JOIN submodulos_vistos sv ON sv.id_usuario = ma.id_usuario AND sv.id_empresa = ma.id_empresa AND sv.id_submodulo = ma.id_submodulo
+                WHERE ma.id_usuario = {$idU} AND ma.id_empresa = {$idE} AND COALESCE(ma.r, 0) = 1 AND sv.id_submodulo IS NULL
+                ORDER BY mm.nombre_modulo, sm.nombre_submodulo
+                LIMIT {$lim}",
+            "SELECT sm.id AS id_submodulo, sm.nombre_submodulo, sm.ruta, mm.nombre_modulo
+                FROM modulos_asignados ma
+                INNER JOIN submodulos_menu sm ON sm.id = ma.id_submodulo AND COALESCE(sm.status, 1) = 1
+                INNER JOIN modulos_menu mm ON mm.id = ma.id_modulo
+                LEFT JOIN submodulos_vistos sv ON sv.id_usuario = ma.id_usuario AND sv.id_empresa = ma.id_empresa AND sv.id_submodulo = ma.id_submodulo
+                WHERE ma.id_usuario = {$idU} AND ma.id_empresa = {$idE} AND COALESCE(ma.r, 0) = 1 AND sv.id_submodulo IS NULL
+                ORDER BY mm.nombre_modulo, sm.nombre_submodulo
+                LIMIT {$lim}",
+        ];
+        foreach ($queries as $sql) {
+            try {
+                return $this->query($sql);
+            } catch (\Throwable $e) {
+                continue;
+            }
+        }
+        return [];
+    }
+
+    /** Marca un submódulo como visitado por el usuario (idempotente). */
+    public function marcarSubmoduloVisto(int $idUsuario, int $idEmpresa, int $idSubmodulo): bool
+    {
+        $idU = (int) $idUsuario;
+        $idE = (int) $idEmpresa;
+        $idS = (int) $idSubmodulo;
+        if ($idU <= 0 || $idE <= 0 || $idS <= 0) return false;
+
+        $ok = $this->execute("INSERT INTO submodulos_vistos (id_usuario, id_empresa, id_submodulo)
+            VALUES ({$idU}, {$idE}, {$idS}) ON CONFLICT (id_usuario, id_empresa, id_submodulo) DO NOTHING");
+        $this->invalidarAvisoNuevo($idU, $idE);
+        return $ok;
     }
 }
