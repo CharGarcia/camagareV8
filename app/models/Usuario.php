@@ -119,20 +119,25 @@ class Usuario extends BaseModel
     }
 
     /**
-     * Lee la empresa marcada SÓLO si sigue VIGENTE (marcada en los últimos 30 minutos). Fuera de esa
-     * ventana devuelve null: así la extensión no inicia sesión sola cada vez que se abre el portal del
-     * SRI, sino únicamente poco después de que el usuario pulsó "Generar descarga del SRI".
+     * Lee la empresa marcada SÓLO si sigue VIGENTE (marcada en los últimos $ventanaMin minutos).
+     * Fuera de esa ventana devuelve null. Se usa con DOS ventanas distintas:
+     *   - LOGIN automático (agenteLoginPendienteAjax): ventana MUY corta, para que la extensión
+     *     inicie sesión en el SRI solo justo después de pulsar "Generar descarga del SRI" y NO cada
+     *     vez que el usuario abre el portal por su cuenta.
+     *   - REGISTRO de claves (agenteRegistrarClavesAjax): ventana amplia, porque registrar requiere
+     *     que el usuario pulse "Enviar comprobantes" (acción deliberada, sin riesgo de seguridad) y
+     *     puede querer enviar varios períodos de la misma empresa.
      */
-    public function getLoginPendiente(int $idUsuario): ?int
+    public function getLoginPendiente(int $idUsuario, int $ventanaMin = 30): ?int
     {
         $st = $this->db->prepare(
             "SELECT login_pendiente_empresa FROM usuarios
              WHERE id = ?
                AND login_pendiente_empresa IS NOT NULL
                AND login_pendiente_at IS NOT NULL
-               AND login_pendiente_at > (NOW() - INTERVAL '30 minutes')"
+               AND login_pendiente_at > (NOW() - ((?)::int * INTERVAL '1 minute'))"
         );
-        $st->execute([$idUsuario]);
+        $st->execute([$idUsuario, $ventanaMin]);
         $id = $st->fetchColumn();
         return ($id === false || $id === null) ? null : (int) $id;
     }

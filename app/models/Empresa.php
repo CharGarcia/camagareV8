@@ -353,15 +353,23 @@ class Empresa extends BaseModel
         return $this->query("SELECT * FROM bodegas WHERE id_empresa = {$id} AND eliminado = false ORDER BY nombre ASC");
     }
 
-    public function getPuntosEmision(int $idEstablecimiento): array
+    /**
+     * Puntos de emisión de un establecimiento.
+     * Por defecto SOLO los activos: es lo que se usa al emitir documentos (elegir el
+     * punto para numerar). Un punto inactivo no debe ofrecerse para nuevos documentos.
+     * Pasar $soloActivos=false para obtener también los inactivos (gestión).
+     */
+    public function getPuntosEmision(int $idEstablecimiento, bool $soloActivos = true): array
     {
         $id = (int) $idEstablecimiento;
-        $sql = "SELECT p.*, e.codigo as cod_establecimiento, e.direccion as direccion_establecimiento 
+        $filtroEstado = $soloActivos ? " AND LOWER(p.estado) = 'activo'" : '';
+        $sql = "SELECT p.*, e.codigo as cod_establecimiento, e.direccion as direccion_establecimiento
                 FROM empresa_punto_emision p
                 JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-                WHERE p.id_establecimiento = {$id} 
-                  AND p.eliminado = false 
+                WHERE p.id_establecimiento = {$id}
+                  AND p.eliminado = false
                   AND e.eliminado = false
+                  {$filtroEstado}
                 ORDER BY p.codigo_punto ASC";
         return $this->query($sql);
     }

@@ -405,6 +405,7 @@ class ComprasController extends BaseModuloController
                 FROM empresa_punto_emision pe
                 JOIN empresa_establecimiento es ON pe.id_establecimiento = es.id
                 WHERE es.id_empresa = ? AND pe.eliminado = FALSE AND es.eliminado = FALSE
+                  AND LOWER(pe.estado) = 'activo'
                 ORDER BY es.codigo ASC, pe.codigo_punto ASC
             ");
             $stPto->execute([$idEmpresa]);

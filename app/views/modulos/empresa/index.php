@@ -805,6 +805,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
 
                 <!-- Pestaña: Secuenciales -->
                 <div class="tab-pane fade" id="secuenciales" role="tabpanel">
+                    <?php
+                    // En Secuenciales solo se muestran los puntos de emisión ACTIVOS
+                    // (los inactivos no se usan para emitir/numerar documentos).
+                    $puntosSec = array_values(array_filter($puntos, static fn($pp) => strtolower((string)($pp['estado'] ?? 'activo')) === 'activo'));
+                    ?>
                     <!-- Tarjeta informativa: cómo nombrar y crear secuenciales -->
                     <div class="card border-0 mb-3" style="background:#eff6ff;">
                         <div class="card-body p-3">
@@ -849,7 +854,9 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                         <div class="col-md-3 border-end">
                             <label class="form-label small fw-bold mb-3 text-primary">Punto de Emisión</label>
                             <div class="list-group list-group-flush small rounded-3 border" id="secuenciales-puntos-list">
-                                <?php foreach ($puntos as $idx => $p): ?>
+                                <?php if (empty($puntosSec)): ?>
+                                    <div class="list-group-item text-muted small py-3"><i class="bi bi-info-circle me-1"></i>No hay puntos de emisión activos.</div>
+                                <?php else: foreach ($puntosSec as $idx => $p): ?>
                                     <a href="#" class="list-group-item list-group-item-action py-3 <?= ($idx === 0) ? 'active' : '' ?>"
                                         onclick="cargarSecuenciales(this, <?= (int)($p['id'] ?? 0) ?>)">
                                         <div class="d-flex justify-content-between align-items-center w-100">
@@ -857,13 +864,13 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                             <i class="bi bi-chevron-right small opacity-50"></i>
                                         </div>
                                     </a>
-                                <?php endforeach; ?>
+                                <?php endforeach; endif; ?>
                             </div>
                         </div>
                         <div class="col-md-9 bg-light bg-opacity-50 p-4 rounded-3 border">
                             <form id="form-secuenciales" method="POST">
                                 <input type="hidden" name="section" value="secuenciales">
-                                <input type="hidden" name="id_punto_emision" id="sec-punto-id" value="<?= $puntos[0]['id'] ?? '' ?>">
+                                <input type="hidden" name="id_punto_emision" id="sec-punto-id" value="<?= $puntosSec[0]['id'] ?? '' ?>">
                                 <div class="form-msg mb-3"></div>
                                 <div class="row g-3" id="secuenciales-fields">
                                     <div class="col-12 text-center py-4 text-muted small">
@@ -1991,15 +1998,15 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             });
         });
 
-        // Auto-cargar secuenciales del primer punto al mostrar la pestaña
-        <?php if (!empty($puntos)): ?>
+        // Auto-cargar secuenciales del primer punto ACTIVO al mostrar la pestaña
+        <?php if (!empty($puntosSec)): ?>
             const secTab = document.getElementById('secuenciales-tab');
             if (secTab) {
                 secTab.addEventListener('shown.bs.tab', function() {
                     const firstLink = document.querySelector('#secuenciales-puntos-list a');
                     if (firstLink && !firstLink.dataset.loaded) {
                         firstLink.dataset.loaded = '1';
-                        cargarSecuenciales(firstLink, <?= (int)($puntos[0]['id'] ?? 0) ?>);
+                        cargarSecuenciales(firstLink, <?= (int)($puntosSec[0]['id'] ?? 0) ?>);
                     }
                 }, {
                     once: true

@@ -523,7 +523,9 @@ class DescargasSriController extends Controller
     /**
      * La extensión, al cargar la pantalla de login del SRI, pide las credenciales de la empresa
      * que el usuario marcó (login pendiente). Autenticado por el token personal del usuario.
-     * Devuelve RUC + clave descifrada y limpia la marca (uso único).
+     * SEGURIDAD: solo entrega credenciales dentro de una ventana MUY corta (5 min) desde que el
+     * usuario pulsó "Generar descarga del SRI"; así la extensión no inicia sesión sola cuando el
+     * usuario abre el portal del SRI por su cuenta más tarde.
      */
     public function agenteLoginPendienteAjax(): void
     {
@@ -538,7 +540,8 @@ class DescargasSriController extends Controller
             exit;
         }
 
-        $idEmpresa = $model->getLoginPendiente((int) $usuario['id']);
+        // Ventana MUY corta: el login automático solo procede justo tras pulsar el botón en el sistema.
+        $idEmpresa = $model->getLoginPendiente((int) $usuario['id'], 5);
         if (!$idEmpresa) {
             echo json_encode(['ok' => false, 'error' => 'No hay una descarga pendiente. Pulsa "Generar descarga del SRI" en el sistema.']);
             exit;
@@ -603,8 +606,10 @@ class DescargasSriController extends Controller
         set_time_limit(0);
 
         try {
-            // La empresa es la ACTIVA cuando el usuario pulsó "Generar descarga del SRI".
-            $idEmpresa = (new Usuario())->getLoginPendiente($idUsuario);
+            // La empresa es la ACTIVA cuando el usuario pulsó "Generar descarga del SRI". Ventana
+            // amplia (3 h): registrar requiere pulsar "Enviar comprobantes", así que no es un riesgo
+            // de seguridad y permite enviar varios períodos de la misma empresa.
+            $idEmpresa = (new Usuario())->getLoginPendiente($idUsuario, 180);
 
             // Respaldo: si no hay empresa marcada (p.ej. entró manual), identificar por el receptor del XML.
             if (!$idEmpresa) {
