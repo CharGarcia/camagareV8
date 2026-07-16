@@ -626,9 +626,13 @@ class DescargasSriController extends Controller
             }
 
             $res = (new SriDescargaAutomaticaService())->registrarClaves($claves, $idEmpresa, $idUsuario, 'agente');
-            // NO se borra la marca: el usuario puede consultar y enviar VARIOS períodos de la misma
-            // empresa sin volver a pulsar el botón. La marca se reemplaza al pulsar "Generar descarga"
-            // (otra empresa) y se limpia al cerrar sesión del SRI.
+
+            // Apagar el INGRESO AUTOMÁTICO: al enviar comprobantes el usuario ya está dentro del SRI,
+            // así que si vuelve a abrir el portal por su cuenta NO se le debe iniciar sesión sola.
+            // Solo se apaga el login automático (ventana corta); el REGISTRO sigue vigente (ventana
+            // amplia), de modo que puede enviar VARIOS períodos de la misma empresa sin volver a
+            // pulsar el botón. Para retomar el login automático hay que pulsar "Generar descarga".
+            (new Usuario())->desactivarLoginAuto($idUsuario);
             echo json_encode($res);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => 'Error del servidor: ' . $e->getMessage()]);

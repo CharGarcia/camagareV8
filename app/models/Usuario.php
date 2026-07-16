@@ -150,6 +150,19 @@ class Usuario extends BaseModel
     }
 
     /**
+     * Apaga el INGRESO AUTOMÁTICO al SRI sin cortar el registro de claves: envejece la marca 10 min
+     * (valor entre la ventana corta del login y la amplia del registro) para que la próxima apertura
+     * del portal ya NO inicie sesión sola, pero el usuario pueda seguir enviando comprobantes. Se
+     * llama al enviar comprobantes: en ese punto el usuario ya está dentro del SRI y no debe volver a
+     * loguearse solo si reabre el portal por su cuenta.
+     */
+    public function desactivarLoginAuto(int $idUsuario): void
+    {
+        $up = $this->db->prepare("UPDATE usuarios SET login_pendiente_at = NOW() - INTERVAL '10 minutes' WHERE id = ?");
+        $up->execute([$idUsuario]);
+    }
+
+    /**
      * Valida contraseña actual (MD5 o bcrypt) y actualiza a nueva contraseña en bcrypt.
      * Si la actual está en MD5 y es correcta, migra transparentemente.
      *
