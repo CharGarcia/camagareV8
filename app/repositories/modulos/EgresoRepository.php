@@ -20,7 +20,7 @@ class EgresoRepository extends BaseRepository
                 $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN numero_cheque VARCHAR(50) NULL");
                 $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN fecha_cobro DATE NULL");
             }
-        } catch (\Exception $e) { 
+        } catch (\Exception $e) {
             // Silenciar en caso de no poseer permisos DDL
         }
     }

@@ -233,21 +233,26 @@ class AsientoContableService
                 );
             }
 
-            // Si el asiento pertenece a un ingreso o egreso, desvincular su id_asiento_contable.
+            // Si el asiento pertenece a un ingreso, egreso o traspaso, desvincular su id_asiento_contable.
             // Así, si el documento sigue activo, el control de Estados Financieros lo regenerará.
             $origenDoc = $asiento['modulo_origen'] ?? '';
-            if (in_array($origenDoc, ['ingreso', 'egreso'], true) && !empty($asiento['id_referencia_origen'])) {
-                if ($origenDoc === 'ingreso') {
-                    $this->repository->desvincularAsientoIngreso((int)$asiento['id_referencia_origen']);
-                } else {
-                    $this->repository->desvincularAsientoEgreso((int)$asiento['id_referencia_origen']);
-                }
+            if (in_array($origenDoc, ['ingreso', 'egreso', 'traspaso'], true) && !empty($asiento['id_referencia_origen'])) {
+                $tablaOrigen = match ($origenDoc) {
+                    'ingreso'  => 'ingresos_cabecera',
+                    'egreso'   => 'egresos_cabecera',
+                    'traspaso' => 'traspasos_cabecera',
+                };
+                match ($origenDoc) {
+                    'ingreso'  => $this->repository->desvincularAsientoIngreso((int)$asiento['id_referencia_origen']),
+                    'egreso'   => $this->repository->desvincularAsientoEgreso((int)$asiento['id_referencia_origen']),
+                    'traspaso' => $this->repository->desvincularAsientoTraspaso((int)$asiento['id_referencia_origen']),
+                };
 
                 $this->logService->registrar(
                     idUsuario: $idUsuario,
                     idEmpresa: $idEmpresa,
                     accion: 'Desvincular Asiento de ' . ucfirst($origenDoc),
-                    tabla: $origenDoc === 'ingreso' ? 'ingresos_cabecera' : 'egresos_cabecera',
+                    tabla: $tablaOrigen,
                     idRegistro: (int)$asiento['id_referencia_origen'],
                     antes: ['id_asiento_contable' => $idAsiento],
                     despues: ['id_asiento_contable' => null]

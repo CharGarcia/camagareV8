@@ -629,6 +629,57 @@ class TareaRepository extends BaseRepository
     }
 
     /**
+     * Desglose para la campana del navbar: cuántas tareas del usuario están VENCIDAS
+     * y cuántas POR VENCER (dentro de 2 días). Mismo criterio de visibilidad que
+     * getAlertaTareasCount (creadas por el usuario o donde es responsable).
+     *
+     *   vencidas   = estado 'vencida' o 'por_realizar' con fecha ya pasada
+     *   por_vencer = 'por_realizar' con fecha entre hoy y hoy+2
+     * (rangos disjuntos → el total = vencidas + por_vencer coincide con getAlertaTareasCount)
+     *
+     * @return array{vencidas:int,por_vencer:int}
+     */
+    public function getAlertaTareasDetalle(int $idUsuario): array
+    {
+        $selMail = $this->db->prepare("SELECT mail FROM usuarios WHERE id = :id_u");
+        $selMail->execute([':id_u' => $idUsuario]);
+        $uMail = strtolower(trim((string) $selMail->fetchColumn()));
+
+        $sql = "SELECT
+                  COUNT(*) FILTER (
+                     WHERE t.estado = 'vencida'
+                        OR (t.estado = 'por_realizar' AND t.fecha_tarea < CURRENT_DATE)
+                  ) AS vencidas,
+                  COUNT(*) FILTER (
+                     WHERE t.estado = 'por_realizar'
+                       AND t.fecha_tarea >= CURRENT_DATE
+                       AND t.fecha_tarea <= CURRENT_DATE + 2
+                  ) AS por_vencer
+                FROM tareas t
+                WHERE t.eliminado = false
+                  AND (
+                    t.created_by = :id_usuario
+                    OR t.id IN (
+                      SELECT id_tarea FROM tareas_responsables
+                      WHERE id_usuario = :id_usuario_rep
+                         OR (:u_mail <> '' AND LOWER(correo_cache) = :u_mail_aux)
+                    )
+                  )";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_usuario'     => $idUsuario,
+            ':id_usuario_rep' => $idUsuario,
+            ':u_mail'         => $uMail,
+            ':u_mail_aux'     => $uMail,
+        ]);
+        $row = $st->fetch(\PDO::FETCH_ASSOC) ?: [];
+        return [
+            'vencidas'   => (int) ($row['vencidas'] ?? 0),
+            'por_vencer' => (int) ($row['por_vencer'] ?? 0),
+        ];
+    }
+
+    /**
      * Tareas VENCIDAS o POR VENCER (fecha dentro de $dias) con su responsable resuelto
      * (correo + nombre). Devuelve una fila por (tarea, responsable). Es GLOBAL: la tabla
      * `tareas` no depende de empresa. Para el recordatorio diario por correo.

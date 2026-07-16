@@ -107,16 +107,23 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
         padding-right: 0.75rem;
     }
 
+    /* Sangría del encabezado (título + botón) y de las pestañas — igual que proveedores.
+       Con el app-shell el contenedor va sin padding lateral, por eso lo damos aquí. */
+    body.cmg-has-table .tareas-page-header,
+    body.cmg-has-table #tabsTareas {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+
     .cmg-table-card .table thead th {
-        background: #f7f8fc;
-        font-size: .68rem;
+        background: #f8f9fa;
         font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: .02em;
-        padding: 4px 6px;
+        padding: 6px 8px;
         position: sticky;
         top: 0;
         z-index: 1;
+        box-shadow: 0 1px 0 #dee2e6;
+        white-space: nowrap;
     }
 
     .cmg-table-card .table tbody td {
@@ -285,15 +292,26 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
 <!-- ══════════════════════════════════════════════════════ -->
 <!-- Encabezado -->
 <!-- ══════════════════════════════════════════════════════ -->
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+<div class="tareas-page-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div>
         <h5 class="mb-0"><i class="bi bi-list-check"></i> <?= htmlspecialchars($titulo) ?></h5>
         <p class="text-muted mb-0 small">Gestión de obligaciones y asignación de tareas.</p>
     </div>
+    <div>
+        <button class="btn btn-primary btn-sm px-3 enc-tab-btn<?= $tabActiva === 'tareas' ? '' : ' d-none' ?>" data-tab-btn="tareas" id="btn-nueva-tarea" onclick="abrirModalTareaNueva()">
+            <i class="bi bi-plus-lg"></i> Nueva tarea
+        </button>
+        <button class="btn btn-primary btn-sm px-3 enc-tab-btn<?= $tabActiva === 'obligaciones' ? '' : ' d-none' ?>" data-tab-btn="obligaciones" onclick="abrirModalObligNueva()">
+            <i class="bi bi-plus-lg"></i> Nueva obligación
+        </button>
+        <button class="btn btn-primary btn-sm px-3 enc-tab-btn<?= $tabActiva === 'clientes' ? '' : ' d-none' ?>" data-tab-btn="clientes" onclick="abrirModalClienteNuevo('', 'clientes-tab')">
+            <i class="bi bi-plus-lg"></i> Nuevo cliente
+        </button>
+    </div>
 </div>
 
 <!-- Pestañas -->
-<ul class="nav nav-tabs nav-tabs-cmg mb-3" id="tabsTareas" role="tablist">
+<ul class="nav nav-tabs nav-tabs-cmg mb-0" id="tabsTareas" role="tablist">
     <li class="nav-item">
         <a class="nav-link<?= $tabActiva === 'tareas' ? ' active' : '' ?>"
             href="<?= $base ?>/config/tareas-obligaciones"
@@ -319,13 +337,7 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
 <!-- ══════════════════════════════════════════════════════ -->
 <div id="panel-tareas" class="tab-panel<?= $tabActiva === 'tareas' ? '' : ' d-none' ?>">
     <div class="cmg-dashboard-frame">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h6 class="fw-bold mb-0"><i class="bi bi-list-task text-primary"></i> Listado de Tareas</h6>
-            <button class="btn btn-primary btn-sm" id="btn-nueva-tarea" onclick="abrirModalTareaNueva()">
-                <i class="bi bi-plus-lg"></i> Nueva tarea
-            </button>
-        </div>
-        <div class="card cmg-table-card">
+        <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
             <div class="card-header px-3 py-2 border-bottom-0">
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <!-- Exportar -->
@@ -407,7 +419,7 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
                 </div>
             </div>
             <div class="table-scroll">
-                <table class="table table-hover mb-0" id="tabla-tareas">
+                <table class="table table-hover table-sm mb-0" id="tabla-tareas">
                     <thead>
                         <tr>
                             <th class="sortable-header ps-3" onclick="sortTareas('cliente_nombre')">Cliente <i class="bi bi-arrow-down-up text-muted" id="sort-icon-tareas-cliente_nombre"></i></th>
@@ -438,13 +450,7 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
 <!-- ══════════════════════════════════════════════════════ -->
 <div id="panel-obligaciones" class="tab-panel<?= $tabActiva === 'obligaciones' ? '' : ' d-none' ?>">
     <div class="cmg-dashboard-frame">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h6 class="fw-bold"><i class="bi bi-journal-check text-success"></i> Listado de Obligaciones</h6>
-            <button class="btn btn-primary btn-sm ms-auto" onclick="abrirModalObligNueva()">
-                <i class="bi bi-plus-lg"></i> Nueva obligación
-            </button>
-        </div>
-        <div class="card cmg-table-card">
+        <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
             <div class="card-header">
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <div class="btn-group btn-group-sm me-1">
@@ -461,7 +467,7 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
                 </div>
             </div>
             <div class="table-scroll">
-                <table class="table table-hover mb-0">
+                <table class="table table-hover table-sm mb-0">
                     <thead>
                         <tr>
                             <th class="sortable-header ps-3" onclick="sortOblig('nombre')">Nombre <i class="bi bi-arrow-down-up text-muted" id="sort-icon-oblig-nombre"></i></th>
@@ -488,14 +494,7 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
 <!-- ══════════════════════════════════════════════════════ -->
 <div id="panel-clientes" class="tab-panel<?= $tabActiva === 'clientes' ? '' : ' d-none' ?>">
     <div class="cmg-dashboard-frame">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h6 class="fw-bold mb-0"><i class="bi bi-people text-primary"></i> Detalle por cliente</h6>
-            <button class="btn btn-primary btn-sm" onclick="abrirModalClienteNuevo('', 'clientes-tab')">
-                <i class="bi bi-plus-lg"></i> Nuevo cliente
-            </button>
-        </div>
-        <p class="text-muted small mb-2">Clientes con obligaciones vigentes<?= $nivelUsuarioActual < 3 ? ' a tu cargo' : '' ?>. Haz clic en uno para ver el detalle y, si quieres, duplicar sus obligaciones hacia otro cliente.</p>
-        <div class="card cmg-table-card">
+        <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
             <div class="card-header px-3 py-2 border-bottom-0">
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <div class="input-group input-group-sm" style="max-width:280px">
@@ -506,8 +505,9 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
                     <div id="pagination-clientes"></div>
                 </div>
             </div>
+            <div class="px-3 py-1 small text-muted border-bottom">Clientes con obligaciones vigentes<?= $nivelUsuarioActual < 3 ? ' a tu cargo' : '' ?>. Haz clic en uno para ver el detalle y, si quieres, duplicar sus obligaciones hacia otro cliente.</div>
             <div class="table-scroll">
-                <table class="table table-hover mb-0">
+                <table class="table table-hover table-sm mb-0">
                     <thead>
                         <tr>
                             <th class="sortable-header ps-3" onclick="sortClientes('nombre')">Nombre <i class="bi bi-arrow-down-up text-muted" id="sort-icon-clientes-nombre"></i></th>
@@ -1038,6 +1038,10 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
             l.classList.remove('active');
         });
         document.getElementById(TAB_LINK_ID[tab] || TAB_LINK_ID.tareas).classList.add('active');
+        // Botón "Nueva…" superior: mostrar solo el de la pestaña activa
+        document.querySelectorAll('.enc-tab-btn').forEach(function(b) { b.classList.add('d-none'); });
+        var encBtn = document.querySelector('.enc-tab-btn[data-tab-btn="' + tab + '"]');
+        if (encBtn) encBtn.classList.remove('d-none');
         if (tab === 'tareas') {
             buscarTareas(1);
         } else if (tab === 'clientes') {

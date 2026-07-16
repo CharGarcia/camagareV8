@@ -137,6 +137,13 @@ return [
         'legacy_rutas' => ['modulos/opciones-ingreso-egreso'],
     ],
 
+    // Traspasos de Fondos (Tesorería): mueve saldo entre dos formas de pago en un solo paso.
+    // Actualizar id_submodulo con el id real tras registrar el submódulo en submodulos_menu.
+    'modulos/traspasos' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     // Pendientes de implementación (agregar cuando se cree el controlador):
     'modulos/vendedores' => ['id_submodulo' => 151, 'legacy_rutas' => []],
     'modulos/productos'  => ['id_submodulo' => 152, 'legacy_rutas' => []],

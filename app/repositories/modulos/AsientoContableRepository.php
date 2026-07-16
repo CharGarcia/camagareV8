@@ -316,4 +316,12 @@ class AsientoContableRepository
         $stmt = $pdo->prepare($sql);
         $stmt->execute([':id' => $idEgreso]);
     }
+
+    public function desvincularAsientoTraspaso(int $idTraspaso): void
+    {
+        $sql = "UPDATE traspasos_cabecera SET id_asiento_contable = NULL WHERE id = :id";
+        $pdo = \App\core\Database::getConnection();
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':id' => $idTraspaso]);
+    }
 }

@@ -162,16 +162,24 @@ class ContadoresNavbarService
         return $datos;
     }
 
-    /** Contador de tareas (global por usuario, con caché). */
-    private function contadorTareas(int $idUsuario): int
+    /**
+     * Alertas de tareas (global por usuario, con caché): desglose vencidas / por vencer
+     * y total. @return array{vencidas:int,por_vencer:int,total:int}
+     */
+    private function contadorTareas(int $idUsuario): array
     {
         $cache = Cache::get(self::claveTareas($idUsuario));
-        if (is_int($cache)) {
+        if (is_array($cache) && isset($cache['total'])) {
             return $cache;
         }
-        $count = (new TareaRepository())->getAlertaTareasCount($idUsuario);
-        Cache::set(self::claveTareas($idUsuario), $count, self::TTL_CONTADORES);
-        return $count;
+        $d = (new TareaRepository())->getAlertaTareasDetalle($idUsuario);
+        $det = [
+            'vencidas'   => (int) ($d['vencidas'] ?? 0),
+            'por_vencer' => (int) ($d['por_vencer'] ?? 0),
+        ];
+        $det['total'] = $det['vencidas'] + $det['por_vencer'];
+        Cache::set(self::claveTareas($idUsuario), $det, self::TTL_CONTADORES);
+        return $det;
     }
 
     /**
@@ -266,7 +274,12 @@ class ContadoresNavbarService
         }
 
         // Tareas: global por usuario, siempre incluido (solo requiere sesión).
-        $out['tareas_alertas'] = $this->contadorTareas($idUsuario);
+        $tareas = $this->contadorTareas($idUsuario);
+        $out['tareas_alertas'] = $tareas['total']; // total: el badge lo muestra
+        $out['tareas_detalle'] = [                  // desglose para el tooltip de la campana
+            'vencidas'   => $tareas['vencidas'],
+            'por_vencer' => $tareas['por_vencer'],
+        ];
 
         return $out;
     }

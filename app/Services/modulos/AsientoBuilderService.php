@@ -2417,6 +2417,66 @@ class AsientoBuilderService
     }
 
     /**
+     * Arma el asiento contable de un TRASPASO ENTRE FORMAS DE PAGO (Tesorería):
+     *   DEBE : cuenta de la forma DESTINO, por el monto (entra dinero, como un ingreso).
+     *   HABER: cuenta de la forma ORIGEN, por el monto (sale dinero, como un egreso).
+     * Reutiliza el mismo mecanismo de resolución de cuenta que lineasFormas(): la cuenta de la
+     * forma (empresa_formas_pago.id_cuenta_contable), con override opcional en
+     * asientos_programados (tipo_referencia 'forma_pago' para el lado que pierde dinero,
+     * 'forma_cobro' para el que lo recibe — mismo criterio que Ingresos/Egresos).
+     * Devuelve [] si el traspaso no existe o si a alguna de las dos formas le falta cuenta
+     * contable configurada (el asiento queda descuadrado a propósito y no se genera).
+     */
+    public function generarAsientoTraspaso(int $idEmpresa, int $idTraspaso): array
+    {
+        $db = \App\core\Database::getConnection();
+
+        $sql = "SELECT t.monto,
+                       fo.nombre AS origen_nombre,
+                       COALESCE(apo.id_cuenta, fo.id_cuenta_contable) AS origen_cuenta,
+                       fd.nombre AS destino_nombre,
+                       COALESCE(apd.id_cuenta, fd.id_cuenta_contable) AS destino_cuenta
+                FROM traspasos_cabecera t
+                INNER JOIN empresa_formas_pago fo ON fo.id = t.id_forma_origen
+                INNER JOIN empresa_formas_pago fd ON fd.id = t.id_forma_destino
+                LEFT JOIN asientos_programados apo ON apo.id_referencia = fo.id
+                                                   AND apo.tipo_referencia = 'forma_pago'
+                                                   AND apo.id_empresa = :emp
+                                                   AND apo.eliminado = false
+                LEFT JOIN asientos_programados apd ON apd.id_referencia = fd.id
+                                                   AND apd.tipo_referencia = 'forma_cobro'
+                                                   AND apd.id_empresa = :emp
+                                                   AND apd.eliminado = false
+                WHERE t.id = :id AND t.id_empresa = :emp AND t.eliminado = false";
+        $st = $db->prepare($sql);
+        $st->execute([':id' => $idTraspaso, ':emp' => $idEmpresa]);
+        $row = $st->fetch(\PDO::FETCH_ASSOC);
+        if (!$row) {
+            return [];
+        }
+
+        $monto = round((float) $row['monto'], 2);
+        if ($monto <= 0 || empty($row['origen_cuenta']) || empty($row['destino_cuenta'])) {
+            return [];
+        }
+
+        return [
+            [
+                'id_cuenta_contable' => (int) $row['destino_cuenta'],
+                'debe'               => $monto,
+                'haber'              => 0.0,
+                'referencia_detalle' => 'Traspaso a: ' . ($row['destino_nombre'] ?? ''),
+            ],
+            [
+                'id_cuenta_contable' => (int) $row['origen_cuenta'],
+                'debe'               => 0.0,
+                'haber'              => $monto,
+                'referencia_detalle' => 'Traspaso desde: ' . ($row['origen_nombre'] ?? ''),
+            ],
+        ];
+    }
+
+    /**
      * Construye la contrapartida (lado concepto) de un ingreso/egreso GENERAL repartida por la
      * cuenta contable elegida en cada línea de descripción. Para documentos sin líneas manuales
      * (egresos/ingresos atados a módulo) devuelve UNA sola línea con la cuenta del concepto por el

@@ -335,12 +335,15 @@ class DashboardService
         // ── Bancos / Efectivo / Tarjeta / Otro: saldo real actual por forma ──
         //   saldo = saldo_inicial (saldos_iniciales_bancos)
         //           + Σ cobros (ingresos_pagos)  − Σ pagos (egresos_pagos)
-        //   Filtrado por el ambiente real de la empresa (igual que Ingresos).
+        //           + Σ traspasos recibidos − Σ traspasos enviados (traspasos_cabecera)
+        //   Filtrado por el ambiente real de la empresa (igual que Ingresos/Egresos).
         $sqlFormas = "
             SELECT efp.id, efp.nombre, efp.tipo,
                    COALESCE(sib.saldo_inicial, 0)
                    + COALESCE(ing.total, 0)
-                   - COALESCE(egr.total, 0) AS saldo
+                   - COALESCE(egr.total, 0)
+                   + COALESCE(trsIn.total, 0)
+                   - COALESCE(trsOut.total, 0) AS saldo
             FROM empresa_formas_pago efp
             LEFT JOIN saldos_iniciales_bancos sib
                    ON sib.id_forma_pago = efp.id
@@ -367,6 +370,24 @@ class DashboardService
                   AND ec.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                 GROUP BY ep.id_forma_pago
             ) egr ON egr.id_forma = efp.id
+            LEFT JOIN (
+                SELECT tc.id_forma_destino AS id_forma, SUM(tc.monto) AS total
+                FROM traspasos_cabecera tc
+                WHERE tc.id_empresa = :e
+                  AND tc.eliminado  = FALSE
+                  AND tc.estado    <> 'anulado'
+                  AND tc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
+                GROUP BY tc.id_forma_destino
+            ) trsIn ON trsIn.id_forma = efp.id
+            LEFT JOIN (
+                SELECT tc.id_forma_origen AS id_forma, SUM(tc.monto) AS total
+                FROM traspasos_cabecera tc
+                WHERE tc.id_empresa = :e
+                  AND tc.eliminado  = FALSE
+                  AND tc.estado    <> 'anulado'
+                  AND tc.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
+                GROUP BY tc.id_forma_origen
+            ) trsOut ON trsOut.id_forma = efp.id
             WHERE efp.id_empresa = :e
               AND efp.eliminado  = FALSE
               AND efp.activo     = TRUE

@@ -62,6 +62,42 @@ class ComprobanteCajaPdfService
         ], $cabecera, $detalles, $pagos, $empresa, $outputDest, $asiento);
     }
 
+    /** Genera el PDF de un TRASPASO DE FONDOS entre formas de pago. */
+    public function generarTraspaso(array $cabecera, array $empresa, string $outputDest = 'I', ?array $asiento = null)
+    {
+        $cfg = [
+            'titulo'        => 'COMPROBANTE DE TRASPASO',
+            'numero'        => (string)($cabecera['numero_traspaso'] ?? ''),
+            'recibi_label'  => 'Recibido en',
+            'sujeto_nombre' => (string)($cabecera['destino_nombre'] ?? '—'),
+            'file_prefix'   => 'Traspaso',
+        ];
+
+        $this->pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
+        $this->pdf->SetCreator('Sistema');
+        $this->pdf->SetAuthor($empresa['nombre'] ?? '');
+        $this->pdf->SetTitle($cfg['titulo'] . ' ' . $cfg['numero']);
+        $this->pdf->SetMargins($this->marginL, 10, $this->marginR);
+        $this->pdf->SetAutoPageBreak(true, 15);
+        $this->pdf->setPrintHeader(false);
+        $this->pdf->setPrintFooter(false);
+        $this->pdf->AddPage();
+        $this->pdf->SetFont('helvetica', '', 9);
+
+        $y = $this->dibujarEncabezado($empresa, $cfg);
+        $y = $this->dibujarDatosTraspaso($cabecera, $y + 3);
+        $y = $this->dibujarMovimientoTraspaso($cabecera, $y + 3);
+        $y = $this->dibujarTotales(['monto_total' => (float)($cabecera['monto'] ?? 0)], $y + 3);
+        $y = $this->dibujarAsiento($asiento, $y + 4);
+        $this->dibujarFirmas($cfg, $cabecera, $y);
+
+        $nombre = $cfg['file_prefix'] . '_' . ($cfg['numero'] !== '' ? $cfg['numero'] : 'comprobante') . '.pdf';
+        if ($outputDest === 'S') {
+            return $this->pdf->Output($nombre, 'S');
+        }
+        $this->pdf->Output($nombre, $outputDest);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
 
     private function render(array $cfg, array $cabecera, array $detalles, array $pagos, array $empresa, string $outputDest, ?array $asiento = null)
@@ -206,6 +242,103 @@ class ComprobanteCajaPdfService
         $pdf->MultiCell($w - 32, 5, $obs !== '' ? $obs : '—', 0, 'L', false, 1);
 
         return $y + 20;
+    }
+
+    /** Caja con Fecha, Estado y Observaciones del traspaso (equivalente a dibujarDatosSujeto). */
+    private function dibujarDatosTraspaso(array $cabecera, float $y): float
+    {
+        $pdf = $this->pdf;
+        $mL  = $this->marginL;
+        $w   = $this->contentW;
+
+        $fecha = '';
+        if (!empty($cabecera['fecha_emision'])) {
+            $ts = strtotime((string)$cabecera['fecha_emision']);
+            $fecha = $ts ? date('d/m/Y', $ts) : (string)$cabecera['fecha_emision'];
+        }
+        $estado = ucfirst((string)($cabecera['estado'] ?? 'registrado'));
+
+        $pdf->SetLineWidth(0.2);
+        $pdf->SetDrawColor(120, 120, 120);
+        $pdf->SetFillColor(245, 245, 245);
+        $pdf->RoundedRect($mL, $y, $w, 14, 1.5, '1111', 'DF');
+
+        $pdf->SetFont('helvetica', 'B', 8);
+        $pdf->SetXY($mL + 2, $y + 2);
+        $pdf->Cell(18, 5, 'Fecha:', 0, 0, 'L');
+        $pdf->SetFont('helvetica', '', 9);
+        $pdf->Cell(60, 5, $fecha, 0, 0, 'L');
+
+        $pdf->SetFont('helvetica', 'B', 8);
+        $pdf->Cell(18, 5, 'Estado:', 0, 0, 'L');
+        $pdf->SetFont('helvetica', '', 9);
+        $pdf->Cell(0, 5, $estado, 0, 1, 'L');
+
+        $obs = trim((string)($cabecera['observaciones'] ?? ''));
+        $pdf->SetXY($mL + 2, $pdf->GetY());
+        $pdf->SetFont('helvetica', 'B', 8);
+        $pdf->Cell(28, 5, 'Por concepto de:', 0, 0, 'L');
+        $pdf->SetFont('helvetica', '', 9);
+        $pdf->MultiCell($w - 32, 5, $obs !== '' ? $obs : '—', 0, 'L', false, 1);
+
+        return max($pdf->GetY(), $y + 14);
+    }
+
+    /** Bloque visual ORIGEN → DESTINO con el nombre y tipo de cada forma de pago. */
+    private function dibujarMovimientoTraspaso(array $cabecera, float $y): float
+    {
+        $pdf  = $this->pdf;
+        $mL   = $this->marginL;
+        $w    = $this->contentW;
+        $boxH = 22;
+        $gap  = 20;
+        $boxW = ($w - $gap) / 2;
+        $xOrigen  = $mL;
+        $xDestino = $mL + $boxW + $gap;
+
+        // Caja ORIGEN
+        $pdf->SetLineWidth(0.3);
+        $pdf->SetDrawColor(180, 0, 0);
+        $pdf->SetFillColor(255, 245, 245);
+        $pdf->RoundedRect($xOrigen, $y, $boxW, $boxH, 1.5, '1111', 'DF');
+        $pdf->SetXY($xOrigen, $y + 2);
+        $pdf->SetFont('helvetica', 'B', 7.5);
+        $pdf->SetTextColor(180, 0, 0);
+        $pdf->Cell($boxW, 4, 'ORIGEN (Sale)', 0, 1, 'C');
+        $pdf->SetX($xOrigen);
+        $pdf->SetFont('helvetica', 'B', 10);
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->MultiCell($boxW, 5, $this->ajustarTexto((string)($cabecera['origen_nombre'] ?? '—'), $boxW - 4), 0, 'C', false, 1);
+        $pdf->SetX($xOrigen);
+        $pdf->SetFont('helvetica', '', 7.5);
+        $pdf->SetTextColor(90, 90, 90);
+        $pdf->Cell($boxW, 4, (string)($cabecera['origen_tipo'] ?? ''), 0, 1, 'C');
+
+        // Caja DESTINO
+        $pdf->SetDrawColor(0, 120, 0);
+        $pdf->SetFillColor(245, 255, 245);
+        $pdf->RoundedRect($xDestino, $y, $boxW, $boxH, 1.5, '1111', 'DF');
+        $pdf->SetXY($xDestino, $y + 2);
+        $pdf->SetFont('helvetica', 'B', 7.5);
+        $pdf->SetTextColor(0, 120, 0);
+        $pdf->Cell($boxW, 4, 'DESTINO (Entra)', 0, 1, 'C');
+        $pdf->SetX($xDestino);
+        $pdf->SetFont('helvetica', 'B', 10);
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->MultiCell($boxW, 5, $this->ajustarTexto((string)($cabecera['destino_nombre'] ?? '—'), $boxW - 4), 0, 'C', false, 1);
+        $pdf->SetX($xDestino);
+        $pdf->SetFont('helvetica', '', 7.5);
+        $pdf->SetTextColor(90, 90, 90);
+        $pdf->Cell($boxW, 4, (string)($cabecera['destino_tipo'] ?? ''), 0, 1, 'C');
+
+        // Flecha central
+        $pdf->SetTextColor(60, 60, 60);
+        $pdf->SetFont('helvetica', 'B', 14);
+        $pdf->SetXY($xOrigen + $boxW, $y + ($boxH / 2) - 4);
+        $pdf->Cell($gap, 8, '>>', 0, 0, 'C');
+        $pdf->SetTextColor(0, 0, 0);
+
+        return $y + $boxH;
     }
 
     private function dibujarTablaDetalle(array $cfg, array $detalles, float $y): float

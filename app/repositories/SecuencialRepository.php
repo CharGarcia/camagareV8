@@ -34,6 +34,7 @@ class SecuencialRepository
         'Proformas'                            => ['tabla' => 'proformas_cabecera',      'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Ingresos'                             => ['tabla' => 'ingresos_cabecera',       'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Egresos'                              => ['tabla' => 'egresos_cabecera',        'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
+        'Traspasos'                            => ['tabla' => 'traspasos_cabecera',      'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Pedidos'                              => ['tabla' => 'pedidos_cabecera',        'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Órdenes de compra'                    => ['tabla' => 'ordenes_compra',           'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Consignaciones ventas'                => ['tabla' => 'consignaciones_ventas',   'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
@@ -51,7 +52,7 @@ class SecuencialRepository
     private const DOCUMENT_AREAS = [
         'Ventas'         => ['Facturas de venta', 'Recibos de venta', 'Nota de crédito', 'Nota de débito', 'Proformas', 'Guía de remisión'],
         'Compras'        => ['Retenciones de compras', 'Liquidación de compras o servicios', 'Órdenes de compra'],
-        'Tesorería'      => ['Ingresos', 'Egresos'],
+        'Tesorería'      => ['Ingresos', 'Egresos', 'Traspasos'],
         'Operativos'     => ['Pedidos', 'Cambios de productos', 'Ordenes car-wash'],
         'Consignaciones' => ['Consignaciones ventas', 'Retornos consignaciones ventas', 'Facturacion consignaciones ventas'],
     ];

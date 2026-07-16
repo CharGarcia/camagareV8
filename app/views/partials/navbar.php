@@ -676,6 +676,15 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                 } else {
                     firmaWraps.forEach(function(w) { w.classList.add('d-none'); });
                 }
+
+                // Campana de tareas: tooltip con el desglose (vencidas vs por vencer)
+                const td = c.tareas_detalle || null;
+                if (td) {
+                    const v = parseInt(td.vencidas || 0, 10);
+                    const p = parseInt(td.por_vencer || 0, 10);
+                    const titTareas = v + ' vencida' + (v === 1 ? '' : 's') + ' · ' + p + ' por vencer';
+                    document.querySelectorAll('.tareas-alertas-link').forEach(function(l) { l.setAttribute('title', titTareas); });
+                }
             } catch (e) {}
             finally { CMG_contadoresEnVuelo = false; }
         };
