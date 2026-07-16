@@ -111,9 +111,12 @@ $mesActual  = (int) date('n');
         </div>
         <div class="col-auto">
             <label class="form-label small fw-semibold mb-1">Tipo gráfico</label>
-            <select id="fTipoChart" class="form-select form-select-sm" style="width:120px">
+            <select id="fTipoChart" class="form-select form-select-sm" style="width:150px">
                 <option value="bar">Barras</option>
+                <option value="stacked">Barras apiladas</option>
                 <option value="line">Líneas</option>
+                <option value="area">Área</option>
+                <option value="radar">Radar</option>
             </select>
         </div>
         <div class="col-auto ms-auto d-flex gap-2 align-items-end">
@@ -581,33 +584,47 @@ function renderTendencia(data, tipo){
     const ctx = $('chartTendencia');
     if(chartTend) chartTend.destroy();
     const labels = data.map(d=>d.mes);
-    const isFill = tipo==='line';
+
+    // tipo → configuración de Chart.js
+    const isLineFam = (tipo==='line' || tipo==='area');
+    const isRadar   = (tipo==='radar');
+    const isStacked = (tipo==='stacked');
+    const fill      = (tipo==='area' || tipo==='radar');
+    const chartType = isRadar ? 'radar' : (isLineFam ? 'line' : 'bar');
+
     const ds = seriesSeleccionadas().map(k=>{
         const s = CMP_SERIES[k];
         return {
             label: s.label,
             data: data.map(s.val),
             borderColor: s.color,
-            backgroundColor: isFill ? hexToRgba(s.color,.14) : hexToRgba(s.color,.8),
-            fill:isFill, tension:.3, borderRadius:4, borderWidth:isFill?2:0
+            backgroundColor: (isLineFam||isRadar) ? hexToRgba(s.color, fill?.14:.9) : hexToRgba(s.color,.8),
+            pointBackgroundColor: s.color,
+            fill: fill,
+            tension: isRadar ? 0 : .3,
+            borderRadius: 4,
+            borderWidth: (isLineFam||isRadar) ? 2 : 0
         };
     });
-    chartTend = new Chart(ctx,{
-        type: tipo==='line' ? 'line' : 'bar',
-        data:{labels,datasets:ds},
-        options:{
-            responsive:true,maintainAspectRatio:false,
-            interaction:{mode:'index',intersect:false},
-            plugins:{
-                legend:{position:'top',align:'end',labels:{boxWidth:11,usePointStyle:true,font:{size:12}}},
-                tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${fmt(c.parsed.y)}`}}
-            },
-            scales:{
-                y:{beginAtZero:true,grid:{color:'#f3f4f6'},ticks:{callback:v=>v>=1000?'$'+(v/1000)+'k':'$'+v}},
-                x:{grid:{display:false},ticks:{font:{size:11}}}
-            }
+
+    const opts = {
+        responsive:true, maintainAspectRatio:false,
+        interaction:{mode:'index',intersect:false},
+        plugins:{
+            legend:{position:'top',align:'end',labels:{boxWidth:11,usePointStyle:true,font:{size:12}}},
+            tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${fmt(isRadar?c.parsed.r:c.parsed.y)}`}}
         }
-    });
+    };
+    if(isRadar){
+        opts.scales = { r:{ beginAtZero:true, ticks:{ callback:v=>v>=1000?'$'+(v/1000)+'k':'$'+v, backdropColor:'transparent' } } };
+    } else {
+        opts.scales = {
+            y:{beginAtZero:true, stacked:isStacked, grid:{color:'#f3f4f6'}, ticks:{callback:v=>v>=1000?'$'+(v/1000)+'k':'$'+v}},
+            x:{stacked:isStacked, grid:{display:false}, ticks:{font:{size:11}}}
+        };
+    }
+
+    chartTend = new Chart(ctx,{ type:chartType, data:{labels,datasets:ds}, options:opts });
 }
 
 // ── Gráfico Top Proveedores (compras) ──
