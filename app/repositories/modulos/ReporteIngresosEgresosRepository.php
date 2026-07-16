@@ -279,9 +279,7 @@ class ReporteIngresosEgresosRepository extends BaseRepository
     public function getReporteAgrupadoForma(int $idEmpresa, array $f): array
     {
         [$union, $params] = $this->armarUnionPagos($idEmpresa, $f);
-        $textoWhere = '';
-        $q = trim($f['buscar'] ?? '');
-        if ($q !== '') { $params[':buscar'] = '%' . $q . '%'; $textoWhere = " AND (numero ILIKE :buscar OR tercero_nombre ILIKE :buscar OR forma_nombre ILIKE :buscar)"; }
+        $textoWhere = $this->filtroTexto($f, $params, ['numero', 'tercero_nombre', 'forma_nombre']);
         $sql = "SELECT tipo_flujo, forma_nombre, MAX(forma_tipo) AS forma_tipo,
                        COUNT(DISTINCT id_comprobante) AS comprobantes,
                        COUNT(*)   AS pagos_n,
