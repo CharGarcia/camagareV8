@@ -72,6 +72,7 @@ class SuscripcionesController extends BaseModuloController
         // igual que en la factura de venta.
         $decimalesPrecio   = 2;
         $decimalesCantidad = 2;
+        $calculoIva        = 'linea_linea';
         if (!empty($establecimientos)) {
             try {
                 $estRepo   = new \App\repositories\modulos\EmpresaRepository();
@@ -79,9 +80,11 @@ class SuscripcionesController extends BaseModuloController
                 if ($estConfig) {
                     $decimalesPrecio   = (int) ($estConfig['decimales_precio']   ?? 2);
                     $decimalesCantidad = (int) ($estConfig['decimales_cantidad'] ?? 2);
+                    $calculoIva        = ($estConfig['calculo_iva_facturacion'] ?? 'linea_linea') === 'subtotal'
+                        ? 'subtotal' : 'linea_linea';
                 }
             } catch (\Throwable $e) {
-                // Migración pendiente — se usan valores por defecto (2).
+                // Migración pendiente — se usan valores por defecto.
             }
         }
 
@@ -103,6 +106,7 @@ class SuscripcionesController extends BaseModuloController
             'puntos'         => $puntos,
             'decimalesPrecio'   => $decimalesPrecio,
             'decimalesCantidad' => $decimalesCantidad,
+            'calculoIva'        => $calculoIva,
             'fullWidth'      => true,
         ]);
     }

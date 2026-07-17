@@ -325,6 +325,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
     // Decimales configurados en el módulo empresa (precio unitario y cantidad).
     const SUSC_DEC_PRECIO = <?= (int) ($decimalesPrecio ?? 2) ?>;
     const SUSC_DEC_CANT   = <?= (int) ($decimalesCantidad ?? 2) ?>;
+    // Modo de cálculo de IVA configurado en el establecimiento (igual que la factura).
+    const SUSC_CALCULO_IVA = '<?= ($calculoIva ?? 'linea_linea') === 'subtotal' ? 'subtotal' : 'linea_linea' ?>';
     const suscStepDec = (d) => d > 0 ? '0.' + '0'.repeat(d - 1) + '1' : '1';
     let suscDetLineIdx = 0;
 
@@ -557,7 +559,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         let subGeneral = 0;
         let totalGeneral = 0;
 
-        let basesIva = {};
+        let basesIva = {};      // tasa → base acumulada
+        let ivasLinea = {};     // tasa → IVA acumulado línea a línea (modo linea_linea)
 
         document.querySelectorAll('#susc_tbody_detalle tr.row-susc-det').forEach(tr => {
             const qty  = parseFloat(tr.querySelector('.det-qty')?.value)   || 0;
@@ -567,8 +570,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
 
             subGeneral += sub;
 
-            if (!basesIva[ivaP]) basesIva[ivaP] = 0;
-            basesIva[ivaP] += sub;
+            if (!basesIva[ivaP])  basesIva[ivaP]  = 0;
+            if (!ivasLinea[ivaP]) ivasLinea[ivaP] = 0;
+            basesIva[ivaP]  += sub;
+            ivasLinea[ivaP]  = r2(ivasLinea[ivaP] + r2(sub * ivaP / 100));
         });
         subGeneral = r2(subGeneral);
 
@@ -593,7 +598,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         contIvasGrupo.innerHTML = '';
         let sumaIvas = 0;
         sortedTasas.forEach(tasa => {
-            const montoIva = r2(basesIva[tasa] * (tasa / 100));
+            const montoIva = SUSC_CALCULO_IVA === 'subtotal'
+                ? r2(basesIva[tasa] * (tasa / 100))
+                : (ivasLinea[tasa] || 0);
             sumaIvas += montoIva;
             if (tasa > 0 && montoIva > 0) {
                 contIvasGrupo.innerHTML += `

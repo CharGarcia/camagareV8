@@ -50,23 +50,27 @@ class SuscripcionFacturacionService
         $infoConcepto = strtr(trim($extras['info_concepto'] ?? ''), $reemplazos);
         $infoDetalle  = strtr(trim($extras['info_detalle']  ?? ''), $reemplazos);
 
+        // Modo de cálculo de IVA configurado en el establecimiento (igual que la
+        // factura de venta): 'linea_linea' redondea el IVA por línea y suma;
+        // 'subtotal' calcula el IVA sobre la base acumulada de cada tarifa.
+        $modoIva = ($estabConfig['calculo_iva_facturacion'] ?? 'linea_linea') === 'subtotal'
+            ? 'subtotal' : 'linea_linea';
+
         $detallesFactura = [];
         $basePorTarifa   = []; // clave = tarifa (string) → suma de bases de línea
+        $ivaPorTarifa    = []; // clave = tarifa (string) → IVA acumulado línea a línea
 
         foreach ($detalle as $det) {
             $tarifaIva = (float)($det['porcentaje_iva'] ?? 0);
             $base = round((float)$det['cantidad'] * (float)$det['precio_unitario'], 2);
 
-            // Acumular la base por tarifa para calcular el IVA AGRUPADO (igual que
-            // el modal de la suscripción y la factura de venta). Calcular el IVA
-            // línea por línea y redondear cada uno descuadra por centavos cuando
-            // hay varias líneas de la misma tarifa.
             $claveTarifa = (string)$tarifaIva;
             $basePorTarifa[$claveTarifa] = ($basePorTarifa[$claveTarifa] ?? 0.0) + $base;
 
-            // IVA de la línea (informativo, para el detalle/XML). El total del
-            // documento se toma del cálculo agrupado de abajo.
+            // IVA de la línea (redondeado). Se guarda en el detalle/XML y, en modo
+            // 'linea_linea', se acumula para el total del documento.
             $iva = round($base * ($tarifaIva / 100), 2);
+            $ivaPorTarifa[$claveTarifa] = round(($ivaPorTarifa[$claveTarifa] ?? 0.0) + $iva, 2);
 
             // El SRI exige declarar el IVA en CADA línea, incluso con tarifa 0%.
             // Omitir el impuesto cuando la tarifa era 0 generaba un
@@ -102,15 +106,17 @@ class SuscripcionFacturacionService
             ];
         }
 
-        // Totales AGRUPADOS por tarifa: base = suma de bases de línea de esa tarifa;
-        // IVA = round(base_grupo * tarifa/100). Así el total del documento coincide
-        // exactamente con el que muestra el modal de la suscripción.
+        // Totales por tarifa, respetando el modo configurado (idéntico a la factura):
+        //   linea_linea → IVA = suma de los IVA de línea ya redondeados
+        //   subtotal    → IVA = round(base_grupo * tarifa/100)
         $totalSinImp = 0.0;
         $totalIva    = 0.0;
         foreach ($basePorTarifa as $claveTarifa => $baseGrupo) {
             $baseGrupo    = round($baseGrupo, 2);
             $totalSinImp += $baseGrupo;
-            $totalIva    += round($baseGrupo * ((float)$claveTarifa / 100), 2);
+            $totalIva    += $modoIva === 'subtotal'
+                ? round($baseGrupo * ((float)$claveTarifa / 100), 2)
+                : ($ivaPorTarifa[$claveTarifa] ?? 0.0);
         }
         $totalSinImp = round($totalSinImp, 2);
         $totalIva    = round($totalIva, 2);
