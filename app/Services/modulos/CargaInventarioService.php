@@ -408,8 +408,11 @@ class CargaInventarioService
         $emp = $this->empresaRepo()->getEmisorConfig($idEmpresa) ?? [];
         $empNombre = $emp['nombre_comercial'] ?? ($emp['nombre'] ?? '');
 
-        $baseUrl = rtrim(defined('BASE_URL') ? BASE_URL : '', '/');
-        $url = $token ? ($baseUrl . '/aprobar-carga-inventario/' . $token) : ($baseUrl . '/modulos/cargas-inventario');
+        // El correo necesita una URL absoluta (con dominio); BASE_URL es solo la
+        // ruta relativa del subdirectorio, no sirve fuera del navegador.
+        $publicUrl = (defined('APP_URL') && APP_URL !== '') ? APP_URL : (defined('BASE_URL') ? BASE_URL : '');
+        $publicUrl = rtrim($publicUrl, '/');
+        $url = $token ? ($publicUrl . '/aprobar-carga-inventario/' . $token) : ($publicUrl . '/modulos/cargas-inventario');
 
         $data = [
             'numero'       => $carga['numero'],

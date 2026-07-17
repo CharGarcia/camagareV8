@@ -622,8 +622,10 @@ class ImportacionesService
         $emp       = $empRepo->getEmisorConfig($idEmpresa) ?? [];
         $empNombre = $emp['nombre_comercial'] ?? ($emp['nombre'] ?? '');
 
-        $baseUrl = rtrim(defined('BASE_URL') ? BASE_URL : '', '/');
-        $url = $baseUrl . '/aprobar-importacion/' . $token;
+        // El correo necesita una URL absoluta (con dominio); BASE_URL es solo la
+        // ruta relativa del subdirectorio, no sirve fuera del navegador.
+        $publicUrl = (defined('APP_URL') && APP_URL !== '') ? APP_URL : (defined('BASE_URL') ? BASE_URL : '');
+        $url = rtrim($publicUrl, '/') . '/aprobar-importacion/' . $token;
 
         $creador = $this->repository->getNombresUsuarios([$creadorId]);
 
