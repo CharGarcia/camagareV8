@@ -804,50 +804,55 @@ $plantillasFiltradas = [];
             ?>
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; }
-                table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
                 th { background: #e9ecef; border: 1px solid #ccc; padding: 4px 5px; text-align: center; font-size: 8pt; }
-                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; }
+                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; overflow: hidden; word-wrap: break-word; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
-                .header { text-align: center; margin-bottom: 12px; }
-                .stats { display: table; width: 100%; margin-bottom: 10px; }
-                .stat-box { display: table-cell; border: 1px solid #ccc; padding: 5px; text-align: center; }
-                .stat-val { font-size: 11pt; font-weight: bold; }
+                .header { text-align: center; margin-bottom: 10px; }
+                .header h2 { margin: 0 0 2px 0; font-size: 13pt; }
+                .header h3 { margin: 0 0 2px 0; font-size: 10pt; color: #555; }
+                .header p  { margin: 0; font-size: 7.5pt; color: #777; }
+                .stats-box { text-align: center; padding: 5px; }
+                .stat-val  { font-size: 11pt; font-weight: bold; }
             </style>
+            <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
             <div class="header">
                 <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
                 <h3>Cuentas por Cobrar</h3>
                 <p>Generado: <?= date('d-m-Y H:i:s') ?></p>
             </div>
-            <div class="stats">
-                <div class="stat-box">
-                    <div>Facturas</div>
-                    <div class="stat-val"><?= $stats['total_facturas'] ?></div>
-                </div>
-                <div class="stat-box">
-                    <div>Saldo Total</div>
-                    <div class="stat-val">$<?= number_format($stats['total_saldo'], 2) ?></div>
-                </div>
-                <div class="stat-box" style="color:#dc3545;">
-                    <div>Vencido</div>
-                    <div class="stat-val">$<?= number_format($stats['total_vencido'], 2) ?></div>
-                </div>
-                <div class="stat-box" style="color:#198754;">
-                    <div>Al Día</div>
-                    <div class="stat-val">$<?= number_format($stats['total_al_dia'], 2) ?></div>
-                </div>
-            </div>
+            <table class="stats">
+                <tr>
+                    <td class="stats-box" style="width:25%;">
+                        <div>Facturas</div>
+                        <div class="stat-val"><?= $stats['total_facturas'] ?></div>
+                    </td>
+                    <td class="stats-box" style="width:25%;">
+                        <div>Saldo Total</div>
+                        <div class="stat-val">$<?= number_format($stats['total_saldo'], 2) ?></div>
+                    </td>
+                    <td class="stats-box" style="width:25%;color:#dc3545;">
+                        <div>Vencido</div>
+                        <div class="stat-val">$<?= number_format($stats['total_vencido'], 2) ?></div>
+                    </td>
+                    <td class="stats-box" style="width:25%;color:#198754;">
+                        <div>Al Día</div>
+                        <div class="stat-val">$<?= number_format($stats['total_al_dia'], 2) ?></div>
+                    </td>
+                </tr>
+            </table>
             <table>
                 <thead>
                     <tr>
-                        <th>Documento</th>
-                        <th>Origen</th>
-                        <th>Cliente / RUC</th>
-                        <th>F. Emisión</th>
-                        <th>F. Vencimiento</th>
-                        <th>Total</th>
-                        <th>Cobrado</th>
-                        <th>Saldo</th>
+                        <th style="width:13%;">Documento</th>
+                        <th style="width:9%;">Origen</th>
+                        <th style="width:24%;">Cliente / RUC</th>
+                        <th style="width:11%;">F. Emisión</th>
+                        <th style="width:16%;">F. Vencimiento</th>
+                        <th style="width:9%;">Total</th>
+                        <th style="width:9%;">Cobrado</th>
+                        <th style="width:9%;">Saldo</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -855,13 +860,14 @@ $plantillasFiltradas = [];
                 </tbody>
                 <tfoot>
                     <tr style="background:#f8f9fa;font-weight:bold;">
-                        <th colspan="5" class="text-end">TOTALES:</th>
-                        <th class="text-end">$<?= number_format($totalTotal, 2) ?></th>
-                        <th class="text-end" style="color:#198754;">$<?= number_format($totalCobrado, 2) ?></th>
-                        <th class="text-end" style="color:#dc3545;">$<?= number_format($totalSaldo, 2) ?></th>
+                        <td colspan="5" class="text-end">TOTALES:</td>
+                        <td class="text-end">$<?= number_format($totalTotal, 2) ?></td>
+                        <td class="text-end" style="color:#198754;">$<?= number_format($totalCobrado, 2) ?></td>
+                        <td class="text-end" style="color:#dc3545;">$<?= number_format($totalSaldo, 2) ?></td>
                     </tr>
                 </tfoot>
             </table>
+            </page>
             <?php
             $html     = ob_get_clean();
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');

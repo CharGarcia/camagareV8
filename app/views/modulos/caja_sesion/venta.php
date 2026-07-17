@@ -8,6 +8,9 @@
  * @var string $rutaModulo
  * @var int    $idPuntoEmision
  * @var array  $sesion
+ * @var bool   $obligatorioLotes
+ * @var bool   $obligatorioCaducidad
+ * @var bool   $obligatorioNup
  */
 $base = rtrim(BASE_URL ?? '', '/');
 $rutaAjax = $base . '/' . $rutaModulo;
@@ -30,11 +33,16 @@ $rutaAjax = $base . '/' . $rutaModulo;
         .pv-catalogo { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
         .pv-search { flex: 0 0 auto; padding: 12px 16px; background: #fff; border-bottom: 1px solid #dee2e6; }
         .pv-grid { flex: 1 1 auto; overflow-y: auto; padding: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; align-content: start; }
-        .pv-tile { background: #fff; border: 1px solid #dee2e6; border-radius: 10px; padding: 12px 10px; cursor: pointer; text-align: left; transition: border-color .15s; }
+        .pv-tile { position: relative; background: #fff; border: 1px solid #dee2e6; border-radius: 10px; padding: 12px 10px; cursor: pointer; text-align: left; transition: border-color .15s; }
         .pv-tile:hover { border-color: #0d6efd; }
+        .pv-tile .thumb { width: 100%; height: 56px; object-fit: cover; border-radius: 6px; margin-bottom: 8px; background: #f4f6f9; display: block; }
         .pv-tile .nombre { font-size: .82rem; font-weight: 600; line-height: 1.25; margin-bottom: 6px; min-height: 2.1em; }
         .pv-tile .precio { font-size: .82rem; color: #0d6efd; font-weight: 700; }
         .pv-tile .codigo { font-size: .68rem; color: #8a94a6; }
+        .pv-tile .sin-stock {
+            position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%;
+            background: #dc3545; color: #fff; display: flex; align-items: center; justify-content: center; font-size: .7rem;
+        }
         .pv-empty { color: #8a94a6; }
 
         .pv-carrito { width: 340px; max-width: 40%; background: #fff; border-left: 1px solid #dee2e6; display: flex; flex-direction: column; }
@@ -81,8 +89,8 @@ $rutaAjax = $base . '/' . $rutaModulo;
         <div class="pv-catalogo">
             <div class="pv-search">
                 <div class="input-group">
-                    <span class="input-group-text"><i class="bi bi-search"></i></span>
-                    <input type="text" id="pv-buscar" class="form-control" placeholder="Buscar producto por nombre o código...">
+                    <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+                    <input type="text" id="pv-buscar" class="form-control" placeholder="Buscar producto o escanear código de barras..." autofocus autocomplete="off">
                 </div>
             </div>
             <div class="pv-grid" id="pv-grid">
@@ -93,6 +101,11 @@ $rutaAjax = $base . '/' . $rutaModulo;
         </div>
 
         <div class="pv-carrito">
+            <?php if ($obligatorioLotes): ?>
+            <div class="small text-muted px-3 pt-2">
+                <i class="bi bi-boxes"></i> Esta empresa exige lote en productos inventariados.
+            </div>
+            <?php endif; ?>
             <div class="pv-lineas" id="pv-lineas">
                 <div class="text-center py-4 pv-empty small">El carrito está vacío.<br>Toca un producto para agregarlo.</div>
             </div>
@@ -119,11 +132,64 @@ $rutaAjax = $base . '/' . $rutaModulo;
     </div>
 </div>
 
+<div class="modal fade" id="modalLote" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="bi bi-boxes me-1"></i>Selecciona el lote</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-2" id="modalLoteProducto"></p>
+                <select id="modalLoteSelect" class="form-select"></select>
+                <div id="modalLoteCaducidadWrap" class="d-none">
+                    <label class="form-label small fw-semibold text-uppercase text-muted mt-3 mb-1">Fecha de caducidad</label>
+                    <input type="date" id="modalLoteCaducidad" class="form-control form-control-sm">
+                    <div class="form-text">Este lote no trae caducidad registrada; la empresa la exige.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="modalLoteConfirmar">Agregar al carrito</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalNup" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="bi bi-upc me-1"></i>Número de serie</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-2" id="modalNupProducto"></p>
+                <input type="text" id="modalNupInput" class="form-control" placeholder="Escanea o escribe el número de serie" autocomplete="off">
+                <div class="form-text">Este producto exige un número de serie por unidad — cada unidad queda como una línea propia.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="modalNupConfirmar">Agregar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 (function () {
     const AJAX = "<?= $rutaAjax ?>";
+    const BASE = "<?= $base ?>";
     const ID_PUNTO = <?= (int) $idPuntoEmision ?>;
+    const OBLIGATORIO_LOTES = <?= $obligatorioLotes ? 'true' : 'false' ?>;
+    const OBLIGATORIO_CADUCIDAD = <?= $obligatorioCaducidad ? 'true' : 'false' ?>;
+    const OBLIGATORIO_NUP = <?= $obligatorioNup ? 'true' : 'false' ?>;
+    const modalLoteEl = document.getElementById('modalLote');
+    const modalLote = new bootstrap.Modal(modalLoteEl);
+    const modalNupEl = document.getElementById('modalNup');
+    const modalNup = new bootstrap.Modal(modalNupEl);
     const $grid = document.getElementById('pv-grid');
     const $buscar = document.getElementById('pv-buscar');
     const $lineas = document.getElementById('pv-lineas');
@@ -131,8 +197,19 @@ $rutaAjax = $base . '/' . $rutaModulo;
     let cart = [];
     let formaPago = '01';
     let buscarTimer = null;
+    let lineSeq = 0;
 
     function money(v) { return '$' + (parseFloat(v || 0)).toFixed(2); }
+
+    function swalToast(icon, title) {
+        Swal.fire({ toast: true, position: 'top-end', icon, title, showConfirmButton: false, timer: 2800, timerProgressBar: true });
+    }
+    function swalError(html) {
+        Swal.fire({ icon: 'error', title: 'Error', html, confirmButtonColor: '#0d6efd', confirmButtonText: 'Aceptar' });
+    }
+    function swalWarning(html) {
+        Swal.fire({ icon: 'warning', title: 'Atención', html, confirmButtonColor: '#0d6efd', confirmButtonText: 'Aceptar' });
+    }
 
     async function buscarProductos(q) {
         $grid.innerHTML = '<div class="text-center py-4 pv-empty" style="grid-column: 1 / -1;"><span class="spinner-border spinner-border-sm"></span> Buscando...</div>';
@@ -155,7 +232,14 @@ $rutaAjax = $base . '/' . $rutaModulo;
             const tile = document.createElement('button');
             tile.type = 'button';
             tile.className = 'pv-tile';
-            tile.innerHTML = '<div class="nombre">' + escapeHtml(p.nombre || '') + '</div>' +
+            const thumbHtml = p.imagen
+                ? '<img class="thumb" src="' + BASE + '/' + escapeHtml(p.imagen) + '" alt="" loading="lazy">'
+                : '';
+            const sinStock = (p.stock_pos !== undefined && parseFloat(p.stock_pos) <= 0)
+                ? '<span class="sin-stock" title="Sin stock"><i class="bi bi-exclamation-triangle-fill"></i></span>'
+                : '';
+            tile.innerHTML = sinStock + thumbHtml +
+                '<div class="nombre">' + escapeHtml(p.nombre || '') + '</div>' +
                 '<div class="precio">' + money(p.precio_base) + '</div>' +
                 '<div class="codigo">' + escapeHtml(p.codigo || '') + '</div>';
             tile.addEventListener('click', () => addToCart(p));
@@ -169,35 +253,177 @@ $rutaAjax = $base . '/' . $rutaModulo;
         return d.innerHTML;
     }
 
-    function addToCart(p) {
+    function esInventariableControlado(p) {
+        const inv = p.inventariable === true || p.inventariable === 't' || p.inventariable === 'true' || p.inventariable == 1;
+        return inv && p.tipo_produccion !== '02';
+    }
+    function requiereLote(p) { return OBLIGATORIO_LOTES && esInventariableControlado(p); }
+    function requiereNup(p) { return OBLIGATORIO_NUP && esInventariableControlado(p); }
+
+    async function addToCart(p) {
         const idProducto = parseInt(p.id, 10);
-        const existente = cart.find(l => l.id_producto === idProducto);
-        if (existente) {
-            existente.cantidad += 1;
-        } else {
-            cart.push({
-                id_producto: idProducto,
-                descripcion: p.nombre,
-                precio_unitario: parseFloat(p.precio_base || 0),
-                pct_iva: parseFloat(p.porcentaje_iva_final || 0),
-                cantidad: 1,
-            });
+        const necesitaNup = requiereNup(p);
+
+        // Con NÚP obligatorio cada unidad es su propia línea (un número de
+        // serie por línea) — nunca se fusiona con una existente.
+        if (!necesitaNup) {
+            const existente = cart.find(l => l.id_producto === idProducto);
+            if (existente) {
+                existente.cantidad += 1;
+                renderCart();
+                $buscar.focus();
+                return;
+            }
         }
+
+        let lote = '', caducidad = '';
+        if (requiereLote(p)) {
+            const elegido = await seleccionarLote(p);
+            if (!elegido) { $buscar.focus(); return; } // cancelado o sin stock
+            lote = elegido.lote;
+            caducidad = elegido.caducidad;
+        }
+
+        let nup = '';
+        if (necesitaNup) {
+            const val = await capturarNup(p);
+            if (val === null) { $buscar.focus(); return; } // cancelado
+            nup = val;
+        }
+
+        cart.push({
+            uid: ++lineSeq,
+            id_producto: idProducto,
+            descripcion: p.nombre,
+            precio_unitario: parseFloat(p.precio_base || 0),
+            pct_iva: parseFloat(p.porcentaje_iva_final || 0),
+            cantidad: 1,
+            lote,
+            caducidad,
+            nup,
+        });
         renderCart();
+        $buscar.focus();
     }
 
-    function cambiarCantidad(idProducto, delta) {
-        const linea = cart.find(l => l.id_producto === idProducto);
+    function seleccionarLote(p) {
+        return fetch(AJAX + '/getLotesAjax?id_producto=' + p.id, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(res => res.json())
+            .then(json => {
+                const lotes = (json.data || []).filter(l => parseFloat(l.stock_lote || 0) > 0);
+                if (!lotes.length) {
+                    swalWarning('No hay stock con lote disponible para "' + escapeHtml(p.nombre) + '".');
+                    return null;
+                }
+                const faltaCaducidad = OBLIGATORIO_CADUCIDAD && !lotes[0].fecha_caducidad;
+                if (lotes.length === 1 && !faltaCaducidad) {
+                    const l = lotes[0];
+                    return { lote: l.numero_lote === 'sin_lote' ? '' : l.numero_lote, caducidad: l.fecha_caducidad || '' };
+                }
+                return abrirModalLote(p, lotes);
+            })
+            .catch(() => {
+                swalError('Error de conexión al consultar los lotes de "' + escapeHtml(p.nombre) + '".');
+                return null;
+            });
+    }
+
+    function abrirModalLote(p, lotes) {
+        return new Promise(resolve => {
+            document.getElementById('modalLoteProducto').textContent = p.nombre;
+            const $sel = document.getElementById('modalLoteSelect');
+            const $cadWrap = document.getElementById('modalLoteCaducidadWrap');
+            const $cad = document.getElementById('modalLoteCaducidad');
+            $sel.innerHTML = '';
+            lotes.forEach(l => {
+                const opt = document.createElement('option');
+                opt.value = l.numero_lote;
+                const cadTxt = l.fecha_caducidad ? (' · vence ' + l.fecha_caducidad) : '';
+                opt.textContent = (l.numero_lote === 'sin_lote' ? 'Sin lote' : l.numero_lote) + ' — stock ' + l.stock_lote + cadTxt;
+                $sel.appendChild(opt);
+            });
+
+            const sincronizarCaducidad = () => {
+                const l = lotes.find(x => x.numero_lote === $sel.value);
+                $cad.value = l?.fecha_caducidad || '';
+            };
+            if (OBLIGATORIO_CADUCIDAD) {
+                $cadWrap.classList.remove('d-none');
+                sincronizarCaducidad();
+            } else {
+                $cadWrap.classList.add('d-none');
+                $cad.value = '';
+            }
+            $sel.addEventListener('change', sincronizarCaducidad);
+
+            let resuelto = false;
+            const $btnConfirmar = document.getElementById('modalLoteConfirmar');
+            const onConfirmar = () => {
+                if (OBLIGATORIO_CADUCIDAD && !$cad.value) {
+                    $cad.focus();
+                    return;
+                }
+                resuelto = true;
+                const val = $sel.value;
+                modalLote.hide();
+                resolve({ lote: val === 'sin_lote' ? '' : val, caducidad: $cad.value || '' });
+            };
+            const onHidden = () => {
+                modalLoteEl.removeEventListener('hidden.bs.modal', onHidden);
+                $btnConfirmar.removeEventListener('click', onConfirmar);
+                $sel.removeEventListener('change', sincronizarCaducidad);
+                if (!resuelto) resolve(null);
+            };
+
+            $btnConfirmar.addEventListener('click', onConfirmar);
+            modalLoteEl.addEventListener('hidden.bs.modal', onHidden);
+            modalLote.show();
+        });
+    }
+
+    function capturarNup(p) {
+        return new Promise(resolve => {
+            document.getElementById('modalNupProducto').textContent = p.nombre;
+            const $input = document.getElementById('modalNupInput');
+            $input.value = '';
+
+            let resuelto = false;
+            const $btnConfirmar = document.getElementById('modalNupConfirmar');
+            const confirmar = () => {
+                const val = $input.value.trim();
+                if (!val) { $input.focus(); return; }
+                resuelto = true;
+                modalNup.hide();
+                resolve(val);
+            };
+            const onEnter = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); confirmar(); } };
+            const onHidden = () => {
+                modalNupEl.removeEventListener('hidden.bs.modal', onHidden);
+                $btnConfirmar.removeEventListener('click', confirmar);
+                $input.removeEventListener('keydown', onEnter);
+                if (!resuelto) resolve(null);
+            };
+
+            $btnConfirmar.addEventListener('click', confirmar);
+            $input.addEventListener('keydown', onEnter);
+            modalNupEl.addEventListener('hidden.bs.modal', onHidden);
+            modalNup.show();
+            setTimeout(() => $input.focus(), 300);
+        });
+    }
+
+    function cambiarCantidad(uid, delta) {
+        const linea = cart.find(l => l.uid === uid);
         if (!linea) return;
         linea.cantidad += delta;
         if (linea.cantidad <= 0) {
-            cart = cart.filter(l => l.id_producto !== idProducto);
+            cart = cart.filter(l => l.uid !== uid);
         }
         renderCart();
     }
 
-    function quitarLinea(idProducto) {
-        cart = cart.filter(l => l.id_producto !== idProducto);
+    function quitarLinea(uid) {
+        cart = cart.filter(l => l.uid !== uid);
         renderCart();
     }
 
@@ -210,18 +436,23 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 const base = l.precio_unitario * l.cantidad;
                 const row = document.createElement('div');
                 row.className = 'pv-linea';
-                row.innerHTML =
-                    '<div class="desc"><div class="n">' + escapeHtml(l.descripcion) + '</div><div class="p">' + money(l.precio_unitario) + ' c/u</div></div>' +
-                    '<div class="pv-qty">' +
+                const loteTag = l.lote ? ' <span class="badge bg-secondary bg-opacity-25 text-secondary">Lote ' + escapeHtml(l.lote) + '</span>' : '';
+                const nupTag = l.nup ? ' <span class="badge bg-info bg-opacity-25 text-info">S/N ' + escapeHtml(l.nup) + '</span>' : '';
+                const qtyHtml = l.nup
+                    ? '<span class="small text-muted">1 unidad</span>'
+                    : '<div class="pv-qty">' +
                         '<button type="button" class="btn btn-outline-secondary btn-sm" data-act="menos">-</button>' +
                         '<span>' + l.cantidad + '</span>' +
                         '<button type="button" class="btn btn-outline-secondary btn-sm" data-act="mas">+</button>' +
-                    '</div>' +
+                      '</div>';
+                row.innerHTML =
+                    '<div class="desc"><div class="n">' + escapeHtml(l.descripcion) + loteTag + nupTag + '</div><div class="p">' + money(l.precio_unitario) + ' c/u</div></div>' +
+                    qtyHtml +
                     '<div class="total">' + money(base) + '</div>' +
                     '<i class="bi bi-x-lg rm" data-act="rm"></i>';
-                row.querySelector('[data-act="menos"]').addEventListener('click', () => cambiarCantidad(l.id_producto, -1));
-                row.querySelector('[data-act="mas"]').addEventListener('click', () => cambiarCantidad(l.id_producto, 1));
-                row.querySelector('[data-act="rm"]').addEventListener('click', () => quitarLinea(l.id_producto));
+                row.querySelector('[data-act="menos"]')?.addEventListener('click', () => cambiarCantidad(l.uid, -1));
+                row.querySelector('[data-act="mas"]')?.addEventListener('click', () => cambiarCantidad(l.uid, 1));
+                row.querySelector('[data-act="rm"]').addEventListener('click', () => quitarLinea(l.uid));
                 $lineas.appendChild(row);
             });
         }
@@ -262,21 +493,31 @@ $rutaAjax = $base . '/' . $rutaModulo;
             descripcion: l.descripcion,
             cantidad: l.cantidad,
             precio_unitario: l.precio_unitario,
+            lote: l.lote || '',
+            caducidad: l.caducidad || '',
+            nup: l.nup || '',
         }))));
 
         try {
             const res = await fetch(AJAX + '/cobrarAjax', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             const json = await res.json();
             if (!json.ok) {
-                alert(json.error || 'No se pudo registrar la venta.');
+                swalError(json.error || 'No se pudo registrar la venta.');
                 renderCart();
                 return;
             }
-            alert('Venta registrada: ' + json.data.numero_documento + ' — ' + money(json.data.importe_total));
+            Swal.fire({
+                icon: 'success',
+                title: 'Venta registrada',
+                html: 'Recibo <b>' + escapeHtml(json.data.numero_documento) + '</b> por <b>' + money(json.data.importe_total) + '</b>.' +
+                      '<br><br><span class="text-muted small">Ya se descontó el inventario y se generó el asiento contable. Queda guardada como recibo interno — puedes verla, imprimirla o enviarla desde el módulo <b>Recibos de Venta</b>.</span>',
+                confirmButtonColor: '#198754',
+                confirmButtonText: 'Nueva venta'
+            });
             cart = [];
             renderCart();
         } catch (e) {
-            alert('Error de conexión al cobrar.');
+            swalError('Error de conexión al cobrar.');
             renderCart();
         }
     });
@@ -286,8 +527,61 @@ $rutaAjax = $base . '/' . $rutaModulo;
         buscarTimer = setTimeout(() => buscarProductos($buscar.value.trim()), 350);
     });
 
+    // Los lectores de código de barras "escriben" el código y rematan con Enter.
+    $buscar.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+            ev.preventDefault();
+            escanearCodigo($buscar.value.trim());
+            return;
+        }
+        // Backspace/Delete limpian el campo de una vez, en vez de borrar
+        // carácter por carácter — útil para corregir un escaneo fallido rápido.
+        if (ev.key === 'Backspace' || ev.key === 'Delete') {
+            ev.preventDefault();
+            $buscar.value = '';
+            buscarProductos('');
+        }
+    });
+
+    async function escanearCodigo(valor) {
+        if (!valor) return;
+        clearTimeout(buscarTimer);
+
+        try {
+            const res = await fetch(AJAX + '/getProductosAjax?q=' + encodeURIComponent(valor), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const json = await res.json();
+            const rows = json.data || [];
+
+            const valorNorm = valor.toLowerCase();
+            let match = rows.find(p =>
+                (p.codigo_barras || '').toLowerCase() === valorNorm ||
+                (p.codigo || '').toLowerCase() === valorNorm ||
+                (p.codigo_auxiliar || '').toLowerCase() === valorNorm
+            );
+            if (!match && rows.length === 1) {
+                match = rows[0];
+            }
+
+            if (match) {
+                addToCart(match);
+                $buscar.value = '';
+                renderGrid(rows.filter(p => p.id !== match.id));
+            } else if (rows.length > 1) {
+                renderGrid(rows);
+                swalToast('warning', 'Varios productos coinciden con "' + valor + '" — elige uno de la lista.');
+            } else {
+                swalToast('warning', 'No se encontró ningún producto con el código "' + valor + '".');
+            }
+        } catch (e) {
+            swalToast('error', 'Error de conexión al buscar el código.');
+        } finally {
+            $buscar.focus();
+        }
+    }
+
     buscarProductos('');
     renderCart();
+    $buscar.focus();
 })();
 </script>
 </body>

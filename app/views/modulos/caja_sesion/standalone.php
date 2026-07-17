@@ -119,12 +119,12 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 </div>
             </div>
 
-            <div id="cx-alerta" class="alert d-none mt-3 mb-0 py-2 small"></div>
         </div>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 (function () {
     const AJAX = "<?= $rutaAjax ?>";
@@ -133,21 +133,20 @@ $rutaAjax = $base . '/' . $rutaModulo;
     const $loading = document.getElementById('cx-loading');
     const $panelAbrir = document.getElementById('cx-panel-abrir');
     const $panelTurno = document.getElementById('cx-panel-turno');
-    const $alerta = document.getElementById('cx-alerta');
     let sesionActual = null;
 
     function money(v) {
         return '$' + (parseFloat(v || 0)).toFixed(2);
     }
 
-    function mostrarAlerta(msg, tipo) {
-        $alerta.className = 'alert mt-3 mb-0 py-2 small alert-' + (tipo || 'danger');
-        $alerta.textContent = msg;
-        $alerta.classList.remove('d-none');
+    function swalToast(icon, title) {
+        Swal.fire({ toast: true, position: 'top-end', icon, title, showConfirmButton: false, timer: 2800, timerProgressBar: true });
     }
-
-    function ocultarAlerta() {
-        $alerta.classList.add('d-none');
+    function swalError(html) {
+        Swal.fire({ icon: 'error', title: 'Error', html, confirmButtonColor: '#0d6efd', confirmButtonText: 'Aceptar' });
+    }
+    function swalWarning(html) {
+        Swal.fire({ icon: 'warning', title: 'Atención', html, confirmButtonColor: '#0d6efd', confirmButtonText: 'Aceptar' });
     }
 
     function ocultarPaneles() {
@@ -188,7 +187,6 @@ $rutaAjax = $base . '/' . $rutaModulo;
     }
 
     async function consultarEstado(idPuntoEmision) {
-        ocultarAlerta();
         ocultarPaneles();
         if (!idPuntoEmision) return;
 
@@ -197,21 +195,21 @@ $rutaAjax = $base . '/' . $rutaModulo;
             const res = await fetch(AJAX + '/estadoActualAjax?id_punto_emision=' + idPuntoEmision, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             const json = await res.json();
             $loading.classList.add('d-none');
-            if (!json.ok) { mostrarAlerta(json.error || 'No se pudo consultar el turno.'); return; }
+            if (!json.ok) { swalError(json.error || 'No se pudo consultar el turno.'); return; }
 
             sesionActual = json.sesion;
             if (sesionActual) {
                 document.getElementById('cx-turno-cajero').textContent = 'Cajero: ' + (sesionActual.cajero_nombre || '—');
                 document.getElementById('cx-turno-desde').textContent = 'Abierta: ' + sesionActual.fecha_apertura;
                 document.getElementById('cx-turno-fondo').textContent = money(sesionActual.fondo_inicial);
-                document.getElementById('cx-btn-continuar').href = AJAX + '/venta?id_punto_emision=' + idPuntoEmision;
+                document.getElementById('cx-btn-continuar').href = AJAX + '/venta';
                 $panelTurno.classList.remove('d-none');
             } else {
                 $panelAbrir.classList.remove('d-none');
             }
         } catch (e) {
             $loading.classList.add('d-none');
-            mostrarAlerta('Error de conexión al consultar el turno.');
+            swalError('Error de conexión al consultar el turno.');
         }
     }
 
@@ -219,10 +217,9 @@ $rutaAjax = $base . '/' . $rutaModulo;
     $pto.addEventListener('change', () => consultarEstado($pto.value));
 
     document.getElementById('cx-btn-abrir').addEventListener('click', async () => {
-        ocultarAlerta();
         const idPunto = $pto.value;
         const fondo = document.getElementById('cx-fondo-inicial').value;
-        if (!idPunto) { mostrarAlerta('Seleccione un punto de emisión.'); return; }
+        if (!idPunto) { swalWarning('Seleccione un punto de emisión.'); return; }
 
         const fd = new FormData();
         fd.append('id_punto_emision', idPunto);
@@ -230,9 +227,9 @@ $rutaAjax = $base . '/' . $rutaModulo;
 
         const res = await fetch(AJAX + '/abrirAjax', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         const json = await res.json();
-        if (!json.ok) { mostrarAlerta(json.error || 'No se pudo abrir la caja.'); return; }
+        if (!json.ok) { swalError(json.error || 'No se pudo abrir la caja.'); return; }
 
-        mostrarAlerta('Caja abierta correctamente.', 'success');
+        swalToast('success', 'Caja abierta correctamente.');
         consultarEstado(idPunto);
     });
 
@@ -247,7 +244,6 @@ $rutaAjax = $base . '/' . $rutaModulo;
     });
 
     document.getElementById('cx-btn-confirmar-cierre').addEventListener('click', async () => {
-        ocultarAlerta();
         if (!sesionActual) return;
         const montoContado = document.getElementById('cx-monto-contado').value;
         const observaciones = document.getElementById('cx-observaciones').value;
@@ -259,11 +255,14 @@ $rutaAjax = $base . '/' . $rutaModulo;
 
         const res = await fetch(AJAX + '/cerrarAjax', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         const json = await res.json();
-        if (!json.ok) { mostrarAlerta(json.error || 'No se pudo cerrar la caja.'); return; }
+        if (!json.ok) { swalError(json.error || 'No se pudo cerrar la caja.'); return; }
 
         const dif = parseFloat(json.sesion.diferencia || 0);
-        const tipoAlerta = Math.abs(dif) < 0.01 ? 'success' : 'warning';
-        mostrarAlerta('Caja cerrada. Diferencia: ' + money(dif), tipoAlerta);
+        if (Math.abs(dif) < 0.01) {
+            swalToast('success', 'Caja cerrada correctamente.');
+        } else {
+            swalWarning('Caja cerrada con una diferencia de <b>' + money(dif) + '</b> respecto a lo esperado.');
+        }
         consultarEstado($pto.value);
     });
 

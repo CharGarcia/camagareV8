@@ -18,6 +18,33 @@ class InventarioRepository extends BaseRepository
     // ────────────────────────────────────────────────────────────────
 
     /**
+     * Stock actual de varios productos a la vez en una sola bodega (una sola
+     * consulta, evita N+1). Devuelve [id_producto => stock]; los productos
+     * sin ningún movimiento no aparecen en el resultado (asumir 0).
+     */
+    public function getStockActualPorProductos(array $idProductos, int $idBodega, int $idEmpresa): array
+    {
+        $idProductos = array_values(array_unique(array_map('intval', $idProductos)));
+        if (empty($idProductos)) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($idProductos), '?'));
+        $sql = "SELECT id_producto, COALESCE(SUM(cantidad), 0) AS stock
+                FROM inventario_kardex
+                WHERE id_bodega = ? AND id_empresa = ? AND eliminado = false
+                  AND id_producto IN ($placeholders)
+                GROUP BY id_producto";
+        $st = $this->db->prepare($sql);
+        $st->execute(array_merge([$idBodega, $idEmpresa], $idProductos));
+
+        $resultado = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $resultado[(int) $row['id_producto']] = (float) $row['stock'];
+        }
+        return $resultado;
+    }
+
+    /**
      * Obtiene el stock actual real sumando todos los movimientos del Kardex.
      * Es la fuente de verdad absoluta para validaciones.
      * @param int|null $excludeRefId ID de referencia a excluir (para ediciones)

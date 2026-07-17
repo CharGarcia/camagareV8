@@ -62,7 +62,7 @@ class CajaPosController extends BaseModuloController
         $this->requireLeer();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idPuntoEmision = (int) ($_GET['id_punto_emision'] ?? 0);
+        $idPuntoEmision = (int) ($_SESSION['pos_id_punto_emision'] ?? 0);
         $sesion = $idPuntoEmision > 0 ? $this->service->getSesionAbierta($idEmpresa, $idPuntoEmision) : null;
 
         if (!$sesion) {
@@ -75,11 +75,17 @@ class CajaPosController extends BaseModuloController
             return;
         }
 
+        $estConfig = $this->getEmpresaConfig($idEmpresa);
+        $toBool = fn($v) => ($v === true || $v === 't' || $v === 'true' || $v === 1 || $v === '1');
+
         $this->view('modulos.caja_sesion.venta', [
             'titulo' => 'Punto de Venta',
             'rutaModulo' => self::RUTA_MODULO,
             'idPuntoEmision' => $idPuntoEmision,
             'sesion' => $sesion,
+            'obligatorioLotes' => $toBool($estConfig['obligatorio_lotes'] ?? false),
+            'obligatorioCaducidad' => $toBool($estConfig['obligatorio_caducidad'] ?? false),
+            'obligatorioNup' => $toBool($estConfig['obligatorio_nup'] ?? false),
         ]);
     }
 
@@ -91,8 +97,52 @@ class CajaPosController extends BaseModuloController
 
         $repo = new ProductoRepository();
         $result = $repo->getListado($idEmpresa, $buscar, 1, 24, 'nombre', 'ASC', null, 'venta', true);
+        $rows = $result['rows'];
 
-        $this->json(['ok' => true, 'data' => $result['rows']]);
+        $idBodega = $this->ventaService->getBodegaActiva($idEmpresa);
+        if ($idBodega) {
+            $idsInventariables = array_values(array_filter(array_map(
+                fn($p) => !empty($p['inventariable']) && ($p['tipo_produccion'] ?? '') !== '02' ? (int) $p['id'] : null,
+                $rows
+            )));
+            $stockPorProducto = (new \App\repositories\modulos\InventarioRepository())
+                ->getStockActualPorProductos($idsInventariables, $idBodega, $idEmpresa);
+            foreach ($rows as &$p) {
+                if (!empty($p['inventariable']) && ($p['tipo_produccion'] ?? '') !== '02') {
+                    $p['stock_pos'] = $stockPorProducto[(int) $p['id']] ?? 0.0;
+                }
+            }
+            unset($p);
+        }
+
+        $this->json(['ok' => true, 'data' => $rows]);
+    }
+
+    /**
+     * Lotes con stock disponible para un producto, en la bodega del POS.
+     * Mismo origen de datos que usa el selector de lote de Factura de Venta
+     * (InventarioRepository::getLotesDisponibles), sin depender de ese módulo.
+     */
+    public function getLotesAjax(): void
+    {
+        $this->requireLeer();
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idProducto = (int) ($_GET['id_producto'] ?? 0);
+        if ($idProducto <= 0) {
+            $this->json(['ok' => false, 'error' => 'Producto no válido.'], 400);
+        }
+
+        $idBodega = $this->ventaService->getBodegaActiva($idEmpresa);
+        if (!$idBodega) {
+            $this->json(['ok' => true, 'data' => [], 'stock_total' => 0]);
+        }
+
+        $repoInv = new \App\repositories\modulos\InventarioRepository();
+        $lotes = $repoInv->getLotesDisponibles($idProducto, $idBodega, $idEmpresa);
+        $stockTotal = $repoInv->getStockActual($idProducto, $idBodega, $idEmpresa);
+
+        $this->json(['ok' => true, 'data' => $lotes, 'stock_total' => $stockTotal]);
     }
 
     public function cobrarAjax(): void
@@ -169,6 +219,10 @@ class CajaPosController extends BaseModuloController
             $this->json(['ok' => false, 'error' => 'Punto de emisión no válido.'], 400);
         }
 
+        // Recordar el punto de emisión elegido: la pantalla de venta lo lee de
+        // sesión (URL limpia, sin id en la dirección).
+        $_SESSION['pos_id_punto_emision'] = $idPuntoEmision;
+
         $sesion = $this->service->getSesionAbierta($idEmpresa, $idPuntoEmision);
         $this->json(['ok' => true, 'sesion' => $sesion]);
     }
@@ -210,6 +264,7 @@ class CajaPosController extends BaseModuloController
                 throw new \Exception('Sesión de caja no válida.');
             }
             $sesion = $this->service->cerrar($id, $idEmpresa, $data);
+            unset($_SESSION['pos_id_punto_emision']);
             $this->json(['ok' => true, 'msg' => 'Caja cerrada correctamente.', 'sesion' => $sesion]);
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'error' => $e->getMessage()]);

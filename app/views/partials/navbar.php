@@ -350,6 +350,12 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                 <i class="bi bi-robot"></i>
             </a>
             <?php endif; ?>
+            <?php if (\App\Helpers\Permisos::puedeVer('modulos/caja-pos')): ?>
+            <a href="<?= $base ?>/modulos/caja-pos" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Punto de Venta"
+               target="_blank" rel="noopener">
+                <i class="bi bi-cash-coin"></i>
+            </a>
+            <?php endif; ?>
             <a href="<?= $base ?>/videos-ayuda" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Videos de ayuda"
                target="_blank" rel="noopener">
                 <i class="bi bi-question-circle-fill"></i>
@@ -483,6 +489,12 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                 <a href="<?= $base ?>/modulos/ia-soporte" class="btn btn-outline-primary btn-sm flex-grow-1"
                    target="_blank" rel="noopener">
                     <i class="bi bi-robot me-1"></i>IA Soporte
+                </a>
+                <?php endif; ?>
+                <?php if (\App\Helpers\Permisos::puedeVer('modulos/caja-pos')): ?>
+                <a href="<?= $base ?>/modulos/caja-pos" class="btn btn-outline-primary btn-sm flex-grow-1"
+                   target="_blank" rel="noopener">
+                    <i class="bi bi-cash-coin me-1"></i>Punto de Venta
                 </a>
                 <?php endif; ?>
                 <a href="<?= $base ?>/videos-ayuda" class="btn btn-outline-primary btn-sm flex-grow-1"

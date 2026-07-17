@@ -719,6 +719,16 @@ async function CXC_enviarWA() {
     fd.append('telefono',       telefono);
     fd.append('template_name',  templateName);
 
+    // Aviso "Enviando…" mientras la API de WhatsApp responde (puede tardar unos
+    // segundos); el usuario ve que el envío está en curso.
+    Swal.fire({
+        title: 'Enviando mensaje…',
+        html: 'Contactando a WhatsApp. Por favor espera.',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading()
+    });
+
     try {
         const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/enviarWhatsappAjax`, {
             method: 'POST',
@@ -726,6 +736,7 @@ async function CXC_enviarWA() {
             body: fd
         });
         const data = await r.json();
+        Swal.close();
         if (data.ok) {
             bootstrap.Modal.getInstance(document.getElementById('modalWA')).hide();
             CXC_toast(data.mensaje || 'WhatsApp enviado.', 'success');
@@ -733,6 +744,7 @@ async function CXC_enviarWA() {
             CXC_toast(data.error || 'Error al enviar.', 'danger');
         }
     } catch (e) {
+        Swal.close();
         CXC_toast('Error de conexión.', 'danger');
     }
 }

@@ -380,7 +380,7 @@ class CuentasPorPagarController extends BaseModuloController
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
 
             $totalSaldo   = 0;
-            $totalPagado  = 0;
+            $totalPagRet  = 0;   // pagado + retenido + NC (lo que muestra la columna)
             $totalTotal   = 0;
             $filaHtml     = '';
 
@@ -391,7 +391,7 @@ class CuentasPorPagarController extends BaseModuloController
                 $tsal  = (float)$r['saldo'];
                 $tret  = (float)($r['total_retenido'] ?? 0) + (float)($r['total_nc'] ?? 0);
                 $totalTotal  += $ts;
-                $totalPagado += $tp;
+                $totalPagRet += $tp + $tret;
                 $totalSaldo  += $tsal;
                 $color = $dias > 0 && $tsal > 0 ? 'color:#dc3545;' : '';
                 $badge = $tsal <= 0
@@ -418,49 +418,54 @@ class CuentasPorPagarController extends BaseModuloController
             ?>
             <style>
                 body { font-family: Arial, sans-serif; font-size: 8pt; }
-                table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
                 th { background: #e9ecef; border: 1px solid #ccc; padding: 4px 5px; text-align: center; font-size: 8pt; }
-                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; }
+                td { border: 1px solid #ddd; padding: 3px 5px; font-size: 7.5pt; overflow: hidden; word-wrap: break-word; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
-                .header { text-align: center; margin-bottom: 12px; }
-                .stats { display: table; width: 100%; margin-bottom: 10px; }
-                .stat-box { display: table-cell; border: 1px solid #ccc; padding: 5px; text-align: center; }
-                .stat-val { font-size: 11pt; font-weight: bold; }
+                .header { text-align: center; margin-bottom: 10px; }
+                .header h2 { margin: 0 0 2px 0; font-size: 13pt; }
+                .header h3 { margin: 0 0 2px 0; font-size: 10pt; color: #555; }
+                .header p  { margin: 0; font-size: 7.5pt; color: #777; }
+                .stats-box { text-align: center; padding: 5px; }
+                .stat-val  { font-size: 11pt; font-weight: bold; }
             </style>
+            <page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">
             <div class="header">
                 <h2><?= htmlspecialchars($nombreEmpresa) ?></h2>
                 <h3>Cuentas por Pagar</h3>
                 <p>Generado: <?= date('d-m-Y H:i:s') ?></p>
             </div>
-            <div class="stats">
-                <div class="stat-box">
-                    <div>Documentos</div>
-                    <div class="stat-val"><?= $stats['total_docs'] ?></div>
-                </div>
-                <div class="stat-box">
-                    <div>Saldo Total</div>
-                    <div class="stat-val">$<?= number_format($stats['total_saldo'], 2) ?></div>
-                </div>
-                <div class="stat-box" style="color:#dc3545;">
-                    <div>Vencido</div>
-                    <div class="stat-val">$<?= number_format($stats['total_vencido'], 2) ?></div>
-                </div>
-                <div class="stat-box" style="color:#198754;">
-                    <div>Al Día</div>
-                    <div class="stat-val">$<?= number_format($stats['total_al_dia'], 2) ?></div>
-                </div>
-            </div>
+            <table class="stats">
+                <tr>
+                    <td class="stats-box" style="width:25%;">
+                        <div>Documentos</div>
+                        <div class="stat-val"><?= $stats['total_docs'] ?></div>
+                    </td>
+                    <td class="stats-box" style="width:25%;">
+                        <div>Saldo Total</div>
+                        <div class="stat-val">$<?= number_format($stats['total_saldo'], 2) ?></div>
+                    </td>
+                    <td class="stats-box" style="width:25%;color:#dc3545;">
+                        <div>Vencido</div>
+                        <div class="stat-val">$<?= number_format($stats['total_vencido'], 2) ?></div>
+                    </td>
+                    <td class="stats-box" style="width:25%;color:#198754;">
+                        <div>Al Día</div>
+                        <div class="stat-val">$<?= number_format($stats['total_al_dia'], 2) ?></div>
+                    </td>
+                </tr>
+            </table>
             <table>
                 <thead>
                     <tr>
-                        <th>Documento</th>
-                        <th>Proveedor / RUC</th>
-                        <th>F. Emisión</th>
-                        <th>F. Vencimiento</th>
-                        <th>Total</th>
-                        <th>Pagado/Ret/NC</th>
-                        <th>Saldo</th>
+                        <th style="width:14%;">Documento</th>
+                        <th style="width:28%;">Proveedor / RUC</th>
+                        <th style="width:12%;">F. Emisión</th>
+                        <th style="width:16%;">F. Vencimiento</th>
+                        <th style="width:10%;">Total</th>
+                        <th style="width:10%;">Pagado/Ret/NC</th>
+                        <th style="width:10%;">Saldo</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -468,13 +473,14 @@ class CuentasPorPagarController extends BaseModuloController
                 </tbody>
                 <tfoot>
                     <tr style="background:#f8f9fa;font-weight:bold;">
-                        <th colspan="4" class="text-end">TOTALES:</th>
-                        <th class="text-end">$<?= number_format($totalTotal, 2) ?></th>
-                        <th class="text-end" style="color:#198754;">$<?= number_format($totalPagado, 2) ?></th>
-                        <th class="text-end" style="color:#dc3545;">$<?= number_format($totalSaldo, 2) ?></th>
+                        <td colspan="4" class="text-end">TOTALES:</td>
+                        <td class="text-end">$<?= number_format($totalTotal, 2) ?></td>
+                        <td class="text-end" style="color:#198754;">$<?= number_format($totalPagRet, 2) ?></td>
+                        <td class="text-end" style="color:#dc3545;">$<?= number_format($totalSaldo, 2) ?></td>
                     </tr>
                 </tfoot>
             </table>
+            </page>
             <?php
             $html     = ob_get_clean();
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');

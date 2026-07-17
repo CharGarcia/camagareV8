@@ -53,7 +53,7 @@ class PosVentaService
             throw new Exception('El punto de emisión no es válido.');
         }
 
-        $idBodega = $this->getPrimeraBodegaActiva($idEmpresa);
+        $idBodega = $this->getBodegaActiva($idEmpresa);
 
         $det = [];
         $totalSinImp = 0.0;
@@ -96,6 +96,9 @@ class PosVentaService
                 'id_tarifa_iva' => $idTar,
                 'es_libre' => 0,
                 'porcentaje_iva' => $pct,
+                'lote' => (string) ($it['lote'] ?? ''),
+                'caducidad' => (string) ($it['caducidad'] ?? ''),
+                'nup' => (string) ($it['nup'] ?? ''),
                 'impuestos' => [[
                     'codigo_impuesto' => '2',
                     'codigo_porcentaje' => $codPct,
@@ -193,7 +196,11 @@ class PosVentaService
         return $row ?: null;
     }
 
-    private function getPrimeraBodegaActiva(int $idEmpresa): ?int
+    /**
+     * Bodega única que usa el POS (primera bodega activa de la empresa).
+     * Pública porque el controller también la necesita para consultar lotes.
+     */
+    public function getBodegaActiva(int $idEmpresa): ?int
     {
         $empresaModel = new \App\models\Empresa();
         $bodegas = $empresaModel->getBodegas($idEmpresa);

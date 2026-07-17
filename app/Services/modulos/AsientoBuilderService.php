@@ -1905,6 +1905,105 @@ class AsientoBuilderService
     }
 
     /**
+     * Arma el asiento contable de la nacionalización de una IMPORTACIÓN (concepto
+     * 'adquisiciones_importacion'). No usa la cascada por proveedor/producto de
+     * 'adquisiciones_compras' (Fase 1): las 7 cuentas del concepto se resuelven a nivel
+     * general (asientos_programados con tipo_referencia = 'adquisiciones_importacion'),
+     * configurables en /config/asientos-contables igual que cualquier otro concepto.
+     *
+     * Construcción balanceada por diseño (ver ImportacionesService::calcularTotales):
+     *   Debe  INVENTARIOIMPORTACION       = costo_total_nacionalizado (FOB facturado + TODOS los gastos capitalizables)
+     *   Debe  IVAIMPORTACION              = IVA pagado en la DAI (crédito tributario, no se capitaliza)
+     *   Debe  ISDIMPORTACION              = ISD pagado (gasto financiero, no se capitaliza)
+     *   Debe  OTROSGASTOSIMPORTACION      = gastos manuales no prorrateables distintos de IVA/ISD
+     *   Haber PORPAGARPROVEEDOREXTERIOR   = total facturado por el proveedor del exterior
+     *   Haber PORPAGARTRIBUTOSADUANEROS   = total de gastos manuales de la DAI (arancel, fodinfa, agente, iva, isd, otros)
+     *   Haber RECLASIFICACIONGASTOIMPORTACION = gastos que YA se registraron como Compra/Liquidación
+     *         (su propio documento generó su propio gasto+CxP; aquí solo se reclasifica a Inventario)
+     */
+    public function generarAsientoImportacion(int $idEmpresa, int $idImportacion): array
+    {
+        $db = \App\core\Database::getConnection();
+
+        $stCab = $db->prepare(
+            "SELECT total_gastos_capitalizables, total_iva, total_isd, total_otros_gastos, costo_total_nacionalizado
+             FROM importaciones_cabecera WHERE id = ?"
+        );
+        $stCab->execute([$idImportacion]);
+        $cab = $stCab->fetch(\PDO::FETCH_ASSOC) ?: [];
+
+        $costoTotalNacionalizado = round((float) ($cab['costo_total_nacionalizado'] ?? 0), 2);
+        $totalIva                = round((float) ($cab['total_iva'] ?? 0), 2);
+        $totalIsd                = round((float) ($cab['total_isd'] ?? 0), 2);
+        $totalOtros              = round((float) ($cab['total_otros_gastos'] ?? 0), 2);
+        if ($costoTotalNacionalizado <= 0.0 && $totalIva <= 0.0 && $totalIsd <= 0.0 && $totalOtros <= 0.0) {
+            return [];
+        }
+
+        $stFact = $db->prepare("SELECT COALESCE(SUM(monto_usd),0) FROM importaciones_factura_exterior WHERE id_importacion = ? AND eliminado = false");
+        $stFact->execute([$idImportacion]);
+        $totalFacturaExterior = round((float) $stFact->fetchColumn(), 2);
+
+        $stGastos = $db->prepare(
+            "SELECT origen, COALESCE(SUM(monto),0) AS total
+             FROM importaciones_gastos
+             WHERE id_importacion = ? AND eliminado = false
+             GROUP BY origen"
+        );
+        $stGastos->execute([$idImportacion]);
+        $totalManual = 0.0;
+        $totalVinculado = 0.0;
+        foreach ($stGastos as $row) {
+            if ($row['origen'] === 'dai_manual') {
+                $totalManual = round((float) $row['total'], 2);
+            } else {
+                $totalVinculado += round((float) $row['total'], 2);
+            }
+        }
+        $totalVinculado = round($totalVinculado, 2);
+
+        $reglas = $this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'adquisiciones_importacion');
+        $porCodigo = [];
+        foreach ($reglas as $r) {
+            $porCodigo[strtoupper((string) $r['codigo'])] = $r;
+        }
+
+        $lineas = [
+            ['codigo' => 'INVENTARIOIMPORTACION',           'monto' => $costoTotalNacionalizado],
+            ['codigo' => 'IVAIMPORTACION',                  'monto' => $totalIva],
+            ['codigo' => 'ISDIMPORTACION',                  'monto' => $totalIsd],
+            ['codigo' => 'OTROSGASTOSIMPORTACION',           'monto' => $totalOtros],
+            ['codigo' => 'PORPAGARPROVEEDOREXTERIOR',        'monto' => $totalFacturaExterior],
+            ['codigo' => 'PORPAGARTRIBUTOSADUANEROS',        'monto' => $totalManual],
+            ['codigo' => 'RECLASIFICACIONGASTOIMPORTACION',  'monto' => $totalVinculado],
+        ];
+
+        $detalles = [];
+        foreach ($lineas as $l) {
+            if ($l['monto'] <= 0.0) continue;
+            $regla = $porCodigo[$l['codigo']] ?? null;
+            if (!$regla || empty($regla['id_cuenta'])) {
+                throw new \Exception("No se ha configurado la cuenta contable para '{$l['codigo']}' del concepto Importaciones. Configúrela en /config/asientos-contables.");
+            }
+            $esDebe = ($regla['debe_haber'] ?? 'debe') === 'debe';
+            $detalles[] = [
+                'id_cuenta_contable' => (int) $regla['id_cuenta'],
+                'cuenta_codigo'      => $regla['cuenta_codigo'],
+                'cuenta_nombre'      => $regla['cuenta_nombre'],
+                'debe'               => $esDebe ? round($l['monto'], 2) : 0.0,
+                'haber'              => $esDebe ? 0.0 : round($l['monto'], 2),
+                'referencia_detalle' => $regla['concepto'] ?? $regla['detalle'] ?? $l['codigo'],
+            ];
+        }
+
+        if (empty($detalles)) {
+            return [];
+        }
+
+        return $this->aplicarAjusteRedondeo($detalles, $reglas, 'la importación');
+    }
+
+    /**
      * Distribución dinámica para Compras, Liquidaciones, Notas de Crédito, etc.
      */
     private function armarDistribucionDinamica(array $reglas, array $data): array
