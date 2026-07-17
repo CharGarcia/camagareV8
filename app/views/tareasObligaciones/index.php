@@ -893,6 +893,10 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
             <input type="email" id="dup-resp-mail-manual" class="form-control form-control-sm" placeholder="Correo">
             <button type="button" class="btn btn-primary btn-sm" onclick="agregarDupRespManual()" title="Agregar"><i class="bi bi-plus-lg"></i></button>
         </div>
+        <div class="form-check form-switch mt-2 mb-0">
+            <input class="form-check-input" type="checkbox" id="dup-resp-todas" checked>
+            <label class="form-check-label extra-small text-muted" for="dup-resp-todas">Aplicar a todas las tareas</label>
+        </div>
     </div>
 </div>
 
@@ -1579,19 +1583,44 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
         agregarDupResponsable({ id: '', nombre: nombre, mail: mail, tipo: 'propio' });
     };
 
+    /**
+     * ¿Son el MISMO responsable? Mismo registro del catálogo (id+tipo), o misma persona
+     * (mismo nombre Y mismo correo). Compartir solo el correo NO los hace la misma persona:
+     * varios responsables pueden usar un correo de empresa.
+     */
+    function mismoResponsable(a, b) {
+        if (a.id && b.id && a.id == b.id && (a.tipo || '') === (b.tipo || '')) return true;
+        var n1 = (a.nombre || '').trim().toLowerCase();
+        var n2 = (b.nombre || '').trim().toLowerCase();
+        var m1 = (a.mail || '').trim().toLowerCase();
+        var m2 = (b.mail || '').trim().toLowerCase();
+        return n1 !== '' && n1 === n2 && m1 === m2;
+    }
+
     function agregarDupResponsable(u) {
         if (dupRespFilaActiva === null || !u || !u.nombre) return;
-        var fila = duplicarFilas[dupRespFilaActiva];
-        var yaExiste = fila.responsables.some(function(s) {
-            if (u.id && s.id && u.id == s.id && u.tipo == s.tipo) return true;
-            if (u.mail && s.mail && u.mail.toLowerCase() === s.mail.toLowerCase()) return true;
-            return false;
+
+        var swTodas = document.getElementById('dup-resp-todas');
+        var aplicarTodas = !!(swTodas && swTodas.checked);
+        var objetivo = aplicarTodas ? duplicarFilas : [duplicarFilas[dupRespFilaActiva]];
+
+        var agregados = 0;
+        objetivo.forEach(function(fila) {
+            if (!fila) return;
+            var yaExiste = fila.responsables.some(function(s) { return mismoResponsable(u, s); });
+            if (!yaExiste) {
+                fila.responsables.push(Object.assign({}, u)); // copia por fila
+                agregados++;
+            }
         });
-        if (yaExiste) {
-            if (typeof mostrarToast === 'function') mostrarToast('Ya está en la lista de esta fila.', 'info');
+
+        if (agregados === 0) {
+            if (typeof mostrarToast === 'function') mostrarToast('Ese responsable ya está asignado.', 'info');
             return;
         }
-        fila.responsables.push(u);
+        if (typeof mostrarToast === 'function' && aplicarTodas) {
+            mostrarToast('Responsable agregado a ' + agregados + ' tarea(s).', 'success');
+        }
         cerrarPanelRespFila();
         renderTablaDuplicar();
     }
