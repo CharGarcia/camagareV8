@@ -237,9 +237,10 @@ class DeclaracionIvaController extends BaseModuloController
 
             // Consultar empresa
             $db = \App\core\Database::getConnection();
-            $st = $db->query("SELECT razon_social FROM empresas WHERE id = " . $idEmpresa);
+            $st = $db->prepare("SELECT nombre FROM empresas WHERE id = ?");
+            $st->execute([$idEmpresa]);
             $empresaRow = $st->fetch();
-            $nombreEmpresa = $empresaRow['razon_social'] ?? 'Empresa ' . $idEmpresa;
+            $nombreEmpresa = $empresaRow['nombre'] ?? 'Empresa ' . $idEmpresa;
 
             // Fila 1: Nombre de la empresa
             $sheet1->setCellValue('A1', mb_strtoupper($nombreEmpresa, 'UTF-8'));

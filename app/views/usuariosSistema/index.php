@@ -217,7 +217,16 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
                             <td><?= htmlspecialchars($r['mail'] ?? '-') ?></td>
                             <td><span class="badge bg-<?= $nivelU >= 3 ? 'danger' : ($nivelU >= 2 ? 'info' : 'secondary') ?>"><?= nivelTexto($nivelU) ?></span></td>
                             <td>
-                                <?php if ($estado): ?>
+                                <?php if (!empty($r['token'])): ?>
+                                    <span class="badge bg-warning bg-opacity-10 text-warning border border-warning" title="El usuario aún no ha completado su registro">
+                                        <i class="bi bi-hourglass-split"></i> Pendiente registro
+                                    </span>
+                                    <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 ms-1"
+                                        title="Reenviar correo de invitación a <?= htmlspecialchars($r['mail'] ?? '') ?>"
+                                        onclick="event.stopPropagation(); reenviarInvitacionUsuario(<?= (int)($r['id'] ?? 0) ?>, this);">
+                                        <i class="bi bi-send"></i>
+                                    </button>
+                                <?php elseif ($estado): ?>
                                     <span class="badge bg-success">Activo</span>
                                 <?php else: ?>
                                     <span class="badge bg-secondary">Inactivo</span>
@@ -716,4 +725,21 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
             });
         }
     })();
+
+    // Reenviar invitación directo desde la fila del listado (usuarios no registrados).
+    window.reenviarInvitacionUsuario = function (id, btn) {
+        if (!id) return;
+        var original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:.8rem;height:.8rem;"></span>';
+        var fd = new FormData();
+        fd.append('id', id);
+        fetch('<?= $base ?>/config/usuarios-sistema-reenviar-invitacion', {
+            method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) { alert(res.msg || (res.ok ? 'Invitación reenviada.' : 'No se pudo reenviar.')); })
+        .catch(function () { alert('Error de conexión.'); })
+        .finally(function () { btn.disabled = false; btn.innerHTML = original; });
+    };
 </script>

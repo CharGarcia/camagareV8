@@ -124,6 +124,14 @@ return [
         'legacy_rutas' => ['modulos/cargas_inventario'],
     ],
 
+    // ─── APROBACIONES (config) ────────────────────────────────────────────────
+    // Configuración: qué checkpoints exigen aprobación y quién aprueba, por
+    // empresa (la bandeja de solicitudes se retiró; solo queda la config).
+    'modulos/aprobaciones-config' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     'modulos/ingresos' => [
         'legacy_rutas' => [],
     ],
@@ -258,6 +266,12 @@ return [
     ],
     'modulos/control-bancario' => [
         'id_submodulo' => 0, // Ajustar con el ID real tras ejecutar database/migrations/20260716_menu_control_bancario.sql
+        'legacy_rutas' => [],
+    ],
+    // Conciliación de Cobros Bancarios: importa el extracto del banco (Excel/PDF),
+    // sugiere factura/cliente por línea y genera Ingresos en lote.
+    'modulos/conciliacion-cobros' => [
+        'id_submodulo' => 0, // Ajustar con el ID real tras registrar el submódulo en submodulos_menu
         'legacy_rutas' => [],
     ],
     'modulos/empresa' => [

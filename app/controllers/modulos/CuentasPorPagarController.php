@@ -190,92 +190,28 @@ class CuentasPorPagarController extends BaseModuloController
             $this->jsonError('Datos incompletos. Verifique serie, monto y forma de pago.');
         }
 
-        // Validar punto de emisión
-        $punto = $this->repo->getPuntoEmisionPorId($idPunto, $idEmpresa);
-        if (!$punto) {
-            $this->jsonError('Punto de emisión no válido.');
-        }
+        $datosPago = [
+            'id_empresa'              => $idEmpresa,
+            'id_usuario'              => $idUsuario,
+            'id_doc'                  => $idDoc,
+            'tipo_fuente'             => $tipoFuente,
+            'monto'                   => $monto,
+            'id_forma_pago'           => $idFormaPago,
+            'id_punto_emision'        => $idPunto,
+            'id_egreso_concepto'      => $idConcepto,
+            'fecha_pago'              => $fechaPago,
+            'observaciones'           => $observ,
+            'tipo_operacion_bancaria' => $tipoOp,
+            'numero_operacion'        => $numOp,
+            'fecha_cobro'             => $fechaCobro,
+        ];
 
-        // Validar documento y saldo
-        $doc = $this->repo->getDocumentoParaPago($idDoc, $tipoFuente, $idEmpresa);
-        if (!$doc) {
-            $this->jsonError('Documento no encontrado.');
-        }
-
-        $saldo     = (float)$doc['saldo'];
-        $totalDoc  = (float)$doc['importe_total'];
-        $tipoDocEg = $tipoFuente === 'LIQUIDACION' ? 'LIQUIDACION' : 'COMPRA';
-
-        if ($saldo <= 0) {
-            $this->jsonError('Este documento ya se encuentra pagado.');
-        }
-        if ($monto > $saldo + 0.001) {
-            $this->jsonError("El monto ($monto) supera el saldo pendiente ($saldo).");
-        }
+        $cxpService = new \App\Services\modulos\CuentasPorPagarService($this->repo, $this->log);
 
         try {
-            $secuencialService = new \App\Services\SecuencialService();
-            $secRes    = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
-            $secuencial = $secRes['formateado'];
-
-            $codEst  = str_pad((string)($punto['establecimiento'] ?? '001'), 3, '0', STR_PAD_LEFT);
-            $codPto  = str_pad((string)($punto['punto']           ?? '001'), 3, '0', STR_PAD_LEFT);
-            $numEgr  = "{$codEst}-{$codPto}-{$secuencial}";
-            $numDoc  = $doc['numero_documento'] ?? '';
-
-            $payload = [
-                'id_empresa'         => $idEmpresa,
-                'id_punto_emision'   => $idPunto,
-                'establecimiento'    => $codEst,
-                'punto_emision'      => $codPto,
-                'secuencial'         => $secuencial,
-                'numero_egreso'      => $numEgr,
-                'fecha_emision'      => $fechaPago ?: date('Y-m-d'),
-                'tipo_egreso'        => $tipoFuente === 'LIQUIDACION' ? 'COMPRA_LIQUIDACION' : 'COMPRA_FACTURA',
-                'tipo_sujeto'        => 'PROVEEDOR',
-                'id_proveedor'       => (int)$doc['id_proveedor'],
-                'id_empleado'        => null,
-                'id_egreso_concepto' => $idConcepto,
-                'monto_total'        => $monto,
-                'observaciones'      => $observ ?: "Pago de {$tipoDocEg} {$numDoc}",
-                'estado'             => 'registrado',
-                'usuario_id'         => $idUsuario,
-                'detalles' => [[
-                    'tipo_documento'          => $tipoDocEg,
-                    'id_referencia_documento' => $idDoc,
-                    'numero_documento'        => $numDoc,
-                    'descripcion'             => "Pago de {$tipoDocEg} {$numDoc}",
-                    'monto_documento'         => $totalDoc,
-                    'saldo_anterior'          => $saldo,
-                    'monto_pagado'            => $monto,
-                    'saldo_actual'            => max(0.0, $saldo - $monto),
-                ]],
-                'pagos' => [[
-                    'id_forma_pago'           => $idFormaPago,
-                    'monto'                   => $monto,
-                    'fecha_cobro'             => $fechaCobro,
-                    'referencia'              => $numOp  ?: null,
-                    'tipo_operacion_bancaria' => $tipoOp ?: null,
-                    'numero_cheque'           => ($tipoOp === 'CHEQUE' ? $numOp : null) ?: null,
-                ]],
-            ];
-
-            $egresoService = new \App\Services\modulos\EgresoService(
-                new \App\repositories\modulos\EgresoRepository(),
-                new \App\Rules\modulos\EgresoRules(),
-                $this->log
-            );
-
-            $idEgreso = $egresoService->registrar($payload);
-
-            $nuevoSaldo = $saldo - $monto;
-            $this->jsonSuccess([
-                'mensaje'      => "Pago registrado correctamente. Egreso: {$numEgr}",
-                'id_egreso'    => $idEgreso,
-                'numero_egreso'=> $numEgr,
-                'nuevo_saldo'  => number_format($nuevoSaldo, 2, '.', ''),
-                'pagado'       => $nuevoSaldo <= 0.001,
-            ]);
+            $res = $cxpService->registrarPago($datosPago);
+            unset($res['doc']);
+            $this->jsonSuccess($res);
         } catch (\Throwable $e) {
             error_log('[CxP registrarPago] ' . $e->getMessage());
             $this->jsonError('Error al registrar el pago: ' . $e->getMessage());

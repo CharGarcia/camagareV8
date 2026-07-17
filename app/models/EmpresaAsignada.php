@@ -286,7 +286,13 @@ class EmpresaAsignada extends BaseModel
         $id = (int) $idEmpresa;
         $r = $this->query("SELECT COALESCE(max_usuarios, 3) AS max_usuarios FROM empresas WHERE id = {$id} AND eliminado = false LIMIT 1");
         $max = (int) ($r[0]['max_usuarios'] ?? 3);
-        $c = $this->query("SELECT COUNT(*) AS n FROM empresa_asignada WHERE id_empresa = {$id}");
+        // No se cuentan los super administradores (nivel 3): no ocupan cupo de la empresa.
+        $c = $this->query(
+            "SELECT COUNT(*) AS n
+             FROM empresa_asignada ea
+             INNER JOIN usuarios u ON u.id = ea.id_usuario
+             WHERE ea.id_empresa = {$id} AND COALESCE(u.nivel, 1) < 3"
+        );
         $actual = (int) ($c[0]['n'] ?? 0);
         return ['max' => $max, 'actual' => $actual];
     }
