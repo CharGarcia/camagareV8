@@ -194,6 +194,30 @@ class PayphoneRepository extends BaseRepository
         return $st->fetchAll();
     }
 
+    /**
+     * Transacciones "pendiente" de un módulo, creadas por un usuario puntual —
+     * usado por el aviso del POS ("link de pago enviado, esperando que Payphone
+     * confirme"). Al aprobarse/rechazarse/cancelarse (actualizarResultado cambia
+     * el estado), la fila deja de aparecer aquí sola, sin necesidad de marcarla.
+     */
+    public function getPendientesPorUsuario(int $idEmpresa, string $modulo, int $idUsuario, int $limit = 10): array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, descripcion, monto, moneda, created_at
+             FROM payphone_transacciones
+             WHERE id_empresa = :ie AND modulo = :mod AND created_by = :cb
+               AND estado = 'pendiente' AND eliminado = false
+             ORDER BY created_at DESC
+             LIMIT :lim"
+        );
+        $st->bindValue(':ie', $idEmpresa, \PDO::PARAM_INT);
+        $st->bindValue(':mod', $modulo, \PDO::PARAM_STR);
+        $st->bindValue(':cb', $idUsuario, \PDO::PARAM_INT);
+        $st->bindValue(':lim', $limit, \PDO::PARAM_INT);
+        $st->execute();
+        return $st->fetchAll();
+    }
+
     public function getListado(int $idEmpresa, string $modulo = '', string $estado = '', int $page = 1, int $perPage = 30): array
     {
         $where  = "WHERE t.id_empresa = :ie AND t.eliminado = false";

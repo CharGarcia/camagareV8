@@ -341,6 +341,42 @@ class CajaPosController extends BaseModuloController
         }
     }
 
+    /**
+     * Aviso de links de pago con tarjeta enviados por el cajero que Payphone
+     * todavía no confirma (la respuesta puede tardar hasta ~10 minutos). Se
+     * consulta por polling desde venta.php; en cuanto Payphone aprueba/rechaza/
+     * cancela el pago (PayphoneController::procesarAprobacion actualiza el
+     * estado), la transacción deja de venir en esta lista sola, sin que nadie
+     * la tenga que marcar como resuelta.
+     */
+    public function getPagosTarjetaPendientesAjax(): void
+    {
+        $this->requireLeer();
+
+        // Este endpoint solo lee (nunca escribe) y se consulta por polling —
+        // liberar el lock de sesión cuanto antes, mismo criterio que el
+        // aviso unificado del navbar (ContadoresController::navbarAjax).
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $repo = new \App\repositories\PayphoneRepository();
+            $rows = $repo->getPendientesPorUsuario($idEmpresa, 'pos', $idUsuario);
+            $data = array_map(fn($r) => [
+                'descripcion' => $r['descripcion'],
+                'monto' => round(((int) $r['monto']) / 100, 2),
+                'creado' => $r['created_at'],
+            ], $rows);
+            $this->json(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'data' => []]);
+        }
+    }
+
     public function cobrarAjax(): void
     {
         $this->requireCrear();

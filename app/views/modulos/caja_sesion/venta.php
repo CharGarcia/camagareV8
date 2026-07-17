@@ -115,6 +115,13 @@ $rutaAjax = $base . '/' . $rutaModulo;
             <button type="button" class="pv-btn-nuevo-ticket" id="pv-btn-nuevo-ticket" title="Nueva venta">
                 <i class="bi bi-plus-lg"></i>
             </button>
+            <div class="position-relative flex-shrink-0">
+                <button type="button" class="btn btn-light btn-sm position-relative d-none" id="pv-btn-pagos-pendientes" title="Pagos con tarjeta esperando confirmación de Payphone">
+                    <i class="bi bi-credit-card"></i>
+                    <span class="badge rounded-pill bg-warning text-dark position-absolute top-0 start-100 translate-middle" id="pv-badge-pagos-pendientes">0</span>
+                </button>
+                <div id="pv-panel-pagos-pendientes" class="d-none shadow-lg border rounded-3 bg-white p-2" style="position:absolute; right:0; top:110%; width:290px; z-index:2000; color:#212529;"></div>
+            </div>
             <a href="<?= $rutaAjax ?>" class="btn btn-light btn-sm flex-shrink-0">
                 <i class="bi bi-lock-fill me-1"></i>Cerrar caja
             </a>
@@ -1139,12 +1146,59 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 return;
             }
             swalToast('success', json.msg || 'Enlace enviado.');
+            cargarPagosPendientes();
         } catch (e) {
             swalError('Error de conexión al enviar el enlace de pago.');
         } finally {
             $btnLinkWhatsapp.disabled = false;
         }
     });
+
+    // ─── Aviso: pagos con tarjeta esperando confirmación de Payphone ───────
+    // Payphone puede tardar hasta ~10 min en confirmar. Esto se refresca por
+    // polling (igual criterio que el aviso unificado del navbar): en cuanto
+    // Payphone aprueba/rechaza/cancela el pago, la transacción deja de venir
+    // en la lista sola — no hay que marcarla como "resuelta" a mano.
+    const $btnPagosPendientes = document.getElementById('pv-btn-pagos-pendientes');
+    const $badgePagosPendientes = document.getElementById('pv-badge-pagos-pendientes');
+    const $panelPagosPendientes = document.getElementById('pv-panel-pagos-pendientes');
+
+    async function cargarPagosPendientes() {
+        try {
+            const res = await fetch(AJAX + '/getPagosTarjetaPendientesAjax', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const json = await res.json();
+            const rows = (json.ok && Array.isArray(json.data)) ? json.data : [];
+
+            $btnPagosPendientes.classList.toggle('d-none', rows.length === 0);
+            $badgePagosPendientes.textContent = rows.length;
+
+            if (!rows.length) {
+                $panelPagosPendientes.classList.add('d-none');
+                return;
+            }
+            $panelPagosPendientes.innerHTML = '<div class="small fw-semibold text-uppercase text-muted mb-1">Esperando confirmación de Payphone</div>' +
+                rows.map(r => {
+                    const min = Math.max(0, Math.round((Date.now() - new Date(r.creado.replace(' ', 'T'))) / 60000));
+                    return '<div class="small border-bottom py-1">' +
+                        '<div class="d-flex justify-content-between"><span>' + escapeHtml(r.descripcion || 'Venta POS') + '</span><span class="fw-semibold">' + money(r.monto) + '</span></div>' +
+                        '<div class="text-muted" style="font-size:.72rem;">Enviado hace ' + min + ' min</div>' +
+                        '</div>';
+                }).join('');
+        } catch (e) {
+            // Silencioso: es un aviso de fondo, no debe interrumpir la venta.
+        }
+    }
+
+    $btnPagosPendientes.addEventListener('click', () => {
+        $panelPagosPendientes.classList.toggle('d-none');
+    });
+    document.addEventListener('click', (ev) => {
+        if (!ev.target.closest('#pv-btn-pagos-pendientes') && !ev.target.closest('#pv-panel-pagos-pendientes')) {
+            $panelPagosPendientes.classList.add('d-none');
+        }
+    });
+    setInterval(cargarPagosPendientes, 30000);
+    window.addEventListener('focus', cargarPagosPendientes);
 
     // ─── Pestañas de venta ──────────────────────────────────────────────
     function snapshotTicketActual() {
@@ -1491,6 +1545,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
         nuevoTicket();
     }
     buscarProductos('');
+    cargarPagosPendientes();
     $buscar.focus();
 })();
 </script>
