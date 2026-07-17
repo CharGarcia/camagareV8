@@ -18,11 +18,14 @@
 ALTER TABLE usuarios
     ADD COLUMN IF NOT EXISTS registrado BOOLEAN NOT NULL DEFAULT FALSE;
 
--- Backfill: todo usuario que NO tiene un token pendiente ya completó su registro
--- (o nunca tuvo invitación). Los que tienen token quedan como pendientes.
+-- Backfill (CONFIABLE, independiente del token):
+-- La invitación (crearPorCorreo) inserta una cédula PLACEHOLDER = substr(md5(correo),0,15).
+-- Al completar el registro, el usuario define su cédula REAL. Por lo tanto:
+--   cédula = hash del correo  => NO registrado (pendiente)
+--   cédula distinta           => registrado
+-- Es reejecutable: recalcula el valor correcto para todos los usuarios.
+-- (En PostgreSQL substr(s,1,15) = los primeros 15 caracteres, igual que PHP substr(s,0,15).)
 UPDATE usuarios
-   SET registrado = TRUE
- WHERE COALESCE(token, '') = ''
-   AND registrado = FALSE;
+   SET registrado = (COALESCE(cedula, '') <> substr(md5(COALESCE(mail, '')), 1, 15));
 
 COMMENT ON COLUMN usuarios.registrado IS 'TRUE cuando el usuario completó su registro (definió su contraseña). Independiente de `token`, que también se usa para recuperación de contraseña.';

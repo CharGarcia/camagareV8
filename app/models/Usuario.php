@@ -573,7 +573,12 @@ class Usuario extends BaseModel
         $countSql = "SELECT COUNT(DISTINCT u.id) AS total FROM {$from} {$where}";
         $total = (int) ($this->query($countSql)[0]['total'] ?? 0);
 
-        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel, u.estado, u.mail, u.token, u.registrado
+        // Detección robusta de "registrado": la invitación (crearPorCorreo) inserta
+        // una cédula placeholder = substr(md5(correo),0,15). Al completar el registro,
+        // el usuario define su cédula REAL. Por eso: cédula = hash del correo => NO
+        // registrado. Se combina con la columna `registrado` (OR) para blindar el dato.
+        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel, u.estado, u.mail, u.token,
+                (u.registrado OR COALESCE(u.cedula,'') <> substr(md5(COALESCE(u.mail,'')), 1, 15)) AS registrado
             FROM {$from} {$where}
             ORDER BY {$col} {$dir}
             LIMIT {$perPage} OFFSET {$offset}";
@@ -696,7 +701,9 @@ class Usuario extends BaseModel
     public function getDatosInvitacion(int $id): ?array
     {
         $id = (int) $id;
-        $sql = "SELECT nombre, mail, token, registrado FROM usuarios WHERE id = {$id} AND eliminado = false LIMIT 1";
+        $sql = "SELECT nombre, mail, token,
+                (registrado OR COALESCE(cedula,'') <> substr(md5(COALESCE(mail,'')), 1, 15)) AS registrado
+                FROM usuarios WHERE id = {$id} AND eliminado = false LIMIT 1";
         $r = $this->query($sql);
         return $r[0] ?? null;
     }
