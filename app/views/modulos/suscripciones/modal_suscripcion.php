@@ -549,22 +549,28 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
     };
 
     function suscRecalcTotales() {
+        // Redondeo a 2 decimales, idéntico al del backend (round PHP): la base se
+        // redondea por línea y el IVA se calcula AGRUPADO por tarifa. Así el total
+        // que se muestra coincide exactamente con el documento generado.
+        const r2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+
         let subGeneral = 0;
         let totalGeneral = 0;
-        
-        let basesIva = {}; 
+
+        let basesIva = {};
 
         document.querySelectorAll('#susc_tbody_detalle tr.row-susc-det').forEach(tr => {
             const qty  = parseFloat(tr.querySelector('.det-qty')?.value)   || 0;
             const prc  = parseFloat(tr.querySelector('.det-price')?.value)  || 0;
             const ivaP = parseFloat(tr.querySelector('.det-porcentaje-iva')?.value) || 0;
-            const sub  = qty * prc;
-            
+            const sub  = r2(qty * prc);
+
             subGeneral += sub;
-            
+
             if (!basesIva[ivaP]) basesIva[ivaP] = 0;
             basesIva[ivaP] += sub;
         });
+        subGeneral = r2(subGeneral);
 
         document.getElementById('susc_lbl_subtotal').textContent = '$' + subGeneral.toFixed(2);
         
@@ -587,7 +593,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         contIvasGrupo.innerHTML = '';
         let sumaIvas = 0;
         sortedTasas.forEach(tasa => {
-            const montoIva = basesIva[tasa] * (tasa / 100);
+            const montoIva = r2(basesIva[tasa] * (tasa / 100));
             sumaIvas += montoIva;
             if (tasa > 0 && montoIva > 0) {
                 contIvasGrupo.innerHTML += `
@@ -598,7 +604,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
             }
         });
 
-        totalGeneral = subGeneral + sumaIvas;
+        totalGeneral = r2(subGeneral + sumaIvas);
         document.getElementById('susc_lbl_total').textContent = '$' + totalGeneral.toFixed(2);
         
         if(document.getElementById('susc_count_items')) {

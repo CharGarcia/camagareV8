@@ -92,6 +92,14 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // Punto de Venta — Fase 1: apertura/cierre de caja (ventana standalone).
+    // Actualizar id_submodulo con el id real tras registrar el submodulo en
+    // submodulos_menu (ruta = 'modulos/caja-pos').
+    'modulos/caja-pos' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     'modulos/notas_credito' => [
         'id_submodulo' => 165,
         'legacy_rutas' => [

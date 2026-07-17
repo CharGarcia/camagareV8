@@ -1563,6 +1563,9 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
                     if (!html) { list.style.display = 'none'; list.innerHTML = ''; return; }
 
                     list.innerHTML = html;
+                    // Flotar la lista fuera del panel/modal (overflow:hidden) y por encima de todo.
+                    flotarAC(document.getElementById('dup-resp-input'), list);
+                    list.style.zIndex = '5080'; // por encima del panel flotante (z-index 5075)
                     list.style.display = 'block';
                     list.querySelectorAll('.ac-item[data-json]').forEach(function(el) {
                         el.addEventListener('click', function() {
