@@ -356,7 +356,7 @@ class Usuario extends BaseModel
         $hash = password_hash($p, PASSWORD_DEFAULT);
         if ($hash === false) $hash = md5($p);
         $h = $this->escape($hash);
-        return $this->execute("UPDATE usuarios SET password = '{$h}', token = '' WHERE id = {$id} AND token = '{$t}'");
+        return $this->execute("UPDATE usuarios SET password = '{$h}', token = '', registrado = true WHERE id = {$id} AND token = '{$t}'");
     }
 
     /**
@@ -573,7 +573,7 @@ class Usuario extends BaseModel
         $countSql = "SELECT COUNT(DISTINCT u.id) AS total FROM {$from} {$where}";
         $total = (int) ($this->query($countSql)[0]['total'] ?? 0);
 
-        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel, u.estado, u.mail, u.token
+        $sql = "SELECT DISTINCT u.id, u.nombre, u.cedula, u.nivel, u.estado, u.mail, u.token, u.registrado
             FROM {$from} {$where}
             ORDER BY {$col} {$dir}
             LIMIT {$perPage} OFFSET {$offset}";
@@ -669,12 +669,13 @@ class Usuario extends BaseModel
         $hash = password_hash($password, PASSWORD_DEFAULT);
         if ($hash === false) $hash = md5($password);
 
-        $sql = "UPDATE usuarios 
-                SET nombre = :nombre, 
-                    cedula = :cedula, 
-                    password = :password, 
-                    telefono = :telefono, 
+        $sql = "UPDATE usuarios
+                SET nombre = :nombre,
+                    cedula = :cedula,
+                    password = :password,
+                    telefono = :telefono,
                     token = '',
+                    registrado = true,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND token = :token AND eliminado = false";
         
@@ -695,7 +696,7 @@ class Usuario extends BaseModel
     public function getDatosInvitacion(int $id): ?array
     {
         $id = (int) $id;
-        $sql = "SELECT nombre, mail, token FROM usuarios WHERE id = {$id} AND eliminado = false LIMIT 1";
+        $sql = "SELECT nombre, mail, token, registrado FROM usuarios WHERE id = {$id} AND eliminado = false LIMIT 1";
         $r = $this->query($sql);
         return $r[0] ?? null;
     }

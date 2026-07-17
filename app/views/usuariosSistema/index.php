@@ -202,6 +202,11 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
                         $nivelU = (int)($r['nivel'] ?? 1);
                         $estado = (int)($r['estado'] ?? 1);
                         $empresas = $r['empresas'] ?? [];
+                        // `registrado` viene de Postgres como boolean ('t'/'f'/true/false).
+                        // Pendiente de registro = NO registrado (el `token` no sirve para
+                        // esto porque también se usa en recuperación de contraseña).
+                        $rv = $r['registrado'] ?? false;
+                        $registrado = ($rv === true || $rv === 't' || $rv === '1' || $rv === 1 || $rv === 'true');
                         ?>
                         <tr class="usuario-row" role="button" tabindex="0"
                             data-id="<?= (int)($r['id'] ?? 0) ?>"
@@ -217,7 +222,7 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
                             <td><?= htmlspecialchars($r['mail'] ?? '-') ?></td>
                             <td><span class="badge bg-<?= $nivelU >= 3 ? 'danger' : ($nivelU >= 2 ? 'info' : 'secondary') ?>"><?= nivelTexto($nivelU) ?></span></td>
                             <td>
-                                <?php if (!empty($r['token'])): ?>
+                                <?php if (!$registrado): ?>
                                     <span class="badge bg-warning bg-opacity-10 text-warning border border-warning" title="El usuario aún no ha completado su registro">
                                         <i class="bi bi-hourglass-split"></i> Pendiente registro
                                     </span>

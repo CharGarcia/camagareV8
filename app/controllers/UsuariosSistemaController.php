@@ -164,9 +164,19 @@ class UsuariosSistemaController extends Controller
             $this->json(['ok' => false, 'msg' => 'Usuario no encontrado.']);
         }
 
-        $token = $row['token'] ?? '';
+        // Guía por el estado real de registro, no por el token (el token también
+        // se usa en recuperación de contraseña de usuarios ya registrados).
+        $rv = $row['registrado'] ?? false;
+        $registrado = ($rv === true || $rv === 't' || $rv === '1' || $rv === 1 || $rv === 'true');
+        if ($registrado) {
+            $this->json(['ok' => false, 'msg' => 'El usuario ya completó su registro.']);
+        }
+
+        // Usuario pendiente: reutiliza su token de invitación o regenera uno si falta.
+        $token = trim((string) ($row['token'] ?? ''));
         if ($token === '') {
-            $this->json(['ok' => false, 'msg' => 'El usuario ya completó su registro o no tiene una invitación pendiente.']);
+            $token = bin2hex(random_bytes(16));
+            $this->model->actualizarToken($id, $token);
         }
 
         $nombre = $row['nombre'];
