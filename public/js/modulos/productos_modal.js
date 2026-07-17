@@ -622,11 +622,16 @@
     }
 
     function mostrarImagen(path) {
+        // Normalizar: la ruta debe ser relativa al directorio público. Registros
+        // antiguos guardaron 'public/uploads/...'; quitar ese prefijo evita que la
+        // URL final quede como /sistema/public/public/uploads/... (imagen no carga).
+        let rel = String(path || '').replace(/^\/+/, '').replace(/^public\//, '');
         const prodImg = document.getElementById('prod_imagen');
-        if (prodImg) prodImg.value = path;
+        if (prodImg) prodImg.value = rel;
         const preview = document.getElementById('imagePreview');
-        if (preview) {
-            const fullUrl = (typeof BASE_URL !== 'undefined' ? BASE_URL : (typeof B_URL !== 'undefined' ? B_URL : '')) + '/' + path;
+        if (preview && rel) {
+            const base = (typeof BASE_URL !== 'undefined' ? BASE_URL : (typeof B_URL !== 'undefined' ? B_URL : ''));
+            const fullUrl = base + '/' + rel;
             preview.innerHTML = `<img src="${fullUrl}" class="img-fluid" style="max-height: 100%; object-fit: contain;">`;
         }
         document.getElementById('btnRemoveImage')?.classList.remove('d-none');

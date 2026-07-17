@@ -30,7 +30,7 @@ class CuentasPorPagarRepository extends BaseRepository
                    SUM(ed.monto_pagado)        AS total_pagado
             FROM egresos_detalle ed
             INNER JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
-            WHERE ed.tipo_documento IN ('COMPRA','LIQUIDACION')
+            WHERE ed.tipo_documento IN ('COMPRA','LIQUIDACION','IMPORTACION')
               AND ec.estado    != 'anulado'
               AND ec.eliminado  = false
               AND ed.eliminado  = false
@@ -134,6 +134,20 @@ class CuentasPorPagarRepository extends BaseRepository
         )";
     }
 
+    /**
+     * Expresión SQL para calcular la fecha de vencimiento de una factura del
+     * proveedor del exterior (importaciones_factura_exterior.plazo_dias ya
+     * está en días, a diferencia de compras_pagos/liquidaciones_pagos que
+     * distinguen días/meses/años).
+     */
+    private function exprFechaVencImportacion(string $aliasF = 'fe', string $aliasIc = 'ic'): string
+    {
+        return "(
+            COALESCE({$aliasF}.fecha_factura, {$aliasIc}.fecha_nacionalizacion, {$aliasIc}.created_at::date)
+            + INTERVAL '1 day' * COALESCE({$aliasF}.plazo_dias, 0)
+        )";
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // CONSULTA PRINCIPAL
     // ─────────────────────────────────────────────────────────────────────
@@ -148,6 +162,7 @@ class CuentasPorPagarRepository extends BaseRepository
 
         $fvcExpr = $this->exprFechaVencCompra('c');
         $fvlExpr = $this->exprFechaVencLiquid('l');
+        $fviExpr = $this->exprFechaVencImportacion('fe', 'ic');
 
         $sql = "
             WITH
@@ -230,6 +245,39 @@ class CuentasPorPagarRepository extends BaseRepository
                   AND l.eliminado     = false
                   AND l.estado       IN ('autorizado','AUTORIZADO','aprobado','APROBADO')
                   AND l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_ta2)
+
+                UNION ALL
+
+                -- ── FACTURAS DEL PROVEEDOR DEL EXTERIOR (IMPORTACIONES) ───
+                SELECT
+                    fe.id,
+                    'IMPORTACION'                                                  AS tipo_fuente,
+                    fe.id_proveedor,
+                    p.razon_social                                                 AS proveedor_nombre,
+                    p.identificacion                                               AS proveedor_ruc,
+                    COALESCE(p.email,   '')                                        AS proveedor_email,
+                    COALESCE(p.telefono,'')                                        AS proveedor_telefono,
+                    COALESCE(fe.numero_factura, ic.numero_importacion)             AS numero_documento,
+                    COALESCE(fe.fecha_factura, ic.fecha_nacionalizacion, ic.created_at::date) AS fecha_emision,
+                    fe.monto_usd                                                   AS total,
+                    COALESCE(pg.total_pagado, 0)                                   AS total_pagado,
+                    0::numeric                                                     AS total_nc,
+                    0::numeric                                                     AS total_nd,
+                    0::numeric                                                     AS total_retenido,
+                    fe.monto_usd - COALESCE(pg.total_pagado, 0)                    AS saldo,
+                    {$fviExpr}                                                     AS fecha_vencimiento
+                FROM importaciones_factura_exterior fe
+                JOIN importaciones_cabecera ic
+                  ON ic.id = fe.id_importacion
+                JOIN proveedores p
+                  ON p.id = fe.id_proveedor
+                LEFT JOIN pagado pg
+                  ON pg.tipo_documento = 'IMPORTACION'
+                 AND pg.id_doc = fe.id
+                WHERE fe.eliminado    = false
+                  AND ic.eliminado    = false
+                  AND ic.id_empresa   = :id_empresa3
+                  AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_ta3)
             )
             SELECT
                 d.*,
@@ -256,6 +304,7 @@ class CuentasPorPagarRepository extends BaseRepository
 
         $fvcExpr = $this->exprFechaVencCompra('c');
         $fvlExpr = $this->exprFechaVencLiquid('l');
+        $fviExpr = $this->exprFechaVencImportacion('fe', 'ic');
 
         $sql = "
             WITH
@@ -297,6 +346,20 @@ class CuentasPorPagarRepository extends BaseRepository
                 WHERE l.id_empresa=:id_empresa2 AND l.eliminado=false
                   AND l.estado IN ('autorizado','AUTORIZADO','aprobado','APROBADO')
                   AND l.tipo_ambiente=(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id=:id_empresa_ta2)
+
+                UNION ALL
+
+                SELECT fe.id_proveedor,
+                       'IMPORTACION'::text                                         AS tipo_fuente,
+                       COALESCE(fe.fecha_factura, ic.fecha_nacionalizacion, ic.created_at::date) AS fecha_emision,
+                       fe.monto_usd - COALESCE(pg.total_pagado, 0) AS saldo,
+                       {$fviExpr} AS fecha_vencimiento
+                FROM importaciones_factura_exterior fe
+                JOIN importaciones_cabecera ic ON ic.id = fe.id_importacion
+                JOIN proveedores p ON p.id = fe.id_proveedor
+                LEFT JOIN pagado pg ON pg.tipo_documento='IMPORTACION' AND pg.id_doc=fe.id
+                WHERE ic.id_empresa=:id_empresa3 AND fe.eliminado=false AND ic.eliminado=false
+                  AND ic.tipo_ambiente=(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id=:id_empresa_ta3)
             )
             SELECT
                 COUNT(*) AS total_docs,
@@ -382,6 +445,7 @@ class CuentasPorPagarRepository extends BaseRepository
 
         $fvcExpr = $this->exprFechaVencCompra('c');
         $fvlExpr = $this->exprFechaVencLiquid('l');
+        $fviExpr = $this->exprFechaVencImportacion('fe', 'ic');
 
         $sql = "
             WITH
@@ -423,6 +487,20 @@ class CuentasPorPagarRepository extends BaseRepository
                 WHERE l.id_empresa=:id_empresa2 AND l.eliminado=false
                   AND l.estado IN ('autorizado','AUTORIZADO','aprobado','APROBADO')
                   AND l.tipo_ambiente=(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id=:id_empresa_ta2)
+
+                UNION ALL
+
+                SELECT fe.id_proveedor,
+                       'IMPORTACION'::text                                         AS tipo_fuente,
+                       COALESCE(fe.fecha_factura, ic.fecha_nacionalizacion, ic.created_at::date) AS fecha_emision,
+                       fe.monto_usd - COALESCE(pg.total_pagado, 0) AS saldo,
+                       {$fviExpr} AS fecha_vencimiento
+                FROM importaciones_factura_exterior fe
+                JOIN importaciones_cabecera ic ON ic.id = fe.id_importacion
+                JOIN proveedores p ON p.id = fe.id_proveedor
+                LEFT JOIN pagado pg ON pg.tipo_documento='IMPORTACION' AND pg.id_doc=fe.id
+                WHERE ic.id_empresa=:id_empresa3 AND fe.eliminado=false AND ic.eliminado=false
+                  AND ic.tipo_ambiente=(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id=:id_empresa_ta3)
             )
             SELECT
                 SUM(CASE WHEN d.saldo > 0 AND (CURRENT_DATE - d.fecha_vencimiento::date) <= 0              THEN d.saldo ELSE 0 END) AS tramo_vigente,
@@ -570,6 +648,30 @@ class CuentasPorPagarRepository extends BaseRepository
                 FROM liquidaciones_cabecera l
                 JOIN proveedores p ON p.id=l.id_proveedor
                 WHERE l.id=:id AND l.id_empresa=:id_empresa AND l.eliminado=false
+            ";
+        } elseif ($tipoFuente === 'IMPORTACION') {
+            $sql = "
+                SELECT fe.id,
+                       'IMPORTACION' AS tipo_fuente,
+                       fe.id_proveedor,
+                       p.razon_social        AS proveedor_nombre,
+                       p.identificacion      AS proveedor_ruc,
+                       COALESCE(p.email,'')  AS proveedor_email,
+                       COALESCE(fe.fecha_factura, ic.fecha_nacionalizacion, ic.created_at::date) AS fecha_emision,
+                       fe.monto_usd          AS importe_total,
+                       COALESCE(fe.numero_factura, ic.numero_importacion) AS numero_documento,
+                       COALESCE((
+                           SELECT SUM(ed.monto_pagado)
+                           FROM egresos_detalle ed
+                           INNER JOIN egresos_cabecera ec ON ec.id=ed.id_egreso
+                           WHERE ed.tipo_documento='IMPORTACION' AND ed.id_referencia_documento=fe.id
+                             AND ec.estado!='anulado' AND ec.eliminado=false AND ed.eliminado=false
+                       ), 0) AS total_pagado,
+                       0::numeric AS total_retenido
+                FROM importaciones_factura_exterior fe
+                JOIN importaciones_cabecera ic ON ic.id=fe.id_importacion
+                JOIN proveedores p ON p.id=fe.id_proveedor
+                WHERE fe.id=:id AND ic.id_empresa=:id_empresa AND fe.eliminado=false AND ic.eliminado=false
             ";
         } else {
             $sql = "
@@ -719,6 +821,8 @@ class CuentasPorPagarRepository extends BaseRepository
             ':id_empresa_ta'  => $idEmpresa,
             ':id_empresa2'    => $idEmpresa,
             ':id_empresa_ta2' => $idEmpresa,
+            ':id_empresa3'    => $idEmpresa,
+            ':id_empresa_ta3' => $idEmpresa,
         ];
         $whereExtra = '';
 

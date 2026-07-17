@@ -95,19 +95,20 @@ class CuentasPorPagarController extends BaseModuloController
     }
 
     /**
-     * Lista unificada de Cuentas por Pagar: compras/liquidaciones + saldos
-     * iniciales por pagar, en una sola tabla. Cada fila lleva `tipo_fuente`
-     * ('COMPRA' | 'LIQUIDACION' | 'SALDO_INICIAL') para distinguirla y enrutar.
+     * Lista unificada de Cuentas por Pagar: compras/liquidaciones/importaciones
+     * + saldos iniciales por pagar, en una sola tabla. Cada fila lleva
+     * `tipo_fuente` ('COMPRA' | 'LIQUIDACION' | 'IMPORTACION' | 'SALDO_INICIAL')
+     * para distinguirla y enrutar.
      */
     private function getFilasUnificadas(int $idEmpresa, array $filtros): array
     {
-        // Compras + liquidaciones
+        // Compras + liquidaciones + importaciones
         $docs = $this->repo->getListado($idEmpresa, $filtros);
 
-        // Si el usuario filtró explícitamente por tipo (COMPRA/LIQUIDACION),
-        // no incluir saldos iniciales (no aplican a ese filtro).
+        // Si el usuario filtró explícitamente por tipo (COMPRA/LIQUIDACION/
+        // IMPORTACION), no incluir saldos iniciales (no aplican a ese filtro).
         $tipo = $filtros['tipo_fuente'] ?? '';
-        if ($tipo === 'COMPRA' || $tipo === 'LIQUIDACION') {
+        if (in_array($tipo, ['COMPRA', 'LIQUIDACION', 'IMPORTACION'], true)) {
             return $docs;
         }
 
@@ -345,7 +346,12 @@ class CuentasPorPagarController extends BaseModuloController
             $estadoCxP = $saldo <= 0 ? 'PAGADA' : ($dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE');
             $ncRet = number_format((float)($r['total_nc'] ?? 0) + (float)($r['total_retenido'] ?? 0), 2);
             echo implode("\t", [
-                $r['tipo_fuente'] === 'SALDO_INICIAL' ? 'Saldo inicial' : ($r['tipo_fuente'] === 'LIQUIDACION' ? 'Liquidación' : 'Factura'),
+                match ($r['tipo_fuente']) {
+                    'SALDO_INICIAL' => 'Saldo inicial',
+                    'LIQUIDACION'   => 'Liquidación',
+                    'IMPORTACION'   => 'Importación',
+                    default         => 'Factura',
+                },
                 $r['numero_documento'] ?? '',
                 $r['proveedor_nombre'] ?? '',
                 $r['proveedor_ruc']    ?? '',
@@ -401,16 +407,21 @@ class CuentasPorPagarController extends BaseModuloController
                         : "<small style='color:#198754;'>Vigente</small>");
                 $fVenc = !empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '—';
                 $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
-                $tipo  = $r['tipo_fuente'] === 'SALDO_INICIAL' ? 'Saldo ini.' : ($r['tipo_fuente'] === 'LIQUIDACION' ? 'Liq.' : 'Fac.');
+                $tipo  = match ($r['tipo_fuente']) {
+                    'SALDO_INICIAL' => 'Saldo ini.',
+                    'LIQUIDACION'   => 'Liq.',
+                    'IMPORTACION'   => 'Imp.',
+                    default         => 'Fac.',
+                };
 
                 $filaHtml .= "<tr style='{$color}'>
-                    <td><small style='color:#6c757d;'>{$tipo}</small><br>" . htmlspecialchars($r['numero_documento'] ?? '') . "</td>
-                    <td>" . htmlspecialchars($r['proveedor_nombre'] ?? '') . "<br><small style='color:#6c757d;'>" . htmlspecialchars($r['proveedor_ruc'] ?? '') . "</small></td>
-                    <td class='text-center'>{$fEmis}</td>
-                    <td class='text-center'>{$fVenc}<br>{$badge}</td>
-                    <td class='text-end'>\$" . number_format($ts, 2) . "</td>
-                    <td class='text-end' style='color:#198754;'>\$" . number_format($tp + $tret, 2) . "</td>
-                    <td class='text-end' style='{$color}font-weight:bold;'>\$" . number_format($tsal, 2) . "</td>
+                    <td style='width:14%;'><small style='color:#6c757d;'>{$tipo}</small><br>" . htmlspecialchars($r['numero_documento'] ?? '') . "</td>
+                    <td style='width:28%;'>" . htmlspecialchars($r['proveedor_nombre'] ?? '') . "</td>
+                    <td class='text-center' style='width:12%;'>{$fEmis}</td>
+                    <td class='text-center' style='width:16%;'>{$fVenc}<br>{$badge}</td>
+                    <td class='text-end' style='width:10%;'>\$" . number_format($ts, 2) . "</td>
+                    <td class='text-end' style='width:10%;color:#198754;'>\$" . number_format($tp + $tret, 2) . "</td>
+                    <td class='text-end' style='width:10%;{$color}font-weight:bold;'>\$" . number_format($tsal, 2) . "</td>
                 </tr>";
             }
 
@@ -460,7 +471,7 @@ class CuentasPorPagarController extends BaseModuloController
                 <thead>
                     <tr>
                         <th style="width:14%;">Documento</th>
-                        <th style="width:28%;">Proveedor / RUC</th>
+                        <th style="width:28%;">Proveedor</th>
                         <th style="width:12%;">F. Emisión</th>
                         <th style="width:16%;">F. Vencimiento</th>
                         <th style="width:10%;">Total</th>
@@ -473,10 +484,10 @@ class CuentasPorPagarController extends BaseModuloController
                 </tbody>
                 <tfoot>
                     <tr style="background:#f8f9fa;font-weight:bold;">
-                        <td colspan="4" class="text-end">TOTALES:</td>
-                        <td class="text-end">$<?= number_format($totalTotal, 2) ?></td>
-                        <td class="text-end" style="color:#198754;">$<?= number_format($totalPagRet, 2) ?></td>
-                        <td class="text-end" style="color:#dc3545;">$<?= number_format($totalSaldo, 2) ?></td>
+                        <td colspan="4" class="text-end" style="width:70%;">TOTALES:</td>
+                        <td class="text-end" style="width:10%;">$<?= number_format($totalTotal, 2) ?></td>
+                        <td class="text-end" style="width:10%;color:#198754;">$<?= number_format($totalPagRet, 2) ?></td>
+                        <td class="text-end" style="width:10%;color:#dc3545;">$<?= number_format($totalSaldo, 2) ?></td>
                     </tr>
                 </tfoot>
             </table>

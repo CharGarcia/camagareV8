@@ -42,6 +42,7 @@ class SecuencialRepository
         'Facturacion consignaciones ventas'    => ['tabla' => 'consignaciones_facturas', 'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Ordenes car-wash'                     => ['tabla' => 'carwash_ordenes',         'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Cambios de productos'                 => ['tabla' => 'cambios_producto_cv',    'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
+        'Importaciones'                        => ['tabla' => 'importaciones_cabecera', 'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
     ];
 
     /**
@@ -51,7 +52,7 @@ class SecuencialRepository
      */
     private const DOCUMENT_AREAS = [
         'Ventas'         => ['Facturas de venta', 'Recibos de venta', 'Nota de crédito', 'Nota de débito', 'Proformas', 'Guía de remisión'],
-        'Compras'        => ['Retenciones de compras', 'Liquidación de compras o servicios', 'Órdenes de compra'],
+        'Compras'        => ['Retenciones de compras', 'Liquidación de compras o servicios', 'Órdenes de compra', 'Importaciones'],
         'Tesorería'      => ['Ingresos', 'Egresos', 'Traspasos'],
         'Operativos'     => ['Pedidos', 'Cambios de productos', 'Ordenes car-wash'],
         'Consignaciones' => ['Consignaciones ventas', 'Retornos consignaciones ventas', 'Facturacion consignaciones ventas'],

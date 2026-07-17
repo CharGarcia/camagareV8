@@ -339,7 +339,7 @@ class ProveedoresController extends BaseModuloController
         }
         try {
             $svc    = new SriIdentificationService();
-            $result = $svc->consultar($identificacion);
+            $result = $svc->consultar($identificacion, (int) $_SESSION['id_empresa']);
             echo json_encode($result);
         } catch (\Throwable $e) {
             http_response_code(500);

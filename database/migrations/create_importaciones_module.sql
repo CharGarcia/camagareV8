@@ -21,7 +21,18 @@
 CREATE TABLE IF NOT EXISTS importaciones_cabecera (
     id                              SERIAL PRIMARY KEY,
     id_empresa                      INTEGER NOT NULL,
-    numero                          INTEGER NOT NULL,              -- correlativo interno por empresa (no SRI)
+
+    -- Numeración: mismo mecanismo consecutivo (SecuencialService + empresa_secuencial) que
+    -- Órdenes de Compra / Traspasos. No es un comprobante SRI: la serie establecimiento-punto
+    -- de emisión solo sirve para llevar el consecutivo por sucursal, sin clave de acceso.
+    id_establecimiento              INTEGER NOT NULL,
+    id_punto_emision                INTEGER NOT NULL,
+    establecimiento                 VARCHAR(3)  NOT NULL,
+    punto_emision                   VARCHAR(3)  NOT NULL,
+    secuencial                      VARCHAR(9)  NOT NULL,
+    numero_importacion              VARCHAR(20) GENERATED ALWAYS AS (establecimiento || '-' || punto_emision || '-' || secuencial) STORED,
+    tipo_ambiente                   VARCHAR(1),                    -- pruebas/producción, igual que el resto de documentos
+
     referencia_dai                  VARCHAR(50),                   -- se completa cuando SENAE asigna la DAI
 
     id_proveedor                    INTEGER NOT NULL,               -- proveedor exterior (proveedores.tipo_id_proveedor = '08')
@@ -58,17 +69,20 @@ CREATE TABLE IF NOT EXISTS importaciones_cabecera (
     deleted_at  TIMESTAMP,
     deleted_by  INTEGER,
 
-    CONSTRAINT fk_importacion_empresa    FOREIGN KEY (id_empresa)          REFERENCES empresas(id),
-    CONSTRAINT fk_importacion_proveedor  FOREIGN KEY (id_proveedor)        REFERENCES proveedores(id),
-    CONSTRAINT fk_importacion_agente     FOREIGN KEY (id_agente_afianzado) REFERENCES proveedores(id),
-    CONSTRAINT fk_importacion_bodega     FOREIGN KEY (id_bodega_destino)   REFERENCES bodegas(id)
+    CONSTRAINT fk_importacion_empresa         FOREIGN KEY (id_empresa)          REFERENCES empresas(id),
+    CONSTRAINT fk_importacion_establecimiento FOREIGN KEY (id_establecimiento)  REFERENCES empresa_establecimiento(id),
+    CONSTRAINT fk_importacion_punto_emision   FOREIGN KEY (id_punto_emision)    REFERENCES empresa_punto_emision(id),
+    CONSTRAINT fk_importacion_proveedor       FOREIGN KEY (id_proveedor)        REFERENCES proveedores(id),
+    CONSTRAINT fk_importacion_agente          FOREIGN KEY (id_agente_afianzado) REFERENCES proveedores(id),
+    CONSTRAINT fk_importacion_bodega          FOREIGN KEY (id_bodega_destino)   REFERENCES bodegas(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_importaciones_empresa   ON importaciones_cabecera(id_empresa);
 CREATE INDEX IF NOT EXISTS idx_importaciones_eliminado ON importaciones_cabecera(eliminado);
 CREATE INDEX IF NOT EXISTS idx_importaciones_estado    ON importaciones_cabecera(estado);
 CREATE INDEX IF NOT EXISTS idx_importaciones_proveedor ON importaciones_cabecera(id_proveedor);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_importaciones_numero ON importaciones_cabecera(id_empresa, numero) WHERE eliminado = false;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_importaciones_secuencial
+    ON importaciones_cabecera(id_punto_emision, secuencial, tipo_ambiente) WHERE eliminado = false;
 
 -- 2. FACTURAS DEL PROVEEDOR EXTERIOR (una importación puede consolidar varias)
 CREATE TABLE IF NOT EXISTS importaciones_factura_exterior (

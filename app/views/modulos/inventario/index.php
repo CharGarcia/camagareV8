@@ -268,7 +268,17 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
         };
 
         window.eliminarMovimiento = async function(id) {
-            if (!confirm('¿Está seguro de eliminar este movimiento? El stock será revertido automáticamente.')) return;
+            const result = await Swal.fire({
+                title: '¿Eliminar movimiento?',
+                text: 'El stock será revertido automáticamente.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!result.isConfirmed) return false;
             try {
                 const resp = await fetch(`${urlBase}/eliminarAjax`, {
                     method: 'POST',
@@ -276,10 +286,18 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
                     body: `id=${id}`
                 });
                 const json = await resp.json();
-                if (json.ok) window.fetchSearch(window.currentPage);
-                else alert(json.mensaje);
+                if (json.ok) {
+                    if (typeof window.INV_toast === 'function') window.INV_toast('success', 'Movimiento eliminado');
+                    else Swal.fire({ icon: 'success', title: 'Movimiento eliminado', timer: 1400, showConfirmButton: false });
+                    window.fetchSearch(window.currentPage);
+                    return true;
+                }
+                Swal.fire({ icon: 'error', title: 'Error', text: json.mensaje || 'No se pudo eliminar.' });
+                return false;
             } catch (e) {
                 console.error('Error al eliminar:', e);
+                Swal.fire({ icon: 'error', title: 'Error', text: 'Error de conexión con el servidor.' });
+                return false;
             }
         };
 

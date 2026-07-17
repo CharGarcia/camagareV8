@@ -8,6 +8,7 @@ use App\repositories\modulos\ImportacionesRepository;
 use App\repositories\modulos\InventarioRepository;
 use App\Rules\modulos\ImportacionesRules;
 use App\Services\LogSistemaService;
+use App\Services\SecuencialService;
 use App\core\Database;
 
 class ImportacionesService
@@ -40,7 +41,7 @@ class ImportacionesService
             $idEmpresa = (int) $data['id_empresa'];
             $idUsuario = (int) $data['id_usuario'];
 
-            $data['numero'] = $data['numero'] ?? $this->repository->getSiguienteNumero($idEmpresa);
+            $data = $this->asignarSecuencial($data);
             $idImportacion = $this->repository->insertCabecera($data);
 
             $this->guardarFacturasExterior($idImportacion, $data['facturas_exterior'] ?? [], $idUsuario);
@@ -68,8 +69,8 @@ class ImportacionesService
         if (!$cabecera) {
             throw new \Exception('Importación no encontrada.');
         }
-        if (in_array($cabecera['estado'], ['nacionalizada', 'cerrada', 'anulada'], true)) {
-            throw new \Exception('No se puede modificar una importación ya nacionalizada, cerrada o anulada.');
+        if (in_array($cabecera['estado'], ['pendiente_aprobacion', 'nacionalizada', 'cerrada', 'anulada'], true)) {
+            throw new \Exception('No se puede modificar una importación pendiente de aprobación, nacionalizada, cerrada o anulada.');
         }
 
         $this->rules->validar($data);
@@ -131,6 +132,9 @@ class ImportacionesService
         if ($importacion['estado'] === 'nacionalizada') {
             throw new \Exception('No se puede eliminar una importación ya nacionalizada. Reviértala desde el kardex de inventario primero.');
         }
+        if ($importacion['estado'] === 'pendiente_aprobacion') {
+            throw new \Exception('No se puede eliminar una importación pendiente de aprobación. Recházela primero.');
+        }
 
         $db = Database::getConnection();
         $managed = !$db->inTransaction();
@@ -148,6 +152,70 @@ class ImportacionesService
             if ($managed && $db->inTransaction()) $db->rollBack();
             throw $e;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // CARGA MASIVA DE LÍNEAS FOB DESDE EXCEL/CSV
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Resuelve las filas ya parseadas de un Excel/CSV (una fila = un array
+     * asociativo con las claves del encabezado, ver ImportacionesController::
+     * importarProductosAjax) a líneas de detalle FOB, buscando el producto por
+     * código en el catálogo. No persiste nada: las líneas resultantes se
+     * agregan a la tabla de la pestaña Productos igual que al buscar un
+     * producto manualmente; solo quedan guardadas cuando el usuario guarda
+     * toda la importación (mismo patrón que el buscador del catálogo).
+     */
+    public function resolverLineasExcelProductos(array $filas, int $idEmpresa): array
+    {
+        $resultado = [];
+        foreach ($filas as $i => $f) {
+            $codigo      = trim((string) ($f['codigo_producto'] ?? ''));
+            $descripcion = trim((string) ($f['descripcion'] ?? ''));
+            $cantidad    = $this->parseNumeroExcel($f['cantidad'] ?? 0);
+            $precioFob   = $this->parseNumeroExcel($f['precio_unitario_fob'] ?? 0);
+            $pesoKg      = $this->parseNumeroExcel($f['peso_kg'] ?? 0);
+            $volumenM3   = $this->parseNumeroExcel($f['volumen_m3'] ?? 0);
+
+            $producto = $codigo !== '' ? $this->repository->getProductoPorCodigo($codigo, $idEmpresa) : null;
+
+            $error = null;
+            if ($codigo === '' && $descripcion === '') {
+                $error = 'Falta el código o la descripción del producto.';
+            } elseif ($codigo !== '' && !$producto) {
+                $error = "El producto con código \"{$codigo}\" no existe en la empresa.";
+            } elseif ($cantidad <= 0) {
+                $error = 'La cantidad debe ser mayor a cero.';
+            }
+
+            $resultado[] = [
+                'fila'                => $i + 2, // +2: la fila 1 del Excel es el encabezado
+                'id_producto'         => $producto['id'] ?? null,
+                'codigo_producto_raw' => $codigo,
+                'descripcion'         => $producto['nombre'] ?? ($descripcion !== '' ? $descripcion : $codigo),
+                'id_medida'           => $producto['id_medida'] ?? null,
+                'cantidad'            => $cantidad,
+                'precio_unitario_fob' => $precioFob,
+                'precio_total_fob'    => round($cantidad * $precioFob, 2),
+                'peso_kg'             => $pesoKg,
+                'volumen_m3'          => $volumenM3,
+                'numero_lote'         => ($f['numero_lote'] ?? '') !== '' ? trim((string) $f['numero_lote']) : null,
+                'fecha_caducidad'     => ($f['fecha_caducidad'] ?? '') !== '' ? trim((string) $f['fecha_caducidad']) : null,
+                'nup'                 => ($f['nup'] ?? '') !== '' ? trim((string) $f['nup']) : null,
+                'valido'              => $error === null,
+                'error'               => $error,
+            ];
+        }
+        return $resultado;
+    }
+
+    /** Tolera coma o punto como separador decimal (celdas de Excel en formato texto). */
+    private function parseNumeroExcel(mixed $v): float
+    {
+        if ($v === null || $v === '') return 0.0;
+        if (is_int($v) || is_float($v)) return (float) $v;
+        return (float) str_replace(',', '.', trim((string) $v));
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -213,8 +281,9 @@ class ImportacionesService
      * Clasifica los gastos en los 4 baldes del landed cost. Un gasto VINCULADO
      * (ya registrado como Compra/Liquidación) siempre se trata como capitalizable:
      * su propio documento ya gestionó su IVA/CxP, aquí solo aporta al costo.
+     * Público: también lo usa el Controller para la vista previa del prorrateo.
      */
-    private function calcularTotalesGastos(array $gastos): array
+    public function calcularTotalesGastos(array $gastos): array
     {
         $capitalizableManual    = 0.0;
         $capitalizableVinculado = 0.0;
@@ -283,14 +352,49 @@ class ImportacionesService
     // ─────────────────────────────────────────────────────────────────────
 
     /**
-     * Prorratea el costo entre las líneas y las postea al kardex (una entrada por
-     * línea, referencia_tipo='importacion'), cambia el estado a 'nacionalizada' y
-     * genera el asiento contable. Equivalente a ComprasController::procesarInventarioAjax
-     * pero para todas las líneas de una vez (carga masiva).
-     *
-     * Nota (Fase 1): no integra el flujo de aprobación de cargas de inventario
-     * (empresa_establecimiento.inv_requiere_aprobacion) — la nacionalización se
-     * postea de inmediato. Queda pendiente para cuando se construya el Controller/Vista.
+     * Config de aprobación de inventario (empresa_establecimiento), mismo
+     * mecanismo que CargaInventarioService::getConfigAprobacion() — se toma
+     * del primer establecimiento de la empresa.
+     */
+    public function getConfigAprobacion(int $idEmpresa): array
+    {
+        $empRepo = new \App\repositories\modulos\EmpresaRepository();
+        $idEst   = $empRepo->getPrimerEstablecimientoId($idEmpresa);
+        $cfg     = $idEst ? ($empRepo->getEstablecimientoConfig($idEst) ?? []) : [];
+
+        $requiere  = !empty($cfg['inv_requiere_aprobacion']) && $cfg['inv_requiere_aprobacion'] !== 'f';
+        $notificar = !isset($cfg['inv_notificar_correo']) || ($cfg['inv_notificar_correo'] && $cfg['inv_notificar_correo'] !== 'f');
+        $aprob     = json_decode($cfg['inv_usuarios_aprobadores'] ?? '[]', true);
+        if (!is_array($aprob)) $aprob = [];
+        $aprob = array_values(array_map('intval', $aprob));
+
+        return ['requiere' => $requiere, 'notificar' => $notificar, 'aprobadores' => $aprob];
+    }
+
+    /** ¿El usuario puede aprobar/rechazar la nacionalización? (aprobador configurado o super admin). */
+    public function esAprobador(int $idUsuario, int $idEmpresa, int $nivel = 1): bool
+    {
+        if ($nivel >= 3) return true;
+        $cfg = $this->getConfigAprobacion($idEmpresa);
+        return in_array($idUsuario, $cfg['aprobadores'], true);
+    }
+
+    /** Nombres de los usuarios aprobadores configurados (para mostrar quién debe aprobar). */
+    public function getAprobadoresNombres(int $idEmpresa): array
+    {
+        $cfg = $this->getConfigAprobacion($idEmpresa);
+        if (empty($cfg['aprobadores'])) return [];
+        return array_column($this->repository->getNombresUsuarios($cfg['aprobadores']), 'nombre');
+    }
+
+    /**
+     * Prorratea el costo entre las líneas. Si la empresa NO exige aprobación de
+     * inventario, postea de inmediato al kardex (una entrada por línea,
+     * referencia_tipo='importacion') y genera el asiento — equivalente a
+     * ComprasController::procesarInventarioAjax pero para todas las líneas de
+     * una vez. Si la exige, deja la importación en 'pendiente_aprobacion' (con
+     * los costos ya calculados y guardados para revisión) y no toca el kardex
+     * ni el asiento hasta que se apruebe — mismo patrón que Cargas de Inventario.
      */
     public function procesarInventario(int $id, int $idEmpresa, int $idUsuario): array
     {
@@ -318,6 +422,244 @@ class ImportacionesService
 
         $detallesConCosto = $this->calcularProrrateo($detalles, $costoTotalNacionalizado, $importacion['criterio_prorrateo']);
 
+        $cfgAprobacion = $this->getConfigAprobacion($idEmpresa);
+
+        if ($cfgAprobacion['requiere']) {
+            $db = Database::getConnection();
+            $managed = !$db->inTransaction();
+            if ($managed) $db->beginTransaction();
+            try {
+                foreach ($detallesConCosto as $d) {
+                    $this->repository->actualizarCostoNacionalizado(
+                        (int) $d['id'],
+                        (float) $d['costo_unitario_nacionalizado'],
+                        (float) $d['costo_total_nacionalizado']
+                    );
+                }
+                $this->repository->actualizarTotales($id, [
+                    'subtotal_fob'                => round(array_sum(array_map(fn($d) => (float) $d['precio_total_fob'], $detalles)), 2),
+                    'total_gastos_capitalizables' => $tg['capitalizable_total'],
+                    'total_iva'                   => $tg['iva'],
+                    'total_isd'                   => $tg['isd'],
+                    'total_otros_gastos'          => $tg['otros'],
+                    'costo_total_nacionalizado'   => $costoTotalNacionalizado,
+                ]);
+                $this->repository->actualizarEstadoAprobacion($id, 'pendiente_aprobacion');
+                $token = bin2hex(random_bytes(24));
+                $this->repository->setToken($id, $token);
+                $this->logService->registrar(
+                    $idUsuario, $idEmpresa, 'SOLICITAR_NACIONALIZACION', 'importaciones_cabecera', $id,
+                    ['estado' => $importacion['estado']],
+                    ['estado' => 'pendiente_aprobacion', 'costo_total_nacionalizado' => $costoTotalNacionalizado]
+                );
+                if ($managed) $db->commit();
+            } catch (\Throwable $e) {
+                if ($managed && $db->inTransaction()) $db->rollBack();
+                throw $e;
+            }
+
+            if ($cfgAprobacion['requiere'] && $cfgAprobacion['notificar']) {
+                try {
+                    $this->notificarAprobadores($idEmpresa, $id, $cfgAprobacion['aprobadores'], $token, $idUsuario);
+                } catch (\Throwable $e) {
+                    // Best-effort: un fallo de correo no revierte la solicitud de aprobación.
+                }
+            }
+
+            return [
+                'id'                        => $id,
+                'costo_total_nacionalizado' => $costoTotalNacionalizado,
+                'pendiente_aprobacion'      => true,
+                'asiento_warning'           => null,
+            ];
+        }
+
+        return $this->aplicarNacionalizacion($id, $idEmpresa, $idUsuario, $importacion, $detalles, $detallesConCosto, $tg, $costoTotalNacionalizado);
+    }
+
+    /**
+     * Aprueba una importación 'pendiente_aprobacion': recalcula el prorrateo
+     * (no puede haber cambiado, la edición queda bloqueada mientras está
+     * pendiente) y aplica la nacionalización real (kardex + asiento).
+     * Segregación de funciones: quien la solicitó no puede autoaprobarla,
+     * salvo super admin — mismo patrón que CargaInventarioService::aprobar().
+     */
+    public function aprobarNacionalizacion(int $id, int $idEmpresa, int $idUsuario, int $nivel = 3): array
+    {
+        $importacion = $this->repository->getPorId($id, $idEmpresa);
+        if (!$importacion) {
+            throw new \Exception('Importación no encontrada.');
+        }
+        if ($importacion['estado'] !== 'pendiente_aprobacion') {
+            throw new \Exception('Solo se pueden aprobar importaciones pendientes de aprobación.');
+        }
+        if ($nivel < 3 && (int) ($importacion['created_by'] ?? 0) === $idUsuario) {
+            throw new \Exception('No puede aprobar una importación que usted mismo solicitó nacionalizar. Debe aprobarla otro usuario autorizado.');
+        }
+
+        $detalles = $this->repository->getDetalles($id);
+        $gastos   = $this->repository->getGastos($id);
+        $facturas = $this->repository->getFacturasExterior($id);
+
+        $totalFacturaExterior    = array_sum(array_map(fn($f) => (float) $f['monto_usd'], $facturas));
+        $tg                      = $this->calcularTotalesGastos($gastos);
+        $costoTotalNacionalizado = round($totalFacturaExterior + $tg['capitalizable_total'], 2);
+        $detallesConCosto        = $this->calcularProrrateo($detalles, $costoTotalNacionalizado, $importacion['criterio_prorrateo']);
+
+        $resultado = $this->aplicarNacionalizacion($id, $idEmpresa, $idUsuario, $importacion, $detalles, $detallesConCosto, $tg, $costoTotalNacionalizado, true);
+        $this->repository->clearToken($id);
+        return $resultado;
+    }
+
+    /**
+     * Rechaza una importación 'pendiente_aprobacion': vuelve a 'borrador' (se
+     * puede corregir y reintentar) guardando el motivo. Misma segregación de
+     * funciones que aprobar().
+     */
+    public function rechazarNacionalizacion(int $id, int $idEmpresa, int $idUsuario, string $motivo, int $nivel = 3): array
+    {
+        $importacion = $this->repository->getPorId($id, $idEmpresa);
+        if (!$importacion) {
+            throw new \Exception('Importación no encontrada.');
+        }
+        if ($importacion['estado'] !== 'pendiente_aprobacion') {
+            throw new \Exception('Solo se pueden rechazar importaciones pendientes de aprobación.');
+        }
+        if ($nivel < 3 && (int) ($importacion['created_by'] ?? 0) === $idUsuario) {
+            throw new \Exception('No puede rechazar una importación que usted mismo solicitó nacionalizar.');
+        }
+
+        $this->repository->actualizarEstadoAprobacion($id, 'borrador', null, $motivo);
+        $this->repository->clearToken($id);
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa, 'RECHAZAR_NACIONALIZACION', 'importaciones_cabecera', $id,
+            ['estado' => 'pendiente_aprobacion'], ['estado' => 'borrador', 'motivo' => $motivo]
+        );
+
+        return ['id' => $id, 'estado' => 'borrador'];
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // APROBACIÓN DESDE EL ENLACE DEL CORREO (por token, sin sesión) — mismo
+    // patrón que CargaInventarioService::getCargaPorToken/aprobarPorToken/
+    // rechazarPorToken().
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Importación por token (para la página pública). Null si el token no es válido. */
+    public function getImportacionPorToken(string $token): ?array
+    {
+        $importacion = $this->repository->getByToken($token);
+        if (!$importacion) return null;
+        $importacion['detalles']          = $this->repository->getDetalles((int) $importacion['id']);
+        $importacion['facturas_exterior'] = $this->repository->getFacturasExterior((int) $importacion['id']);
+        $importacion['gastos']            = $this->repository->getGastos((int) $importacion['id']);
+        return $importacion;
+    }
+
+    public function aprobarPorToken(string $token): array
+    {
+        $importacion = $this->repository->getByToken($token);
+        if (!$importacion) {
+            throw new \Exception('Enlace inválido o ya utilizado.');
+        }
+        if ($importacion['estado'] !== 'pendiente_aprobacion') {
+            throw new \Exception('Esta importación ya no está pendiente de aprobación (estado: ' . $importacion['estado'] . ').');
+        }
+        $idEmpresa = (int) $importacion['id_empresa'];
+        $id        = (int) $importacion['id'];
+
+        // Contexto de sistema para aplicar al kardex (ruta pública sin sesión de usuario).
+        $_SESSION['id_empresa'] = $idEmpresa;
+        $_SESSION['nivel']      = 3;
+        if (!isset($_SESSION['id_usuario'])) $_SESSION['id_usuario'] = 0;
+
+        $cfg = $this->getConfigAprobacion($idEmpresa);
+        $aprobadaPor = $cfg['aprobadores'][0] ?? 0;
+
+        $res = $this->aprobarNacionalizacion($id, $idEmpresa, $aprobadaPor, 3);
+        return $res + ['numero_importacion' => $importacion['numero_importacion']];
+    }
+
+    public function rechazarPorToken(string $token, string $motivo): array
+    {
+        $importacion = $this->repository->getByToken($token);
+        if (!$importacion) {
+            throw new \Exception('Enlace inválido o ya utilizado.');
+        }
+        if ($importacion['estado'] !== 'pendiente_aprobacion') {
+            throw new \Exception('Esta importación ya no está pendiente de aprobación (estado: ' . $importacion['estado'] . ').');
+        }
+        $idEmpresa = (int) $importacion['id_empresa'];
+        $id        = (int) $importacion['id'];
+        $cfg = $this->getConfigAprobacion($idEmpresa);
+        $aprobadaPor = $cfg['aprobadores'][0] ?? 0;
+
+        $res = $this->rechazarNacionalizacion($id, $idEmpresa, $aprobadaPor, $motivo, 3);
+        return $res + ['numero_importacion' => $importacion['numero_importacion']];
+    }
+
+    /**
+     * Notifica por correo a los aprobadores que hay una importación pendiente.
+     * Best-effort: cualquier fallo de correo no interrumpe el flujo.
+     */
+    private function notificarAprobadores(int $idEmpresa, int $id, array $idsAprobadores, string $token, int $creadorId): void
+    {
+        // Segregación: no se notifica (para aprobar) al usuario que solicitó la nacionalización.
+        $idsAprobadores = array_values(array_filter($idsAprobadores, static fn($uid) => (int) $uid !== $creadorId));
+        if (empty($idsAprobadores)) return;
+
+        $usuarios = $this->repository->getNombresUsuarios($idsAprobadores);
+        $correos  = array_values(array_filter(array_map(static fn($u) => trim((string) ($u['mail'] ?? '')), $usuarios)));
+        if (empty($correos)) {
+            $this->logService->registrar(0, $idEmpresa, 'notificar_pendiente_sin_correo', 'importaciones_cabecera', $id, null, ['aprobadores' => $idsAprobadores]);
+            return;
+        }
+
+        $importacion = $this->repository->getPorId($id, $idEmpresa);
+        if (!$importacion) return;
+
+        $empRepo   = new \App\repositories\modulos\EmpresaRepository();
+        $emp       = $empRepo->getEmisorConfig($idEmpresa) ?? [];
+        $empNombre = $emp['nombre_comercial'] ?? ($emp['nombre'] ?? '');
+
+        $baseUrl = rtrim(defined('BASE_URL') ? BASE_URL : '', '/');
+        $url = $baseUrl . '/aprobar-importacion/' . $token;
+
+        $creador = $this->repository->getNombresUsuarios([$creadorId]);
+
+        $data = [
+            'numero_importacion'        => $importacion['numero_importacion'],
+            'proveedor'                 => $importacion['proveedor_nombre'],
+            'costo_total_nacionalizado' => $importacion['costo_total_nacionalizado'],
+            'empresa'                   => $empNombre,
+            'creador'                   => $creador[0]['nombre'] ?? '',
+            'url'                       => $url,
+        ];
+
+        require_once MVC_APP . '/helpers/mail.php';
+        $ok = notificar_importacion_pendiente($correos, $data);
+
+        $this->logService->registrar(0, $idEmpresa, $ok ? 'notificar_pendiente_ok' : 'notificar_pendiente_error', 'importaciones_cabecera', $id, null, [
+            'correos' => $correos, 'error' => $ok ? null : ($GLOBALS['LAST_EMAIL_ERROR'] ?? null),
+        ]);
+    }
+
+    /**
+     * Postea cada línea al kardex, guarda los costos definitivos y genera el
+     * asiento contable. Núcleo compartido entre procesarInventario() (sin
+     * aprobación exigida) y aprobarNacionalizacion() (con aprobación).
+     */
+    private function aplicarNacionalizacion(
+        int $id,
+        int $idEmpresa,
+        int $idUsuario,
+        array $importacion,
+        array $detalles,
+        array $detallesConCosto,
+        array $tg,
+        float $costoTotalNacionalizado,
+        bool $viaAprobacion = false
+    ): array {
         $db = Database::getConnection();
         $managed = !$db->inTransaction();
         if ($managed) $db->beginTransaction();
@@ -340,7 +682,7 @@ class ImportacionesService
                     'fecha_caducidad' => $d['fecha_caducidad'] ?? null,
                     'nup'             => $d['nup'] ?? null,
                     'id_medida'       => $d['id_medida'] ?? null,
-                    'observaciones'   => 'Importación #' . $importacion['numero'],
+                    'observaciones'   => 'Importación #' . $importacion['numero_importacion'],
                 ], $idEmpresa, $idUsuario);
 
                 $this->repository->actualizarCostoNacionalizado(
@@ -360,7 +702,12 @@ class ImportacionesService
                 'costo_total_nacionalizado'   => $costoTotalNacionalizado,
             ]);
 
-            $this->repository->actualizarEstado($id, 'nacionalizada', $idUsuario, date('Y-m-d'));
+            if ($viaAprobacion) {
+                $this->repository->actualizarEstadoAprobacion($id, 'nacionalizada', $idUsuario);
+                $this->repository->actualizarEstado($id, 'nacionalizada', $idUsuario, date('Y-m-d'));
+            } else {
+                $this->repository->actualizarEstado($id, 'nacionalizada', $idUsuario, date('Y-m-d'));
+            }
 
             $this->logService->registrar(
                 $idUsuario, $idEmpresa, 'NACIONALIZAR', 'importaciones_cabecera', $id,
@@ -385,9 +732,10 @@ class ImportacionesService
         }
 
         return [
-            'id'                       => $id,
+            'id'                        => $id,
             'costo_total_nacionalizado' => $costoTotalNacionalizado,
-            'asiento_warning'          => $warning,
+            'pendiente_aprobacion'      => false,
+            'asiento_warning'           => $warning,
         ];
     }
 
@@ -413,7 +761,7 @@ class ImportacionesService
             'fecha_asiento'        => $importacion['fecha_nacionalizacion'] ?? date('Y-m-d'),
             'tipo_comprobante'     => 'importaciones',
             'numero_comprobante'   => '',
-            'concepto'             => 'Importación #' . $importacion['numero'] . ' - Proveedor: ' . $importacion['proveedor_nombre'],
+            'concepto'             => 'Importación #' . $importacion['numero_importacion'] . ' - Proveedor: ' . $importacion['proveedor_nombre'],
             'estado'               => 'contabilizado',
             'modulo_origen'        => 'importacion',
             'id_referencia_origen' => $idImportacion,
@@ -422,6 +770,31 @@ class ImportacionesService
 
         $idAsientoGenerado = $asientoService->guardarAsiento($cabeceraData, $detalles, $idEmpresa, $idUsuario);
         $this->repository->updateAsientoContable($idImportacion, $idAsientoGenerado);
+    }
+
+    /**
+     * Resuelve el código de establecimiento/punto de emisión y reserva el siguiente
+     * secuencial consecutivo (mismo mecanismo que Órdenes de Compra/Traspasos:
+     * SecuencialService + empresa_secuencial, tipo_documento = 'Importaciones').
+     * No es un comprobante SRI: la serie solo numera por sucursal.
+     */
+    private function asignarSecuencial(array $data): array
+    {
+        $idEstablecimiento = (int) $data['id_establecimiento'];
+        $idPuntoEmision    = (int) $data['id_punto_emision'];
+
+        $serie = $this->repository->getDatosSerie($idEstablecimiento, $idPuntoEmision);
+        if (!$serie) {
+            throw new \Exception('No se encontraron datos del establecimiento o punto de emisión seleccionado.');
+        }
+
+        $secResult = (new SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, 'Importaciones');
+
+        $data['establecimiento'] = $serie['establecimiento'];
+        $data['punto_emision']   = $serie['punto_emision'];
+        $data['secuencial']      = $secResult['formateado'];
+
+        return $data;
     }
 
     // ─────────────────────────────────────────────────────────────────────

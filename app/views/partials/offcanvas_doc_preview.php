@@ -8,7 +8,7 @@
  *     CMG_abrirPreviewDoc(id, tipo, extra)
  *
  *   tipo:  FACTURA | FACTURA_VENTA | VENTA | RECIBO | RECIBO_VENTA
- *          | COMPRA | LIQUIDACION | SALDO_INICIAL
+ *          | COMPRA | LIQUIDACION | IMPORTACION | SALDO_INICIAL
  *
  *   extra: (opcional) datos que el llamador ya tiene en la fila. Se usan como
  *          respaldo mientras carga y si el documento no se puede consultar.
@@ -109,7 +109,8 @@
         RECIBO:        { url: BASE + '/modulos/recibo-venta/getFacturaAjax',         badge: 'RECIBO DE VENTA',  sujeto: 'Cliente',   forma: 'cabecera' },
         RECIBO_VENTA:  { url: BASE + '/modulos/recibo-venta/getFacturaAjax',         badge: 'RECIBO DE VENTA',  sujeto: 'Cliente',   forma: 'cabecera' },
         COMPRA:        { url: BASE + '/modulos/compras/getCompraAjax',               badge: 'FACTURA DE COMPRA', sujeto: 'Proveedor', forma: 'data' },
-        LIQUIDACION:   { url: BASE + '/modulos/liquidacion-compra/getLiquidacionAjax', badge: 'LIQUIDACIÓN',    sujeto: 'Proveedor', forma: 'cabecera' }
+        LIQUIDACION:   { url: BASE + '/modulos/liquidacion-compra/getLiquidacionAjax', badge: 'LIQUIDACIÓN',    sujeto: 'Proveedor', forma: 'cabecera' },
+        IMPORTACION:   { url: BASE + '/modulos/importaciones/getImportacionAjax',     badge: 'IMPORTACIÓN',     sujeto: 'Proveedor exterior', forma: 'data' }
     };
 
     const $ = (id) => document.getElementById(id);
@@ -238,7 +239,7 @@
 
                 const cab  = (cfg.forma === 'data') ? res.data : res.cabecera;
                 if (!cab) throw new Error('El documento no devolvió datos');
-                const dets = (cfg.forma === 'data') ? (cab.detalles || []) : (res.detalles || []);
+                let dets = (cfg.forma === 'data') ? (cab.detalles || []) : (res.detalles || []);
 
                 const numero = [
                     cab.establecimiento || cab.establecimiento_prov || '',
@@ -249,14 +250,28 @@
                 pintarCabecera({
                     badge:       cfg.badge,
                     numero:      numero !== '--' ? numero : (extra.numero || ''),
-                    fechaTxt:    fecha(cab.fecha_emision),
+                    fechaTxt:    fecha(cab.fecha_emision || cab.fecha_nacionalizacion || cab.created_at),
                     sujetoLabel: cfg.sujeto,
                     sujeto:      cab.cliente_nombre || cab.proveedor_nombre || extra.sujeto || ''
                 });
 
-                const subtotal = parseFloat(cab.total_sin_impuestos || 0);
-                const total    = parseFloat(cab.importe_total || 0);
-                const iva      = parseFloat(cab.monto_iva || 0) || (total - subtotal);
+                let subtotal, total, iva;
+                if (tipo === 'IMPORTACION') {
+                    // Importaciones: FOB + gastos capitalizables = costo nacionalizado; el IVA es crédito tributario aparte.
+                    subtotal = parseFloat(cab.subtotal_fob || 0);
+                    iva      = parseFloat(cab.total_iva || 0);
+                    total    = parseFloat(cab.costo_total_nacionalizado || 0) || (subtotal + parseFloat(cab.total_gastos_capitalizables || 0));
+                    dets = dets.map(d => ({
+                        ...d,
+                        costo_unitario: d.costo_unitario_nacionalizado || d.precio_unitario_fob,
+                        subtotal:       d.costo_total_nacionalizado    || d.precio_total_fob,
+                        codigo:         d.codigo_producto_raw
+                    }));
+                } else {
+                    subtotal = parseFloat(cab.total_sin_impuestos || 0);
+                    total    = parseFloat(cab.importe_total || 0);
+                    iva      = parseFloat(cab.monto_iva || 0) || (total - subtotal);
+                }
 
                 pintarItems(dets);
                 pintarTotales({ subtotal, iva, total });

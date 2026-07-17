@@ -89,10 +89,12 @@ class CajaSesionService
             throw new Exception('Esta sesión de caja ya está cerrada.');
         }
 
-        // Hoy no hay ventas del POS vinculadas a la sesión todavía, así que
-        // lo esperado es el fondo inicial. Cuando exista el flujo de venta,
-        // aquí se suma el efectivo cobrado durante el turno.
-        $montoEsperado = (float) $sesion['fondo_inicial'];
+        // Arqueo real: lo esperado es el fondo con el que se abrió el turno
+        // más el efectivo cobrado durante el turno (Facturas/Recibos del POS
+        // pagados en efectivo). Tarjeta/banco no se cuentan aquí: no afectan
+        // lo que debe haber físicamente en la caja.
+        $efectivoCobrado = $this->repository->getEfectivoCobradoEnTurno($id);
+        $montoEsperado = round((float) $sesion['fondo_inicial'] + $efectivoCobrado, 2);
         $montoContado = (float) $data['monto_contado'];
         $diferencia = round($montoContado - $montoEsperado, 2);
 

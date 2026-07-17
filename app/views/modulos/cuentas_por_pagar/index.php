@@ -21,6 +21,7 @@
     /* Badges de tipo documento */
     .badge-liquid   { background: rgba(102,16,242,.1);  color: #6610f2; border: 1px solid rgba(102,16,242,.2); font-size:.6rem; }
     .badge-compra   { background: rgba(13,110,253,.08); color: #0d6efd; border: 1px solid rgba(13,110,253,.2);  font-size:.6rem; }
+    .badge-importacion { background: rgba(255,140,0,.1); color: #d2691e; border: 1px solid rgba(255,140,0,.25); font-size:.6rem; }
     /* Columna saldo */
     .cxp-saldo-vencido { color: #dc3545 !important; }
     .cxp-saldo-vigente { color: #198754 !important; }
@@ -72,6 +73,7 @@
                                 <option value="">Todos</option>
                                 <option value="COMPRA">Solo Facturas</option>
                                 <option value="LIQUIDACION">Solo Liquidaciones</option>
+                                <option value="IMPORTACION">Solo Importaciones</option>
                             </select>
                         </div>
 

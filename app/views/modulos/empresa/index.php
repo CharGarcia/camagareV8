@@ -1527,6 +1527,43 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
 
 
 <script>
+    // ── Helpers de notificación (SweetAlert2) ─────────────────────────────────
+    // Unifican todos los mensajes del módulo Empresa. Requieren Swal (cargado en
+    // partials/scripts.php). Si por algún motivo Swal no está, hacen fallback.
+    function swalToastOk(mensaje) {
+        if (typeof Swal === 'undefined') { return; }
+        Swal.fire({
+            toast: true, position: 'top-end', icon: 'success',
+            title: mensaje || 'Cambios guardados correctamente',
+            showConfirmButton: false, timer: 2500, timerProgressBar: true
+        });
+    }
+    function swalError(mensaje, titulo) {
+        if (typeof Swal === 'undefined') { alert(mensaje || 'Ocurrió un error'); return; }
+        return Swal.fire(titulo || 'Error', mensaje || 'Ocurrió un error', 'error');
+    }
+    function swalInfo(mensaje, titulo) {
+        if (typeof Swal === 'undefined') { alert(mensaje || ''); return; }
+        return Swal.fire(titulo || 'Aviso', mensaje || '', 'warning');
+    }
+    // Devuelve una promesa que resuelve a true si el usuario confirma.
+    async function swalConfirm(mensaje, opts) {
+        opts = opts || {};
+        if (typeof Swal === 'undefined') { return confirm(mensaje); }
+        const res = await Swal.fire({
+            title: opts.titulo || '¿Confirmar?',
+            text: mensaje,
+            icon: opts.icon || 'warning',
+            showCancelButton: true,
+            confirmButtonText: opts.confirmText || 'Sí, continuar',
+            cancelButtonText: opts.cancelText || 'Cancelar',
+            confirmButtonColor: opts.confirmColor || '#d33',
+            cancelButtonColor: '#6c757d',
+            reverseButtons: true
+        });
+        return res.isConfirmed;
+    }
+
     // ── Preview logo establecimiento ──────────────────────────────────────────
     function previewLogoEst(input) {
         const preview     = document.getElementById('est-logo-preview');
@@ -1609,7 +1646,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
         const idPunto = document.getElementById('punto-id').value;
         if (!idPunto) return;
 
-        if (!confirm("¿Eliminar punto de emisión? Esta acción no se puede deshacer.")) return;
+        if (!await swalConfirm('Esta acción no se puede deshacer.', { titulo: '¿Eliminar punto de emisión?', confirmText: 'Sí, eliminar' })) return;
 
         try {
             const response = await fetch('<?= $base ?>/modulos/empresa/deletePunto', {
@@ -1621,12 +1658,13 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             });
             const res = await response.json();
             if (res.ok) {
-                location.reload();
+                swalToastOk('Punto de emisión eliminado');
+                setTimeout(() => location.reload(), 900);
             } else {
-                alert(res.error || 'No se pudo eliminar');
+                swalError(res.error || 'No se pudo eliminar');
             }
         } catch (err) {
-            alert('Error de conexión');
+            swalError('Error de conexión');
         }
     }
 
@@ -1677,16 +1715,12 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                 if (link) await cargarSecuenciales(link, parseInt(idPunto));
             } else {
                 const errMsg = json.error || json.msg || 'Error al crear los secuenciales iniciales.';
-                if (msgContainer) {
-                    msgContainer.innerHTML = `<div class="alert alert-danger py-2 px-3 small mb-0">${errMsg}</div>`;
-                }
+                swalError(errMsg);
                 btn.disabled = false;
                 _setBtnSecuencialesEstado(false);
             }
         } catch (e) {
-            if (msgContainer) {
-                msgContainer.innerHTML = `<div class="alert alert-danger py-2 px-3 small mb-0">Error de conexión con el servidor.</div>`;
-            }
+            swalError('Error de conexión con el servidor.');
             btn.disabled = false;
             _setBtnSecuencialesEstado(false);
         }
@@ -1824,18 +1858,33 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     }
 
     // Agrega el tipo elegido en el selector (o uno personalizado si eligió "Otro").
-    function agregarSecuencialSeleccionado() {
+    async function agregarSecuencialSeleccionado() {
         const sel = document.getElementById('sec-add-tipo');
         if (!sel) return;
         let name = sel.value;
         if (!name) return;
         if (name === '__otro__') {
-            name = (prompt('Nombre del tipo de documento (debe coincidir exacto con el que espera el módulo):') || '').trim();
+            if (typeof Swal !== 'undefined') {
+                const r = await Swal.fire({
+                    title: 'Nuevo tipo de documento',
+                    input: 'text',
+                    inputLabel: 'Debe coincidir exacto con el que espera el módulo',
+                    inputPlaceholder: 'Ej.: Facturas',
+                    showCancelButton: true,
+                    confirmButtonText: 'Agregar',
+                    cancelButtonText: 'Cancelar',
+                    inputValidator: (v) => (!v || !v.trim()) ? 'Ingrese un nombre' : undefined
+                });
+                if (!r.isConfirmed) return;
+                name = (r.value || '').trim();
+            } else {
+                name = (prompt('Nombre del tipo de documento (debe coincidir exacto con el que espera el módulo):') || '').trim();
+            }
             if (!name) return;
         }
         const presentes = _secNombresPresentes();
         if (presentes.includes(name.toLowerCase())) {
-            alert('Ese tipo de documento ya existe en este punto de emisión.');
+            swalInfo('Ese tipo de documento ya existe en este punto de emisión.', 'Duplicado');
             return;
         }
         _agregarCampoSecuencial(name);
@@ -1921,7 +1970,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     }
 
     window.eliminarIce = async function(id) {
-        if (!confirm('¿Seguro que desea eliminar esta configuración de ICE?')) return;
+        if (!await swalConfirm('¿Seguro que desea eliminar esta configuración de ICE?', { titulo: 'Eliminar ICE', confirmText: 'Sí, eliminar' })) return;
 
         try {
             const response = await fetch('<?= $base ?>/modulos/empresa/deleteIce', {
@@ -1933,12 +1982,13 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
             });
             const res = await response.json();
             if (res.ok) {
-                location.reload();
+                swalToastOk('Configuración de ICE eliminada');
+                setTimeout(() => location.reload(), 900);
             } else {
-                alert(res.error || 'No se pudo eliminar');
+                swalError(res.error || 'No se pudo eliminar');
             }
         } catch (err) {
-            alert('Error de conexión');
+            swalError('Error de conexión');
         }
     }
 
@@ -1964,16 +2014,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     });
                     const res = await response.json();
                     if (res.ok) {
-                        if (msgContainer) {
-                            msgContainer.innerHTML = `<div class="alert alert-success py-2 px-3 small mb-0">${res.msg || 'Cambios guardados correctamente'}</div>`;
-                            setTimeout(() => {
-                                if (msgContainer) msgContainer.innerHTML = '';
-                            }, 3000);
-                        }
+                        swalToastOk(res.msg || 'Cambios guardados correctamente');
                         if (id === 'form-firma' || id === 'form-punto' || id === 'form-ice') setTimeout(() => location.reload(), 1000);
                     } else {
                         if (res.confirm) {
-                            if (confirm(res.msg)) {
+                            if (await swalConfirm(res.msg, { titulo: 'Confirmación requerida', icon: 'question', confirmText: 'Sí, continuar', confirmColor: '#0d6efd' })) {
                                 if (!f.querySelector('input[name="forzar"]')) {
                                     const input = document.createElement('input');
                                     input.type = 'hidden';
@@ -1985,15 +2030,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                 return;
                             }
                         }
-                        if (msgContainer) {
-                            msgContainer.innerHTML = `<div class="alert alert-danger py-2 px-3 small mb-0">${res.error || res.msg || 'Error al guardar'}</div>`;
-                        }
+                        swalError(res.error || res.msg || 'Error al guardar');
                     }
                 } catch (err) {
                     console.error(err);
-                    if (msgContainer) {
-                        msgContainer.innerHTML = `<div class="alert alert-danger py-2 px-3 small mb-0">Error de conexión con el servidor</div>`;
-                    }
+                    swalError('Error de conexión con el servidor');
                 }
             });
         });

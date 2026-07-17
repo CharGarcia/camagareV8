@@ -789,14 +789,14 @@ $plantillasFiltradas = [];
                 $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
                 $origenTxt = (($r['origen'] ?? 'FACTURA') === 'SALDO_INICIAL') ? 'Saldo inicial' : 'Factura';
                 $filaHtml .= "<tr style='{$color}'>
-                    <td>" . htmlspecialchars($r['numero_factura'] ?? '') . "</td>
-                    <td class='text-center'>{$origenTxt}</td>
-                    <td>" . htmlspecialchars($r['cliente_nombre'] ?? '') . "<br><small style='color:#6c757d;'>" . htmlspecialchars($r['cliente_ruc'] ?? '') . "</small></td>
-                    <td class='text-center'>{$fEmis}</td>
-                    <td class='text-center'>{$fVenc} {$badge}</td>
-                    <td class='text-end'>\$" . number_format($ts, 2) . "</td>
-                    <td class='text-end' style='color:#198754;'>\$" . number_format($tc, 2) . "</td>
-                    <td class='text-end' style='{$color}font-weight:bold;'>\$" . number_format($tsal, 2) . "</td>
+                    <td style='width:13%;'>" . htmlspecialchars($r['numero_factura'] ?? '') . "</td>
+                    <td class='text-center' style='width:9%;'>{$origenTxt}</td>
+                    <td style='width:24%;'>" . htmlspecialchars($r['cliente_nombre'] ?? '') . "</td>
+                    <td class='text-center' style='width:11%;'>{$fEmis}</td>
+                    <td class='text-center' style='width:16%;'>{$fVenc} {$badge}</td>
+                    <td class='text-end' style='width:9%;'>\$" . number_format($ts, 2) . "</td>
+                    <td class='text-end' style='width:9%;color:#198754;'>\$" . number_format($tc, 2) . "</td>
+                    <td class='text-end' style='width:9%;{$color}font-weight:bold;'>\$" . number_format($tsal, 2) . "</td>
                 </tr>";
             }
 
@@ -847,7 +847,7 @@ $plantillasFiltradas = [];
                     <tr>
                         <th style="width:13%;">Documento</th>
                         <th style="width:9%;">Origen</th>
-                        <th style="width:24%;">Cliente / RUC</th>
+                        <th style="width:24%;">Cliente</th>
                         <th style="width:11%;">F. Emisión</th>
                         <th style="width:16%;">F. Vencimiento</th>
                         <th style="width:9%;">Total</th>
@@ -860,10 +860,10 @@ $plantillasFiltradas = [];
                 </tbody>
                 <tfoot>
                     <tr style="background:#f8f9fa;font-weight:bold;">
-                        <td colspan="5" class="text-end">TOTALES:</td>
-                        <td class="text-end">$<?= number_format($totalTotal, 2) ?></td>
-                        <td class="text-end" style="color:#198754;">$<?= number_format($totalCobrado, 2) ?></td>
-                        <td class="text-end" style="color:#dc3545;">$<?= number_format($totalSaldo, 2) ?></td>
+                        <td colspan="5" class="text-end" style="width:73%;">TOTALES:</td>
+                        <td class="text-end" style="width:9%;">$<?= number_format($totalTotal, 2) ?></td>
+                        <td class="text-end" style="width:9%;color:#198754;">$<?= number_format($totalCobrado, 2) ?></td>
+                        <td class="text-end" style="width:9%;color:#dc3545;">$<?= number_format($totalSaldo, 2) ?></td>
                     </tr>
                 </tfoot>
             </table>

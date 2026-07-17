@@ -93,7 +93,13 @@ class CuentasPorPagarService
         $fechaCobro  = !empty($d['fecha_cobro']) ? trim((string) $d['fecha_cobro']) : $fechaPago;
 
         $totalDoc  = (float) $doc['importe_total'];
-        $tipoDocEg = $tipoFuente === 'LIQUIDACION' ? 'LIQUIDACION' : 'COMPRA';
+        // 'IMPORTACION' es un tipo_fuente legítimo (factura del proveedor del
+        // exterior, ver CuentasPorPagarRepository), no solo COMPRA/LIQUIDACION.
+        $tipoDocEg = match ($tipoFuente) {
+            'LIQUIDACION'  => 'LIQUIDACION',
+            'IMPORTACION'  => 'IMPORTACION',
+            default        => 'COMPRA',
+        };
 
         $secuencialService = new SecuencialService();
         $secRes = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
@@ -112,7 +118,11 @@ class CuentasPorPagarService
             'secuencial'         => $secuencial,
             'numero_egreso'      => $numEgr,
             'fecha_emision'      => $fechaPago,
-            'tipo_egreso'        => $tipoFuente === 'LIQUIDACION' ? 'COMPRA_LIQUIDACION' : 'COMPRA_FACTURA',
+            'tipo_egreso'        => match ($tipoFuente) {
+                'LIQUIDACION'  => 'COMPRA_LIQUIDACION',
+                'IMPORTACION'  => 'IMPORTACION_FACTURA',
+                default        => 'COMPRA_FACTURA',
+            },
             'tipo_sujeto'        => 'PROVEEDOR',
             'id_proveedor'       => (int) $doc['id_proveedor'],
             'id_empleado'        => null,

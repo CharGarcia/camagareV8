@@ -255,7 +255,9 @@ class ProductosController extends BaseModuloController
             $fullPath = $uploadDir . $fileName;
 
             if (move_uploaded_file($file['tmp_name'], $fullPath)) {
-                echo json_encode(['ok' => true, 'path' => 'public/uploads/productos/' . $fileName]);
+                // Ruta RELATIVA al directorio público (BASE_URL ya apunta a /public).
+                // No incluir el prefijo 'public/' o la URL final quedaría con /public/public/.
+                echo json_encode(['ok' => true, 'path' => 'uploads/productos/' . $fileName]);
             } else {
                 throw new Exception('Error al mover el archivo al servidor.');
             }

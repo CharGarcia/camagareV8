@@ -304,6 +304,24 @@ class ReciboVentaRepository extends BaseRepository
         }
     }
 
+    /**
+     * Enlaza el recibo con el turno de caja (caja_sesiones) que lo cobró — solo
+     * lo llena el POS. Protegido: si la columna id_caja_sesion aún no existe
+     * (migración no aplicada), no falla.
+     */
+    public function setCajaSesion(int $idRecibo, ?int $idCajaSesion): void
+    {
+        if (empty($idCajaSesion)) {
+            return;
+        }
+        try {
+            $sql = "UPDATE recibos_venta_cabecera SET id_caja_sesion = :ics WHERE id = :id";
+            $this->query($sql, [':ics' => $idCajaSesion, ':id' => $idRecibo]);
+        } catch (\Throwable $e) {
+            error_log('[ReciboVenta] No se pudo enlazar id_caja_sesion (¿migración pendiente?): ' . $e->getMessage());
+        }
+    }
+
     public function updateCabecera(int $id, array $data): void
     {
         $idVendedor = !empty($data['id_vendedor']) ? (int) $data['id_vendedor'] : null;
@@ -560,10 +578,10 @@ class ReciboVentaRepository extends BaseRepository
         return $this->getTarifasIva();
     }
 
-    /** Tarifa de IVA (id, porcentaje_iva, codigo SRI) configurada en el producto. */
+    /** Tarifa de IVA (id, porcentaje_iva, codigo SRI) configurada en el producto, más su código principal. */
     public function getTarifaIvaProducto(int $idProducto): ?array
     {
-        $sql = "SELECT ti.id, ti.porcentaje_iva, ti.codigo
+        $sql = "SELECT ti.id, ti.porcentaje_iva, ti.codigo, p.codigo AS codigo_producto
                 FROM productos p
                 JOIN tarifa_iva ti ON ti.id = p.tarifa_iva
                 WHERE p.id = ?";

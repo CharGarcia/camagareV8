@@ -156,6 +156,7 @@ function CXP_filaHtml(r) {
         const ret     = parseFloat(r.total_retenido|| 0);
         const ncRet   = nc + ret - nd;
         const esLiq   = r.tipo_fuente === 'LIQUIDACION';
+        const esImp   = r.tipo_fuente === 'IMPORTACION';
         const esSaldo = r.tipo_fuente === 'SALDO_INICIAL';
         const pagada  = saldo <= 0.001;
 
@@ -184,7 +185,9 @@ function CXP_filaHtml(r) {
             ? `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 small px-2" title="Saldo inicial de apertura">Saldo inicial</span>`
             : esLiq
                 ? `<span class="badge badge-liquid rounded-pill px-2">Liquidación</span>`
-                : `<span class="badge badge-compra rounded-pill px-2">Factura</span>`;
+                : esImp
+                    ? `<span class="badge badge-importacion rounded-pill px-2">Importación</span>`
+                    : `<span class="badge badge-compra rounded-pill px-2">Factura</span>`;
 
         // ── Fechas ──
         const fEmision     = CXP_fmtFecha(r.fecha_emision);
@@ -414,10 +417,10 @@ async function CXP_abrirModalPago(idDoc, tipoFuente) {
     document.getElementById('pago-total-doc').textContent = CXP_fmt(d.importe_total);
     document.getElementById('pago-ya-pagado').textContent = CXP_fmt(d.total_pagado);
     document.getElementById('pago-retenido').textContent  = CXP_fmt(d.total_retenido || 0);
-    // NC/ND: solo aplica para COMPRA; en LIQUIDACION mostrar 0
+    // NC/ND: solo aplica para COMPRA; en LIQUIDACION/IMPORTACION mostrar 0
     const ncNdVal = parseFloat(d.total_nc || 0) - parseFloat(d.total_nd || 0);
     const lblNcNd = document.getElementById('pago-nc-nd-label');
-    if (lblNcNd) lblNcNd.textContent = (d.tipo_fuente === 'LIQUIDACION') ? 'NC/ND' : 'NC - ND';
+    if (lblNcNd) lblNcNd.textContent = (d.tipo_fuente === 'LIQUIDACION' || d.tipo_fuente === 'IMPORTACION') ? 'NC/ND' : 'NC - ND';
     document.getElementById('pago-nc-nd').textContent    = CXP_fmt(ncNdVal);
     document.getElementById('pago-saldo-pend').textContent = CXP_fmt(saldo);
 

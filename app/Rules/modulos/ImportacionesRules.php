@@ -31,6 +31,10 @@ class ImportacionesRules
             throw new \Exception('Debe seleccionar la bodega destino.');
         }
 
+        if (empty($data['id_establecimiento']) || empty($data['id_punto_emision'])) {
+            throw new \Exception('Debe seleccionar la serie (establecimiento y punto de emisión) para numerar la importación.');
+        }
+
         $criterio = $data['criterio_prorrateo'] ?? 'fob';
         if (!in_array($criterio, ['fob', 'peso', 'volumen', 'cantidad'], true)) {
             throw new \Exception('Criterio de prorrateo inválido.');
@@ -116,6 +120,9 @@ class ImportacionesRules
     {
         if (($importacion['estado'] ?? '') === 'nacionalizada') {
             throw new \Exception('Esta importación ya fue procesada a inventario.');
+        }
+        if (($importacion['estado'] ?? '') === 'pendiente_aprobacion') {
+            throw new \Exception('Esta importación ya está pendiente de aprobación.');
         }
         if (($importacion['estado'] ?? '') === 'anulada') {
             throw new \Exception('No se puede procesar una importación anulada.');

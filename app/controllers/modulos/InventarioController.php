@@ -482,16 +482,19 @@ class InventarioController extends BaseModuloController
         try {
             $prodRepo = new \App\repositories\modulos\ProductoRepository();
             $prod = $prodRepo->getDetalleCompleto($idProducto, $idEmpresa);
-            
-            if (!$prod || empty($prod['id_medida'])) {
-                echo json_encode(['ok' => false, 'mensaje' => 'El producto no tiene una medida base asignada.']);
-                exit;
+
+            $umRepo  = new \App\repositories\modulos\UnidadesMedidaRepository();
+            $idBase  = ($prod && !empty($prod['id_medida'])) ? (int)$prod['id_medida'] : 0;
+            $medidas = $idBase > 0 ? $umRepo->getUnidadesMismoTipo($idBase, $idEmpresa) : [];
+
+            // Fallback: si el producto no tiene medida base o no hay unidades de su tipo,
+            // se ofrecen todas las unidades activas de la empresa.
+            if (empty($medidas)) {
+                $medidas = $umRepo->getActive($idEmpresa);
+                $idBase  = 0;
             }
 
-            $umRepo = new \App\repositories\modulos\UnidadesMedidaRepository();
-            $medidas = $umRepo->getUnidadesMismoTipo((int)$prod['id_medida'], $idEmpresa);
-
-            echo json_encode(['ok' => true, 'medidas' => $medidas, 'id_medida_base' => $prod['id_medida']]);
+            echo json_encode(['ok' => true, 'medidas' => $medidas, 'id_medida_base' => $idBase]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }

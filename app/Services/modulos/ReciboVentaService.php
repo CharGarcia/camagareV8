@@ -261,6 +261,7 @@ class ReciboVentaService
             }
 
             $idRecibo = $this->repository->insertCabecera($data);
+            $this->repository->setCajaSesion($idRecibo, !empty($data['id_caja_sesion']) ? (int) $data['id_caja_sesion'] : null);
             $this->guardarLineas($idRecibo, $data, $idEmpresa, $idUsuario);
 
             $this->logService->registrar(

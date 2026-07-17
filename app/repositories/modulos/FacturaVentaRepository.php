@@ -426,6 +426,10 @@ class FacturaVentaRepository extends BaseRepository
             $cols[]   = 'id_proforma';
             $params[] = (int) $data['id_proforma'];
         }
+        if (in_array('id_caja_sesion', $colsOpcionales) && !empty($data['id_caja_sesion'])) {
+            $cols[]   = 'id_caja_sesion';
+            $params[] = (int) $data['id_caja_sesion'];
+        }
 
         $colSql  = implode(', ', $cols);
         $valSql  = implode(', ', array_fill(0, count($params), '?'));
@@ -475,7 +479,7 @@ class FacturaVentaRepository extends BaseRepository
             !empty($data['id_producto']) ? (int)$data['id_producto'] : null,
             !empty($data['id_bodega'])         ? (int) $data['id_bodega']         : null,
             !empty($data['id_unidad_medida'])   ? (int) $data['id_unidad_medida']  : (!empty($data['id_medida']) ? (int)$data['id_medida'] : null),
-            $data['codigo_principal'],
+            $data['codigo_principal'] ?? null,
             !empty($data['codigo_auxiliar'])    ? $data['codigo_auxiliar']         : null,
             $data['descripcion'],
             $data['cantidad'],

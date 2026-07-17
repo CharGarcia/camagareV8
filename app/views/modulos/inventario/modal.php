@@ -2,6 +2,41 @@
 $vistaConfigInv = \App\Helpers\PreferenciasHelper::getPreferenciasVista('inventario');
 echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigInv, 'estiloVistaPestanasInv');
 ?>
+<style>
+    /* Dropdown predictivo del buscador de productos: se superpone sobre el formulario del modal.
+       Autónomo (no depende de estilos del index.php). El contenedor padre tiene position-relative. */
+    #modalAjuste .dropdown-predictivo {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 1080;
+        max-height: 240px;
+        overflow-y: auto;
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: .375rem;
+        box-shadow: 0 .5rem 1rem rgba(0, 0, 0, .15);
+    }
+    #modalAjuste .predictivo-item {
+        cursor: pointer;
+        font-size: 0.85rem;
+        padding: 8px 12px;
+        border-bottom: 1px solid #f1f1f1;
+        background: #fff;
+    }
+    #modalAjuste .predictivo-item:last-child { border-bottom: 0; }
+    #modalAjuste .predictivo-item:hover,
+    #modalAjuste .predictivo-item.active {
+        background-color: #f8f9fa;
+        color: #0d6efd;
+    }
+    #modalAjuste .predictivo-item .item-codigo {
+        font-weight: bold;
+        color: #6c757d;
+        margin-right: 8px;
+    }
+</style>
 <!-- Modal para Nuevo Movimiento de Inventario -->
 <div class="modal fade" id="modalAjuste" tabindex="-1" aria-labelledby="modalAjusteLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -149,6 +184,24 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
 </div>
 
 <script>
+    // ─── Helpers SweetAlert (compartidos por el modal y el listado de inventario) ───
+    window.INV_toast = function(icon, title) {
+        Swal.fire({
+            toast: true, position: 'top-end', icon, title,
+            showConfirmButton: false, timer: 2800, timerProgressBar: true
+        });
+    };
+    window.INV_error = function(html) {
+        return Swal.fire({ icon: 'error', title: 'Error', html, confirmButtonColor: '#0d6efd', confirmButtonText: 'Aceptar' });
+    };
+    window.INV_confirm = function(opts) {
+        return Swal.fire(Object.assign({
+            icon: 'warning', showCancelButton: true,
+            confirmButtonColor: '#dc3545', cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Sí, continuar', cancelButtonText: 'Cancelar'
+        }, opts || {}));
+    };
+
     (function() {
         const form = document.getElementById('formAjuste');
         const inputBusqueda = document.getElementById('ajuste_busqueda_prod');
@@ -371,9 +424,26 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                 const resp = await fetch(`<?= BASE_URL ?>/modulos/inventario/getMedidasProductoAjax?id_producto=${idProd}`);
                 const json = await resp.json();
                 if (json.ok) {
+                    const medidas = json.medidas || [];
+
+                    // Determinar la medida por defecto:
+                    //   1) la que viene seleccionada (edición)
+                    //   2) la medida base del producto
+                    //   3) la unidad llamada "Unidad"
+                    //   4) la primera de la lista
+                    let defaultId = '';
+                    if (idSeleccionada && medidas.some(m => m.id == idSeleccionada)) {
+                        defaultId = idSeleccionada;
+                    } else if (json.id_medida_base && medidas.some(m => m.id == json.id_medida_base)) {
+                        defaultId = json.id_medida_base;
+                    } else {
+                        const unidad = medidas.find(m => (m.nombre || '').trim().toLowerCase() === 'unidad');
+                        defaultId = unidad ? unidad.id : (medidas[0] ? medidas[0].id : '');
+                    }
+
                     let html = '<option value="">Seleccione medida...</option>';
-                    json.medidas.forEach(m => {
-                        const selected = (idSeleccionada && m.id == idSeleccionada) || (!idSeleccionada && m.id == json.id_medida_base) ? 'selected' : '';
+                    medidas.forEach(m => {
+                        const selected = (m.id == defaultId) ? 'selected' : '';
                         html += `<option value="${m.id}" ${selected}>${m.nombre} (${m.abreviatura})</option>`;
                     });
                     selectMedida.innerHTML = html;
@@ -480,14 +550,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!inputIdProd.value) {
-                alert('Debe seleccionar un producto válido');
+                window.INV_error('Debe seleccionar un producto válido.');
                 return;
             }
 
             btnGuardar.disabled = true;
-            resMsg.classList.remove('d-none');
-            resMsg.className = 'alert mt-3 py-2 small shadow-sm border-0 alert-info';
-            resMsg.textContent = 'Procesando movimiento...';
+            Swal.fire({
+                title: 'Procesando movimiento...',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
 
             const fd = new FormData(form);
             try {
@@ -496,23 +568,24 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                     body: fd
                 });
                 const json = await resp.json();
-                
-                resMsg.className = `alert mt-3 py-2 small shadow-sm border-0 ${json.ok ? 'alert-success' : 'alert-danger'}`;
-                resMsg.textContent = json.mensaje;
 
                 if (json.ok) {
-                    setTimeout(() => {
-                        modalObj.hide();
-                        if (typeof window.cargarListado === 'function') window.cargarListado();
-                        else location.reload();
-                    }, 1200);
+                    await Swal.fire({
+                        icon: 'success',
+                        title: json.mensaje || 'Movimiento registrado',
+                        timer: 1400,
+                        showConfirmButton: false
+                    });
+                    modalObj.hide();
+                    if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
+                    else location.reload();
                 } else {
                     btnGuardar.disabled = false;
+                    window.INV_error(json.mensaje || 'No se pudo registrar el movimiento.');
                 }
             } catch (e) {
                 btnGuardar.disabled = false;
-                resMsg.className = 'alert mt-3 py-2 small shadow-sm border-0 alert-danger';
-                resMsg.textContent = 'Error de conexión con el servidor.';
+                window.INV_error('Error de conexión con el servidor.');
             }
         });
 
@@ -522,8 +595,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                 if (!id) return;
                 
                 if (typeof window.eliminarMovimiento === 'function') {
-                    await window.eliminarMovimiento(id);
-                    modalObj.hide();
+                    const ok = await window.eliminarMovimiento(id);
+                    if (ok) modalObj.hide();
                 }
             });
         }

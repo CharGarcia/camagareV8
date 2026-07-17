@@ -395,8 +395,13 @@ class PermisoSubmodulo extends BaseModel
         $r = strtolower(trim($ruta));
         $r = str_replace(['../', './'], '', $r);
         $r = preg_replace('#^(sistema/)+#', '', $r);
-
-        return ltrim($r, '/');
+        $r = ltrim($r, '/');
+        // Unificar guión medio y bajo: el Router (toCamelCase) trata '-' y '_' como
+        // equivalentes al resolver el controlador, así que el resolutor de permisos
+        // debe hacer lo mismo. Sin esto, un submódulo guardado como
+        // 'modulos/unidades_medida' no resuelve contra getRutaModulo()
+        // 'modulos/unidades-medida' y el usuario no-admin es enviado al dashboard.
+        return str_replace('_', '-', $r);
     }
 
     /**

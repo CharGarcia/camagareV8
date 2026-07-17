@@ -51,6 +51,7 @@ class ImportacionesRepository extends BaseRepository
                 OR p.identificacion ILIKE :buscar
                 OR i.referencia_dai ILIKE :buscar
                 OR i.observaciones ILIKE :buscar
+                OR i.numero_importacion ILIKE :buscar
             )";
             $params[':buscar'] = "%$textoLibre%";
         }
@@ -61,6 +62,7 @@ class ImportacionesRepository extends BaseRepository
                 'dai'            => 'i.referencia_dai',
                 'incoterm'       => 'i.incoterm',
                 'obs'            => 'i.observaciones',
+                'numero'         => 'i.numero_importacion',
             ],
             'exacto' => [
                 'estado' => 'i.estado',
@@ -84,7 +86,7 @@ class ImportacionesRepository extends BaseRepository
         $total = (int) $this->query($sqlCount, $params)->fetchColumn();
 
         $allowedCols = [
-            'id', 'numero', 'referencia_dai', 'fecha_embarque', 'fecha_llegada',
+            'id', 'numero_importacion', 'referencia_dai', 'fecha_embarque', 'fecha_llegada',
             'fecha_nacionalizacion', 'estado', 'subtotal_fob', 'costo_total_nacionalizado',
             'proveedor_nombre',
         ];
@@ -141,18 +143,27 @@ class ImportacionesRepository extends BaseRepository
     public function insertCabecera(array $data): int
     {
         $sql = "INSERT INTO importaciones_cabecera (
-                    id_empresa, numero, referencia_dai, id_proveedor, id_agente_afianzado,
+                    id_empresa, id_establecimiento, id_punto_emision, establecimiento, punto_emision, secuencial,
+                    referencia_dai, id_proveedor, id_agente_afianzado,
                     id_bodega_destino, incoterm, fecha_embarque, fecha_llegada, fecha_nacionalizacion,
-                    criterio_prorrateo, estado, observaciones, created_by, updated_by
+                    criterio_prorrateo, estado, observaciones, tipo_ambiente, created_by, updated_by
                 ) VALUES (
-                    :id_empresa, :numero, :referencia_dai, :id_proveedor, :id_agente_afianzado,
+                    :id_empresa, :id_establecimiento, :id_punto_emision, :establecimiento, :punto_emision, :secuencial,
+                    :referencia_dai, :id_proveedor, :id_agente_afianzado,
                     :id_bodega_destino, :incoterm, :fecha_embarque, :fecha_llegada, :fecha_nacionalizacion,
-                    :criterio_prorrateo, :estado, :observaciones, :id_usuario, :id_usuario
+                    :criterio_prorrateo, :estado, :observaciones,
+                    (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_ta),
+                    :id_usuario, :id_usuario
                 ) RETURNING id";
 
         return (int) $this->query($sql, [
             ':id_empresa'            => (int) $data['id_empresa'],
-            ':numero'                => (int) $data['numero'],
+            ':id_empresa_ta'         => (int) $data['id_empresa'],
+            ':id_establecimiento'    => (int) $data['id_establecimiento'],
+            ':id_punto_emision'      => (int) $data['id_punto_emision'],
+            ':establecimiento'       => $data['establecimiento'],
+            ':punto_emision'         => $data['punto_emision'],
+            ':secuencial'            => $data['secuencial'],
             ':referencia_dai'        => $data['referencia_dai'] ?? null,
             ':id_proveedor'          => (int) $data['id_proveedor'],
             ':id_agente_afianzado'   => !empty($data['id_agente_afianzado']) ? (int) $data['id_agente_afianzado'] : null,
@@ -166,6 +177,41 @@ class ImportacionesRepository extends BaseRepository
             ':observaciones'         => $data['observaciones'] ?? null,
             ':id_usuario'            => (int) $data['id_usuario'],
         ])->fetchColumn();
+    }
+
+    /**
+     * Código de establecimiento (3 dígitos) y punto de emisión (3 dígitos) para
+     * armar el secuencial, igual patrón que OrdenCompraService::_getDatosSerie().
+     */
+    public function getDatosSerie(int $idEstablecimiento, int $idPuntoEmision): ?array
+    {
+        $sql = "SELECT ee.codigo AS establecimiento, pe.codigo_punto AS punto_emision
+                FROM empresa_establecimiento ee
+                JOIN empresa_punto_emision pe ON pe.id = :id_punto AND pe.id_establecimiento = ee.id
+                WHERE ee.id = :id_estab AND ee.estado = 'activo' AND pe.estado = 'activo'
+                LIMIT 1";
+        $row = $this->query($sql, [':id_punto' => $idPuntoEmision, ':id_estab' => $idEstablecimiento])->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Datos del punto de emisión (sin filtrar por estado) más un flag `activo`
+     * (punto Y establecimiento activos). Para la vista previa del secuencial:
+     * a diferencia de getDatosSerie(), permite distinguir "no existe" de
+     * "existe pero está inactivo" y devolver un mensaje específico al usuario.
+     */
+    public function getDatosSerieConEstado(int $idPuntoEmision): ?array
+    {
+        $sql = "SELECT ee.codigo AS establecimiento, pe.codigo_punto AS punto_emision,
+                       (LOWER(ee.estado) = 'activo' AND LOWER(pe.estado) = 'activo') AS activo
+                FROM empresa_punto_emision pe
+                JOIN empresa_establecimiento ee ON ee.id = pe.id_establecimiento
+                WHERE pe.id = :id_punto AND pe.eliminado = false AND ee.eliminado = false
+                LIMIT 1";
+        $row = $this->query($sql, [':id_punto' => $idPuntoEmision])->fetch(PDO::FETCH_ASSOC);
+        if (!$row) return null;
+        $row['activo'] = in_array($row['activo'], [true, 't', 'true', 1, '1'], true);
+        return $row;
     }
 
     public function updateCabecera(int $id, array $data): void
@@ -236,6 +282,84 @@ class ImportacionesRepository extends BaseRepository
         );
     }
 
+    /**
+     * Transición de estado del flujo de aprobación (mismo patrón que
+     * CargaInventarioRepository::actualizarEstado): pendiente_aprobacion →
+     * nacionalizada (aprobar) o → borrador (rechazar, con motivo).
+     */
+    public function actualizarEstadoAprobacion(int $id, string $estado, ?int $aprobadaPor = null, ?string $motivoRechazo = null): void
+    {
+        $this->query(
+            "UPDATE importaciones_cabecera
+             SET estado = :estado,
+                 aprobada_por = :apr,
+                 aprobada_at = CASE WHEN :estado2 = 'nacionalizada' THEN CURRENT_TIMESTAMP ELSE aprobada_at END,
+                 motivo_rechazo = :motivo,
+                 updated_at = NOW()
+             WHERE id = :id",
+            [
+                ':estado'  => $estado,
+                ':estado2' => $estado,
+                ':apr'     => $aprobadaPor,
+                ':motivo'  => $motivoRechazo,
+                ':id'      => $id,
+            ]
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // APROBACIÓN POR CORREO (token, sin sesión) — mismo patrón que
+    // CargaInventarioRepository::setToken/getByToken/clearToken.
+    // ─────────────────────────────────────────────────────────────────────
+
+    public function setToken(int $id, string $token): void
+    {
+        $this->query(
+            "UPDATE importaciones_cabecera SET token_aprobacion = :t WHERE id = :id",
+            [':t' => $token, ':id' => $id]
+        );
+    }
+
+    /** Importación por token (sin filtrar por empresa: la ruta pública no tiene sesión). */
+    public function getByToken(string $token): ?array
+    {
+        $token = trim($token);
+        if ($token === '') return null;
+        $sql = "SELECT i.*,
+                       p.razon_social      AS proveedor_nombre,
+                       ag.razon_social     AS agente_nombre,
+                       b.nombre            AS bodega_nombre,
+                       u.nombre            AS creado_por_nombre,
+                       e.nombre_comercial  AS empresa_nombre
+                FROM importaciones_cabecera i
+                INNER JOIN proveedores p ON p.id = i.id_proveedor
+                LEFT  JOIN proveedores ag ON ag.id = i.id_agente_afianzado
+                LEFT  JOIN bodegas     b ON b.id = i.id_bodega_destino
+                LEFT  JOIN usuarios    u ON u.id = i.created_by
+                LEFT  JOIN empresas    e ON e.id = i.id_empresa
+                WHERE i.token_aprobacion = :t AND i.eliminado = false LIMIT 1";
+        return $this->query($sql, [':t' => $token])->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    public function clearToken(int $id): void
+    {
+        $this->query(
+            "UPDATE importaciones_cabecera SET token_aprobacion = NULL WHERE id = :id",
+            [':id' => $id]
+        );
+    }
+
+    /** Usuarios por ids (id, nombre, mail) — para mostrar/notificar a los aprobadores. */
+    public function getNombresUsuarios(array $ids): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (empty($ids)) return [];
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $st = $this->db->prepare("SELECT id, nombre, mail FROM usuarios WHERE id IN ($ph)");
+        $st->execute($ids);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function updateAsientoContable(int $id, int $idAsiento): void
     {
         $this->query(
@@ -252,12 +376,6 @@ class ImportacionesRepository extends BaseRepository
              WHERE id = :id",
             [':uid' => $idUsuario, ':id' => $id]
         );
-    }
-
-    public function getSiguienteNumero(int $idEmpresa): int
-    {
-        $sql = "SELECT COALESCE(MAX(numero), 0) + 1 FROM importaciones_cabecera WHERE id_empresa = :id_empresa";
-        return (int) $this->query($sql, [':id_empresa' => $idEmpresa])->fetchColumn();
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -441,6 +559,33 @@ class ImportacionesRepository extends BaseRepository
     }
 
     /**
+     * Resuelve un producto por código (para la carga masiva de líneas FOB desde
+     * Excel/CSV, mismo patrón que CargaInventarioRepository::getProductoIdPorCodigo).
+     */
+    public function getProductoPorCodigo(string $codigo, int $idEmpresa): ?array
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') return null;
+        $st = $this->query(
+            "SELECT id, nombre, codigo, id_medida FROM productos
+             WHERE id_empresa = :e AND eliminado = false AND TRIM(codigo) = :c
+             ORDER BY id LIMIT 1",
+            [':e' => $idEmpresa, ':c' => $codigo]
+        );
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Catálogo (código, nombre) para la hoja de referencia de la plantilla Excel. */
+    public function getProductosParaPlantilla(int $idEmpresa): array
+    {
+        $sql = "SELECT codigo, nombre FROM productos
+                WHERE id_empresa = :e AND eliminado = false AND TRIM(COALESCE(codigo,'')) <> ''
+                ORDER BY codigo ASC";
+        return $this->query($sql, [':e' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Datos de una Compra/Liquidación de Compra ya registrada, para vincularla como gasto
      * (valida que pertenezca a la empresa y trae el monto para prellenar la línea).
      */
@@ -464,5 +609,95 @@ class ImportacionesRepository extends BaseRepository
                 WHERE l.id = :id AND l.id_empresa = :id_empresa AND l.eliminado = false";
         $row = $this->query($sql, [':id' => $idLiquidacion, ':id_empresa' => $idEmpresa])->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
+    }
+
+    /**
+     * Typeahead para vincular una Compra existente como gasto de importación
+     * (agente afianzado, transporte, almacenaje, etc. ya facturados localmente).
+     */
+    public function buscarComprasParaVincular(int $idEmpresa, string $buscar, int $limite = 15): array
+    {
+        $sql = "SELECT c.id, c.importe_total, c.fecha_emision, p.razon_social AS proveedor_nombre,
+                       CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov) AS numero
+                FROM compras_cabecera c
+                JOIN proveedores p ON p.id = c.id_proveedor
+                WHERE c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_comprobante = '01'
+                  AND (
+                    p.razon_social ILIKE :buscar
+                    OR p.identificacion ILIKE :buscar
+                    OR CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov) ILIKE :buscar
+                  )
+                ORDER BY c.fecha_emision DESC
+                LIMIT :limite";
+        $st = $this->db->prepare($sql);
+        $st->bindValue(':id_empresa', $idEmpresa, PDO::PARAM_INT);
+        $st->bindValue(':buscar', "%$buscar%");
+        $st->bindValue(':limite', $limite, PDO::PARAM_INT);
+        $st->execute();
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Typeahead para vincular una Liquidación de Compra existente como gasto de importación.
+     */
+    public function buscarLiquidacionesParaVincular(int $idEmpresa, string $buscar, int $limite = 15): array
+    {
+        $sql = "SELECT l.id, l.importe_total, l.fecha_emision, p.razon_social AS proveedor_nombre,
+                       CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial) AS numero
+                FROM liquidaciones_cabecera l
+                JOIN proveedores p ON p.id = l.id_proveedor
+                WHERE l.id_empresa = :id_empresa AND l.eliminado = false
+                  AND (
+                    p.razon_social ILIKE :buscar
+                    OR p.identificacion ILIKE :buscar
+                    OR CONCAT(l.establecimiento,'-',l.punto_emision,'-',l.secuencial) ILIKE :buscar
+                  )
+                ORDER BY l.fecha_emision DESC
+                LIMIT :limite";
+        $st = $this->db->prepare($sql);
+        $st->bindValue(':id_empresa', $idEmpresa, PDO::PARAM_INT);
+        $st->bindValue(':buscar', "%$buscar%");
+        $st->bindValue(':limite', $limite, PDO::PARAM_INT);
+        $st->execute();
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Proveedores del exterior (tipo_id_proveedor = '08') para el typeahead de la cabecera.
+     */
+    public function buscarProveedoresExterior(int $idEmpresa, string $buscar, int $limite = 15): array
+    {
+        $sql = "SELECT id, razon_social AS nombre, identificacion
+                FROM proveedores
+                WHERE id_empresa = :id_empresa AND eliminado = false AND tipo_id_proveedor = '08'
+                  AND (razon_social ILIKE :buscar OR identificacion ILIKE :buscar)
+                ORDER BY razon_social ASC
+                LIMIT :limite";
+        $st = $this->db->prepare($sql);
+        $st->bindValue(':id_empresa', $idEmpresa, PDO::PARAM_INT);
+        $st->bindValue(':buscar', "%$buscar%");
+        $st->bindValue(':limite', $limite, PDO::PARAM_INT);
+        $st->execute();
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Proveedores locales (con RUC/cédula, tipo_id_proveedor != '08') para el
+     * typeahead del agente afianzado.
+     */
+    public function buscarProveedoresLocales(int $idEmpresa, string $buscar, int $limite = 15): array
+    {
+        $sql = "SELECT id, razon_social AS nombre, identificacion
+                FROM proveedores
+                WHERE id_empresa = :id_empresa AND eliminado = false AND tipo_id_proveedor != '08'
+                  AND (razon_social ILIKE :buscar OR identificacion ILIKE :buscar)
+                ORDER BY razon_social ASC
+                LIMIT :limite";
+        $st = $this->db->prepare($sql);
+        $st->bindValue(':id_empresa', $idEmpresa, PDO::PARAM_INT);
+        $st->bindValue(':buscar', "%$buscar%");
+        $st->bindValue(':limite', $limite, PDO::PARAM_INT);
+        $st->execute();
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 }

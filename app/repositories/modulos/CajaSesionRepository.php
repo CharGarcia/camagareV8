@@ -54,6 +54,43 @@ class CajaSesionRepository extends BaseRepository
         return (int) $this->lastInsertId();
     }
 
+    /**
+     * Efectivo cobrado durante el turno (Facturas + Recibos del POS enlazados
+     * a esta sesión, forma_pago = '01' = efectivo). Es la base del arqueo:
+     * monto_esperado = fondo_inicial + este valor. Protegido: si la columna
+     * id_caja_sesion aún no existe (migración pendiente), devuelve 0 en vez
+     * de romper el cierre de caja.
+     */
+    public function getEfectivoCobradoEnTurno(int $idCajaSesion): float
+    {
+        try {
+            $stF = $this->db->prepare(
+                "SELECT COALESCE(SUM(vp.total), 0)
+                 FROM ventas_pagos vp
+                 JOIN ventas_cabecera v ON v.id = vp.id_venta
+                 WHERE v.id_caja_sesion = :id AND v.eliminado = false
+                   AND v.estado != 'anulado' AND vp.forma_pago = '01'"
+            );
+            $stF->execute([':id' => $idCajaSesion]);
+            $totalFacturas = (float) $stF->fetchColumn();
+
+            $stR = $this->db->prepare(
+                "SELECT COALESCE(SUM(rp.total), 0)
+                 FROM recibos_venta_pagos rp
+                 JOIN recibos_venta_cabecera r ON r.id = rp.id_recibo
+                 WHERE r.id_caja_sesion = :id AND r.eliminado = false
+                   AND r.estado != 'anulado' AND rp.forma_pago = '01'"
+            );
+            $stR->execute([':id' => $idCajaSesion]);
+            $totalRecibos = (float) $stR->fetchColumn();
+
+            return round($totalFacturas + $totalRecibos, 2);
+        } catch (\Throwable $e) {
+            error_log('[CajaSesion] No se pudo calcular el efectivo cobrado del turno (¿migración id_caja_sesion pendiente?): ' . $e->getMessage());
+            return 0.0;
+        }
+    }
+
     public function cerrar(int $id, int $idEmpresa, array $data): bool
     {
         $sql = "UPDATE {$this->table} SET

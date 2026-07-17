@@ -33,9 +33,14 @@ class SriIdentificationService
 
     /**
      * Consulta el web service y devuelve los datos normalizados para el formulario.
-     * @return array{ok: bool, data?: array, error?: string}
+     *
+     * @param int|null $idEmpresa Empresa activa de quien consulta. Obligatorio para
+     *   que la búsqueda local (clientes/proveedores) no cruce datos entre empresas
+     *   (regla multiempresa, CLAUDE.md §4/§6). Si se omite, la búsqueda local se
+     *   salta por completo y se va directo al SRI — nunca se busca sin filtrar.
+     * @return array{ok: bool, data?: array, error?: string, source?: string}
      */
-    public function consultar(string $identificacion): array
+    public function consultar(string $identificacion, ?int $idEmpresa = null): array
     {
         if (!self::estaHabilitado()) {
             return [
@@ -44,13 +49,13 @@ class SriIdentificationService
             ];
         }
 
-        // 1. BUSCAR LOCALMENTE PRIMERO (Clientes y Proveedores)
-        $local = $this->buscarLocalmente($identificacion);
+        // 1. BUSCAR LOCALMENTE PRIMERO (clientes/proveedores de la MISMA empresa)
+        $local = $this->buscarLocalmente($identificacion, $idEmpresa);
         if ($local !== null) {
             return [
                 'ok' => true,
-                'data' => $local,
-                'source' => 'local'
+                'data' => $local['data'],
+                'source' => $local['source'],
             ];
         }
 
@@ -217,45 +222,75 @@ class SriIdentificationService
     }
 
     /**
-     * Busca en las tablas de proveedores y clientes sin filtros adicionales.
+     * Busca en `clientes` y `proveedores` de la empresa activa ($idEmpresa).
+     * Sin $idEmpresa no se busca nada (evita cruzar datos entre empresas —
+     * regla multiempresa, CLAUDE.md §4/§6). Prioriza `clientes`: si la
+     * identificación ya es cliente de esta empresa, eso es lo primero que el
+     * llamador necesita saber (evitar un duplicado), antes que enriquecer con
+     * datos de proveedor.
+     *
+     * @return array{data: array, source: 'cliente'|'proveedor'}|null
      */
-    private function buscarLocalmente(string $identificacion): ?array
+    private function buscarLocalmente(string $identificacion, ?int $idEmpresa): ?array
     {
+        if ($idEmpresa === null || $idEmpresa <= 0) {
+            return null;
+        }
+
         try {
             $db = \App\core\Database::getConnection();
-            $id = $db->quote($identificacion);
 
-            // Buscar en Proveedores primero (suelen tener datos más completos)
-            $prov = $db->query("SELECT razon_social, nombre_comercial, direccion, provincia, ciudad, telefono, email, identificacion FROM proveedores WHERE identificacion = {$id} LIMIT 1")->fetch(\PDO::FETCH_ASSOC);
-            if ($prov) {
+            $stCli = $db->prepare(
+                "SELECT id, nombre, direccion, provincia, ciudad, telefono, email, identificacion
+                 FROM clientes
+                 WHERE identificacion = :id AND id_empresa = :id_empresa AND eliminado = false
+                 LIMIT 1"
+            );
+            $stCli->execute([':id' => $identificacion, ':id_empresa' => $idEmpresa]);
+            $cli = $stCli->fetch(\PDO::FETCH_ASSOC);
+            if ($cli) {
                 return [
-                    'ruc' => $prov['identificacion'],
-                    'establecimiento' => '001',
-                    'nombre' => $prov['razon_social'],
-                    'nombre_comercial' => $prov['nombre_comercial'] ?: $prov['razon_social'],
-                    'direccion' => $prov['direccion'],
-                    'cod_prov' => $prov['provincia'],
-                    'cod_ciudad' => $prov['ciudad'],
-                    'telefono' => $prov['telefono'],
-                    'mail' => $prov['email'],
-                    'tipo' => strlen($prov['identificacion']) === 13 ? '01' : '04', 
+                    'source' => 'cliente',
+                    'data' => [
+                        'id' => (int) $cli['id'],
+                        'ruc' => $cli['identificacion'],
+                        'establecimiento' => '001',
+                        'nombre' => $cli['nombre'],
+                        'nombre_comercial' => $cli['nombre'],
+                        'direccion' => $cli['direccion'],
+                        'cod_prov' => $cli['provincia'],
+                        'cod_ciudad' => $cli['ciudad'],
+                        'telefono' => $cli['telefono'],
+                        'mail' => $cli['email'],
+                        'tipo' => strlen($cli['identificacion']) === 13 ? '01' : '04',
+                    ],
                 ];
             }
 
-            // Buscar en Clientes
-            $cli = $db->query("SELECT nombre, direccion, provincia, ciudad, telefono, email, identificacion FROM clientes WHERE identificacion = {$id} LIMIT 1")->fetch(\PDO::FETCH_ASSOC);
-            if ($cli) {
+            $stProv = $db->prepare(
+                "SELECT id, razon_social, nombre_comercial, direccion, provincia, ciudad, telefono, email, identificacion
+                 FROM proveedores
+                 WHERE identificacion = :id AND id_empresa = :id_empresa AND eliminado = false
+                 LIMIT 1"
+            );
+            $stProv->execute([':id' => $identificacion, ':id_empresa' => $idEmpresa]);
+            $prov = $stProv->fetch(\PDO::FETCH_ASSOC);
+            if ($prov) {
                 return [
-                    'ruc' => $cli['identificacion'],
-                    'establecimiento' => '001',
-                    'nombre' => $cli['nombre'],
-                    'nombre_comercial' => $cli['nombre'],
-                    'direccion' => $cli['direccion'],
-                    'cod_prov' => $cli['provincia'],
-                    'cod_ciudad' => $cli['ciudad'],
-                    'telefono' => $cli['telefono'],
-                    'mail' => $cli['email'],
-                    'tipo' => strlen($cli['identificacion']) === 13 ? '01' : '04',
+                    'source' => 'proveedor',
+                    'data' => [
+                        'id' => (int) $prov['id'],
+                        'ruc' => $prov['identificacion'],
+                        'establecimiento' => '001',
+                        'nombre' => $prov['razon_social'],
+                        'nombre_comercial' => $prov['nombre_comercial'] ?: $prov['razon_social'],
+                        'direccion' => $prov['direccion'],
+                        'cod_prov' => $prov['provincia'],
+                        'cod_ciudad' => $prov['ciudad'],
+                        'telefono' => $prov['telefono'],
+                        'mail' => $prov['email'],
+                        'tipo' => strlen($prov['identificacion']) === 13 ? '01' : '04',
+                    ],
                 ];
             }
         } catch (\Exception $e) {

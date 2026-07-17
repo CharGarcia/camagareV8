@@ -193,6 +193,13 @@ return [
         'id_submodulo' => 0, // Actualizar con el id real después de ejecutar create_retenciones_compras.sql
         'legacy_rutas' => [],
     ],
+    // Importaciones (nacionalización y costeo). Registrar el submódulo en
+    // submodulos_menu (ruta = 'modulos/importaciones') y actualizar este
+    // id_submodulo con el id real. Asignar permisos en /config/permisos-modulos.
+    'modulos/importaciones' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
     'modulos/retenciones_ventas' => [
         'id_submodulo' => 0, // Actualizar con el id real después de ejecutar create_retenciones_ventas.sql
         'legacy_rutas' => [],
@@ -363,6 +370,13 @@ return [
         // Registrar el submódulo en submodulos_menu (id_modulo = 9, Reportes) con
         // ruta = 'modulos/reporte_ingresos_egresos', y actualizar este id_submodulo
         // con el id real. Asignar permisos en /config/permisos-modulos.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+    'modulos/reporte-pos' => [
+        // Registrar el submódulo en submodulos_menu (id_modulo = 9, Reportes) con
+        // ruta = 'modulos/reporte-pos', y actualizar este id_submodulo con el id
+        // real. Asignar permisos en /config/permisos-modulos.
         'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],
