@@ -22,7 +22,32 @@ class Application
 
     public function run(): void
     {
-        if (session_status() === PHP_SESSION_NONE) {
+        $dispatch = $this->router->dispatch();
+        $controller = $dispatch['controller'];
+        $action = $dispatch['action'];
+
+        // La API móvil (/api/v1/*) es stateless: no usa cookie de sesión de navegador.
+        // $_SESSION se rellena por request a partir del JWT (ver ApiAuthMiddleware) y
+        // no se persiste entre requests.
+        $isApi = str_starts_with($controller, 'api\\');
+
+        if ($isApi) {
+            if (session_status() === PHP_SESSION_NONE) {
+                // Sesión real pero SIN cookie: código reutilizado de la web (p. ej.
+                // Controller::requireAuth()) llama session_start() por su cuenta: si
+                // session_status() siguiera en NONE, esa llamada REINICIARÍA $_SESSION
+                // y borraría lo que ApiAuthMiddleware acaba de rellenar desde el JWT.
+                // Arrancar la sesión aquí (con id aleatorio propio y sin cookie) evita
+                // ese re-inicio; no se persiste de forma útil entre requests.
+                ini_set('session.use_cookies', '0');
+                ini_set('session.use_only_cookies', '0');
+                ini_set('session.use_trans_sid', '0');
+                ini_set('session.gc_maxlifetime', '120');
+                session_id(bin2hex(random_bytes(16)));
+                session_start();
+                $_SESSION = [];
+            }
+        } elseif (session_status() === PHP_SESSION_NONE) {
             session_name($this->config['session']['name'] ?? 'PHPSESSID');
             // Cookie path=/ para que funcione cuando BASE_URL está vacío (sitio en raíz)
             session_set_cookie_params([
@@ -36,15 +61,12 @@ class Application
             session_start();
         }
 
-        $dispatch = $this->router->dispatch();
-        $controller = $dispatch['controller'];
-        $action = $dispatch['action'];
-
         // Controladores públicos (sin autenticación requerida)
-        $publicControllers = ['Auth', 'Registro', 'SolicitudFirma', 'FacturaExpressPublico', 'WhatsappWebhook', 'Reservas', 'Payphone', 'CargasInventarioAprobacion', 'Asistencia', 'ImportacionesAprobacion'];
+        $publicControllers = ['Auth', 'Registro', 'SolicitudFirma', 'FacturaExpressPublico', 'WhatsappWebhook', 'Reservas', 'Payphone', 'CargasInventarioAprobacion', 'Asistencia', 'ImportacionesAprobacion', 'TransferenciasAprobacion'];
 
-        // Si no hay sesión y no es un controlador público, mostrar login
-        if (!isset($_SESSION['id_usuario']) && !in_array($controller, $publicControllers, true)) {
+        // La autenticación de /api/v1/* la resuelve ApiAuthMiddleware (Bearer JWT) dentro
+        // de cada ApiBaseController; aquí no se bloquea por falta de sesión de navegador.
+        if (!$isApi && !isset($_SESSION['id_usuario']) && !in_array($controller, $publicControllers, true)) {
             $isAjax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
                    || (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json'));
             if ($isAjax) {

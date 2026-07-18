@@ -21,37 +21,40 @@ class SesionActivaRepository
 
     /**
      * Crea una nueva sesión activa para el usuario.
+     * $canal distingue 'web' de 'movil' para permitir una sesión activa por canal.
      */
-    public function crear(int $idUsuario, string $token, string $ip, string $userAgent): bool
+    public function crear(int $idUsuario, string $token, string $ip, string $userAgent, string $canal = 'web'): bool
     {
-        $sql = "INSERT INTO sesiones_activas (id_usuario, session_token, ip, user_agent, created_at, ultima_actividad, activa)
-                VALUES (:id_usuario, :token, :ip, :user_agent, NOW(), NOW(), TRUE)";
+        $sql = "INSERT INTO sesiones_activas (id_usuario, session_token, ip, user_agent, created_at, ultima_actividad, activa, canal)
+                VALUES (:id_usuario, :token, :ip, :user_agent, NOW(), NOW(), TRUE, :canal)";
         $st = $this->db->prepare($sql);
         return $st->execute([
             ':id_usuario' => $idUsuario,
             ':token'      => $token,
             ':ip'         => $ip,
             ':user_agent' => $userAgent,
+            ':canal'      => $canal,
         ]);
     }
 
     /**
-     * Obtiene la sesión activa de un usuario (si existe).
+     * Obtiene la sesión activa de un usuario para un canal (si existe).
      */
-    public function obtenerSesionActiva(int $idUsuario): ?array
+    public function obtenerSesionActiva(int $idUsuario, string $canal = 'web'): ?array
     {
         $sql = "SELECT * FROM sesiones_activas
-                WHERE id_usuario = :id_usuario AND activa = TRUE
+                WHERE id_usuario = :id_usuario AND activa = TRUE AND canal = :canal
                 ORDER BY ultima_actividad DESC
                 LIMIT 1";
         $st = $this->db->prepare($sql);
-        $st->execute([':id_usuario' => $idUsuario]);
+        $st->execute([':id_usuario' => $idUsuario, ':canal' => $canal]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }
 
     /**
-     * Verifica si un token de sesión es válido y está activo.
+     * Verifica si un token de sesión es válido y está activo (cualquier canal:
+     * el token ya identifica una sesión concreta, no hace falta filtrar por canal).
      */
     public function tokenEsValido(string $token): bool
     {
@@ -62,13 +65,13 @@ class SesionActivaRepository
     }
 
     /**
-     * Desactiva todas las sesiones activas de un usuario.
+     * Desactiva todas las sesiones activas de un usuario en un canal.
      */
-    public function desactivarTodasDelUsuario(int $idUsuario): bool
+    public function desactivarTodasDelUsuario(int $idUsuario, string $canal = 'web'): bool
     {
-        $sql = "UPDATE sesiones_activas SET activa = FALSE WHERE id_usuario = :id_usuario AND activa = TRUE";
+        $sql = "UPDATE sesiones_activas SET activa = FALSE WHERE id_usuario = :id_usuario AND activa = TRUE AND canal = :canal";
         $st = $this->db->prepare($sql);
-        return $st->execute([':id_usuario' => $idUsuario]);
+        return $st->execute([':id_usuario' => $idUsuario, ':canal' => $canal]);
     }
 
     /**

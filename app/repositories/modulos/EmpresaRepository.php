@@ -327,7 +327,8 @@ class EmpresaRepository extends BaseModel
                        factura_agrupar_items, factura_item_mostrar_unidad,
                        factura_item_mostrar_lote, factura_item_mostrar_caducidad,
                        factura_item_mostrar_nup,
-                       inv_requiere_aprobacion, inv_notificar_correo, inv_usuarios_aprobadores
+                       inv_requiere_aprobacion, inv_notificar_correo, inv_usuarios_aprobadores,
+                       transf_requiere_aprobacion, transf_notificar_correo, transf_usuarios_aprobadores
                 FROM empresa_establecimiento
                 WHERE id = {$id} AND eliminado = false";
         $res = $this->query($sql);
@@ -353,6 +354,7 @@ class EmpresaRepository extends BaseModel
             'factura_item_mostrar_lote', 'factura_item_mostrar_caducidad',
             'factura_item_mostrar_nup',
             'inv_requiere_aprobacion', 'inv_notificar_correo', 'inv_usuarios_aprobadores',
+            'transf_requiere_aprobacion', 'transf_notificar_correo', 'transf_usuarios_aprobadores',
         ];
 
         // Campos numéricos que admiten NULL

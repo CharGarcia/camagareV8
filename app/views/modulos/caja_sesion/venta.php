@@ -17,6 +17,7 @@
  * @var bool   $puedeFactura
  * @var bool   $puedeRecibo
  * @var array  $bodegas
+ * @var array  $empresa
  */
 $base = rtrim(BASE_URL ?? '', '/');
 $rutaAjax = $base . '/' . $rutaModulo;
@@ -252,8 +253,11 @@ $rutaAjax = $base . '/' . $rutaModulo;
                     <i class="bi bi-whatsapp me-1"></i>Enviar link de pago por WhatsApp
                 </button>
             </div>
-            <div class="pv-cobrar">
-                <button id="pv-btn-cobrar" class="btn btn-success w-100" type="button" disabled>
+            <div class="pv-cobrar d-flex gap-2">
+                <button id="pv-btn-vista-previa" class="btn btn-outline-secondary" type="button" title="Imprimir vista previa (para que el cliente vea qué va a pagar, todavía no es un documento válido)" disabled>
+                    <i class="bi bi-receipt"></i>
+                </button>
+                <button id="pv-btn-cobrar" class="btn btn-success flex-grow-1" type="button" disabled>
                     <i class="bi bi-check-circle-fill me-1"></i>Cobrar $0.00
                 </button>
             </div>
@@ -366,6 +370,16 @@ $rutaAjax = $base . '/' . $rutaModulo;
     const AJAX = "<?= $rutaAjax ?>";
     const BASE = "<?= $base ?>";
     const ID_PUNTO = <?= (int) $idPuntoEmision ?>;
+    // Mismos datos que EMPRESA_INFO en factura_venta/recibos_venta — para armar
+    // el encabezado del ticket de impresión (imprimirTicketPos), sin llamada extra.
+    const EMPRESA_INFO = {
+        nombre: <?= json_encode($empresa['nombre'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
+        nombre_comercial: <?= json_encode($empresa['nombre_comercial'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
+        ruc: <?= json_encode($empresa['ruc'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
+        direccion: <?= json_encode($empresa['direccion'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
+        telefono: <?= json_encode($empresa['telefono'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
+        logo: <?= json_encode($empresa['logo'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
+    };
     // Ligado al turno (id de caja_sesiones): al abrir un turno nuevo en el
     // mismo punto de emisión, las pestañas guardadas del turno anterior
     // quedan huérfanas en localStorage (no se muestran) en vez de mezclarse.
@@ -400,6 +414,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
     const $buscar = document.getElementById('pv-buscar');
     const $lineas = document.getElementById('pv-lineas');
     const $btnCobrar = document.getElementById('pv-btn-cobrar');
+    const $btnVistaPrevia = document.getElementById('pv-btn-vista-previa');
     const $tickets = document.getElementById('pv-tickets');
     const $btnNuevoTicket = document.getElementById('pv-btn-nuevo-ticket');
     let cart = [];
@@ -766,6 +781,281 @@ $rutaAjax = $base . '/' . $rutaModulo;
         return d.innerHTML;
     }
 
+    // ─── Ticket / tirilla ───────────────────────────────────────────────────
+    // Mismo patrón que imprimirTicket() en factura_venta/recibos_venta: 100%
+    // client-side (getFacturaAjax + ventana nueva + window.print()), sin PDF.
+    // Aquí recibe el tipo porque el POS puede haber generado uno u otro.
+    async function imprimirTicketPos(idDocumento, tipoDocumento) {
+        if (!idDocumento) return;
+        const rutaDoc = tipoDocumento === 'FACTURA' ? 'modulos/factura-venta' : 'modulos/recibo-venta';
+
+        try {
+            const resp = await fetch(`${BASE}/${rutaDoc}/getFacturaAjax?id=${idDocumento}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const json = await resp.json();
+            if (!json.ok) {
+                swalError(json.error || 'No se pudo cargar el documento.');
+                return;
+            }
+
+            const cab = json.cabecera;
+            const detalles = json.detalles || [];
+            const pagos = json.pagos || [];
+
+            const num = `${cab.establecimiento || '000'}-${cab.punto_emision || '000'}-${String(cab.secuencial || '').padStart(9, '0')}`;
+            const fecha = cab.fecha_emision ? (() => {
+                const d = new Date(cab.fecha_emision);
+                return isNaN(d) ? cab.fecha_emision : d.toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            })() : '';
+
+            const fmt = (n) => parseFloat(n || 0).toFixed(2);
+
+            let subtotal = 0, totalIva = 0, totalIce = 0, totalDescuento = 0;
+            const impMap = {};
+            detalles.forEach(d => {
+                subtotal += parseFloat(d.precio_total_sin_impuesto || 0);
+                totalDescuento += parseFloat(d.descuento || 0);
+                (d.impuestos || []).forEach(imp => {
+                    const lbl = `IVA ${parseFloat(imp.tarifa || 0).toFixed(0)}%`;
+                    impMap[lbl] = (impMap[lbl] || 0) + parseFloat(imp.valor || 0);
+                    if (String(imp.codigo_impuesto) === '3') totalIce += parseFloat(imp.valor || 0);
+                });
+            });
+            Object.values(impMap).forEach(v => totalIva += v);
+            const total = subtotal + totalIva + totalIce + parseFloat(cab.propina || 0);
+
+            const logoHtml = EMPRESA_INFO.logo
+                ? `<img src="${BASE}/${EMPRESA_INFO.logo}" style="max-width:120px;max-height:60px;margin-bottom:4px;">`
+                : '';
+
+            const lineas = detalles.map(d => {
+                const cant = parseFloat(d.cantidad || 1);
+                const pu = parseFloat(d.precio_unitario || 0);
+                const desc = parseFloat(d.descuento || 0);
+                const tot = parseFloat(d.precio_total_sin_impuesto || 0);
+                const ivaPct = (d.impuestos && d.impuestos[0]) ? parseFloat(d.impuestos[0].tarifa || 0).toFixed(0) : '0';
+                return `<tr><td colspan="2" style="padding:1px 0;">${escapeHtml(d.descripcion)}</td></tr>
+                    <tr><td style="padding:1px 0;color:#555;">${fmt(cant)} x $${fmt(pu)}${desc > 0 ? ` desc.$${fmt(desc)}` : ''} (IVA ${ivaPct}%)</td>
+                    <td style="padding:1px 0;text-align:right;font-weight:bold;">$${fmt(tot)}</td></tr>`;
+            }).join('<tr><td colspan="2"><hr style="margin:2px 0;border-color:#ccc;"></td></tr>');
+
+            const ivaLineas = Object.entries(impMap).map(([lbl, val]) =>
+                `<tr><td>${lbl}</td><td style="text-align:right;">$${fmt(val)}</td></tr>`).join('');
+
+            const pagoLineas = pagos.map(p =>
+                `<tr><td>${escapeHtml(p.nombre_forma_pago || p.forma_pago || 'Efectivo')}</td><td style="text-align:right;">$${fmt(p.total)}</td></tr>`).join('');
+
+            const tituloDoc = tipoDocumento === 'FACTURA' ? 'FACTURA DE VENTA' : 'RECIBO DE VENTA';
+
+            const html = `<!DOCTYPE html><html lang="es"><head>
+                <meta charset="UTF-8">
+                <title>Ticket - ${escapeHtml(num)}</title>
+                <style>
+                    @page { size: 80mm auto; margin: 3mm; }
+                    * { box-sizing: border-box; }
+                    body { font-family: 'Courier New', Courier, monospace; font-size: 9px; width: 74mm; margin: 0; padding: 0; color: #000; }
+                    .center { text-align: center; }
+                    .bold { font-weight: bold; }
+                    .sep { border: none; border-top: 1px dashed #000; margin: 3px 0; }
+                    table { width: 100%; border-collapse: collapse; }
+                    td { vertical-align: top; font-size: 9px; }
+                    .totales td { padding: 1px 0; }
+                    .totales tr:last-child td { font-weight: bold; font-size: 10px; }
+                    h2 { font-size: 11px; margin: 2px 0; }
+                    h3 { font-size: 9px; margin: 1px 0; font-weight: normal; }
+                    @media print { body { width: 74mm; } button { display: none; } }
+                </style>
+            </head><body>
+                <div class="center">
+                    ${logoHtml}
+                    <h2>${escapeHtml(EMPRESA_INFO.nombre_comercial || EMPRESA_INFO.nombre)}</h2>
+                    <h3>RUC: ${escapeHtml(EMPRESA_INFO.ruc)}</h3>
+                    ${EMPRESA_INFO.direccion ? `<h3>${escapeHtml(EMPRESA_INFO.direccion)}</h3>` : ''}
+                    ${EMPRESA_INFO.telefono ? `<h3>Tel: ${escapeHtml(EMPRESA_INFO.telefono)}</h3>` : ''}
+                </div>
+                <hr class="sep">
+                <div class="center bold" style="font-size:10px;">${tituloDoc}</div>
+                <div class="center">No. ${escapeHtml(num)}</div>
+                <div class="center">Fecha: ${escapeHtml(fecha)}</div>
+                <hr class="sep">
+                <table>
+                    <tr><td class="bold">Cliente:</td><td>${escapeHtml(cab.cliente_nombre)}</td></tr>
+                    <tr><td class="bold">RUC/CI:</td><td>${escapeHtml(cab.cliente_ruc)}</td></tr>
+                    ${cab.cliente_direccion ? `<tr><td class="bold">Dir:</td><td>${escapeHtml(cab.cliente_direccion)}</td></tr>` : ''}
+                </table>
+                <hr class="sep">
+                <table><tbody>${lineas}</tbody></table>
+                <hr class="sep">
+                <table class="totales">
+                    <tr><td>Subtotal sin imp.</td><td style="text-align:right;">$${fmt(subtotal)}</td></tr>
+                    ${totalDescuento > 0 ? `<tr><td>Descuento</td><td style="text-align:right;">-$${fmt(totalDescuento)}</td></tr>` : ''}
+                    ${ivaLineas}
+                    ${totalIce > 0 ? `<tr><td>ICE</td><td style="text-align:right;">$${fmt(totalIce)}</td></tr>` : ''}
+                    ${parseFloat(cab.propina || 0) > 0 ? `<tr><td>Propina</td><td style="text-align:right;">$${fmt(cab.propina)}</td></tr>` : ''}
+                    <tr><td>TOTAL</td><td style="text-align:right;">$${fmt(total)}</td></tr>
+                </table>
+                ${pagos.length ? `<hr class="sep"><div class="bold" style="font-size:9px;">FORMA DE PAGO</div><table class="totales">${pagoLineas}</table>` : ''}
+                ${cab.observaciones ? `<hr class="sep"><div style="font-size:8px;">${escapeHtml(cab.observaciones)}</div>` : ''}
+                <hr class="sep">
+                <div class="center" style="font-size:8px;">¡Gracias por su compra!</div>
+                <br><br>
+                <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script>
+            </body></html>`;
+
+            const win = window.open('', '_blank', 'width=320,height=600,scrollbars=yes');
+            if (!win) {
+                swalWarning('Permite ventanas emergentes para imprimir el ticket.');
+                return;
+            }
+            win.document.write(html);
+            win.document.close();
+        } catch (e) {
+            swalError('No se pudo generar el ticket.');
+        }
+    }
+
+    // ─── Vista previa (antes de cobrar) ─────────────────────────────────────
+    // Para que el cliente vea qué va a pagar antes de confirmar. Se arma
+    // 100% con el estado en memoria (carrito/cliente/forma de pago elegida) —
+    // sin llamar al servidor, porque todavía no existe ningún documento.
+    function imprimirVistaPreviaPos() {
+        if (!cart.length) return;
+        const fmt = (n) => parseFloat(n || 0).toFixed(2);
+
+        let subtotal = 0, totalIva = 0;
+        const impMap = {};
+        cart.forEach(l => {
+            const base = l.precio_unitario * l.cantidad;
+            subtotal += base;
+            const ivaLinea = base * l.pct_iva / 100;
+            const lbl = `IVA ${l.pct_iva}%`;
+            impMap[lbl] = (impMap[lbl] || 0) + ivaLinea;
+        });
+        Object.values(impMap).forEach(v => totalIva += v);
+        const total = subtotal + totalIva;
+
+        const lineas = cart.map(l => {
+            const base = l.precio_unitario * l.cantidad;
+            const extra = (l.lote ? ` — Lote ${l.lote}` : '') + (l.nup ? ` — S/N ${l.nup}` : '');
+            return `<tr><td colspan="2" style="padding:1px 0;">${escapeHtml(l.descripcion + extra)}</td></tr>
+                <tr><td style="padding:1px 0;color:#555;">${fmt(l.cantidad)} x $${fmt(l.precio_unitario)} (IVA ${l.pct_iva}%)</td>
+                <td style="padding:1px 0;text-align:right;font-weight:bold;">$${fmt(base)}</td></tr>`;
+        }).join('<tr><td colspan="2"><hr style="margin:2px 0;border-color:#ccc;"></td></tr>');
+
+        const ivaLineas = Object.entries(impMap).map(([lbl, val]) =>
+            `<tr><td>${lbl}</td><td style="text-align:right;">$${fmt(val)}</td></tr>`).join('');
+
+        const formaSel = formasPagoCargadas.find(f => String(f.id) === $pagos.value);
+        const nombreForma = formaSel ? formaSel.nombre : '';
+
+        const logoHtml = EMPRESA_INFO.logo
+            ? `<img src="${BASE}/${EMPRESA_INFO.logo}" style="max-width:120px;max-height:60px;margin-bottom:4px;">`
+            : '';
+
+        const html = `<!DOCTYPE html><html lang="es"><head>
+            <meta charset="UTF-8">
+            <title>Vista previa</title>
+            <style>
+                @page { size: 80mm auto; margin: 3mm; }
+                * { box-sizing: border-box; }
+                body { font-family: 'Courier New', Courier, monospace; font-size: 9px; width: 74mm; margin: 0; padding: 0; color: #000; }
+                .center { text-align: center; }
+                .bold { font-weight: bold; }
+                .sep { border: none; border-top: 1px dashed #000; margin: 3px 0; }
+                table { width: 100%; border-collapse: collapse; }
+                td { vertical-align: top; font-size: 9px; }
+                .totales td { padding: 1px 0; }
+                .totales tr:last-child td { font-weight: bold; font-size: 10px; }
+                h2 { font-size: 11px; margin: 2px 0; }
+                @media print { body { width: 74mm; } button { display: none; } }
+            </style>
+        </head><body>
+            <div class="center">
+                ${logoHtml}
+                <h2>${escapeHtml(EMPRESA_INFO.nombre_comercial || EMPRESA_INFO.nombre)}</h2>
+            </div>
+            <hr class="sep">
+            <div class="center">Fecha: ${escapeHtml(new Date().toLocaleDateString('es-EC'))}</div>
+            <hr class="sep">
+            <table>
+                <tr><td class="bold">Cliente:</td><td>${escapeHtml(clienteSeleccionado ? clienteSeleccionado.nombre : 'Consumidor Final')}</td></tr>
+            </table>
+            <hr class="sep">
+            <table><tbody>${lineas}</tbody></table>
+            <hr class="sep">
+            <table class="totales">
+                <tr><td>Subtotal</td><td style="text-align:right;">$${fmt(subtotal)}</td></tr>
+                ${ivaLineas}
+                <tr><td>TOTAL A PAGAR</td><td style="text-align:right;">$${fmt(total)}</td></tr>
+            </table>
+            ${nombreForma ? `<hr class="sep"><div class="bold" style="font-size:9px;">Forma de pago seleccionada</div><div>${escapeHtml(nombreForma)}</div>` : ''}
+            <hr class="sep">
+            <div class="center" style="font-size:8px;">Este ticket es solo una vista previa.<br>No tiene validez tributaria.</div>
+            <br><br>
+            <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script>
+        </body></html>`;
+
+        const win = window.open('', '_blank', 'width=320,height=600,scrollbars=yes');
+        if (!win) {
+            swalWarning('Permite ventanas emergentes para imprimir la vista previa.');
+            return;
+        }
+        win.document.write(html);
+        win.document.close();
+    }
+
+    // ─── WhatsApp del documento (solo Factura por ahora — Recibo de Venta
+    // todavía no tiene envío por WhatsApp construido, ni PDF ni correo).
+    // Reusa tal cual los endpoints que ya usa Factura de Venta para esto
+    // (getPlantillasWhatsappAjax / enviarWhatsappAjax): arma el PDF, lo sube
+    // a Meta y lo manda con la plantilla aprobada — el POS no duplica nada.
+    async function enviarWhatsappDocumentoPos(idDocumento) {
+        try {
+            const resp = await fetch(`${BASE}/modulos/factura-venta/getPlantillasWhatsappAjax?id_factura=${idDocumento}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const json = await resp.json();
+            if (!json.ok) { swalError(json.error || 'No se pudo consultar la configuración de WhatsApp.'); return; }
+            if (!json.configurado) {
+                swalWarning('Esta empresa no tiene WhatsApp Business (Meta) configurado. Configúralo en Empresa → WhatsApp.');
+                return;
+            }
+            const plantillas = (json.plantillas || []).filter(p => p.nombre !== 'link_pago_payphone');
+            if (!plantillas.length) {
+                swalWarning('No hay una plantilla de WhatsApp aprobada para enviar facturas. Configúrala en Plantillas de WhatsApp.');
+                return;
+            }
+            const idPlantilla = json.id_plantilla_default || plantillas[0].id;
+
+            const res = await Swal.fire({
+                title: 'Enviar factura por WhatsApp',
+                html: '<div class="text-start">' +
+                      '<label class="form-label small fw-semibold text-uppercase text-muted mb-1">WhatsApp del cliente</label>' +
+                      '<input type="tel" id="pv-swal-tel-doc" class="form-control form-control-sm" placeholder="0991234567 o 593991234567" value="' + escapeHtml(json.telefono_cliente || '') + '">' +
+                      '</div>',
+                showCancelButton: true,
+                confirmButtonText: 'Enviar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#198754',
+                focusConfirm: false,
+                preConfirm: () => {
+                    const val = document.getElementById('pv-swal-tel-doc').value.trim();
+                    if (!val) { Swal.showValidationMessage('Ingresa un número de WhatsApp.'); return false; }
+                    return val;
+                },
+            });
+            if (!res.isConfirmed) return;
+
+            const fd = new FormData();
+            fd.append('id_factura', idDocumento);
+            fd.append('id_plantilla', idPlantilla);
+            fd.append('telefono', res.value);
+            const envio = await fetch(`${BASE}/modulos/factura-venta/enviarWhatsappAjax`, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const envioJson = await envio.json();
+            if (!envioJson.ok) { swalError(envioJson.error || 'No se pudo enviar la factura por WhatsApp.'); return; }
+            swalToast('success', 'Factura enviada por WhatsApp.');
+        } catch (e) {
+            swalError('Error de conexión al enviar por WhatsApp.');
+        }
+    }
+
     function esInventariableControlado(p) {
         const inv = p.inventariable === true || p.inventariable === 't' || p.inventariable === 'true' || p.inventariable == 1;
         return inv && p.tipo_produccion !== '02';
@@ -1025,6 +1315,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
 
         $btnCobrar.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>Cobrar ' + money(total);
         $btnCobrar.disabled = cart.length === 0 || superaLimiteSinCliente || !getTipoDocumento();
+        $btnVistaPrevia.disabled = cart.length === 0;
 
         renderTickets();
         guardarTicketsStorage();
@@ -1379,6 +1670,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
     }
 
     $btnNuevoTicket.addEventListener('click', () => nuevoTicket());
+    $btnVistaPrevia.addEventListener('click', imprimirVistaPreviaPos);
 
     $btnCobrar.addEventListener('click', async () => {
         if (!cart.length) return;
@@ -1433,9 +1725,17 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 icon: 'success',
                 title: 'Venta registrada',
                 html: etiquetaDoc + ' <b>' + escapeHtml(json.data.numero_documento) + '</b> por <b>' + money(json.data.importe_total) + '</b>.' +
-                      '<br><br><span class="text-muted small">Ya se descontó el inventario y se generó el asiento contable. ' + notaFactura + ' <b>' + moduloDestino + '</b>.</span>',
+                      '<br><br><span class="text-muted small">Ya se descontó el inventario y se generó el asiento contable. ' + notaFactura + ' <b>' + moduloDestino + '</b>.</span>' +
+                      '<div class="d-flex gap-2 justify-content-center mt-3">' +
+                      '<button type="button" class="btn btn-outline-secondary btn-sm" id="pv-swal-btn-ticket"><i class="bi bi-receipt me-1"></i>Imprimir tirilla</button>' +
+                      (esFactura ? '<button type="button" class="btn btn-outline-success btn-sm" id="pv-swal-btn-whatsapp"><i class="bi bi-whatsapp me-1"></i>WhatsApp</button>' : '') +
+                      '</div>',
                 confirmButtonColor: '#198754',
-                confirmButtonText: 'Nueva venta'
+                confirmButtonText: 'Nueva venta',
+                didOpen: () => {
+                    document.getElementById('pv-swal-btn-ticket')?.addEventListener('click', () => imprimirTicketPos(json.data.id_documento, json.data.tipo_documento));
+                    document.getElementById('pv-swal-btn-whatsapp')?.addEventListener('click', () => enviarWhatsappDocumentoPos(json.data.id_documento));
+                }
             });
             if (json.data.aviso_ingreso) {
                 setTimeout(() => swalWarning(escapeHtml(json.data.aviso_ingreso) + ' Regístralo manualmente desde el módulo Ingresos.'), 300);

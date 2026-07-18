@@ -91,6 +91,7 @@ class CajaPosController extends BaseModuloController
             'puedeFactura' => \App\Helpers\Permisos::puedeCrear('modulos/factura-venta'),
             'puedeRecibo' => \App\Helpers\Permisos::puedeCrear('modulos/recibo-venta'),
             'bodegas' => (new Empresa())->getBodegas($idEmpresa),
+            'empresa' => $estConfig,
         ]);
     }
 

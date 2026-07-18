@@ -356,6 +356,27 @@ class EmpresaService
         return $this->repository->updateEstablecimientoConfig($idEst, $filtered);
     }
 
+    public function saveTransferenciasConfig(int $idEmpresa, array $data): bool
+    {
+        $idEst = (int) ($data['id_establecimiento'] ?? 0);
+        if (!$idEst) $idEst = $this->repository->getPrimerEstablecimientoId($idEmpresa);
+
+        $aprobadores = $data['transf_usuarios_aprobadores'] ?? [];
+        if (!is_array($aprobadores)) $aprobadores = [];
+        $aprobadores = array_values(array_unique(array_filter(
+            array_map('intval', $aprobadores),
+            static fn($x) => $x > 0
+        )));
+
+        $filtered = [
+            'transf_requiere_aprobacion'  => !empty($data['transf_requiere_aprobacion']) ? 'true' : 'false',
+            'transf_notificar_correo'     => !empty($data['transf_notificar_correo']) ? 'true' : 'false',
+            'transf_usuarios_aprobadores' => json_encode($aprobadores),
+        ];
+
+        return $this->repository->updateEstablecimientoConfig($idEst, $filtered);
+    }
+
     public function saveCorreo(int $idEmpresa, array $data): bool
     {
         return $this->repository->saveCorreoConfig($idEmpresa, $data);

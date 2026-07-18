@@ -86,6 +86,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                         Inventario
                     </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="transferencias-tab" data-bs-toggle="tab" data-bs-target="#transferencias_config" type="button" role="tab">
+                        Pagos al Banco
+                    </button>
+                </li>
             </ul>
         </div>
         <div class="card-body p-0">
@@ -1418,6 +1423,69 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     </script>
                 </div>
 
+                <!-- Pestaña: Aprobación de Transferencias -->
+                <div class="tab-pane fade" id="transferencias_config" role="tabpanel">
+                    <form id="form-transferencias-config" method="POST">
+                        <input type="hidden" name="section" value="transferencias_config">
+                        <input type="hidden" name="id_establecimiento" value="<?= (int)($estPrincipal['id'] ?? 0) ?>">
+                        <div class="form-msg mb-3"></div>
+                        <?php
+                        $transfReqAprob = !empty($empresa['transf_requiere_aprobacion']) && $empresa['transf_requiere_aprobacion'] !== 'f';
+                        $transfNotifCorreo = !isset($empresa['transf_notificar_correo']) || ($empresa['transf_notificar_correo'] && $empresa['transf_notificar_correo'] !== 'f');
+                        $transfAprobadores = json_decode($empresa['transf_usuarios_aprobadores'] ?? '[]', true);
+                        if (!is_array($transfAprobadores)) $transfAprobadores = [];
+                        $transfAprobadores = array_map('intval', $transfAprobadores);
+                        $usuariosParaAprobarTransf = $usuarios_empresa ?? [];
+                        ?>
+                        <div class="row g-4">
+                            <div class="col-md-12">
+                                <h6 class="fw-bold fs-6 text-primary border-bottom pb-2 mb-3">Aprobación de lotes de pago bancario</h6>
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="transf_requiere_aprobacion" name="transf_requiere_aprobacion" value="1" <?= $transfReqAprob ? 'checked' : '' ?>>
+                                    <label class="form-check-label fw-bold small" for="transf_requiere_aprobacion">Los lotes de pago bancario requieren aprobación</label>
+                                    <div class="text-muted" style="font-size:0.7rem;">Si se activa, el lote queda pendiente y no se puede generar el archivo bancario hasta ser aprobado.</div>
+                                </div>
+
+                                <div id="transf-aprob-config" class="ps-2 border-start <?= $transfReqAprob ? '' : 'opacity-50' ?>">
+                                    <label class="form-label small fw-bold mb-1">Usuarios que aprueban <span class="text-muted fw-normal">(puede seleccionar varios)</span></label>
+                                    <?php if (empty($usuariosParaAprobarTransf)): ?>
+                                        <p class="text-muted small mb-2"><i class="bi bi-info-circle me-1"></i>No hay usuarios asignados a esta empresa para elegir como aprobadores.</p>
+                                    <?php else: ?>
+                                        <div class="row g-2 mb-3">
+                                            <?php foreach ($usuariosParaAprobarTransf as $u): $uid = (int)($u['id'] ?? 0); ?>
+                                                <div class="col-md-4 col-lg-3">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input transf-aprob-user" type="checkbox" name="transf_usuarios_aprobadores[]" value="<?= $uid ?>" id="transf-aprob-<?= $uid ?>" <?= in_array($uid, $transfAprobadores, true) ? 'checked' : '' ?>>
+                                                        <label class="form-check-label small text-truncate d-block" for="transf-aprob-<?= $uid ?>" title="<?= htmlspecialchars($u['nombre'] ?? '') ?>"><?= htmlspecialchars($u['nombre'] ?? '') ?></label>
+                                                    </div>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php endif; ?>
+
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="transf_notificar_correo" name="transf_notificar_correo" value="1" <?= $transfNotifCorreo ? 'checked' : '' ?>>
+                                        <label class="form-check-label small" for="transf_notificar_correo">Notificar por correo a los aprobadores</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 mt-4 text-end">
+                            <button type="submit" class="btn btn-primary btn-sm px-4">Guardar Configuración</button>
+                        </div>
+                    </form>
+                    <script>
+                        (function () {
+                            var sw = document.getElementById('transf_requiere_aprobacion');
+                            var box = document.getElementById('transf-aprob-config');
+                            if (sw && box) {
+                                var toggle = function () { box.classList.toggle('opacity-50', !sw.checked); };
+                                sw.addEventListener('change', toggle);
+                            }
+                        })();
+                    </script>
+                </div>
+
             </div>
         </div>
     </div>
@@ -1993,7 +2061,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        const forms = ['form-general', 'form-emisor', 'form-correo', 'form-firma', 'form-punto', 'form-secuenciales', 'form-establecimiento-directo', 'form-decimales', 'form-iva', 'form-facturacion-config', 'form-inventario-config', 'form-ice'];
+        const forms = ['form-general', 'form-emisor', 'form-correo', 'form-firma', 'form-punto', 'form-secuenciales', 'form-establecimiento-directo', 'form-decimales', 'form-iva', 'form-facturacion-config', 'form-inventario-config', 'form-transferencias-config', 'form-ice'];
         forms.forEach(id => {
             const f = document.getElementById(id);
             if (!f) return;

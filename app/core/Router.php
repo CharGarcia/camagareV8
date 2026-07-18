@@ -62,6 +62,21 @@ class Router
                     } else {
                         $action = 'index';
                     }
+                } elseif (strtolower($parts[0]) === 'api') {
+                    // /api/{version}/{controlador}/{accion} → App\controllers\api\{version}\{Controlador}Controller
+                    // Version fija por ahora a lo que venga en la URL (ej. 'v1'); si falta, 'v1' por defecto.
+                    $version = !empty($parts[1]) ? preg_replace('/[^a-z0-9]/i', '', $parts[1]) : 'v1';
+                    if (count($parts) >= 3) {
+                        $controllerName = $this->toCamelCase($parts[2]);
+                        $controller = 'api\\' . $version . '\\' . ucfirst($controllerName);
+                    } else {
+                        $controller = 'api\\' . $version . '\\Index';
+                    }
+                    if (count($parts) >= 4) {
+                        $action = $this->toCamelCase($parts[3]);
+                    } else {
+                        $action = 'index';
+                    }
                 } else {
                     $controllerName = $this->toCamelCase($parts[0]);
                     $controller = ucfirst($controllerName);
@@ -115,6 +130,14 @@ class Router
             // /aprobar-importacion/{token}[/aprobar|/rechazar] → aprobación pública por token (sin auth)
             if (($parts[0] ?? '') === 'aprobar-importacion') {
                 $controller    = 'ImportacionesAprobacion';
+                $_GET['token'] = $parts[1] ?? ($_GET['token'] ?? '');
+                $sub           = $parts[2] ?? '';
+                $action        = in_array($sub, ['aprobar', 'rechazar'], true) ? $sub : 'index';
+            }
+
+            // /aprobar-transferencia/{token}[/aprobar|/rechazar] → aprobación pública por token (sin auth)
+            if (($parts[0] ?? '') === 'aprobar-transferencia') {
+                $controller    = 'TransferenciasAprobacion';
                 $_GET['token'] = $parts[1] ?? ($_GET['token'] ?? '');
                 $sub           = $parts[2] ?? '';
                 $action        = in_array($sub, ['aprobar', 'rechazar'], true) ? $sub : 'index';

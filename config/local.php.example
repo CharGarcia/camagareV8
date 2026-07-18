@@ -12,4 +12,10 @@ return [
     // Se usa para construir URLs absolutas como el webhook de WhatsApp.
     // Ej: 'https://www.camagare.com.ec'
     'app_url'  => 'https://www.camagare.com.ec',
+
+    // Secreto de firma HS256 para el access token (JWT) de la API móvil.
+    // Obligatorio para que /api/v1/* funcione. Mínimo 32 caracteres aleatorios.
+    // Generar uno nuevo por entorno (no reutilizar entre dev/producción) con:
+    //   php -r "echo bin2hex(random_bytes(32));"
+    'api_jwt_secret' => '',
 ];

@@ -61,6 +61,15 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // Cargar Transferencias: arma lotes de pagos (proveedores/nómina) ya
+    // registrados en Egresos con tipo_operacion_bancaria='TRANSFERENCIA',
+    // los aprueba y genera el archivo bancario. id_submodulo = 0 → pendiente
+    // de asignar tras insertar el submódulo en submodulos_menu (migración manual).
+    'modulos/transferencias' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     'modulos/factura-venta' => [
         'id_submodulo' => 149,
         'legacy_rutas' => [

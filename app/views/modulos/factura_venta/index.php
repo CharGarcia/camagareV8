@@ -3938,7 +3938,11 @@ $totalPages = $totalPagesOriginal;
         inputDesc.addEventListener('input', debounce((e) => buscarProducto(e.target.value, inputDesc), 400));
 
         inputDesc.addEventListener('keydown', (e) => {
-            if (e.key === 'Delete' || e.key === 'Backspace') {
+            // En modo estricto la descripción es un buscador de catálogo: Delete/Retroceso
+            // limpian toda la selección de un golpe (regla de "chip"). En modo libre el
+            // usuario escribe el texto a mano, así que esas teclas deben borrar carácter a
+            // carácter como en cualquier campo — no vaciar la celda ni la fila.
+            if ((e.key === 'Delete' || e.key === 'Backspace') && !EMPRESA_CONFIG.facturacion_libre) {
                 e.target.value = '';
                 dropdownGlobal.classList.add('d-none');
                 tr.querySelector('.input-id-producto').value = '';

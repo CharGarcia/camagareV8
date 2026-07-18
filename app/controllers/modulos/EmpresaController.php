@@ -155,6 +155,11 @@ class EmpresaController extends BaseModuloController
                     $res = $this->service->saveInventarioConfig($idEmpresa, $_POST);
                     echo json_encode(['ok' => $res]);
                     break;
+                case 'transferencias_config':
+                    $this->requireActualizar();
+                    $res = $this->service->saveTransferenciasConfig($idEmpresa, $_POST);
+                    echo json_encode(['ok' => $res]);
+                    break;
                 default:
                     throw new \Exception('Sección no válida');
             }

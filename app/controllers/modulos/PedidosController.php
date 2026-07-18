@@ -5,6 +5,7 @@ namespace App\Controllers\Modulos;
 use App\Services\Modulos\PedidoService;
 use App\Repositories\Modulos\PedidoRepository;
 use App\Repositories\Modulos\ResponsableTrasladoRepository;
+use App\Rules\Modulos\PedidoRules;
 use App\models\Empresa;
 use Exception;
 
@@ -221,27 +222,8 @@ class PedidosController extends BaseModuloController {
         try {
             $datos = $_POST['cabecera'];
             $detalles = $_POST['detalles'] ?? [];
-            
-            // Validaciones de Fecha y Horas de Entrega
-            $fecha_entrega = $datos['fecha_entrega'] ?? '';
-            $hora_inicial = $datos['hora_inicial_entrega'] ?? '';
-            $hora_maxima = $datos['hora_maxima_entrega'] ?? '';
 
-            if (!empty($fecha_entrega)) {
-                $today = date('Y-m-d');
-                if ($fecha_entrega < $today) {
-                    throw new Exception('La fecha de entrega no puede ser menor a la fecha actual.');
-                }
-            }
-
-            if (!empty($hora_inicial) && !empty($hora_maxima)) {
-                if ($hora_inicial > $hora_maxima) {
-                    throw new Exception('La hora inicial no puede ser mayor a la hora máxima de entrega.');
-                }
-                if ($hora_inicial === $hora_maxima) {
-                    throw new Exception('La hora máxima no puede ser igual a la hora inicial.');
-                }
-            }
+            PedidoRules::validar($datos, $detalles);
 
             $res = $this->service->guardarPedido($datos, $detalles, $_SESSION['id_empresa'], $_SESSION['id_usuario']);
 

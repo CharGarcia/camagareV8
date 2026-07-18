@@ -20,24 +20,25 @@ class SesionActivaService
     }
 
     /**
-     * Verifica si el usuario ya tiene una sesión activa.
+     * Verifica si el usuario ya tiene una sesión activa en el canal indicado.
      * Retorna la sesión activa o null.
      */
-    public function obtenerSesionActiva(int $idUsuario): ?array
+    public function obtenerSesionActiva(int $idUsuario, string $canal = 'web'): ?array
     {
-        return $this->repo->obtenerSesionActiva($idUsuario);
+        return $this->repo->obtenerSesionActiva($idUsuario, $canal);
     }
 
     /**
-     * Inicia una nueva sesión para el usuario.
-     * Desactiva todas las sesiones previas y genera un nuevo token.
+     * Inicia una nueva sesión para el usuario en un canal ('web' o 'movil').
+     * Desactiva las sesiones previas del MISMO canal (no las de otros canales,
+     * así web y app pueden estar activas a la vez) y genera un nuevo token.
      *
      * @return string El token generado.
      */
-    public function iniciarSesion(int $idUsuario): string
+    public function iniciarSesion(int $idUsuario, string $canal = 'web'): string
     {
-        // Desactivar sesiones anteriores
-        $this->repo->desactivarTodasDelUsuario($idUsuario);
+        // Desactivar sesiones anteriores del mismo canal
+        $this->repo->desactivarTodasDelUsuario($idUsuario, $canal);
 
         // Generar token único
         $token = bin2hex(random_bytes(32));
@@ -45,7 +46,7 @@ class SesionActivaService
         $ip        = $_SERVER['REMOTE_ADDR'] ?? 'desconocida';
         $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'desconocido';
 
-        $this->repo->crear($idUsuario, $token, $ip, $userAgent);
+        $this->repo->crear($idUsuario, $token, $ip, $userAgent, $canal);
 
         return $token;
     }

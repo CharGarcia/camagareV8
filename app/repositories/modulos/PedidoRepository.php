@@ -36,6 +36,14 @@ class PedidoRepository {
         $whereSql = "WHERE p.id_empresa = :id_empresa AND p.eliminado = false AND p.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
         $params   = [':id_empresa' => $idEmpresa];
 
+        // Registros propios (§6): si el usuario no tiene "acceso total" en el
+        // submódulo, solo ve lo que él mismo creó. $idUsuarioFiltro llega null
+        // cuando el usuario SÍ tiene acceso total (ver todos).
+        if ($idUsuarioFiltro !== null) {
+            $whereSql .= " AND p.created_by = :id_usuario_filtro";
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+
         if ($buscar !== '') {
             $whereSql .= " AND ((p.establecimiento || '-' || p.punto_emision || '-' || p.secuencial) ILIKE :b OR c.nombre ILIKE :b OR rt.nombre ILIKE :b OR p.observaciones ILIKE :b OR p.observaciones_internas ILIKE :b)";
             $params[':b'] = '%' . $buscar . '%';
@@ -111,11 +119,13 @@ class PedidoRepository {
 
     public function obtenerPorId($id, $id_empresa) {
         $sql = "SELECT p.*, c.nombre as cliente_nombre, c.identificacion as cliente_identificacion,
-                       uc.nombre as creado_por_nombre, uu.nombre as modificado_por_nombre
+                       uc.nombre as creado_por_nombre, uu.nombre as modificado_por_nombre,
+                       rt.nombre as responsable_entrega
                 FROM pedidos_cabecera p
                 JOIN clientes c ON p.id_cliente = c.id
                 LEFT JOIN usuarios uc ON p.created_by = uc.id
                 LEFT JOIN usuarios uu ON p.updated_by = uu.id
+                LEFT JOIN responsables_traslado rt ON p.id_responsable_entrega = rt.id
                 WHERE p.id = :id AND p.id_empresa = :id_empresa AND p.eliminado = false";
         $stmt = $this->db->prepare($sql);
         $stmt->execute(['id' => $id, 'id_empresa' => $id_empresa]);
