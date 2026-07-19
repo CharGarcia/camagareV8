@@ -5,6 +5,9 @@ $moduloBase = basename($rutaModulo ?? 'consignaciones-ventas');
 $vistaConfigConsignaciones = \App\Helpers\PreferenciasHelper::getPreferenciasVista($moduloBase);
 echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigConsignaciones, 'estiloVistaPestanasConsignaciones');
 ?>
+<!-- Leaflet (mapas) — mismo vendor local que el módulo de clientes -->
+<link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/vendor/leaflet/leaflet.css">
+<script src="<?= rtrim(BASE_URL, '/') ?>/vendor/leaflet/leaflet.js"></script>
 <div class="modal fade" id="modalConsignacion" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-focus="false" style="z-index: 1060;">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
@@ -392,13 +395,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                             </div>
                         </div>
 
-                        <!-- Pestaña Entrega -->
-                        <div class="tab-pane fade" id="cons-tab-entrega" role="tabpanel">
-                            <div class="p-4 text-center text-muted">
-                                <i class="bi bi-geo-alt fs-1 text-secondary mb-3 opacity-50"></i>
-                                <h5>Ubicación de Entrega</h5>
-                                <p>Aquí se mostrará el mapa con el lugar donde se entregó la mercadería.</p>
-                                <p class="small">Se implementará junto con el módulo de <strong>responsables de traslado</strong>.</p>
+                        <!-- Pestaña Entrega (evidencia GPS + firma desde la app móvil) -->
+                        <div class="tab-pane fade p-3" id="cons-tab-entrega" role="tabpanel">
+                            <div id="cons_entrega_contenido">
+                                <div class="p-4 text-center text-muted">Cargando entrega...</div>
                             </div>
                         </div>
 
@@ -1537,6 +1537,23 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
     };
 
     // Cambia el estado de la consignación (Borrador | Entregada | Anulada) vía endpoint dedicado.
+    // Obtiene la ubicación del navegador (GPS). Nunca rechaza: si el usuario deniega o
+    // el dispositivo no tiene GPS, resuelve null y la entrega se registra solo con hora + usuario.
+    window.consObtenerUbicacion = function() {
+        return new Promise((resolve) => {
+            if (!navigator.geolocation) return resolve(null);
+            navigator.geolocation.getCurrentPosition(
+                (pos) => resolve({
+                    lat: pos.coords.latitude,
+                    lon: pos.coords.longitude,
+                    precision: (pos.coords.accuracy != null) ? Math.round(pos.coords.accuracy) : null
+                }),
+                () => resolve(null),
+                { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+            );
+        });
+    };
+
     window.cambiarEstadoConsignacion = async function(nuevo) {
         const sel  = document.getElementById('cons_estado_selector');
         const id   = document.getElementById('cons_id').value;
@@ -1556,10 +1573,33 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             if (!c.isConfirmed) { sel.value = prev; return; }
         }
 
+        if (nuevo === 'Entregada') {
+            const c = await Swal.fire({
+                title: '¿Registrar como Entregada?',
+                text: 'Se registrará la entrega con la ubicación actual, la fecha/hora y su usuario.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: '<i class="bi bi-geo-alt me-1"></i> Sí, registrar entrega',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!c.isConfirmed) { sel.value = prev; return; }
+        }
+
+        // Al ENTREGAR manualmente, intentar capturar la ubicación del navegador (opcional).
+        let ubic = null;
+        if (nuevo === 'Entregada') {
+            ubic = await consObtenerUbicacion();
+        }
+
         try {
             const fd = new FormData();
             fd.append('id', id);
             fd.append('estado', nuevo);
+            if (ubic) {
+                fd.append('latitud', ubic.lat);
+                fd.append('longitud', ubic.lon);
+                if (ubic.precision != null) fd.append('precision_m', ubic.precision);
+            }
             const res  = await fetch(`${RUTA_MODULO_CONSIGNACION}/cambiarEstadoAjax`, { method: 'POST', body: fd });
             const data = await res.json();
             if (data.ok) {
@@ -2662,6 +2702,134 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (btnTabF) {
             btnTabF.addEventListener('shown.bs.tab', () => {
                 consCargarFacturacion(document.getElementById('cons_id').value);
+            });
+        }
+    });
+
+    // ── Pestaña Entrega: evidencia (GPS + firma) registrada desde la app móvil ──
+    window.consFmtFechaHora = function(f) {
+        if (!f) return '';
+        const s = String(f).replace('T', ' ').substring(0, 16);
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ ]?(\d{2}:\d{2})?/);
+        return m ? `${m[3]}-${m[2]}-${m[1]}${m[4] ? ' ' + m[4] : ''}` : s;
+    };
+    window.consBadgeEntrega = function(estado) {
+        const e = (estado || 'valida').toLowerCase();
+        if (e === 'valida') return '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Válida</span>';
+        if (e === 'anulada' || e === 'invalida') return '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">' + consEscHtml(estado) + '</span>';
+        return '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">' + consEscHtml(estado) + '</span>';
+    };
+
+    window.consCargarEntrega = async function(id) {
+        const cont = document.getElementById('cons_entrega_contenido');
+        if (!cont) return;
+        if (!id) {
+            cont.innerHTML = '<div class="p-4 text-center text-muted">Guarde la consignación para ver la entrega.</div>';
+            return;
+        }
+        cont.innerHTML = '<div class="p-4 text-center text-muted">Cargando entrega...</div>';
+        try {
+            const res  = await fetch(`${RUTA_MODULO_CONSIGNACION}/getEntregasAjax?id=${id}`);
+            const data = await res.json();
+            if (!(data.ok && data.data && data.data.length)) {
+                cont.innerHTML = '<div class="p-4 text-center text-muted"><i class="bi bi-geo-alt fs-1 text-secondary d-block mb-2 opacity-50"></i>Aún no se registra la entrega desde la app móvil.</div>';
+                return;
+            }
+
+            const e   = data.data[0]; // evidencia más reciente
+            const lat = parseFloat(e.latitud), lon = parseFloat(e.longitud);
+            const tieneGps = !isNaN(lat) && !isNaN(lon) && (lat !== 0 || lon !== 0);
+            const gmaps = tieneGps ? `https://www.google.com/maps?q=${lat},${lon}` : '';
+
+            const mapaHtml = tieneGps
+                ? `<div id="cons_entrega_mapa" style="height:300px;border-radius:8px;border:1px solid #dee2e6;background:#f8f9fa;"></div>
+                   <div class="small mt-1 text-end"><a href="${gmaps}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right me-1"></i>Abrir en Google Maps</a></div>`
+                : '<div class="alert alert-light border small mb-0 h-100 d-flex align-items-center justify-content-center text-muted">Sin coordenadas GPS registradas para esta entrega.</div>';
+
+            const firmaHtml = e.firma_url
+                ? `<img src="${consEscHtml(e.firma_url)}" alt="Firma de recepción" style="max-width:100%;max-height:150px;border:1px solid #dee2e6;border-radius:6px;background:#fff;">`
+                : '<span class="text-muted small">Sin firma registrada.</span>';
+
+            const coordRows = tieneGps
+                ? `<tr><td class="text-muted">Latitud</td><td class="text-end font-monospace">${lat.toFixed(6)}</td></tr>
+                   <tr><td class="text-muted">Longitud</td><td class="text-end font-monospace">${lon.toFixed(6)}</td></tr>
+                   <tr><td class="text-muted">Precisión</td><td class="text-end">${e.precision_m ? '±' + parseFloat(e.precision_m).toFixed(0) + ' m' : '—'}</td></tr>`
+                : '<tr><td class="text-muted">Ubicación</td><td class="text-end text-muted">No registrada</td></tr>';
+
+            const extra = data.data.length > 1
+                ? `<div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>Hay ${data.data.length} evidencias; se muestra la más reciente.</div>`
+                : '';
+
+            cont.innerHTML = `
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <div class="border rounded-3 bg-white shadow-sm p-3 h-100">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="fw-bold"><i class="bi bi-geo-alt me-1 text-primary"></i>Entrega</span>
+                                ${consBadgeEntrega(e.estado)}
+                            </div>
+                            <table class="table table-sm mb-2 small">
+                                <tr><td class="text-muted">Fecha/hora</td><td class="text-end fw-medium">${consFmtFechaHora(e.capturado_en)}</td></tr>
+                                <tr><td class="text-muted">Realizó</td><td class="text-end text-truncate" style="max-width:160px">${consEscHtml(e.registrado_por || '—')}</td></tr>
+                                <tr><td class="text-muted">Canal</td><td class="text-end">${consEscHtml((e.canal || 'movil') === 'web' ? 'Manual (web)' : 'App móvil')}</td></tr>
+                                <tr><td class="text-muted">Dispositivo</td><td class="text-end text-truncate" style="max-width:160px">${consEscHtml(e.dispositivo_id || '—')}</td></tr>
+                                ${coordRows}
+                            </table>
+                            <div class="small text-muted mb-1">Observaciones</div>
+                            <div class="small mb-3">${consEscHtml(e.observaciones || '—')}</div>
+                            <div class="small text-muted mb-1">Firma de recepción</div>
+                            <div class="text-center">${firmaHtml}</div>
+                            ${extra}
+                        </div>
+                    </div>
+                    <div class="col-md-7">${mapaHtml}</div>
+                </div>`;
+
+            // Mapa Leaflet (mismo vendor local que clientes). invalidateSize por estar en pestaña.
+            if (tieneGps && window.L) {
+                try {
+                    if (window._consEntregaMapa) { window._consEntregaMapa.remove(); window._consEntregaMapa = null; }
+                    const map = L.map('cons_entrega_mapa', { preferCanvas: true }).setView([lat, lon], 16);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                        maxZoom: 19
+                    }).addTo(map);
+                    L.marker([lat, lon]).addTo(map).bindPopup('Lugar de entrega').openPopup();
+                    window._consEntregaMapa = map;
+                    setTimeout(() => map.invalidateSize(), 200);
+                } catch (mapErr) { /* si falla el mapa, los datos igual quedan visibles */ }
+            }
+        } catch (err) {
+            cont.innerHTML = '<div class="p-4 text-center text-danger">Error al cargar la entrega.</div>';
+        }
+    };
+
+    // Al abrir el modal, mostrar siempre la pestaña General (no conservar la última activa).
+    document.addEventListener('DOMContentLoaded', () => {
+        const modalEl = document.getElementById('modalConsignacion');
+        if (modalEl) {
+            modalEl.addEventListener('show.bs.modal', () => {
+                const btn = document.getElementById('cons-tab-general-btn');
+                if (btn && window.bootstrap && bootstrap.Tab) {
+                    bootstrap.Tab.getOrCreateInstance(btn).show();
+                    return;
+                }
+                // Fallback manual si no está el plugin de tabs.
+                document.querySelectorAll('#tabsCons .nav-link').forEach(a => a.classList.remove('active'));
+                document.querySelectorAll('#tabsConsContent .tab-pane').forEach(p => p.classList.remove('show', 'active'));
+                if (btn) btn.classList.add('active');
+                const pane = document.getElementById('cons-tab-general');
+                if (pane) pane.classList.add('show', 'active');
+            });
+        }
+    });
+
+    // Carga perezosa: al mostrar la pestaña Entrega.
+    document.addEventListener('DOMContentLoaded', () => {
+        const btnTabE = document.getElementById('cons-tab-entrega-btn');
+        if (btnTabE) {
+            btnTabE.addEventListener('shown.bs.tab', () => {
+                consCargarEntrega(document.getElementById('cons_id').value);
             });
         }
     });

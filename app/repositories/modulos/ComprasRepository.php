@@ -223,6 +223,22 @@ class ComprasRepository extends BaseRepository
     }
 
     /**
+     * Una sola línea de compra por su id, con datos de cabecera necesarios para
+     * precargar un alta de Activo Fijo (proveedor, fecha de emisión).
+     */
+    public function getDetalleById(int $idDetalle, int $idEmpresa): ?array
+    {
+        $sql = "SELECT d.*, c.id_empresa, c.id_proveedor, c.fecha_emision,
+                       p.razon_social AS proveedor_nombre
+                FROM compras_detalle d
+                INNER JOIN compras_cabecera c ON d.id_compra = c.id
+                LEFT JOIN proveedores p ON c.id_proveedor = p.id
+                WHERE d.id = ? AND c.id_empresa = ? AND c.eliminado = false";
+        $row = $this->query($sql, [$idDetalle, $idEmpresa])->fetch();
+        return $row ?: null;
+    }
+
+    /**
      * Vincula el asiento contable generado a la compra.
      */
     public function updateAsientoContable(int $idCompra, int $idAsiento): void

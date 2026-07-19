@@ -380,6 +380,59 @@ class ConsignacionesVentasController extends BaseModuloController
         exit;
     }
 
+    /** Entregas (evidencia GPS + firma desde la app móvil) de una consignación. */
+    public function getEntregasAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $idCons    = (int) ($_GET['id'] ?? $_POST['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            if ($idCons <= 0) {
+                echo json_encode(['ok' => true, 'data' => []]);
+                exit;
+            }
+            $rows = $this->service->getEntregasDeConsignacion($idCons, $idEmpresa);
+            $base = rtrim(defined('BASE_URL') ? BASE_URL : '', '/');
+            foreach ($rows as &$r) {
+                $r['firma_url'] = !empty($r['firma_path'])
+                    ? $base . '/' . ltrim((string) self::RUTA_MODULO, '/') . '/firmaEntrega?id=' . (int) $r['id']
+                    : null;
+            }
+            unset($r);
+            echo json_encode(['ok' => true, 'data' => $rows]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Sirve la imagen de la firma de una entrega (validando la empresa activa). */
+    public function firmaEntrega(): void
+    {
+        $this->requireLeer();
+
+        $idEntrega = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        $rel = $idEntrega > 0 ? $this->service->getFirmaEntrega($idEntrega, $idEmpresa) : null;
+        if (!$rel) { http_response_code(404); echo 'Firma no encontrada'; exit; }
+
+        $abs = \MVC_ROOT . '/' . $rel;
+        if (!is_file($abs)) { http_response_code(404); echo 'Archivo no encontrado'; exit; }
+
+        $mime = 'image/png';
+        $ext  = strtolower(pathinfo($abs, PATHINFO_EXTENSION));
+        if (in_array($ext, ['jpg', 'jpeg'], true)) $mime = 'image/jpeg';
+        elseif ($ext === 'webp') $mime = 'image/webp';
+
+        header('Content-Type: ' . $mime);
+        header('Cache-Control: private, max-age=300');
+        readfile($abs);
+        exit;
+    }
+
     /** Retornos asociados a una consignación (pestaña Retornos del modal). */
     public function getRetornosAjax(): void
     {
@@ -441,7 +494,14 @@ class ConsignacionesVentasController extends BaseModuloController
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $idUsuario = (int) $_SESSION['id_usuario'];
 
-            $this->service->cambiarEstado($id, $idEmpresa, $idUsuario, $estado);
+            // Ubicación capturada por el navegador al marcar Entregada manualmente (opcional).
+            $datosEntrega = [
+                'latitud'     => $_POST['latitud']     ?? null,
+                'longitud'    => $_POST['longitud']    ?? null,
+                'precision_m' => $_POST['precision_m'] ?? null,
+            ];
+
+            $this->service->cambiarEstado($id, $idEmpresa, $idUsuario, $estado, $datosEntrega);
             echo json_encode(['ok' => true, 'msg' => 'Estado actualizado a ' . $estado . '.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

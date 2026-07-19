@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services\modulos;
 
+use App\repositories\modulos\ConsignacionVentaEntregaRepository;
 use App\repositories\modulos\ConsignacionVentaRepository;
 use App\repositories\modulos\InventarioRepository;
 use App\Rules\modulos\ConsignacionVentaRules;
@@ -473,7 +474,7 @@ class ConsignacionVentaService
      * Solo actualiza el estado; NO reversa inventario ni anula el asiento (eso se maneja
      * en el flujo de eliminar / retornos, aún por definir para "Anulada").
      */
-    public function cambiarEstado(int $id, int $idEmpresa, int $idUsuario, string $nuevoEstado): void
+    public function cambiarEstado(int $id, int $idEmpresa, int $idUsuario, string $nuevoEstado, array $datosEntrega = []): void
     {
         $permitidos = ['Emitida', 'Borrador', 'Entregada', 'Anulada'];
         if (!in_array($nuevoEstado, $permitidos, true)) {
@@ -495,11 +496,124 @@ class ConsignacionVentaService
         try {
             $db->beginTransaction();
             $this->repository->updateEstado($id, $idEmpresa, $nuevoEstado, $idUsuario);
+
+            // Al marcar ENTREGADA manualmente desde el web se registra la evidencia de
+            // entrega (ubicación + hora + usuario que la realizó, canal 'web'). Si ya existe
+            // una evidencia (p. ej. desde la app móvil), no se duplica: solo se apunta.
+            if ($nuevoEstado === 'Entregada') {
+                $entregaRepo = new ConsignacionVentaEntregaRepository();
+                $existentes  = $entregaRepo->getPorConsignacion($id, $idEmpresa);
+                if (!empty($existentes)) {
+                    $this->repository->updateEntregaConfirmada($id, $idEmpresa, (int) $existentes[0]['id']);
+                } else {
+                    $lat  = (isset($datosEntrega['latitud'])  && $datosEntrega['latitud']  !== '') ? $datosEntrega['latitud']  : null;
+                    $lon  = (isset($datosEntrega['longitud']) && $datosEntrega['longitud'] !== '') ? $datosEntrega['longitud'] : null;
+                    $prec = (isset($datosEntrega['precision_m']) && $datosEntrega['precision_m'] !== '') ? $datosEntrega['precision_m'] : null;
+                    $res = $entregaRepo->crear([
+                        'id_empresa'      => $idEmpresa,
+                        'id_consignacion' => $id,
+                        'uuid_cliente'    => 'web-' . $id . '-' . uniqid(),
+                        'latitud'         => $lat,
+                        'longitud'        => $lon,
+                        'precision_m'     => $prec,
+                        'firma_path'      => null,
+                        'capturado_en'    => date('Y-m-d H:i:s'),
+                        'dispositivo_id'  => null,
+                        'canal'           => 'web',
+                        'observaciones'   => 'Entrega registrada manualmente desde el sistema.',
+                        'created_by'      => $idUsuario,
+                    ]);
+                    $this->repository->updateEntregaConfirmada($id, $idEmpresa, (int) $res['id']);
+                }
+            }
+
             $this->logService->registrar(
                 $idUsuario, $idEmpresa, 'CAMBIAR_ESTADO_CONSIGNACION', 'consignaciones_ventas', $id,
                 ['estado' => $cab['estado'] ?? null], ['estado' => $nuevoEstado]
             );
             $db->commit();
+        } catch (Exception $e) {
+            $db->rollBack();
+            throw $e;
+        }
+    }
+
+    /** Consignaciones pendientes de entrega (estado 'Emitida') para el módulo Entregas de la app móvil. */
+    public function getPendientesEntrega(int $idEmpresa, ?array $idsResponsables, string $buscar, int $page, int $perPage): array
+    {
+        return $this->repository->getPendientesEntrega($idEmpresa, $idsResponsables, $buscar, $page, $perPage);
+    }
+
+    /**
+     * Registra la entrega (GPS + firma) de una consignación y la pasa a 'Entregada'.
+     * Idempotente por uuid_cliente: un reenvío (retry de red / cola offline) no crea
+     * evidencia duplicada ni falla — devuelve el mismo resultado que la primera vez.
+     *
+     * @param array $data id_consignacion, id_empresa, id_usuario, uuid_cliente, latitud,
+     *   longitud, precision_m, firma_path (ya guardada en disco por el controller),
+     *   capturado_en, dispositivo_id, canal, observaciones
+     * @return array{id_entrega:int, ya_entregada:bool}
+     * @throws Exception si la consignación no existe o no admite entrega (estado inválido
+     *   y no es un reenvío idempotente del mismo uuid).
+     */
+    public function registrarEntrega(array $data): array
+    {
+        $idConsignacion = (int) $data['id_consignacion'];
+        $idEmpresa = (int) $data['id_empresa'];
+        $idUsuario = (int) $data['id_usuario'];
+
+        $cab = $this->repository->find($idConsignacion, $idEmpresa);
+        if (!$cab) {
+            throw new Exception('Consignación no encontrada.');
+        }
+
+        $entregaRepo = new ConsignacionVentaEntregaRepository();
+
+        // Reenvío idempotente (mismo uuid ya procesado antes, típico de la cola offline
+        // o un timeout de red): responder éxito sin volver a tocar nada.
+        $existente = $entregaRepo->buscarPorUuid($idEmpresa, (string) $data['uuid_cliente']);
+        if ($existente) {
+            return ['id_entrega' => (int) $existente['id'], 'ya_entregada' => true];
+        }
+
+        if (($cab['estado'] ?? '') !== 'Emitida') {
+            throw new Exception("Esta consignación ya no admite entrega (estado actual: {$cab['estado']}).");
+        }
+
+        $db = Database::getConnection();
+        try {
+            $db->beginTransaction();
+
+            $resultado = $entregaRepo->crear([
+                'id_empresa'      => $idEmpresa,
+                'id_consignacion' => $idConsignacion,
+                'uuid_cliente'    => $data['uuid_cliente'],
+                'latitud'         => $data['latitud'] ?? null,
+                'longitud'        => $data['longitud'] ?? null,
+                'precision_m'     => $data['precision_m'] ?? null,
+                'firma_path'      => $data['firma_path'] ?? null,
+                'capturado_en'    => $data['capturado_en'],
+                'dispositivo_id'  => $data['dispositivo_id'] ?? null,
+                'canal'           => $data['canal'] ?? 'movil',
+                'observaciones'   => $data['observaciones'] ?? null,
+                'created_by'      => $idUsuario,
+            ]);
+
+            $this->repository->update($idConsignacion, $idEmpresa, [
+                'id_entrega_confirmada' => $resultado['id'],
+            ]);
+
+            $this->repository->updateEstado($idConsignacion, $idEmpresa, 'Entregada', $idUsuario);
+
+            $this->logService->registrar(
+                $idUsuario, $idEmpresa, 'REGISTRAR_ENTREGA', 'consignaciones_ventas', $idConsignacion,
+                ['estado' => $cab['estado']],
+                ['estado' => 'Entregada', 'id_entrega' => $resultado['id'], 'latitud' => $data['latitud'] ?? null, 'longitud' => $data['longitud'] ?? null]
+            );
+
+            $db->commit();
+
+            return ['id_entrega' => $resultado['id'], 'ya_entregada' => false];
         } catch (Exception $e) {
             $db->rollBack();
             throw $e;
@@ -530,6 +644,36 @@ class ConsignacionVentaService
             // Tabla de retornos inexistente (migración pendiente): sin datos de retorno.
             return [];
         }
+    }
+
+    /** Evidencias de entrega (GPS + firma) registradas desde la app móvil, para la pestaña Entrega. */
+    public function getEntregasDeConsignacion(int $idConsignacion, int $idEmpresa): array
+    {
+        if (!$this->repository->find($idConsignacion, $idEmpresa)) {
+            return [];
+        }
+        try {
+            $entregaRepo = new \App\repositories\modulos\ConsignacionVentaEntregaRepository();
+            return $entregaRepo->getPorConsignacion($idConsignacion, $idEmpresa);
+        } catch (\Throwable $e) {
+            return []; // tabla aún no desplegada
+        }
+    }
+
+    /** Ruta relativa de la firma de una entrega (validando empresa), o null. */
+    public function getFirmaEntrega(int $idEntrega, int $idEmpresa): ?string
+    {
+        try {
+            $entregaRepo = new \App\repositories\modulos\ConsignacionVentaEntregaRepository();
+            $ent = $entregaRepo->find($idEntrega, $idEmpresa);
+            $path = $ent['firma_path'] ?? '';
+            // Solo se sirven archivos dentro de storage/entregas (evita path traversal).
+            if (is_string($path) && strpos($path, 'storage/entregas/') === 0 && strpos($path, '..') === false) {
+                return $path;
+            }
+        } catch (\Throwable $e) {
+        }
+        return null;
     }
 
     /** Retornos (líneas de devolución) asociados a esta consignación, para la pestaña Retornos. */

@@ -102,7 +102,9 @@ class ConfiguracionContableController extends BaseModuloController
             'ingresos_egresos' => 'Ingresos y Egresos',
             'cobros_pagos' => 'Cobros y Pagos',
             'nomina' => 'Nómina',
-            'cierre_ejercicio' => 'Cierre del Ejercicio'
+            'cierre_ejercicio' => 'Cierre del Ejercicio',
+            'activos_fijos_alta' => 'Activos Fijos - Alta',
+            'activos_fijos_depreciacion' => 'Activos Fijos - Depreciación',
         ];
 
         ob_start();

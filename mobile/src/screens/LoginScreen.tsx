@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   StyleSheet,
   Text,
@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthContext';
 import { mensajeError } from '../api/client';
 
@@ -17,36 +18,13 @@ export default function LoginScreen() {
   const { login, avisoSesionActiva, forzarLoginDesdeAviso, descartarAvisoSesionActiva } = useAuth();
   const [cedula, setCedula] = useState('');
   const [password, setPassword] = useState('');
+  const [verPassword, setVerPassword] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!avisoSesionActiva) return;
-    Alert.alert(
-      'Sesión activa en otro celular',
-      `Ya hay una sesión abierta desde otro dispositivo${
-        avisoSesionActiva.ultimaActividad ? ` (última actividad: ${avisoSesionActiva.ultimaActividad})` : ''
-      }. ¿Cerrar esa sesión y entrar aquí?`,
-      [
-        { text: 'Cancelar', style: 'cancel', onPress: () => descartarAvisoSesionActiva() },
-        {
-          text: 'Cerrar la otra e ingresar',
-          style: 'destructive',
-          onPress: async () => {
-            setCargando(true);
-            try {
-              await forzarLoginDesdeAviso();
-            } catch (err) {
-              setError(mensajeError(err, 'No se pudo iniciar sesión.'));
-            } finally {
-              setCargando(false);
-            }
-          },
-        },
-      ]
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [avisoSesionActiva]);
+  // Errores propios del panel "sesión activa en otro celular" (no del formulario de login).
+  const [cargandoForzar, setCargandoForzar] = useState(false);
+  const [errorForzar, setErrorForzar] = useState<string | null>(null);
 
   async function onSubmit() {
     if (!cedula.trim() || !password.trim()) {
@@ -61,6 +39,18 @@ export default function LoginScreen() {
       setError(mensajeError(err, 'Usuario o contraseña incorrectos.'));
     } finally {
       setCargando(false);
+    }
+  }
+
+  async function onForzarIngreso() {
+    setErrorForzar(null);
+    setCargandoForzar(true);
+    try {
+      await forzarLoginDesdeAviso();
+    } catch (err) {
+      setErrorForzar(mensajeError(err, 'No se pudo iniciar sesión.'));
+    } finally {
+      setCargandoForzar(false);
     }
   }
 
@@ -84,14 +74,20 @@ export default function LoginScreen() {
         />
 
         <Text style={styles.label}>Contraseña</Text>
-        <TextInput
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoCapitalize="none"
-          placeholder="••••••••"
-        />
+        <View style={styles.inputConIcono}>
+          <TextInput
+            style={styles.inputTexto}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!verPassword}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="••••••••"
+          />
+          <TouchableOpacity onPress={() => setVerPassword((v) => !v)} hitSlop={10}>
+            <Ionicons name={verPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#666" />
+          </TouchableOpacity>
+        </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -99,6 +95,47 @@ export default function LoginScreen() {
           {cargando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonTexto}>Ingresar</Text>}
         </TouchableOpacity>
       </View>
+
+      {/* Panel propio (no Alert.alert nativo) para poder controlar el flujo y mostrar
+          errores en pantalla en vez de que falle en silencio. */}
+      <Modal visible={!!avisoSesionActiva} animationType="fade" transparent onRequestClose={() => {}}>
+        <View style={styles.overlay}>
+          <View style={styles.dialogo}>
+            <Text style={styles.dialogoTitulo}>Sesión activa en otro celular</Text>
+            <Text style={styles.dialogoTexto}>
+              Ya hay una sesión abierta desde otro dispositivo
+              {avisoSesionActiva?.ultimaActividad ? ` (última actividad: ${avisoSesionActiva.ultimaActividad})` : ''}.
+              ¿Cerrar esa sesión y entrar aquí?
+            </Text>
+
+            {errorForzar ? <Text style={styles.error}>{errorForzar}</Text> : null}
+
+            <View style={styles.dialogoAcciones}>
+              <TouchableOpacity
+                onPress={() => {
+                  setErrorForzar(null);
+                  descartarAvisoSesionActiva();
+                }}
+                disabled={cargandoForzar}
+                style={styles.dialogoBotonCancelar}
+              >
+                <Text style={styles.dialogoCancelarTexto}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={onForzarIngreso}
+                disabled={cargandoForzar}
+                style={styles.dialogoBotonConfirmar}
+              >
+                {cargandoForzar ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.dialogoConfirmarTexto}>Cerrar la otra e ingresar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -117,6 +154,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 16,
   },
+  inputConIcono: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+  },
+  inputTexto: { flex: 1, paddingVertical: 10, fontSize: 16 },
   error: { color: '#dc3545', marginTop: 12, textAlign: 'center' },
   boton: {
     backgroundColor: '#0d6efd',
@@ -126,4 +172,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   botonTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
+  dialogo: { backgroundColor: '#fff', borderRadius: 12, padding: 20 },
+  dialogoTitulo: { fontSize: 17, fontWeight: '700', marginBottom: 8 },
+  dialogoTexto: { fontSize: 14, color: '#444', lineHeight: 20 },
+  dialogoAcciones: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 20 },
+  dialogoBotonCancelar: { paddingVertical: 10, paddingHorizontal: 8 },
+  dialogoCancelarTexto: { color: '#666', fontWeight: '600' },
+  dialogoBotonConfirmar: {
+    backgroundColor: '#dc3545',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    minWidth: 170,
+    alignItems: 'center',
+  },
+  dialogoConfirmarTexto: { color: '#fff', fontWeight: '700' },
 });

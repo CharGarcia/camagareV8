@@ -14,7 +14,13 @@ import ModuloIcono from '../components/ModuloIcono';
  * app. El menú solo muestra lo que está en esta lista — según se vaya construyendo
  * cada módulo (Consignaciones, etc.) simplemente se agrega aquí.
  */
-const RUTAS_IMPLEMENTADAS = new Set(['modulos/pedidos']);
+const RUTAS_IMPLEMENTADAS = new Set([
+  'modulos/pedidos',
+  'modulos/entregas-consignaciones',
+  'modulos/clientes',
+  'modulos/productos',
+  'modulos/factura-venta',
+]);
 
 function soloImplementados(modulos: ModuloMenu[]): ModuloMenu[] {
   return modulos
@@ -52,6 +58,14 @@ export default function MenuScreen() {
   function abrirSubmodulo(sub: SubmoduloMenu) {
     if (sub.ruta === 'modulos/pedidos') {
       navigation.navigate(serie ? 'PedidosList' : 'SeleccionSerie');
+    } else if (sub.ruta === 'modulos/entregas-consignaciones') {
+      navigation.navigate('EntregasList');
+    } else if (sub.ruta === 'modulos/clientes') {
+      navigation.navigate('ClientesList');
+    } else if (sub.ruta === 'modulos/productos') {
+      navigation.navigate('ProductosList');
+    } else if (sub.ruta === 'modulos/factura-venta') {
+      navigation.navigate('FacturasVentaList');
     }
   }
 
@@ -83,7 +97,7 @@ export default function MenuScreen() {
         stickySectionHeadersEnabled={false}
         ListEmptyComponent={
           <Text style={styles.vacio}>
-            Todavía no hay módulos disponibles en la app para tu usuario. Por ahora la app cubre Pedidos.
+            Todavía no hay módulos disponibles en la app para tu usuario. Por ahora la app cubre Pedidos y Entregas.
           </Text>
         }
         renderSectionHeader={({ section }) => (

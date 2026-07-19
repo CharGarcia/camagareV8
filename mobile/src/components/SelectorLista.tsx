@@ -2,19 +2,27 @@ import React, { useState } from 'react';
 import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export type OpcionSelector = { id: number; label: string; sublabel?: string };
+export type OpcionSelector<T = number> = { id: T; label: string; sublabel?: string };
 
-type Props = {
+type Props<T> = {
   label: string;
-  value: number | null;
-  opciones: OpcionSelector[];
-  onChange: (id: number | null) => void;
+  value: T | null;
+  opciones: OpcionSelector<T>[];
+  onChange: (id: T | null) => void;
   placeholder?: string;
 };
 
 /** Selector de una lista de opciones vía modal (a diferencia de un <select> web, en
- * RN no hay un control nativo equivalente para listas cortas de datos del servidor). */
-export default function SelectorLista({ label, value, opciones, onChange, placeholder = 'Seleccionar...' }: Props) {
+ * RN no hay un control nativo equivalente para listas cortas de datos del servidor).
+ * Genérico en T (number para catálogos con id numérico, string para catálogos con
+ * código, ej. provincia/ciudad/tipo de identificación del SRI). */
+export default function SelectorLista<T extends string | number = number>({
+  label,
+  value,
+  opciones,
+  onChange,
+  placeholder = 'Seleccionar...',
+}: Props<T>) {
   const [abierto, setAbierto] = useState(false);
   const seleccionado = opciones.find((o) => o.id === value) ?? null;
 

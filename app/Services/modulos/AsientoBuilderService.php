@@ -2004,6 +2004,142 @@ class AsientoBuilderService
     }
 
     /**
+     * Arma el asiento de ALTA de un activo fijo dado de alta MANUALMENTE (sin factura
+     * de compra — cuando hay factura, esa compra ya generó su propio asiento y este
+     * método no se invoca). Debe = cuenta de Activo de la categoría (id_cuenta_activo);
+     * Haber = contrapartida configurada en el propio activo (id_cuenta_contrapartida_alta)
+     * o, en su defecto, la regla general del concepto 'activos_fijos_alta'
+     * (código CONTRAPARTIDAALTAACTIVOFIJO), configurable en Configuración Contable.
+     */
+    public function generarAsientoAltaActivoFijo(int $idEmpresa, int $idActivo): array
+    {
+        $db = \App\core\Database::getConnection();
+        $st = $db->prepare(
+            "SELECT a.valor_adquisicion, a.id_cuenta_contrapartida_alta, a.nombre,
+                    cat.id_cuenta_activo,
+                    pa.codigo AS cuenta_activo_codigo, pa.nombre AS cuenta_activo_nombre
+             FROM activos_fijos a
+             INNER JOIN activos_fijos_categorias cat ON a.id_categoria = cat.id
+             INNER JOIN plan_cuentas pa ON pa.id = cat.id_cuenta_activo
+             WHERE a.id = ? AND a.id_empresa = ?"
+        );
+        $st->execute([$idActivo, $idEmpresa]);
+        $activo = $st->fetch(\PDO::FETCH_ASSOC);
+        if (!$activo) return [];
+
+        $valor = round((float) $activo['valor_adquisicion'], 2);
+        if ($valor <= 0.0) return [];
+
+        $idCuentaContrapartida = !empty($activo['id_cuenta_contrapartida_alta']) ? (int) $activo['id_cuenta_contrapartida_alta'] : null;
+        $cuentaContrapartidaCodigo = null;
+        $cuentaContrapartidaNombre = null;
+
+        if ($idCuentaContrapartida) {
+            $stC = $db->prepare("SELECT codigo, nombre FROM plan_cuentas WHERE id = ?");
+            $stC->execute([$idCuentaContrapartida]);
+            $c = $stC->fetch(\PDO::FETCH_ASSOC) ?: [];
+            $cuentaContrapartidaCodigo = $c['codigo'] ?? null;
+            $cuentaContrapartidaNombre = $c['nombre'] ?? null;
+        } else {
+            foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'activos_fijos_alta') as $r) {
+                if (strtoupper((string) $r['codigo']) === 'CONTRAPARTIDAALTAACTIVOFIJO' && !empty($r['id_cuenta'])) {
+                    $idCuentaContrapartida = (int) $r['id_cuenta'];
+                    $cuentaContrapartidaCodigo = $r['cuenta_codigo'];
+                    $cuentaContrapartidaNombre = $r['cuenta_nombre'];
+                    break;
+                }
+            }
+        }
+
+        if (!$idCuentaContrapartida) {
+            throw new \Exception(
+                "No se ha configurado la cuenta contrapartida para el alta manual de activos fijos. " .
+                "Selecciónela en el propio activo o configure la regla general en Contabilidad → " .
+                "Configuración contable, concepto «Activos Fijos - Alta»."
+            );
+        }
+
+        return [
+            [
+                'id_cuenta_contable' => (int) $activo['id_cuenta_activo'],
+                'cuenta_codigo'      => $activo['cuenta_activo_codigo'],
+                'cuenta_nombre'      => $activo['cuenta_activo_nombre'],
+                'debe'               => $valor,
+                'haber'              => 0.0,
+                'referencia_detalle' => 'Alta de activo fijo - ' . $activo['nombre'],
+            ],
+            [
+                'id_cuenta_contable' => $idCuentaContrapartida,
+                'cuenta_codigo'      => $cuentaContrapartidaCodigo,
+                'cuenta_nombre'      => $cuentaContrapartidaNombre,
+                'debe'               => 0.0,
+                'haber'              => $valor,
+                'referencia_detalle' => 'Contrapartida alta activo fijo - ' . $activo['nombre'],
+            ],
+        ];
+    }
+
+    /**
+     * Arma el asiento CONSOLIDADO del lote mensual de depreciación de activos fijos:
+     * agrupa las cuotas ya insertadas en activos_fijos_depreciaciones (para este
+     * $idLote) por categoría, y arma una línea Debe (Gasto) + Haber (Depreciación
+     * Acumulada) por categoría, leyendo las cuentas directo de
+     * activos_fijos_categorias (no pasan por la cascada de asientos_programados).
+     */
+    public function generarAsientoDepreciacionLote(int $idEmpresa, int $idLote): array
+    {
+        $db = \App\core\Database::getConnection();
+        $st = $db->prepare(
+            "SELECT cat.id AS id_categoria, cat.nombre AS categoria_nombre,
+                    cat.id_cuenta_gasto_depreciacion, cat.id_cuenta_depreciacion_acumulada,
+                    pg.codigo AS gasto_codigo, pg.nombre AS gasto_nombre,
+                    pa.codigo AS acumulada_codigo, pa.nombre AS acumulada_nombre,
+                    SUM(d.valor_depreciado) AS total
+             FROM activos_fijos_depreciaciones d
+             INNER JOIN activos_fijos a ON d.id_activo = a.id
+             INNER JOIN activos_fijos_categorias cat ON a.id_categoria = cat.id
+             INNER JOIN plan_cuentas pg ON pg.id = cat.id_cuenta_gasto_depreciacion
+             INNER JOIN plan_cuentas pa ON pa.id = cat.id_cuenta_depreciacion_acumulada
+             WHERE d.id_lote = ? AND d.eliminado = false
+             GROUP BY cat.id, cat.nombre, cat.id_cuenta_gasto_depreciacion, cat.id_cuenta_depreciacion_acumulada,
+                      pg.codigo, pg.nombre, pa.codigo, pa.nombre
+             ORDER BY cat.nombre ASC"
+        );
+        $st->execute([$idLote]);
+        $rows = $st->fetchAll(\PDO::FETCH_ASSOC);
+        if (empty($rows)) return [];
+
+        $detalles = [];
+        foreach ($rows as $r) {
+            $monto = round((float) $r['total'], 2);
+            if ($monto <= 0.0) continue;
+            $detalles[] = [
+                'id_cuenta_contable' => (int) $r['id_cuenta_gasto_depreciacion'],
+                'cuenta_codigo'      => $r['gasto_codigo'],
+                'cuenta_nombre'      => $r['gasto_nombre'],
+                'debe'               => $monto,
+                'haber'              => 0.0,
+                'referencia_detalle' => 'Gasto depreciación - ' . $r['categoria_nombre'],
+            ];
+            $detalles[] = [
+                'id_cuenta_contable' => (int) $r['id_cuenta_depreciacion_acumulada'],
+                'cuenta_codigo'      => $r['acumulada_codigo'],
+                'cuenta_nombre'      => $r['acumulada_nombre'],
+                'debe'               => 0.0,
+                'haber'              => $monto,
+                'referencia_detalle' => 'Depreciación acumulada - ' . $r['categoria_nombre'],
+            ];
+        }
+
+        if (empty($detalles)) return [];
+
+        // Cuadra por construcción (cada categoría aporta el mismo monto a Debe y Haber);
+        // se aplica el ajuste por redondeo igual que el resto de conceptos, por si acaso.
+        $reglas = $this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'activos_fijos_depreciacion');
+        return $this->aplicarAjusteRedondeo($detalles, $reglas, 'la depreciación de activos fijos');
+    }
+
+    /**
      * Distribución dinámica para Compras, Liquidaciones, Notas de Crédito, etc.
      */
     private function armarDistribucionDinamica(array $reglas, array $data): array

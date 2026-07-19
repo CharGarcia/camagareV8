@@ -77,6 +77,64 @@ class ConsignacionVentaRepository extends BaseRepository
         return ['total' => $total, 'rows' => $rows];
     }
 
+    /**
+     * Consignaciones en estado 'Emitida' (pendientes de entrega) para el módulo Entregas
+     * de la app móvil. $idsResponsables: si viene no-null, filtra a esos responsables de
+     * traslado (repartidor sin "acceso total"); null = ve todas (acceso total).
+     */
+    public function getPendientesEntrega(int $idEmpresa, ?array $idsResponsables, string $buscar, int $page, int $perPage): array
+    {
+        $params = [':e' => $idEmpresa];
+        $where = "WHERE cv.id_empresa = :e AND cv.eliminado = false AND cv.estado = 'Emitida'";
+
+        if ($idsResponsables !== null) {
+            if (empty($idsResponsables)) {
+                return ['total' => 0, 'rows' => []];
+            }
+            $marcadores = [];
+            foreach (array_values($idsResponsables) as $i => $idResp) {
+                $clave = ":r{$i}";
+                $marcadores[] = $clave;
+                $params[$clave] = $idResp;
+            }
+            $where .= " AND cv.id_responsable_traslado IN (" . implode(',', $marcadores) . ")";
+        }
+
+        if ($buscar !== '') {
+            $where .= " AND (cv.secuencial ILIKE :b OR c.nombre ILIKE :b OR c.identificacion ILIKE :b)";
+            $params[':b'] = "%$buscar%";
+        }
+
+        $sqlCount = "SELECT COUNT(*) FROM consignaciones_ventas cv
+                     INNER JOIN clientes c ON c.id = cv.id_cliente
+                     $where";
+        $stCount = $this->db->prepare($sqlCount);
+        $stCount->execute($params);
+        $total = (int) $stCount->fetchColumn();
+
+        $limitClause = '';
+        if ($perPage > 0) {
+            $offset = ($page - 1) * $perPage;
+            $limitClause = "LIMIT $perPage OFFSET $offset";
+        }
+
+        $sql = "SELECT cv.id, cv.serie, cv.secuencial, cv.fecha_emision, cv.fecha_entrega,
+                       cv.hora_entrega_desde, cv.hora_entrega_hasta, cv.punto_partida, cv.punto_llegada,
+                       cv.total, cv.estado,
+                       c.nombre AS cliente_nombre, c.direccion AS cliente_direccion, c.identificacion AS cliente_identificacion,
+                       rt.nombre AS responsable_traslado_nombre
+                FROM consignaciones_ventas cv
+                INNER JOIN clientes c ON c.id = cv.id_cliente
+                LEFT JOIN responsables_traslado rt ON rt.id = cv.id_responsable_traslado
+                $where
+                ORDER BY cv.fecha_entrega ASC NULLS LAST, cv.id DESC
+                $limitClause";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+
+        return ['total' => $total, 'rows' => $st->fetchAll(PDO::FETCH_ASSOC)];
+    }
+
     public function getDetalles(int $idConsignacion, int $idEmpresa): array
     {
         $sql = "
@@ -118,6 +176,18 @@ class ConsignacionVentaRepository extends BaseRepository
                  WHERE id = :id AND id_empresa = :e";
         $st = $this->db->prepare($sql);
         $st->execute([':est' => $estado, ':u' => $idUsuario, ':id' => $id, ':e' => $idEmpresa]);
+    }
+
+    public function updateEntregaConfirmada(int $id, int $idEmpresa, ?int $idEntrega): void
+    {
+        $sql = "UPDATE consignaciones_ventas
+                   SET id_entrega_confirmada = :en, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :id AND id_empresa = :e";
+        $st = $this->db->prepare($sql);
+        $st->bindValue(':en', $idEntrega, $idEntrega === null ? \PDO::PARAM_NULL : \PDO::PARAM_INT);
+        $st->bindValue(':id', $id, \PDO::PARAM_INT);
+        $st->bindValue(':e', $idEmpresa, \PDO::PARAM_INT);
+        $st->execute();
     }
 
     public function updateAsientoContable(int $id, int $idEmpresa, ?int $idAsiento): void

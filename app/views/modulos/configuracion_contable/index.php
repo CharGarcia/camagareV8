@@ -93,6 +93,8 @@ $base = BASE_URL;
                     <option value="cobros_pagos">Cobros y Pagos</option>
                     <option value="nomina">Nómina</option>
                     <option value="cierre_ejercicio">Cierre del Ejercicio (Saldo de resultados a patrimonio)</option>
+                    <option value="activos_fijos_alta">Activos Fijos - Alta (Contrapartida)</option>
+                    <option value="activos_fijos_depreciacion">Activos Fijos - Depreciación (Ajuste por redondeo)</option>
                 </select>
             </div>
             <div class="col-md-6 col-lg-3">

@@ -10,6 +10,7 @@
 
 $base = BASE_URL;
 $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
+$urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 ?>
 <!-- Estado de la generación de asientos pendientes (se completa en segundo plano vía JS) -->
 <div id="ef-sync-status" class="alert alert-info d-flex align-items-center shadow-sm mb-3" role="alert">
@@ -17,6 +18,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
     <span>Verificando y generando asientos contables pendientes, espere un momento…</span>
 </div>
 <div id="ef-warnings"></div>
+<div id="ef-depreciacion-warning"></div>
 
 <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-header bg-white border-bottom-0 pt-4 pb-2 px-4 d-flex justify-content-between align-items-center">
@@ -193,6 +195,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
 <script>
     let tipoReporteActivo = 'situacion';
     const urlBase = '<?= $urlBaseReporte ?>';
+    const urlBaseActivosFijos = '<?= $urlBaseActivosFijos ?>';
 
     // ── Generación de asientos pendientes en segundo plano ──────────────────────────
     // La página ya cargó; disparamos la sincronización sin bloquearla y mostramos el
@@ -248,6 +251,34 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
                 box.querySelector('span').textContent =
                     'No se pudo completar la generación de asientos. Recargue la página para reintentar.';
             });
+    })();
+
+    // ── Aviso de depreciación de activos fijos pendiente ─────────────────────────
+    // Solo informativo (sin botón de acceso directo): revisa el año/mes que el usuario
+    // tiene seleccionado en el reporte y, si hay activos sin depreciar ese período,
+    // lo muestra en #ef-depreciacion-warning. No dispara ninguna generación.
+    (function verificarDepreciacionPendiente() {
+        const box = document.getElementById('ef-depreciacion-warning');
+        if (!box) return;
+
+        const anio = document.getElementById('filtro_anio')?.value;
+        const mes = document.getElementById('filtro_mes')?.value;
+        if (!anio) return;
+
+        const qs = mes && mes !== '0' ? `anio=${anio}&mes=${mes}` : `anio=${anio}`;
+
+        fetch(`${urlBaseActivosFijos}/periodosPendientesAjax?${qs}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.json())
+            .then(json => {
+                if (!json || !json.ok || !Array.isArray(json.data) || !json.data.length) return;
+                const periodos = json.data.map(p => `${p.mes_nombre} ${p.anio}`).join(', ');
+                box.innerHTML =
+                    `<div class="alert alert-warning d-flex align-items-center shadow-sm mb-3" role="alert">
+                        <i class="bi bi-graph-down-arrow me-2"></i>
+                        <span>Falta generar la depreciación de activos fijos de: <strong>${periodos}</strong>.</span>
+                    </div>`;
+            })
+            .catch(() => { /* silencioso: es solo un aviso informativo */ });
     })();
 
     function setTipoReporte(tipo) {

@@ -85,6 +85,19 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
         background: #fff;
         box-shadow: 0 1px 0 #dee2e6;
     }
+
+    .responsables-usuario-scroll {
+        max-height: 280px;
+        overflow-y: auto;
+    }
+
+    .responsables-usuario-scroll thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #fff;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
 </style>
 <div class="usuarios-sistema-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div>
@@ -298,6 +311,9 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
                         <button class="nav-link" id="tab-empresas" data-bs-toggle="tab" data-bs-target="#pane-empresas" type="button" role="tab">Empresas asignadas</button>
                     </li>
                     <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tab-responsables" data-bs-toggle="tab" data-bs-target="#pane-responsables" type="button" role="tab">Responsables de traslado</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
                         <button class="nav-link" id="tab-restablecer" data-bs-toggle="tab" data-bs-target="#pane-restablecer" type="button" role="tab">Restablecer contraseña</button>
                     </li>
                 </ul>
@@ -371,6 +387,44 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
                                     </tr>
                                 </thead>
                                 <tbody id="tbody-empresas-usuario"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="pane-responsables" role="tabpanel">
+                        <p class="text-muted small mb-2">
+                            Solo aplica a usuarios que hacen entregas desde la app móvil sin "Acceso total" en el módulo Entregas:
+                            verán únicamente las consignaciones de los responsables de traslado vinculados aquí.
+                        </p>
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-5">
+                                <label class="form-label small">Empresa</label>
+                                <select id="select-empresa-responsable" class="form-select form-select-sm">
+                                    <option value="">Cargando...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label small">Agregar responsable</label>
+                                <select id="select-responsable-traslado" class="form-select form-select-sm" disabled>
+                                    <option value="">Seleccione una empresa primero...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button type="button" class="btn btn-sm btn-primary w-100" id="btn-agregar-responsable" disabled>
+                                    <i class="bi bi-plus"></i> Agregar
+                                </button>
+                            </div>
+                        </div>
+                        <div id="msg-responsables" class="form-text mb-2"></div>
+                        <div class="responsables-usuario-scroll">
+                            <table class="table table-sm mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Responsable de traslado</th>
+                                        <th>Identificación</th>
+                                        <th class="text-end">Quitar</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-responsables-usuario"></tbody>
                             </table>
                         </div>
                     </div>
@@ -462,6 +516,7 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
             document.getElementById('tab-general').click();
             cargarEmpresas();
             cargarEmpresasDisponibles();
+            cargarEmpresasParaResponsables();
             new bootstrap.Modal(modal).show();
         }
 
@@ -602,6 +657,179 @@ function thSortUsuarios($urlBase, $col, $label, $ordenCol, $ordenDir, $buscar, $
             f.appendChild(i4);
             document.body.appendChild(f);
             f.submit();
+        });
+
+        // --- Responsables de traslado vinculados (para el módulo Entregas de la app móvil) ---
+        var selectEmpresaResp = document.getElementById('select-empresa-responsable');
+        var selectResponsable = document.getElementById('select-responsable-traslado');
+        var btnAgregarResp = document.getElementById('btn-agregar-responsable');
+        var tbodyResp = document.getElementById('tbody-responsables-usuario');
+        var msgResp = document.getElementById('msg-responsables');
+
+        function cargarEmpresasParaResponsables() {
+            selectEmpresaResp.innerHTML = '<option value="">Cargando...</option>';
+            selectResponsable.innerHTML = '<option value="">Seleccione una empresa primero...</option>';
+            selectResponsable.disabled = true;
+            btnAgregarResp.disabled = true;
+            tbodyResp.innerHTML = '';
+            msgResp.textContent = '';
+            fetch(base + '/config/usuario-responsables-traslado?action=empresasUsuario&id=' + idUsuario)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var empresas = data.empresas || [];
+                    if (empresas.length === 0) {
+                        selectEmpresaResp.innerHTML = '<option value="">Sin empresas asignadas</option>';
+                        return;
+                    }
+                    selectEmpresaResp.innerHTML = '<option value="">Seleccione empresa...</option>';
+                    empresas.forEach(function(e) {
+                        var o = document.createElement('option');
+                        o.value = e.id_empresa;
+                        o.textContent = e.nombre_comercial || '';
+                        selectEmpresaResp.appendChild(o);
+                    });
+                    if (empresas.length === 1) {
+                        selectEmpresaResp.value = empresas[0].id_empresa;
+                        onEmpresaResponsableChange();
+                    }
+                })
+                .catch(function() {
+                    selectEmpresaResp.innerHTML = '<option value="">Error</option>';
+                });
+        }
+
+        function onEmpresaResponsableChange() {
+            var idEmp = selectEmpresaResp.value;
+            if (!idEmp) {
+                selectResponsable.innerHTML = '<option value="">Seleccione una empresa primero...</option>';
+                selectResponsable.disabled = true;
+                btnAgregarResp.disabled = true;
+                tbodyResp.innerHTML = '';
+                return;
+            }
+            selectResponsable.disabled = false;
+            btnAgregarResp.disabled = false;
+            cargarResponsablesVinculados(idEmp);
+            cargarResponsablesDisponibles(idEmp);
+        }
+
+        function cargarResponsablesVinculados(idEmp) {
+            tbodyResp.innerHTML = '<tr><td colspan="3" class="text-center">Cargando...</td></tr>';
+            fetch(base + '/config/usuario-responsables-traslado?action=listar&id_usuario=' + idUsuario + '&id_empresa=' + idEmp)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var rows = data.rows || [];
+                    if (rows.length === 0) {
+                        tbodyResp.innerHTML = '<tr><td colspan="3" class="text-muted">Sin responsables vinculados</td></tr>';
+                        return;
+                    }
+                    tbodyResp.innerHTML = '';
+                    rows.forEach(function(r) {
+                        var tr = document.createElement('tr');
+                        var tdNombre = document.createElement('td');
+                        tdNombre.textContent = r.nombre || '';
+                        var tdIdent = document.createElement('td');
+                        tdIdent.textContent = r.identificacion || '';
+                        var tdQuitar = document.createElement('td');
+                        tdQuitar.className = 'text-end';
+                        var btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'btn btn-sm btn-outline-danger btn-quitar-responsable';
+                        btn.title = 'Quitar';
+                        btn.dataset.id = r.id;
+                        btn.innerHTML = '<i class="bi bi-trash"></i>';
+                        tdQuitar.appendChild(btn);
+                        tr.appendChild(tdNombre);
+                        tr.appendChild(tdIdent);
+                        tr.appendChild(tdQuitar);
+                        tbodyResp.appendChild(tr);
+                    });
+                    tbodyResp.querySelectorAll('.btn-quitar-responsable').forEach(function(b) {
+                        b.addEventListener('click', function() {
+                            if (!confirm('¿Quitar este responsable de traslado?')) return;
+                            var idReg = this.dataset.id;
+                            var idEmpActual = selectEmpresaResp.value;
+                            msgResp.textContent = 'Quitando...';
+                            msgResp.className = 'form-text mb-2';
+                            var fd = new FormData();
+                            fd.append('id', idReg);
+                            fd.append('id_empresa', idEmpActual);
+                            fetch(base + '/config/usuario-responsables-traslado?action=desvincular', {
+                                    method: 'POST',
+                                    body: fd,
+                                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                                })
+                                .then(function(r) { return r.json(); })
+                                .then(function(res) {
+                                    msgResp.textContent = res.msg || '';
+                                    msgResp.className = 'form-text mb-2 ' + (res.ok ? 'text-success' : 'text-danger');
+                                    if (res.ok) {
+                                        cargarResponsablesVinculados(idEmpActual);
+                                        cargarResponsablesDisponibles(idEmpActual);
+                                    }
+                                })
+                                .catch(function() {
+                                    msgResp.textContent = 'Error de conexión.';
+                                    msgResp.className = 'form-text mb-2 text-danger';
+                                });
+                        });
+                    });
+                })
+                .catch(function() {
+                    tbodyResp.innerHTML = '<tr><td colspan="3" class="text-danger">Error al cargar</td></tr>';
+                });
+        }
+
+        function cargarResponsablesDisponibles(idEmp) {
+            selectResponsable.innerHTML = '<option value="">Cargando...</option>';
+            fetch(base + '/config/usuario-responsables-traslado?action=disponibles&id_usuario=' + idUsuario + '&id_empresa=' + idEmp)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var responsables = data.responsables || [];
+                    selectResponsable.innerHTML = '<option value="">Seleccione responsable...</option>';
+                    responsables.forEach(function(r) {
+                        var o = document.createElement('option');
+                        o.value = r.id;
+                        o.textContent = r.nombre + (r.identificacion ? ' (' + r.identificacion + ')' : '');
+                        selectResponsable.appendChild(o);
+                    });
+                })
+                .catch(function() {
+                    selectResponsable.innerHTML = '<option value="">Error</option>';
+                });
+        }
+
+        selectEmpresaResp.addEventListener('change', onEmpresaResponsableChange);
+
+        btnAgregarResp.addEventListener('click', function() {
+            var idEmp = selectEmpresaResp.value;
+            var idResp = selectResponsable.value;
+            if (!idEmp) { alert('Seleccione una empresa'); return; }
+            if (!idResp) { alert('Seleccione un responsable'); return; }
+            msgResp.textContent = 'Agregando...';
+            msgResp.className = 'form-text mb-2';
+            var fd = new FormData();
+            fd.append('id_usuario', idUsuario);
+            fd.append('id_empresa', idEmp);
+            fd.append('id_responsable_traslado', idResp);
+            fetch(base + '/config/usuario-responsables-traslado?action=vincular', {
+                    method: 'POST',
+                    body: fd,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(res) {
+                    msgResp.textContent = res.msg || '';
+                    msgResp.className = 'form-text mb-2 ' + (res.ok ? 'text-success' : 'text-danger');
+                    if (res.ok) {
+                        cargarResponsablesVinculados(idEmp);
+                        cargarResponsablesDisponibles(idEmp);
+                    }
+                })
+                .catch(function() {
+                    msgResp.textContent = 'Error de conexión.';
+                    msgResp.className = 'form-text mb-2 text-danger';
+                });
         });
 
         document.getElementById('edit-mail').addEventListener('input', actualizarCorreoRestablecer);

@@ -169,6 +169,15 @@ return [
         'legacy_rutas' => [],
     ],
 
+    'modulos/activos-fijos' => [
+        'id_submodulo' => 0, // Actualizar con el id real tras insertar el submódulo en submodulos_menu
+        'legacy_rutas' => [],
+    ],
+    'modulos/activos-fijos-categorias' => [
+        'id_submodulo' => 0, // Actualizar con el id real tras insertar el submódulo en submodulos_menu
+        'legacy_rutas' => [],
+    ],
+
     // Pendientes de implementación (agregar cuando se cree el controlador):
     'modulos/vendedores' => ['id_submodulo' => 151, 'legacy_rutas' => []],
     'modulos/productos'  => ['id_submodulo' => 152, 'legacy_rutas' => []],
@@ -290,6 +299,14 @@ return [
     ],
     'modulos/control-bancario' => [
         'id_submodulo' => 0, // Ajustar con el ID real tras ejecutar database/migrations/20260716_menu_control_bancario.sql
+        'legacy_rutas' => [],
+    ],
+    // Flujo de Caja: histórico real (consolidado de Control Bancario) + proyección
+    // con CXC/CXP por vencer, roles de pago programados y cheques posfechados.
+    // Registrar el submódulo en submodulos_menu (ruta = 'modulos/flujo-caja') y
+    // actualizar este id_submodulo con el id real. Asignar permisos en /config/permisos-modulos.
+    'modulos/flujo-caja' => [
+        'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],
     // Conciliación de Cobros Bancarios: importa el extracto del banco (Excel/PDF),

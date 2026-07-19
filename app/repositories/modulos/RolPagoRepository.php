@@ -160,6 +160,25 @@ class RolPagoRepository extends BaseRepository
         return $st->execute([':u' => $idUsuario, ':id' => $id, ':emp' => $idEmpresa]);
     }
 
+    /**
+     * Corridas de rol NO pagadas aún (borrador/generado) con fecha_pago dentro del
+     * rango: egresos de nómina futuros ya conocidos, para el Flujo de Caja proyectado.
+     */
+    public function getRolesProgramados(int $idEmpresa, string $desde, string $hasta): array
+    {
+        $sql = "SELECT id, tipo_rol, fecha_pago, descripcion, total_neto
+                FROM {$this->table}
+                WHERE id_empresa = :id_empresa AND eliminado = false
+                  AND estado IN ('borrador', 'generado')
+                  AND fecha_pago IS NOT NULL
+                  AND fecha_pago BETWEEN :desde AND :hasta
+                  AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                ORDER BY fecha_pago ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':desde' => $desde, ':hasta' => $hasta]);
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
     // ─── Detalle ─────────────────────────────────────────────────────────────
     public function borrarDetalle(int $idRol): void
     {

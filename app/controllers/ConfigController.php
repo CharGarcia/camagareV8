@@ -77,6 +77,23 @@ class ConfigController extends Controller
 
     public function moduloStoreModulo(): void { (new ModuloController())->storeModulo(); }
     public function moduloUpdateModulo(): void { (new ModuloController())->updateModulo(); }
+
+    public function usuarioResponsablesTraslado(): void
+    {
+        $sub = $_GET['action'] ?? $_POST['action'] ?? 'listar';
+        $c = new UsuarioResponsableTrasladoController();
+        $method = match ($sub) {
+            'empresasUsuario' => 'empresasUsuarioJson',
+            'listar' => 'listarJson',
+            'disponibles' => 'disponiblesJson',
+            'vincular' => 'vincular',
+            'desvincular' => 'desvincular',
+            default => 'listarJson',
+        };
+        if (method_exists($c, $method)) {
+            $c->$method();
+        }
+    }
     public function moduloDeleteModulo(): void { (new ModuloController())->deleteModulo(); }
     public function moduloStoreSubmodulo(): void { (new ModuloController())->storeSubmodulo(); }
     public function moduloUpdateSubmodulo(): void { (new ModuloController())->updateSubmodulo(); }
