@@ -426,7 +426,7 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                 <a class="cmg-suscripcion-wrap d-none" href="<?= $base ?>/modulos/empresa">
                     <i class="bi bi-shield-exclamation text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-suscripcion-badge">0</span>
-                    <small>Suscrip.</small>
+                    <small>Mi susc.</small>
                 </a>
                 <a class="cmg-suscgest-wrap d-none" href="<?= $base ?>/modulos/suscripciones">
                     <i class="bi bi-arrow-repeat text-danger"></i>
@@ -693,8 +693,8 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                         else { b.classList.add('bg-warning', 'text-dark'); }
                     });
                     const titulo = vencida
-                        ? 'Suscripción del sistema VENCIDA — clic para ver el detalle'
-                        : ('Suscripción por vencer en ' + dias + (dias === 1 ? ' día' : ' días') + ' — clic para ver el detalle');
+                        ? 'La suscripción DE ESTA EMPRESA está VENCIDA — clic para ver el detalle'
+                        : ('La suscripción DE ESTA EMPRESA vence en ' + dias + (dias === 1 ? ' día' : ' días') + ' — clic para ver el detalle');
                     suscWraps.forEach(function(w) { w.classList.remove('d-none'); w.setAttribute('title', titulo); });
                 } else {
                     suscWraps.forEach(function(w) { w.classList.add('d-none'); });
@@ -713,7 +713,7 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                         if (sgV > 0) { b.classList.add('bg-danger', 'text-white'); }
                         else { b.classList.add('bg-warning', 'text-dark'); }
                     });
-                    const sgTit = sgV + ' vencida' + (sgV === 1 ? '' : 's') + ' · ' + sgP + ' por vencer — clic para ver las suscripciones';
+                    const sgTit = 'Suscripciones DE CLIENTES: ' + sgV + ' vencida' + (sgV === 1 ? '' : 's') + ' · ' + sgP + ' por vencer — clic para gestionarlas';
                     sgWraps.forEach(function(w) { w.classList.remove('d-none'); w.setAttribute('title', sgTit); });
                 } else {
                     sgWraps.forEach(function(w) { w.classList.add('d-none'); });
