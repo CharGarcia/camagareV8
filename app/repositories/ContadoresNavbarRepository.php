@@ -208,6 +208,36 @@ class ContadoresNavbarRepository
     }
 
     /**
+     * Alerta de SUSCRIPCIONES para la empresa ADMINISTRADORA (la que vende/gestiona las
+     * suscripciones de sus clientes: `suscripciones.id_empresa` = empresa activa).
+     *
+     * Cuenta, sobre las suscripciones ACTIVAS, cuántas están vencidas (próximo cobro ya
+     * pasó) y cuántas por vencer (próximo cobro dentro de $dias). Si la empresa activa no
+     * gestiona suscripciones, ambos contadores dan 0 y no se muestra aviso.
+     *
+     * @return array{vencidas:int,por_vencer:int}
+     */
+    public function getAlertaSuscripciones(int $idEmpresa, int $dias): array
+    {
+        $sql = "SELECT
+                  COUNT(*) FILTER (WHERE s.proximo_cobro <  CURRENT_DATE) AS vencidas,
+                  COUNT(*) FILTER (WHERE s.proximo_cobro >= CURRENT_DATE
+                                     AND s.proximo_cobro <= CURRENT_DATE + CAST(:dias AS INTEGER)) AS por_vencer
+                FROM suscripciones s
+                WHERE s.id_empresa = :e
+                  AND s.eliminado = false
+                  AND s.estado = 'activo'
+                  AND s.proximo_cobro IS NOT NULL";
+        $st = $this->db->prepare($sql);
+        $st->execute([':e' => $idEmpresa, ':dias' => $dias]);
+        $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+        return [
+            'vencidas'   => (int) ($row['vencidas'] ?? 0),
+            'por_vencer' => (int) ($row['por_vencer'] ?? 0),
+        ];
+    }
+
+    /**
      * Estado de la FIRMA ELECTRÓNICA vigente (es_activo) de la empresa activa.
      *
      * Usa la misma firma que el sistema emplea para firmar (empresa_firma con

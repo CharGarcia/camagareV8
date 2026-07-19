@@ -64,6 +64,12 @@ class ContadoresNavbarService
     /** Umbral en días para avisar que la firma electrónica está por caducar (incluye caducadas). */
     private const UMBRAL_FIRMA_DIAS = 5;
 
+    /** Ruta MVC del módulo de suscripciones (aviso para la empresa ADMINISTRADORA). */
+    public const RUTA_SUSCRIPCIONES = 'modulos/suscripciones';
+
+    /** Ventana en días para "suscripciones por vencer" (cobros próximos de los clientes). */
+    private const DIAS_SUSCRIPCIONES_POR_VENCER = 7;
+
     /**
      * Umbral de aviso ESCALADO según la periodicidad de la suscripción.
      * Evita que una suscripción mensual mantenga el badge encendido todo el mes
@@ -167,6 +173,12 @@ class ContadoresNavbarService
         } catch (\Throwable $e) {
             $datos['__vigencia'] = null;
         }
+        // Suscripciones que gestiona la empresa activa como ADMINISTRADORA (0/0 si no gestiona).
+        try {
+            $datos['__suscripciones'] = $this->repo->getAlertaSuscripciones($idEmpresa, self::DIAS_SUSCRIPCIONES_POR_VENCER);
+        } catch (\Throwable $e) {
+            $datos['__suscripciones'] = null;
+        }
         // Estado de la firma electrónica (['sin_firma'=>true] | ['dias'=>int] | null).
         try {
             $datos['__firma'] = $this->repo->getEstadoFirma($idEmpresa);
@@ -232,7 +244,7 @@ class ContadoresNavbarService
         $rutas = array_unique(array_merge(
             array_values(self::RUTAS_MODULO),
             array_values(self::NOVEDAD_RUTAS),
-            [self::RUTA_EMPRESA]
+            [self::RUTA_EMPRESA, self::RUTA_SUSCRIPCIONES]
         ));
         $perms = [];
         foreach ($rutas as $ruta) {
@@ -289,6 +301,23 @@ class ContadoresNavbarService
                             'dias'   => $dias,
                             'estado' => $dias < 0 ? 'vencida' : 'por_vencer',
                         ];
+                    }
+                }
+
+                // Suscripciones que la empresa activa gestiona como ADMINISTRADORA:
+                // avisar si hay de sus clientes vencidas o por vencer.
+                if (!empty($permRuta[self::RUTA_SUSCRIPCIONES])) {
+                    $sus = $empresa['__suscripciones'] ?? null;
+                    if (is_array($sus)) {
+                        $sVenc = (int) ($sus['vencidas'] ?? 0);
+                        $sProx = (int) ($sus['por_vencer'] ?? 0);
+                        if ($sVenc > 0 || $sProx > 0) {
+                            $out['suscripciones_gestion'] = [
+                                'vencidas'   => $sVenc,
+                                'por_vencer' => $sProx,
+                                'total'      => $sVenc + $sProx,
+                            ];
+                        }
                     }
                 }
 

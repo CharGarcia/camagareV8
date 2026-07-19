@@ -292,6 +292,12 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-suscripcion-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
             </a>
 
+            <!-- Suscripciones de clientes por vencer / vencidas (empresa administradora) -->
+            <a href="<?= $base ?>/modulos/suscripciones" class="text-white text-decoration-none position-relative me-2 d-none cmg-suscgest-wrap" title="Suscripciones">
+                <i class="bi bi-arrow-repeat" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark cmg-suscgest-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
+
             <!-- Firma electrónica por caducar / caducada (empresa activa) -->
             <a href="<?= $base ?>/modulos/empresa" class="text-white text-decoration-none position-relative me-2 d-none cmg-firma-wrap" title="Firma electrónica">
                 <i class="bi bi-file-earmark-lock-fill" style="font-size: 1.1rem;"></i>
@@ -420,6 +426,11 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                 <a class="cmg-suscripcion-wrap d-none" href="<?= $base ?>/modulos/empresa">
                     <i class="bi bi-shield-exclamation text-danger"></i>
                     <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-suscripcion-badge">0</span>
+                    <small>Suscrip.</small>
+                </a>
+                <a class="cmg-suscgest-wrap d-none" href="<?= $base ?>/modulos/suscripciones">
+                    <i class="bi bi-arrow-repeat text-danger"></i>
+                    <span class="position-absolute badge rounded-pill bg-warning text-dark cmg-suscgest-badge">0</span>
                     <small>Suscrip.</small>
                 </a>
                 <a class="cmg-firma-wrap d-none" href="<?= $base ?>/modulos/empresa">
@@ -687,6 +698,25 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                     suscWraps.forEach(function(w) { w.classList.remove('d-none'); w.setAttribute('title', titulo); });
                 } else {
                     suscWraps.forEach(function(w) { w.classList.add('d-none'); });
+                }
+
+                // Suscripciones de clientes (empresa administradora): vencidas / por vencer
+                const sg = c.suscripciones_gestion || null;
+                const sgWraps = document.querySelectorAll('.cmg-suscgest-wrap');
+                if (sg) {
+                    const sgV = parseInt(sg.vencidas || 0, 10);
+                    const sgP = parseInt(sg.por_vencer || 0, 10);
+                    const sgT = parseInt(sg.total || (sgV + sgP), 10);
+                    document.querySelectorAll('.cmg-suscgest-badge').forEach(function(b) {
+                        b.textContent = sgT > 99 ? '99+' : sgT;
+                        b.classList.remove('bg-warning', 'text-dark', 'bg-danger', 'text-white');
+                        if (sgV > 0) { b.classList.add('bg-danger', 'text-white'); }
+                        else { b.classList.add('bg-warning', 'text-dark'); }
+                    });
+                    const sgTit = sgV + ' vencida' + (sgV === 1 ? '' : 's') + ' · ' + sgP + ' por vencer — clic para ver las suscripciones';
+                    sgWraps.forEach(function(w) { w.classList.remove('d-none'); w.setAttribute('title', sgTit); });
+                } else {
+                    sgWraps.forEach(function(w) { w.classList.add('d-none'); });
                 }
 
                 // Firma electrónica (empresa activa): sin firma / por caducar / caducada
