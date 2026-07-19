@@ -178,6 +178,11 @@ return [
         'legacy_rutas' => [],
     ],
 
+    'modulos/indices-financieros' => [
+        'id_submodulo' => 0, // Actualizar con el id real tras insertar el submódulo en submodulos_menu
+        'legacy_rutas' => [],
+    ],
+
     // Pendientes de implementación (agregar cuando se cree el controlador):
     'modulos/vendedores' => ['id_submodulo' => 151, 'legacy_rutas' => []],
     'modulos/productos'  => ['id_submodulo' => 152, 'legacy_rutas' => []],

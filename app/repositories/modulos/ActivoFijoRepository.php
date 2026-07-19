@@ -94,6 +94,18 @@ class ActivoFijoRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /**
+     * Suma del valor en libros de todos los activos de la empresa (activo fijo neto),
+     * usado por el módulo de Índices Financieros (fuente ACTIVO_FIJO_NETO).
+     */
+    public function getValorNetoAgregado(int $idEmpresa): float
+    {
+        return (float) $this->query(
+            "SELECT COALESCE(SUM(valor_en_libros), 0) FROM activos_fijos WHERE id_empresa = :id_empresa AND eliminado = false",
+            [':id_empresa' => $idEmpresa]
+        )->fetchColumn();
+    }
+
     public function compraDetalleVinculado(int $idCompraDetalle): bool
     {
         return (bool) $this->query(

@@ -106,7 +106,9 @@
         document.getElementById('cc-mapeo-excel').style.display = esPdf ? 'none' : '';
         document.getElementById('cc-mapeo-pdf').style.display = esPdf ? '' : 'none';
         document.getElementById('cc-fila-inicio-wrap').style.display = esPdf ? 'none' : '';
+        document.getElementById('cc-btn-sugerir-regex').style.display = esPdf ? '' : 'none';
         document.getElementById('cc-preview-resultado').style.display = 'none';
+        document.getElementById('cc-sugerencia-msg').style.display = 'none';
     };
 
     CC.cargarPerfilExistente = function (id) {
@@ -172,6 +174,52 @@
             box.textContent = (json.data.lineas || [])
                 .map((fila, i) => `Fila ${i}: ` + fila.map((v, c) => `[${c}]${v}`).join('  '))
                 .join('\n');
+        }
+    };
+
+    CC.sugerirRegexPdf = async function () {
+        const archivo = document.getElementById('cc-perfil-muestra').files[0];
+        if (!archivo) {
+            alertError('Falta el archivo', 'Selecciona primero un archivo de muestra (PDF).');
+            return;
+        }
+
+        const btn = document.getElementById('cc-btn-sugerir-regex');
+        const msg = document.getElementById('cc-sugerencia-msg');
+        btn.disabled = true;
+        msg.style.display = '';
+        msg.className = 'alert alert-info small py-2 mb-3';
+        msg.textContent = 'Analizando el PDF…';
+
+        try {
+            const fd = new FormData();
+            fd.append('archivo', archivo);
+
+            const json = await postForm(`${CC_URL_BASE}/sugerirRegexPdfAjax`, fd);
+            if (!json.ok) {
+                msg.className = 'alert alert-danger small py-2 mb-3';
+                msg.textContent = 'No se pudo analizar el archivo: ' + json.error;
+                return;
+            }
+
+            const s = json.data;
+            if (!s.regex_linea) {
+                msg.className = 'alert alert-warning small py-2 mb-3';
+                msg.textContent = s.mensaje;
+                return;
+            }
+
+            document.getElementById('cc-map-regex-linea').value = s.regex_linea;
+            document.getElementById('cc-perfil-formato-fecha').value = s.formato_fecha;
+            document.getElementById('cc-perfil-separador').value = s.separador_decimal;
+
+            msg.className = 'alert alert-success small py-2 mb-3';
+            msg.textContent = s.mensaje;
+
+            // Muestra de una vez el resultado con el patrón propuesto (sin "Valor es crédito" — hay que revisarlo a mano).
+            await CC.previsualizarMuestra();
+        } finally {
+            btn.disabled = false;
         }
     };
 

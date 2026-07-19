@@ -228,9 +228,13 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                             <button type="button" class="btn btn-outline-secondary btn-sm text-nowrap" onclick="CC.previsualizarMuestra()">
                                 <i class="bi bi-eye me-1"></i> Ver / Probar
                             </button>
+                            <button type="button" class="btn btn-outline-primary btn-sm text-nowrap" id="cc-btn-sugerir-regex" style="display:none;" onclick="CC.sugerirRegexPdf()">
+                                <i class="bi bi-magic me-1"></i> Sugerir patrón
+                            </button>
                         </div>
                     </div>
                     <div class="cc-preview-box mb-3" id="cc-preview-box">— Sin previsualización aún —</div>
+                    <div class="alert alert-info small py-2 mb-3" id="cc-sugerencia-msg" style="display:none;"></div>
                     <div id="cc-preview-resultado" class="mb-3" style="display:none;">
                         <h6 class="fw-bold small text-uppercase text-muted">Resultado de aplicar el mapeo actual</h6>
                         <div class="table-responsive" style="max-height:220px; overflow:auto;">

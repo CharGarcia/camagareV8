@@ -86,6 +86,13 @@ class ConciliacionCobrosService
         return $this->importService->previsualizar($rutaTemporal, $tipoArchivo, $filaInicio, 60, $regexPrueba, $tipoCreditoPrueba);
     }
 
+    /** Analiza un PDF de muestra y propone un patrón (regex) de línea de datos (ver ConciliacionImportService::sugerirRegexPdf). */
+    public function sugerirRegexPdf(array $file): array
+    {
+        $rutaTemporal = $this->validarYObtenerTmp($file, 'PDF');
+        return $this->importService->sugerirRegexPdf($rutaTemporal);
+    }
+
     public function guardarPerfil(int $idEmpresa, int $idUsuario, array $data): array
     {
         $data['tipo_archivo'] = strtoupper((string) ($data['tipo_archivo'] ?? ''));

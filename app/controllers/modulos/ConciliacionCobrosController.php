@@ -89,6 +89,21 @@ class ConciliacionCobrosController extends BaseModuloController
         exit;
     }
 
+    /** Analiza el PDF de muestra y propone un patrón (regex) de línea de datos para el perfil. */
+    public function sugerirRegexPdfAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        try {
+            $sugerencia = $this->service->sugerirRegexPdf($_FILES['archivo'] ?? []);
+            echo json_encode(['ok' => true, 'data' => $sugerencia]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function guardarPerfilAjax(): void
     {
         $this->requireCrear();

@@ -83,6 +83,198 @@ class ConciliacionImportService
         return ['lineas' => array_slice($this->extraerFilasExcel($rutaArchivo, $filaInicio), 0, $limite), 'filas_probadas' => null];
     }
 
+    /**
+     * Analiza un PDF de muestra y propone un patrón (regex) de línea de datos, sin que el
+     * usuario tenga que escribirlo a mano. Es "mejor esfuerzo": busca qué formato de fecha
+     * aparece de forma consistente, clasifica los tokens que vienen después de la fecha en
+     * cada línea (número → posible documento, una letra → posible tipo, formato de dinero →
+     * monto/saldo, el resto → texto libre a saltar), encuentra la estructura que más se repite
+     * y arma el regex con eso. Al final valida el patrón candidato contra el archivo real
+     * (mismo algoritmo de producción) para reportar cuántas líneas reconoció.
+     *
+     * @return array{regex_linea: ?string, formato_fecha: ?string, separador_decimal: ?string, confianza: int, total_lineas_leidas: int, mensaje: string}
+     */
+    public function sugerirRegexPdf(string $rutaArchivo): array
+    {
+        $lineas = $this->extraerLineasPdf($rutaArchivo);
+        if (empty($lineas)) {
+            return $this->sugerenciaVacia(0, 'El PDF no tiene texto extraíble (¿es un escaneo/imagen? en ese caso no se puede detectar nada automáticamente).');
+        }
+
+        $patronesFecha = [
+            'd/m/Y' => '/\d{2}\/\d{2}\/\d{4}/',
+            'Y-m-d' => '/\d{4}-\d{2}-\d{2}/',
+            'd-m-Y' => '/\d{2}-\d{2}-\d{4}/',
+        ];
+
+        $mejorFormato = null;
+        $mejorConteo = 0;
+        $mejorRegexFecha = null;
+        foreach ($patronesFecha as $formato => $regexFecha) {
+            $conteo = 0;
+            foreach ($lineas as $linea) {
+                if (preg_match($regexFecha, $linea) === 1) {
+                    $conteo++;
+                }
+            }
+            if ($conteo > $mejorConteo) {
+                $mejorConteo = $conteo;
+                $mejorFormato = $formato;
+                $mejorRegexFecha = $regexFecha;
+            }
+        }
+
+        if ($mejorConteo < 3 || $mejorRegexFecha === null) {
+            return $this->sugerenciaVacia(count($lineas), 'No se detectó un patrón de fecha consistente en el PDF; arma el patrón manualmente.');
+        }
+
+        // Clasifica, en cada línea con fecha, los tokens que vienen DESPUÉS de la fecha.
+        $lineasClasificadas = [];
+        foreach ($lineas as $linea) {
+            if (preg_match($mejorRegexFecha, $linea, $m, PREG_OFFSET_CAPTURE) !== 1) {
+                continue;
+            }
+            $finFecha = $m[0][1] + strlen($m[0][0]);
+            $cola = trim(mb_substr($linea, $finFecha));
+            if ($cola === '') {
+                continue;
+            }
+            [$firma, $clases] = $this->clasificarTokens(preg_split('/\s+/', $cola));
+            $lineasClasificadas[] = ['clases' => $clases, 'firma' => $firma];
+        }
+
+        if (empty($lineasClasificadas)) {
+            return $this->sugerenciaVacia(count($lineas), 'No se pudo analizar la estructura de las líneas con fecha.');
+        }
+
+        // Estructura (firma) que más se repite entre las líneas de datos.
+        $conteoFirmas = array_count_values(array_column($lineasClasificadas, 'firma'));
+        arsort($conteoFirmas);
+        $firmaGanadora = array_key_first($conteoFirmas);
+        $soporteFirma = $conteoFirmas[$firmaGanadora];
+
+        $ejemplo = null;
+        foreach ($lineasClasificadas as $lc) {
+            if ($lc['firma'] === $firmaGanadora) {
+                $ejemplo = $lc;
+                break;
+            }
+        }
+
+        // Separador decimal dominante, contando los tokens de dinero de TODAS las líneas clasificadas.
+        $conteoDot = 0;
+        $conteoComma = 0;
+        foreach ($lineasClasificadas as $lc) {
+            foreach ($lc['clases'] as $clase) {
+                if ($clase === 'MONEY_DOT') {
+                    $conteoDot++;
+                } elseif ($clase === 'MONEY_COMMA') {
+                    $conteoComma++;
+                }
+            }
+        }
+        $separadorDecimal = $conteoComma > $conteoDot ? ',' : '.';
+        $patronMoney = $separadorDecimal === ',' ? '[\d.]+,\d{2}' : '[\d,]+\.\d{2}';
+
+        // Arma el regex a partir de la estructura ganadora.
+        $piezas = ['(?<fecha>' . trim($mejorRegexFecha, '/') . ')'];
+        $usoDocumento = false;
+        $usoTipo = false;
+        $usoMonto = false;
+        $enTexto = false;
+
+        foreach ($ejemplo['clases'] as $clase) {
+            if ($clase === 'TEXTO') {
+                if (!$enTexto) {
+                    $piezas[] = '[A-Z. ]+?';
+                    $enTexto = true;
+                }
+                continue;
+            }
+            $enTexto = false;
+
+            if ($clase === 'NUM') {
+                $piezas[] = $usoDocumento ? '\d+' : '(?<documento>\d+)';
+                $usoDocumento = true;
+            } elseif ($clase === 'LETRA') {
+                $piezas[] = $usoTipo ? '[A-Z]' : '(?<tipo>[A-Z])';
+                $usoTipo = true;
+            } elseif ($clase === 'MONEY_DOT' || $clase === 'MONEY_COMMA') {
+                $piezas[] = $usoMonto ? $patronMoney : '(?<monto>' . $patronMoney . ')';
+                $usoMonto = true;
+            }
+        }
+
+        if (!$usoMonto) {
+            return $this->sugerenciaVacia(count($lineas), 'Se detectaron fechas, pero ningún valor con formato de monto junto a ellas; arma el patrón manualmente.');
+        }
+
+        $regexSugerido = '/' . implode('\s+', $piezas) . '\s*$/';
+
+        try {
+            $resultado = $this->parsearPdf($rutaArchivo, ['regex_linea' => $regexSugerido], $mejorFormato, $separadorDecimal);
+        } catch (\Throwable $e) {
+            return $this->sugerenciaVacia(count($lineas), 'El patrón candidato no resultó válido: ' . $e->getMessage());
+        }
+
+        return [
+            'regex_linea' => $regexSugerido,
+            'formato_fecha' => $mejorFormato,
+            'separador_decimal' => $separadorDecimal,
+            'confianza' => count($resultado),
+            'total_lineas_leidas' => count($lineas),
+            'mensaje' => sprintf(
+                '%d línea(s) con fecha detectadas, %d con la misma estructura de datos. El patrón propuesto reconoció %d fila(s) — revísalo con "Probar" y ajusta si falta algo (por ejemplo, el campo "Valor es crédito" no se puede adivinar: revisa qué letra corresponde a los depósitos y complétalo tú).',
+                $mejorConteo,
+                $soporteFirma,
+                count($resultado)
+            ),
+        ];
+    }
+
+    /** @return array{0: string, 1: array<int, string>} [firma colapsada para comparar estructuras, clases por token en orden] */
+    private function clasificarTokens(array $tokens): array
+    {
+        $clases = [];
+        foreach ($tokens as $token) {
+            if (preg_match('/^\d{4,}$/', $token) === 1) {
+                $clases[] = 'NUM';
+            } elseif (preg_match('/^[A-Z]$/', $token) === 1) {
+                $clases[] = 'LETRA';
+            } elseif (preg_match('/^[\d,]+\.\d{2}$/', $token) === 1) {
+                $clases[] = 'MONEY_DOT';
+            } elseif (preg_match('/^[\d.]+,\d{2}$/', $token) === 1) {
+                $clases[] = 'MONEY_COMMA';
+            } else {
+                $clases[] = 'TEXTO';
+            }
+        }
+
+        // Para comparar estructuras entre líneas, varias palabras de texto seguidas
+        // (p. ej. "AG." "NORTE") cuentan como un solo bloque de texto.
+        $firmaColapsada = [];
+        foreach ($clases as $clase) {
+            if ($clase === 'TEXTO' && !empty($firmaColapsada) && end($firmaColapsada) === 'TEXTO') {
+                continue;
+            }
+            $firmaColapsada[] = $clase;
+        }
+
+        return [implode(',', $firmaColapsada), $clases];
+    }
+
+    private function sugerenciaVacia(int $totalLineasLeidas, string $mensaje): array
+    {
+        return [
+            'regex_linea' => null,
+            'formato_fecha' => null,
+            'separador_decimal' => null,
+            'confianza' => 0,
+            'total_lineas_leidas' => $totalLineasLeidas,
+            'mensaje' => $mensaje,
+        ];
+    }
+
     // ── Excel / CSV ──────────────────────────────────────────────────────────
 
     /** Cada fila cruda de Excel es un array indexado por posición de columna (0-based). */
