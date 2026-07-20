@@ -68,8 +68,16 @@
 
     function cargarAgentes() {
         fetch(BASE + '/agentesListar')
-            .then((r) => r.json())
+            .then((r) => r.json().catch(() => {
+                throw new Error('El servidor respondió algo que no es JSON (HTTP ' + r.status + ').');
+            }))
             .then((res) => {
+                if (!res.ok) {
+                    console.error('No se pudieron cargar los agentes: ' + (res.error || 'error desconocido'));
+                    const sel = document.getElementById('iaSelectAgente');
+                    if (sel) sel.innerHTML = `<option value="">Error: ${escapeHtml(res.error || 'no se pudo cargar')}</option>`;
+                    return;
+                }
                 agentesCache = res.data || [];
 
                 const sel = document.getElementById('iaSelectAgente');
@@ -84,7 +92,8 @@
                 }
 
                 renderChecksAgentes('iaSubirDocAgentes', []);
-            });
+            })
+            .catch((err) => console.error('Error cargando agentes:', err));
     }
 
     /** Dibuja checkboxes de agentes en `contenedorId`, marcando los ids en `idsSeleccionados`. */
@@ -550,7 +559,9 @@
 
     function cargarPrompts() {
         fetch(BASE + '/promptsListar')
-            .then((r) => r.json())
+            .then((r) => r.json().catch(() => {
+                throw new Error('El servidor respondió algo que no es JSON (HTTP ' + r.status + '). Revise la consola/red del navegador para más detalle.');
+            }))
             .then((res) => {
                 const tbody = document.getElementById('iaTablaPrompts');
                 if (!res.ok) {
@@ -598,6 +609,10 @@
                         if (p) abrirModalPrompt(p, true);
                     });
                 });
+            })
+            .catch((err) => {
+                document.getElementById('iaTablaPrompts').innerHTML =
+                    `<tr><td colspan="7" class="text-center text-danger py-4">${escapeHtml(err.message || 'Error de conexión.')}</td></tr>`;
             });
     }
 

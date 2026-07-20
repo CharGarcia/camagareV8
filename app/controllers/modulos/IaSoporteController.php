@@ -108,7 +108,11 @@ class IaSoporteController extends BaseModuloController
         header('Content-Type: application/json');
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        echo json_encode(['ok' => true, 'data' => $this->service->listarAgentesDisponibles($idEmpresa)], JSON_UNESCAPED_UNICODE);
+        try {
+            echo json_encode(['ok' => true, 'data' => $this->service->listarAgentesDisponibles($idEmpresa)], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
         exit;
     }
 
@@ -399,7 +403,11 @@ class IaSoporteController extends BaseModuloController
         header('Content-Type: application/json');
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        echo json_encode(['ok' => true, 'data' => $this->service->listarPrompts($idEmpresa)], JSON_UNESCAPED_UNICODE);
+        try {
+            echo json_encode(['ok' => true, 'data' => $this->service->listarPrompts($idEmpresa)], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
         exit;
     }
 

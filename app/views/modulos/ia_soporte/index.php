@@ -183,7 +183,7 @@ $urlBase = $base . '/' . ltrim($rutaModulo, '/');
         </div>
         <?php endif; ?>
 
-        <?php if (!empty($esSuperadmin)): ?>
+        <?php if (!empty($puedeGestionarPrompts)): ?>
         <!-- Tab: Prompts (plantillas globales de solo lectura + propios de la empresa) -->
         <div class="ia-soporte-tab-content ia-soporte-tab-pane d-none" data-ia-tab-content="prompts">
             <div class="card border-0 shadow-sm rounded-3 d-flex flex-column flex-fill" style="min-height:0;">
@@ -291,7 +291,7 @@ $urlBase = $base . '/' . ltrim($rutaModulo, '/');
     </div>
 </div>
 
-<?php if (!empty($esSuperadmin)): ?>
+<?php if (!empty($puedeGestionarPrompts)): ?>
 <!-- Modal: Crear/editar prompt -->
 <div class="modal fade" id="iaModalPrompt" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
