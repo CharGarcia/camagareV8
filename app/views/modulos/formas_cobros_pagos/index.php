@@ -113,6 +113,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                             $tipoCls = match($r['tipo']) {
                                 'BANCO'    => 'bg-primary',
                                 'TARJETA'  => 'bg-warning text-dark',
+                                'PAYPHONE' => 'bg-danger',
                                 'EFECTIVO' => 'bg-success',
                                 'ANTICIPO' => 'bg-info',
                                 'OTRO'     => 'bg-dark',

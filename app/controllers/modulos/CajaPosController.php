@@ -227,6 +227,9 @@ class CajaPosController extends BaseModuloController
         if ($tipo === 'TARJETA') {
             return strtoupper((string) ($f['modalidad_tarjeta'] ?? '')) === 'DEBITO' ? '16' : '19';
         }
+        if ($tipo === 'PAYPHONE') {
+            return '19'; // Payphone no distingue modalidad; se asume tarjeta de crédito
+        }
         return '01'; // Efectivo / sin utilización del sistema financiero
     }
 
@@ -272,9 +275,9 @@ class CajaPosController extends BaseModuloController
             }
 
             $ppRepo = new \App\repositories\PayphoneRepository();
-            $formaCobro = $ppRepo->getFormaCobroTarjeta($idEmpresa);
+            $formaCobro = $ppRepo->getFormaCobroPayphone($idEmpresa);
             if (!$formaCobro) {
-                throw new \Exception('No hay una forma de cobro de tipo "Tarjeta" activa y configurada para la empresa.');
+                throw new \Exception('No hay una forma de cobro de tipo "Payphone" activa y configurada para la empresa.');
             }
 
             $descripcion = 'Venta POS' . ($idPuntoEmision > 0 ? ' — Punto #' . $idPuntoEmision : '');

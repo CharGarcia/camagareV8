@@ -172,6 +172,12 @@ class EgresoRepository extends BaseRepository
                     WHERE d.tipo_documento IN ('PRESTAMO7','PRESTAMO8','PRESTAMO9')
                       AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
                     GROUP BY d.tipo_documento, d.id_referencia_documento
+                ),
+                pagado_dc AS (
+                    SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
+                    FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
+                    WHERE d.tipo_documento = 'DECIMO_CUARTO' AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
+                    GROUP BY d.id_referencia_documento
                 )
                 SELECT 'ROL' AS tipo_doc_bd, rd.id,
                        COALESCE(NULLIF(rc.descripcion, ''), 'Rol ' || rc.periodo_mes || '/' || rc.periodo_anio) AS numero_documento,
@@ -213,6 +219,22 @@ class EgresoRepository extends BaseRepository
                   AND n.eliminado = FALSE AND n.estado = 'activo' AND n.tipo_codigo IN ('7','8','9')
                 GROUP BY n.id_empleado, n.tipo_codigo, pp.total_pagado
                 HAVING (SUM(n.valor) - COALESCE(pp.total_pagado, 0)) > 0.01
+                UNION ALL
+                SELECT 'DECIMO_CUARTO' AS tipo_doc_bd, dcd.id,
+                       'Décimo Cuarto ' || dcc.anio || ' (' ||
+                           CASE WHEN dcc.region_grupo = 'sierra_amazonia' THEN 'Sierra/Amazonía' ELSE 'Costa/Insular' END
+                       || ')' AS numero_documento,
+                       dcc.fecha_limite_pago AS fecha_emision,
+                       dcd.valor AS monto_total,
+                       COALESCE(pdc.total_pagado, 0) AS monto_pagado_previo,
+                       (dcd.valor - COALESCE(pdc.total_pagado, 0)) AS saldo_pendiente,
+                       0 AS dias_credito
+                FROM decimo_cuarto_detalle dcd
+                INNER JOIN decimo_cuarto_cabecera dcc ON dcc.id = dcd.id_cabecera
+                LEFT JOIN pagado_dc pdc ON pdc.id_referencia_documento = dcd.id
+                WHERE dcd.id_empleado = :id_emp AND dcd.id_empresa = :id_empresa
+                  AND dcc.eliminado = FALSE AND dcd.mensualiza = FALSE AND dcd.valor > 0.01
+                  AND (dcd.valor - COALESCE(pdc.total_pagado, 0)) > 0.01
                 ORDER BY numero_documento ASC";
         return $this->query($sql, [':id_emp' => $idEmpleado, ':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -462,10 +484,12 @@ class EgresoRepository extends BaseRepository
             $filtroRol = '';
             $filtroAnt = '';
             $filtroPre = '';
+            $filtroDc  = '';
             if ($q !== '') {
                 $filtroRol = " AND (emp.nombres_apellidos ILIKE :q OR emp.identificacion ILIKE :q OR rc.descripcion ILIKE :q)";
                 $filtroAnt = " AND (emp.nombres_apellidos ILIKE :q OR emp.identificacion ILIKE :q OR n.tipo_nombre ILIKE :q)";
                 $filtroPre = " AND (emp.nombres_apellidos ILIKE :q OR emp.identificacion ILIKE :q OR n.tipo_nombre ILIKE :q)";
+                $filtroDc  = " AND (emp.nombres_apellidos ILIKE :q OR emp.identificacion ILIKE :q)";
                 $params[':q'] = '%' . $q . '%';
             }
             $sql = "WITH pagado_rol AS (
@@ -489,6 +513,13 @@ class EgresoRepository extends BaseRepository
                           AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
                           $excluirSql
                         GROUP BY d.tipo_documento, d.id_referencia_documento
+                    ),
+                    pagado_dc AS (
+                        SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
+                        FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
+                        WHERE d.tipo_documento = 'DECIMO_CUARTO' AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
+                          $excluirSql
+                        GROUP BY d.id_referencia_documento
                     )
                     SELECT * FROM (
                         SELECT 'ROL' AS tipo_doc_bd,
@@ -556,6 +587,28 @@ class EgresoRepository extends BaseRepository
                           $filtroPre
                         GROUP BY n.id_empleado, n.tipo_codigo, emp.id, emp.nombres_apellidos, emp.identificacion, pp.total_pagado
                         HAVING (SUM(n.valor) - COALESCE(pp.total_pagado, 0)) > 0.01
+                        UNION ALL
+                        SELECT 'DECIMO_CUARTO' AS tipo_doc_bd,
+                               dcd.id,
+                               'Décimo Cuarto ' || dcc.anio || ' (' ||
+                                   CASE WHEN dcc.region_grupo = 'sierra_amazonia' THEN 'Sierra/Amazonía' ELSE 'Costa/Insular' END
+                               || ')' AS numero_documento,
+                               dcc.fecha_limite_pago AS fecha_emision,
+                               0 AS dias_credito,
+                               dcd.valor AS monto_total,
+                               COALESCE(pdc.total_pagado, 0) AS monto_cobrado,
+                               (dcd.valor - COALESCE(pdc.total_pagado, 0)) AS saldo_pendiente,
+                               emp.id                AS proveedor_id,
+                               emp.nombres_apellidos AS proveedor_nombre,
+                               emp.identificacion    AS proveedor_ruc
+                        FROM decimo_cuarto_detalle dcd
+                        INNER JOIN decimo_cuarto_cabecera dcc ON dcc.id = dcd.id_cabecera
+                        INNER JOIN empleados emp ON emp.id = dcd.id_empleado
+                        LEFT  JOIN pagado_dc pdc ON pdc.id_referencia_documento = dcd.id
+                        WHERE dcc.id_empresa = :id_empresa
+                          AND dcc.eliminado = FALSE AND dcd.mensualiza = FALSE AND dcd.valor > 0.01
+                          AND (dcd.valor - COALESCE(pdc.total_pagado, 0)) > 0.01
+                          $filtroDc
                     ) u
                     ORDER BY proveedor_nombre ASC, numero_documento ASC
                     LIMIT 301";

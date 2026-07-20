@@ -40,6 +40,7 @@ try {
                                 <option value="EFECTIVO">Efectivo</option>
                                 <option value="BANCO">Bancaria</option>
                                 <option value="TARJETA">Tarjeta</option>
+                                <option value="PAYPHONE">Payphone</option>
                                 <option value="ANTICIPO">Anticipo</option>
                                 <option value="OTRO">Otros</option>
                             </select>
@@ -67,6 +68,9 @@ try {
                             <input type="hidden" name="aplica_en" id="fp-aplica" value="AMBAS">
                             <div id="fp-hint-anticipo" class="form-text text-info d-none" style="font-size: 0.72rem;">
                                 <i class="bi bi-info-circle me-1"></i> Para un anticipo debe elegir <strong>una sola</strong> aplicación: <strong>Ingreso</strong> = anticipos de clientes, <strong>Egreso</strong> = anticipos a proveedores.
+                            </div>
+                            <div id="fp-hint-payphone" class="form-text text-info d-none" style="font-size: 0.72rem;">
+                                <i class="bi bi-info-circle me-1"></i> Payphone es un cobro online: solo aplica a <strong>Ingreso</strong>.
                             </div>
                         </div>
 
@@ -288,6 +292,12 @@ try {
                     return;
                 }
 
+                // Payphone: solo puede aplicar a Ingreso
+                if (document.getElementById('fp-tipo').value === 'PAYPHONE' && aplicaVal !== 'INGRESO') {
+                    Swal.fire('Atención', 'Payphone es un cobro online: solo puede aplicar a Ingresos.', 'warning');
+                    return;
+                }
+
                 const formData = new FormData(this);
                 formData.set('aplica_en', aplicaVal);
 
@@ -398,16 +408,31 @@ try {
 
         // Anticipo: aplica a una sola dirección (clientes O proveedores), nunca ambas
         const hintAnt = document.getElementById('fp-hint-anticipo');
+        const hintPp  = document.getElementById('fp-hint-payphone');
         const chkIng  = document.getElementById('fp-chk-ingreso');
         const chkEgr  = document.getElementById('fp-chk-egreso');
         if (tipo === 'ANTICIPO') {
             if (hintAnt) hintAnt.classList.remove('d-none');
+            if (hintPp) hintPp.classList.add('d-none');
+            chkIng.disabled = false;
+            chkEgr.disabled = false;
             // Si están ambas marcadas, dejar solo Ingreso (anticipos de clientes) por defecto
             if (chkIng && chkEgr && chkIng.checked && chkEgr.checked) {
                 chkEgr.checked = false;
             }
-        } else if (hintAnt) {
-            hintAnt.classList.add('d-none');
+        } else if (tipo === 'PAYPHONE') {
+            // Payphone: gateway de cobro online, solo puede aplicar a Ingreso (bloqueado, no editable)
+            if (hintAnt) hintAnt.classList.add('d-none');
+            if (hintPp) hintPp.classList.remove('d-none');
+            chkIng.checked = true;
+            chkIng.disabled = true;
+            chkEgr.checked = false;
+            chkEgr.disabled = true;
+        } else {
+            if (hintAnt) hintAnt.classList.add('d-none');
+            if (hintPp) hintPp.classList.add('d-none');
+            chkIng.disabled = false;
+            chkEgr.disabled = false;
         }
     }
 

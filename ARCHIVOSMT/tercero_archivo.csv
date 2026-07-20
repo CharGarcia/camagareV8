@@ -1,0 +1,4 @@
+Cédula (Ejm.:0502366503);Nombres;Apellidos;Genero (Masculino=M ó Femenino=F);Ocupación;Total_ganado (Ejm.:1000.56);Días laborados (360 días equivalen a un año);Tipo de Deposito(Pago Directo=P,Acreditación en Cuenta=A,Retencion Pago Directo=RP,Retencion Acreditación en Cuenta=RA);Solo si el trabajador posee JORNADA PARCIAL PERMANENTE ponga una X;DETERMINE EN HORAS LA JORNADA PARCIAL PERMANENTE SEMANAL ESTIPULADO EN EL CONTRATO;Solo si su trabajador posee algun tipo de discapacidad ponga una X;Ingrese el valor retenido;
+1000000008;Luis Anastasio;Mcgiver;M;0101011112039;600;360;RP;x;18;x;100;
+#UIO366503;Nombre Ejemplo;Apellidos Ejemplo;F;0101011112039;2325;25;A;
+

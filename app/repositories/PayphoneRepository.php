@@ -109,12 +109,13 @@ class PayphoneRepository extends BaseRepository
     }
 
     /**
-     * Busca la forma de cobro de tipo TARJETA de una empresa (para registrar
-     * ingresos por pagos con tarjeta). Se valida por TIPO, no por nombre, de modo
-     * que el cliente puede nombrar la forma de cobro libremente.
+     * Busca la forma de cobro de tipo PAYPHONE de una empresa (para registrar
+     * ingresos por pagos vía la pasarela Payphone). Se valida por TIPO, no por
+     * nombre, de modo que el cliente puede nombrar la forma de cobro libremente.
+     * Nota: distinta de tipo TARJETA (tarjeta física/datáfono), que no pasa por Payphone.
      * Retorna el registro o null si no existe configurada.
      */
-    public function getFormaCobroTarjeta(int $idEmpresa): ?array
+    public function getFormaCobroPayphone(int $idEmpresa): ?array
     {
         $st = $this->db->prepare(
             "SELECT id, nombre, tipo
@@ -123,7 +124,7 @@ class PayphoneRepository extends BaseRepository
                AND eliminado  = false
                AND activo     = true
                AND (aplica_en = 'AMBAS' OR aplica_en = 'INGRESO')
-               AND UPPER(tipo) = 'TARJETA'
+               AND UPPER(tipo) = 'PAYPHONE'
              ORDER BY nombre ASC
              LIMIT 1"
         );

@@ -6229,11 +6229,11 @@ $totalPages = $totalPagesOriginal;
             else divBanco.classList.add('d-none');
         }
 
-        // Si es TARJETA, el botón cambia a "Enviar cobro con tarjeta"
+        // Si es PAYPHONE, el botón cambia a "Enviar cobro con Payphone"
         const btn = document.getElementById('fvPagoBtnRegistrar');
         if (btn) {
-            if (tipo === 'TARJETA') {
-                btn.innerHTML = '<i class="bi bi-credit-card me-2"></i>Enviar cobro con tarjeta';
+            if (tipo === 'PAYPHONE') {
+                btn.innerHTML = '<i class="bi bi-credit-card me-2"></i>Enviar cobro con Payphone';
                 btn.classList.remove('btn-success');
                 btn.classList.add('btn-primary');
             } else {
@@ -6249,7 +6249,7 @@ $totalPages = $totalPagesOriginal;
         const sel = document.getElementById('fvPagoFormaCobro');
         const fp = (_fvIngresoDeps?.formas_cobro || []).find(x => x.id == (sel ? sel.value : ''));
         const tipo = fp ? (fp.tipo || '').toUpperCase() : '';
-        if (tipo === 'TARJETA') {
+        if (tipo === 'PAYPHONE') {
             fvEnviarCobroTarjeta();
         } else {
             fvRegistrarCobro();
@@ -6594,16 +6594,16 @@ function FV_abrirModalWhatsapp() {
     });
 }
 
-// ─── PAGO CON TARJETA (envío por correo al cliente) ─────────────────────────
+// ─── PAGO CON PAYPHONE (envío por correo al cliente) ─────────────────────────
 
 window.fvEnviarCobroTarjeta = async function() {
     var idFactura = parseInt(FV_ID_ACTIVO) || 0;
     if (idFactura <= 0) return;
 
-    // Forma de cobro (tipo TARJETA) y monto a cobrar
+    // Forma de cobro (tipo PAYPHONE) y monto a cobrar
     var idFormaCobro = document.getElementById('fvPagoFormaCobro').value;
     if (!idFormaCobro) {
-        Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona la forma de cobro (Tarjeta).', target: document.getElementById('modalNuevaFactura') });
+        Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona la forma de cobro (Payphone).', target: document.getElementById('modalNuevaFactura') });
         return;
     }
     var monto = parseFloat(document.getElementById('fvPagoMonto').value);
@@ -6625,8 +6625,8 @@ window.fvEnviarCobroTarjeta = async function() {
 
     // Modal de confirmación con correo editable
     var result = await Swal.fire({
-        title: '<i class="bi bi-credit-card text-primary me-2"></i>Enviar cobro con tarjeta',
-        html: '<p class="text-muted small mb-3">Se enviará al cliente un enlace para pagar <strong>$' + monto.toFixed(2) + '</strong> con tarjeta de forma segura, junto con el PDF de la factura.</p>'
+        title: '<i class="bi bi-credit-card text-primary me-2"></i>Enviar cobro con Payphone',
+        html: '<p class="text-muted small mb-3">Se enviará al cliente un enlace para pagar <strong>$' + monto.toFixed(2) + '</strong> con Payphone de forma segura, junto con el PDF de la factura.</p>'
             + '<label class="form-label small fw-bold d-block text-start mb-1">Correo del cliente</label>'
             + '<input id="swal-correo-tarjeta" type="email" class="swal2-input mx-0 w-100" style="max-width:100%;font-size:.9rem;" placeholder="correo@cliente.com" value="' + correoActual + '">',
         showCancelButton: true,

@@ -963,9 +963,9 @@ class FacturaVentaController extends BaseModuloController
         }
 
         $ppRepo     = new \App\repositories\PayphoneRepository();
-        $formaCobro = $ppRepo->getFormaCobroTarjeta($idEmpresa);
+        $formaCobro = $ppRepo->getFormaCobroPayphone($idEmpresa);
         if (!$formaCobro) {
-            echo json_encode(['ok' => false, 'error' => 'No hay una forma de cobro de tipo "Tarjeta" activa y configurada para la empresa.']);
+            echo json_encode(['ok' => false, 'error' => 'No hay una forma de cobro de tipo "Payphone" activa y configurada para la empresa.']);
             return;
         }
 
@@ -2147,7 +2147,7 @@ class FacturaVentaController extends BaseModuloController
                 exit;
             }
 
-            // Forma de cobro seleccionada (debe ser tipo TARJETA)
+            // Forma de cobro seleccionada (debe ser tipo PAYPHONE)
             $ppRepo        = new \App\repositories\PayphoneRepository();
             $idFormaCobro  = (int) ($_POST['id_forma_cobro'] ?? 0);
 
@@ -2161,10 +2161,10 @@ class FacturaVentaController extends BaseModuloController
                 $formaCobro = $stFc->fetch(\PDO::FETCH_ASSOC);
             }
 
-            if (!$formaCobro || strtoupper((string) $formaCobro['tipo']) !== 'TARJETA') {
+            if (!$formaCobro || strtoupper((string) $formaCobro['tipo']) !== 'PAYPHONE') {
                 echo json_encode([
                     'ok'      => false,
-                    'mensaje' => 'Debes seleccionar una forma de cobro de tipo "Tarjeta" para enviar el cobro con tarjeta.',
+                    'mensaje' => 'Debes seleccionar una forma de cobro de tipo "Payphone" para enviar el cobro con Payphone.',
                 ]);
                 exit;
             }

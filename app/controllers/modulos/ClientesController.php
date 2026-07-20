@@ -284,11 +284,11 @@ class ClientesController extends BaseModuloController
             $dataFp = $modelFp->getAll('codigo', 'ASC');
             $data['formas_pago_sri'] = array_values(array_filter($dataFp, fn($r) => (int)($r['status'] ?? 1) === 1));
 
-            // 5. Formas de Cobro (Ingresos) excluyendo Tarjeta
+            // 5. Formas de Cobro (Ingresos) excluyendo Payphone (cobro online, no seleccionable manualmente)
             $repoFormas = new \App\repositories\modulos\FormaPagoRepository();
             $formasCobro = $repoFormas->getFormasFiltradas($idEmpresa, 'INGRESO');
             $data['formas_cobros_pagos'] = array_values(array_filter($formasCobro, function($f) {
-                return strtoupper($f['tipo'] ?? '') !== 'TARJETA';
+                return strtoupper($f['tipo'] ?? '') !== 'PAYPHONE';
             }));
 
             // 6. Conceptos de Ingreso (Para auto-cobro)

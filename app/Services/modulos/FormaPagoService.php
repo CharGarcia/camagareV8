@@ -74,11 +74,19 @@ class FormaPagoService
             }
         }
 
-        // Validación especial para TARJETA: requiere modalidad (Débito/Crédito/Ambas)
+        // Validación especial para TARJETA (tarjeta física/datáfono): requiere modalidad (Débito/Crédito/Ambas)
         if ($data['tipo'] === 'TARJETA') {
             $mod = strtoupper((string)($data['modalidad_tarjeta'] ?? ''));
             if (!in_array($mod, ['DEBITO', 'CREDITO', 'AMBAS'], true)) {
                 throw new Exception("Debe seleccionar al menos una modalidad de tarjeta (Débito o Crédito).");
+            }
+        }
+
+        // Validación especial para PAYPHONE: es un gateway de cobro online, solo aplica a Ingresos.
+        if ($data['tipo'] === 'PAYPHONE') {
+            $aplica = strtoupper((string)($data['aplica_en'] ?? ''));
+            if ($aplica !== 'INGRESO') {
+                throw new Exception("Payphone es un cobro online: solo puede aplicar a Ingresos.");
             }
         }
 

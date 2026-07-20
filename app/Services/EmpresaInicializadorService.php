@@ -26,6 +26,7 @@ class EmpresaInicializadorService
     {
         $this->crearClienteConsumidorFinal($idEmpresa, $idUsuario);
         $this->crearFormaPagoEfectivo($idEmpresa, $idUsuario);
+        $this->crearFormasPagoTarjetaPayphone($idEmpresa, $idUsuario);
         $this->crearAnticiposDefault($idEmpresa, $idUsuario);
         $this->crearOpcionesIngresoEgresoDefault($idEmpresa, $idUsuario);
         $this->configurarCorreo($idEmpresa, $idUsuario);
@@ -116,6 +117,48 @@ class EmpresaInicializadorService
             ':id_empresa' => $idEmpresa,
             ':created_by' => $idUsuario,
         ]);
+    }
+
+    /**
+     * Crea las formas de pago "Tarjeta" (tipo TARJETA, tarjeta física/datáfono,
+     * aplica a Ingresos y Egresos) y "Payphone" (tipo PAYPHONE, cobro online,
+     * solo aplica a Ingresos) por defecto, si no existen. Cada una se verifica
+     * de forma independiente por tipo, igual que crearAnticiposDefault().
+     */
+    private function crearFormasPagoTarjetaPayphone(int $idEmpresa, int $idUsuario): void
+    {
+        $formas = [
+            ['nombre' => 'Tarjeta',  'tipo' => 'TARJETA',  'aplica_en' => 'AMBAS',   'modalidad' => 'AMBAS'],
+            ['nombre' => 'Payphone', 'tipo' => 'PAYPHONE', 'aplica_en' => 'INGRESO', 'modalidad' => null],
+        ];
+
+        $check = $this->db->prepare(
+            "SELECT 1 FROM empresa_formas_pago
+             WHERE id_empresa = :id_empresa AND tipo = :tipo AND eliminado = false
+             LIMIT 1"
+        );
+        $insert = $this->db->prepare(
+            "INSERT INTO empresa_formas_pago (
+                id_empresa, nombre, tipo, aplica_en, modalidad_tarjeta, activo, created_by, created_at, eliminado
+             ) VALUES (
+                :id_empresa, :nombre, :tipo, :aplica_en, :modalidad, true, :created_by, CURRENT_TIMESTAMP, false
+             )"
+        );
+
+        foreach ($formas as $f) {
+            $check->execute([':id_empresa' => $idEmpresa, ':tipo' => $f['tipo']]);
+            if ($check->fetchColumn()) {
+                continue;
+            }
+            $insert->execute([
+                ':id_empresa' => $idEmpresa,
+                ':nombre'     => $f['nombre'],
+                ':tipo'       => $f['tipo'],
+                ':aplica_en'  => $f['aplica_en'],
+                ':modalidad'  => $f['modalidad'],
+                ':created_by' => $idUsuario,
+            ]);
+        }
     }
 
     /**

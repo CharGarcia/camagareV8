@@ -711,7 +711,7 @@ function renderTopClientes(data){
 
 // ── Saldos de bancos/efectivo + anticipos ──
 function tipoFormaLabel(t){
-    const m = {EFECTIVO:'Efectivo', BANCO:'Banco', TARJETA:'Tarjeta', OTRO:'Otro'};
+    const m = {EFECTIVO:'Efectivo', BANCO:'Banco', TARJETA:'Tarjeta', PAYPHONE:'Payphone', OTRO:'Otro'};
     return m[(t||'').toUpperCase()] || (t||'');
 }
 function renderSaldosCaja(sc){

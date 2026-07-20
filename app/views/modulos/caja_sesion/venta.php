@@ -1389,7 +1389,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
             $fechaCheque.value = '';
         }
 
-        $btnLinkWhatsapp.classList.toggle('d-none', tipo !== 'TARJETA');
+        $btnLinkWhatsapp.classList.toggle('d-none', tipo !== 'PAYPHONE');
     }
 
     $tipoOpBanco.addEventListener('change', () => {

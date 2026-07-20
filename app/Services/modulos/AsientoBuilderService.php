@@ -2631,24 +2631,68 @@ class AsientoBuilderService
             return [];
         }
 
-        // ── DEBE: contrapartida repartida por la cuenta de cada línea de descripción.
+        // ── DEBE (Décimo Cuarto): no usa la cuenta genérica del concepto — cancela
+        //    directamente el pasivo ya provisionado mes a mes en el rol (Décimo Cuarto
+        //    por Pagar). El resto del egreso (ROL/ANTICIPO/PRÉSTAMO/MANUAL) sigue su
+        //    camino normal por el remanente ($restante).
+        $restante = $totalMovido;
+        $totalDecimo = $this->sumaPorTipoDocumento($db, $idEgreso, 'DECIMO_CUARTO');
+        if ($totalDecimo > 0) {
+            $idCtaDecimo = $this->cuentaProgramadaPorCodigo($idEmpresa, 'nomina', 'DECIMOCUARTOPORPAGARNOMINA');
+            if ($idCtaDecimo > 0) {
+                $detalles[] = [
+                    'id_cuenta_contable' => $idCtaDecimo,
+                    'debe'               => round($totalDecimo, 2),
+                    'haber'              => 0.0,
+                    'referencia_detalle' => 'Décimo Cuarto por Pagar',
+                ];
+                $restante = round($totalMovido - $totalDecimo, 2);
+            }
+            // Si la cuenta 'DECIMOCUARTOPORPAGARNOMINA' no está configurada, no se separa:
+            // $restante se queda en $totalMovido y cae al camino normal (cuenta del concepto),
+            // igual que se comportaba antes de esta integración.
+        }
+
+        // ── DEBE (resto): contrapartida repartida por la cuenta de cada línea de descripción.
         //    Por defecto la cuenta del concepto; si la línea trae otra, manda la de la línea.
-        $contrapartida = $this->contrapartidaPorCuenta(
-            $db, $idEmpresa, $idEgreso, 'egreso',
-            (int) ($egreso['concepto_id_cuenta'] ?? 0),
-            (string) ($egreso['concepto_nombre'] ?? 'Egreso'),
-            $totalMovido, $detallesConCuenta
-        );
-        foreach ($contrapartida as $linea) {
-            $detalles[] = [
-                'id_cuenta_contable' => $linea['id_cuenta'],
-                'debe'               => round($linea['monto'], 2),
-                'haber'              => 0.0,
-                'referencia_detalle' => $linea['referencia'],
-            ];
+        if ($restante > 0.0) {
+            $contrapartida = $this->contrapartidaPorCuenta(
+                $db, $idEmpresa, $idEgreso, 'egreso',
+                (int) ($egreso['concepto_id_cuenta'] ?? 0),
+                (string) ($egreso['concepto_nombre'] ?? 'Egreso'),
+                $restante, $detallesConCuenta
+            );
+            foreach ($contrapartida as $linea) {
+                $detalles[] = [
+                    'id_cuenta_contable' => $linea['id_cuenta'],
+                    'debe'               => round($linea['monto'], 2),
+                    'haber'              => 0.0,
+                    'referencia_detalle' => $linea['referencia'],
+                ];
+            }
         }
 
         return $detalles;
+    }
+
+    /** Suma lo pagado (egresos_detalle.monto_pagado) de un egreso para un tipo_documento puntual. */
+    private function sumaPorTipoDocumento(\PDO $db, int $idEgreso, string $tipoDocumento): float
+    {
+        $st = $db->prepare("SELECT COALESCE(SUM(monto_pagado), 0) FROM egresos_detalle
+                             WHERE id_egreso = :id AND tipo_documento = :tipo AND eliminado = FALSE");
+        $st->execute([':id' => $idEgreso, ':tipo' => $tipoDocumento]);
+        return round((float) $st->fetchColumn(), 2);
+    }
+
+    /** Cuenta configurada (asientos_programados) para un código de asientos_tipo puntual; 0 si no está configurada. */
+    private function cuentaProgramadaPorCodigo(int $idEmpresa, string $tipoAsiento, string $codigo): int
+    {
+        foreach ($this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, $tipoAsiento) as $r) {
+            if (($r['codigo'] ?? '') === $codigo) {
+                return (int) ($r['id_cuenta'] ?? 0);
+            }
+        }
+        return 0;
     }
 
     /**

@@ -330,7 +330,8 @@ class FormaPagoRepository extends BaseRepository
             WHERE efp.id_empresa = :id_empresa
               AND efp.eliminado  = FALSE
               AND efp.activo     = TRUE
-              AND efp.tipo      <> 'ANTICIPO'";
+              AND efp.tipo      <> 'ANTICIPO'
+              AND efp.tipo      <> 'PAYPHONE'";
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
 
