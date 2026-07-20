@@ -1077,7 +1077,7 @@ class SriDescargaAutomaticaService
                 } else {
                     $totalErrores++;
                 }
-                $detallesClaves[] = ['clave' => $c, 'estado' => $estadoReg, 'msg' => $res['mensaje'] ?? ''];
+                $detallesClaves[] = $this->detalleDocumento($c, $estadoReg, $res);
             } catch (Exception $e) {
                 $totalErrores++;
                 $detallesClaves[] = ['clave' => $c, 'estado' => 'EXCEPCION', 'msg' => $e->getMessage()];
@@ -1117,6 +1117,49 @@ class SriDescargaAutomaticaService
             'total_errores'     => $totalErrores,
             'duracion_seg'      => $duracion,
             'mensaje'           => $msgFinal,
+        ];
+    }
+
+    /**
+     * De una lista de claves devuelve solo las que NO están registradas todavía.
+     * La usa la extensión para descargar del portal únicamente el XML de los
+     * comprobantes pendientes, en vez de bajarlos todos y descartarlos aquí.
+     *
+     * @param string[] $claves
+     * @return string[]
+     */
+    public function filtrarPendientes(array $claves, int $idEmpresa): array
+    {
+        $setExist = array_flip($this->obtenerClavesExistentes($idEmpresa));
+        $out      = [];
+        $vistos   = [];
+
+        foreach ($claves as $c) {
+            $c = trim((string) $c);
+            if (strlen($c) !== 49 || !ctype_digit($c)) continue;
+            if (isset($vistos[$c]) || isset($setExist[$c])) continue;
+            $vistos[$c] = true;
+            $out[] = $c;
+        }
+        return $out;
+    }
+
+    /**
+     * Arma la fila de detalle que se guarda en el log de la descarga. Además del
+     * estado guarda los datos del documento (número, tipo, emisor, total) que ya
+     * devuelve DocumentoAutomatedRegisterService, para que el historial muestre
+     * documentos legibles y no solo la clave de 49 dígitos.
+     */
+    private function detalleDocumento(string $clave, string $estado, array $res): array
+    {
+        return [
+            'clave'  => $clave,
+            'estado' => $estado,
+            'msg'    => $res['mensaje'] ?? '',
+            'numero' => $res['numero_documento'] ?? '',
+            'tipo'   => $res['tipo_nombre'] ?? '',
+            'emisor' => $res['emisor'] ?? '',
+            'total'  => $res['total'] ?? null,
         ];
     }
 
@@ -1164,10 +1207,11 @@ class SriDescargaAutomaticaService
         $logMod    = new SriDescargaAutoLog();
 
         // Dedup contra lo ya registrado y contra claves repetidas dentro del lote.
-        $setExist     = array_flip($this->obtenerClavesExistentes($idEmpresa));
-        $pendientes   = [];
-        $yaExistentes = 0;
-        $vistos       = [];
+        $setExist       = array_flip($this->obtenerClavesExistentes($idEmpresa));
+        $pendientes     = [];
+        $yaExistentes   = 0;
+        $vistos         = [];
+        $detallesClaves = [];
 
         foreach ($items as $item) {
             $clave = trim((string) ($item['clave'] ?? ''));
@@ -1175,7 +1219,17 @@ class SriDescargaAutomaticaService
             if (strlen($clave) !== 49 || !ctype_digit($clave)) continue;
             if (isset($vistos[$clave])) continue;
             $vistos[$clave] = true;
-            if (isset($setExist[$clave])) { $yaExistentes++; continue; }
+            if (isset($setExist[$clave])) {
+                // Se deja constancia en el detalle: si no, el historial de una corrida
+                // sin documentos nuevos aparecería vacío.
+                $yaExistentes++;
+                $detallesClaves[] = [
+                    'clave'  => $clave,
+                    'estado' => 'YA ESTABA REGISTRADO',
+                    'msg'    => 'Ya estaba registrado en el sistema; no se volvió a descargar.',
+                ];
+                continue;
+            }
             $pendientes[] = ['clave' => $clave, 'xml' => $xml];
         }
 
@@ -1186,7 +1240,7 @@ class SriDescargaAutomaticaService
         $totalExistentes = $yaExistentes;
         $totalIgnorados  = 0;
         $totalErrores    = 0;
-        $detallesClaves  = [];
+        // $detallesClaves ya trae las claves descartadas por el dedup.
 
         foreach ($pendientes as $p) {
             $clave = $p['clave'];
@@ -1219,8 +1273,8 @@ class SriDescargaAutomaticaService
                 } else {
                     $totalErrores++;
                 }
-                $detallesClaves[] = ['clave' => $clave, 'estado' => $estadoReg, 'msg' => $res['mensaje'] ?? ''];
-            } catch (Exception $e) {
+                $detallesClaves[] = $this->detalleDocumento($clave, $estadoReg, $res);
+            } catch (\Throwable $e) {
                 $totalErrores++;
                 $detallesClaves[] = ['clave' => $clave, 'estado' => 'EXCEPCION', 'msg' => $e->getMessage()];
             }

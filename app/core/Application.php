@@ -64,9 +64,25 @@ class Application
         // Controladores públicos (sin autenticación requerida)
         $publicControllers = ['Auth', 'Registro', 'SolicitudFirma', 'FacturaExpressPublico', 'WhatsappWebhook', 'Reservas', 'Payphone', 'CargasInventarioAprobacion', 'Asistencia', 'ImportacionesAprobacion', 'TransferenciasAprobacion'];
 
+        // Acciones concretas que NO usan la sesión del navegador porque se autentican
+        // con su propio token (extensión de Chrome). La cookie de sesión es SameSite=Lax,
+        // así que no viaja en el POST cross-site que hace la extensión: sin esta excepción
+        // la petición se redirige al login, el fetch sigue la redirección y devuelve el
+        // HTML de login con HTTP 200. Se exceptúan por acción, no el controlador entero.
+        $publicActions = [
+            'modulos\\DescargasSri' => [
+                'agenteRegistrarClavesAjax',
+                'agenteRegistrarXmlsAjax',
+                'agenteClavesPendientesAjax',
+                'agenteLoginPendienteAjax',
+            ],
+        ];
+        $esAccionPublica = isset($publicActions[$controller])
+            && in_array($action, $publicActions[$controller], true);
+
         // La autenticación de /api/v1/* la resuelve ApiAuthMiddleware (Bearer JWT) dentro
         // de cada ApiBaseController; aquí no se bloquea por falta de sesión de navegador.
-        if (!$isApi && !isset($_SESSION['id_usuario']) && !in_array($controller, $publicControllers, true)) {
+        if (!$isApi && !$esAccionPublica && !isset($_SESSION['id_usuario']) && !in_array($controller, $publicControllers, true)) {
             $isAjax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
                    || (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json'));
             if ($isAjax) {

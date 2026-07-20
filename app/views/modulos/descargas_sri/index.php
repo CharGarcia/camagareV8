@@ -16,7 +16,12 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
         <div class="card-header bg-white border-bottom-0 pt-3 pb-0 px-4">
             <ul class="nav nav-tabs border-bottom" id="descargasTabs" role="tablist">
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link active fw-semibold text-primary" id="tab-clave-btn" data-bs-toggle="tab" data-bs-target="#tab-clave" type="button" role="tab" aria-controls="tab-clave" aria-selected="true">
+                    <button class="nav-link active fw-semibold text-primary" id="tab-auto-btn" data-bs-toggle="tab" data-bs-target="#tab-auto" type="button" role="tab" aria-controls="tab-auto" aria-selected="true" onclick="cargarConfigDescarga()">
+                        <i class="bi bi-robot me-1"></i> Descarga Automática
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-semibold text-muted" id="tab-clave-btn" data-bs-toggle="tab" data-bs-target="#tab-clave" type="button" role="tab" aria-controls="tab-clave" aria-selected="false">
                         <i class="bi bi-key me-1"></i> Por Clave de Acceso
                     </button>
                 </li>
@@ -35,11 +40,6 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                         <i class="bi bi-slash-circle me-1"></i> Documentos para no descargar
                     </button>
                 </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link fw-semibold text-muted" id="tab-auto-btn" data-bs-toggle="tab" data-bs-target="#tab-auto" type="button" role="tab" aria-controls="tab-auto" aria-selected="false" onclick="cargarConfigDescarga()">
-                        <i class="bi bi-robot me-1"></i> Descarga Automática
-                    </button>
-                </li>
             </ul>
         </div>
 
@@ -47,7 +47,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
             <div class="tab-content" id="descargasTabsContent">
 
                 <!-- Tab: Clave de Acceso -->
-                <div class="tab-pane fade show active" id="tab-clave" role="tabpanel" aria-labelledby="tab-clave-btn">
+                <div class="tab-pane fade" id="tab-clave" role="tabpanel" aria-labelledby="tab-clave-btn">
                     <div class="row">
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-muted">Clave de Acceso</label>
@@ -157,7 +157,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                 </div>
 
                 <!-- Tab: Descarga Automática -->
-                <div class="tab-pane fade" id="tab-auto" role="tabpanel" aria-labelledby="tab-auto-btn">
+                <div class="tab-pane fade show active" id="tab-auto" role="tabpanel" aria-labelledby="tab-auto-btn">
 
                     <div class="row g-3">
 
@@ -365,7 +365,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                     </thead>
                     <tbody id="tbodyResultados">
                         <tr>
-                            <td colspan="3" class="text-center py-5 text-muted">
+                            <td colspan="6" class="text-center py-5 text-muted">
                                 <i class="bi bi-inbox fs-2 d-block mb-2"></i>
                                 No se ha procesado ningún documento todavía.
                             </td>

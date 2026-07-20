@@ -491,6 +491,11 @@ function eliminarDocumentoIgnorado(id) {
 // =============================================================================
 
 function cargarConfigDescarga() {
+    // El historial se carga aparte, NO dentro de la cadena de la configuración:
+    // si la empresa no tiene configuración (data.ok = false) o el fetch falla,
+    // la cadena se cortaba antes y la tabla quedaba en "Cargando historial...".
+    cargarHistorialDescargas();
+
     fetch(`${BASE_URL}/modulos/descargas_sri/obtenerConfigDescargaAjax`)
         .then(r => r.json())
         .then(data => {
@@ -516,9 +521,6 @@ function cargarConfigDescarga() {
 
             // Última ejecución
             renderUltimoEstado(c);
-
-            // Cargar historial
-            cargarHistorialDescargas();
         })
         .catch(err => console.error('Error cargando config descarga:', err));
 }
@@ -624,7 +626,7 @@ function cargarHistorialDescargas() {
         .then(r => r.json())
         .then(data => {
             if (!data.ok || !data.data.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">Sin registros de descargas todavía.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Sin registros de descargas todavía.</td></tr>';
                 return;
             }
 
@@ -680,17 +682,29 @@ function verDetalleLog(idLog) {
 
             const filasClaves = claves.length
                 ? claves.map(c => {
-                    const estadoColor = c.estado === 'REGISTRADO'  ? 'text-success'
-                                      : c.estado === 'YA_EXISTE'   ? 'text-muted'
-                                      : c.estado === 'IGNORADO'    ? 'text-warning'
+                    const est = (c.estado || '').toUpperCase();
+                    const estadoColor = est === 'REGISTRADO' ? 'text-success'
+                                      : (est === 'YA ESTABA REGISTRADO' || est === 'YA_EXISTE' || est === 'EXISTENTE') ? 'text-muted'
+                                      : est === 'IGNORADO' ? 'text-warning'
                                       : 'text-danger';
+                    const monto = (c.total !== null && c.total !== undefined && c.total !== '')
+                        ? '$' + Number(c.total).toFixed(2) : '';
+                    // Los logs antiguos solo guardaban la clave; si no hay número de
+                    // documento se muestra la clave para no dejar la celda vacía.
+                    const doc = c.numero
+                        ? `<div class="fw-semibold">${escHtml(c.numero)}</div>
+                           ${c.tipo ? `<div class="text-muted" style="font-size:0.68rem;">${escHtml(c.tipo)}</div>` : ''}`
+                        : `<div class="text-break" style="font-size:0.68rem;">${escHtml(c.clave || '—')}</div>`;
+
                     return `<tr>
-                        <td class="py-1 small text-break" style="max-width:200px;font-size:0.72rem;">${c.clave || '—'}</td>
-                        <td class="py-1 small fw-bold ${estadoColor}">${c.estado || '—'}</td>
-                        <td class="py-1 small text-muted">${c.msg || ''}</td>
+                        <td class="py-1 small" style="max-width:150px;">${doc}</td>
+                        <td class="py-1 small text-truncate" style="max-width:150px;" title="${escHtml(c.emisor || '')}">${escHtml(c.emisor || '—')}</td>
+                        <td class="py-1 small text-end text-nowrap">${monto}</td>
+                        <td class="py-1 small fw-bold ${estadoColor}">${escHtml(c.estado || '—')}</td>
+                        <td class="py-1 small text-muted">${escHtml(c.msg || '')}</td>
                     </tr>`;
                 }).join('')
-                : '<tr><td colspan="3" class="text-center py-3 text-muted small">Sin documentos procesados.</td></tr>';
+                : '<tr><td colspan="5" class="text-center py-3 text-muted small">Sin documentos procesados.</td></tr>';
 
             const debugHtml = debug.length
                 ? `<div class="mt-3 border-top pt-3">
@@ -725,7 +739,7 @@ function verDetalleLog(idLog) {
 
             Swal.fire({
                 title: `Detalle del log #${idLog}`,
-                width: '700px',
+                width: '900px',
                 html: `
                     <div class="text-start">
                         <div class="d-flex flex-wrap gap-3 mb-3 small">
@@ -758,7 +772,9 @@ function verDetalleLog(idLog) {
                             <table class="table table-sm mb-0" style="font-size:0.78rem;">
                                 <thead class="bg-light sticky-top">
                                     <tr>
-                                        <th class="py-1 ps-2">Clave de acceso</th>
+                                        <th class="py-1 ps-2">Documento</th>
+                                        <th class="py-1">Emisor</th>
+                                        <th class="py-1 text-end">Total</th>
                                         <th class="py-1">Estado</th>
                                         <th class="py-1">Detalle</th>
                                     </tr>
@@ -802,3 +818,12 @@ function generarDescargaSri() {
             Swal.fire('Error', 'Problema de conexión con el sistema.', 'error');
         });
 }
+
+// "Descarga Automática" es ahora la pestaña activa por defecto. Antes su
+// configuración e historial se cargaban con el onclick de la pestaña; al no
+// haber clic inicial, hay que dispararlo al abrir la página.
+document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('tab-auto') && typeof cargarConfigDescarga === 'function') {
+        cargarConfigDescarga();
+    }
+});

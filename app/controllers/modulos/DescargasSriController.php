@@ -662,6 +662,68 @@ class DescargasSriController extends Controller
     }
 
     /**
+     * Endpoint del agente: recibe las claves visibles en una página del portal y
+     * devuelve solo las que faltan por registrar. Permite que la extensión baje
+     * el XML únicamente de esas, en vez de descargar todas y descartarlas aquí.
+     *
+     * Espera POST: agente_token + claves = JSON ["...49...", ...]
+     */
+    public function agenteClavesPendientesAjax(): void
+    {
+        header('Content-Type: application/json');
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido.']);
+            exit;
+        }
+
+        $token   = trim($_POST['agente_token'] ?? '');
+        $usuario = (new Usuario())->getPorAgenteToken($token);
+        if (!$usuario) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Token inválido.']);
+            exit;
+        }
+        $idUsuario = (int) $usuario['id'];
+
+        $raw    = $_POST['claves'] ?? '';
+        $claves = is_array($raw) ? $raw : json_decode((string) $raw, true);
+        if (!is_array($claves)) {
+            echo json_encode(['ok' => false, 'error' => 'No se recibieron claves válidas.']);
+            exit;
+        }
+        $claves = array_values(array_filter(
+            array_map('trim', $claves),
+            fn($c) => strlen($c) === 49 && ctype_digit($c)
+        ));
+        if (empty($claves)) {
+            echo json_encode(['ok' => true, 'pendientes' => []]);
+            exit;
+        }
+
+        try {
+            $idEmpresa = (new Usuario())->getLoginPendiente($idUsuario, 180);
+            if (!$idEmpresa) {
+                $mapa = $this->empresasDelUsuario($idUsuario);
+                if (empty($mapa)) {
+                    echo json_encode(['ok' => false, 'error' => 'Tu usuario no tiene empresas asignadas.']);
+                    exit;
+                }
+                $idEmpresa = $this->resolverEmpresaPorClaves($claves, $mapa);
+                if (!$idEmpresa) {
+                    echo json_encode(['ok' => false, 'error' => 'No se pudo identificar la empresa.']);
+                    exit;
+                }
+            }
+
+            $pendientes = (new SriDescargaAutomaticaService())->filtrarPendientes($claves, $idEmpresa);
+            echo json_encode(['ok' => true, 'pendientes' => $pendientes]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => 'Error del servidor: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
      * Endpoint del agente que recibe los XML YA DESCARGADOS del portal del SRI.
      * Es la vía preferida frente a agenteRegistrarClavesAjax: al traer el XML no
      * depende del webservice de autorización (que solo entrega los comprobantes

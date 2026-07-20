@@ -67,7 +67,11 @@ class SriDescargaAutoLog
                     TO_CHAR(fecha_proceso, 'DD-MM-YYYY HH24:MI:SS') AS fecha_proceso
              FROM sri_descarga_auto_log
              WHERE id_empresa = ?
-             ORDER BY fecha_proceso DESC
+             -- Se califica la columna a propósito: el SELECT define un alias
+             -- 'fecha_proceso' de tipo TEXTO (DD-MM-YYYY) y PostgreSQL resuelve
+             -- el ORDER BY contra el alias antes que contra la columna, lo que
+             -- ordenaba alfabéticamente por día (29-06 antes que 20-07).
+             ORDER BY sri_descarga_auto_log.fecha_proceso DESC
              LIMIT ?"
         );
         $st->execute([$idEmpresa, $limite]);

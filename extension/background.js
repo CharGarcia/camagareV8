@@ -16,6 +16,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         registrarXmls(msg.items).then(sendResponse);
         return true;
     }
+    if (msg && msg.tipo === 'clavesPendientes') {
+        clavesPendientes(msg.claves).then(sendResponse);
+        return true;
+    }
     if (msg && msg.tipo === 'login_pendiente') {
         pedirLoginPendiente().then(sendResponse);
         return true;
@@ -61,6 +65,34 @@ async function pedirLoginPendiente() {
         return { ok: false, error: (data && data.error) || ('Respuesta del servidor HTTP ' + resp.status) };
     } catch (e) {
         return { ok: false, error: 'No se pudo contactar al servidor: ' + e.message };
+    }
+}
+
+/**
+ * Pregunta al sistema cuáles de estas claves faltan por registrar, para bajar
+ * del portal solo el XML de esas. Si falla, devuelve null y quien llama decide
+ * (se descargan todas, como antes) para no perder comprobantes por un error de red.
+ */
+async function clavesPendientes(claves) {
+    try {
+        const cfg = await chrome.storage.local.get(['servidorUrl', 'agenteToken']);
+        if (!cfg.agenteToken) return { ok: false, error: 'Falta configurar el token en la extensión.' };
+        const base = (cfg.servidorUrl || 'https://erp.camagare.com.ec').replace(/\/+$/, '');
+
+        const body = new URLSearchParams();
+        body.set('agente_token', cfg.agenteToken);
+        body.set('claves', JSON.stringify(claves));
+
+        const resp = await fetch(`${base}/modulos/descargas_sri/agenteClavesPendientesAjax`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+        });
+        const data = await resp.json().catch(() => null);
+        if (!data || !data.ok) return { ok: false, error: (data && data.error) || 'Respuesta inválida.' };
+        return { ok: true, pendientes: data.pendientes || [] };
+    } catch (e) {
+        return { ok: false, error: e.message };
     }
 }
 

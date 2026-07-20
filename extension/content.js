@@ -75,18 +75,20 @@
                 params.append(el.name, el.value);
             });
 
-            // Parámetros del onclick: mojarra.jsfcljs(form, {'k':'v'}, '')
+            // Parámetros del onclick de Mojarra:
+            //   mojarra.jsfcljs(form, {'frmPrincipal:tabla:0:lnkXml':'frmPrincipal:tabla:0:lnkXml'}, '')
+            // Los ids de JSF contienen ':', así que hay que separar clave/valor
+            // respetando las comillas: cortar por el primer ':' parte el id a la mitad.
             const onclick = link.getAttribute('onclick') || '';
             const m = onclick.match(/\{([^}]*)\}/);
             let usoOnclick = false;
             if (m && m[1].trim()) {
-                m[1].split(',').forEach((par) => {
-                    const i = par.indexOf(':');
-                    if (i === -1) return;
-                    const k = par.slice(0, i).trim().replace(/^['"]|['"]$/g, '');
-                    const v = par.slice(i + 1).trim().replace(/^['"]|['"]$/g, '');
-                    if (k) { params.set(k, v); usoOnclick = true; }
-                });
+                const re = /(['"])(.*?)\1\s*:\s*(['"])(.*?)\3/g;
+                let par;
+                while ((par = re.exec(m[1])) !== null) {
+                    params.set(par[2], par[4]);
+                    usoOnclick = true;
+                }
             }
             if (!usoOnclick && link.id) {
                 params.set(link.id, link.id);
@@ -110,17 +112,40 @@
     // Recorre todas las páginas y devuelve [{clave, xml}] (xml puede ir vacío).
     // Los XML se bajan ANTES de paginar: los ids de fila del portal solo valen
     // mientras esa página está en pantalla.
+    // Pregunta al sistema cuáles de estas claves faltan por registrar.
+    // Devuelve un Set, o null si no se pudo consultar (entonces se bajan todas).
+    function pedirPendientes(claves) {
+        return new Promise((resolve) => {
+            try {
+                chrome.runtime.sendMessage({ tipo: 'clavesPendientes', claves }, (resp) => {
+                    if (chrome.runtime.lastError || !resp || !resp.ok) return resolve(null);
+                    resolve(new Set(resp.pendientes || []));
+                });
+            } catch (e) { resolve(null); }
+        });
+    }
+
     async function recolectarTodas(onProgreso) {
         const porClave = new Map();
         let vueltas = 0;
         let fallosSeguidos = 0;
         let bajarXml = true;
+        let omitidos = 0;
 
         while (vueltas < 60) {
-            for (const fila of filasDePaginaActual()) {
+            const filas = filasDePaginaActual().filter((f) => !porClave.has(f.clave));
+
+            // Solo se descarga el XML de los pendientes. Los ya registrados se
+            // envían igual (solo la clave) para que el resumen siga contándolos,
+            // pero sin el costo de bajar su XML del portal.
+            const pendientes = filas.length ? await pedirPendientes(filas.map((f) => f.clave)) : null;
+
+            for (const fila of filas) {
                 if (porClave.has(fila.clave)) continue;
+                const hayQueBajar = bajarXml && (pendientes === null || pendientes.has(fila.clave));
+
                 let xml = '';
-                if (bajarXml) {
+                if (hayQueBajar) {
                     xml = await descargarXml(fila.link);
                     if (xml) {
                         fallosSeguidos = 0;
@@ -130,9 +155,11 @@
                         bajarXml = false;
                     }
                     await pausa(150);
+                } else if (pendientes !== null) {
+                    omitidos++;
                 }
                 porClave.set(fila.clave, xml);
-                if (onProgreso) onProgreso(porClave.size);
+                if (onProgreso) onProgreso(porClave.size, omitidos);
             }
 
             const next = document.querySelector('.ui-paginator-next');
@@ -226,11 +253,18 @@
         const btn = document.getElementById('cmg-sri-salir');
         if (btn) { btn.textContent = 'Cerrando sesión…'; btn.disabled = true; }
         // Cierra sesión limpiando las cookies del SRI (vía background) y cierra la pestaña.
-        chrome.runtime.sendMessage({ tipo: 'cerrar_sesion' }, () => {
+        // No se espera la respuesta: al borrar las cookies el portal suele redirigir y
+        // destruye este contexto antes de que llegue, lo que provoca el aviso
+        // "message channel closed". Se consulta lastError solo para silenciarlo.
+        try {
+            chrome.runtime.sendMessage({ tipo: 'cerrar_sesion' }, () => { void chrome.runtime.lastError; });
+        } catch (e) { /* el contexto ya se estaba descargando */ }
+
+        setTimeout(() => {
             window.close();
             // Si el navegador no permite cerrar la pestaña, volver al inicio (pedirá login).
             setTimeout(() => { try { location.href = 'https://srienlinea.sri.gob.ec/'; } catch (e) {} }, 500);
-        });
+        }, 400);
     }
 
     // Aviso de estado/resultado (order 1 = arriba del todo).
@@ -276,8 +310,12 @@
 
         let items;
         try {
-            items = await recolectarTodas((n) => {
-                if (btn) btn.textContent = `Descargando XML… (${n})`;
+            items = await recolectarTodas((n, omitidos) => {
+                if (btn) {
+                    btn.textContent = omitidos
+                        ? `Revisando… (${n}, ${omitidos} ya registrados)`
+                        : `Descargando XML… (${n})`;
+                }
             });
         } catch (e) {
             aviso('Error recolectando: ' + e.message, '#dc3545');
@@ -292,7 +330,9 @@
         }
 
         const conXml = items.filter((i) => i.xml).length;
-        aviso(`Enviando ${items.length} comprobantes al sistema (${conXml} con XML descargado)…`, '#0d6efd');
+        const yaEstaban = items.length - conXml;
+        aviso(`Enviando ${items.length} comprobantes (${conXml} XML descargados`
+            + (yaEstaban ? `, ${yaEstaban} ya registrados` : '') + ')…', '#0d6efd');
         if (btn) btn.textContent = `Enviando ${items.length}…`;
 
         chrome.runtime.sendMessage({ tipo: 'registrarXmls', items }, (resp) => {
