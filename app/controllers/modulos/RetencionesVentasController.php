@@ -332,6 +332,181 @@ class RetencionesVentasController extends BaseModuloController
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // EXPORTAR LISTADO — PDF / Excel
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Filas del listado completo (sin paginar) aplicando búsqueda y orden actuales. */
+    private function filasParaExport(): array
+    {
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar    = trim($_GET['b'] ?? '');
+        $ordenCol  = trim($_GET['sort'] ?? 'fecha_emision');
+        $ordenDir  = strtoupper(trim($_GET['dir'] ?? 'DESC'));
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        // perPage = 0 → sin LIMIT, trae todo el listado filtrado.
+        $data = $this->repository->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        return $data['rows'] ?? [];
+    }
+
+    private static function numeroRetencion(array $r): string
+    {
+        return ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
+    }
+
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            $rows          = $this->filasParaExport();
+            $empresa       = (new Empresa())->getPorId($idEmpresa) ?? [];
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $headers = [
+                'Número', 'Fecha Emisión', 'Cliente', 'RUC / Identificación', 'Período Fiscal',
+                'Retenido Renta', 'Retenido IVA', 'Retenido ISD', 'Total Retenido', 'Origen',
+            ];
+
+            $exportData = [];
+            foreach ($rows as $r) {
+                $exportData[] = [
+                    self::numeroRetencion($r),
+                    !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-',
+                    (string)($r['cliente_nombre'] ?? ''),
+                    (string)($r['cliente_ruc'] ?? ''),
+                    (string)($r['periodo_fiscal'] ?? ''),
+                    round((float)($r['total_renta'] ?? 0), 2),
+                    round((float)($r['total_iva'] ?? 0), 2),
+                    round((float)($r['total_isd'] ?? 0), 2),
+                    round((float)($r['total_retenido'] ?? 0), 2),
+                    (($r['origen'] ?? 'manual') === 'electronico' ? 'Electrónico' : 'Manual'),
+                ];
+            }
+
+            (new \App\Services\ReportService())->exportToExcel(
+                'Retenciones_Ventas_' . date('Ymd_His'),
+                $headers,
+                $exportData,
+                'Retenciones Ventas',
+                'Retenciones en Ventas' . ($nombreEmpresa !== '' ? ' — ' . $nombreEmpresa : '')
+            );
+        } catch (\Throwable $e) {
+            die('Error al generar Excel: ' . $e->getMessage());
+        }
+        exit;
+    }
+
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            $rows          = $this->filasParaExport();
+            $empresa       = (new Empresa())->getPorId($idEmpresa) ?? [];
+            $nombreEmpresa = $empresa['nombre'] ?? 'Retenciones en Ventas';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $tRenta = 0.0; $tIva = 0.0; $tIsd = 0.0; $tTotal = 0.0;
+            foreach ($rows as $r) {
+                $tRenta += (float)($r['total_renta'] ?? 0);
+                $tIva   += (float)($r['total_iva'] ?? 0);
+                $tIsd   += (float)($r['total_isd'] ?? 0);
+                $tTotal += (float)($r['total_retenido'] ?? 0);
+            }
+
+            ob_start();
+?>
+            <style>
+                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 8pt; table-layout: fixed; }
+                th { background: #f2f2f2; border: 1px solid #ccc; padding: 4px; text-align: left; }
+                td { border: 1px solid #ccc; padding: 4px; overflow: hidden; word-wrap: break-word; }
+                .num { text-align: right; }
+                .center { text-align: center; }
+                .header { text-align: center; margin-bottom: 8px; }
+                .header h1 { font-size: 12pt; text-transform: uppercase; margin: 0; }
+                .header h2 { font-size: 10pt; margin: 2px 0 0 0; }
+                tfoot td { background: #f2f2f2; font-weight: bold; }
+            </style>
+            <page backtop="10mm" backbottom="10mm" backleft="10mm" backright="10mm">
+                <div class="header">
+                    <h1><?= htmlspecialchars($nombreEmpresa) ?></h1>
+                    <h2>Retenciones en Ventas</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 12%">Número</th>
+                            <th style="width: 9%">Fecha</th>
+                            <th style="width: 22%">Cliente</th>
+                            <th style="width: 11%">RUC / Ident.</th>
+                            <th style="width: 8%">Período</th>
+                            <th style="width: 9%" class="num">Renta</th>
+                            <th style="width: 9%" class="num">IVA</th>
+                            <th style="width: 8%" class="num">ISD</th>
+                            <th style="width: 10%" class="num">Total Ret.</th>
+                            <th style="width: 8%" class="center">Origen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($rows)): ?>
+                            <tr><td colspan="10" class="center">No se encontraron retenciones.</td></tr>
+                        <?php else: foreach ($rows as $r): ?>
+                            <tr>
+                                <td><?= htmlspecialchars(self::numeroRetencion($r)) ?></td>
+                                <td><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
+                                <td><?= htmlspecialchars((string)($r['cliente_nombre'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string)($r['cliente_ruc'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string)($r['periodo_fiscal'] ?? '')) ?></td>
+                                <td class="num"><?= number_format((float)($r['total_renta'] ?? 0), 2) ?></td>
+                                <td class="num"><?= number_format((float)($r['total_iva'] ?? 0), 2) ?></td>
+                                <td class="num"><?= number_format((float)($r['total_isd'] ?? 0), 2) ?></td>
+                                <td class="num"><?= number_format((float)($r['total_retenido'] ?? 0), 2) ?></td>
+                                <td class="center"><?= (($r['origen'] ?? 'manual') === 'electronico' ? 'Electrónico' : 'Manual') ?></td>
+                            </tr>
+                        <?php endforeach; endif; ?>
+                    </tbody>
+                    <?php if (!empty($rows)): ?>
+                    <tfoot>
+                        <tr>
+                            <td colspan="5" class="num">TOTALES</td>
+                            <td class="num"><?= number_format($tRenta, 2) ?></td>
+                            <td class="num"><?= number_format($tIva, 2) ?></td>
+                            <td class="num"><?= number_format($tIsd, 2) ?></td>
+                            <td class="num"><?= number_format($tTotal, 2) ?></td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                    <?php endif; ?>
+                </table>
+            </page>
+<?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Retenciones_Ventas_' . date('Ymd_His') . '.pdf', 'D');
+        } catch (\Throwable $e) {
+            if (ob_get_length()) ob_end_clean();
+            die('Error al generar PDF: ' . $e->getMessage());
+        }
+        exit;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // AJAX — guardar (crear/actualizar)
     // ─────────────────────────────────────────────────────────────────────────
 

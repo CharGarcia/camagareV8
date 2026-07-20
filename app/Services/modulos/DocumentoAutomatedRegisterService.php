@@ -273,7 +273,10 @@ class DocumentoAutomatedRegisterService
             if ($e->getCode() === '23505'
                 || stripos($msg, 'duplicate key') !== false
                 || stripos($msg, 'unique constraint') !== false
-                || stripos($msg, 'llave duplicada') !== false) {
+                || stripos($msg, 'llave duplicada') !== false
+                // Duplicado detectado por las reglas de negocio (carrera entre lotes).
+                || stripos($msg, 'ya existe una retención') !== false
+                || stripos($msg, 'ya existe otra retención') !== false) {
                 return [
                     'ok' => true,
                     'existe' => true,

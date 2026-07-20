@@ -35,12 +35,17 @@ class RetencionVentaService
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) ($data['id_usuario'] ?? 0);
 
-        // Validar duplicado por número del cliente
+        // Ambiente del documento: el que llega (flujo automático del SRI) o, si no
+        // viene (alta manual), el ambiente activo de la empresa. Sin esto la
+        // inserción caía al default fijo '1' y el registro quedaba invisible.
+        $data['tipo_ambiente'] = $this->resolverAmbiente($data, $idEmpresa);
+
+        // Validar duplicado por número del cliente (dentro del mismo ambiente)
         $this->validarDuplicado($idEmpresa, $data);
 
-        // Validar clave de acceso única si viene
+        // Validar clave de acceso única si viene (dentro del mismo ambiente)
         if (!empty($data['clave_acceso'])) {
-            if ($this->repository->existeClaveAcceso($data['clave_acceso'], $idEmpresa)) {
+            if ($this->repository->existeClaveAcceso($data['clave_acceso'], $idEmpresa, null, $data['tipo_ambiente'])) {
                 throw new \Exception('Ya existe una retención registrada con esa clave de acceso.');
             }
         }
@@ -95,10 +100,16 @@ class RetencionVentaService
         }
 
         $this->rules->validar($data);
+
+        // Conservar el ambiente del registro guardado (updateCabecera no lo cambia).
+        $data['tipo_ambiente'] = trim((string)($cabecera['tipo_ambiente'] ?? '')) !== ''
+            ? (string)$cabecera['tipo_ambiente']
+            : $this->resolverAmbiente($data, $idEmpresa);
+
         $this->validarDuplicado($idEmpresa, $data, $id);
 
         if (!empty($data['clave_acceso'])) {
-            if ($this->repository->existeClaveAcceso($data['clave_acceso'], $idEmpresa, $id)) {
+            if ($this->repository->existeClaveAcceso($data['clave_acceso'], $idEmpresa, $id, $data['tipo_ambiente'])) {
                 throw new \Exception('Ya existe otra retención con esa clave de acceso.');
             }
         }
@@ -322,15 +333,28 @@ class RetencionVentaService
         }
     }
 
+    /**
+     * Ambiente del documento: el que traiga $data (flujo automático del SRI) o,
+     * si no viene, el ambiente activo de la empresa.
+     */
+    private function resolverAmbiente(array $data, int $idEmpresa): string
+    {
+        $amb = trim((string)($data['tipo_ambiente'] ?? ''));
+        return $amb !== '' ? $amb : $this->repository->getTipoAmbienteEmpresa($idEmpresa);
+    }
+
     private function validarDuplicado(int $idEmpresa, array $data, ?int $excluirId = null): void
     {
+        $ambiente = trim((string)($data['tipo_ambiente'] ?? ''));
+
         $existe = $this->repository->existeNumero(
             $idEmpresa,
             $data['establecimiento'] ?? '',
             $data['punto_emision']   ?? '',
             $data['secuencial']      ?? '',
             (int)($data['id_cliente'] ?? 0),
-            $excluirId
+            $excluirId,
+            $ambiente !== '' ? $ambiente : null
         );
 
         if ($existe) {

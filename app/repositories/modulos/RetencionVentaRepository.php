@@ -329,10 +329,15 @@ class RetencionVentaRepository extends BaseRepository
 
     // ── Verificar si ya existe por clave de acceso ───────────────
 
-    public function existeClaveAcceso(string $clave, int $idEmpresa, ?int $excluirId = null): bool
+    public function existeClaveAcceso(string $clave, int $idEmpresa, ?int $excluirId = null, ?string $tipoAmbiente = null): bool
     {
         $sql    = "SELECT COUNT(*) FROM retencion_venta_cabecera WHERE clave_acceso = :ca AND id_empresa = :ie AND eliminado = false";
         $params = [':ca' => $clave, ':ie' => $idEmpresa];
+        // Un documento del otro ambiente (pruebas/producción) no debe bloquear el registro.
+        if ($tipoAmbiente !== null && $tipoAmbiente !== '') {
+            $sql           .= ' AND tipo_ambiente = :ta';
+            $params[':ta']  = $tipoAmbiente;
+        }
         if ($excluirId !== null) {
             $sql           .= ' AND id <> :eid';
             $params[':eid'] = $excluirId;
@@ -340,6 +345,15 @@ class RetencionVentaRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return (int) $st->fetchColumn() > 0;
+    }
+
+    /** Ambiente activo de la empresa ('1' pruebas / '2' producción). */
+    public function getTipoAmbienteEmpresa(int $idEmpresa): string
+    {
+        $st = $this->db->prepare("SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :ie");
+        $st->execute([':ie' => $idEmpresa]);
+        $v = $st->fetchColumn();
+        return ($v !== false && $v !== null && (string)$v !== '') ? (string)$v : '1';
     }
 
     // ── Verificar duplicado por número (estab-pto-sec del cliente) ─
@@ -350,7 +364,8 @@ class RetencionVentaRepository extends BaseRepository
         string $puntoEmision,
         string $secuencial,
         int $idCliente,
-        ?int $excluirId = null
+        ?int $excluirId = null,
+        ?string $tipoAmbiente = null
     ): bool {
         $sql    = "SELECT COUNT(*) FROM retencion_venta_cabecera
                    WHERE id_empresa = :ie AND establecimiento = :estab AND punto_emision = :pto
@@ -362,6 +377,11 @@ class RetencionVentaRepository extends BaseRepository
             ':sec'   => $secuencial,
             ':ic'    => $idCliente,
         ];
+        // Un documento del otro ambiente (pruebas/producción) no debe bloquear el registro.
+        if ($tipoAmbiente !== null && $tipoAmbiente !== '') {
+            $sql           .= ' AND tipo_ambiente = :ta';
+            $params[':ta']  = $tipoAmbiente;
+        }
         if ($excluirId !== null) {
             $sql           .= ' AND id <> :eid';
             $params[':eid'] = $excluirId;
