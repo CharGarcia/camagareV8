@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\Helpers\CryptoHelper;
+use App\repositories\modulos\IaAgentePropioRepository;
 use App\repositories\modulos\IaConfigRepository;
 use App\repositories\modulos\IaConversacionRepository;
 use App\repositories\modulos\IaDocumentoRepository;
@@ -23,6 +24,7 @@ class IaSoporteService
         private IaDocumentoRepository $documentoRepo,
         private IaConversacionRepository $conversacionRepo,
         private IaMensajeRepository $mensajeRepo,
+        private IaAgentePropioRepository $agenteRepo,
         private IaSoporteRules $rules,
         private LogSistemaService $logService,
     ) {
@@ -159,8 +161,65 @@ class IaSoporteService
 
     public function crearConversacion(int $idEmpresa, int $idAgente, string $titulo, int $idUsuario): int
     {
+        if (!$this->agenteRepo->esAccesible($idAgente, $idEmpresa)) {
+            throw new Exception('El agente seleccionado no está disponible para esta empresa.');
+        }
         $titulo = trim($titulo) !== '' ? trim($titulo) : 'Nueva conversación';
         return $this->conversacionRepo->create($idEmpresa, $idAgente, $titulo, $idUsuario);
+    }
+
+    /** Agentes disponibles para el selector de chat / relación con documentos: globales + propios de la empresa. */
+    public function listarAgentesDisponibles(int $idEmpresa): array
+    {
+        return $this->agenteRepo->getDisponibles($idEmpresa);
+    }
+
+    // ── Prompts propios de la empresa (globales aparte, vía IaAgentesController) ──
+
+    public function listarPrompts(int $idEmpresa): array
+    {
+        return $this->agenteRepo->getDisponibles($idEmpresa, false);
+    }
+
+    public function crearPrompt(int $idEmpresa, array $data, int $idUsuario): int
+    {
+        $data['nombre'] = trim((string) ($data['nombre'] ?? ''));
+        $data['prompt_sistema'] = trim((string) ($data['prompt_sistema'] ?? ''));
+        if ($data['nombre'] === '' || $data['prompt_sistema'] === '') {
+            throw new \InvalidArgumentException('El nombre y el prompt del sistema son obligatorios.');
+        }
+
+        $id = $this->agenteRepo->crear($idEmpresa, $data, $idUsuario);
+        $this->logService->registrar($idUsuario, $idEmpresa, 'crear', 'ia_agentes', $id, null, $data);
+        return $id;
+    }
+
+    public function actualizarPrompt(int $id, int $idEmpresa, array $data, int $idUsuario): void
+    {
+        $data['nombre'] = trim((string) ($data['nombre'] ?? ''));
+        $data['prompt_sistema'] = trim((string) ($data['prompt_sistema'] ?? ''));
+        if ($data['nombre'] === '' || $data['prompt_sistema'] === '') {
+            throw new \InvalidArgumentException('El nombre y el prompt del sistema son obligatorios.');
+        }
+
+        $antes = $this->agenteRepo->findPropio($id, $idEmpresa);
+        if ($antes === null) {
+            throw new Exception('El prompt no existe, ya fue eliminado, o no pertenece a esta empresa.');
+        }
+
+        $this->agenteRepo->actualizar($id, $idEmpresa, $data, $idUsuario);
+        $this->logService->registrar($idUsuario, $idEmpresa, 'actualizar', 'ia_agentes', $id, $antes, $data);
+    }
+
+    public function eliminarPrompt(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $antes = $this->agenteRepo->findPropio($id, $idEmpresa);
+        if ($antes === null) {
+            throw new Exception('El prompt no existe, ya fue eliminado, o no pertenece a esta empresa.');
+        }
+
+        $this->agenteRepo->eliminar($id, $idEmpresa, $idUsuario);
+        $this->logService->registrar($idUsuario, $idEmpresa, 'eliminar', 'ia_agentes', $id, $antes, null);
     }
 
     public function renombrarConversacion(int $id, int $idEmpresa, string $titulo, int $idUsuario): void

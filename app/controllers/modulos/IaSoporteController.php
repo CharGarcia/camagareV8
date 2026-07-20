@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
-use App\models\IaAgente;
+use App\repositories\modulos\IaAgentePropioRepository;
 use App\repositories\modulos\IaConfigRepository;
 use App\repositories\modulos\IaConversacionRepository;
 use App\repositories\modulos\IaDocumentoRepository;
@@ -38,6 +38,7 @@ class IaSoporteController extends BaseModuloController
             new IaDocumentoRepository(),
             new IaConversacionRepository(),
             new IaMensajeRepository(),
+            new IaAgentePropioRepository(),
             new IaSoporteRules(),
             new LogSistemaService(),
         );
@@ -62,7 +63,7 @@ class IaSoporteController extends BaseModuloController
             'perm'           => $this->getPermisos(),
             'rutaModulo'     => self::RUTA_MODULO,
             'base'           => BASE_URL,
-            'esSuperadmin'   => (int) ($_SESSION['nivel'] ?? 0) >= 3,
+            'puedeGestionarPrompts' => (int) ($_SESSION['nivel'] ?? 0) >= 2,
             'nombreEmpresa'  => $empresa['nombre'] ?? null,
         ]);
     }
@@ -99,19 +100,15 @@ class IaSoporteController extends BaseModuloController
         exit;
     }
 
-    // ── Catálogo global de agentes (solo lectura aquí) ──────────────────────
+    // ── Agentes disponibles (globales + propios de la empresa) ─────────────
 
     public function agentesListar(): void
     {
         $this->requireLeer();
         header('Content-Type: application/json');
 
-        $st = $this->db->prepare(
-            "SELECT id, nombre, descripcion, icono FROM ia_agentes
-             WHERE eliminado = false AND activo = true ORDER BY orden ASC"
-        );
-        $st->execute();
-        echo json_encode(['ok' => true, 'data' => $st->fetchAll(\PDO::FETCH_ASSOC)]);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        echo json_encode(['ok' => true, 'data' => $this->service->listarAgentesDisponibles($idEmpresa)], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -391,37 +388,32 @@ class IaSoporteController extends BaseModuloController
         exit;
     }
 
-    // ── Gestión de prompts (catálogo global de agentes) — solo superadmin ──
+    // ── Gestión de prompts propios de la empresa (nivel 2 y superadmin) ────
+    // Las plantillas GLOBALES (id_empresa NULL) se administran aparte, solo
+    // por superadmin, en /config/ia-agentes (IaAgentesController).
 
     public function promptsListar(): void
     {
         $this->requireLeer();
-        $this->requireSuperadminAjax();
+        $this->requireGestionPrompts();
         header('Content-Type: application/json');
 
-        $model = new IaAgente();
-        $rows = $model->getAll('orden', 'ASC', '');
-        echo json_encode(['ok' => true, 'data' => $rows], JSON_UNESCAPED_UNICODE);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        echo json_encode(['ok' => true, 'data' => $this->service->listarPrompts($idEmpresa)], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
     public function promptStore(): void
     {
         $this->requireLeer();
-        $this->requireSuperadminAjax();
+        $this->requireGestionPrompts();
         header('Content-Type: application/json');
 
-        $data = $this->recogerDatosPrompt();
-        if ($data['nombre'] === '' || $data['prompt_sistema'] === '') {
-            echo json_encode(['ok' => false, 'error' => 'El nombre y el prompt del sistema son obligatorios.']);
-            exit;
-        }
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
 
         try {
-            $data['created_by'] = (int) $_SESSION['id_usuario'];
-            $model = new IaAgente();
-            $id = $model->crear($data);
-            (new LogSistemaService())->registrar((int) $_SESSION['id_usuario'], null, 'crear', 'ia_agentes', $id, null, $data);
+            $id = $this->service->crearPrompt($idEmpresa, $this->recogerDatosPrompt(), $idUsuario);
             echo json_encode(['ok' => true, 'id' => $id, 'msg' => 'Prompt creado correctamente.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -432,24 +424,18 @@ class IaSoporteController extends BaseModuloController
     public function promptUpdate(): void
     {
         $this->requireLeer();
-        $this->requireSuperadminAjax();
+        $this->requireGestionPrompts();
         header('Content-Type: application/json');
 
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $id = (int) ($_POST['id'] ?? 0);
-        $data = $this->recogerDatosPrompt();
-        if ($id <= 0 || $data['nombre'] === '' || $data['prompt_sistema'] === '') {
-            echo json_encode(['ok' => false, 'error' => 'Datos inválidos.']);
-            exit;
-        }
 
         try {
-            $model = new IaAgente();
-            $antes = $model->find($id);
-            $data['updated_by'] = (int) $_SESSION['id_usuario'];
-            if (!$model->actualizar($id, $data)) {
-                throw new \Exception('No se pudo actualizar el prompt.');
+            if ($id <= 0) {
+                throw new \Exception('ID de prompt no válido.');
             }
-            (new LogSistemaService())->registrar((int) $_SESSION['id_usuario'], null, 'actualizar', 'ia_agentes', $id, $antes, $data);
+            $this->service->actualizarPrompt($id, $idEmpresa, $this->recogerDatosPrompt(), $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Prompt actualizado correctamente.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -460,22 +446,18 @@ class IaSoporteController extends BaseModuloController
     public function promptEliminar(): void
     {
         $this->requireLeer();
-        $this->requireSuperadminAjax();
+        $this->requireGestionPrompts();
         header('Content-Type: application/json');
 
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
         $id = (int) ($_POST['id'] ?? 0);
-        if ($id <= 0) {
-            echo json_encode(['ok' => false, 'error' => 'ID de prompt no válido.']);
-            exit;
-        }
 
         try {
-            $model = new IaAgente();
-            $antes = $model->find($id);
-            if (!$antes || !$model->eliminarLogico($id, (int) $_SESSION['id_usuario'])) {
-                throw new \Exception('No se pudo eliminar el prompt.');
+            if ($id <= 0) {
+                throw new \Exception('ID de prompt no válido.');
             }
-            (new LogSistemaService())->registrar((int) $_SESSION['id_usuario'], null, 'eliminar', 'ia_agentes', $id, $antes, null);
+            $this->service->eliminarPrompt($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Prompt eliminado correctamente.']);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -496,15 +478,16 @@ class IaSoporteController extends BaseModuloController
     }
 
     /**
-     * El catálogo de agentes es global (no depende de id_empresa ni de los
-     * permisos del submódulo): solo el superadministrador (nivel 3) lo edita.
+     * Gestionar los prompts propios de la empresa es una capacidad de rol
+     * (administrador o superadmin), no del sistema de permisos por submódulo:
+     * un usuario nivel 1 no la tiene aunque tenga permiso 'u' en el módulo.
      */
-    private function requireSuperadminAjax(): void
+    private function requireGestionPrompts(): void
     {
-        if ((int) ($_SESSION['nivel'] ?? 0) < 3) {
+        if ((int) ($_SESSION['nivel'] ?? 0) < 2) {
             header('Content-Type: application/json');
             http_response_code(403);
-            echo json_encode(['ok' => false, 'error' => 'Solo el superadministrador puede gestionar los prompts.']);
+            echo json_encode(['ok' => false, 'error' => 'Solo administradores o el superadministrador pueden gestionar los prompts.']);
             exit;
         }
     }

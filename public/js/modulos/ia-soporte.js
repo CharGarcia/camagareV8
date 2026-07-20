@@ -544,7 +544,7 @@
             });
     }
 
-    // ── Prompts (catálogo global de agentes, solo superadmin) ──────────────────
+    // ── Prompts (plantillas globales de solo lectura + propios de la empresa) ──
 
     let prompts = [];
 
@@ -554,48 +554,70 @@
             .then((res) => {
                 const tbody = document.getElementById('iaTablaPrompts');
                 if (!res.ok) {
-                    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">${escapeHtml(res.error || 'Error')}</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">${escapeHtml(res.error || 'Error')}</td></tr>`;
                     return;
                 }
                 prompts = res.data || [];
                 if (prompts.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No hay prompts registrados.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No hay prompts registrados.</td></tr>';
                     return;
                 }
-                tbody.innerHTML = prompts.map((p) => `
-                    <tr class="ia-prompt-row" role="button" data-id="${p.id}">
+                tbody.innerHTML = prompts.map((p) => {
+                    const accion = p.editable
+                        ? `<button type="button" class="btn btn-sm btn-outline-secondary ia-btn-editar-prompt" data-id="${p.id}" title="Editar"><i class="bi bi-pencil"></i></button>`
+                        : `<button type="button" class="btn btn-sm btn-outline-primary ia-btn-clonar-prompt" data-id="${p.id}" title="Usar como base para un prompt propio">Usar como base</button>`;
+                    return `
+                    <tr>
                         <td class="text-center"><i class="bi ${escapeHtml(p.icono || 'bi-robot')}"></i></td>
                         <td class="fw-medium">${escapeHtml(p.nombre)}</td>
-                        <td class="text-truncate" style="max-width:360px;">${escapeHtml(p.descripcion || '')}</td>
+                        <td class="text-truncate" style="max-width:300px;">${escapeHtml(p.descripcion || '')}</td>
+                        <td class="text-center">
+                            ${p.editable
+                                ? '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Propio</span>'
+                                : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Global</span>'}
+                        </td>
                         <td class="text-center">${p.orden ?? 0}</td>
                         <td class="text-center">
                             ${p.activo
                                 ? '<span class="badge bg-success">Activo</span>'
                                 : '<span class="badge bg-secondary">Inactivo</span>'}
                         </td>
+                        <td class="text-end pe-3">${accion}</td>
                     </tr>
-                `).join('');
-                tbody.querySelectorAll('.ia-prompt-row').forEach((row) => {
-                    row.addEventListener('click', () => {
-                        const p = prompts.find((x) => x.id == row.getAttribute('data-id'));
-                        if (p) abrirModalPrompt(p);
+                `;
+                }).join('');
+                tbody.querySelectorAll('.ia-btn-editar-prompt').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        const p = prompts.find((x) => x.id == btn.getAttribute('data-id'));
+                        if (p) abrirModalPrompt(p, false);
+                    });
+                });
+                tbody.querySelectorAll('.ia-btn-clonar-prompt').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        const p = prompts.find((x) => x.id == btn.getAttribute('data-id'));
+                        if (p) abrirModalPrompt(p, true);
                     });
                 });
             });
     }
 
-    function abrirModalPrompt(prompt) {
+    /**
+     * @param prompt Prompt a editar/clonar, o null para uno en blanco.
+     * @param clonar Si es true, arranca de los datos de `prompt` pero como uno NUEVO propio (no lo edita).
+     */
+    function abrirModalPrompt(prompt, clonar) {
+        const esEdicion = prompt && !clonar;
         const form = document.getElementById('iaFormPrompt');
         form.reset();
-        document.getElementById('iaPromptId').value = prompt ? prompt.id : '';
-        document.getElementById('iaPromptNombre').value = prompt ? prompt.nombre : '';
+        document.getElementById('iaPromptId').value = esEdicion ? prompt.id : '';
+        document.getElementById('iaPromptNombre').value = prompt ? (clonar ? prompt.nombre + ' (copia)' : prompt.nombre) : '';
         document.getElementById('iaPromptDescripcion').value = prompt ? (prompt.descripcion || '') : '';
         document.getElementById('iaPromptIcono').value = prompt ? (prompt.icono || 'bi-robot') : 'bi-robot';
         document.getElementById('iaPromptOrden').value = prompt ? (prompt.orden || 0) : 0;
         document.getElementById('iaPromptTexto').value = prompt ? (prompt.prompt_sistema || '') : '';
         document.getElementById('iaPromptActivo').checked = prompt ? !!prompt.activo : true;
-        document.getElementById('iaModalPromptTitulo').textContent = prompt ? 'Editar prompt' : 'Nuevo prompt';
-        document.getElementById('iaBtnEliminarPrompt').classList.toggle('d-none', !prompt);
+        document.getElementById('iaModalPromptTitulo').textContent = esEdicion ? 'Editar prompt propio' : (clonar ? 'Nuevo prompt propio (basado en plantilla)' : 'Nuevo prompt propio');
+        document.getElementById('iaBtnEliminarPrompt').classList.toggle('d-none', !esEdicion);
         document.getElementById('iaPromptError').classList.add('d-none');
 
         const modalEl = document.getElementById('iaModalPrompt');

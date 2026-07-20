@@ -9,6 +9,7 @@
  * @var string $rutaModulo
  * @var string $base
  * @var string|null $nombreEmpresa
+ * @var bool $puedeGestionarPrompts
  */
 $base = rtrim($base ?? BASE_URL ?? '', '/');
 $urlBase = $base . '/' . ltrim($rutaModulo, '/');
@@ -79,7 +80,7 @@ $urlBase = $base . '/' . ltrim($rutaModulo, '/');
             <?php if ($perm['actualizar']): ?>
                 <li class="nav-item"><button type="button" class="nav-link" data-ia-tab="config"><i class="bi bi-gear"></i> Configuración</button></li>
             <?php endif; ?>
-            <?php if (!empty($esSuperadmin)): ?>
+            <?php if (!empty($puedeGestionarPrompts)): ?>
                 <li class="nav-item"><button type="button" class="nav-link" data-ia-tab="prompts"><i class="bi bi-sliders"></i> Prompts</button></li>
             <?php endif; ?>
         </ul>
@@ -183,16 +184,19 @@ $urlBase = $base . '/' . ltrim($rutaModulo, '/');
         <?php endif; ?>
 
         <?php if (!empty($esSuperadmin)): ?>
-        <!-- Tab: Prompts (catálogo global de agentes) -->
+        <!-- Tab: Prompts (plantillas globales de solo lectura + propios de la empresa) -->
         <div class="ia-soporte-tab-content ia-soporte-tab-pane d-none" data-ia-tab-content="prompts">
             <div class="card border-0 shadow-sm rounded-3 d-flex flex-column flex-fill" style="min-height:0;">
                 <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div>
                         <h6 class="mb-0">Prompts de los agentes</h6>
-                        <small class="text-muted">Plantillas globales que usan todas las empresas. Solo el superadministrador las edita.</small>
+                        <small class="text-muted">
+                            Las plantillas <strong>globales</strong> (de solo lectura aquí) las administra el superadministrador y las usan todas las empresas.
+                            Los prompts <strong>propios</strong> de esta empresa solo los ve y usa esta empresa — puede crear uno nuevo o usar una plantilla global como base.
+                        </small>
                     </div>
                     <button type="button" class="btn btn-primary btn-sm" id="iaBtnNuevoPrompt">
-                        <i class="bi bi-plus-lg"></i> Nuevo prompt
+                        <i class="bi bi-plus-lg"></i> Nuevo prompt propio
                     </button>
                 </div>
                 <div class="card-body p-0 d-flex flex-column" style="min-height:0;">
@@ -203,12 +207,14 @@ $urlBase = $base . '/' . ltrim($rutaModulo, '/');
                                     <th style="width:40px;"></th>
                                     <th>Nombre</th>
                                     <th>Descripción</th>
+                                    <th class="text-center">Origen</th>
                                     <th class="text-center">Orden</th>
                                     <th class="text-center">Estado</th>
+                                    <th class="text-end pe-3">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody id="iaTablaPrompts">
-                                <tr><td colspan="5" class="text-center text-muted py-4">Cargando…</td></tr>
+                                <tr><td colspan="7" class="text-center text-muted py-4">Cargando…</td></tr>
                             </tbody>
                         </table>
                     </div>

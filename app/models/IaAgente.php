@@ -1,7 +1,10 @@
 <?php
 /**
  * Modelo IaAgente - Catálogo GLOBAL de plantillas/prompts de agentes de IA
- * (módulo IA Soporte). Tabla: ia_agentes (sin id_empresa; único para toda la app).
+ * (módulo IA Soporte). Tabla: ia_agentes, filas con id_empresa IS NULL
+ * (las plantillas base, compartidas por todas las empresas). Las filas
+ * propias de cada empresa (id_empresa NOT NULL) las gestiona
+ * App\repositories\modulos\IaAgentePropioRepository, no este modelo.
  * Acceso a datos puro con PDO y consultas preparadas (CLAUDE.md §6).
  */
 
@@ -18,7 +21,7 @@ class IaAgente extends BaseModel
         $col = in_array($ordenCol, self::COLUMNAS_ORDEN, true) ? $ordenCol : 'orden';
         $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
 
-        $sql = "SELECT * FROM ia_agentes WHERE eliminado = FALSE";
+        $sql = "SELECT * FROM ia_agentes WHERE eliminado = FALSE AND id_empresa IS NULL";
         $params = [];
         if ($buscar !== '') {
             $sql .= " AND (nombre ILIKE :b OR descripcion ILIKE :b)";
@@ -33,7 +36,7 @@ class IaAgente extends BaseModel
 
     public function find(int $id): ?array
     {
-        $st = $this->db->prepare('SELECT * FROM ia_agentes WHERE id = :id AND eliminado = FALSE');
+        $st = $this->db->prepare('SELECT * FROM ia_agentes WHERE id = :id AND eliminado = FALSE AND id_empresa IS NULL');
         $st->execute([':id' => $id]);
         $row = $st->fetch(\PDO::FETCH_ASSOC);
         return $row ?: null;
@@ -41,8 +44,8 @@ class IaAgente extends BaseModel
 
     public function crear(array $data): int
     {
-        $sql = "INSERT INTO ia_agentes (nombre, descripcion, icono, prompt_sistema, orden, activo, created_by, updated_by)
-                VALUES (:nombre, :descripcion, :icono, :prompt_sistema, :orden, :activo, :created_by, :created_by)
+        $sql = "INSERT INTO ia_agentes (nombre, descripcion, icono, prompt_sistema, orden, activo, id_empresa, created_by, updated_by)
+                VALUES (:nombre, :descripcion, :icono, :prompt_sistema, :orden, :activo, NULL, :created_by, :created_by)
                 RETURNING id";
         $st = $this->db->prepare($sql);
         $st->execute([
@@ -68,7 +71,7 @@ class IaAgente extends BaseModel
                     activo = :activo,
                     updated_by = :updated_by,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id AND eliminado = FALSE";
+                WHERE id = :id AND eliminado = FALSE AND id_empresa IS NULL";
         $st = $this->db->prepare($sql);
         return $st->execute([
             ':nombre'         => $data['nombre'],
@@ -86,7 +89,7 @@ class IaAgente extends BaseModel
     {
         $st = $this->db->prepare(
             "UPDATE ia_agentes SET eliminado = TRUE, deleted_by = :u, deleted_at = CURRENT_TIMESTAMP
-             WHERE id = :id AND eliminado = FALSE"
+             WHERE id = :id AND eliminado = FALSE AND id_empresa IS NULL"
         );
         return $st->execute([':u' => $idUsuario, ':id' => $id]);
     }
