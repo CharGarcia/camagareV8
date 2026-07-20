@@ -12,6 +12,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         registrar(msg.claves).then(sendResponse);
         return true; // respuesta asíncrona
     }
+    if (msg && msg.tipo === 'registrarXmls') {
+        registrarXmls(msg.items).then(sendResponse);
+        return true;
+    }
     if (msg && msg.tipo === 'login_pendiente') {
         pedirLoginPendiente().then(sendResponse);
         return true;
@@ -57,6 +61,64 @@ async function pedirLoginPendiente() {
         return { ok: false, error: (data && data.error) || ('Respuesta del servidor HTTP ' + resp.status) };
     } catch (e) {
         return { ok: false, error: 'No se pudo contactar al servidor: ' + e.message };
+    }
+}
+
+/**
+ * Envía los comprobantes con su XML ya descargado del portal. Va por lotes porque
+ * los XML pesan y una sola petición con cientos de comprobantes se pasaría de los
+ * límites de POST del servidor. Los totales de cada lote se acumulan.
+ */
+async function registrarXmls(items) {
+    try {
+        const cfg = await chrome.storage.local.get(['servidorUrl', 'agenteToken']);
+        if (!cfg.agenteToken) return { ok: false, error: 'Falta configurar el token en la extensión.' };
+        const base = (cfg.servidorUrl || 'https://erp.camagare.com.ec').replace(/\/+$/, '');
+
+        // Lotes acotados por cantidad y por tamaño (~3 MB de XML por petición).
+        const MAX_ITEMS = 15;
+        const MAX_BYTES = 3 * 1024 * 1024;
+        const lotes = [];
+        let actual = [];
+        let bytes = 0;
+        for (const it of items) {
+            const size = (it.xml || '').length;
+            if (actual.length && (actual.length >= MAX_ITEMS || bytes + size > MAX_BYTES)) {
+                lotes.push(actual);
+                actual = [];
+                bytes = 0;
+            }
+            actual.push(it);
+            bytes += size;
+        }
+        if (actual.length) lotes.push(actual);
+
+        const total = {
+            total_encontrados: 0, total_nuevos: 0, total_existentes: 0,
+            total_ignorados: 0, total_errores: 0,
+        };
+
+        for (const lote of lotes) {
+            const body = new URLSearchParams();
+            body.set('agente_token', cfg.agenteToken);
+            body.set('xmls', JSON.stringify(lote));
+
+            const resp = await fetch(`${base}/modulos/descargas_sri/agenteRegistrarXmlsAjax`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString(),
+            });
+
+            const data = await resp.json().catch(() => null);
+            if (!data) return { ok: false, error: 'Respuesta inválida del servidor (HTTP ' + resp.status + ').' };
+            if (!data.ok) return { ok: false, error: data.error || 'El servidor rechazó la solicitud.' };
+
+            for (const k of Object.keys(total)) total[k] += (data[k] || 0);
+        }
+
+        return { ok: true, data: total };
+    } catch (e) {
+        return { ok: false, error: e.message };
     }
 }
 

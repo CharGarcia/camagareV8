@@ -299,6 +299,26 @@ class SriService
             ];
         }
 
+        // Sin nodo <autorizacion>. Si el SRI respondió numeroComprobantes = 0 significa
+        // que no tiene ese comprobante disponible por este servicio: pasa con documentos
+        // antiguos (el WS de autorización offline solo entrega los recientes, aunque el
+        // comprobante siga autorizado) o si está anulado.
+        $numComprobantes = trim((string) $xpath->evaluate('string(//*[local-name()="numeroComprobantes"])'));
+        $claveConsultada = trim((string) $xpath->evaluate('string(//*[local-name()="claveAccesoConsultada"])'));
+
+        if ($numComprobantes === '0') {
+            return [
+                'ok'      => false,
+                'estado'  => 'NO DISPONIBLE',
+                'mensaje' => 'El SRI no devolvió autorización para la clave'
+                    . ($claveConsultada !== '' ? " {$claveConsultada}" : '')
+                    . '. Esto ocurre con comprobantes antiguos (el servicio de autorización del SRI'
+                    . ' solo entrega los recientes, aunque el documento siga autorizado) o si está anulado.'
+                    . ' Si el comprobante está autorizado, descargue el XML desde el portal del SRI'
+                    . ' y regístrelo con la carga manual de XML.',
+            ];
+        }
+
         return [
             'ok' => false,
             'estado' => 'NO AUTORIZADO',

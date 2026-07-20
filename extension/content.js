@@ -8,14 +8,15 @@
  */
 
 (function () {
-    const SEL_TBODY = '[id$="tablaCompRecibidos_data"]';
+    const SEL_TBODY   = '[id$="tablaCompRecibidos_data"]';
+    const SEL_LNK_XML = 'a[id*="lnkXml"]';
     let enviando = false;
 
     const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
 
-    // Extrae las claves de la página visible. La clave vive en su propia celda con
-    // 49 dígitos exactos; así no se pegan dígitos de otras columnas.
-    function clavesDePaginaActual() {
+    // Extrae {clave, link} de cada fila visible. La clave vive en su propia celda con
+    // 49 dígitos exactos; el enlace del XML es el mismo que usaba el scraper (":lnkXml").
+    function filasDePaginaActual() {
         const tbody = document.querySelector(SEL_TBODY);
         if (!tbody) return [];
         const out = [];
@@ -29,21 +30,111 @@
                 const m = (row.textContent || '').match(/(?<!\d)\d{49}(?!\d)/);
                 if (m) clave = m[0];
             }
-            if (clave) out.push(clave);
+            if (clave) out.push({ clave, link: row.querySelector(SEL_LNK_XML) });
         });
         return out;
     }
 
     function hayResultados() {
-        return clavesDePaginaActual().length > 0;
+        return filasDePaginaActual().length > 0;
     }
 
-    // Recorre todas las páginas del listado y junta las claves (sin duplicar).
-    async function recolectarTodas() {
-        const set = new Set();
+    // ── Descarga del XML desde el portal ────────────────────────────────────────
+    // Es la vía preferida: el XML del portal está disponible aunque el comprobante
+    // sea antiguo, mientras que el webservice de autorización solo entrega los
+    // recientes. Si falla, se manda solo la clave y el servidor usa el webservice.
+
+    function pareceXmlComprobante(txt) {
+        if (!txt) return false;
+        const s = txt.slice(0, 500).toLowerCase();
+        return s.includes('<?xml')
+            || /<(comprobanteretencion|factura|notacredito|notadebito|liquidacioncompra|autorizacion)\b/.test(s);
+    }
+
+    async function descargarXml(link) {
+        if (!link) return '';
+        try {
+            // Caso simple: el enlace apunta directo al archivo.
+            const href = link.getAttribute('href') || '';
+            if (href && !href.startsWith('#') && !href.toLowerCase().startsWith('javascript:')) {
+                const r = await fetch(new URL(href, location.href).toString(), { credentials: 'include' });
+                if (r.ok) {
+                    const t = await r.text();
+                    if (pareceXmlComprobante(t)) return t;
+                }
+            }
+
+            // Caso JSF: replicar el postback del formulario que contiene el enlace.
+            const form = link.closest('form');
+            if (!form) return '';
+
+            const params = new URLSearchParams();
+            form.querySelectorAll('input[name], select[name], textarea[name]').forEach((el) => {
+                if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
+                if (el.type === 'submit' || el.type === 'button') return;
+                params.append(el.name, el.value);
+            });
+
+            // Parámetros del onclick: mojarra.jsfcljs(form, {'k':'v'}, '')
+            const onclick = link.getAttribute('onclick') || '';
+            const m = onclick.match(/\{([^}]*)\}/);
+            let usoOnclick = false;
+            if (m && m[1].trim()) {
+                m[1].split(',').forEach((par) => {
+                    const i = par.indexOf(':');
+                    if (i === -1) return;
+                    const k = par.slice(0, i).trim().replace(/^['"]|['"]$/g, '');
+                    const v = par.slice(i + 1).trim().replace(/^['"]|['"]$/g, '');
+                    if (k) { params.set(k, v); usoOnclick = true; }
+                });
+            }
+            if (!usoOnclick && link.id) {
+                params.set(link.id, link.id);
+                params.set('javax.faces.source', link.id);
+            }
+
+            const resp = await fetch(form.getAttribute('action') || location.href, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: params.toString(),
+            });
+            if (!resp.ok) return '';
+            const txt = await resp.text();
+            return pareceXmlComprobante(txt) ? txt : '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    // Recorre todas las páginas y devuelve [{clave, xml}] (xml puede ir vacío).
+    // Los XML se bajan ANTES de paginar: los ids de fila del portal solo valen
+    // mientras esa página está en pantalla.
+    async function recolectarTodas(onProgreso) {
+        const porClave = new Map();
         let vueltas = 0;
+        let fallosSeguidos = 0;
+        let bajarXml = true;
+
         while (vueltas < 60) {
-            clavesDePaginaActual().forEach((c) => set.add(c));
+            for (const fila of filasDePaginaActual()) {
+                if (porClave.has(fila.clave)) continue;
+                let xml = '';
+                if (bajarXml) {
+                    xml = await descargarXml(fila.link);
+                    if (xml) {
+                        fallosSeguidos = 0;
+                    } else if (++fallosSeguidos >= 3) {
+                        // El portal no está entregando XML por esta vía: dejar de
+                        // intentarlo y seguir solo con claves (el servidor hará el resto).
+                        bajarXml = false;
+                    }
+                    await pausa(150);
+                }
+                porClave.set(fila.clave, xml);
+                if (onProgreso) onProgreso(porClave.size);
+            }
+
             const next = document.querySelector('.ui-paginator-next');
             if (!next || next.classList.contains('ui-state-disabled')) break;
             const antes = document.querySelector('tr[data-ri]')?.textContent || '';
@@ -57,7 +148,8 @@
             }
             vueltas++;
         }
-        return [...set];
+
+        return [...porClave.entries()].map(([clave, xml]) => ({ clave, xml }));
     }
 
     // ── UI flotante (contenedor apilado abajo a la derecha) ─────────────────────
@@ -179,28 +271,31 @@
 
         enviando = true;
         const btn = document.getElementById('cmg-sri-btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Recolectando…'; }
-        aviso('Recolectando comprobantes de todas las páginas…', '#0d6efd');
+        if (btn) { btn.disabled = true; btn.textContent = 'Descargando XML…'; }
+        aviso('Descargando los XML del portal…', '#0d6efd');
 
-        let claves;
+        let items;
         try {
-            claves = await recolectarTodas();
+            items = await recolectarTodas((n) => {
+                if (btn) btn.textContent = `Descargando XML… (${n})`;
+            });
         } catch (e) {
             aviso('Error recolectando: ' + e.message, '#dc3545');
             resetBoton(btn);
             return;
         }
 
-        if (!claves.length) {
+        if (!items.length) {
             aviso('No se encontraron comprobantes. Primero haz la consulta en el portal.', '#dc3545');
             resetBoton(btn);
             return;
         }
 
-        aviso(`Enviando ${claves.length} comprobantes al sistema…`, '#0d6efd');
-        if (btn) btn.textContent = `Enviando ${claves.length}…`;
+        const conXml = items.filter((i) => i.xml).length;
+        aviso(`Enviando ${items.length} comprobantes al sistema (${conXml} con XML descargado)…`, '#0d6efd');
+        if (btn) btn.textContent = `Enviando ${items.length}…`;
 
-        chrome.runtime.sendMessage({ tipo: 'registrar', claves }, (resp) => {
+        chrome.runtime.sendMessage({ tipo: 'registrarXmls', items }, (resp) => {
             resetBoton(btn);
             if (chrome.runtime.lastError) {
                 aviso('Error: ' + chrome.runtime.lastError.message, '#dc3545');

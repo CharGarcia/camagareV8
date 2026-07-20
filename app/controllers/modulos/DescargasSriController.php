@@ -233,38 +233,59 @@ class DescargasSriController extends Controller
         $archivos = $_FILES['archivos_xml'];
         $total = count($archivos['name']);
         $resultados = [];
-        
+
         $registerService = new DocumentoAutomatedRegisterService();
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
 
-        for ($i = 0; $i < $total; $i++) {
-            $nombre = $archivos['name'][$i];
-            $tmp = $archivos['tmp_name'][$i];
-            $error = $archivos['error'][$i];
+        // Mismo advisory lock (namespace 815) que usa el registro desde el agente:
+        // serializa por empresa. Sin esto, subir el mismo lote dos veces en paralelo
+        // (doble clic o dos pestañas) abre la ventana entre el chequeo de existencia
+        // y el INSERT, y se duplican documentos.
+        $db     = \App\core\Database::getConnection();
+        $lockNs = 815;
+        $stLock = $db->prepare('SELECT pg_try_advisory_lock(?, ?)');
+        $stLock->execute([$lockNs, $idEmpresa]);
+        if (!$stLock->fetchColumn()) {
+            echo json_encode([
+                'ok'       => false,
+                'en_curso' => true,
+                'error'    => 'Ya hay un registro de comprobantes en curso para esta empresa. Espera a que termine antes de subir más XML.',
+            ]);
+            exit;
+        }
 
-            if ($error !== UPLOAD_ERR_OK) {
-                $resultados[] = ['clave' => $nombre, 'estado' => 'ERROR', 'mensaje' => 'Error al subir archivo.'];
-                continue;
-            }
+        try {
+            for ($i = 0; $i < $total; $i++) {
+                $nombre = $archivos['name'][$i];
+                $tmp = $archivos['tmp_name'][$i];
+                $error = $archivos['error'][$i];
 
-            $xmlContent = file_get_contents($tmp);
-            
-            try {
-                $res = $registerService->procesarYRegistrar($xmlContent, $idEmpresa, $idUsuario);
-                
-                $resultados[] = [
-                    'clave' => $res['numero_documento'] ?? $nombre,
-                    'estado' => $res['ok'] ? 'AUTORIZADO' : 'ERROR',
-                    'estado_registro' => $res['estado_registro'] ?? 'ERROR',
-                    'mensaje' => $res['mensaje'] ?? ($res['error'] ?? 'Error desconocido'),
-                    'info' => $res,
-                    'ok' => $res['ok'],
-                    'xml_base64' => base64_encode($xmlContent)
-                ];
-            } catch (Throwable $e) {
-                $resultados[] = ['clave' => $nombre, 'estado' => 'ERROR', 'mensaje' => $e->getMessage()];
+                if ($error !== UPLOAD_ERR_OK) {
+                    $resultados[] = ['clave' => $nombre, 'estado' => 'ERROR', 'mensaje' => 'Error al subir archivo.'];
+                    continue;
+                }
+
+                $xmlContent = file_get_contents($tmp);
+
+                try {
+                    $res = $registerService->procesarYRegistrar($xmlContent, $idEmpresa, $idUsuario);
+
+                    $resultados[] = [
+                        'clave' => $res['numero_documento'] ?? $nombre,
+                        'estado' => $res['ok'] ? 'AUTORIZADO' : 'ERROR',
+                        'estado_registro' => $res['estado_registro'] ?? 'ERROR',
+                        'mensaje' => $res['mensaje'] ?? ($res['error'] ?? 'Error desconocido'),
+                        'info' => $res,
+                        'ok' => $res['ok'],
+                        'xml_base64' => base64_encode($xmlContent)
+                    ];
+                } catch (Throwable $e) {
+                    $resultados[] = ['clave' => $nombre, 'estado' => 'ERROR', 'mensaje' => $e->getMessage()];
+                }
             }
+        } finally {
+            $db->prepare('SELECT pg_advisory_unlock(?, ?)')->execute([$lockNs, $idEmpresa]);
         }
 
         echo json_encode(['ok' => true, 'resultados' => $resultados, 'total' => $total]);
@@ -632,6 +653,81 @@ class DescargasSriController extends Controller
             // Solo se apaga el login automático (ventana corta); el REGISTRO sigue vigente (ventana
             // amplia), de modo que puede enviar VARIOS períodos de la misma empresa sin volver a
             // pulsar el botón. Para retomar el login automático hay que pulsar "Generar descarga".
+            (new Usuario())->desactivarLoginAuto($idUsuario);
+            echo json_encode($res);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => 'Error del servidor: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Endpoint del agente que recibe los XML YA DESCARGADOS del portal del SRI.
+     * Es la vía preferida frente a agenteRegistrarClavesAjax: al traer el XML no
+     * depende del webservice de autorización (que solo entrega los comprobantes
+     * recientes), así que también registra documentos antiguos.
+     *
+     * Espera POST: agente_token + xmls = JSON [{"clave": "...49...", "xml": "<?xml ..."}]
+     */
+    public function agenteRegistrarXmlsAjax(): void
+    {
+        header('Content-Type: application/json');
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido.']);
+            exit;
+        }
+
+        $token   = trim($_POST['agente_token'] ?? '');
+        $usuario = (new Usuario())->getPorAgenteToken($token);
+        if (!$usuario) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Token inválido. Genera tu token en el sistema y pégalo en la extensión.']);
+            exit;
+        }
+        $idUsuario = (int) $usuario['id'];
+
+        $raw   = $_POST['xmls'] ?? '';
+        $items = is_array($raw) ? $raw : json_decode((string) $raw, true);
+        if (!is_array($items)) {
+            echo json_encode(['ok' => false, 'error' => 'No se recibieron comprobantes válidos.']);
+            exit;
+        }
+
+        // Normalizar: quedarnos con clave válida; el XML puede venir vacío (se usará el
+        // webservice como respaldo para ese comprobante).
+        $limpios = [];
+        $claves  = [];
+        foreach ($items as $it) {
+            $clave = trim((string) ($it['clave'] ?? ''));
+            if (strlen($clave) !== 49 || !ctype_digit($clave)) continue;
+            $limpios[] = ['clave' => $clave, 'xml' => (string) ($it['xml'] ?? '')];
+            $claves[]  = $clave;
+        }
+        if (empty($limpios)) {
+            echo json_encode(['ok' => false, 'error' => 'No se recibieron claves de acceso válidas.']);
+            exit;
+        }
+
+        set_time_limit(0);
+
+        try {
+            $idEmpresa = (new Usuario())->getLoginPendiente($idUsuario, 180);
+
+            if (!$idEmpresa) {
+                $mapa = $this->empresasDelUsuario($idUsuario);
+                if (empty($mapa)) {
+                    echo json_encode(['ok' => false, 'error' => 'Tu usuario no tiene empresas asignadas.']);
+                    exit;
+                }
+                $idEmpresa = $this->resolverEmpresaPorClaves($claves, $mapa);
+                if (!$idEmpresa) {
+                    echo json_encode(['ok' => false, 'error' => 'No se pudo identificar la empresa. Pulsa "Generar descarga del SRI" antes de consultar en el SRI.']);
+                    exit;
+                }
+            }
+
+            $res = (new SriDescargaAutomaticaService())->registrarXmls($limpios, $idEmpresa, $idUsuario, 'agente');
+
             (new Usuario())->desactivarLoginAuto($idUsuario);
             echo json_encode($res);
         } catch (\Throwable $e) {

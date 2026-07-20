@@ -1120,6 +1120,148 @@ class SriDescargaAutomaticaService
         ];
     }
 
+    /**
+     * Registra comprobantes cuyo XML ya viene descargado del portal del SRI por la
+     * extensión. Es la vía preferida: NO depende del webservice de autorización, que
+     * solo entrega comprobantes recientes, así que también carga documentos antiguos.
+     *
+     * @param array $items Lista de ['clave' => string(49), 'xml' => string]
+     */
+    public function registrarXmls(
+        array  $items,
+        int    $idEmpresa,
+        int    $idUsuario = 0,
+        string $origen = 'agente'
+    ): array {
+        // Mismo advisory lock que registrarClaves(): serializa lotes solapados por empresa.
+        $db     = \App\core\Database::getConnection();
+        $lockNs = 815;
+        $stLock = $db->prepare('SELECT pg_try_advisory_lock(?, ?)');
+        $stLock->execute([$lockNs, $idEmpresa]);
+        if (!$stLock->fetchColumn()) {
+            return [
+                'ok'       => false,
+                'en_curso' => true,
+                'error'    => 'Ya hay una descarga en curso para esta empresa. Espera a que termine antes de enviar más comprobantes.',
+            ];
+        }
+        try {
+            return $this->registrarXmlsLote($items, $idEmpresa, $idUsuario, $origen);
+        } finally {
+            $db->prepare('SELECT pg_advisory_unlock(?, ?)')->execute([$lockNs, $idEmpresa]);
+        }
+    }
+
+    /** Núcleo del registro por XML. Asume que ya se posee el advisory lock. */
+    private function registrarXmlsLote(
+        array  $items,
+        int    $idEmpresa,
+        int    $idUsuario = 0,
+        string $origen = 'agente'
+    ): array {
+        $inicio    = microtime(true);
+        $configMod = new SriConfigDescarga();
+        $logMod    = new SriDescargaAutoLog();
+
+        // Dedup contra lo ya registrado y contra claves repetidas dentro del lote.
+        $setExist     = array_flip($this->obtenerClavesExistentes($idEmpresa));
+        $pendientes   = [];
+        $yaExistentes = 0;
+        $vistos       = [];
+
+        foreach ($items as $item) {
+            $clave = trim((string) ($item['clave'] ?? ''));
+            $xml   = trim((string) ($item['xml'] ?? ''));
+            if (strlen($clave) !== 49 || !ctype_digit($clave)) continue;
+            if (isset($vistos[$clave])) continue;
+            $vistos[$clave] = true;
+            if (isset($setExist[$clave])) { $yaExistentes++; continue; }
+            $pendientes[] = ['clave' => $clave, 'xml' => $xml];
+        }
+
+        $sriService  = new SriService();
+        $registerSvc = new DocumentoAutomatedRegisterService();
+
+        $totalNuevos     = 0;
+        $totalExistentes = $yaExistentes;
+        $totalIgnorados  = 0;
+        $totalErrores    = 0;
+        $detallesClaves  = [];
+
+        foreach ($pendientes as $p) {
+            $clave = $p['clave'];
+            $xml   = $p['xml'];
+            try {
+                // Respaldo: si la extensión no pudo bajar el XML del portal, se intenta
+                // el webservice de autorización (sirve para comprobantes recientes).
+                if ($xml === '' || strpos($xml, '<') === false) {
+                    $resp = $sriService->obtenerComprobanteXml($clave);
+                    if (empty($resp['ok']) || empty($resp['xml'])) {
+                        $totalErrores++;
+                        $detallesClaves[] = [
+                            'clave'  => $clave,
+                            'estado' => 'ERROR',
+                            'msg'    => $resp['mensaje'] ?? 'No se pudo descargar el XML del portal ni obtenerlo del webservice.',
+                        ];
+                        continue;
+                    }
+                    $xml = $resp['xml'];
+                }
+
+                $res       = $registerSvc->procesarYRegistrar($xml, $idEmpresa, $idUsuario);
+                $estadoReg = $res['estado_registro'] ?? 'DESCONOCIDO';
+                if ($estadoReg === 'REGISTRADO') {
+                    $totalNuevos++;
+                } elseif (in_array($estadoReg, ['YA_EXISTE', 'EXISTENTE', 'YA ESTABA REGISTRADO'], true)) {
+                    $totalExistentes++;
+                } elseif ($estadoReg === 'IGNORADO') {
+                    $totalIgnorados++;
+                } else {
+                    $totalErrores++;
+                }
+                $detallesClaves[] = ['clave' => $clave, 'estado' => $estadoReg, 'msg' => $res['mensaje'] ?? ''];
+            } catch (Exception $e) {
+                $totalErrores++;
+                $detallesClaves[] = ['clave' => $clave, 'estado' => 'EXCEPCION', 'msg' => $e->getMessage()];
+            }
+        }
+
+        $totalListado = count($pendientes) + $yaExistentes;
+        $duracion     = (int) (microtime(true) - $inicio);
+        $msgFinal = "Listado: {$totalListado} | Nuevas: {$totalNuevos} | Existentes: {$totalExistentes}" .
+                    " | Ignoradas: {$totalIgnorados} | Errores: {$totalErrores}";
+
+        $hoy = new \DateTime();
+        $logMod->insertar([
+            'id_empresa'        => $idEmpresa,
+            'fecha_desde'       => $hoy->format('Y-m-01'),
+            'fecha_hasta'       => $hoy->format('Y-m-d'),
+            'tipos_documento'   => 'todos',
+            'total_encontrados' => $totalListado,
+            'total_nuevos'      => $totalNuevos,
+            'total_existentes'  => $totalExistentes,
+            'total_ignorados'   => $totalIgnorados,
+            'total_errores'     => $totalErrores,
+            'estado'            => 'completado',
+            'detalle_json'      => json_encode(['claves' => $detallesClaves]),
+            'duracion_seg'      => $duracion,
+            'origen'            => $origen,
+            'created_by'        => $idUsuario,
+        ]);
+        $configMod->actualizarEstadoDescarga($idEmpresa, 'completado', $msgFinal);
+
+        return [
+            'ok'                => true,
+            'total_encontrados' => $totalListado,
+            'total_nuevos'      => $totalNuevos,
+            'total_existentes'  => $totalExistentes,
+            'total_ignorados'   => $totalIgnorados,
+            'total_errores'     => $totalErrores,
+            'duracion_seg'      => $duracion,
+            'mensaje'           => $msgFinal,
+        ];
+    }
+
     // ─────────────────────────────────────────────
     // VALIDACIÓN DE CLAVE DE ACCESO
     // ─────────────────────────────────────────────
