@@ -258,6 +258,9 @@
     </div>
 </div>
 
+<?php // Panel lateral con el detalle del documento (clic sobre una fila del detallado)
+require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
+
 <script>
     const RUTA_MODULO = "<?php echo $rutaModulo; ?>";
 </script>

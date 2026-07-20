@@ -58,6 +58,14 @@
     <li><strong>Claves de acceso de los comprobantes:</strong> la extensión lee las claves de acceso
         (49 dígitos) que muestra la página de «Comprobantes electrónicos recibidos» del SRI y las
         envía a tu servidor CaMaGaRe para su registro.</li>
+    <li><strong>Comprobantes electrónicos (archivos XML):</strong> para los comprobantes que aún no
+        están registrados en tu sistema, la extensión <strong>descarga el archivo XML</strong> desde el
+        propio portal del SRI —el mismo que puedes bajar a mano con el botón «XML» de cada fila— y lo
+        envía a tu servidor CaMaGaRe para registrarlo. Ese XML es el comprobante emitido a tu empresa e
+        incluye los datos del documento: emisor, receptor, fechas, detalle de líneas, impuestos y
+        totales. La extensión <strong>no almacena</strong> estos archivos: los transmite y los descarta.
+        Antes de descargar, consulta a tu servidor qué comprobantes faltan, para no volver a bajar los
+        que ya tienes.</li>
     <li><strong>Cookies del SRI:</strong> al pulsar «Cerrar sesión SRI», la extensión elimina las
         cookies del dominio del SRI en tu navegador para cerrar la sesión. No las lee ni las transmite.</li>
   </ul>
@@ -70,13 +78,17 @@
   <h2>Almacenamiento</h2>
   <p>Lo único que se guarda de forma persistente es el <strong>token</strong> y la <strong>URL de tu
   servidor</strong>, en el almacenamiento local del navegador. Puedes borrarlos quitando la extensión.</p>
+  <p>Los comprobantes XML <strong>no se guardan en el navegador</strong>: se descargan del portal del
+  SRI, se envían a tu servidor y se descartan de inmediato.</p>
 
   <h2>Permisos</h2>
   <ul>
     <li><code>storage</code>: guardar el token y la URL del servidor.</li>
     <li><code>cookies</code>: cerrar sesión en el SRI eliminando sus cookies.</li>
-    <li>Acceso a <code>*.sri.gob.ec</code>: operar dentro del portal del SRI (login y lectura de comprobantes).</li>
-    <li>Acceso al dominio de tu sistema CaMaGaRe: recibir el token y enviar las claves.</li>
+    <li>Acceso a <code>*.sri.gob.ec</code>: operar dentro del portal del SRI (inicio de sesión, lectura
+        de las claves de acceso y descarga del XML de cada comprobante).</li>
+    <li>Acceso al dominio de tu sistema CaMaGaRe: recibir el token, consultar qué comprobantes faltan y
+        enviar las claves y los XML para su registro.</li>
   </ul>
 
   <h2>Contacto</h2>

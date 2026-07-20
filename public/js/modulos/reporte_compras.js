@@ -399,3 +399,22 @@ window.RC_exportarPDF = function () {
     const params = new URLSearchParams(new FormData(document.getElementById('form-filtros-reporte'))).toString();
     window.open(BASE_URL + '/' + RUTA_MODULO + '/exportPdf?' + params, '_blank');
 };
+
+/* ════════════════════════════════════════════════════
+   PANEL LATERAL: detalle del documento al hacer clic
+   en una fila del reporte detallado. Delegado en
+   document porque el tbody se re-renderiza por AJAX.
+   Las filas agrupadas no llevan data-doc-id.
+════════════════════════════════════════════════════ */
+document.addEventListener('click', function (e) {
+    const tr = e.target.closest('tr[data-doc-id]');
+    if (!tr) return;
+    if (e.target.closest('button, a, input, select, label')) return;
+    if (typeof window.CMG_abrirPreviewDoc !== 'function') return;
+
+    window.CMG_abrirPreviewDoc(tr.dataset.docId, tr.dataset.docTipo, {
+        numero:      tr.dataset.docNumero || '',
+        sujetoLabel: 'Proveedor',
+        sujeto:      tr.dataset.docSujeto || ''
+    });
+});

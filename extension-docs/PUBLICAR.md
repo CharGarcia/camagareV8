@@ -35,12 +35,13 @@ Cómo funciona:
 1. En tu sistema CaMaGaRe pulsas "Generar descarga del SRI".
 2. La extensión abre el portal del SRI, ingresa con el RUC y la clave de la empresa activa y te lleva a "Comprobantes electrónicos recibidos".
 3. Eliges el período (año, mes, día) y el tipo de documento y das clic en Consultar (tú resuelves el captcha, como siempre).
-4. Pulsas "Enviar comprobantes al sistema" y la extensión recolecta las claves de acceso y las envía a tu sistema, que descarga y registra los XML.
+4. Pulsas "Enviar comprobantes al sistema": la extensión consulta a tu sistema qué comprobantes faltan, descarga del portal del SRI el archivo XML de cada uno de ellos y los envía a tu sistema para registrarlos.
 
 Ventajas:
 - Sin teclear el RUC y la clave en cada empresa.
 - Te lleva directo al listado de comprobantes recibidos.
 - Descarga varios períodos seguidos.
+- Solo descarga lo que te falta: los comprobantes ya registrados no se vuelven a bajar.
 - Botón para cerrar sesión y cambiar de empresa rápido.
 
 Requiere una cuenta activa en el sistema CaMaGaRe. La extensión no funciona por sí sola: es un complemento de ese sistema.
@@ -48,14 +49,14 @@ Requiere una cuenta activa en el sistema CaMaGaRe. La extensión no funciona por
 
 ## 4. Propósito único (campo "Single purpose")
 ```
-Conectar el portal del SRI (Ecuador) con el sistema contable CaMaGaRe del usuario: ingresar al SRI con las credenciales de la empresa activa, ubicar los comprobantes recibidos y enviar sus claves de acceso al sistema del usuario para su registro.
+Conectar el portal del SRI (Ecuador) con el sistema contable CaMaGaRe del usuario: ingresar al SRI con las credenciales de la empresa activa, ubicar los comprobantes electrónicos recibidos y enviar al sistema del usuario sus claves de acceso y los archivos XML descargados del portal, para registrarlos en su contabilidad.
 ```
 
 ## 5. Justificación de permisos (campo por campo)
 - **storage:** "Guardar localmente el token de acceso y la URL del sistema del usuario, para no pedirlos cada vez."
 - **cookies:** "Permitir cerrar la sesión del SRI eliminando sus cookies, para que el usuario pueda cambiar de empresa de forma limpia."
-- **Host `*.sri.gob.ec`:** "Operar dentro del portal del SRI: completar el inicio de sesión y leer las claves de acceso de los comprobantes recibidos."
-- **Host del sistema CaMaGaRe (erp.camagare.com.ec):** "Recibir el token del usuario y enviar las claves de acceso al sistema para su registro."
+- **Host `*.sri.gob.ec`:** "Operar dentro del portal del SRI: completar el inicio de sesión, leer las claves de acceso de los comprobantes recibidos y descargar el archivo XML de cada comprobante (el mismo que el usuario puede bajar a mano con el botón «XML» de cada fila)."
+- **Host del sistema CaMaGaRe (erp.camagare.com.ec):** "Recibir el token del usuario, consultar qué comprobantes faltan por registrar y enviar al sistema las claves de acceso y los archivos XML para su registro contable."
 - **Uso de código remoto:** No. Todo el código va dentro del paquete.
 
 > Nota: si Google observa los permisos `http://localhost/*` y `http://127.0.0.1/*` (son solo para

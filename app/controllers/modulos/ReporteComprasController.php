@@ -117,7 +117,18 @@ class ReporteComprasController extends BaseModuloController
 
     private function renderFilaHtml(array $r, string $agruparPor): string
     {
-        $html = '<tr class="align-middle">';
+        // Solo el modo detallado corresponde a un documento real: se marca la fila
+        // para poder abrir el panel lateral con su detalle (ver offcanvas_doc_preview).
+        $attrs = '';
+        if (!in_array($agruparPor, ['PROVEEDOR', 'PRODUCTO', 'FECHA', 'MES'], true) && !empty($r['id'])) {
+            $attrs = ' style="cursor:pointer;" title="Clic para ver el detalle"'
+                   . ' data-doc-id="' . (int)$r['id'] . '"'
+                   . ' data-doc-tipo="COMPRA"'
+                   . ' data-doc-numero="' . htmlspecialchars($r['numero_documento'] ?? '', ENT_QUOTES) . '"'
+                   . ' data-doc-sujeto="' . htmlspecialchars($r['proveedor_nombre'] ?? '', ENT_QUOTES) . '"';
+        }
+
+        $html = '<tr class="align-middle"' . $attrs . '>';
 
         $base0   = number_format((float)($r['base_0']    ?? 0), 2);
         $baseIva = number_format((float)($r['base_iva']  ?? 0), 2);

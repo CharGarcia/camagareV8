@@ -100,7 +100,7 @@ class ReporteVentasController extends BaseModuloController
                 echo '<tr><td colspan="'.$colSpan.'" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-bar-graph fs-3 d-block mb-2"></i>No se encontraron resultados.</td></tr>';
             } else {
                 foreach ($rows as $r) {
-                    echo $this->renderFilaAgrupadaHtml($r, $filtros['agrupar_por']);
+                    echo $this->renderFilaAgrupadaHtml($r, $filtros['agrupar_por'], $filtros['tipo_documento'] ?? 'FACTURA');
                 }
             }
             $rowsHtml = ob_get_clean();
@@ -128,10 +128,22 @@ class ReporteVentasController extends BaseModuloController
         exit;
     }
 
-    private function renderFilaAgrupadaHtml(array $r, string $agruparPor): string
+    private function renderFilaAgrupadaHtml(array $r, string $agruparPor, string $tipoDocumento = 'FACTURA'): string
     {
-        $html = '<tr class="align-middle">';
-        
+        // Solo el modo detallado corresponde a un documento real: se marca la fila
+        // para poder abrir el panel lateral con su detalle (ver offcanvas_doc_preview).
+        $attrs = '';
+        if (!in_array($agruparPor, ['CLIENTE', 'PRODUCTO', 'FECHA', 'MES'], true) && !empty($r['id'])) {
+            $tipoDoc = ($tipoDocumento === 'RECIBO') ? 'RECIBO' : 'FACTURA';
+            $attrs = ' style="cursor:pointer;" title="Clic para ver el detalle"'
+                   . ' data-doc-id="' . (int)$r['id'] . '"'
+                   . ' data-doc-tipo="' . $tipoDoc . '"'
+                   . ' data-doc-numero="' . htmlspecialchars($r['numero_factura'] ?? '', ENT_QUOTES) . '"'
+                   . ' data-doc-sujeto="' . htmlspecialchars($r['cliente_nombre'] ?? '', ENT_QUOTES) . '"';
+        }
+
+        $html = '<tr class="align-middle"' . $attrs . '>';
+
         $base0   = number_format((float)($r['base_0'] ?? 0), 2);
         $baseIva = number_format((float)($r['base_iva'] ?? 0), 2);
         $iva     = number_format((float)($r['valor_iva'] ?? 0), 2);
