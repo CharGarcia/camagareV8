@@ -178,6 +178,12 @@ class EgresoRepository extends BaseRepository
                     FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
                     WHERE d.tipo_documento = 'DECIMO_CUARTO' AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
                     GROUP BY d.id_referencia_documento
+                ),
+                pagado_dt AS (
+                    SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
+                    FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
+                    WHERE d.tipo_documento = 'DECIMO_TERCERO' AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
+                    GROUP BY d.id_referencia_documento
                 )
                 SELECT 'ROL' AS tipo_doc_bd, rd.id,
                        COALESCE(NULLIF(rc.descripcion, ''), 'Rol ' || rc.periodo_mes || '/' || rc.periodo_anio) AS numero_documento,
@@ -235,6 +241,20 @@ class EgresoRepository extends BaseRepository
                 WHERE dcd.id_empleado = :id_emp AND dcd.id_empresa = :id_empresa
                   AND dcc.eliminado = FALSE AND dcd.mensualiza = FALSE AND dcd.valor > 0.01
                   AND (dcd.valor - COALESCE(pdc.total_pagado, 0)) > 0.01
+                UNION ALL
+                SELECT 'DECIMO_TERCERO' AS tipo_doc_bd, dtd.id,
+                       'Décimo Tercero ' || dtc.anio AS numero_documento,
+                       dtc.fecha_limite_pago AS fecha_emision,
+                       dtd.valor AS monto_total,
+                       COALESCE(pdt.total_pagado, 0) AS monto_pagado_previo,
+                       (dtd.valor - COALESCE(pdt.total_pagado, 0)) AS saldo_pendiente,
+                       0 AS dias_credito
+                FROM decimo_tercero_detalle dtd
+                INNER JOIN decimo_tercero_cabecera dtc ON dtc.id = dtd.id_cabecera
+                LEFT JOIN pagado_dt pdt ON pdt.id_referencia_documento = dtd.id
+                WHERE dtd.id_empleado = :id_emp AND dtd.id_empresa = :id_empresa
+                  AND dtc.eliminado = FALSE AND dtd.mensualiza = FALSE AND dtd.valor > 0.01
+                  AND (dtd.valor - COALESCE(pdt.total_pagado, 0)) > 0.01
                 ORDER BY numero_documento ASC";
         return $this->query($sql, [':id_emp' => $idEmpleado, ':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -485,11 +505,13 @@ class EgresoRepository extends BaseRepository
             $filtroAnt = '';
             $filtroPre = '';
             $filtroDc  = '';
+            $filtroDt  = '';
             if ($q !== '') {
                 $filtroRol = " AND (emp.nombres_apellidos ILIKE :q OR emp.identificacion ILIKE :q OR rc.descripcion ILIKE :q)";
                 $filtroAnt = " AND (emp.nombres_apellidos ILIKE :q OR emp.identificacion ILIKE :q OR n.tipo_nombre ILIKE :q)";
                 $filtroPre = " AND (emp.nombres_apellidos ILIKE :q OR emp.identificacion ILIKE :q OR n.tipo_nombre ILIKE :q)";
                 $filtroDc  = " AND (emp.nombres_apellidos ILIKE :q OR emp.identificacion ILIKE :q)";
+                $filtroDt  = " AND (emp.nombres_apellidos ILIKE :q OR emp.identificacion ILIKE :q)";
                 $params[':q'] = '%' . $q . '%';
             }
             $sql = "WITH pagado_rol AS (
@@ -518,6 +540,13 @@ class EgresoRepository extends BaseRepository
                         SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
                         FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
                         WHERE d.tipo_documento = 'DECIMO_CUARTO' AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
+                          $excluirSql
+                        GROUP BY d.id_referencia_documento
+                    ),
+                    pagado_dt AS (
+                        SELECT d.id_referencia_documento, SUM(d.monto_pagado) AS total_pagado
+                        FROM egresos_detalle d INNER JOIN egresos_cabecera e ON d.id_egreso = e.id
+                        WHERE d.tipo_documento = 'DECIMO_TERCERO' AND e.estado != 'anulado' AND e.eliminado = FALSE AND d.eliminado = FALSE
                           $excluirSql
                         GROUP BY d.id_referencia_documento
                     )
@@ -609,6 +638,26 @@ class EgresoRepository extends BaseRepository
                           AND dcc.eliminado = FALSE AND dcd.mensualiza = FALSE AND dcd.valor > 0.01
                           AND (dcd.valor - COALESCE(pdc.total_pagado, 0)) > 0.01
                           $filtroDc
+                        UNION ALL
+                        SELECT 'DECIMO_TERCERO' AS tipo_doc_bd,
+                               dtd.id,
+                               'Décimo Tercero ' || dtc.anio AS numero_documento,
+                               dtc.fecha_limite_pago AS fecha_emision,
+                               0 AS dias_credito,
+                               dtd.valor AS monto_total,
+                               COALESCE(pdt.total_pagado, 0) AS monto_cobrado,
+                               (dtd.valor - COALESCE(pdt.total_pagado, 0)) AS saldo_pendiente,
+                               emp.id                AS proveedor_id,
+                               emp.nombres_apellidos AS proveedor_nombre,
+                               emp.identificacion    AS proveedor_ruc
+                        FROM decimo_tercero_detalle dtd
+                        INNER JOIN decimo_tercero_cabecera dtc ON dtc.id = dtd.id_cabecera
+                        INNER JOIN empleados emp ON emp.id = dtd.id_empleado
+                        LEFT  JOIN pagado_dt pdt ON pdt.id_referencia_documento = dtd.id
+                        WHERE dtc.id_empresa = :id_empresa
+                          AND dtc.eliminado = FALSE AND dtd.mensualiza = FALSE AND dtd.valor > 0.01
+                          AND (dtd.valor - COALESCE(pdt.total_pagado, 0)) > 0.01
+                          $filtroDt
                     ) u
                     ORDER BY proveedor_nombre ASC, numero_documento ASC
                     LIMIT 301";

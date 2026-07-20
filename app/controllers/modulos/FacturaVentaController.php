@@ -1805,23 +1805,9 @@ class FacturaVentaController extends BaseModuloController
             $stRet->execute([$idEmpresa, $id, $numeroFactura]);
             $totalRetenciones = (float) $stRet->fetchColumn();
 
-            $sqlRetDetalle = "SELECT r.id, r.establecimiento, r.punto_emision, r.secuencial,
-                                     r.fecha_emision, r.total_renta, r.total_iva, r.total_isd,
-                                     (r.total_renta + r.total_iva + r.total_isd) AS total_retenido,
-                                     r.origen
-                              FROM retencion_venta_cabecera r
-                              WHERE r.id_empresa = ? AND r.eliminado = false
-                                AND (r.id_venta = ? 
-                                     OR EXISTS (
-                                         SELECT 1 FROM retencion_venta_detalle rd 
-                                         WHERE rd.id_retencion = r.id 
-                                           AND rd.num_doc_sustento = ?
-                                     )
-                                    )
-                              ORDER BY r.fecha_emision DESC";
-            $stRetDetalle = $db->prepare($sqlRetDetalle);
-            $stRetDetalle->execute([$idEmpresa, $id, $numeroFactura]);
-            $retencionesArray = $stRetDetalle->fetchAll(\PDO::FETCH_ASSOC);
+            // Retenciones con su detalle línea por línea (impuesto, código SRI, base, % y valor).
+            $retencionesArray = (new \App\repositories\modulos\RetencionVentaRepository())
+                ->getPorVentaConDetalle($id, $idEmpresa, $numeroFactura);
 
             // ── Total Notas de Crédito ─────────────────────────────────────────────
             $sqlNC = "SELECT COALESCE(SUM(nc.importe_total), 0)

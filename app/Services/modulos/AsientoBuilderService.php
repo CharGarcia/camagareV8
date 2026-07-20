@@ -22,6 +22,21 @@ class AsientoBuilderService
      */
     private const TOPE_AJUSTE_REDONDEO = 0.03;
 
+    /**
+     * tipo_documento (egresos_detalle) => código (asientos_tipo, tipo 'nomina') cuyo pasivo
+     * ya se provisiona mes a mes en el rol y que, al pagarse por Egresos, debe cancelarse
+     * directo contra esa cuenta específica (no contra la cuenta genérica del concepto).
+     */
+    private const CONTRAPARTIDA_ESPECIFICA_NOMINA = [
+        'DECIMO_TERCERO' => 'DECIMOTERCEROPORPAGARNOMINA',
+        'DECIMO_CUARTO'  => 'DECIMOCUARTOPORPAGARNOMINA',
+    ];
+
+    private const NOMBRE_CONTRAPARTIDA_NOMINA = [
+        'DECIMO_TERCERO' => 'Décimo Tercero por Pagar',
+        'DECIMO_CUARTO'  => 'Décimo Cuarto por Pagar',
+    ];
+
     private AsientoProgramadoRepository $programadoRepo;
 
     public function __construct()
@@ -2631,26 +2646,29 @@ class AsientoBuilderService
             return [];
         }
 
-        // ── DEBE (Décimo Cuarto): no usa la cuenta genérica del concepto — cancela
-        //    directamente el pasivo ya provisionado mes a mes en el rol (Décimo Cuarto
-        //    por Pagar). El resto del egreso (ROL/ANTICIPO/PRÉSTAMO/MANUAL) sigue su
-        //    camino normal por el remanente ($restante).
+        // ── DEBE (pasivos de nómina ya provisionados): para estos tipo_documento
+        //    puntuales NO se usa la cuenta genérica del concepto — cada uno cancela
+        //    directamente su propio pasivo (ya provisionado mes a mes en el rol vía
+        //    RolProvisionService). El resto del egreso (ROL/ANTICIPO/PRÉSTAMO/MANUAL)
+        //    sigue su camino normal por el remanente ($restante).
         $restante = $totalMovido;
-        $totalDecimo = $this->sumaPorTipoDocumento($db, $idEgreso, 'DECIMO_CUARTO');
-        if ($totalDecimo > 0) {
-            $idCtaDecimo = $this->cuentaProgramadaPorCodigo($idEmpresa, 'nomina', 'DECIMOCUARTOPORPAGARNOMINA');
-            if ($idCtaDecimo > 0) {
+        foreach (self::CONTRAPARTIDA_ESPECIFICA_NOMINA as $tipoDocumento => $codigo) {
+            $totalTipo = $this->sumaPorTipoDocumento($db, $idEgreso, $tipoDocumento);
+            if ($totalTipo <= 0) continue;
+
+            $idCtaTipo = $this->cuentaProgramadaPorCodigo($idEmpresa, 'nomina', $codigo);
+            if ($idCtaTipo > 0) {
                 $detalles[] = [
-                    'id_cuenta_contable' => $idCtaDecimo,
-                    'debe'               => round($totalDecimo, 2),
+                    'id_cuenta_contable' => $idCtaTipo,
+                    'debe'               => round($totalTipo, 2),
                     'haber'              => 0.0,
-                    'referencia_detalle' => 'Décimo Cuarto por Pagar',
+                    'referencia_detalle' => self::NOMBRE_CONTRAPARTIDA_NOMINA[$tipoDocumento] ?? $codigo,
                 ];
-                $restante = round($totalMovido - $totalDecimo, 2);
+                $restante = round($restante - $totalTipo, 2);
             }
-            // Si la cuenta 'DECIMOCUARTOPORPAGARNOMINA' no está configurada, no se separa:
-            // $restante se queda en $totalMovido y cae al camino normal (cuenta del concepto),
-            // igual que se comportaba antes de esta integración.
+            // Si la cuenta no está configurada, no se separa: ese monto se queda en
+            // $restante y cae al camino normal (cuenta del concepto), igual que se
+            // comportaba antes de esta integración.
         }
 
         // ── DEBE (resto): contrapartida repartida por la cuenta de cada línea de descripción.

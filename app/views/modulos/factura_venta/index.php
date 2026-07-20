@@ -1035,18 +1035,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <h6 class="fw-bold mb-0 small text-primary"><i class="bi bi-percent me-1"></i> Retenciones asociadas</h6>
                             </div>
                             <div class="table-responsive border rounded">
-                                <table class="table table-sm small mb-0 table-hover">
+                                <table class="table table-sm small mb-0">
                                     <thead class="table-light">
                                         <tr>
-                                            <th class="ps-3 py-2">Fecha</th>
-                                            <th>Nº Retención</th>
-                                            <th>Origen</th>
-                                            <th class="text-end pe-3">Total Retenido</th>
+                                            <th class="ps-3 py-2">Impuesto</th>
+                                            <th class="py-2">Código</th>
+                                            <th class="py-2">Concepto</th>
+                                            <th class="py-2">Doc. sustento</th>
+                                            <th class="text-end py-2">Base imponible</th>
+                                            <th class="text-end py-2">%</th>
+                                            <th class="text-end pe-3 py-2">Valor retenido</th>
                                         </tr>
                                     </thead>
                                     <tbody id="m-tbody-retenciones">
                                         <tr>
-                                            <td colspan="4" class="text-center py-5 text-muted">
+                                            <td colspan="7" class="text-center py-5 text-muted">
                                                 <i class="bi bi-info-circle me-1"></i> No se han encontrado retenciones para esta factura.
                                             </td>
                                         </tr>
@@ -6145,28 +6148,91 @@ $totalPages = $totalPagesOriginal;
                 cardTarjeta.classList.add('d-none');
             }
 
-            // Retenciones
+            // Retenciones: cada comprobante con su detalle línea por línea.
             const tbodyRet = document.getElementById('m-tbody-retenciones');
             if (tbodyRet) {
                 tbodyRet.innerHTML = '';
-                if (jCob.retenciones && jCob.retenciones.length > 0) {
-                    jCob.retenciones.forEach(ret => {
+                const rets = jCob.retenciones || [];
+
+                if (rets.length > 0) {
+                    // codigo_impuesto del SRI (ver create_retenciones_ventas.sql).
+                    const IMPUESTO_NOMBRE = { '1': 'Renta', '2': 'IVA', '6': 'ISD' };
+                    const celda = (texto, clases) => {
+                        const td = document.createElement('td');
+                        td.className = clases || '';
+                        td.textContent = texto;           // textContent: los datos vienen del cliente emisor
+                        return td;
+                    };
+
+                    rets.forEach(ret => {
                         const fEmis = ret.fecha_emision
                             ? ret.fecha_emision.slice(0, 10).split('-').reverse().join('/')
                             : '—';
                         const num = (ret.establecimiento || '000') + '-' + (ret.punto_emision || '000') + '-' + (ret.secuencial || '000000000');
-                        const origen = ret.origen || 'Manual';
                         const total = parseFloat(ret.total_retenido || 0);
 
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = '<td class="ps-3">' + fEmis + '</td>'
-                            + '<td><code class="text-secondary fw-bold">' + num + '</code></td>'
-                            + '<td>' + origen.toUpperCase() + '</td>'
-                            + '<td class="text-end fw-bold pe-3">$ ' + total.toFixed(2) + '</td>';
-                        tbodyRet.appendChild(tr);
+                        // ── Cabecera del comprobante de retención ──
+                        const trCab = document.createElement('tr');
+                        trCab.className = 'table-light';
+
+                        const tdCab = document.createElement('td');
+                        tdCab.colSpan = 6;
+                        tdCab.className = 'ps-3 py-2';
+                        const cod = document.createElement('code');
+                        cod.className = 'text-secondary fw-bold';
+                        cod.textContent = num;
+                        tdCab.appendChild(cod);
+                        const meta = document.createElement('span');
+                        meta.className = 'text-muted ms-2';
+                        meta.style.fontSize = '0.72rem';
+                        let metaTxt = fEmis + ' · ' + (ret.origen || 'manual').toUpperCase();
+                        if (ret.periodo_fiscal) metaTxt += ' · Período ' + ret.periodo_fiscal;
+                        if (ret.cliente_nombre) metaTxt += ' · ' + ret.cliente_nombre;
+                        meta.textContent = metaTxt;
+                        tdCab.appendChild(meta);
+                        trCab.appendChild(tdCab);
+                        trCab.appendChild(celda('$ ' + total.toFixed(2), 'text-end fw-bold pe-3 py-2'));
+                        tbodyRet.appendChild(trCab);
+
+                        // ── Líneas del comprobante ──
+                        const dets = ret.detalles || [];
+                        if (dets.length === 0) {
+                            const trVacio = document.createElement('tr');
+                            trVacio.appendChild(celda('Sin detalle registrado en este comprobante.',
+                                                      'ps-4 py-1 text-muted fst-italic'));
+                            trVacio.lastChild.colSpan = 7;
+                            tbodyRet.appendChild(trVacio);
+                            return;
+                        }
+
+                        dets.forEach(d => {
+                            const tr = document.createElement('tr');
+                            // Una retención puede sustentar varios documentos: las líneas de otro
+                            // documento se muestran atenuadas para no confundirlas con esta factura.
+                            const ajena = d.es_de_esta_factura === false;
+                            if (ajena) {
+                                tr.className = 'text-muted';
+                                tr.title = 'Esta línea sustenta otro documento del mismo comprobante de retención';
+                            }
+
+                            const imp = IMPUESTO_NOMBRE[String(d.codigo_impuesto)] || ('Cód. ' + (d.codigo_impuesto || '—'));
+                            const base = parseFloat(d.base_imponible || 0);
+                            const pct  = parseFloat(d.porcentaje_retencion || 0);
+                            const val  = parseFloat(d.valor_retenido || 0);
+
+                            tr.appendChild(celda(imp, 'ps-4 py-1'));
+                            tr.appendChild(celda(d.codigo_retencion || '—', 'py-1'));
+                            tr.appendChild(celda(d.sri_concepto || '—', 'py-1'));
+                            tr.appendChild(celda(d.num_doc_sustento || '—', 'py-1'));
+                            tr.appendChild(celda(base.toFixed(2), 'text-end py-1'));
+                            tr.appendChild(celda(pct.toFixed(2) + ' %', 'text-end py-1'));
+                            tr.appendChild(celda('$ ' + val.toFixed(2),
+                                                 'text-end pe-3 py-1' + (ajena ? '' : ' fw-bold')));
+                            tbodyRet.appendChild(tr);
+                        });
                     });
                 } else {
-                    tbodyRet.innerHTML = '<tr><td colspan="4" class="text-center py-5 text-muted">'
+                    tbodyRet.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted">'
                         + '<i class="bi bi-info-circle me-1"></i> No se han encontrado retenciones para esta factura.</td></tr>';
                 }
             }

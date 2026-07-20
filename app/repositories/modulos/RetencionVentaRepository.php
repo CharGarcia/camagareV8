@@ -448,6 +448,68 @@ class RetencionVentaRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Retenciones asociadas a una factura, cada una con su detalle línea por línea.
+     *
+     * El vínculo es doble, igual que en el cálculo del saldo de la factura:
+     *   - `r.id_venta`: retención registrada directamente desde la factura.
+     *   - `rd.num_doc_sustento`: retención electrónica recibida del SRI, que referencia
+     *     el número de la factura en sus líneas.
+     *
+     * Una misma retención puede sustentar varios documentos, por eso cada línea conserva
+     * su `num_doc_sustento` y se marca con `es_de_esta_factura` para distinguir las que
+     * corresponden a esta factura de las que pertenecen a otro documento.
+     */
+    public function getPorVentaConDetalle(int $idVenta, int $idEmpresa, string $numeroFactura): array
+    {
+        $sql = "SELECT r.id, r.establecimiento, r.punto_emision, r.secuencial,
+                       r.fecha_emision, r.periodo_fiscal, r.clave_acceso,
+                       r.total_renta, r.total_iva, r.total_isd,
+                       (r.total_renta + r.total_iva + r.total_isd) AS total_retenido,
+                       r.origen,
+                       c.nombre AS cliente_nombre, c.identificacion AS cliente_identificacion
+                FROM retencion_venta_cabecera r
+                LEFT JOIN clientes c ON c.id = r.id_cliente
+                WHERE r.id_empresa = :ie AND r.eliminado = false
+                  AND (r.id_venta = :iv
+                       OR EXISTS (SELECT 1 FROM retencion_venta_detalle rd
+                                   WHERE rd.id_retencion = r.id
+                                     AND rd.num_doc_sustento = :num))
+                ORDER BY r.fecha_emision DESC, r.id DESC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':ie' => $idEmpresa, ':iv' => $idVenta, ':num' => $numeroFactura]);
+        $retenciones = $st->fetchAll(PDO::FETCH_ASSOC);
+
+        if (!$retenciones) {
+            return [];
+        }
+
+        $sqlDet = "SELECT d.id_retencion, d.cod_doc_sustento, d.num_doc_sustento,
+                          d.fecha_emision_doc_sustento, d.codigo_impuesto, d.codigo_retencion,
+                          d.base_imponible, d.porcentaje_retencion, d.valor_retenido,
+                          rs.concepto_ret AS sri_concepto,
+                          ca.comprobante  AS doc_sustento_nombre
+                   FROM retencion_venta_detalle d
+                   LEFT JOIN retenciones_sri rs ON rs.codigo_ret = d.codigo_retencion
+                   LEFT JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = d.cod_doc_sustento
+                   WHERE d.id_retencion = :ir
+                   ORDER BY d.codigo_impuesto, d.id";
+        $stDet = $this->db->prepare($sqlDet);
+
+        foreach ($retenciones as &$r) {
+            $stDet->execute([':ir' => (int) $r['id']]);
+            $detalles = $stDet->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($detalles as &$d) {
+                $d['es_de_esta_factura'] = ((string) ($d['num_doc_sustento'] ?? '') === $numeroFactura);
+            }
+            unset($d);
+            $r['detalles'] = $detalles;
+        }
+        unset($r);
+
+        return $retenciones;
+    }
+
     public function getComprobantesAutorizados(): array
     {
         return $this->db->query("SELECT codigo_comprobante, comprobante 
