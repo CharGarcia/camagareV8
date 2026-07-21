@@ -336,15 +336,31 @@
                     const cImp = r.casillero_impuesto || '';
                     const vImp = cImp ? (parseFloat(valores[cImp]) || 0) : null;
 
-                    // Las filas de conteo muestran cantidades (enteros), no montos
-                    const esConteo = r.fuente_valor && r.fuente_valor !== 'documentos';
+                    // Las filas de conteo muestran cantidades (enteros), no montos. El arrastre
+                    // de crédito tributario (605/606/615/617) siempre es un monto (2 decimales).
+                    const esArrastre = (r.fuente_valor || '').startsWith('arrastre_');
+                    const esConteo = r.fuente_valor && r.fuente_valor !== 'documentos' && !esArrastre;
                     const dec = esConteo ? 0 : 2;
                     const fmt = v => v.toLocaleString('en-US', {minimumFractionDigits: dec, maximumFractionDigits: dec});
+
+                    // 615/617 (arrastre "saliente", para el próximo mes) se autocalculan pero
+                    // se pueden ajustar manualmente antes de guardar la declaración. 605/606
+                    // (arrastre "entrante") son de solo lectura: vienen del período anterior.
+                    const esArrastreSaliente = r.fuente_valor === 'arrastre_saliente_compras' || r.fuente_valor === 'arrastre_saliente_retenciones';
+                    const esArrastreEntrante = r.fuente_valor === 'arrastre_entrante_compras' || r.fuente_valor === 'arrastre_entrante_retenciones';
+                    let tdBruto;
+                    if (esArrastreSaliente) {
+                        tdBruto = `<input type="number" step="0.01" class="form-control form-control-sm text-end p-0 border-0 bg-warning bg-opacity-10 fw-bold" style="height:22px;font-size:0.78rem;" data-casillero-arrastre="${cBruto}" value="${(vBruto ?? 0).toFixed(2)}">`;
+                    } else if (esArrastreEntrante) {
+                        tdBruto = `${vBruto !== null ? fmt(vBruto) : ''} <i class="bi bi-lock-fill text-muted" style="font-size:0.65rem;" title="Se completa automáticamente con el arrastre del período anterior"></i>`;
+                    } else {
+                        tdBruto = vBruto !== null ? fmt(vBruto) : '';
+                    }
 
                     html += `<tr class="${rowClass} sri-row-data ${dNoneRow}" data-has-values="${r.hasValues ? '1' : '0'}">
                         <td class="ps-2" style="padding-left: calc(0.5rem + ${marginLeft}) !important;">${descFormatted}</td>
                         <td class="text-center text-muted" style="font-size:0.7rem;">${cBruto ? '<b>'+cBruto+'</b>' : ''}</td>
-                        <td class="text-end">${vBruto !== null ? fmt(vBruto) : ''}</td>
+                        <td class="text-end">${tdBruto}</td>
                         <td class="text-center text-muted" style="font-size:0.7rem;">${cNeto ? '<b>'+cNeto+'</b>' : ''}</td>
                         <td class="text-end">${vNeto !== null ? fmt(vNeto) : ''}</td>
                         <td class="text-center text-muted" style="font-size:0.7rem;">${cImp ? '<b>'+cImp+'</b>' : ''}</td>
@@ -578,6 +594,14 @@
                 fd.append('anio', p.anio);
                 fd.append('periodo', p.periodo);
                 fd.append('tipo_periodo', p.tipo_periodo);
+
+                // Arrastre de crédito tributario (615/617): si la tabla ya se generó, se envía
+                // el valor actual del input (autocalculado o ajustado a mano por el usuario).
+                const inp615 = document.querySelector('input[data-casillero-arrastre="615"]');
+                const inp617 = document.querySelector('input[data-casillero-arrastre="617"]');
+                if (inp615) fd.append('ajuste_615', inp615.value);
+                if (inp617) fd.append('ajuste_617', inp617.value);
+
                 btnGuardar.disabled = true;
                 fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/guardar-ajax`, { method: 'POST', body: fd }).then(data => {
                     btnGuardar.disabled = false;

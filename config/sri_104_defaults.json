@@ -55,6 +55,14 @@
         "NO_OBJETO": { "bruto": "531", "neto": "541", "impuesto": "" },
         "EXENTO":    { "bruto": "532", "neto": "542", "impuesto": "" }
     },
+    "importacion": {
+        "15": { "bruto": "", "neto": "", "impuesto": "505" },
+        "8":  { "bruto": "", "neto": "", "impuesto": "" },
+        "5":  { "bruto": "", "neto": "", "impuesto": "" },
+        "0":  { "bruto": "", "neto": "", "impuesto": "" },
+        "NO_OBJETO": { "bruto": "", "neto": "", "impuesto": "" },
+        "EXENTO":    { "bruto": "", "neto": "", "impuesto": "" }
+    },
     "retencion_iva": {
         "10":  { "ventas": "609", "compras": "721" },
         "20":  { "ventas": "609", "compras": "723" },

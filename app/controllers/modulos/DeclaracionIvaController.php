@@ -162,7 +162,7 @@ class DeclaracionIvaController extends BaseModuloController
                 }
             }
             
-            $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta);
+            $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, (string) $tipo, (int) $anio, (int) $periodo);
             $detalleDocumentos = $this->repository->getDetalleDocumentos($idEmpresa, $fechaDesde, $fechaHasta);
             
             echo json_encode([
@@ -224,7 +224,7 @@ class DeclaracionIvaController extends BaseModuloController
         }
 
         try {
-            $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta);
+            $resumenCompleto = $this->service->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, (string) $tipo, (int) $anio, (int) $periodo);
             $detalleDocumentos = $this->repository->getDetalleDocumentos($idEmpresa, $fechaDesde, $fechaHasta);
 
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
@@ -502,6 +502,8 @@ class DeclaracionIvaController extends BaseModuloController
                 'periodo_anio'  => (int) ($_POST['anio'] ?? 0),
                 'periodo_valor' => (int) ($_POST['periodo'] ?? 0),
                 'observaciones' => trim((string) ($_POST['observaciones'] ?? '')) ?: null,
+                'ajuste_615'    => $_POST['ajuste_615'] ?? '',
+                'ajuste_617'    => $_POST['ajuste_617'] ?? '',
             ]);
             echo json_encode(['ok' => true, 'declaracion' => $declaracion]);
         } catch (\Throwable $e) {

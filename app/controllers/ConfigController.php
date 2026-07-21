@@ -609,6 +609,8 @@ class ConfigController extends Controller
             'migrar'             => 'migrarAjax',
             'progreso'           => 'progresoAjax',
             'verificar-anuladas' => 'verificarAnuladasAjax',
+            'config-preview'     => 'configPreviewAjax',
+            'config-aplicar'     => 'configAplicarAjax',
             default              => 'index',
         };
         if (method_exists($c, $method)) {

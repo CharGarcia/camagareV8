@@ -965,6 +965,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                     'liquidacion_compra' => 'Liquidaciones de Compra',
                                     'nota_credito_compra' => 'Notas de Crédito (Compra)',
                                     'nota_debito_compra' => 'Notas de Débito (Compra)',
+                                    'importacion' => 'Importaciones (crédito tributario aduanero)',
                                 ];
                                 $idxAcc = 0;
                                 ?>
@@ -978,6 +979,9 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                             </h2>
                                             <div id="collapse<?= $idxAcc ?>" class="accordion-collapse collapse <?= $idxAcc === 1 ? 'show' : '' ?>" aria-labelledby="heading<?= $idxAcc ?>" data-bs-parent="#accordionCasillerosIva">
                                                 <div class="accordion-body p-0">
+                                                    <?php if ($tdKey === 'importacion'): ?>
+                                                        <p class="text-muted small px-3 pt-2 mb-0"><i class="bi bi-info-circle me-1"></i>El IVA pagado en aduana (nacionalización) no viene desglosado por tarifa: complete solo la columna <b>Casillero Impuesto</b> de la fila 15% (la tarifa habitual de importación); Bruto/Neto se dejan vacíos.</p>
+                                                    <?php endif; ?>
                                                     <div class="table-responsive">
                                                         <table class="table table-sm table-hover mb-0 small border-top-0">
                                                             <thead class="table-light">

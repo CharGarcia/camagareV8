@@ -94,6 +94,13 @@ class DeclaracionIvaService
             $retVService->sincronizarCasilleros((int)$rv['id'], null);
         }
 
+        // 7. Importaciones (crédito tributario aduanero, solo nacionalizadas/cerradas)
+        $importaciones = $this->repository->getDocumentosPeriodo($idEmpresa, 'importaciones_cabecera', $fechaDesde, $fechaHasta);
+        $impService = new ImportacionesService();
+        foreach ($importaciones as $imp) {
+            $impService->sincronizarCasilleros((int)$imp['id'], $idEmpresa);
+        }
+
         return ['ok' => true, 'mensaje' => 'Sincronización completa finalizada.'];
     }
 
@@ -102,7 +109,7 @@ class DeclaracionIvaService
      * limitando a 0 (para que no existan valores negativos), y 
      * resolviendo las fórmulas matemáticas.
      */
-    public function getResumenCompleto(int $idEmpresa, string $fechaDesde, string $fechaHasta): array
+    public function getResumenCompleto(int $idEmpresa, string $fechaDesde, string $fechaHasta, string $tipoPeriodo = '', int $anio = 0, int $periodoValor = 0): array
     {
         // 1. Obtener sumatorias desde base de datos (se mantienen los agrupados por código '401', etc)
         $rawSums = $this->repository->getResumenPorCasilleros($idEmpresa, $fechaDesde, $fechaHasta);
@@ -119,11 +126,39 @@ class DeclaracionIvaService
         // del período (configurado en la estructura con fuente_valor)
         foreach ($estructura as $e) {
             $fuente = $e['fuente_valor'] ?? 'documentos';
-            if ($fuente !== '' && $fuente !== null && $fuente !== 'documentos') {
+            if ($fuente !== '' && $fuente !== null && $fuente !== 'documentos' && !str_starts_with($fuente, 'arrastre_')) {
                 $casillero = $e['casillero_bruto'] ?: ($e['casillero_neto'] ?: $e['casillero_impuesto']);
                 if ($casillero) {
                     $sums[$casillero] = (float) $this->repository->getConteoDocumentos($idEmpresa, $fuente, $fechaDesde, $fechaHasta);
                 }
+            }
+        }
+
+        // 2c. Casilleros de arrastre de crédito tributario (605/606 entrante, 615/617 saliente).
+        // Solo se calculan si se recibió el contexto del período (tipo_periodo/anio/periodo_valor);
+        // sin eso (llamadas antiguas) simplemente no se pintan estos casilleros.
+        if ($tipoPeriodo !== '' && $anio > 0 && $periodoValor > 0) {
+            $ambiente = $this->ambienteEmpresa($idEmpresa);
+            [$anioAnt, $periodoAnt] = $this->periodoAnterior($tipoPeriodo, $anio, $periodoValor);
+            $declAnterior = $this->repository->getDeclaracionAnterior($idEmpresa, $ambiente, $tipoPeriodo, $anioAnt, $periodoAnt);
+            $creditoAnteriorCompras     = $declAnterior ? round((float) $declAnterior['saldo_favor_compras'], 2) : 0.0;
+            $creditoAnteriorRetenciones = $declAnterior ? round((float) $declAnterior['saldo_favor_retenciones'], 2) : 0.0;
+            $sums['605'] = $creditoAnteriorCompras;
+            $sums['606'] = $creditoAnteriorRetenciones;
+
+            // Si el período ya tiene una declaración guardada, se respeta el valor guardado
+            // (pudo haber sido ajustado manualmente) en vez de recalcular el default y pisarlo.
+            $declActual = $this->repository->findDeclaracion($idEmpresa, $ambiente, $tipoPeriodo, $anio, $periodoValor);
+            if ($declActual) {
+                $sums['615'] = round((float) $declActual['saldo_favor_compras'], 2);
+                $sums['617'] = round((float) $declActual['saldo_favor_retenciones'], 2);
+            } else {
+                $comp = $this->repository->getResumenPagoDirecto($idEmpresa, $fechaDesde, $fechaHasta, $ambiente);
+                $ivaVentasNeto      = round((float) $comp['iva_ventas'] - (float) $comp['iva_notas_credito'], 2);
+                $creditoComprasNeto = round((float) $comp['iva_compras'] - (float) $comp['iva_notas_credito_compra'], 2);
+                $split = $this->calcularSplitArrastre($ivaVentasNeto, $creditoComprasNeto, (float) $comp['retenciones'], $creditoAnteriorCompras, $creditoAnteriorRetenciones);
+                $sums['615'] = $split['615'];
+                $sums['617'] = $split['617'];
             }
         }
 
@@ -308,6 +343,39 @@ class DeclaracionIvaService
         return $periodoValor <= 1 ? [$anio - 1, 12] : [$anio, $periodoValor - 1];
     }
 
+    /**
+     * Descompone el arrastre de crédito tributario en sus dos orígenes (compras/adquisiciones
+     * y retenciones), consumiendo el IVA en ventas en el MISMO orden que ya usa el cálculo
+     * combinado de siempre (compras primero, retenciones después), para que el total
+     * (615 + 617, o el a_pagar) coincida exactamente con el neto combinado tradicional.
+     *
+     * @return array{'615':float,'617':float,'a_pagar':float,'saldo_favor':float}
+     */
+    private function calcularSplitArrastre(float $ivaVentasNeto, float $creditoComprasNeto, float $retenciones, float $creditoAnteriorCompras, float $creditoAnteriorRetenciones): array
+    {
+        $disponibleCompras = round($creditoAnteriorCompras + $creditoComprasNeto, 2);
+        $netoTrasCompras    = round($ivaVentasNeto - $disponibleCompras, 2);
+
+        if ($netoTrasCompras <= 0) {
+            // El crédito de compras por sí solo ya cubre el IVA en ventas: sobra para arrastrar,
+            // y las retenciones del período (más lo que traía de antes) no se tocan, quedan enteras.
+            $c615 = round(-$netoTrasCompras, 2);
+            $c617 = round($creditoAnteriorRetenciones + $retenciones, 2);
+            return ['615' => $c615, '617' => $c617, 'a_pagar' => 0.0, 'saldo_favor' => round($c615 + $c617, 2)];
+        }
+
+        // El crédito de compras se agotó (615 = 0); seguimos con las retenciones.
+        $disponibleRetenciones = round($creditoAnteriorRetenciones + $retenciones, 2);
+        $netoFinal = round($netoTrasCompras - $disponibleRetenciones, 2);
+
+        if ($netoFinal <= 0) {
+            $c617 = round(-$netoFinal, 2);
+            return ['615' => 0.0, '617' => $c617, 'a_pagar' => 0.0, 'saldo_favor' => $c617];
+        }
+
+        return ['615' => 0.0, '617' => 0.0, 'a_pagar' => $netoFinal, 'saldo_favor' => 0.0];
+    }
+
     private function etiquetaPeriodo(array $decl): string
     {
         $meses = [1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4 => 'Abril', 5 => 'Mayo', 6 => 'Junio',
@@ -363,34 +431,59 @@ class DeclaracionIvaService
 
         [$anioAnt, $periodoAnt] = $this->periodoAnterior($tipoPeriodo, $anio, $periodoValor);
         $declAnterior = $this->repository->getDeclaracionAnterior($idEmpresa, $ambiente, $tipoPeriodo, $anioAnt, $periodoAnt);
-        $creditoAnteriorAplicado = $declAnterior ? round((float) $declAnterior['saldo_favor'], 2) : 0.0;
+        // Entrante (casilleros 605/606): obligatorio = lo declarado como saliente (615/617) del período anterior.
+        $creditoAnteriorCompras     = $declAnterior ? round((float) $declAnterior['saldo_favor_compras'], 2) : 0.0;
+        $creditoAnteriorRetenciones = $declAnterior ? round((float) $declAnterior['saldo_favor_retenciones'], 2) : 0.0;
+        $creditoAnteriorAplicado   = round($creditoAnteriorCompras + $creditoAnteriorRetenciones, 2);
 
-        $neto       = $ivaVentas - $notasCreditoVenta - $creditoCompras + $notasCreditoCompra - $retenciones - $creditoAnteriorAplicado;
-        $aPagar     = round(max(0.0, $neto), 2);
-        $saldoFavor = round(max(0.0, -$neto), 2);
+        $ivaVentasNeto      = round($ivaVentas - $notasCreditoVenta, 2);
+        $creditoComprasNeto = round($creditoCompras - $notasCreditoCompra, 2);
+        $split = $this->calcularSplitArrastre($ivaVentasNeto, $creditoComprasNeto, $retenciones, $creditoAnteriorCompras, $creditoAnteriorRetenciones);
 
-        $valoresCasilleros = $this->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta)['valores'] ?? [];
+        // Saliente (casilleros 615/617): autocalculado, pero el usuario puede sobreescribirlo
+        // desde el formulario antes de guardar (arrastre editable al período siguiente).
+        $ajuste615 = (isset($data['ajuste_615']) && $data['ajuste_615'] !== '' && $data['ajuste_615'] !== null)
+            ? round((float) $data['ajuste_615'], 2) : null;
+        $ajuste617 = (isset($data['ajuste_617']) && $data['ajuste_617'] !== '' && $data['ajuste_617'] !== null)
+            ? round((float) $data['ajuste_617'], 2) : null;
+
+        $saldoFavorCompras     = $ajuste615 ?? $split['615'];
+        $saldoFavorRetenciones = $ajuste617 ?? $split['617'];
+        $saldoFavor = round($saldoFavorCompras + $saldoFavorRetenciones, 2);
+        $aPagar     = round($split['a_pagar'], 2);
+
+        $valoresCasilleros = $this->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta, $tipoPeriodo, $anio, $periodoValor)['valores'] ?? [];
+        // Los valores efectivamente guardados (con el ajuste manual aplicado) mandan sobre
+        // el default que haya calculado getResumenCompleto para el snapshot del formulario.
+        $valoresCasilleros['605'] = $creditoAnteriorCompras;
+        $valoresCasilleros['606'] = $creditoAnteriorRetenciones;
+        $valoresCasilleros['615'] = $saldoFavorCompras;
+        $valoresCasilleros['617'] = $saldoFavorRetenciones;
 
         $toSave = [
-            'id_empresa'                 => $idEmpresa,
-            'tipo_ambiente'              => $ambiente,
-            'tipo_periodo'               => $tipoPeriodo,
-            'periodo_anio'               => $anio,
-            'periodo_valor'              => $periodoValor,
-            'fecha_desde'                => $fechaDesde,
-            'fecha_hasta'                => $fechaHasta,
-            'iva_ventas'                 => $ivaVentas,
-            'notas_credito_venta'        => $notasCreditoVenta,
-            'credito_tributario_compras' => $creditoCompras,
-            'notas_credito_compra'       => $notasCreditoCompra,
-            'retenciones_iva'            => $retenciones,
-            'credito_anterior_aplicado'  => $creditoAnteriorAplicado,
-            'iva_a_pagar'                => $aPagar,
-            'saldo_favor'                => $saldoFavor,
-            'valores_casilleros'         => $valoresCasilleros,
-            'estado'                     => $existente['estado'] ?? 'guardado',
-            'observaciones'              => $data['observaciones'] ?? ($existente['observaciones'] ?? null),
-            'usuario_id'                 => $idUsuario,
+            'id_empresa'                   => $idEmpresa,
+            'tipo_ambiente'                => $ambiente,
+            'tipo_periodo'                 => $tipoPeriodo,
+            'periodo_anio'                 => $anio,
+            'periodo_valor'                => $periodoValor,
+            'fecha_desde'                  => $fechaDesde,
+            'fecha_hasta'                  => $fechaHasta,
+            'iva_ventas'                   => $ivaVentas,
+            'notas_credito_venta'          => $notasCreditoVenta,
+            'credito_tributario_compras'   => $creditoCompras,
+            'notas_credito_compra'         => $notasCreditoCompra,
+            'retenciones_iva'              => $retenciones,
+            'credito_anterior_aplicado'    => $creditoAnteriorAplicado,
+            'credito_anterior_compras'     => $creditoAnteriorCompras,
+            'credito_anterior_retenciones' => $creditoAnteriorRetenciones,
+            'iva_a_pagar'                  => $aPagar,
+            'saldo_favor'                  => $saldoFavor,
+            'saldo_favor_compras'          => $saldoFavorCompras,
+            'saldo_favor_retenciones'      => $saldoFavorRetenciones,
+            'valores_casilleros'           => $valoresCasilleros,
+            'estado'                       => $existente['estado'] ?? 'guardado',
+            'observaciones'                => $data['observaciones'] ?? ($existente['observaciones'] ?? null),
+            'usuario_id'                   => $idUsuario,
         ];
 
         if ($existente) {

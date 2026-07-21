@@ -136,6 +136,47 @@ class MigrarMysqlController extends Controller
         exit;
     }
 
+    /**
+     * POST: tabla comparativa de la configuración contable del sistema viejo (solo reglas
+     * generales). No escribe nada: el usuario decide después qué aplicar.
+     */
+    public function configPreviewAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            [$idEmpresa, $ruc] = $this->resolverEmpresa();
+            $svc  = new \App\Services\MigracionMysql\MigracionConfigContableService();
+            $data = $svc->previsualizar($idEmpresa, $ruc);
+            echo json_encode(['ok' => true] + $data, JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
+    /** POST: aplica SOLO las reglas que el usuario marcó en la pantalla de revisión. */
+    public function configAplicarAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            [$idEmpresa] = $this->resolverEmpresa();
+            $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+
+            $sel = $_POST['seleccion'] ?? '[]';
+            $sel = is_string($sel) ? json_decode($sel, true) : $sel;
+            if (!is_array($sel) || !$sel) {
+                throw new \RuntimeException('No se seleccionó ninguna regla para aplicar.');
+            }
+
+            $svc = new \App\Services\MigracionMysql\MigracionConfigContableService();
+            $res = $svc->aplicar($idEmpresa, $idUsuario, $sel);
+            echo json_encode(['ok' => true, 'data' => $res], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     /** Devuelve [idEmpresa, ruc] de la empresa seleccionada. */
     private function resolverEmpresa(): array
     {

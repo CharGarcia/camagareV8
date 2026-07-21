@@ -21,6 +21,8 @@ class MigracionMysqlService
      * `tipo` (catalogo|documento) ajusta la estimación de tiempo. Todas filtran por ruc_empresa.
      */
     public const ENTIDADES = [
+        // Prerequisito de Contabilidad y de la configuración contable: ambas apuntan a cuentas.
+        'plan_cuentas'      => ['label' => 'Plan de cuentas',                  'tabla' => 'plan_cuentas',               'fecha' => null,             'tipo' => 'catalogo'],
         'clientes'          => ['label' => 'Clientes',                         'tabla' => 'clientes',                   'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
         'productos'         => ['label' => 'Productos y servicios',            'tabla' => 'productos_servicios',        'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
         'proveedores'       => ['label' => 'Proveedores',                      'tabla' => 'proveedores',                'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
@@ -98,6 +100,8 @@ class MigracionMysqlService
     public function migrar(string $entidad, int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
         switch ($entidad) {
+            case 'plan_cuentas':
+                return $this->migrarPlanCuentasEntidad($idEmpresa, $ruc, $idUsuario);
             case 'clientes':
                 return $this->migrarClientes($idEmpresa, $ruc, $idUsuario);
             case 'productos':
@@ -951,6 +955,12 @@ class MigracionMysqlService
      * Las cuentas de movimiento (las que usan los asientos) son todas de nivel 5, p. ej.
      * '3.1.01.01.001' -> '3.1.1.01.001'.
      */
+    /** Igual que codigoCasa(), expuesto para reusar la MISMA conversión desde otros servicios. */
+    public static function codigoCasaPublico(string $cod): string
+    {
+        return self::codigoCasa($cod);
+    }
+
     private static function codigoCasa(string $cod): string
     {
         $s = explode('.', $cod);
@@ -1020,19 +1030,22 @@ class MigracionMysqlService
      * casa (codigoCasa). Reglas:
      *   - Si la cuenta (por su código de la casa) YA EXISTE en el plan nuevo: se reusa y se
      *     sobreescribe su NOMBRE con el del sistema viejo. No se duplica.
-     *   - Si NO existe: se crea SOLO cuando la empresa nueva no tenía plan de cuentas (para no
-     *     ensuciar un plan ya armado). Si la nueva ya tenía plan, las cuentas faltantes se crean
-     *     bajo demanda (resolverOCrearCuenta) únicamente cuando un asiento las referencia.
+     *   - Si NO existe: se crea. Con `$crearSiempre=false` (uso interno desde Contabilidad) solo se
+     *     crea si la empresa nueva no tenía plan, para no ensuciar uno ya armado; las faltantes se
+     *     crean bajo demanda (resolverOCrearCuenta) cuando un asiento las referencia. Con
+     *     `$crearSiempre=true` (entidad "Plan de cuentas", paso explícito del usuario) se crean todas.
      * Deja `$mapCuenta` (id_cuenta viejo → id nuevo) y `$cuentaPorCod` (código casa → id) listos.
+     * Si se pasa `$res`, cuenta migradas/vinculadas/omitidas para el reporte del módulo.
      */
-    private function migrarPlanCuentas(int $idEmpresa, int $idUsuario, PDO $pg, array $oldCuentas, array &$mapCuenta, array &$cuentaPorCod): void
+    private function migrarPlanCuentas(int $idEmpresa, int $idUsuario, PDO $pg, array $oldCuentas, array &$mapCuenta, array &$cuentaPorCod, bool $crearSiempre = false, ?array &$res = null): void
     {
         $nuevoVacio = ((int) $pg->query("SELECT COUNT(*) FROM plan_cuentas WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false")->fetchColumn()) === 0;
         $ins    = $pg->prepare("INSERT INTO plan_cuentas (id_empresa, id_usuario, codigo, nivel, nombre, status, created_by) VALUES (?, ?, ?, ?, ?, 1, ?) RETURNING id");
         $updNom = $pg->prepare("UPDATE plan_cuentas SET nombre = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         foreach ($oldCuentas as $oldId => $c) {
+            if ($res !== null) { $res['total']++; }
             $cod = trim((string) $c['codigo']);
-            if ($cod === '') { continue; }
+            if ($cod === '') { if ($res !== null) { $res['omitidos']++; } continue; }
             $house  = self::codigoCasa($cod);
             $nombre = ((string) $c['nombre'] !== '') ? (string) $c['nombre'] : $house;
             if (isset($cuentaPorCod[$house])) {
@@ -1040,15 +1053,55 @@ class MigracionMysqlService
                 $newId = (int) $cuentaPorCod[$house];
                 $updNom->execute([$nombre, $idUsuario, $newId]);
                 $mapCuenta[(int) $oldId] = $newId;
-            } elseif ($nuevoVacio) {
-                // Empresa nueva sin plan: importar la cuenta con el código de la casa.
+                if ($res !== null) {
+                    $res['vinculados']++;
+                    if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = $house . ' · ' . $nombre; }
+                }
+            } elseif ($crearSiempre || $nuevoVacio) {
                 $nivel = (int) ($c['nivel'] ?: (substr_count($house, '.') + 1));
                 $ins->execute([$idEmpresa, $idUsuario, $house, $nivel, $nombre, $idUsuario]);
                 $newId = (int) $ins->fetchColumn();
                 $cuentaPorCod[$house]    = $newId;
                 $mapCuenta[(int) $oldId] = $newId;
+                if ($res !== null) { $res['migrados']++; }
+            } elseif ($res !== null) {
+                $res['omitidos']++;
             }
         }
+    }
+
+    /**
+     * Entidad "Plan de cuentas": migra el plan viejo como PASO PROPIO (prerequisito para importar la
+     * configuración contable, que apunta a cuentas). A diferencia del uso interno desde Contabilidad,
+     * aquí SÍ se crean las cuentas faltantes aunque la empresa ya tenga plan.
+     */
+    private function migrarPlanCuentasEntidad(int $idEmpresa, string $ruc, int $idUsuario): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+
+        $res = ['entidad' => 'plan_cuentas', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'cuenta sin código en el plan viejo', 'errores' => 0];
+
+        // Plan nuevo actual (código de la casa → id) y plan viejo de la empresa.
+        $cuentaPorCod = [];
+        $qn = $pg->prepare("SELECT codigo, id FROM plan_cuentas WHERE id_empresa = ? AND eliminado = false");
+        $qn->execute([$idEmpresa]);
+        foreach ($qn->fetchAll(PDO::FETCH_ASSOC) as $r) { $cuentaPorCod[(string) $r['codigo']] = (int) $r['id']; }
+
+        $oldCuentas = [];
+        foreach ($mysql->query("SELECT id_cuenta, codigo_cuenta, nombre_cuenta, nivel_cuenta FROM plan_cuentas WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base) . " ORDER BY codigo_cuenta") as $r) {
+            $oldCuentas[(int) $r['id_cuenta']] = ['codigo' => $r['codigo_cuenta'], 'nombre' => $r['nombre_cuenta'], 'nivel' => $r['nivel_cuenta']];
+        }
+
+        $mapCuenta = [];
+        try {
+            $this->migrarPlanCuentas($idEmpresa, $idUsuario, $pg, $oldCuentas, $mapCuenta, $cuentaPorCod, true, $res);
+        } catch (Throwable $ex) {
+            $res['errores']++;
+            if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+        }
+        return $res;
     }
 
     /** Migra la contabilidad histórica (encabezado_diario + detalle_diario_contable) → asientos, tal cual (modulo_origen='migracion'). */

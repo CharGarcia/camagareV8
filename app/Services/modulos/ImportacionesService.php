@@ -711,6 +711,8 @@ class ImportacionesService
                 $this->repository->actualizarEstado($id, 'nacionalizada', $idUsuario, date('Y-m-d'));
             }
 
+            $this->sincronizarCasilleros($id, $idEmpresa);
+
             $this->logService->registrar(
                 $idUsuario, $idEmpresa, 'NACIONALIZAR', 'importaciones_cabecera', $id,
                 ['estado' => $importacion['estado']],
@@ -739,6 +741,66 @@ class ImportacionesService
             'pendiente_aprobacion'      => false,
             'asiento_warning'           => $warning,
         ];
+    }
+
+    /**
+     * Refleja el IVA de importación (crédito tributario pagado en aduana) en el "Detalle de
+     * Casilleros" de la Declaración de IVA. Mismo patrón que ComprasService::sincronizarCasilleros,
+     * pero sin desglose por tarifa: importaciones_gastos no guarda codigo_porcentaje, así que solo
+     * se completa el casillero "Impuesto" configurado en Empresa → Form 104 IVA → Importaciones.
+     */
+    public function sincronizarCasilleros(int $idImportacion, int $idEmpresa): void
+    {
+        $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
+        $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'importaciones', $idImportacion);
+
+        $importacion = $this->repository->getPorId($idImportacion, $idEmpresa);
+        if (!$importacion) {
+            return;
+        }
+        // Solo cuenta una vez nacionalizada/cerrada (antes es un borrador sin crédito real todavía)
+        // y si no se excluyó puntualmente de la declaración.
+        if (!in_array($importacion['estado'] ?? '', ['nacionalizada', 'cerrada'], true)) {
+            return;
+        }
+        if (($importacion['deducible'] ?? 'declaracion_iva') !== 'declaracion_iva') {
+            return;
+        }
+
+        $gastos = $this->repository->getGastos($idImportacion);
+        $ivaTotal = 0.0;
+        foreach ($gastos as $g) {
+            if (($g['tipo_gasto'] ?? '') === 'iva_importacion' && ($g['origen'] ?? 'dai_manual') === 'dai_manual') {
+                $ivaTotal += (float) ($g['monto'] ?? 0);
+            }
+        }
+        if ($ivaTotal <= 0.0) {
+            return;
+        }
+
+        $empresaConfigRepo = new \App\repositories\modulos\EmpresaRepository();
+        $configDec = $empresaConfigRepo->getIvaCasilleros($idEmpresa);
+        if (!$configDec || !isset($configDec['importacion'])) {
+            return;
+        }
+        $confImp = $configDec['importacion'];
+
+        // Sin tarifa real disponible: se usa la fila configurada para el 15% (tarifa habitual de
+        // importación) como casillero destino; si no está configurada, se toma la primera que sí lo esté.
+        $tarifaMap = $decIvaRepo->getMapaTarifasIva();
+        $idTarifa15 = $tarifaMap['15'] ?? null;
+        $conf = ($idTarifa15 !== null && isset($confImp[$idTarifa15])) ? $confImp[$idTarifa15] : reset($confImp);
+        $impC = $conf['impuesto'] ?? '';
+        if ($impC === '' || $impC === false) {
+            return;
+        }
+
+        $concepto = 'Importación #' . ($importacion['establecimiento'] ?? '') . '-' . ($importacion['punto_emision'] ?? '') . '-' . ($importacion['secuencial'] ?? $idImportacion);
+        $decIvaRepo->insertarCasilleroDeclaracion([
+            'id_empresa' => $idEmpresa, 'origen' => 'importaciones', 'id_origen' => $idImportacion,
+            'fecha' => $importacion['fecha_nacionalizacion'] ?? date('Y-m-d'),
+            'casillero' => $impC, 'valor' => round($ivaTotal, 2), 'concepto' => $concepto . ' (IVA aduana)',
+        ]);
     }
 
     public function procesarAsientoContable(int $idImportacion, int $idEmpresa, int $idUsuario): void

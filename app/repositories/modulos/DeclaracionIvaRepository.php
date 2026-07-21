@@ -30,13 +30,19 @@ class DeclaracionIvaRepository extends BaseRepository
         $this->db->exec("ALTER TABLE casilleros_declaracion_sri ADD COLUMN IF NOT EXISTS concepto VARCHAR(255)");
 
         $estadoFilter = "AND estado = 'autorizado'";
+        $fechaCol = 'fecha_emision';
         if ($tabla === 'compras_cabecera') {
             $estadoFilter = "AND COALESCE(deducible, '') = 'declaracion_iva'";
         } elseif ($tabla === 'retencion_venta_cabecera') {
             $estadoFilter = ""; // Estas tablas no tienen columna estado, solo nos guiamos por eliminado
+        } elseif ($tabla === 'importaciones_cabecera') {
+            // No es comprobante SRI: no tiene fecha_emision, y el crédito solo es real una
+            // vez nacionalizada (o cerrada); antes es un borrador sin IVA declarable todavía.
+            $fechaCol = 'fecha_nacionalizacion';
+            $estadoFilter = "AND estado IN ('nacionalizada', 'cerrada') AND COALESCE(deducible, '') = 'declaracion_iva'";
         }
 
-        $sql = "SELECT id FROM {$tabla} WHERE id_empresa = :emp AND fecha_emision BETWEEN :d AND :h {$estadoFilter} AND eliminado = false AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)";
+        $sql = "SELECT id FROM {$tabla} WHERE id_empresa = :emp AND {$fechaCol} BETWEEN :d AND :h {$estadoFilter} AND eliminado = false AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)";
         return $this->query($sql, [':emp' => $idEmpresa, ':d' => $fechaDesde, ':h' => $fechaHasta])->fetchAll();
     }
 
@@ -203,6 +209,8 @@ class DeclaracionIvaRepository extends BaseRepository
                     (c.origen = 'retenciones_compras' AND NOT EXISTS (SELECT 1 FROM retencion_compra_cabecera rc WHERE rc.id = CAST(c.id_origen AS INTEGER) AND COALESCE(rc.eliminado, false) = false AND rc.estado = 'autorizado'))
                     OR
                     (c.origen = 'retenciones_ventas' AND NOT EXISTS (SELECT 1 FROM retencion_venta_cabecera rv WHERE rv.id = CAST(c.id_origen AS INTEGER) AND COALESCE(rv.eliminado, false) = false))
+                    OR
+                    (c.origen = 'importaciones' AND NOT EXISTS (SELECT 1 FROM importaciones_cabecera imp WHERE imp.id = CAST(c.id_origen AS INTEGER) AND COALESCE(imp.eliminado, false) = false AND imp.estado IN ('nacionalizada', 'cerrada') AND COALESCE(imp.deducible, '') = 'declaracion_iva'))
                 )";
         $st = $this->db->prepare($sql);
         $st->execute([$idEmpresa, $fechaDesde, $fechaHasta, $idEmpresa]);
@@ -377,6 +385,16 @@ class DeclaracionIvaRepository extends BaseRepository
              WHERE id_empresa = :emp AND eliminado = false
                AND fecha_emision BETWEEN :d AND :h AND tipo_ambiente = :amb", $p)->fetchColumn();
 
+        // IVA pagado en aduana al nacionalizar importaciones: mismo casillero oficial que las
+        // compras (605/615 "adquisiciones E IMPORTACIONES"), por eso se suma directo a iva_compras.
+        // Solo cuenta una vez nacionalizada/cerrada (antes es un borrador sin crédito real todavía).
+        $ivaImportaciones = (float) $this->query(
+            "SELECT COALESCE(SUM(total_iva), 0)
+             FROM importaciones_cabecera
+             WHERE id_empresa = :emp AND deducible = 'declaracion_iva' AND eliminado = false
+               AND estado IN ('nacionalizada', 'cerrada')
+               AND fecha_nacionalizacion BETWEEN :d AND :h AND tipo_ambiente = :amb", $p)->fetchColumn();
+
         $numVentas = (int) $this->query(
             "SELECT COUNT(*)
              FROM ventas_cabecera v
@@ -386,7 +404,7 @@ class DeclaracionIvaRepository extends BaseRepository
         return [
             'iva_ventas'               => $ivaVentas,
             'iva_notas_credito'        => $ivaNotasCredito,
-            'iva_compras'              => $ivaCompras,
+            'iva_compras'              => $ivaCompras + $ivaImportaciones,
             'iva_notas_credito_compra' => $ivaNotasCreditoCompra,
             'retenciones'              => $retenciones,
             'num_ventas'               => $numVentas,
@@ -458,12 +476,16 @@ class DeclaracionIvaRepository extends BaseRepository
                     fecha_desde, fecha_hasta,
                     iva_ventas, notas_credito_venta, credito_tributario_compras, notas_credito_compra,
                     retenciones_iva, credito_anterior_aplicado, iva_a_pagar, saldo_favor,
+                    credito_anterior_compras, credito_anterior_retenciones,
+                    saldo_favor_compras, saldo_favor_retenciones,
                     valores_casilleros, estado, observaciones, created_by, updated_by
                 ) VALUES (
                     :id_empresa, :amb, :tp, :anio, :periodo,
                     :fdesde, :fhasta,
                     :iva_ventas, :nc_venta, :credito_compras, :nc_compra,
                     :retenciones, :credito_ant, :a_pagar, :saldo_favor,
+                    :credito_ant_compras, :credito_ant_retenciones,
+                    :saldo_favor_compras, :saldo_favor_retenciones,
                     :valores, :estado, :obs, :usr, :usr2
                 ) RETURNING id";
         $params = $this->mapDeclaracionParams($data);
@@ -481,6 +503,8 @@ class DeclaracionIvaRepository extends BaseRepository
                     credito_tributario_compras = :credito_compras, notas_credito_compra = :nc_compra,
                     retenciones_iva = :retenciones, credito_anterior_aplicado = :credito_ant,
                     iva_a_pagar = :a_pagar, saldo_favor = :saldo_favor,
+                    credito_anterior_compras = :credito_ant_compras, credito_anterior_retenciones = :credito_ant_retenciones,
+                    saldo_favor_compras = :saldo_favor_compras, saldo_favor_retenciones = :saldo_favor_retenciones,
                     valores_casilleros = :valores, estado = :estado, observaciones = :obs,
                     updated_by = :usr, updated_at = now()
                 WHERE id = :id AND id_empresa = :id_empresa2";
@@ -509,6 +533,10 @@ class DeclaracionIvaRepository extends BaseRepository
             ':credito_ant'     => (float) $data['credito_anterior_aplicado'],
             ':a_pagar'         => (float) $data['iva_a_pagar'],
             ':saldo_favor'     => (float) $data['saldo_favor'],
+            ':credito_ant_compras'     => (float) ($data['credito_anterior_compras'] ?? 0),
+            ':credito_ant_retenciones' => (float) ($data['credito_anterior_retenciones'] ?? 0),
+            ':saldo_favor_compras'     => (float) ($data['saldo_favor_compras'] ?? 0),
+            ':saldo_favor_retenciones' => (float) ($data['saldo_favor_retenciones'] ?? 0),
             ':valores'         => json_encode($data['valores_casilleros'] ?? [], JSON_UNESCAPED_UNICODE),
             ':estado'          => (string) ($data['estado'] ?? 'guardado'),
             ':obs'             => $data['observaciones'] ?? null,

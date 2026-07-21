@@ -114,6 +114,34 @@ $base = BASE_URL;
             </div>
         </div>
     </div>
+
+    <!-- Paso 3: importar la configuración contable (reglas generales), con revisión previa -->
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white d-flex align-items-center justify-content-between">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-3-circle text-primary me-2"></i>Configuración contable (opcional)</h6>
+                <button class="btn btn-sm btn-outline-primary" id="btnCfgPrev">
+                    <i class="bi bi-search me-1"></i> Revisar configuración del sistema anterior
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="small text-muted mb-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Trae las <b>reglas generales</b> de cuentas del sistema anterior (ventas, compras, recibos, rol de pagos).
+                    Primero migre el <b>Plan de cuentas</b>: las cuentas destino se resuelven por su código.
+                    Nada se guarda hasta que usted elija qué aplicar.
+                </div>
+                <div id="cfgResumen" class="small mb-2"></div>
+                <div id="cfgTabla" class="table-responsive" style="max-height:420px;overflow:auto;"></div>
+                <div id="cfgAcciones" class="mt-2 d-none">
+                    <button class="btn btn-success btn-sm" id="btnCfgAplicar">
+                        <i class="bi bi-check2-circle me-1"></i> Aplicar seleccionadas
+                    </button>
+                    <span id="cfgAplicarMsg" class="small ms-2"></span>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -409,5 +437,103 @@ $base = BASE_URL;
         if (!el) { el = document.createElement('div'); el.id = id; el.className = 'mb-1'; $('zonaMigrarResultado').appendChild(el); }
         el.innerHTML = '<b>' + label + ':</b> ' + html;
     }
+
+    // ── Paso 3: configuración contable (revisión previa + aplicar lo elegido) ──
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    $('btnCfgPrev').addEventListener('click', async () => {
+        const idEmpresa = $('selEmpresa').value;
+        if (!idEmpresa) { $('cfgResumen').innerHTML = '<span class="text-danger">Seleccione una empresa.</span>'; return; }
+
+        $('cfgResumen').innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Revisando…';
+        $('cfgTabla').innerHTML = ''; $('cfgAcciones').classList.add('d-none');
+        try {
+            const body = new FormData(); body.append('id_empresa', idEmpresa);
+            const res = await fetch(base + '/config/migrarMysql?action=config-preview', { method: 'POST', body }).then(r => r.json());
+            if (!res.ok) { $('cfgResumen').innerHTML = '<span class="text-danger">' + esc(res.mensaje) + '</span>'; return; }
+
+            const r = res.resumen;
+            $('cfgResumen').innerHTML =
+                `<b>${fmt(r.total)}</b> reglas generales encontradas · ` +
+                `<b class="text-success">${fmt(r.listas)}</b> listas para aplicar · ` +
+                `<b class="${r.sin_slot ? 'text-warning' : ''}">${fmt(r.sin_slot)}</b> sin equivalente · ` +
+                `<b class="${r.sin_cuenta ? 'text-danger' : ''}">${fmt(r.sin_cuenta)}</b> sin cuenta · ` +
+                `<b>${fmt(r.ya)}</b> ya configuradas`;
+
+            if (!res.filas.length) { $('cfgTabla').innerHTML = '<div class="text-muted small">Sin configuración general en el sistema anterior.</div>'; return; }
+
+            const badge = {
+                lista:          '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Lista</span>',
+                ya_configurada: '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">Ya configurada</span>',
+                sin_slot:       '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Sin equivalente</span>',
+                sin_cuenta:     '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Sin cuenta</span>'
+            };
+
+            let filas = '';
+            res.filas.forEach((f, i) => {
+                const aplicable = (f.estado === 'lista' || f.estado === 'ya_configurada');
+                const chk = aplicable
+                    ? `<input type="checkbox" class="form-check-input chk-cfg" data-i="${i}" ${f.estado === 'lista' ? 'checked' : ''}>`
+                    : '<span class="text-muted">—</span>';
+                filas +=
+                    `<tr class="${aplicable ? '' : 'table-light text-muted'}">
+                        <td class="text-center">${chk}</td>
+                        <td class="small">${esc(f.tipo_viejo)}</td>
+                        <td class="small">${esc(f.concepto_viejo)}</td>
+                        <td class="small">${esc(f.cuenta_vieja)}</td>
+                        <td class="small">${f.slot_nuevo ? esc(f.slot_nuevo) : '<i>(sin equivalente)</i>'}</td>
+                        <td class="small">${f.cuenta_nueva ? esc(f.cuenta_nueva) : '—'}</td>
+                        <td class="text-center">${badge[f.estado] || ''}</td>
+                     </tr>`;
+            });
+
+            $('cfgTabla').innerHTML =
+                `<table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light" style="position:sticky;top:0;z-index:1">
+                        <tr>
+                            <th style="width:34px" class="text-center"><input type="checkbox" class="form-check-input" id="chkCfgTodos" checked></th>
+                            <th>Tipo (anterior)</th><th>Concepto (anterior)</th><th>Cuenta anterior</th>
+                            <th>Configuración destino</th><th>Cuenta destino</th><th class="text-center">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>${filas}</tbody>
+                 </table>`;
+
+            window.__cfgFilas = res.filas;
+            $('cfgAcciones').classList.remove('d-none');
+            $('chkCfgTodos').addEventListener('change', (e) => {
+                document.querySelectorAll('.chk-cfg').forEach(c => c.checked = e.target.checked);
+            });
+        } catch (e) {
+            $('cfgResumen').innerHTML = '<span class="text-danger">Error al revisar la configuración.</span>';
+        }
+    });
+
+    $('btnCfgAplicar').addEventListener('click', async () => {
+        const idEmpresa = $('selEmpresa').value;
+        const marcadas = Array.from(document.querySelectorAll('.chk-cfg:checked'))
+            .map(c => window.__cfgFilas[Number(c.dataset.i)])
+            .filter(f => f && f.id_asiento_tipo && f.id_cuenta)
+            .map(f => ({ id_asiento_tipo: f.id_asiento_tipo, id_cuenta: f.id_cuenta }));
+
+        if (!marcadas.length) { $('cfgAplicarMsg').innerHTML = '<span class="text-warning">No hay reglas seleccionadas.</span>'; return; }
+        if (!confirm(`¿Aplicar ${marcadas.length} regla(s) a la configuración contable de esta empresa?`)) return;
+
+        $('cfgAplicarMsg').innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Aplicando…';
+        try {
+            const body = new FormData();
+            body.append('id_empresa', idEmpresa);
+            body.append('seleccion', JSON.stringify(marcadas));
+            const res = await fetch(base + '/config/migrarMysql?action=config-aplicar', { method: 'POST', body }).then(r => r.json());
+            if (!res.ok) { $('cfgAplicarMsg').innerHTML = '<span class="text-danger">' + esc(res.mensaje) + '</span>'; return; }
+            const d = res.data;
+            $('cfgAplicarMsg').innerHTML =
+                `<span class="text-success"><b>${fmt(d.aplicadas)}</b> creadas · <b>${fmt(d.actualizadas)}</b> actualizadas` +
+                (d.errores ? ` · <b class="text-danger">${fmt(d.errores)}</b> con error` : '') + '</span>';
+            $('btnCfgPrev').click(); // refrescar: ahora saldrán como "Ya configurada"
+        } catch (e) {
+            $('cfgAplicarMsg').innerHTML = '<span class="text-danger">Error al aplicar.</span>';
+        }
+    });
 })();
 </script>

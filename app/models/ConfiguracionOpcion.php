@@ -155,7 +155,7 @@ class ConfiguracionOpcion extends BaseModel
                 $claseColor,
                 $nivelMinimo,
                 $orden,
-                $activo
+                $activo ? 't' : 'f'
             ]);
 
             // Obtener el ID generado
@@ -274,7 +274,7 @@ class ConfiguracionOpcion extends BaseModel
                 $claseColor,
                 $nivelMinimo,
                 $orden,
-                $activo,
+                $activo ? 't' : 'f',
                 $id
             ]);
 
