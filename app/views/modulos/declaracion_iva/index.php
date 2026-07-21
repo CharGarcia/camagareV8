@@ -281,7 +281,9 @@
                     const vNeto = cNeto ? (parseFloat(valores[cNeto]) || 0) : null;
                     const cImp = r.casillero_impuesto || '';
                     const vImp = cImp ? (parseFloat(valores[cImp]) || 0) : null;
-                    r.hasValues = (vBruto !== null && vBruto !== 0) || (vNeto !== null && vNeto !== 0) || (vImp !== null && vImp !== 0);
+                    // Un casillero editable debe verse siempre, aunque esté en 0: es precisamente
+                    // cuando está vacío que el usuario necesita encontrarlo para llenarlo.
+                    r.hasValues = r.editable || (vBruto !== null && vBruto !== 0) || (vNeto !== null && vNeto !== 0) || (vImp !== null && vImp !== 0);
                 } else {
                     r.hasValues = false;
                 }
