@@ -61,10 +61,9 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
 
 <!-- ── Cabecera ── -->
 <div class="inv-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-    <div>
-        <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-left-right me-2 text-primary"></i>Movimientos de Inventario</h5>
-        <small class="text-muted">Historial detallado de entradas, salidas y ajustes</small>
-    </div>
+    <!-- El <h5> debe ser hijo DIRECTO de esta fila: el app-shell aplica la sangría
+         horizontal con `div:has(> h5)` (app.css). Un div intermedio la rompe. -->
+    <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-left-right me-2 text-primary"></i>Movimientos de Inventario</h5>
     <?php if ($perm['crear']): ?>
         <div class="d-flex gap-2">
             <a href="<?= BASE_URL ?>/modulos/cargas-inventario" class="btn btn-outline-success btn-sm px-3" title="La importación masiva ahora se gestiona (con aprobación) en el módulo Cargas de Inventario">
