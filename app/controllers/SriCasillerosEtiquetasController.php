@@ -63,7 +63,7 @@ class SriCasillerosEtiquetasController extends Controller
 
         $ordenCol = trim($_GET['sort'] ?? 'orden');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? 'DESC'));
-        $buscar = trim($_GET['buscar'] ?? $_GET['b'] ?? '');
+        $buscar = trim($_GET['b'] ?? $_GET['buscar'] ?? '');
         
         if (!in_array($ordenCol, SriCasilleroEtiqueta::COLUMNAS_ORDEN, true)) {
             $ordenCol = 'orden';

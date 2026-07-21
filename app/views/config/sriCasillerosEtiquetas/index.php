@@ -17,7 +17,7 @@ unset($_SESSION['sri_etiquetas_msg']);
 function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '') {
     $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
     $url = rtrim($base, '/') . '/config/sri-casilleros-etiquetas?sort=' . urlencode($col) . '&dir=' . $dir;
-    if ($buscar !== '') $url .= '&buscar=' . urlencode($buscar);
+    if ($buscar !== '') $url .= '&b=' . urlencode($buscar);
     $cls = trim('text-decoration-none ' . $align);
     return '<a href="' . htmlspecialchars($url) . '" class="' . $cls . '" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</a>';
 }
@@ -55,7 +55,7 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
     <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
     <div class="input-group input-group-sm" style="max-width: 380px;">
         <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" name="buscar" class="form-control" placeholder="Buscar en sección, concepto, casilleros u orden..." value="<?= htmlspecialchars($buscar) ?>">
+        <input type="text" name="b" class="form-control" placeholder="Buscar en sección, concepto, casilleros u orden..." value="<?= htmlspecialchars($buscar) ?>">
         <button type="submit" class="btn btn-outline-primary">Buscar</button>
         <?php if ($buscar !== ''): ?>
         <a href="<?= rtrim($base, '/') ?>/config/sri-casilleros-etiquetas" class="btn btn-outline-secondary">Limpiar</a>
@@ -90,8 +90,9 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                     $c_orden = htmlspecialchars((string)($r['orden'] ?? '0'));
                     $c_indent = htmlspecialchars((string)($r['indent'] ?? '0'));
                     $c_bold = !empty($r['bold']);
+                    $c_editable = !empty($r['editable']);
                     $c_tipo = htmlspecialchars($r['tipo'] ?? 'valor');
-                    
+
                     $rj = htmlspecialchars(json_encode([
                         'id' => $id,
                         'seccion' => $c_seccion,
@@ -105,6 +106,7 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                         'orden' => $c_orden,
                         'indent' => $c_indent,
                         'bold' => $c_bold,
+                        'editable' => $c_editable,
                         'tipo' => $c_tipo,
                         'fuente_valor' => htmlspecialchars($r['fuente_valor'] ?? 'documentos')
                     ]), ENT_QUOTES, 'UTF-8');
