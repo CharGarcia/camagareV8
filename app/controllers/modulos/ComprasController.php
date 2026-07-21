@@ -911,16 +911,20 @@ class ComprasController extends BaseModuloController
                 $stockPost = $stockAnt + $cantEnviar;
 
                 // 5. Registrar movimiento en Kardex DIRECTO
+                // tipo_ambiente se toma del ambiente actual de la empresa: el listado
+                // del kardex filtra por él y, con el DEFAULT ('1'), las entradas de una
+                // empresa en producción ('2') quedaban invisibles en Inventario.
                 $sqlInsK = "INSERT INTO inventario_kardex (
                                 id_empresa, id_producto, id_bodega, id_medida, tipo_movimiento,
                                 referencia_tipo, referencia_id, fecha_movimiento, cantidad, costo_unitario, costo_total,
                                 stock_anterior, stock_posterior, numero_lote, fecha_caducidad, nup,
-                                observaciones, created_by, updated_by, eliminado
+                                observaciones, created_by, updated_by, eliminado, tipo_ambiente
                             ) VALUES (
                                 ?, ?, ?, ?, 'entrada',
                                 'compra', ?, CURRENT_TIMESTAMP, ?, ?, ?,
                                 ?, ?, ?, ?, ?,
-                                ?, ?, ?, false
+                                ?, ?, ?, false,
+                                (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
                             ) RETURNING id";
 
                 $loteVal = !empty($item['lote']) ? $item['lote'] : null;
@@ -945,7 +949,8 @@ class ComprasController extends BaseModuloController
                     $nupVal,
                     $obsBase . " (Item: " . $idDetalle . ")",
                     $idUsuario,
-                    $idUsuario
+                    $idUsuario,
+                    $idEmpresa   // → tipo_ambiente (subconsulta del ambiente de la empresa)
                 ]);
                 $idKardex = (int)$stInsK->fetchColumn();
                 error_log("KARDEX INSERTADO: ID $idKardex, Producto $idProducto, Cantidad $cantEnviar");

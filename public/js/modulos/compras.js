@@ -417,6 +417,9 @@ function CMG_resetModal() {
     const tbodyInv = document.getElementById('mc-tbody-inventario');
     if (tbodyInv) tbodyInv.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted"><i class="bi bi-box-seam d-block fs-3 mb-2"></i>Agregue productos a la compra para verlos aquí</td></tr>';
 
+    // Ocultar aviso de líneas sin vincular
+    document.getElementById('mc-inventario-aviso-vinculacion')?.classList.add('d-none');
+
     // Reset botones barra superior
     document.getElementById('btnEliminarCompraBar')?.classList.add('d-none');
 
@@ -1839,10 +1842,15 @@ window.mcActualizarUIInventario = function() {
     // Copia profunda del mapa de procesados para ir descontando
     const procesadosRestantes = JSON.parse(JSON.stringify(window.mcInventarioProcesadoMap || {}));
 
+    // Conteo de líneas sin vincular a un producto del catálogo (bloquean el registro)
+    let pendientesTotal = 0;       // líneas aún no procesadas del todo
+    let pendientesSinVincular = 0; // de esas, cuántas no tienen producto
+    let checkedSinVincular = 0;    // seleccionadas sin producto → impiden procesar
+
     document.querySelectorAll('#mc-tbody-inventario .row-inv').forEach(tr => {
         const idDet = tr.dataset.idDetalle; // Usar ID del detalle, no del producto
         const cantCompra = parseFloat(tr.querySelector('.input-inv-cantidad').dataset.cantOriginal || tr.querySelector('.input-inv-cantidad').value || 0);
-        
+
         let procesadoEnFila = 0;
         if (idDet && procesadosRestantes[idDet] > 0) {
             procesadoEnFila = Math.min(cantCompra, procesadosRestantes[idDet]);
@@ -1850,6 +1858,7 @@ window.mcActualizarUIInventario = function() {
         }
 
         const check = tr.querySelector('.input-inv-check');
+        const sinVincular = !(tr.dataset.idProducto || '').trim();
 
         if (procesadoEnFila >= cantCompra) {
             tr.classList.add('table-success', 'bg-opacity-10');
@@ -1858,13 +1867,32 @@ window.mcActualizarUIInventario = function() {
             }
         } else {
             tr.classList.remove('table-success', 'bg-opacity-10');
+            pendientesTotal++;
+            if (sinVincular) pendientesSinVincular++;
             if (check) {
                 check.disabled = false;
-                if (check.checked) hayParaProcesar = true;
+                if (check.checked) {
+                    hayParaProcesar = true;
+                    if (sinVincular) checkedSinVincular++;
+                }
             }
             todosProcesados = false;
         }
     });
+
+    // Aviso de líneas sin vincular
+    const aviso = document.getElementById('mc-inventario-aviso-vinculacion');
+    if (aviso) {
+        if (pendientesSinVincular > 0) {
+            const elSin = document.getElementById('mc-inv-sin-vincular');
+            const elTot = document.getElementById('mc-inv-total-lineas');
+            if (elSin) elSin.textContent = pendientesSinVincular;
+            if (elTot) elTot.textContent = pendientesTotal;
+            aviso.classList.remove('d-none');
+        } else {
+            aviso.classList.add('d-none');
+        }
+    }
 
     if (btnProcesar) {
         const rows = document.querySelectorAll('#mc-tbody-inventario .row-inv').length;
@@ -1872,10 +1900,18 @@ window.mcActualizarUIInventario = function() {
             btnProcesar.disabled = true;
             btnProcesar.innerHTML = '<i class="bi bi-check2-all me-1"></i> Inventario Completo';
             btnProcesar.classList.replace('btn-primary', 'btn-outline-success');
+            btnProcesar.title = '';
+        } else if (checkedSinVincular > 0) {
+            // Hay seleccionadas sin producto: procesar fallaría, se bloquea con motivo visible.
+            btnProcesar.disabled = true;
+            btnProcesar.innerHTML = '<i class="bi bi-link-45deg me-1"></i> Vincule ' + checkedSinVincular + ' línea(s) para continuar';
+            btnProcesar.classList.replace('btn-outline-success', 'btn-primary');
+            btnProcesar.title = 'Las líneas seleccionadas deben estar vinculadas a un producto del catálogo.';
         } else {
             btnProcesar.disabled = !hayParaProcesar;
             btnProcesar.innerHTML = '<i class="bi bi-box-arrow-in-right me-1"></i> Procesar Entradas';
             btnProcesar.classList.replace('btn-outline-success', 'btn-primary');
+            btnProcesar.title = '';
         }
     }
 

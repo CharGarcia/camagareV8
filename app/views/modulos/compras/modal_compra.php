@@ -620,6 +620,19 @@
                 </div>
               </div>
 
+              <!-- Aviso: líneas sin vincular a un producto del catálogo.
+                   Sin vinculación el inventario NO se puede registrar. -->
+              <div id="mc-inventario-aviso-vinculacion" class="alert alert-warning d-flex align-items-start gap-2 py-2 px-3 mb-3 d-none">
+                <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+                <div class="small">
+                  <strong><span id="mc-inv-sin-vincular">0</span> de <span id="mc-inv-total-lineas">0</span> líneas sin vincular a un producto del catálogo.</strong>
+                  <div class="text-muted mt-1">
+                    Vincula cada línea pendiente para poder registrarla en inventario. Al vincularla se guarda la
+                    homologación del proveedor, de modo que las próximas compras con el mismo código se vinculen solas.
+                  </div>
+                </div>
+              </div>
+
               <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
                 <div class="table-responsive" style="max-height: 400px;">
                   <table class="table table-sm table-hover mb-0">
