@@ -63,7 +63,7 @@ class SriCasillerosEtiquetasController extends Controller
 
         $ordenCol = trim($_GET['sort'] ?? 'orden');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? 'DESC'));
-        $buscar = trim($_GET['b'] ?? $_GET['buscar'] ?? '');
+        $buscar = trim($_GET['buscar'] ?? $_GET['b'] ?? '');
         
         if (!in_array($ordenCol, SriCasilleroEtiqueta::COLUMNAS_ORDEN, true)) {
             $ordenCol = 'orden';
@@ -106,6 +106,7 @@ class SriCasillerosEtiquetasController extends Controller
         $orden = (int) ($_POST['orden'] ?? 0);
         $indent = (int) ($_POST['indent'] ?? 0);
         $bold = !empty($_POST['bold']);
+        $editable = !empty($_POST['editable']);
         $tipo = trim($_POST['tipo'] ?? 'valor');
         $fuenteValor = trim($_POST['fuente_valor'] ?? 'documentos');
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
@@ -120,7 +121,7 @@ class SriCasillerosEtiquetasController extends Controller
                 $casilleroBruto, $casilleroNeto, $casilleroImpuesto,
                 $seccion, $descripcion, $orden, $indent, $bold, $tipo,
                 $formulaBruto, $formulaNeto, $formulaImpuesto,
-                $idUsuario, $fuenteValor
+                $idUsuario, $fuenteValor, $editable
             );
             $_SESSION['sri_etiquetas_msg'] = ['success', 'Fila creada correctamente.'];
         } catch (\Throwable $e) {
@@ -157,6 +158,7 @@ class SriCasillerosEtiquetasController extends Controller
         $orden = (int) ($_POST['orden'] ?? 0);
         $indent = (int) ($_POST['indent'] ?? 0);
         $bold = !empty($_POST['bold']);
+        $editable = !empty($_POST['editable']);
         $tipo = trim($_POST['tipo'] ?? 'valor');
         $fuenteValor = trim($_POST['fuente_valor'] ?? 'documentos');
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
@@ -170,7 +172,7 @@ class SriCasillerosEtiquetasController extends Controller
             $id, $casilleroBruto, $casilleroNeto, $casilleroImpuesto,
             $seccion, $descripcion, $orden, $indent, $bold, $tipo,
             $formulaBruto, $formulaNeto, $formulaImpuesto,
-            $idUsuario, $fuenteValor
+            $idUsuario, $fuenteValor, $editable
         )) {
             $_SESSION['sri_etiquetas_msg'] = ['success', 'Fila actualizada correctamente.'];
         } else {

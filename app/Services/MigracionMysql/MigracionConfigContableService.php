@@ -133,6 +133,8 @@ class MigracionConfigContableService
                 'slot_nuevo'     => $slot !== null ? ($slot['tipo_asiento'] . ' · ' . $slot['referencia']) : null,
                 'id_asiento_tipo'=> $slot !== null ? (int) $slot['id'] : null,
                 'cuenta_nueva'   => $cta !== null ? ($cta['codigo'] . ' · ' . $cta['nombre']) : null,
+                // Código que se buscó en el plan nuevo: permite explicar al usuario qué cuenta falta.
+                'cod_casa'       => $codCasa,
                 'id_cuenta'      => $cta !== null ? (int) $cta['id'] : null,
                 'estado'         => $estado,
             ];

@@ -139,6 +139,7 @@ function estadoPagoBadge($estado) {
                         <th><?= thSortEmpresas($urlBaseEmpresas, 'nombre_ciudad', 'Ciudad', $ordenCol, $ordenDir, $buscar, $page) ?></th>
                         <th><?= thSortEmpresas($urlBaseEmpresas, 'estado', 'Estado', $ordenCol, $ordenDir, $buscar, $page) ?></th>
                         <th class="text-center">Usuarios</th>
+                        <th class="text-center">Documentos</th>
                         <?php if ($nivel >= 3): ?><th class="text-center">Acciones</th><?php endif; ?>
                     </tr>
                 </thead>
@@ -200,24 +201,39 @@ function estadoPagoBadge($estado) {
                                 <?= $cntUsu ?>/<?= $maxUsu ?>
                             </span>
                         </td>
+                        <?php
+                        // Estado de los documentos legales (acuerdo de datos + contrato de uso)
+                        $ed = ($estadoDocs ?? [])[(int)$r['id']] ?? null;
+                        if ($ed === null) {
+                            $docTit   = 'No se han enviado los documentos legales a esta empresa.';
+                            $docBadge = 'bg-danger';
+                            $docTxt   = 'Sin enviar';
+                            $docIco   = 'x-circle-fill';
+                            $docBtn   = 'btn-danger';
+                        } elseif (($ed['estado'] ?? '') === 'aceptado') {
+                            $docTit   = 'Documentos ACEPTADOS el ' . date('d-m-Y H:i:s', strtotime((string)$ed['aceptado_at']));
+                            $docBadge = 'bg-success';
+                            $docTxt   = 'Aceptado';
+                            $docIco   = 'check-circle-fill';
+                            $docBtn   = 'btn-success';
+                        } else {
+                            $docTit   = 'Enviados el ' . date('d-m-Y H:i:s', strtotime((string)$ed['enviado_at'])) . ', pendientes de aceptación.';
+                            $docBadge = 'bg-warning text-dark';
+                            $docTxt   = 'Pendiente';
+                            $docIco   = 'hourglass-split';
+                            $docBtn   = 'btn-warning';
+                        }
+                        ?>
+                        <td class="text-center">
+                            <span class="badge <?= $docBadge ?>" title="<?= htmlspecialchars($docTit) ?>" style="font-size:.72rem;">
+                                <i class="bi bi-<?= $docIco ?> me-1"></i><?= $docTxt ?>
+                            </span>
+                        </td>
                         <?php if ($nivel >= 3): ?>
                         <td class="text-center" onclick="event.stopPropagation()">
-                            <?php
-                            $ed = ($estadoDocs ?? [])[(int)$r['id']] ?? null;
-                            if ($ed === null) {
-                                $docTit = 'No se han enviado los documentos legales. Clic para enviar.';
-                                $docCls = 'btn-outline-secondary';
-                            } elseif (($ed['estado'] ?? '') === 'aceptado') {
-                                $docTit = 'Documentos ACEPTADOS el ' . date('d-m-Y H:i:s', strtotime((string)$ed['aceptado_at'])) . '. Clic para reenviar.';
-                                $docCls = 'btn-outline-success';
-                            } else {
-                                $docTit = 'Enviados el ' . date('d-m-Y H:i:s', strtotime((string)$ed['enviado_at'])) . ', pendientes de aceptación. Clic para reenviar.';
-                                $docCls = 'btn-outline-warning';
-                            }
-                            ?>
-                            <button class="btn btn-sm <?= $docCls ?>" title="<?= htmlspecialchars($docTit) ?>"
+                            <button class="btn btn-sm <?= $docBtn ?>" title="<?= htmlspecialchars($docTit) ?> Clic para <?= $ed === null ? 'enviar' : 'reenviar' ?>."
                                     onclick="enviarDocumentosLegales(<?= $r['id'] ?>, this)">
-                                <i class="bi bi-file-earmark-text"></i>
+                                <i class="bi bi-envelope-fill"></i>
                             </button>
                             <button class="btn btn-sm btn-outline-danger" onclick="eliminarEmpresa(<?= $r['id'] ?>)" title="Eliminar empresa"><i class="bi bi-trash"></i></button>
                         </td>

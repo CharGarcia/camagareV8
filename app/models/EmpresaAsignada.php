@@ -61,13 +61,21 @@ class EmpresaAsignada extends BaseModel
     /**
      * Usuarios asignados a una empresa
      */
-    public function getUsuariosDeEmpresa(int $idEmpresa): array
+    /**
+     * Usuarios asignados a una empresa.
+     *
+     * @param bool $excluirSuperAdmin Los super admin (nivel 3) tienen acceso a
+     *        todas las empresas sin necesidad de asignación, por lo que no deben
+     *        ocupar cupo ni contarse en los listados de usuarios de la empresa.
+     */
+    public function getUsuariosDeEmpresa(int $idEmpresa, bool $excluirSuperAdmin = false): array
     {
         $id = (int) $idEmpresa;
+        $filtroNivel = $excluirSuperAdmin ? ' AND COALESCE(u.nivel, 1) < 3' : '';
         $sql = "SELECT ea.id AS id_registro, ea.id_usuario, ea.usu_asignador, u.nombre, u.cedula, u.mail, u.nivel
             FROM empresa_asignada ea
             INNER JOIN usuarios u ON u.id = ea.id_usuario
-            WHERE ea.id_empresa = {$id}
+            WHERE ea.id_empresa = {$id}{$filtroNivel}
             ORDER BY u.nombre";
         return $this->query($sql);
     }

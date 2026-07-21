@@ -411,6 +411,25 @@ class DeclaracionIvaRepository extends BaseRepository
         ];
     }
 
+    /**
+     * Total de transferencias gravadas con tarifa distinta de cero del período (base imponible),
+     * usado como el total fijo que los casilleros 480 (a contado) + 481 (a crédito) deben sumar,
+     * en el régimen de liquidación diferida de IVA por ventas a plazo.
+     */
+    public function getTotalTransferenciasGravadas(int $idEmpresa, string $fechaDesde, string $fechaHasta, string $ambiente): float
+    {
+        return (float) $this->query(
+            "SELECT COALESCE(SUM(i.base_imponible), 0)
+             FROM ventas_cabecera v
+             JOIN ventas_detalle d ON d.id_venta = v.id
+             JOIN ventas_detalle_impuestos i ON i.id_venta_detalle = d.id
+             WHERE v.id_empresa = :emp AND v.estado = 'autorizado' AND v.eliminado = false
+               AND v.fecha_emision BETWEEN :d AND :h
+               AND i.codigo_impuesto = '2' AND i.codigo_porcentaje <> '0' AND v.tipo_ambiente = :amb",
+            [':emp' => $idEmpresa, ':d' => $fechaDesde, ':h' => $fechaHasta, ':amb' => $ambiente]
+        )->fetchColumn();
+    }
+
     public function getMapaTarifasIva(): array
     {
         $stmt = $this->db->query("SELECT id, codigo FROM tarifa_iva");
@@ -478,6 +497,8 @@ class DeclaracionIvaRepository extends BaseRepository
                     retenciones_iva, credito_anterior_aplicado, iva_a_pagar, saldo_favor,
                     credito_anterior_compras, credito_anterior_retenciones,
                     saldo_favor_compras, saldo_favor_retenciones,
+                    transferencias_contado, transferencias_credito, mes_pago_credito,
+                    liquidacion_diferida_483, liquidacion_diferida_484, liquidacion_diferida_485, liquidacion_diferida_499,
                     valores_casilleros, estado, observaciones, created_by, updated_by
                 ) VALUES (
                     :id_empresa, :amb, :tp, :anio, :periodo,
@@ -486,6 +507,8 @@ class DeclaracionIvaRepository extends BaseRepository
                     :retenciones, :credito_ant, :a_pagar, :saldo_favor,
                     :credito_ant_compras, :credito_ant_retenciones,
                     :saldo_favor_compras, :saldo_favor_retenciones,
+                    :transf_contado, :transf_credito, :mes_pago,
+                    :liq483, :liq484, :liq485, :liq499,
                     :valores, :estado, :obs, :usr, :usr2
                 ) RETURNING id";
         $params = $this->mapDeclaracionParams($data);
@@ -505,6 +528,9 @@ class DeclaracionIvaRepository extends BaseRepository
                     iva_a_pagar = :a_pagar, saldo_favor = :saldo_favor,
                     credito_anterior_compras = :credito_ant_compras, credito_anterior_retenciones = :credito_ant_retenciones,
                     saldo_favor_compras = :saldo_favor_compras, saldo_favor_retenciones = :saldo_favor_retenciones,
+                    transferencias_contado = :transf_contado, transferencias_credito = :transf_credito, mes_pago_credito = :mes_pago,
+                    liquidacion_diferida_483 = :liq483, liquidacion_diferida_484 = :liq484,
+                    liquidacion_diferida_485 = :liq485, liquidacion_diferida_499 = :liq499,
                     valores_casilleros = :valores, estado = :estado, observaciones = :obs,
                     updated_by = :usr, updated_at = now()
                 WHERE id = :id AND id_empresa = :id_empresa2";
@@ -537,6 +563,13 @@ class DeclaracionIvaRepository extends BaseRepository
             ':credito_ant_retenciones' => (float) ($data['credito_anterior_retenciones'] ?? 0),
             ':saldo_favor_compras'     => (float) ($data['saldo_favor_compras'] ?? 0),
             ':saldo_favor_retenciones' => (float) ($data['saldo_favor_retenciones'] ?? 0),
+            ':transf_contado'  => (float) ($data['transferencias_contado'] ?? 0),
+            ':transf_credito'  => (float) ($data['transferencias_credito'] ?? 0),
+            ':mes_pago'        => (int) ($data['mes_pago_credito'] ?? 0),
+            ':liq483'          => (float) ($data['liquidacion_diferida_483'] ?? 0),
+            ':liq484'          => (float) ($data['liquidacion_diferida_484'] ?? 0),
+            ':liq485'          => (float) ($data['liquidacion_diferida_485'] ?? 0),
+            ':liq499'          => (float) ($data['liquidacion_diferida_499'] ?? 0),
             ':valores'         => json_encode($data['valores_casilleros'] ?? [], JSON_UNESCAPED_UNICODE),
             ':estado'          => (string) ($data['estado'] ?? 'guardado'),
             ':obs'             => $data['observaciones'] ?? null,

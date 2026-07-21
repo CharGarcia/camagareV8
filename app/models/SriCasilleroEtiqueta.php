@@ -25,7 +25,14 @@ class SriCasilleroEtiqueta extends BaseModel
 
         if ($buscar !== '') {
             $b = $this->escape($buscar);
-            $where .= " AND (COALESCE(casillero_bruto,'') LIKE '%{$b}%' OR seccion LIKE '%{$b}%' OR descripcion LIKE '%{$b}%') ";
+            $where .= " AND (
+                seccion ILIKE '%{$b}%'
+                OR descripcion ILIKE '%{$b}%'
+                OR COALESCE(casillero_bruto,'') ILIKE '%{$b}%'
+                OR COALESCE(casillero_neto,'') ILIKE '%{$b}%'
+                OR COALESCE(casillero_impuesto,'') ILIKE '%{$b}%'
+                OR CAST(orden AS TEXT) ILIKE '%{$b}%'
+            ) ";
         }
 
         $sql = "SELECT * FROM sri_casilleros_etiquetas {$where} ORDER BY {$col} {$dir}, orden ASC";
@@ -68,12 +75,13 @@ class SriCasilleroEtiqueta extends BaseModel
         string $formulaNeto,
         string $formulaImpuesto,
         int $idUsuario,
-        string $fuenteValor = 'documentos'
+        string $fuenteValor = 'documentos',
+        bool $editable = false
     ): void {
         $cBruto = $casilleroBruto !== '' ? "'".$this->escape($casilleroBruto)."'" : "NULL";
         $cNeto = $casilleroNeto !== '' ? "'".$this->escape($casilleroNeto)."'" : "NULL";
         $cImp = $casilleroImpuesto !== '' ? "'".$this->escape($casilleroImpuesto)."'" : "NULL";
-        
+
         $fBruto = $formulaBruto !== '' ? "'".$this->escape($formulaBruto)."'" : "NULL";
         $fNeto = $formulaNeto !== '' ? "'".$this->escape($formulaNeto)."'" : "NULL";
         $fImp = $formulaImpuesto !== '' ? "'".$this->escape($formulaImpuesto)."'" : "NULL";
@@ -83,6 +91,7 @@ class SriCasilleroEtiqueta extends BaseModel
         $orden = (int) $orden;
         $indent = (int) $indent;
         $boldVal = $bold ? 'true' : 'false';
+        $editableVal = $editable ? 'true' : 'false';
         $tipo = $this->escape($tipo);
         $idUsuario = (int) $idUsuario;
 
@@ -90,17 +99,17 @@ class SriCasilleroEtiqueta extends BaseModel
 
         $sql = "INSERT INTO sri_casilleros_etiquetas (
                     casillero_bruto, casillero_neto, casillero_impuesto,
-                    seccion, descripcion, orden, indent, bold, tipo, fuente_valor,
+                    seccion, descripcion, orden, indent, bold, editable, tipo, fuente_valor,
                     formula_bruto, formula_neto, formula_impuesto,
                     created_by, updated_by
                 )
                 VALUES (
                     {$cBruto}, {$cNeto}, {$cImp},
-                    '{$seccion}', '{$descripcion}', {$orden}, {$indent}, {$boldVal}, '{$tipo}', '{$fuenteValor}',
+                    '{$seccion}', '{$descripcion}', {$orden}, {$indent}, {$boldVal}, {$editableVal}, '{$tipo}', '{$fuenteValor}',
                     {$fBruto}, {$fNeto}, {$fImp},
                     {$idUsuario}, {$idUsuario}
                 )";
-        
+
         $this->execute($sql);
     }
 
@@ -122,12 +131,13 @@ class SriCasilleroEtiqueta extends BaseModel
         string $formulaNeto,
         string $formulaImpuesto,
         int $idUsuario,
-        string $fuenteValor = 'documentos'
+        string $fuenteValor = 'documentos',
+        bool $editable = false
     ): bool {
         $cBruto = $casilleroBruto !== '' ? "'".$this->escape($casilleroBruto)."'" : "NULL";
         $cNeto = $casilleroNeto !== '' ? "'".$this->escape($casilleroNeto)."'" : "NULL";
         $cImp = $casilleroImpuesto !== '' ? "'".$this->escape($casilleroImpuesto)."'" : "NULL";
-        
+
         $fBruto = $formulaBruto !== '' ? "'".$this->escape($formulaBruto)."'" : "NULL";
         $fNeto = $formulaNeto !== '' ? "'".$this->escape($formulaNeto)."'" : "NULL";
         $fImp = $formulaImpuesto !== '' ? "'".$this->escape($formulaImpuesto)."'" : "NULL";
@@ -137,6 +147,7 @@ class SriCasilleroEtiqueta extends BaseModel
         $orden = (int) $orden;
         $indent = (int) $indent;
         $boldVal = $bold ? 'true' : 'false';
+        $editableVal = $editable ? 'true' : 'false';
         $tipo = $this->escape($tipo);
         $idUsuario = (int) $idUsuario;
 
@@ -145,7 +156,7 @@ class SriCasilleroEtiqueta extends BaseModel
         $sql = "UPDATE sri_casilleros_etiquetas
                 SET casillero_bruto = {$cBruto}, casillero_neto = {$cNeto}, casillero_impuesto = {$cImp},
                     seccion = '{$seccion}', descripcion = '{$descripcion}',
-                    orden = {$orden}, indent = {$indent}, bold = {$boldVal}, tipo = '{$tipo}',
+                    orden = {$orden}, indent = {$indent}, bold = {$boldVal}, editable = {$editableVal}, tipo = '{$tipo}',
                     fuente_valor = '{$fuenteValor}',
                     formula_bruto = {$fBruto}, formula_neto = {$fNeto}, formula_impuesto = {$fImp},
                     updated_by = {$idUsuario}, updated_at = CURRENT_TIMESTAMP

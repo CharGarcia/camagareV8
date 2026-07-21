@@ -189,6 +189,12 @@
         const tabsContainer = document.getElementById('myTab');
         const tabContent = document.getElementById('myTabContent');
 
+        // Estado del último resumen renderizado, para el recálculo de fórmulas en vivo
+        // cuando el usuario edita un casillero editable (sin volver a pedir el servidor).
+        let ultimoLayout = [];
+        let ultimosValores = {};
+        let ultimoTotal480481 = 0;
+
         // Map (no objeto literal): en los objetos JS las claves '10'-'12' se ordenan
         // numéricamente antes que '01'-'09' y los meses salían desordenados
         const meses = new Map([
@@ -261,6 +267,10 @@
             const layout = resumenData.layout;
             const valores = resumenData.valores;
             const isChecked = document.getElementById('checkSoloValores').checked;
+
+            ultimoLayout = layout;
+            ultimosValores = valores;
+            ultimoTotal480481 = parseFloat(resumenData.total_480_481) || 0;
 
             // Pre-calcular valores
             layout.forEach(r => {
@@ -337,24 +347,23 @@
                     const vImp = cImp ? (parseFloat(valores[cImp]) || 0) : null;
 
                     // Las filas de conteo muestran cantidades (enteros), no montos. El arrastre
-                    // de crédito tributario (605/606/615/617) siempre es un monto (2 decimales).
+                    // de crédito tributario y la liquidación diferida siempre son montos (2 decimales).
                     const esArrastre = (r.fuente_valor || '').startsWith('arrastre_');
                     const esConteo = r.fuente_valor && r.fuente_valor !== 'documentos' && !esArrastre;
                     const dec = esConteo ? 0 : 2;
                     const fmt = v => v.toLocaleString('en-US', {minimumFractionDigits: dec, maximumFractionDigits: dec});
 
-                    // 615/617 (arrastre "saliente", para el próximo mes) se autocalculan pero
-                    // se pueden ajustar manualmente antes de guardar la declaración. 605/606
-                    // (arrastre "entrante") son de solo lectura: vienen del período anterior.
-                    const esArrastreSaliente = r.fuente_valor === 'arrastre_saliente_compras' || r.fuente_valor === 'arrastre_saliente_retenciones';
+                    // Editable: propiedad genérica configurada en /config/sri-casilleros-etiquetas.
+                    // 605/606 (arrastre "entrante") no son editables pero muestran un candado
+                    // informativo: vienen automáticamente del período anterior.
                     const esArrastreEntrante = r.fuente_valor === 'arrastre_entrante_compras' || r.fuente_valor === 'arrastre_entrante_retenciones';
                     let tdBruto;
-                    if (esArrastreSaliente) {
-                        tdBruto = `<input type="number" step="0.01" class="form-control form-control-sm text-end p-0 border-0 bg-warning bg-opacity-10 fw-bold" style="height:22px;font-size:0.78rem;" data-casillero-arrastre="${cBruto}" value="${(vBruto ?? 0).toFixed(2)}">`;
+                    if (r.editable && cBruto) {
+                        tdBruto = `<input type="number" step="0.01" class="form-control form-control-sm text-end p-0 border-0 bg-warning bg-opacity-10 fw-bold" style="height:22px;font-size:0.78rem;" data-casillero-editable="${cBruto}" data-decimales="${dec}" value="${(vBruto ?? 0).toFixed(dec)}">`;
                     } else if (esArrastreEntrante) {
-                        tdBruto = `${vBruto !== null ? fmt(vBruto) : ''} <i class="bi bi-lock-fill text-muted" style="font-size:0.65rem;" title="Se completa automáticamente con el arrastre del período anterior"></i>`;
+                        tdBruto = `<span data-casillero-display="${cBruto}" data-decimales="${dec}">${vBruto !== null ? fmt(vBruto) : ''}</span> <i class="bi bi-lock-fill text-muted" style="font-size:0.65rem;" title="Se completa automáticamente con el arrastre del período anterior"></i>`;
                     } else {
-                        tdBruto = vBruto !== null ? fmt(vBruto) : '';
+                        tdBruto = cBruto ? `<span data-casillero-display="${cBruto}" data-decimales="${dec}">${vBruto !== null ? fmt(vBruto) : ''}</span>` : (vBruto !== null ? fmt(vBruto) : '');
                     }
 
                     html += `<tr class="${rowClass} sri-row-data ${dNoneRow}" data-has-values="${r.hasValues ? '1' : '0'}">
@@ -371,6 +380,77 @@
             if (currentSeccion !== '') html += '</tbody></table></div></div>';
             formSRI.innerHTML = html;
         }
+
+        // ==========================================================================
+        // Motor de fórmulas en el navegador — puerto de DeclaracionIvaService::
+        // evaluarMatematica() + el loop de sustitución de getResumenCompleto(). Recalcula
+        // los casilleros con fórmula cuando el usuario edita un casillero "editable"
+        // (configurado en /config/sri-casilleros-etiquetas), sin volver a pedir al servidor.
+        // ==========================================================================
+        function evaluarMatematicaJS(expr) {
+            const limpio = String(expr).replace(/[^0-9+\-*/.()]/g, '');
+            if (!limpio) return 0;
+            try {
+                const resultado = Function('"use strict"; return (' + limpio + ');')();
+                return typeof resultado === 'number' && isFinite(resultado) ? resultado : 0;
+            } catch (e) {
+                return 0;
+            }
+        }
+
+        function recalcularFormulasJS(valores, layout) {
+            const formulas = {};
+            layout.forEach(r => {
+                if (r.casillero_bruto && r.formula_bruto) formulas[r.casillero_bruto] = r.formula_bruto;
+                if (r.casillero_neto && r.formula_neto) formulas[r.casillero_neto] = r.formula_neto;
+                if (r.casillero_impuesto && r.formula_impuesto) formulas[r.casillero_impuesto] = r.formula_impuesto;
+            });
+
+            for (let pasada = 0; pasada < 3; pasada++) {
+                let cambio = false;
+                for (const casillero in formulas) {
+                    const expresion = formulas[casillero].replace(/\b(\d{3})\b/g, (m, cod) => {
+                        return (valores[cod] !== undefined ? valores[cod] : 0).toString();
+                    });
+                    let resultado = Math.max(0, evaluarMatematicaJS(expresion));
+                    const actual = parseFloat(valores[casillero]) || 0;
+                    if (Math.abs(actual - resultado) > 0.001) {
+                        valores[casillero] = resultado;
+                        cambio = true;
+                    }
+                }
+                if (!cambio) break;
+            }
+            return valores;
+        }
+
+        function actualizarCeldaCasillero(codigo, valor) {
+            document.querySelectorAll('[data-casillero-display="' + codigo + '"]').forEach(el => {
+                const dec = parseInt(el.getAttribute('data-decimales') || '2', 10);
+                el.textContent = Number(valor).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+            });
+        }
+
+        // Delegado: cualquier input editable del "Resumen 104" dispara el recálculo en vivo.
+        formSRI.addEventListener('input', (e) => {
+            const input = e.target.closest('[data-casillero-editable]');
+            if (!input) return;
+            const codigo = input.getAttribute('data-casillero-editable');
+            const nuevoValor = parseFloat(input.value) || 0;
+            ultimosValores[codigo] = nuevoValor;
+
+            // Caso especial 480/481: son complementarios, siempre suman el total gravado del período.
+            if (codigo === '481') {
+                const nuevoValor480 = Math.round((ultimoTotal480481 - nuevoValor) * 100) / 100;
+                ultimosValores['480'] = nuevoValor480;
+                const input480 = formSRI.querySelector('[data-casillero-editable="480"]');
+                if (input480) input480.value = nuevoValor480.toFixed(2);
+                else actualizarCeldaCasillero('480', nuevoValor480);
+            }
+
+            recalcularFormulasJS(ultimosValores, ultimoLayout);
+            Object.keys(ultimosValores).forEach(cod => actualizarCeldaCasillero(cod, ultimosValores[cod]));
+        });
 
         function renderDetalle(detalle) {
             let html = '';
@@ -595,12 +675,14 @@
                 fd.append('periodo', p.periodo);
                 fd.append('tipo_periodo', p.tipo_periodo);
 
-                // Arrastre de crédito tributario (615/617): si la tabla ya se generó, se envía
-                // el valor actual del input (autocalculado o ajustado a mano por el usuario).
-                const inp615 = document.querySelector('input[data-casillero-arrastre="615"]');
-                const inp617 = document.querySelector('input[data-casillero-arrastre="617"]');
-                if (inp615) fd.append('ajuste_615', inp615.value);
-                if (inp617) fd.append('ajuste_617', inp617.value);
+                // Casilleros editables (615/617 arrastre, 481/484/486 liquidación diferida):
+                // si la tabla ya se generó, se envía el valor actual de cada input (autocalculado
+                // o ajustado a mano por el usuario).
+                const mapaAjustes = { '615': 'ajuste_615', '617': 'ajuste_617', '481': 'ajuste_481', '484': 'ajuste_484', '486': 'ajuste_486' };
+                Object.keys(mapaAjustes).forEach(codigo => {
+                    const inp = formSRI.querySelector('input[data-casillero-editable="' + codigo + '"]');
+                    if (inp) fd.append(mapaAjustes[codigo], inp.value);
+                });
 
                 btnGuardar.disabled = true;
                 fetchJsonDecl(`<?= $base ?>/<?= $rutaModulo ?>/guardar-ajax`, { method: 'POST', body: fd }).then(data => {

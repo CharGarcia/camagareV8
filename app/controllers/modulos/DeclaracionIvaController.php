@@ -504,6 +504,9 @@ class DeclaracionIvaController extends BaseModuloController
                 'observaciones' => trim((string) ($_POST['observaciones'] ?? '')) ?: null,
                 'ajuste_615'    => $_POST['ajuste_615'] ?? '',
                 'ajuste_617'    => $_POST['ajuste_617'] ?? '',
+                'ajuste_481'    => $_POST['ajuste_481'] ?? '',
+                'ajuste_484'    => $_POST['ajuste_484'] ?? '',
+                'ajuste_486'    => $_POST['ajuste_486'] ?? '',
             ]);
             echo json_encode(['ok' => true, 'declaracion' => $declaracion]);
         } catch (\Throwable $e) {

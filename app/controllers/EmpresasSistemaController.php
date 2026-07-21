@@ -452,7 +452,8 @@ class EmpresasSistemaController extends Controller
         }
 
         $model = new EmpresaAsignada();
-        $usuarios = $model->getUsuariosDeEmpresa($idEmpresa);
+        // Sin super admin: no ocupan cupo y tienen acceso a todas las empresas.
+        $usuarios = $model->getUsuariosDeEmpresa($idEmpresa, true);
 
         $idActual = (int) $_SESSION['id_usuario'];
         $html = '';

@@ -183,6 +183,10 @@ class EmpresaService
         $idEst = (int) ($data['id_establecimiento'] ?? 0);
         if (!$idEst) $idEst = $this->repository->getPrimerEstablecimientoId($idEmpresa);
 
+        // Interruptor del régimen de liquidación diferida de IVA por ventas a plazo (480-499).
+        // Apagado por defecto: no afecta a las empresas que no lo usan.
+        $this->repository->updateUsaLiquidacionDiferidaIva($idEmpresa, !empty($data['usa_liquidacion_diferida_iva']));
+
         // Guardar casilleros de IVA por tipo de documento y tarifa
         $casilleros = $data['iva_casilleros'] ?? [];
         foreach ($casilleros as $tipoDocumento => $tarifas) {

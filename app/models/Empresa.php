@@ -79,7 +79,7 @@ class Empresa extends BaseModel
 
         $empAsignada = new EmpresaAsignada();
         foreach ($rows as &$r) {
-            $r['usuarios'] = $empAsignada->getUsuariosDeEmpresa((int) $r['id']);
+            $r['usuarios'] = $empAsignada->getUsuariosDeEmpresa((int) $r['id'], true);
         }
 
         return ['rows' => $rows, 'total' => $total];

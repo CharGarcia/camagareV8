@@ -160,6 +160,21 @@ class DeclaracionIvaService
                 $sums['615'] = $split['615'];
                 $sums['617'] = $split['617'];
             }
+
+            // 2d. Liquidación diferida de IVA por ventas a plazo (480/481/483/484/486 —
+            // 482, 485 y 499 se resuelven solos con el motor de fórmulas de más abajo).
+            $totalTransferencias = $this->repository->getTotalTransferenciasGravadas($idEmpresa, $fechaDesde, $fechaHasta, $ambiente);
+            $sums['483'] = $declAnterior ? round((float) $declAnterior['liquidacion_diferida_485'], 2) : 0.0;
+            if ($declActual) {
+                $sums['481'] = round((float) $declActual['transferencias_credito'], 2);
+                $sums['484'] = round((float) $declActual['liquidacion_diferida_484'], 2);
+                $sums['486'] = (float) $declActual['mes_pago_credito'];
+            } else {
+                $sums['481'] = 0.0;
+                $sums['484'] = 0.0;
+                $sums['486'] = 0.0;
+            }
+            $sums['480'] = round($totalTransferencias - $sums['481'], 2);
         }
 
         // 3. Extraer fórmulas y casilleros de la estructura matricial
@@ -206,7 +221,10 @@ class DeclaracionIvaService
         // para que la interfaz dibuje las 7 columnas
         return [
             'layout' => $estructura,
-            'valores' => $sums
+            'valores' => $sums,
+            // Total fijo que 480 (contado) + 481 (crédito) deben sumar: al editar 481 en el
+            // navegador, 480 se recalcula como total_480_481 - 481 (ver punto 3 del plan).
+            'total_480_481' => $totalTransferencias ?? 0.0,
         ];
     }
 
@@ -436,7 +454,33 @@ class DeclaracionIvaService
         $creditoAnteriorRetenciones = $declAnterior ? round((float) $declAnterior['saldo_favor_retenciones'], 2) : 0.0;
         $creditoAnteriorAplicado   = round($creditoAnteriorCompras + $creditoAnteriorRetenciones, 2);
 
+        // Liquidación diferida de IVA por ventas a plazo (art. 67 LRTI, casilleros 480-499).
+        // Interruptor por empresa, APAGADO por defecto: si está apagado, nada de este bloque
+        // afecta el cálculo de iva_a_pagar (el 499 solo queda guardado como referencia).
+        $empresaRow = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+        $usaLiquidacionDiferida = !empty($empresaRow['usa_liquidacion_diferida_iva']);
+
+        $totalTransferencias = $this->repository->getTotalTransferenciasGravadas($idEmpresa, $fechaDesde, $fechaHasta, $ambiente);
+        $transferenciasCredito = (isset($data['ajuste_481']) && $data['ajuste_481'] !== '' && $data['ajuste_481'] !== null)
+            ? round((float) $data['ajuste_481'], 2) : round((float) ($existente['transferencias_credito'] ?? 0), 2);
+        $transferenciasContado = round($totalTransferencias - $transferenciasCredito, 2);
+
+        $liq484 = (isset($data['ajuste_484']) && $data['ajuste_484'] !== '' && $data['ajuste_484'] !== null)
+            ? round((float) $data['ajuste_484'], 2) : round((float) ($existente['liquidacion_diferida_484'] ?? 0), 2);
+        $mesPagoCredito = (isset($data['ajuste_486']) && $data['ajuste_486'] !== '' && $data['ajuste_486'] !== null)
+            ? (int) $data['ajuste_486'] : (int) ($existente['mes_pago_credito'] ?? 0);
+
+        // 482 = "trasládese campo 429" = IVA generado en ventas del período (bruto, antes de NC).
+        $liq482 = $ivaVentas;
+        $liq483 = $declAnterior ? round((float) $declAnterior['liquidacion_diferida_485'], 2) : 0.0;
+        $liq485 = round(max(0.0, $liq482 - $liq484), 2);
+        $liq499 = round($liq483 + $liq484, 2);
+
         $ivaVentasNeto      = round($ivaVentas - $notasCreditoVenta, 2);
+        if ($usaLiquidacionDiferida) {
+            // El 499 (impuesto a liquidar este mes) reemplaza al IVA en ventas neto normal.
+            $ivaVentasNeto = $liq499;
+        }
         $creditoComprasNeto = round($creditoCompras - $notasCreditoCompra, 2);
         $split = $this->calcularSplitArrastre($ivaVentasNeto, $creditoComprasNeto, $retenciones, $creditoAnteriorCompras, $creditoAnteriorRetenciones);
 
@@ -459,6 +503,13 @@ class DeclaracionIvaService
         $valoresCasilleros['606'] = $creditoAnteriorRetenciones;
         $valoresCasilleros['615'] = $saldoFavorCompras;
         $valoresCasilleros['617'] = $saldoFavorRetenciones;
+        $valoresCasilleros['480'] = $transferenciasContado;
+        $valoresCasilleros['481'] = $transferenciasCredito;
+        $valoresCasilleros['483'] = $liq483;
+        $valoresCasilleros['484'] = $liq484;
+        $valoresCasilleros['485'] = $liq485;
+        $valoresCasilleros['486'] = $mesPagoCredito;
+        $valoresCasilleros['499'] = $liq499;
 
         $toSave = [
             'id_empresa'                   => $idEmpresa,
@@ -480,6 +531,13 @@ class DeclaracionIvaService
             'saldo_favor'                  => $saldoFavor,
             'saldo_favor_compras'          => $saldoFavorCompras,
             'saldo_favor_retenciones'      => $saldoFavorRetenciones,
+            'transferencias_contado'       => $transferenciasContado,
+            'transferencias_credito'       => $transferenciasCredito,
+            'mes_pago_credito'             => $mesPagoCredito,
+            'liquidacion_diferida_483'     => $liq483,
+            'liquidacion_diferida_484'     => $liq484,
+            'liquidacion_diferida_485'     => $liq485,
+            'liquidacion_diferida_499'     => $liq499,
             'valores_casilleros'           => $valoresCasilleros,
             'estado'                       => $existente['estado'] ?? 'guardado',
             'observaciones'                => $data['observaciones'] ?? ($existente['observaciones'] ?? null),

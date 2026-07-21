@@ -460,6 +460,22 @@ $base = BASE_URL;
                 `<b class="${r.sin_cuenta ? 'text-danger' : ''}">${fmt(r.sin_cuenta)}</b> sin cuenta · ` +
                 `<b>${fmt(r.ya)}</b> ya configuradas`;
 
+            // Nada marcable: casi siempre es que falta migrar el plan de cuentas (Paso 1).
+            if (!r.listas && !r.ya) {
+                $('cfgResumen').innerHTML +=
+                    '<div class="alert alert-warning py-2 px-3 mt-2 mb-0 small">' +
+                    '<i class="bi bi-exclamation-triangle me-1"></i>' +
+                    (r.sin_cuenta
+                        ? 'Ninguna regla se puede aplicar porque las cuentas de destino <b>no existen todavía</b> en el plan de esta empresa. ' +
+                          'Migre primero <b>Plan de cuentas</b> en el Paso 1 y vuelva a revisar.'
+                        : 'Ninguna de las reglas del sistema anterior tiene equivalente en el sistema nuevo.') +
+                    '</div>';
+            } else if (r.sin_cuenta) {
+                $('cfgResumen').innerHTML +=
+                    '<div class="form-text mt-1"><i class="bi bi-info-circle me-1"></i>Las filas <b>sin cuenta</b> no se pueden marcar: ' +
+                    'esa cuenta no existe en el plan de la empresa. Migre <b>Plan de cuentas</b> (Paso 1) y vuelva a revisar.</div>';
+            }
+
             if (!res.filas.length) { $('cfgTabla').innerHTML = '<div class="text-muted small">Sin configuración general en el sistema anterior.</div>'; return; }
 
             const badge = {
@@ -482,7 +498,11 @@ $base = BASE_URL;
                         <td class="small">${esc(f.concepto_viejo)}</td>
                         <td class="small">${esc(f.cuenta_vieja)}</td>
                         <td class="small">${f.slot_nuevo ? esc(f.slot_nuevo) : '<i>(sin equivalente)</i>'}</td>
-                        <td class="small">${f.cuenta_nueva ? esc(f.cuenta_nueva) : '—'}</td>
+                        <td class="small">${f.cuenta_nueva
+                            ? esc(f.cuenta_nueva)
+                            : (f.estado === 'sin_cuenta'
+                                ? `<span class="text-danger">falta <b>${esc(f.cod_casa)}</b> en el plan</span>`
+                                : '—')}</td>
                         <td class="text-center">${badge[f.estado] || ''}</td>
                      </tr>`;
             });

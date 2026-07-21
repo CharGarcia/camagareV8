@@ -1030,6 +1030,14 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
+
+                                <div class="form-check form-switch mt-3 p-3 border rounded-3 bg-light">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="usa_liquidacion_diferida_iva" name="usa_liquidacion_diferida_iva" value="1" <?= !empty($empresa['usa_liquidacion_diferida_iva']) ? 'checked' : '' ?>>
+                                    <label class="form-check-label fw-medium" for="usa_liquidacion_diferida_iva">
+                                        Esta empresa declara bajo el régimen de <b>liquidación diferida de IVA por ventas a plazo</b> (art. 67 LRTI, casilleros 480-499)
+                                    </label>
+                                    <p class="text-muted small mb-0 mt-1">Actívelo solo si vende a crédito con IVA diferido. Con esta opción encendida, el casillero 499 (impuesto a liquidar este mes) reemplaza al IVA en ventas normal para calcular el IVA a pagar/saldo a favor de la declaración.</p>
+                                </div>
                             </div>
 
                             <!-- Tabla: Retenciones SRI - IVA -->

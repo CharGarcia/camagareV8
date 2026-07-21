@@ -17,7 +17,7 @@ unset($_SESSION['sri_etiquetas_msg']);
 function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '') {
     $dir = ($ordenCol === $col && strtolower($ordenDir) === 'asc') ? 'desc' : 'asc';
     $url = rtrim($base, '/') . '/config/sri-casilleros-etiquetas?sort=' . urlencode($col) . '&dir=' . $dir;
-    if ($buscar !== '') $url .= '&b=' . urlencode($buscar);
+    if ($buscar !== '') $url .= '&buscar=' . urlencode($buscar);
     $cls = trim('text-decoration-none ' . $align);
     return '<a href="' . htmlspecialchars($url) . '" class="' . $cls . '" title="Ordenar por ' . htmlspecialchars($label) . '">' . htmlspecialchars($label) . '</a>';
 }
@@ -25,9 +25,12 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 <style>
 .sri-row { cursor: pointer; }
 .sri-row:hover { background-color: rgba(0,0,0,.04); }
-.sri-etiquetas-header { flex-shrink: 0; }
+.sri-etiquetas-header { flex-shrink: 0; padding-left: 0.75rem; padding-right: 0.75rem; }
+.sri-etiquetas-msg,
+.sri-etiquetas-buscador { padding-left: 0.75rem; padding-right: 0.75rem; }
 .sri-etiquetas-scroll { max-height: calc(100dvh - 280px); overflow-y: auto; }
 .sri-etiquetas-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
+.sri-desc-cell { max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 <div class="sri-etiquetas-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div>
@@ -41,18 +44,18 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
 </div>
 
 <?php if ($msg): ?>
-<div class="alert alert-<?= htmlspecialchars($msg[0]) ?> alert-dismissible fade show" role="alert">
+<div class="sri-etiquetas-msg alert alert-<?= htmlspecialchars($msg[0]) ?> alert-dismissible fade show" role="alert">
     <?= htmlspecialchars($msg[1]) ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>
 
-<form method="GET" action="<?= rtrim($base, '/') ?>/config/sri-casilleros-etiquetas" class="mb-3">
+<form method="GET" action="<?= rtrim($base, '/') ?>/config/sri-casilleros-etiquetas" class="sri-etiquetas-buscador mb-3">
     <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
     <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
     <div class="input-group input-group-sm" style="max-width: 380px;">
         <span class="input-group-text"><i class="bi bi-search"></i></span>
-        <input type="text" name="b" class="form-control" placeholder="Buscar en casillero, sección, descripción..." value="<?= htmlspecialchars($buscar) ?>">
+        <input type="text" name="buscar" class="form-control" placeholder="Buscar en sección, concepto, casilleros u orden..." value="<?= htmlspecialchars($buscar) ?>">
         <button type="submit" class="btn btn-outline-primary">Buscar</button>
         <?php if ($buscar !== ''): ?>
         <a href="<?= rtrim($base, '/') ?>/config/sri-casilleros-etiquetas" class="btn btn-outline-secondary">Limpiar</a>
@@ -66,8 +69,8 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-3"><?= thSort($base, 'seccion', 'Sección', $ordenCol, $ordenDir, $buscar) ?></th>
-                        <th><?= thSort($base, 'descripcion', 'Concepto (Fila)', $ordenCol, $ordenDir, $buscar) ?></th>
+                        <th class="ps-3" data-col="seccion"><?= thSort($base, 'seccion', 'Sección', $ordenCol, $ordenDir, $buscar) ?></th>
+                        <th data-col="descripcion" class="sri-desc-cell"><?= thSort($base, 'descripcion', 'Concepto (Fila)', $ordenCol, $ordenDir, $buscar) ?></th>
                         <th class="text-center">Casillero Bruto</th>
                         <th class="text-center">Casillero Neto</th>
                         <th class="text-center">Casillero Impuesto</th>
@@ -107,8 +110,8 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                     ]), ENT_QUOTES, 'UTF-8');
                     ?>
                     <tr class="sri-row" role="button" tabindex="0" data-json="<?= $rj ?>" onclick="abrirModalEditar(this)">
-                        <td class="ps-3"><?= $c_seccion ?></td>
-                        <td>
+                        <td class="ps-3" data-col="seccion"><?= $c_seccion ?></td>
+                        <td class="sri-desc-cell" data-col="descripcion" title="<?= $c_desc ?>">
                             <?php if ($c_bold): ?><strong><?= $c_desc ?></strong><?php else: ?><?= $c_desc ?><?php endif; ?>
                             <?php if ($c_tipo === 'titulo'): ?> <span class="badge bg-info text-dark">TITULO</span> <?php endif; ?>
                         </td>
@@ -237,6 +240,13 @@ function thSort($base, $col, $label, $ordenCol, $ordenDir, $buscar, $align = '')
                                         <label class="form-check-label fw-medium" for="bold">Resaltar en Negrita</label>
                                     </div>
                                 </div>
+                                <div class="col-12 mt-2">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="editable" name="editable" value="1">
+                                        <label class="form-check-label fw-medium" for="editable">Editable manualmente en la Declaración de IVA</label>
+                                    </div>
+                                    <div class="form-text" style="font-size: 0.7rem;">El usuario podrá escribir el valor directamente en el "Resumen 104"; el formulario recalcula solo los casilleros que dependan de este por fórmula.</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -272,6 +282,7 @@ function abrirModalCrear() {
     document.getElementById('formula_impuesto').value = '';
     document.getElementById('indent').value = '0';
     document.getElementById('bold').checked = false;
+    document.getElementById('editable').checked = false;
     document.getElementById('tipo').value = 'valor';
     document.getElementById('fuente_valor').value = 'documentos';
 
@@ -302,6 +313,7 @@ function abrirModalEditar(tr) {
     document.getElementById('formula_impuesto').value = data.formula_impuesto;
     document.getElementById('indent').value = data.indent;
     document.getElementById('bold').checked = data.bold;
+    document.getElementById('editable').checked = data.editable;
     document.getElementById('tipo').value = data.tipo;
     document.getElementById('fuente_valor').value = data.fuente_valor || 'documentos';
 
