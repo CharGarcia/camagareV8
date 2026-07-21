@@ -17,6 +17,7 @@ class RolPagoService
     private RolPagoRules $rules;
     private LogSistemaService $log;
     private RolCalculoService $calc;
+    private ImpuestoRentaEmpleadoService $ir;
 
     public function __construct(RolPagoRepository $repo, RolPagoRules $rules, LogSistemaService $log)
     {
@@ -24,6 +25,7 @@ class RolPagoService
         $this->rules = $rules;
         $this->log = $log;
         $this->calc = new RolCalculoService();
+        $this->ir = new ImpuestoRentaEmpleadoService();
     }
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array
@@ -183,6 +185,12 @@ class RolPagoService
         $salario   = $this->repo->getSalario($anio);
         $vacRepo   = new VacacionRepository();
 
+        // Impuesto a la Renta (solo aplica al rol MENSUAL): tramos y tope de gasto
+        // personal del año. Si el catálogo aún no está cargado, quedan vacíos y
+        // la retención calculada es 0 (ver ImpuestoRentaEmpleadoService).
+        $tramosIr = $tipo === 'MENSUAL' ? $this->ir->getTramosAnio($anio) : [];
+        $gastoPersonalMaximoAnual = $tipo === 'MENSUAL' ? $this->ir->getGastoPersonalMaximo($anio) : 0.0;
+
         $ids = array_map(fn($e) => (int) $e['id'], $empleados);
         $esMensual = ($tipo === 'MENSUAL');
         // En SEMANAL/QUINCENA se omiten los empleados cuyo rol de fin de mes (MENSUAL) ya
@@ -240,7 +248,7 @@ class RolPagoService
                     $dias = self::diasTrabajadosMes($anio, $mes, $periodos);
                 }
 
-                $calc = $this->calc->calcular($emp, $tipo, $salario, $rubrosF, $noveds, $neteo, $vacacion, $dias, $anticiposMap, $prestamosNoDesemb);
+                $calc = $this->calc->calcular($emp, $tipo, $salario, $rubrosF, $noveds, $neteo, $vacacion, $dias, $anticiposMap, $prestamosNoDesemb, $tramosIr, $gastoPersonalMaximoAnual);
 
                 // Omite empleados sin ningún concepto (p. ej. base 0 y sin novedades).
                 if ($calc['total_ingresos'] == 0 && $calc['total_egresos'] == 0) {

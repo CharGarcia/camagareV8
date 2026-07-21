@@ -6,16 +6,22 @@ namespace App\services\modulos;
 
 use App\repositories\modulos\DeclaracionIvaRepository;
 use App\repositories\modulos\FacturaVentaRepository;
+use App\Rules\modulos\DeclaracionIvaRules;
+use App\Services\LogSistemaService;
 
 class DeclaracionIvaService
 {
     private $repository;
     private $fvRepository;
+    private $rules;
+    private $logService;
 
     public function __construct(DeclaracionIvaRepository $repository)
     {
         $this->repository = $repository;
         $this->fvRepository = new FacturaVentaRepository();
+        $this->rules = new DeclaracionIvaRules();
+        $this->logService = new LogSistemaService();
     }
 
     /**
@@ -276,5 +282,282 @@ class DeclaracionIvaService
         } catch (\Throwable $e) {
             return 0.0;
         }
+    }
+
+    // ==========================================================================
+    // Declaración guardada: guardar/verificar duplicado, asiento contable y egreso
+    // ==========================================================================
+
+    private function rangoPeriodo(string $tipoPeriodo, int $anio, int $periodoValor): array
+    {
+        if ($tipoPeriodo === 'semestral') {
+            return $periodoValor == 1
+                ? ["{$anio}-01-01", "{$anio}-06-30"]
+                : ["{$anio}-07-01", "{$anio}-12-31"];
+        }
+        $mesStr = str_pad((string) $periodoValor, 2, '0', STR_PAD_LEFT);
+        $fechaDesde = "{$anio}-{$mesStr}-01";
+        return [$fechaDesde, date('Y-m-t', strtotime($fechaDesde))];
+    }
+
+    private function periodoAnterior(string $tipoPeriodo, int $anio, int $periodoValor): array
+    {
+        if ($tipoPeriodo === 'semestral') {
+            return $periodoValor <= 1 ? [$anio - 1, 2] : [$anio, 1];
+        }
+        return $periodoValor <= 1 ? [$anio - 1, 12] : [$anio, $periodoValor - 1];
+    }
+
+    private function etiquetaPeriodo(array $decl): string
+    {
+        $meses = [1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4 => 'Abril', 5 => 'Mayo', 6 => 'Junio',
+                  7 => 'Julio', 8 => 'Agosto', 9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre'];
+        $valor = (int) $decl['periodo_valor'];
+        if (($decl['tipo_periodo'] ?? '') === 'semestral') {
+            return ($valor === 1 ? 'Primer Semestre' : 'Segundo Semestre') . ' ' . $decl['periodo_anio'];
+        }
+        return ($meses[$valor] ?? (string) $valor) . ' ' . $decl['periodo_anio'];
+    }
+
+    private function ambienteEmpresa(int $idEmpresa): string
+    {
+        $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+        return (string) ($empresa['tipo_ambiente'] ?? '1');
+    }
+
+    /**
+     * Verifica si el período (año/tipo_periodo/periodo_valor) ya tiene una declaración
+     * guardada, para avisar al usuario antes de que vuelva a declarar.
+     */
+    public function verificarDeclarado(int $idEmpresa, string $tipoPeriodo, int $anio, int $periodoValor): ?array
+    {
+        $ambiente = $this->ambienteEmpresa($idEmpresa);
+        return $this->repository->findDeclaracion($idEmpresa, $ambiente, $tipoPeriodo, $anio, $periodoValor);
+    }
+
+    /**
+     * Guarda (crea o actualiza) la declaración de un período: calcula los componentes,
+     * aplica el arrastre automático del saldo a favor del período anterior, y persiste
+     * un snapshot completo de los casilleros.
+     */
+    public function guardarDeclaracion(array $data): array
+    {
+        $idEmpresa    = (int) $data['id_empresa'];
+        $idUsuario    = (int) $data['usuario_id'];
+        $tipoPeriodo  = (string) $data['tipo_periodo'];
+        $anio         = (int) $data['periodo_anio'];
+        $periodoValor = (int) $data['periodo_valor'];
+
+        $ambiente = $this->ambienteEmpresa($idEmpresa);
+        [$fechaDesde, $fechaHasta] = $this->rangoPeriodo($tipoPeriodo, $anio, $periodoValor);
+
+        $existente = $this->repository->findDeclaracion($idEmpresa, $ambiente, $tipoPeriodo, $anio, $periodoValor);
+        $this->rules->validarGuardado($data, $existente);
+
+        $comp = $this->repository->getResumenPagoDirecto($idEmpresa, $fechaDesde, $fechaHasta, $ambiente);
+        $ivaVentas          = round((float) $comp['iva_ventas'], 2);
+        $notasCreditoVenta  = round((float) $comp['iva_notas_credito'], 2);
+        $creditoCompras     = round((float) $comp['iva_compras'], 2);
+        $notasCreditoCompra = round((float) $comp['iva_notas_credito_compra'], 2);
+        $retenciones        = round((float) $comp['retenciones'], 2);
+
+        [$anioAnt, $periodoAnt] = $this->periodoAnterior($tipoPeriodo, $anio, $periodoValor);
+        $declAnterior = $this->repository->getDeclaracionAnterior($idEmpresa, $ambiente, $tipoPeriodo, $anioAnt, $periodoAnt);
+        $creditoAnteriorAplicado = $declAnterior ? round((float) $declAnterior['saldo_favor'], 2) : 0.0;
+
+        $neto       = $ivaVentas - $notasCreditoVenta - $creditoCompras + $notasCreditoCompra - $retenciones - $creditoAnteriorAplicado;
+        $aPagar     = round(max(0.0, $neto), 2);
+        $saldoFavor = round(max(0.0, -$neto), 2);
+
+        $valoresCasilleros = $this->getResumenCompleto($idEmpresa, $fechaDesde, $fechaHasta)['valores'] ?? [];
+
+        $toSave = [
+            'id_empresa'                 => $idEmpresa,
+            'tipo_ambiente'              => $ambiente,
+            'tipo_periodo'               => $tipoPeriodo,
+            'periodo_anio'               => $anio,
+            'periodo_valor'              => $periodoValor,
+            'fecha_desde'                => $fechaDesde,
+            'fecha_hasta'                => $fechaHasta,
+            'iva_ventas'                 => $ivaVentas,
+            'notas_credito_venta'        => $notasCreditoVenta,
+            'credito_tributario_compras' => $creditoCompras,
+            'notas_credito_compra'       => $notasCreditoCompra,
+            'retenciones_iva'            => $retenciones,
+            'credito_anterior_aplicado'  => $creditoAnteriorAplicado,
+            'iva_a_pagar'                => $aPagar,
+            'saldo_favor'                => $saldoFavor,
+            'valores_casilleros'         => $valoresCasilleros,
+            'estado'                     => $existente['estado'] ?? 'guardado',
+            'observaciones'              => $data['observaciones'] ?? ($existente['observaciones'] ?? null),
+            'usuario_id'                 => $idUsuario,
+        ];
+
+        if ($existente) {
+            $id = (int) $existente['id'];
+            $this->repository->updateDeclaracion($id, $idEmpresa, $toSave);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR', 'declaracion_iva_cabecera', $id, $existente, $toSave);
+        } else {
+            $id = $this->repository->insertDeclaracion($toSave);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'CREAR', 'declaracion_iva_cabecera', $id, null, $toSave);
+        }
+
+        return $this->repository->findDeclaracionById($id, $idEmpresa) ?? [];
+    }
+
+    /**
+     * Genera (o regenera, sin duplicar) el asiento contable de la liquidación del IVA.
+     */
+    public function generarAsientoDeclaracion(int $idDeclaracion, int $idEmpresa, int $idUsuario): array
+    {
+        $decl = $this->repository->findDeclaracionById($idDeclaracion, $idEmpresa);
+        if (!$decl) {
+            throw new \Exception('Declaración no encontrada.');
+        }
+
+        $datos = [
+            'iva_ventas_neto'           => round((float) $decl['iva_ventas'] - (float) $decl['notas_credito_venta'], 2),
+            'credito_compras_neto'      => round((float) $decl['credito_tributario_compras'] - (float) $decl['notas_credito_compra'], 2),
+            'retenciones'               => (float) $decl['retenciones_iva'],
+            'iva_a_pagar'               => (float) $decl['iva_a_pagar'],
+            'saldo_favor'               => (float) $decl['saldo_favor'],
+            'credito_anterior_aplicado' => (float) $decl['credito_anterior_aplicado'],
+        ];
+
+        $builder  = new AsientoBuilderService();
+        $detalles = $builder->generarAsientoDeclaracionIva($idEmpresa, $idDeclaracion, $datos);
+        if (empty($detalles)) {
+            throw new \Exception('No hay valores para generar el asiento de esta declaración.');
+        }
+
+        $asientoService = new AsientoContableService(
+            new \App\repositories\modulos\AsientoContableRepository(),
+            new \App\Rules\modulos\AsientoContableRules(),
+            $this->logService
+        );
+
+        $previo    = $asientoService->getAsientoPorOrigen('declaracion_iva', $idDeclaracion, $idEmpresa);
+        $idAsiento = $previo ? (int) $previo['id'] : 0;
+
+        $cabecera = [
+            'id'                   => $idAsiento > 0 ? $idAsiento : null,
+            'fecha_asiento'        => $decl['fecha_hasta'],
+            'tipo_comprobante'     => 'declaracion_iva',
+            'numero_comprobante'   => '',
+            'concepto'             => 'Declaración de IVA ' . $this->etiquetaPeriodo($decl),
+            'estado'               => 'contabilizado',
+            'modulo_origen'        => 'declaracion_iva',
+            'id_referencia_origen' => $idDeclaracion,
+            'observaciones'        => $decl['observaciones'] ?? null,
+        ];
+
+        $idGenerado = $asientoService->guardarAsiento($cabecera, $detalles, $idEmpresa, $idUsuario);
+        $this->repository->marcarAsiento($idDeclaracion, $idEmpresa, $idGenerado, $idUsuario);
+        $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_ASIENTO', 'declaracion_iva_cabecera', $idDeclaracion, null, ['id_asiento' => $idGenerado]);
+
+        return ['id_asiento' => $idGenerado];
+    }
+
+    /**
+     * Genera el egreso del IVA a pagar de la declaración, a nombre del proveedor y con el
+     * concepto de egreso que elige el usuario. Reutiliza EgresoService::registrar (numeración,
+     * validación de período y asiento contable propio del egreso), igual que RolEgresoLoteService.
+     *
+     * @param array $opts ['id_proveedor','id_egreso_concepto','id_forma_pago','id_punto_emision','fecha']
+     */
+    public function generarEgreso(int $idDeclaracion, int $idEmpresa, int $idUsuario, array $opts): int
+    {
+        $decl = $this->repository->findDeclaracionById($idDeclaracion, $idEmpresa);
+        if (!$decl) {
+            throw new \Exception('Declaración no encontrada.');
+        }
+        $this->rules->validarGenerarEgreso($decl);
+
+        $idProveedor = (int) ($opts['id_proveedor'] ?? 0);
+        $idConcepto  = (int) ($opts['id_egreso_concepto'] ?? 0);
+        $idForma     = (int) ($opts['id_forma_pago'] ?? 0);
+        $idPunto     = (int) ($opts['id_punto_emision'] ?? 0);
+        $fecha       = !empty($opts['fecha']) ? $opts['fecha'] : date('Y-m-d');
+
+        if ($idProveedor <= 0) throw new \Exception('Seleccione el proveedor a nombre de quien se emite el egreso.');
+        if ($idConcepto <= 0) throw new \Exception('Seleccione el concepto de egreso.');
+        if ($idForma <= 0) throw new \Exception('Seleccione la forma de pago.');
+        if ($idPunto <= 0) throw new \Exception('Seleccione el punto de emisión.');
+
+        // Operación bancaria (transferencia/débito/depósito/cheque), solo si la forma de pago es tipo BANCO.
+        $tipoOp = strtoupper(trim((string) ($opts['tipo_operacion_bancaria'] ?? '')));
+        $numeroCheque = trim((string) ($opts['numero_cheque'] ?? ''));
+        $fechaCobro = trim((string) ($opts['fecha_cobro'] ?? ''));
+        if ($tipoOp === 'CHEQUE' && $numeroCheque === '') {
+            throw new \Exception('Ingrese el número de cheque.');
+        }
+
+        $db = \App\core\Database::getConnection();
+        $stP = $db->prepare("SELECT e.codigo AS est, p.codigo_punto AS pto
+                             FROM empresa_punto_emision p JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+                             WHERE p.id = :idp");
+        $stP->execute([':idp' => $idPunto]);
+        $pRow = $stP->fetch(\PDO::FETCH_ASSOC);
+        if (!$pRow) throw new \Exception('Punto de emisión no válido.');
+        $est = str_pad((string) $pRow['est'], 3, '0', STR_PAD_LEFT);
+        $pto = str_pad((string) $pRow['pto'], 3, '0', STR_PAD_LEFT);
+
+        $secSvc = new \App\Services\SecuencialService();
+        $sec    = (int) ($secSvc->obtenerSiguienteSecuencial($idPunto, 'Egresos')['secuencial'] ?? 0);
+        $numero = $est . '-' . $pto . '-' . str_pad((string) $sec, 9, '0', STR_PAD_LEFT);
+
+        $monto        = round((float) $decl['iva_a_pagar'], 2);
+        $periodoLabel = $this->etiquetaPeriodo($decl);
+
+        $egSvc = new \App\Services\modulos\EgresoService(
+            new \App\repositories\modulos\EgresoRepository(),
+            new \App\Rules\modulos\EgresoRules(),
+            $this->logService
+        );
+
+        $idEgreso = $egSvc->registrar([
+            'id_empresa'         => $idEmpresa,
+            'usuario_id'         => $idUsuario,
+            'id_punto_emision'   => $idPunto,
+            'establecimiento'    => $est,
+            'punto_emision'      => $pto,
+            'secuencial'         => $sec,
+            'numero_egreso'      => $numero,
+            'fecha_emision'      => $fecha,
+            'tipo_egreso'        => 'DECLARACION_IVA',
+            'tipo_sujeto'        => 'PROVEEDOR',
+            'id_proveedor'       => $idProveedor,
+            'id_egreso_concepto' => $idConcepto,
+            'monto_total'        => $monto,
+            'observaciones'      => 'Pago Declaración de IVA ' . $periodoLabel,
+            'detalles' => [[
+                'tipo_documento'          => 'DECLARACION_IVA',
+                'id_referencia_documento' => $idDeclaracion,
+                'numero_documento'        => 'Declaración IVA ' . $periodoLabel,
+                'monto_documento'         => $monto,
+                'saldo_anterior'          => $monto,
+                'monto_pagado'            => $monto,
+                'saldo_actual'            => 0,
+            ]],
+            'pagos' => [$this->armarPagoEgreso($idForma, $monto, $tipoOp, $numeroCheque, $fechaCobro, $fecha)],
+        ]);
+
+        $this->repository->marcarEgreso($idDeclaracion, $idEmpresa, $idEgreso, $idUsuario);
+        $this->logService->registrar($idUsuario, $idEmpresa, 'GENERAR_EGRESO', 'declaracion_iva_cabecera', $idDeclaracion, null, ['id_egreso' => $idEgreso]);
+
+        return $idEgreso;
+    }
+
+    private function armarPagoEgreso(int $idForma, float $monto, string $tipoOp, string $numeroCheque, string $fechaCobro, string $fechaEmision): array
+    {
+        $pago = ['id_forma_pago' => $idForma, 'monto' => $monto];
+        if ($tipoOp !== '') {
+            $pago['tipo_operacion_bancaria'] = $tipoOp;
+            if ($tipoOp === 'CHEQUE') {
+                $pago['numero_cheque'] = $numeroCheque;
+                $pago['fecha_cobro']   = $fechaCobro !== '' ? $fechaCobro : $fechaEmision;
+            }
+        }
+        return $pago;
     }
 }

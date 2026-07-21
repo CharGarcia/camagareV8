@@ -120,6 +120,10 @@
                 document.getElementById('emp_valor_quincena').value = d.valor_quincena || 0;
                 window.toggleIessFields();
 
+                // Imp. Renta
+                var _excIr = document.getElementById('emp_excluir_calculo_ir');
+                if (_excIr) _excIr.value = d.excluir_calculo_ir ? 'si' : 'no';
+
                 // Puesto
                 document.getElementById('emp_region').value = d.region || 'costa';
                 document.getElementById('emp_departamento').value = d.departamento || '';
@@ -178,6 +182,53 @@
             }
         }
         document.querySelectorAll('#tablaRubros tbody tr .rb-tipo').forEach(sel => window.toggleRubroIess(sel));
+    };
+
+    /**
+     * Carga la proyección informativa de retención de Impuesto a la Renta
+     * (relación de dependencia) con el sueldo/aporte actuales del formulario.
+     * Solo lectura: el valor real que se retiene lo calcula el rol de pagos al generarse.
+     */
+    window.empIrCargar = async function() {
+        const cont = document.getElementById('empIrContenido');
+        if (!cont) return;
+        const sueldo = parseFloat(document.getElementById('emp_sueldo_base')?.value || '0');
+        const aportePer = parseFloat(document.getElementById('emp_aporte_personal')?.value || '9.45');
+        const excluido = document.getElementById('emp_excluir_calculo_ir')?.value === 'si' ? 1 : 0;
+
+        cont.innerHTML = '<div class="text-center py-3 small text-muted"><div class="spinner-border spinner-border-sm mb-2"></div><br>Calculando proyección...</div>';
+
+        try {
+            const params = new URLSearchParams({ sueldo_base: sueldo, aporte_personal: aportePer, excluir_calculo_ir: excluido });
+            const resp = await fetch(`${urlModuloEmp}/proyeccionIrAjax?${params}`);
+            const r = await resp.json();
+            if (!r.ok) { cont.innerHTML = '<div class="alert alert-danger small mb-0">No se pudo calcular la proyección.</div>'; return; }
+
+            const money = v => '$' + Number(v).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            let avisoTramos = '';
+            if (!r.tramos_cargados) {
+                avisoTramos = `<div class="alert alert-warning small py-2 mb-3"><i class="bi bi-exclamation-triangle me-1"></i>
+                    No hay tabla de tramos de Impuesto a la Renta cargada para ${r.anio}. La retención se muestra en $0.00
+                    hasta que se configure en <strong>Config &rarr; Tramos de Impuesto a la Renta</strong>.</div>`;
+            }
+            let avisoExcluido = excluido ? '<div class="alert alert-secondary small py-2 mb-3"><i class="bi bi-slash-circle me-1"></i>Este empleado está excluido del cálculo automático de IR.</div>' : '';
+
+            cont.innerHTML = `
+                ${avisoTramos}${avisoExcluido}
+                <table class="table table-sm table-borderless mb-0" style="font-size:0.82rem;">
+                    <tbody>
+                        <tr><td class="text-muted">Ingreso gravado anual proyectado (sueldo x 12)</td><td class="text-end fw-bold">${money(r.ingreso_gravado_anual)}</td></tr>
+                        <tr><td class="text-muted">(–) Aporte IESS personal anual</td><td class="text-end">${money(r.aporte_iess_anual)}</td></tr>
+                        <tr><td class="text-muted">(–) Gasto personal máximo deducible (${r.anio})</td><td class="text-end">${money(r.gasto_personal_maximo)}</td></tr>
+                        <tr class="border-top"><td class="fw-bold">Base imponible anual</td><td class="text-end fw-bold">${money(r.base_imponible_anual)}</td></tr>
+                        <tr><td class="text-muted">Retención anual estimada</td><td class="text-end">${money(r.retencion_anual)}</td></tr>
+                        <tr class="border-top"><td class="fw-bold text-primary">Retención mensual estimada</td><td class="text-end fw-bold text-primary">${money(r.retencion_mensual)}</td></tr>
+                    </tbody>
+                </table>
+                <p class="text-muted small mt-2 mb-0"><i class="bi bi-info-circle me-1"></i>Proyección informativa con el sueldo y % de aporte IESS actuales del formulario (método simplificado, ingreso mensual estable durante el año). El valor real que se retiene se calcula al generar cada rol de pagos mensual.</p>`;
+        } catch (e) {
+            cont.innerHTML = '<div class="alert alert-danger small mb-0">Error al calcular la proyección.</div>';
+        }
     };
 
     window.agregarFilaPeriodo = function(data = {}) {

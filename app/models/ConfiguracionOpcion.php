@@ -28,6 +28,7 @@ class ConfiguracionOpcion extends BaseModel
             ['nombre' => 'Apariencia', 'descripcion' => 'Colores y tema visual del sistema', 'icono' => 'palette', 'clase_color' => 'primary', 'nivel_minimo' => 1, 'enlace' => ['etiqueta' => 'Colores y tema', 'ruta' => '/config/appearance', 'clase_btn' => 'primary']],
             ['nombre' => 'Unidades de medida', 'descripcion' => 'Tipos y unidades de medida (kg, litro, etc.)', 'icono' => 'rulers', 'clase_color' => 'secondary', 'nivel_minimo' => 2, 'enlace' => ['etiqueta' => 'Unidades de medida', 'ruta' => '/config/unidades-medida', 'clase_btn' => 'secondary']],
             ['nombre' => 'Asientos tipo', 'descripcion' => 'Modelos de asientos contables predefinidos del sistema', 'icono' => 'sliders', 'clase_color' => 'dark', 'nivel_minimo' => 2, 'enlace' => ['etiqueta' => 'Asientos tipo', 'ruta' => '/config/asientos-tipo', 'clase_btn' => 'dark']],
+            ['nombre' => 'Documentos legales', 'descripcion' => 'Acuerdo de uso de datos y contrato de uso que se envían a las empresas', 'icono' => 'journal-text', 'clase_color' => 'primary', 'nivel_minimo' => 3, 'enlace' => ['etiqueta' => 'Configurar', 'ruta' => '/config/documentos-legales', 'clase_btn' => 'primary']],
         ];
         foreach ($base as $op) {
             $ruta = $op['enlace']['ruta'] ?? '';

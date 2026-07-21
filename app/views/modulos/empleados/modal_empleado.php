@@ -110,6 +110,9 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                 <a class="nav-link py-2 small" id="tab-laboral-btn" data-bs-toggle="tab" href="#tab-laboral" role="tab"><i class="bi bi-briefcase me-1"></i>Laboral</a>
                             </li>
                             <li class="nav-item">
+                                <a class="nav-link py-2 small" id="tab-renta-btn" data-bs-toggle="tab" href="#tab-renta" role="tab" onclick="window.empIrCargar && window.empIrCargar()"><i class="bi bi-percent me-1"></i>Imp. Renta</a>
+                            </li>
+                            <li class="nav-item">
                                 <a class="nav-link py-2 small" id="tab-puesto-btn" data-bs-toggle="tab" href="#tab-puesto" role="tab"><i class="bi bi-person-workspace me-1"></i>Puesto</a>
                             </li>
                             <li class="nav-item">
@@ -135,6 +138,7 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                             <?php
                             $pestanasConfigEmp = [
                                 'tab-laboral-btn' => 'Laboral',
+                                'tab-renta-btn' => 'Imp. Renta',
                                 'tab-puesto-btn' => 'Puesto',
                                 'tab-financiera-btn' => 'Bancarios',
                                 'tab-periodos-btn' => 'Historial',
@@ -264,6 +268,22 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                     <label class="form-label mb-1 small fw-bold text-muted">V. Quincena</label>
                                     <input type="number" step="0.01" class="form-control form-control-sm shadow-none" name="valor_quincena" id="emp_valor_quincena">
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Panel Imp. Renta -->
+                        <div class="tab-pane fade" id="tab-renta" role="tabpanel">
+                            <div class="row g-3 mb-2">
+                                <div class="col-md-4">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Excluir del cálculo de IR</label>
+                                    <select class="form-select form-select-sm shadow-none" name="excluir_calculo_ir" id="emp_excluir_calculo_ir" onchange="window.empIrCargar && window.empIrCargar()">
+                                        <option value="no">No</option>
+                                        <option value="si">Sí</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="empIrContenido" class="border rounded-3 p-3 bg-light">
+                                <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>Abre esta pestaña para calcular la proyección.</p>
                             </div>
                         </div>
 

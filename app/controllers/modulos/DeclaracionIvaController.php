@@ -462,4 +462,193 @@ class DeclaracionIvaController extends BaseModuloController
         }
         exit;
     }
+
+    // ==========================================================================
+    // Declaración guardada: verificar duplicado, guardar, asiento y egreso
+    // ==========================================================================
+
+    public function verificarDeclaradoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $anio = (int) ($_GET['anio'] ?? 0);
+        $periodo = (int) ($_GET['periodo'] ?? 0);
+        $tipo = $_GET['tipo_periodo'] ?? 'mensual';
+
+        try {
+            $declaracion = $this->service->verificarDeclarado($idEmpresa, $tipo, $anio, $periodo);
+            echo json_encode(['ok' => true, 'declarado' => $declaracion !== null, 'declaracion' => $declaracion]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function guardarAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $declaracion = $this->service->guardarDeclaracion([
+                'id_empresa'    => $idEmpresa,
+                'usuario_id'    => $idUsuario,
+                'tipo_periodo'  => $_POST['tipo_periodo'] ?? 'mensual',
+                'periodo_anio'  => (int) ($_POST['anio'] ?? 0),
+                'periodo_valor' => (int) ($_POST['periodo'] ?? 0),
+                'observaciones' => trim((string) ($_POST['observaciones'] ?? '')) ?: null,
+            ]);
+            echo json_encode(['ok' => true, 'declaracion' => $declaracion]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function generarAsientoAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $idDeclaracion = (int) ($_POST['id_declaracion'] ?? 0);
+
+        try {
+            $resultado = $this->service->generarAsientoDeclaracion($idDeclaracion, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true] + $resultado);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function generarEgresoAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $idDeclaracion = (int) ($_POST['id_declaracion'] ?? 0);
+
+        try {
+            $idEgreso = $this->service->generarEgreso($idDeclaracion, $idEmpresa, $idUsuario, [
+                'id_proveedor'             => (int) ($_POST['id_proveedor'] ?? 0),
+                'id_egreso_concepto'       => (int) ($_POST['id_egreso_concepto'] ?? 0),
+                'id_forma_pago'            => (int) ($_POST['id_forma_pago'] ?? 0),
+                'id_punto_emision'         => (int) ($_POST['id_punto_emision'] ?? 0),
+                'fecha'                    => $_POST['fecha'] ?? date('Y-m-d'),
+                'tipo_operacion_bancaria'  => $_POST['tipo_operacion_bancaria'] ?? '',
+                'numero_cheque'            => $_POST['numero_cheque'] ?? '',
+                'fecha_cobro'              => $_POST['fecha_cobro'] ?? '',
+            ]);
+            echo json_encode(['ok' => true, 'id_egreso' => $idEgreso]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Datos auxiliares para el modal de "Generar egreso": conceptos, formas de pago y puntos de emisión. */
+    public function datosEgresoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            $empresaModel = new \App\models\Empresa();
+            $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+            $puntos = [];
+            if (!empty($establecimientos)) {
+                $puntos = $empresaModel->getPuntosEmision((int) $establecimientos[0]['id']);
+            }
+
+            $fpRepo = new \App\repositories\modulos\FormaPagoRepository();
+            $formasPago = $fpRepo->getFormasFiltradas($idEmpresa, 'EGRESO');
+
+            $egRepo = new \App\repositories\modulos\EgresoRepository();
+            $conceptos = $egRepo->getConceptosEgreso($idEmpresa);
+
+            echo json_encode(['ok' => true, 'puntos_emision' => $puntos, 'formas_pago' => $formasPago, 'conceptos' => $conceptos]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function getProveedoresAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $q = trim($_GET['q'] ?? '');
+
+        try {
+            $repo = new \App\repositories\modulos\ProveedorRepository();
+            $result = $repo->getListado($idEmpresa, $q, 1, 15, 'razon_social', 'ASC');
+            echo json_encode(['ok' => true, 'data' => $result['rows']]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Vista previa del siguiente secuencial de Egresos para el punto de emisión elegido en el modal. */
+    public function getSecuencialEgresoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idPunto = (int) ($_GET['id_punto_emision'] ?? 0);
+
+        try {
+            $secService = new \App\Services\SecuencialService();
+            $res = $secService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
+            echo json_encode(array_merge(['ok' => true], $res));
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Sugiere el siguiente número de cheque para la forma de pago elegida en el modal de egreso. */
+    public function getUltimoChequeAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idForma = (int) ($_GET['id_forma_pago'] ?? 0);
+        if ($idForma <= 0) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Forma de pago inválida']);
+            exit;
+        }
+
+        try {
+            $egSvc = new \App\Services\modulos\EgresoService(
+                new \App\repositories\modulos\EgresoRepository(),
+                new \App\Rules\modulos\EgresoRules(),
+                new \App\Services\LogSistemaService()
+            );
+            $ultimo = $egSvc->getUltimoNumeroCheque($idForma);
+
+            $siguiente = '';
+            if ($ultimo && preg_match('/^(\d+)$/', $ultimo, $matches)) {
+                $siguiente = str_pad((string) ((int) $matches[1] + 1), strlen($ultimo), '0', STR_PAD_LEFT);
+            }
+
+            echo json_encode(['ok' => true, 'ultimo' => $ultimo, 'siguiente' => $siguiente]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
 }

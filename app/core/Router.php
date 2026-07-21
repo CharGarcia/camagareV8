@@ -119,6 +119,14 @@ class Router
                 }
             }
 
+            // /aceptar-documentos/{token}[/aceptar] → aceptación pública de los
+            // documentos legales (acuerdo de datos + contrato de uso), sin auth
+            if (($parts[0] ?? '') === 'aceptar-documentos') {
+                $controller    = 'AceptacionDocumentos';
+                $_GET['token'] = $parts[1] ?? ($_GET['token'] ?? '');
+                $action        = (($parts[2] ?? '') === 'aceptar') ? 'aceptar' : 'index';
+            }
+
             // /aprobar-carga-inventario/{token}[/aprobar|/rechazar] → aprobación pública por token (sin auth)
             if (($parts[0] ?? '') === 'aprobar-carga-inventario') {
                 $controller    = 'CargasInventarioAprobacion';

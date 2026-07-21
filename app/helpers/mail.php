@@ -867,3 +867,78 @@ if (!function_exists('enviar_correo_factura_express_cliente')) {
         }
     }
 }
+
+if (!function_exists('enviar_correo_documentos_legales')) {
+    /**
+     * Envía a la empresa el Acuerdo de uso de datos y el Contrato de uso del
+     * sistema como PDFs adjuntos, con el enlace para aceptarlos en línea.
+     *
+     * @param string $correoDestino Correo de la empresa
+     * @param array  $data          empresa_nombre, empresa_ruc, acuerdo_titulo,
+     *                              contrato_titulo, url_aceptacion, sistema_nombre
+     * @param array  $adjuntos      [rutaArchivo => nombreVisible]
+     */
+    function enviar_correo_documentos_legales(string $correoDestino, array $data, array $adjuntos = []): bool
+    {
+        $base = \App\services\EmailConfigService::getDataForSendEmail('notificaciones');
+        if (!$base) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'No hay configuración en correos_config para "notificaciones"';
+            return false;
+        }
+
+        $docMailDir = MVC_APP . '/lib/mail';
+        if (!file_exists($docMailDir . '/phpmailer.php')) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'No se encuentra PHPMailer';
+            return false;
+        }
+
+        require_once $docMailDir . '/phpmailer.php';
+        require_once $docMailDir . '/smtp.php';
+        require_once $docMailDir . '/exception.php';
+
+        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        $GLOBALS['LAST_EMAIL_ERROR'] = null;
+
+        try {
+            $mail->isSMTP();
+            $mail->Host = _mail_resolve_ipv4_host($base['host']);
+            $mail->SMTPAuth = true;
+            $mail->Username = $base['emisor'];
+            $mail->Password = $base['pass'];
+            $mail->SMTPSecure = $base['smtp_secure'] ?? 'tls';
+            $mail->Port = $base['port'];
+            $mail->CharSet = 'UTF-8';
+
+            $config = require MVC_CONFIG . '/app.php';
+            if (!empty($config['mail_smtp_options'])) {
+                $mail->SMTPOptions = $config['mail_smtp_options'];
+            }
+
+            $mail->setFrom($base['emisor'], $base['empresa']);
+            if (!filter_var($correoDestino, FILTER_VALIDATE_EMAIL)) {
+                $GLOBALS['LAST_EMAIL_ERROR'] = 'El correo destino no es válido.';
+                return false;
+            }
+            $mail->addAddress($correoDestino);
+
+            $mail->Subject = 'Documentos legales para el uso del sistema — ' . ($data['empresa_nombre'] ?? '');
+
+            ob_start();
+            require MVC_APP . '/views/emails/documentos_legales.php';
+            $mail->Body = ob_get_clean();
+            $mail->isHTML(true);
+
+            foreach ($adjuntos as $ruta => $nombre) {
+                if (is_file($ruta)) {
+                    $mail->addAttachment($ruta, is_string($nombre) && $nombre !== '' ? $nombre : basename($ruta));
+                }
+            }
+
+            return $mail->send();
+        } catch (\PHPMailer\PHPMailer\Exception $e) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = $mail->ErrorInfo ?? $e->getMessage();
+            error_log('Mailer Error (DocumentosLegales): ' . ($GLOBALS['LAST_EMAIL_ERROR']));
+            return false;
+        }
+    }
+}

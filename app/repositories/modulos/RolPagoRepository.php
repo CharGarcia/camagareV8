@@ -481,7 +481,7 @@ class RolPagoRepository extends BaseRepository
             $i = 0;
             foreach ($chunk as $f) {
                 $t = $f['calc'];
-                $vals[] = "(:r{$i}, :emp{$i}, :e{$i}, :dias{$i}, :sb{$i}, :ti{$i}, :te{$i}, :ap{$i}, :app{$i}, :neto{$i})";
+                $vals[] = "(:r{$i}, :emp{$i}, :e{$i}, :dias{$i}, :sb{$i}, :ti{$i}, :te{$i}, :ap{$i}, :app{$i}, :ir{$i}, :neto{$i})";
                 $params[":r{$i}"] = $idRol;
                 $params[":emp{$i}"] = $idEmpresa;
                 $params[":e{$i}"] = $f['id_empleado'];
@@ -491,11 +491,12 @@ class RolPagoRepository extends BaseRepository
                 $params[":te{$i}"] = $t['total_egresos'];
                 $params[":ap{$i}"] = $t['aporte_iess'];
                 $params[":app{$i}"] = $t['aporte_patronal'];
+                $params[":ir{$i}"] = $t['retencion_renta'] ?? 0;
                 $params[":neto{$i}"] = $t['neto'];
                 $i++;
             }
             $sql = "INSERT INTO rol_detalle (id_rol, id_empresa, id_empleado, dias_trabajados, sueldo_base,
-                        total_ingresos, total_egresos, aporte_iess, aporte_patronal, neto)
+                        total_ingresos, total_egresos, aporte_iess, aporte_patronal, retencion_renta, neto)
                     VALUES " . implode(', ', $vals) . " RETURNING id, id_empleado";
             $st = $this->db->prepare($sql);
             $st->execute($params);
@@ -620,6 +621,7 @@ class RolPagoRepository extends BaseRepository
 
         $sql = "SELECT e.id, e.identificacion, e.nombres_apellidos, e.sueldo_base, e.valor_semanal, e.valor_quincena,
                        e.aporte_personal, e.aporte_patronal, e.fondos_reserva, e.decimo_tercero, e.decimo_cuarto,
+                       e.excluir_calculo_ir,
                        {$selPeriodos}
                 FROM empleados e
                 WHERE e.id_empresa = :emp AND e.eliminado = false AND e.estado = 'activo'";

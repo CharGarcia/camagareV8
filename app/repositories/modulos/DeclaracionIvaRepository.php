@@ -404,4 +404,132 @@ class DeclaracionIvaRepository extends BaseRepository
         }
         return $mapa;
     }
+
+    // ==========================================================================
+    // Declaración guardada (declaracion_iva_cabecera)
+    // ==========================================================================
+
+    public function existsDeclaracion(int $idEmpresa, string $tipoAmbiente, string $tipoPeriodo, int $anio, int $periodoValor, ?int $excludeId = null): bool
+    {
+        $sql = "SELECT COUNT(*) FROM declaracion_iva_cabecera
+                WHERE id_empresa = :emp AND tipo_ambiente = :amb AND tipo_periodo = :tp
+                  AND periodo_anio = :anio AND periodo_valor = :periodo AND eliminado = false";
+        $params = [':emp' => $idEmpresa, ':amb' => $tipoAmbiente, ':tp' => $tipoPeriodo, ':anio' => $anio, ':periodo' => $periodoValor];
+        if ($excludeId !== null) {
+            $sql .= " AND id != :exid";
+            $params[':exid'] = $excludeId;
+        }
+        return (int) $this->query($sql, $params)->fetchColumn() > 0;
+    }
+
+    public function findDeclaracion(int $idEmpresa, string $tipoAmbiente, string $tipoPeriodo, int $anio, int $periodoValor): ?array
+    {
+        $sql = "SELECT d.*, u.nombre AS usuario_nombre
+                FROM declaracion_iva_cabecera d
+                LEFT JOIN usuarios u ON u.id = COALESCE(d.updated_by, d.created_by)
+                WHERE d.id_empresa = :emp AND d.tipo_ambiente = :amb AND d.tipo_periodo = :tp
+                  AND d.periodo_anio = :anio AND d.periodo_valor = :periodo AND d.eliminado = false
+                LIMIT 1";
+        $row = $this->query($sql, [':emp' => $idEmpresa, ':amb' => $tipoAmbiente, ':tp' => $tipoPeriodo, ':anio' => $anio, ':periodo' => $periodoValor])->fetch(\PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function findDeclaracionById(int $id, int $idEmpresa): ?array
+    {
+        $sql = "SELECT * FROM declaracion_iva_cabecera WHERE id = ? AND id_empresa = ? AND eliminado = false";
+        $row = $this->query($sql, [$id, $idEmpresa])->fetch(\PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Trae la declaración del período inmediatamente anterior (para leer su saldo_favor
+     * y arrastrarlo al período actual). El período anterior ya se calcula en el Service
+     * (mes-1 o semestre-1) y se pasa listo aquí.
+     */
+    public function getDeclaracionAnterior(int $idEmpresa, string $tipoAmbiente, string $tipoPeriodo, int $anioAnterior, int $periodoValorAnterior): ?array
+    {
+        return $this->findDeclaracion($idEmpresa, $tipoAmbiente, $tipoPeriodo, $anioAnterior, $periodoValorAnterior);
+    }
+
+    public function insertDeclaracion(array $data): int
+    {
+        $sql = "INSERT INTO declaracion_iva_cabecera (
+                    id_empresa, tipo_ambiente, tipo_periodo, periodo_anio, periodo_valor,
+                    fecha_desde, fecha_hasta,
+                    iva_ventas, notas_credito_venta, credito_tributario_compras, notas_credito_compra,
+                    retenciones_iva, credito_anterior_aplicado, iva_a_pagar, saldo_favor,
+                    valores_casilleros, estado, observaciones, created_by, updated_by
+                ) VALUES (
+                    :id_empresa, :amb, :tp, :anio, :periodo,
+                    :fdesde, :fhasta,
+                    :iva_ventas, :nc_venta, :credito_compras, :nc_compra,
+                    :retenciones, :credito_ant, :a_pagar, :saldo_favor,
+                    :valores, :estado, :obs, :usr, :usr2
+                ) RETURNING id";
+        $params = $this->mapDeclaracionParams($data);
+        $params[':usr2'] = $params[':usr'];
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return (int) $st->fetchColumn();
+    }
+
+    public function updateDeclaracion(int $id, int $idEmpresa, array $data): void
+    {
+        $sql = "UPDATE declaracion_iva_cabecera SET
+                    fecha_desde = :fdesde, fecha_hasta = :fhasta,
+                    iva_ventas = :iva_ventas, notas_credito_venta = :nc_venta,
+                    credito_tributario_compras = :credito_compras, notas_credito_compra = :nc_compra,
+                    retenciones_iva = :retenciones, credito_anterior_aplicado = :credito_ant,
+                    iva_a_pagar = :a_pagar, saldo_favor = :saldo_favor,
+                    valores_casilleros = :valores, estado = :estado, observaciones = :obs,
+                    updated_by = :usr, updated_at = now()
+                WHERE id = :id AND id_empresa = :id_empresa2";
+        $params = $this->mapDeclaracionParams($data);
+        unset($params[':id_empresa'], $params[':amb'], $params[':tp'], $params[':anio'], $params[':periodo']);
+        $params[':id'] = $id;
+        $params[':id_empresa2'] = $idEmpresa;
+        $this->query($sql, $params);
+    }
+
+    private function mapDeclaracionParams(array $data): array
+    {
+        return [
+            ':id_empresa'      => (int) $data['id_empresa'],
+            ':amb'             => (string) $data['tipo_ambiente'],
+            ':tp'              => (string) $data['tipo_periodo'],
+            ':anio'            => (int) $data['periodo_anio'],
+            ':periodo'         => (int) $data['periodo_valor'],
+            ':fdesde'          => $data['fecha_desde'],
+            ':fhasta'          => $data['fecha_hasta'],
+            ':iva_ventas'      => (float) $data['iva_ventas'],
+            ':nc_venta'        => (float) $data['notas_credito_venta'],
+            ':credito_compras' => (float) $data['credito_tributario_compras'],
+            ':nc_compra'       => (float) $data['notas_credito_compra'],
+            ':retenciones'     => (float) $data['retenciones_iva'],
+            ':credito_ant'     => (float) $data['credito_anterior_aplicado'],
+            ':a_pagar'         => (float) $data['iva_a_pagar'],
+            ':saldo_favor'     => (float) $data['saldo_favor'],
+            ':valores'         => json_encode($data['valores_casilleros'] ?? [], JSON_UNESCAPED_UNICODE),
+            ':estado'          => (string) ($data['estado'] ?? 'guardado'),
+            ':obs'             => $data['observaciones'] ?? null,
+            ':usr'             => (int) $data['usuario_id'],
+        ];
+    }
+
+    public function marcarAsiento(int $id, int $idEmpresa, int $idAsiento, int $idUsuario): void
+    {
+        $sql = "UPDATE declaracion_iva_cabecera
+                SET id_asiento = ?, estado = CASE WHEN estado = 'guardado' THEN 'contabilizado' ELSE estado END,
+                    updated_by = ?, updated_at = now()
+                WHERE id = ? AND id_empresa = ?";
+        $this->query($sql, [$idAsiento, $idUsuario, $id, $idEmpresa]);
+    }
+
+    public function marcarEgreso(int $id, int $idEmpresa, int $idEgreso, int $idUsuario): void
+    {
+        $sql = "UPDATE declaracion_iva_cabecera
+                SET id_egreso = ?, estado = 'pagado', updated_by = ?, updated_at = now()
+                WHERE id = ? AND id_empresa = ?";
+        $this->query($sql, [$idEgreso, $idUsuario, $id, $idEmpresa]);
+    }
 }

@@ -114,7 +114,7 @@ class ClientesController extends BaseModuloController
         // Renderizar Filas
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-3 d-block mb-2"></i>No se encontraron clientes.</td></tr>';
+            echo '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-3 d-block mb-2"></i>No se encontraron clientes.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 // Formatear fechas para el modal

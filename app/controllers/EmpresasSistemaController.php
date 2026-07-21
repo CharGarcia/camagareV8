@@ -60,6 +60,7 @@ class EmpresasSistemaController extends Controller
         $this->viewWithLayout('layouts.main', 'empresasSistema.index', [
             'titulo' => 'Empresas del sistema',
             'fullWidth' => true,
+            'estadoDocs' => (new \App\Services\DocumentosLegalesService())->getEstadoPorEmpresa(),
             'rows' => $rows,
             'total' => $total,
             'page' => $page,
@@ -126,9 +127,17 @@ class EmpresasSistemaController extends Controller
                 $_SESSION['ruc_empresa'] = $empCreada['ruc'] ?? '';
             }
             (new \App\Services\EmpresaInicializadorService())->inicializar($id, $idUsuario);
-            $_SESSION['empresas_msg'] = ['success', 'Empresa creada correctamente.'];
+
+            // Envío automático de los documentos legales (acuerdo de datos +
+            // contrato de uso). No interrumpe la creación si falla el correo.
+            $errDocs = (new \App\Services\DocumentosLegalesService())->enviarAEmpresaSinFallar($id, $idUsuario);
+            $msgOk = $errDocs === null
+                ? 'Empresa creada correctamente. Se enviaron los documentos legales a ' . ($data['mail'] ?? 'su correo') . '.'
+                : 'Empresa creada correctamente, pero NO se pudieron enviar los documentos legales: ' . $errDocs;
+
+            $_SESSION['empresas_msg'] = [$errDocs === null ? 'success' : 'warning', $msgOk];
             if ($esAjax) {
-                $this->json(['ok' => true, 'msg' => 'Empresa creada correctamente.']);
+                $this->json(['ok' => true, 'msg' => $msgOk]);
                 return;
             }
         } catch (\InvalidArgumentException $e) {
@@ -268,6 +277,92 @@ class EmpresasSistemaController extends Controller
      * (para "Empresa a la que facturamos / reventa").
      * GET: q, id_empresa (controladora) → [{id, label}]
      */
+    /**
+     * Reenvía los documentos legales (acuerdo de datos + contrato de uso) al
+     * correo de una empresa ya existente.
+     */
+    public function enviarDocumentosLegales(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(3);
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json(['ok' => false, 'error' => 'Método no permitido.']);
+            return;
+        }
+
+        $idEmpresa = (int) ($_POST['id'] ?? 0);
+        if ($idEmpresa <= 0) {
+            $this->json(['ok' => false, 'error' => 'Empresa no válida.']);
+            return;
+        }
+
+        try {
+            $res = (new \App\Services\DocumentosLegalesService())
+                ->enviarAEmpresa($idEmpresa, (int) ($_SESSION['id_usuario'] ?? 0));
+            $this->json(['ok' => true, 'msg' => 'Documentos enviados a ' . $res['correo'] . '.']);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /** Historial de envíos/aceptaciones de documentos legales de una empresa. */
+    public function historialDocumentosLegalesJson(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+
+        $idEmpresa = (int) ($_GET['id'] ?? 0);
+        if ($idEmpresa <= 0) {
+            $this->json(['ok' => false, 'error' => 'Empresa no válida.', 'data' => []]);
+            return;
+        }
+
+        $this->verificarAccesoEmpresa($idEmpresa);
+
+        $rows = (new \App\Services\DocumentosLegalesService())->getEnviosDeEmpresa($idEmpresa);
+        $this->json(['ok' => true, 'data' => $rows, 'puede_enviar' => (int) ($_SESSION['nivel'] ?? 1) >= 3]);
+    }
+
+    /**
+     * Descarga/visualiza el PDF de un documento legal de una empresa
+     * (con la versión que realmente se le envió).
+     */
+    public function descargarDocumentoLegal(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+
+        $idEmpresa = (int) ($_GET['id'] ?? 0);
+        $tipo      = trim($_GET['tipo'] ?? 'acuerdo_datos');
+
+        if ($idEmpresa <= 0) {
+            http_response_code(400);
+            echo 'Empresa no válida.';
+            return;
+        }
+
+        $this->verificarAccesoEmpresa($idEmpresa);
+
+        try {
+            $res = (new \App\Services\DocumentosLegalesService())->generarPdfParaEmpresa($idEmpresa, $tipo);
+
+            // Descarga directa del archivo (no visualización en el navegador).
+            if (ob_get_length()) {
+                ob_end_clean();
+            }
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="' . $res['nombre'] . '"');
+            header('Content-Length: ' . strlen($res['bin']));
+            header('Cache-Control: private, max-age=0, must-revalidate');
+            header('Pragma: public');
+            echo $res['bin'];
+        } catch (\Throwable $e) {
+            http_response_code(404);
+            echo htmlspecialchars($e->getMessage());
+        }
+    }
+
     public function buscarClientesJson(): void
     {
         $this->requireAuth();

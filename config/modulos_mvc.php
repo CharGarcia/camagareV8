@@ -423,6 +423,15 @@ return [
         'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],
+    'modulos/declaracion_retenciones' => [
+        // Formulario 103 SRI (Declaración de Retenciones en la Fuente del Impuesto
+        // a la Renta). Registrar el submódulo en submodulos_menu (id_modulo = 9,
+        // Reportes, o el módulo contable/tributario que corresponda) con
+        // ruta = 'modulos/declaracion_retenciones', y actualizar este id_submodulo
+        // con el id real. Asignar permisos en /config/permisos-modulos.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
     'modulos/reporte_trazabilidad_productos' => [
         // Registrar el submódulo en submodulos_menu (id_modulo = 9, Reportes) con
         // ruta = 'modulos/reporte_trazabilidad_productos', y actualizar este

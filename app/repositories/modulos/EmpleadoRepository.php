@@ -83,7 +83,7 @@ class EmpleadoRepository extends BaseRepository
                     fondos_reserva, aporta_iess, decimo_tercero, decimo_cuarto,
                     aporte_personal, aporte_patronal, sueldo_base, valor_semanal, valor_quincena,
                     region, cargo, lugar_trabajo, horario_trabajo,
-                    departamento, codigo_sectorial_iess, atraso_modo,
+                    departamento, codigo_sectorial_iess, atraso_modo, excluir_calculo_ir,
                     created_by, updated_by, created_at, updated_at, eliminado
                 ) VALUES (
                     :id_empresa, :tipo_id, :identificacion,
@@ -93,7 +93,7 @@ class EmpleadoRepository extends BaseRepository
                     :fondos_reserva, :aporta_iess, :decimo_tercero, :decimo_cuarto,
                     :aporte_personal, :aporte_patronal, :sueldo_base, :valor_semanal, :valor_quincena,
                     :region, :cargo, :lugar_trabajo, :horario_trabajo,
-                    :departamento, :codigo_sectorial_iess, :atraso_modo,
+                    :departamento, :codigo_sectorial_iess, :atraso_modo, :excluir_calculo_ir,
                     :id_u, :id_u, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, false
                 )";
 
@@ -129,6 +129,7 @@ class EmpleadoRepository extends BaseRepository
             ':departamento'         => $data['departamento'] ?? null,
             ':codigo_sectorial_iess' => $data['codigo_sectorial_iess'] ?? null,
             ':atraso_modo'          => !empty($data['atraso_modo']) ? $data['atraso_modo'] : null,
+            ':excluir_calculo_ir'   => (($data['excluir_calculo_ir'] ?? 'no') === 'si') ? 'true' : 'false',
             ':id_u'                 => $data['id_usuario']
         ]);
 
@@ -170,6 +171,7 @@ class EmpleadoRepository extends BaseRepository
                     departamento = :departamento,
                     codigo_sectorial_iess = :codigo_sectorial_iess,
                     atraso_modo = :atraso_modo,
+                    excluir_calculo_ir = :excluir_calculo_ir,
                     updated_by = :updated_by,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
@@ -205,6 +207,7 @@ class EmpleadoRepository extends BaseRepository
             ':departamento'         => $data['departamento'] ?? null,
             ':codigo_sectorial_iess' => $data['codigo_sectorial_iess'] ?? null,
             ':atraso_modo'          => !empty($data['atraso_modo']) ? $data['atraso_modo'] : null,
+            ':excluir_calculo_ir'   => (($data['excluir_calculo_ir'] ?? 'no') === 'si') ? 'true' : 'false',
             ':updated_by'           => $data['id_usuario'],
             ':id'                   => $id,
             ':id_empresa'           => $idEmpresa

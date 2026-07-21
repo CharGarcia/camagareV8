@@ -31,7 +31,7 @@ use App\models\CatalogoNovedades;
  */
 class RolCalculoService
 {
-    public function calcular(array $emp, string $tipo, array $salario, array $rubrosFijos, array $novedades, float $neteo = 0.0, float $vacaciones = 0.0, int $diasTrabajados = 30, array $anticiposPagados = [], array $prestamosNoDesembolsados = []): array
+    public function calcular(array $emp, string $tipo, array $salario, array $rubrosFijos, array $novedades, float $neteo = 0.0, float $vacaciones = 0.0, int $diasTrabajados = 30, array $anticiposPagados = [], array $prestamosNoDesembolsados = [], array $tramosIr = [], float $gastoPersonalMaximoAnual = 0.0): array
     {
         $esMensual = $tipo === 'MENSUAL';
         $rubros = [];
@@ -188,6 +188,21 @@ class RolCalculoService
             $aportePatronal = round($baseIess * $pctPat / 100, 2);
         }
 
+        // 5b) Impuesto a la Renta (retención en la fuente, relación de dependencia).
+        // Solo MENSUAL; requiere tabla de tramos del año cargada y que el empleado
+        // no esté marcado como excluido del cálculo.
+        $retencionRenta = 0.0;
+        if ($esMensual && !$this->esVerdadero($emp['excluir_calculo_ir'] ?? false)) {
+            $pctPer = (float) ($emp['aporte_personal'] ?? 9.45);
+            $retencionRenta = ImpuestoRentaEmpleadoService::calcularRetencionMensual(
+                $baseIess, $pctPer, $tramosIr, $gastoPersonalMaximoAnual
+            );
+            if ($retencionRenta > 0) {
+                $rubros[] = $this->r('egreso', 'Impuesto a la Renta (relación de dependencia)', null, 'ir', $retencionRenta, false);
+                $egresos += $retencionRenta;
+            }
+        }
+
         // 6) Neteo de semanas/quincenas (solo MENSUAL)
         if ($esMensual && $neteo > 0) {
             $neteo = round($neteo, 2);
@@ -205,6 +220,7 @@ class RolCalculoService
             'total_egresos'   => $egresos,
             'aporte_iess'     => $aporteIess,
             'aporte_patronal' => $aportePatronal,
+            'retencion_renta' => $retencionRenta,
             'neto'            => round($ingresos - $egresos, 2),
             'rubros'          => $rubros,
         ];

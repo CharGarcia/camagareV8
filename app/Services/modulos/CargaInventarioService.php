@@ -141,7 +141,9 @@ class CargaInventarioService
             if ($codProd === '') {
                 $err = 'Falta el código del producto.';
             } elseif ($idProd === 0) {
-                $err = "El producto con código \"{$codProd}\" no existe en la empresa.";
+                $err = $this->repo->codigoEsServicio($codProd, $idEmpresa)
+                    ? "El código \"{$codProd}\" corresponde a un servicio y no puede cargarse al inventario."
+                    : "El producto con código \"{$codProd}\" no existe en la empresa.";
             } elseif ($nomBod === '') {
                 $err = 'Falta la bodega.';
             } elseif ($idBod === 0) {

@@ -2693,6 +2693,168 @@ class AsientoBuilderService
         return $detalles;
     }
 
+    /**
+     * Arma el asiento de la LIQUIDACIÓN de la Declaración de IVA de un período (concepto
+     * 'declaracion_iva'). Es un asiento de reclasificación/cierre: cancela lo acumulado en
+     * IVA en ventas, crédito tributario de compras y retenciones de IVA, y deja el neto en
+     * IVA por Pagar (si hay valor a pagar) y/o Crédito Tributario a Favor (si hay saldo a favor
+     * del período, o si se está consumiendo el saldo a favor del período anterior).
+     *
+     * DEBE:  IVA en Ventas (neto) + Crédito Tributario a Favor (saldo a favor de ESTE período)
+     * HABER: Crédito Tributario Compras (neto) + Retenciones de IVA + IVA por Pagar
+     *        + Crédito Tributario a Favor (arrastre del período anterior que se consume)
+     *
+     * @param array $datos ['iva_ventas_neto','credito_compras_neto','retenciones',
+     *                       'iva_a_pagar','saldo_favor','credito_anterior_aplicado']
+     */
+    public function generarAsientoDeclaracionIva(int $idEmpresa, int $idDeclaracion, array $datos): array
+    {
+        $reglas = $this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'declaracion_iva');
+
+        $ivaVentas   = round((float) ($datos['iva_ventas_neto'] ?? 0), 2);
+        $creditoComp = round((float) ($datos['credito_compras_neto'] ?? 0), 2);
+        $retenciones = round((float) ($datos['retenciones'] ?? 0), 2);
+        $aPagar      = round((float) ($datos['iva_a_pagar'] ?? 0), 2);
+        $saldoFavor  = round((float) ($datos['saldo_favor'] ?? 0), 2);
+        $creditoAnt  = round((float) ($datos['credito_anterior_aplicado'] ?? 0), 2);
+
+        $lineas = [
+            ['codigo' => 'IVAVENTASDECLARACION',              'lado' => 'debe',  'monto' => $ivaVentas,   'ref' => 'IVA en Ventas'],
+            ['codigo' => 'CREDITOTRIBUTARIOFAVORDECLARACION', 'lado' => 'debe',  'monto' => $saldoFavor,  'ref' => 'Crédito Tributario a Favor'],
+            ['codigo' => 'IVACOMPRASDECLARACION',             'lado' => 'haber', 'monto' => $creditoComp, 'ref' => 'Crédito Tributario Compras'],
+            ['codigo' => 'RETENCIONIVADECLARACION',           'lado' => 'haber', 'monto' => $retenciones, 'ref' => 'Retenciones de IVA Recibidas'],
+            ['codigo' => 'IVAPORPAGARDECLARACION',            'lado' => 'haber', 'monto' => $aPagar,      'ref' => 'IVA por Pagar'],
+            ['codigo' => 'CREDITOTRIBUTARIOFAVORDECLARACION', 'lado' => 'haber', 'monto' => $creditoAnt,  'ref' => 'Crédito Tributario a Favor Aplicado'],
+        ];
+
+        $detalles = [];
+        $reglasSinCuenta = [];
+        $huboMontos = false;
+        foreach ($lineas as $l) {
+            if ($l['monto'] <= 0.0) {
+                continue;
+            }
+            $huboMontos = true;
+            $idCuenta = $this->cuentaProgramadaPorCodigo($idEmpresa, 'declaracion_iva', $l['codigo']);
+            if ($idCuenta <= 0) {
+                $reglasSinCuenta[] = $l['ref'];
+                continue;
+            }
+            $detalles[] = [
+                'id_cuenta_contable' => $idCuenta,
+                'debe'               => $l['lado'] === 'debe'  ? $l['monto'] : 0.0,
+                'haber'              => $l['lado'] === 'haber' ? $l['monto'] : 0.0,
+                'referencia_detalle' => $l['ref'],
+            ];
+        }
+
+        // No había ningún monto en la declaración (caso legítimo de "nada que contabilizar").
+        if (!$huboMontos) {
+            return [];
+        }
+
+        // Había montos, pero NINGUNA de las cuentas requeridas está configurada: el ajuste por
+        // redondeo no detectaría esto (Debe=Haber=0, sin descuadre), así que se avisa explícito.
+        if (empty($detalles)) {
+            throw new \Exception(
+                'Falta configurar la(s) cuenta(s) contable(s) de: ' . implode(', ', array_unique($reglasSinCuenta)) .
+                '. Configúrelas en Contabilidad → Configuración contable, concepto «Declaración de IVA».'
+            );
+        }
+
+        return $this->aplicarAjusteRedondeo($detalles, $reglas, 'Declaración de IVA', $reglasSinCuenta);
+    }
+
+    /**
+     * Asiento de la Declaración de Retenciones (Formulario 103): RECLASIFICA el pasivo por
+     * retención de Impuesto a la Renta que ya se reconoció documento a documento (cada
+     * retencion_compra_cabecera generó su propio asiento vía generarAsientoRetencionCompra,
+     * acreditando la cuenta configurada por código SRI en 'retenciones_compra_haber') hacia
+     * una única cuenta consolidada "Retenciones de Renta por Pagar (Declaración)", que es la
+     * que luego se cancela con el egreso al SRI.
+     *
+     * A diferencia de generarAsientoDeclaracionIva, aquí ambos lados se calculan DIRECTO de
+     * retencion_compra_detalle (no de valores ya agregados en la cabecera de la declaración),
+     * igual patrón que generarAsientoRetencionCompra, para garantizar Debe=Haber por
+     * construcción sin depender de que el snapshot de casilleros coincida centavo a centavo.
+     *
+     *   DEBE : cada cuenta de retención por código SRI usada en el período (la cierra).
+     *   HABER: RETENCIONRENTAPORPAGARDECLARACION, por el total.
+     */
+    public function generarAsientoDeclaracionRetenciones(int $idEmpresa, string $fechaDesde, string $fechaHasta): array
+    {
+        $db = \App\core\Database::getConnection();
+
+        $sqlDebe = "SELECT ap.id_cuenta, pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre,
+                           SUM(d.valor_retenido) AS total
+                    FROM retencion_compra_detalle d
+                    JOIN retencion_compra_cabecera c ON c.id = d.id_retencion
+                    LEFT JOIN LATERAL (
+                        SELECT rs.id FROM retenciones_sri rs
+                        WHERE rs.codigo_ret = d.codigo_retencion
+                        ORDER BY rs.id DESC LIMIT 1
+                    ) rsx ON true
+                    LEFT JOIN asientos_programados ap
+                           ON ap.id_referencia = rsx.id
+                          AND ap.tipo_referencia = 'retenciones_compra_haber'
+                          AND ap.id_empresa = :emp
+                          AND ap.eliminado = false
+                    LEFT JOIN plan_cuentas pc ON pc.id = ap.id_cuenta
+                    WHERE c.id_empresa = :emp2 AND c.estado = 'autorizada' AND c.eliminado = false
+                      AND c.fecha_emision BETWEEN :d AND :h
+                      AND (d.codigo_impuesto IN ('1','RENTA'))
+                    GROUP BY ap.id_cuenta, pc.codigo, pc.nombre";
+        $st = $db->prepare($sqlDebe);
+        $st->execute([':emp' => $idEmpresa, ':emp2' => $idEmpresa, ':d' => $fechaDesde, ':h' => $fechaHasta]);
+
+        $detalles = [];
+        $reglasSinCuenta = [];
+        $totalRetenido = 0.0;
+        while ($l = $st->fetch(\PDO::FETCH_ASSOC)) {
+            $valor = round((float) $l['total'], 2);
+            if ($valor <= 0) continue;
+            $totalRetenido += $valor;
+            if (empty($l['id_cuenta'])) {
+                $reglasSinCuenta[] = 'Retención por Pagar (código SRI sin cuenta configurada)';
+                continue;
+            }
+            $detalles[] = [
+                'id_cuenta_contable' => (int) $l['id_cuenta'],
+                'debe'               => $valor,
+                'haber'              => 0.0,
+                'referencia_detalle' => 'Retenciones de Renta del período (' . ($l['cuenta_nombre'] ?? $l['cuenta_codigo']) . ')',
+            ];
+        }
+        $totalRetenido = round($totalRetenido, 2);
+
+        if ($totalRetenido <= 0.0) {
+            return []; // caso legítimo: sin retenciones de renta en el período
+        }
+        if (empty($detalles)) {
+            throw new Exception(
+                'Falta configurar la(s) cuenta(s) contable(s) de retención por código SRI ' .
+                '(Contabilidad → Configuración contable, concepto «Retenciones en Compra»).'
+            );
+        }
+
+        $idCuentaConsolidada = $this->cuentaProgramadaPorCodigo($idEmpresa, 'declaracion_retenciones', 'RETENCIONRENTAPORPAGARDECLARACION');
+        if ($idCuentaConsolidada <= 0) {
+            throw new Exception(
+                'Falta configurar la cuenta «Retenciones de Renta por Pagar (Declaración)» en ' .
+                'Contabilidad → Configuración contable, concepto «Declaración de Retenciones».'
+            );
+        }
+        $detalles[] = [
+            'id_cuenta_contable' => $idCuentaConsolidada,
+            'debe'               => 0.0,
+            'haber'              => $totalRetenido,
+            'referencia_detalle' => 'Retenciones de Renta por Pagar (Declaración)',
+        ];
+
+        $reglas = $this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'declaracion_retenciones');
+        return $this->aplicarAjusteRedondeo($detalles, $reglas, 'Declaración de Retenciones', $reglasSinCuenta);
+    }
+
     /** Suma lo pagado (egresos_detalle.monto_pagado) de un egreso para un tipo_documento puntual. */
     private function sumaPorTipoDocumento(\PDO $db, int $idEgreso, string $tipoDocumento): float
     {

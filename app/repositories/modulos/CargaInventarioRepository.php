@@ -204,12 +204,33 @@ class CargaInventarioRepository extends BaseRepository
         return (bool) $st->fetchColumn();
     }
 
-    /** Resuelve el id de un producto por su código principal (0 si no existe). */
+    /** ¿El código existe pero corresponde a un servicio ('02')? Permite dar un error preciso. */
+    public function codigoEsServicio(string $codigo, int $idEmpresa): bool
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') return false;
+        $st = $this->db->prepare(
+            "SELECT 1 FROM productos
+             WHERE id_empresa = :e AND eliminado = false AND TRIM(codigo) = :c
+               AND COALESCE(tipo_produccion, '01') = '02'
+             LIMIT 1"
+        );
+        $st->execute([':e' => $idEmpresa, ':c' => $codigo]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /** Resuelve el id de un producto por su código principal, solo bienes (0 si no existe o es servicio). */
     public function getProductoIdPorCodigo(string $codigo, int $idEmpresa): int
     {
         $codigo = trim($codigo);
         if ($codigo === '') return 0;
-        $st = $this->db->prepare("SELECT id FROM productos WHERE id_empresa = :e AND eliminado = false AND TRIM(codigo) = :c ORDER BY id LIMIT 1");
+        // Solo bienes ('01'); un servicio ('02') no puede cargarse a inventario.
+        $st = $this->db->prepare(
+            "SELECT id FROM productos
+             WHERE id_empresa = :e AND eliminado = false AND TRIM(codigo) = :c
+               AND COALESCE(tipo_produccion, '01') = '01'
+             ORDER BY id LIMIT 1"
+        );
         $st->execute([':e' => $idEmpresa, ':c' => $codigo]);
         return (int) $st->fetchColumn();
     }
@@ -263,7 +284,15 @@ class CargaInventarioRepository extends BaseRepository
     /** Productos de la empresa para la hoja de referencia de la plantilla. */
     public function getProductosParaPlantilla(int $idEmpresa): array
     {
-        $st = $this->db->prepare("SELECT codigo, nombre FROM productos WHERE id_empresa = :e AND eliminado = false AND TRIM(COALESCE(codigo,'')) <> '' ORDER BY codigo ASC");
+        // Solo bienes (tipo_produccion = '01'); los servicios ('02') no se cargan a inventario.
+        // COALESCE: los registros antiguos sin el campo se tratan como bien, igual que en el resto del sistema.
+        $st = $this->db->prepare(
+            "SELECT codigo, nombre FROM productos
+             WHERE id_empresa = :e AND eliminado = false
+               AND TRIM(COALESCE(codigo,'')) <> ''
+               AND COALESCE(tipo_produccion, '01') = '01'
+             ORDER BY codigo ASC"
+        );
         $st->execute([':e' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }

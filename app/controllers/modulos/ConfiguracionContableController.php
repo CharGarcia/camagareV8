@@ -103,6 +103,8 @@ class ConfiguracionContableController extends BaseModuloController
             'cobros_pagos' => 'Cobros y Pagos',
             'nomina' => 'Nómina',
             'cierre_ejercicio' => 'Cierre del Ejercicio',
+            'declaracion_iva' => 'Declaración de IVA',
+            'declaracion_retenciones' => 'Declaración de Retenciones',
             'activos_fijos_alta' => 'Activos Fijos - Alta',
             'activos_fijos_depreciacion' => 'Activos Fijos - Depreciación',
         ];

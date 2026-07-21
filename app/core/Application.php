@@ -62,7 +62,7 @@ class Application
         }
 
         // Controladores públicos (sin autenticación requerida)
-        $publicControllers = ['Auth', 'Registro', 'SolicitudFirma', 'FacturaExpressPublico', 'WhatsappWebhook', 'Reservas', 'Payphone', 'CargasInventarioAprobacion', 'Asistencia', 'ImportacionesAprobacion', 'TransferenciasAprobacion'];
+        $publicControllers = ['Auth', 'Registro', 'SolicitudFirma', 'FacturaExpressPublico', 'WhatsappWebhook', 'Reservas', 'Payphone', 'CargasInventarioAprobacion', 'Asistencia', 'ImportacionesAprobacion', 'TransferenciasAprobacion', 'AceptacionDocumentos'];
 
         // Acciones concretas que NO usan la sesión del navegador porque se autentican
         // con su propio token (extensión de Chrome). La cookie de sesión es SameSite=Lax,

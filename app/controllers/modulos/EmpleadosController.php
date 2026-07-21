@@ -11,6 +11,7 @@ use App\Services\LogSistemaService;
 use App\Services\modulos\EmpleadoService;
 use App\Services\modulos\BiometriaService;
 use App\Services\modulos\EmpleadoImportService;
+use App\Services\modulos\ImpuestoRentaEmpleadoService;
 use App\Services\SriIdentificationService;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -33,6 +34,53 @@ class EmpleadosController extends BaseModuloController
         $logService = new LogSistemaService();
         $this->service = new EmpleadoService($repository, $rules, $logService);
         $this->biometriaService = new BiometriaService(new BiometriaRepository(), $logService);
+    }
+
+    // ==================================================================
+    // IMPUESTO A LA RENTA (pestaña "Imp. Renta" del modal): proyección informativa.
+    // ==================================================================
+
+    /**
+     * Proyección de retención de Impuesto a la Renta (relación de dependencia)
+     * para el sueldo/aporte indicados, con la tabla de tramos del año en curso
+     * (o del año pedido). Solo lectura/informativa — no persiste nada; el valor
+     * real que se retiene en el rol lo calcula RolCalculoService al generar la corrida.
+     */
+    public function proyeccionIrAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $sueldoBase   = (float) ($_GET['sueldo_base'] ?? 0);
+        $aportePer    = (float) ($_GET['aporte_personal'] ?? 9.45);
+        $anio         = (int) ($_GET['anio'] ?? date('Y'));
+        $excluido     = (int) ($_GET['excluir_calculo_ir'] ?? 0) === 1;
+
+        $irService = new ImpuestoRentaEmpleadoService();
+        $tramos = $irService->getTramosAnio($anio);
+        $gastoPersonalMaximo = $irService->getGastoPersonalMaximo($anio);
+
+        $ingresoAnual = $sueldoBase * 12;
+        $aporteIessAnual = round($ingresoAnual * $aportePer / 100, 2);
+        $baseImponibleAnual = max(0.0, $ingresoAnual - $aporteIessAnual - $gastoPersonalMaximo);
+
+        $retencionMensual = ($excluido || $sueldoBase <= 0)
+            ? 0.0
+            : ImpuestoRentaEmpleadoService::calcularRetencionMensual($sueldoBase, $aportePer, $tramos, $gastoPersonalMaximo);
+
+        echo json_encode([
+            'ok' => true,
+            'anio' => $anio,
+            'tramos_cargados' => !empty($tramos),
+            'excluido' => $excluido,
+            'ingreso_gravado_anual' => round($ingresoAnual, 2),
+            'aporte_iess_anual' => $aporteIessAnual,
+            'gasto_personal_maximo' => $gastoPersonalMaximo,
+            'base_imponible_anual' => round($baseImponibleAnual, 2),
+            'retencion_mensual' => $retencionMensual,
+            'retencion_anual' => round($retencionMensual * 12, 2),
+        ]);
+        exit;
     }
 
     // ==================================================================

@@ -202,6 +202,23 @@ function estadoPagoBadge($estado) {
                         </td>
                         <?php if ($nivel >= 3): ?>
                         <td class="text-center" onclick="event.stopPropagation()">
+                            <?php
+                            $ed = ($estadoDocs ?? [])[(int)$r['id']] ?? null;
+                            if ($ed === null) {
+                                $docTit = 'No se han enviado los documentos legales. Clic para enviar.';
+                                $docCls = 'btn-outline-secondary';
+                            } elseif (($ed['estado'] ?? '') === 'aceptado') {
+                                $docTit = 'Documentos ACEPTADOS el ' . date('d-m-Y H:i:s', strtotime((string)$ed['aceptado_at'])) . '. Clic para reenviar.';
+                                $docCls = 'btn-outline-success';
+                            } else {
+                                $docTit = 'Enviados el ' . date('d-m-Y H:i:s', strtotime((string)$ed['enviado_at'])) . ', pendientes de aceptación. Clic para reenviar.';
+                                $docCls = 'btn-outline-warning';
+                            }
+                            ?>
+                            <button class="btn btn-sm <?= $docCls ?>" title="<?= htmlspecialchars($docTit) ?>"
+                                    onclick="enviarDocumentosLegales(<?= $r['id'] ?>, this)">
+                                <i class="bi bi-file-earmark-text"></i>
+                            </button>
                             <button class="btn btn-sm btn-outline-danger" onclick="eliminarEmpresa(<?= $r['id'] ?>)" title="Eliminar empresa"><i class="bi bi-trash"></i></button>
                         </td>
                         <?php endif; ?>
@@ -521,7 +538,44 @@ function estadoPagoBadge($estado) {
                         </form>
                     </div>
                     <div class="tab-pane fade" id="pane-empresas-documentos" role="tabpanel">
-                        <p class="text-muted small mb-2">Contratos, RUC, licencias y demás documentos legales de la empresa.</p>
+
+                        <!-- Documentos legales del sistema (acuerdo de datos + contrato de uso) -->
+                        <div class="card border mb-3">
+                            <div class="card-header bg-light py-2 px-3 d-flex justify-content-between align-items-center">
+                                <span class="small fw-semibold">
+                                    <i class="bi bi-shield-check me-1"></i>Documentos legales del sistema
+                                </span>
+                                <span id="dl-estado-badge"></span>
+                            </div>
+                            <div class="card-body p-3">
+                                <p class="text-muted small mb-2">
+                                    Acuerdo de uso de datos y contrato de uso que se envían al correo de la empresa.
+                                </p>
+
+                                <div id="dl-info" class="small mb-2 text-muted">Cargando…</div>
+
+                                <div class="d-flex gap-2 flex-wrap align-items-center">
+                                    <a id="dl-btn-acuerdo" href="#" download class="btn btn-sm btn-outline-danger"
+                                       title="Descargar el PDF del acuerdo de uso de datos">
+                                        <i class="bi bi-download"></i> Acuerdo de uso de datos
+                                    </a>
+                                    <a id="dl-btn-contrato" href="#" download class="btn btn-sm btn-outline-danger"
+                                       title="Descargar el PDF del contrato de uso">
+                                        <i class="bi bi-download"></i> Contrato de uso
+                                    </a>
+                                    <div class="vr mx-1"></div>
+                                    <button type="button" id="dl-btn-enviar" class="btn btn-sm btn-primary">
+                                        <i class="bi bi-envelope"></i> <span id="dl-btn-enviar-txt">Enviar por correo</span>
+                                    </button>
+                                </div>
+
+                                <div id="dl-historial" class="mt-3"></div>
+                            </div>
+                        </div>
+
+                        <hr class="my-3">
+
+                        <p class="text-muted small mb-2">Documentos propios de la empresa: contratos, RUC, licencias, etc.</p>
                         <form method="POST" action="<?= $base ?>/config/empresas-sistema?action=uploadDocumento" enctype="multipart/form-data" class="mb-3">
                             <input type="hidden" name="action" value="uploadDocumento">
                             <input type="hidden" name="id_empresa" id="upload-id-empresa" value="">
@@ -742,6 +796,102 @@ function estadoPagoBadge($estado) {
             .catch(function() { select.innerHTML = '<option value="">Error</option>'; });
     }
 
+    // ── Documentos legales del sistema (acuerdo de datos + contrato de uso) ──
+    function fmtFecha(s) {
+        if (!s) return '—';
+        var d = new Date(s.replace(' ', 'T'));
+        if (isNaN(d)) return s;
+        function p(n) { return (n < 10 ? '0' : '') + n; }
+        return p(d.getDate()) + '-' + p(d.getMonth() + 1) + '-' + d.getFullYear() +
+               ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+    }
+
+    function cargarDocumentosLegales() {
+        var badge = document.getElementById('dl-estado-badge');
+        var info  = document.getElementById('dl-info');
+        var hist  = document.getElementById('dl-historial');
+        var btnEnviar = document.getElementById('dl-btn-enviar');
+        var btnTxt = document.getElementById('dl-btn-enviar-txt');
+        if (!badge || !idEmpresa) return;
+
+        // Enlaces de descarga (siempre disponibles: se regenera el PDF)
+        var urlDoc = base + '/config/empresas-sistema?action=descargarDocumentoLegal&id=' + idEmpresa + '&tipo=';
+        document.getElementById('dl-btn-acuerdo').href = urlDoc + 'acuerdo_datos';
+        document.getElementById('dl-btn-contrato').href = urlDoc + 'contrato_uso';
+
+        info.textContent = 'Cargando…';
+        badge.innerHTML = '';
+        hist.innerHTML = '';
+
+        fetch(base + '/config/empresas-sistema?action=historialDocumentosLegales&id=' + idEmpresa, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            var rows = (res && res.data) ? res.data : [];
+            btnEnviar.style.display = (res && res.puede_enviar) ? '' : 'none';
+
+            if (!rows.length) {
+                badge.innerHTML = '<span class="badge bg-secondary">Sin enviar</span>';
+                info.innerHTML = '<i class="bi bi-exclamation-circle text-warning me-1"></i>' +
+                                 'Todavía no se han enviado los documentos a esta empresa.';
+                btnTxt.textContent = 'Enviar por correo';
+                return;
+            }
+
+            var u = rows[0];
+            if (u.estado === 'aceptado') {
+                badge.innerHTML = '<span class="badge bg-success">Aceptado</span>';
+                info.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i>' +
+                    'Aceptado el <b>' + fmtFecha(u.aceptado_at) + '</b> por <b>' +
+                    (u.aceptado_nombre || '—') + '</b>' +
+                    (u.aceptado_identificacion ? ' (' + u.aceptado_identificacion + ')' : '') +
+                    '<br><span class="text-muted">IP ' + (u.aceptado_ip || '—') +
+                    ' · enviado a ' + (u.correo_destino || '—') + '</span>';
+            } else {
+                badge.innerHTML = '<span class="badge bg-warning text-dark">Pendiente de aceptación</span>';
+                info.innerHTML = '<i class="bi bi-hourglass-split text-warning me-1"></i>' +
+                    'Enviado el <b>' + fmtFecha(u.enviado_at) + '</b> a <b>' + (u.correo_destino || '—') +
+                    '</b>, aún sin aceptar.';
+            }
+            btnTxt.textContent = 'Reenviar por correo';
+
+            // Historial (si hay más de un envío)
+            if (rows.length > 1) {
+                var h = '<div class="small fw-semibold mb-1">Historial de envíos</div>' +
+                        '<div style="max-height:150px;overflow:auto;">' +
+                        '<table class="table table-sm table-bordered mb-0" style="font-size:.75rem;">' +
+                        '<thead class="table-light"><tr><th>Enviado</th><th>Correo</th><th>Estado</th><th>Aceptado</th></tr></thead><tbody>';
+                rows.forEach(function(r) {
+                    h += '<tr><td>' + fmtFecha(r.enviado_at) + '</td>' +
+                         '<td>' + (r.correo_destino || '—') + '</td>' +
+                         '<td>' + (r.estado === 'aceptado'
+                            ? '<span class="text-success">Aceptado</span>'
+                            : '<span class="text-warning">Pendiente</span>') + '</td>' +
+                         '<td>' + (r.aceptado_at ? fmtFecha(r.aceptado_at) + ' · ' + (r.aceptado_nombre || '') : '—') + '</td></tr>';
+                });
+                h += '</tbody></table></div>';
+                hist.innerHTML = h;
+            }
+        })
+        .catch(function() {
+            info.innerHTML = '<span class="text-danger">Error al cargar el estado de los documentos.</span>';
+        });
+    }
+
+    // Botón enviar/reenviar dentro de la pestaña Documentos
+    document.addEventListener('DOMContentLoaded', function() {
+        var b = document.getElementById('dl-btn-enviar');
+        if (b) {
+            b.addEventListener('click', function() {
+                if (!idEmpresa) return;
+                window.enviarDocumentosLegales(idEmpresa, b, function() {
+                    cargarDocumentosLegales();
+                });
+            });
+        }
+    });
+
     function cargarDocumentos() {
         var tbody = document.getElementById('tbody-documentos-empresa');
         tbody.innerHTML = '<tr><td colspan="4" class="text-center">Cargando...</td></tr>';
@@ -846,7 +996,10 @@ function estadoPagoBadge($estado) {
     }
 
     document.getElementById('tab-empresas-establecimientos').addEventListener('shown.bs.tab', cargarEstablecimientos);
-    document.getElementById('tab-empresas-documentos').addEventListener('shown.bs.tab', cargarDocumentos);
+    document.getElementById('tab-empresas-documentos').addEventListener('shown.bs.tab', function() {
+        cargarDocumentos();
+        cargarDocumentosLegales();
+    });
     document.getElementById('tab-empresas-usuarios').addEventListener('shown.bs.tab', function() {
         cargarUsuarios();
         cargarUsuariosDisponibles();
@@ -1116,6 +1269,75 @@ function estadoPagoBadge($estado) {
         })
         .catch(function(err) {
             alert('Error de conexión. Intente de nuevo.');
+        });
+    };
+
+    // Envía (o reenvía) el acuerdo de uso de datos y el contrato de uso del
+    // sistema al correo registrado de la empresa.
+    // onDone: si se pasa, se llama tras un envío exitoso en vez de recargar la
+    // página (se usa desde la pestaña Documentos del modal).
+    window.enviarDocumentosLegales = function(id, btn, onDone) {
+        if (!id) return;
+
+        var pregunta = '¿Enviar el acuerdo de uso de datos y el contrato de uso al correo de esta empresa?';
+        var seguir = (typeof Swal !== 'undefined')
+            ? Swal.fire({
+                title: 'Enviar documentos legales',
+                text: pregunta,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, enviar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#0d6efd',
+                reverseButtons: true
+              }).then(function(r) { return r.isConfirmed; })
+            : Promise.resolve(confirm(pregunta));
+
+        seguir.then(function(ok) {
+            if (!ok) return;
+
+            var original = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:.8rem;height:.8rem;"></span>';
+            }
+
+            var fd = new FormData();
+            fd.append('id', id);
+
+            fetch(base + '/config/empresas-sistema?action=enviarDocumentosLegales', {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            }).then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (btn) { btn.disabled = false; btn.innerHTML = original; }
+                if (res.ok) {
+                    var despues = function() {
+                        if (typeof onDone === 'function') { onDone(); }
+                        else { window.location.reload(); }
+                    };
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({ icon: 'success', title: 'Enviado', text: res.msg }).then(despues);
+                    } else {
+                        alert(res.msg); despues();
+                    }
+                } else {
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire('No se pudo enviar', res.error || 'Error desconocido.', 'error');
+                    } else {
+                        alert(res.error || 'No se pudo enviar.');
+                    }
+                }
+            })
+            .catch(function() {
+                if (btn) { btn.disabled = false; btn.innerHTML = original; }
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire('Error', 'Error de conexión. Intente de nuevo.', 'error');
+                } else {
+                    alert('Error de conexión.');
+                }
+            });
         });
     };
 

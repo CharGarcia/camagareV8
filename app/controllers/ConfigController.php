@@ -455,6 +455,9 @@ class ConfigController extends Controller
             'sriIdentificacion' => 'sriIdentificacionJson',
             'buscarEmpresas' => 'buscarEmpresasJson',
             'buscarClientes' => 'buscarClientesJson',
+            'enviarDocumentosLegales' => 'enviarDocumentosLegales',
+            'historialDocumentosLegales' => 'historialDocumentosLegalesJson',
+            'descargarDocumentoLegal' => 'descargarDocumentoLegal',
             'delete' => 'delete',
             default => 'index',
         };
@@ -468,6 +471,23 @@ class ConfigController extends Controller
     public function empresasSistemaStore(): void
     {
         (new EmpresasSistemaController())->store();
+    }
+
+    // ─── Documentos legales (acuerdo de datos + contrato de uso) ────────────
+
+    public function documentosLegales(): void
+    {
+        (new DocumentosLegalesController())->index();
+    }
+
+    public function documentosLegalesGuardar(): void
+    {
+        (new DocumentosLegalesController())->guardar();
+    }
+
+    public function documentosLegalesPrevisualizar(): void
+    {
+        (new DocumentosLegalesController())->previsualizar();
     }
 
     public function empresasSistemaUpdate(): void
@@ -539,6 +559,26 @@ class ConfigController extends Controller
     public function sriCasillerosEtiquetasDelete(): void
     {
         (new SriCasillerosEtiquetasController())->delete();
+    }
+
+    public function impuestoRentaTramos(): void
+    {
+        (new ImpuestoRentaTramosController())->index();
+    }
+
+    public function impuestoRentaTramosStore(): void
+    {
+        (new ImpuestoRentaTramosController())->store();
+    }
+
+    public function impuestoRentaTramosDelete(): void
+    {
+        (new ImpuestoRentaTramosController())->delete();
+    }
+
+    public function impuestoRentaTramosGuardarParametros(): void
+    {
+        (new ImpuestoRentaTramosController())->guardarParametros();
     }
 
     public function importarAntiguo(): void
