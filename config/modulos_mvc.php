@@ -415,6 +415,14 @@ return [
         'id_submodulo' => 39,
         'legacy_rutas' => [],
     ],
+    'modulos/reporte_retenciones' => [
+        // Combina retencion_compra_* y retencion_venta_* en un solo reporte con
+        // export a PDF/Excel. Registrar el submódulo en submodulos_menu (id_modulo
+        // = 9, Reportes) con ruta = 'modulos/reporte_retenciones', y actualizar
+        // este id_submodulo con el id real. Asignar permisos en /config/permisos-modulos.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
     'modulos/reporte_trazabilidad_productos' => [
         // Registrar el submódulo en submodulos_menu (id_modulo = 9, Reportes) con
         // ruta = 'modulos/reporte_trazabilidad_productos', y actualizar este
