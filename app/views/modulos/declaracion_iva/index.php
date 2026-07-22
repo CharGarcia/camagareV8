@@ -356,26 +356,32 @@
                     const fmt = v => v.toLocaleString('en-US', {minimumFractionDigits: dec, maximumFractionDigits: dec});
 
                     // Editable: propiedad genérica configurada en /config/sri-casilleros-etiquetas.
+                    // Un casillero puede vivir en la columna Bruto, Neto o Impuesto según la fila
+                    // (la mayoría de las filas de una sola columna usan Impuesto o Bruto indistintamente);
+                    // por eso esto se resuelve por columna, no asumiendo que siempre es "Bruto".
                     // 605/606 (arrastre "entrante") no son editables pero muestran un candado
                     // informativo: vienen automáticamente del período anterior.
                     const esArrastreEntrante = r.fuente_valor === 'arrastre_entrante_compras' || r.fuente_valor === 'arrastre_entrante_retenciones';
-                    let tdBruto;
-                    if (r.editable && cBruto) {
-                        tdBruto = `<input type="number" step="0.01" class="form-control form-control-sm text-end p-0 border-0 bg-warning bg-opacity-10 fw-bold" style="height:22px;font-size:0.78rem;" data-casillero-editable="${cBruto}" data-decimales="${dec}" value="${(vBruto ?? 0).toFixed(dec)}">`;
-                    } else if (esArrastreEntrante) {
-                        tdBruto = `<span data-casillero-display="${cBruto}" data-decimales="${dec}">${vBruto !== null ? fmt(vBruto) : ''}</span> <i class="bi bi-lock-fill text-muted" style="font-size:0.65rem;" title="Se completa automáticamente con el arrastre del período anterior"></i>`;
-                    } else {
-                        tdBruto = cBruto ? `<span data-casillero-display="${cBruto}" data-decimales="${dec}">${vBruto !== null ? fmt(vBruto) : ''}</span>` : (vBruto !== null ? fmt(vBruto) : '');
-                    }
+                    const celdaValor = (codigo, valor) => {
+                        if (!codigo) return valor !== null ? fmt(valor) : '';
+                        if (r.editable) {
+                            return `<input type="number" step="0.01" class="form-control form-control-sm text-end p-0 border-0 bg-warning bg-opacity-10 fw-bold" style="height:22px;font-size:0.78rem;" data-casillero-editable="${codigo}" data-decimales="${dec}" value="${(valor ?? 0).toFixed(dec)}">`;
+                        }
+                        const candado = esArrastreEntrante ? ' <i class="bi bi-lock-fill text-muted" style="font-size:0.65rem;" title="Se completa automáticamente con el arrastre del período anterior"></i>' : '';
+                        return `<span data-casillero-display="${codigo}" data-decimales="${dec}">${valor !== null ? fmt(valor) : ''}</span>${candado}`;
+                    };
+                    const tdBruto = celdaValor(cBruto, vBruto);
+                    const tdNetoContenido = celdaValor(cNeto, vNeto);
+                    const tdImpContenido = celdaValor(cImp, vImp);
 
                     html += `<tr class="${rowClass} sri-row-data ${dNoneRow}" data-has-values="${r.hasValues ? '1' : '0'}">
                         <td class="ps-2" style="padding-left: calc(0.5rem + ${marginLeft}) !important;">${descFormatted}</td>
                         <td class="text-center text-muted" style="font-size:0.7rem;">${cBruto ? '<b>'+cBruto+'</b>' : ''}</td>
                         <td class="text-end">${tdBruto}</td>
                         <td class="text-center text-muted" style="font-size:0.7rem;">${cNeto ? '<b>'+cNeto+'</b>' : ''}</td>
-                        <td class="text-end">${vNeto !== null ? fmt(vNeto) : ''}</td>
+                        <td class="text-end">${tdNetoContenido}</td>
                         <td class="text-center text-muted" style="font-size:0.7rem;">${cImp ? '<b>'+cImp+'</b>' : ''}</td>
-                        <td class="text-end">${vImp !== null ? fmt(vImp) : ''}</td>
+                        <td class="text-end">${tdImpContenido}</td>
                     </tr>`;
                 }
             });
