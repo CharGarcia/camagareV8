@@ -93,6 +93,15 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // Cotización de Publicidad (agencia): servicios publicitarios con comisión de
+    // agencia, costos por proveedor y conversión a Factura de Venta.
+    // Registrar el submódulo manualmente (submodulos_menu/modulos_asignados) tras
+    // ejecutar 20260722_create_cotizacion_publicidad.sql y actualizar el id_submodulo.
+    'modulos/cotizacion-publicidad' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     // Servicio Car-Wash (órdenes de lavado de vehículos).
     // Actualizar id_submodulo con el id real que retorne 20260705_menu_carwash.sql
     // (SELECT id FROM submodulos_menu WHERE ruta = 'modulos/car-wash';).

@@ -92,6 +92,10 @@ class CajaPosController extends BaseModuloController
             'puedeRecibo' => \App\Helpers\Permisos::puedeCrear('modulos/recibo-venta'),
             'bodegas' => (new Empresa())->getBodegas($idEmpresa),
             'empresa' => $estConfig,
+            'categorias' => (new \App\repositories\modulos\CategoriaRepository())
+                ->getListado($idEmpresa, '', 1, 0, 'nombre', 'ASC')['rows'],
+            'marcas' => (new \App\repositories\modulos\MarcaRepository())
+                ->getListado($idEmpresa, '', 1, 0, 'nombre', 'ASC')['rows'],
         ]);
     }
 

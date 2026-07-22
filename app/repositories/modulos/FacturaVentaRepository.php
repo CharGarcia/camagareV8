@@ -265,6 +265,16 @@ class FacturaVentaRepository extends BaseRepository
         return $this->query($sql, [$idProforma, $idEmpresa])->fetchAll();
     }
 
+    public function getPorCotizacionPublicidad(int $idCotizacion, int $idEmpresa): array
+    {
+        $sql = "SELECT id, fecha_emision, establecimiento, punto_emision, secuencial,
+                       importe_total, estado, estado_correo
+                FROM ventas_cabecera
+                WHERE id_cotizacion_publicidad = ? AND id_empresa = ? AND eliminado = false
+                ORDER BY fecha_emision DESC, id DESC";
+        return $this->query($sql, [$idCotizacion, $idEmpresa])->fetchAll();
+    }
+
     /**
      * Persiste el XML (sin firma o firmado/autorizado) en detalle_xml.
      */
@@ -425,6 +435,10 @@ class FacturaVentaRepository extends BaseRepository
         if (in_array('id_proforma', $colsOpcionales) && !empty($data['id_proforma'])) {
             $cols[]   = 'id_proforma';
             $params[] = (int) $data['id_proforma'];
+        }
+        if (in_array('id_cotizacion_publicidad', $colsOpcionales) && !empty($data['id_cotizacion_publicidad'])) {
+            $cols[]   = 'id_cotizacion_publicidad';
+            $params[] = (int) $data['id_cotizacion_publicidad'];
         }
         if (in_array('id_caja_sesion', $colsOpcionales) && !empty($data['id_caja_sesion'])) {
             $cols[]   = 'id_caja_sesion';

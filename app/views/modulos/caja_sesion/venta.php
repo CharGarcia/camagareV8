@@ -18,6 +18,8 @@
  * @var bool   $puedeRecibo
  * @var array  $bodegas
  * @var array  $empresa
+ * @var array  $categorias
+ * @var array  $marcas
  */
 $base = rtrim(BASE_URL ?? '', '/');
 $rutaAjax = $base . '/' . $rutaModulo;
@@ -60,11 +62,11 @@ $rutaAjax = $base . '/' . $rutaModulo;
         .pv-btn-nuevo-ticket:hover { background: rgba(255,255,255,.3); }
 
         .pv-catalogo { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-        .pv-search { flex: 0 0 auto; padding: 12px 16px; background: #fff; border-bottom: 1px solid #dee2e6; }
+        .pv-search { flex: 0 0 auto; padding: 8px 16px 6px; background: #fff; border-bottom: 1px solid #dee2e6; }
         .pv-grid { flex: 1 1 auto; overflow-y: auto; padding: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; align-content: start; }
         .pv-tile { position: relative; background: #fff; border: 1px solid #dee2e6; border-radius: 10px; padding: 12px 10px; cursor: pointer; text-align: left; transition: border-color .15s; }
         .pv-tile:hover { border-color: #0d6efd; }
-        .pv-tile .thumb { width: 100%; height: 56px; object-fit: cover; border-radius: 6px; margin-bottom: 8px; background: #f4f6f9; display: block; }
+        .pv-tile .thumb { width: 100%; height: 56px; object-fit: contain; border-radius: 6px; margin-bottom: 8px; background: #f4f6f9; display: block; }
         .pv-tile .nombre { font-size: .82rem; font-weight: 600; line-height: 1.25; margin-bottom: 6px; min-height: 2.1em; }
         .pv-tile .precio-row { display: flex; align-items: baseline; gap: 5px; }
         .pv-tile .precio { font-size: .82rem; color: #0d6efd; font-weight: 700; }
@@ -131,23 +133,58 @@ $rutaAjax = $base . '/' . $rutaModulo;
 
     <div class="pv-body">
         <div class="pv-catalogo">
+            <?php
+                $mostrarBodega = count($bodegas) > 1;
+                $mostrarCategoria = !empty($categorias);
+                $mostrarMarca = !empty($marcas);
+                $colFijas = ($mostrarBodega ? 2 : 0) + ($mostrarCategoria ? 2 : 0) + ($mostrarMarca ? 2 : 0);
+                $colBuscador = 12 - $colFijas;
+            ?>
             <div class="pv-search">
                 <div class="row g-2 align-items-end">
-                    <?php if (count($bodegas) > 1): ?>
+                    <?php if ($mostrarBodega): ?>
                     <div class="col-2">
                         <label class="form-label small fw-semibold text-uppercase text-muted mb-1">
                             Bodega
                             <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'pv-id-bodega', 'id_bodega') ?>
                         </label>
-                        <select id="pv-id-bodega" class="form-select">
+                        <select id="pv-id-bodega" class="form-select form-select-sm">
                             <?php foreach ($bodegas as $b): ?>
                                 <option value="<?= (int) $b['id'] ?>"><?= htmlspecialchars($b['nombre']) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                     <?php endif; ?>
-                    <div class="<?= count($bodegas) > 1 ? 'col-10' : 'col-12' ?>">
-                        <div class="input-group">
+                    <?php if ($mostrarCategoria): ?>
+                    <div class="col-2">
+                        <label class="form-label small fw-semibold text-uppercase text-muted mb-1">
+                            Categoría
+                            <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'pv-categoria', 'categoria') ?>
+                        </label>
+                        <select id="pv-categoria" class="form-select form-select-sm">
+                            <option value="">Todas</option>
+                            <?php foreach ($categorias as $c): ?>
+                                <option value="<?= htmlspecialchars($c['nombre']) ?>"><?= htmlspecialchars($c['nombre']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($mostrarMarca): ?>
+                    <div class="col-2">
+                        <label class="form-label small fw-semibold text-uppercase text-muted mb-1">
+                            Marca
+                            <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'pv-marca', 'marca') ?>
+                        </label>
+                        <select id="pv-marca" class="form-select form-select-sm">
+                            <option value="">Todas</option>
+                            <?php foreach ($marcas as $m): ?>
+                                <option value="<?= htmlspecialchars($m['nombre']) ?>"><?= htmlspecialchars($m['nombre']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <?php endif; ?>
+                    <div class="col-<?= $colBuscador ?>">
+                        <div class="input-group input-group-sm">
                             <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
                             <input type="text" id="pv-buscar" class="form-control" placeholder="Buscar producto o escanear código de barras..." autofocus autocomplete="off">
                         </div>
@@ -160,7 +197,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
                     if ($obligatorioNup) $reglasInv[] = 'serie (NUP)';
                 ?>
                 <?php if (!empty($reglasInv)): ?>
-                <div class="small text-muted mt-1">
+                <div class="small text-muted mt-1" style="font-size:.72rem;">
                     <i class="bi bi-boxes"></i> Esta empresa exige <?= implode(', ', $reglasInv) ?> en productos inventariados según su configuración.
                 </div>
                 <?php endif; ?>
@@ -737,10 +774,24 @@ $rutaAjax = $base . '/' . $rutaModulo;
         }
     });
 
+    // Categoría/Marca se combinan con el texto libre usando la sintaxis
+    // clave:"valor" que ya entiende el buscador (App\Helpers\FiltrosBusqueda) —
+    // sin tocar el backend, el mismo ProductoRepository::getListado() de
+    // siempre ya sabe filtrar por categoria:/marca:.
+    function aplicarFiltrosCatalogo(q) {
+        const cat = document.getElementById('pv-categoria')?.value || '';
+        const marca = document.getElementById('pv-marca')?.value || '';
+        let qFinal = q;
+        if (cat) qFinal += (qFinal ? ' ' : '') + 'categoria:"' + cat.replace(/"/g, '') + '"';
+        if (marca) qFinal += (qFinal ? ' ' : '') + 'marca:"' + marca.replace(/"/g, '') + '"';
+        return qFinal;
+    }
+
     async function buscarProductos(q) {
         $grid.innerHTML = '<div class="text-center py-4 pv-empty" style="grid-column: 1 / -1;"><span class="spinner-border spinner-border-sm"></span> Buscando...</div>';
         try {
-            const res = await fetch(AJAX + '/getProductosAjax?q=' + encodeURIComponent(q) + '&id_bodega=' + (getIdBodega() || ''), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const qFinal = aplicarFiltrosCatalogo(q);
+            const res = await fetch(AJAX + '/getProductosAjax?q=' + encodeURIComponent(qFinal) + '&id_bodega=' + (getIdBodega() || ''), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             const json = await res.json();
             renderGrid(json.data || []);
         } catch (e) {
@@ -766,13 +817,25 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 : '';
             const pctIva = parseFloat(p.porcentaje_iva_final || 0);
             const ivaTag = '<span class="iva-tag' + (pctIva === 0 ? ' iva-cero' : '') + '">IVA ' + pctIva + '%</span>';
+            // Precio ya con impuestos incluidos (lo que el cliente paga por unidad);
+            // el carrito/backend siguen usando precio_base sin impuestos por dentro.
+            const precioConIva = parseFloat(p.precio_base || 0) * (1 + pctIva / 100);
             tile.innerHTML = sinStock + thumbHtml +
                 '<div class="nombre">' + escapeHtml(p.nombre || '') + '</div>' +
-                '<div class="precio-row"><span class="precio">' + money(p.precio_base) + '</span>' + ivaTag + '</div>' +
+                '<div class="precio-row"><span class="precio">' + money(precioConIva) + '</span>' + ivaTag + '</div>' +
                 '<div class="codigo">' + escapeHtml(p.codigo || '') + '</div>';
             tile.addEventListener('click', () => addToCart(p));
             $grid.appendChild(tile);
         });
+    }
+
+    // El cursor siempre debe volver al buscador: al agregar un producto, al
+    // cancelar/cerrar un modal (lote/NUP/variante), o al iniciar el POS.
+    // Con un pequeño retraso porque SweetAlert2 y los modales de Bootstrap
+    // restauran el foco a su propio disparador al cerrarse, y eso puede
+    // ganarle a un focus() inmediato — el timeout corre después y gana.
+    function enfocarBuscador() {
+        setTimeout(() => $buscar.focus(), 50);
     }
 
     function escapeHtml(s) {
@@ -1075,7 +1138,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
             const yaEnCarrito = cart.filter(l => l.id_producto === idProducto).reduce((s, l) => s + l.cantidad, 0);
             if (yaEnCarrito + 1 > stockDisponible) {
                 swalWarning('No hay stock suficiente de "' + escapeHtml(p.nombre) + '" (disponible: ' + stockDisponible + ').');
-                $buscar.focus();
+                enfocarBuscador();
                 return;
             }
         }
@@ -1086,7 +1149,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
         let variante = null;
         if (p.variantes && p.variantes.length) {
             variante = await elegirVariante(p);
-            if (!variante) { $buscar.focus(); return; } // cancelado
+            if (!variante) { enfocarBuscador(); return; } // cancelado
         }
         const idVariante = variante ? variante.id : null;
 
@@ -1099,7 +1162,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
             if (existente) {
                 existente.cantidad += 1;
                 renderCart();
-                $buscar.focus();
+                enfocarBuscador();
                 return;
             }
         }
@@ -1110,13 +1173,13 @@ $rutaAjax = $base . '/' . $rutaModulo;
         let lote = '', caducidad = '', nup = '';
         if (requiereLote(p)) {
             const elegido = await seleccionarLote(p, necesitaNup);
-            if (!elegido) { $buscar.focus(); return; } // cancelado o sin stock
+            if (!elegido) { enfocarBuscador(); return; } // cancelado o sin stock
             lote = elegido.lote;
             caducidad = elegido.caducidad;
             nup = elegido.nup || '';
         } else if (necesitaNup) {
             const val = await capturarNup(p);
-            if (val === null) { $buscar.focus(); return; } // cancelado
+            if (val === null) { enfocarBuscador(); return; } // cancelado
             nup = val;
         }
 
@@ -1133,7 +1196,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
             id_producto_variante: idVariante,
         });
         renderCart();
-        $buscar.focus();
+        enfocarBuscador();
     }
 
     /**
@@ -1811,6 +1874,9 @@ $rutaAjax = $base . '/' . $rutaModulo;
         buscarTimer = setTimeout(() => buscarProductos($buscar.value.trim()), 350);
     });
 
+    document.getElementById('pv-categoria')?.addEventListener('change', () => buscarProductos($buscar.value.trim()));
+    document.getElementById('pv-marca')?.addEventListener('change', () => buscarProductos($buscar.value.trim()));
+
     // Los lectores de código de barras "escriben" el código y rematan con Enter.
     $buscar.addEventListener('keydown', (ev) => {
         if (ev.key === 'Enter') {
@@ -1859,7 +1925,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
         } catch (e) {
             swalToast('error', 'Error de conexión al buscar el código.');
         } finally {
-            $buscar.focus();
+            enfocarBuscador();
         }
     }
 
@@ -1890,6 +1956,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
 
     if (typeof window.aplicarFavoritosModal === 'function') {
         window.aplicarFavoritosModal('.pv-carrito');
+        window.aplicarFavoritosModal('.pv-search');
     }
     bodegaConfirmada = getIdBodega();
     cargarFormasPago();
@@ -1898,7 +1965,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
     }
     buscarProductos('');
     cargarPagosPendientes();
-    $buscar.focus();
+    enfocarBuscador();
 })();
 </script>
 </body>
