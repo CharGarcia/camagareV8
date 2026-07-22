@@ -166,6 +166,7 @@ class BodegaRepository extends BaseRepository
                 LEFT JOIN usuarios_bodegas ub ON u.id = ub.id_usuario AND ub.id_bodega = :id_bodega
                      AND ub.id_empresa = :id_empresa AND ub.eliminado = false
                 WHERE ea.id_empresa = :id_empresa AND u.eliminado = false
+                  AND COALESCE(u.nivel, 1) < 3
                 ORDER BY u.nombre ASC";
         
         $st = $this->db->prepare($sql);
@@ -194,12 +195,14 @@ class BodegaRepository extends BaseRepository
             $defaults[$uid]   = !empty($acc['es_default']);
         }
 
-        // Universo de usuarios de la empresa (los que puede listar la pestaña Accesos)
+        // Universo de usuarios de la empresa (debe coincidir con getUsuariosAcceso:
+        // el superadmin no se lista ni se gestiona aquí, siempre ve todas las bodegas).
         $stUsers = $this->db->prepare(
             "SELECT DISTINCT u.id
                FROM usuarios u
                INNER JOIN empresa_asignada ea ON u.id = ea.id_usuario
-              WHERE ea.id_empresa = :id_e AND u.eliminado = false"
+              WHERE ea.id_empresa = :id_e AND u.eliminado = false
+                AND COALESCE(u.nivel, 1) < 3"
         );
         $stUsers->execute([':id_e' => $idEmpresa]);
         $todosUsuarios = $stUsers->fetchAll(PDO::FETCH_COLUMN);
