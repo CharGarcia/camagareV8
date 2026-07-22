@@ -192,7 +192,7 @@ class EmpresasSistemaController extends Controller
             }
         }
 
-        $allKeys = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_cliente_facturado'];
+        $allKeys = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_cliente_facturado', 'id_suscripcion'];
         $data = [];
         foreach ($allKeys as $k) {
             if (array_key_exists($k, $_POST)) {
@@ -277,6 +277,31 @@ class EmpresasSistemaController extends Controller
      * (para "Empresa a la que facturamos / reventa").
      * GET: q, id_empresa (controladora) → [{id, label}]
      */
+    /**
+     * Suscripciones de un cliente en la controladora, para elegir cuál cubre a
+     * esta empresa (reventa donde el cliente tiene varias suscripciones).
+     */
+    public function suscripcionesClienteJson(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+
+        $idControladora = (int) ($_GET['id_controladora'] ?? 0);
+        $idCliente      = (int) ($_GET['id_cliente'] ?? 0);
+
+        if ($idControladora <= 0 || $idCliente <= 0) {
+            $this->json(['ok' => true, 'data' => []]);
+            return;
+        }
+
+        try {
+            $repo = new \App\repositories\modulos\SuscripcionesRepository();
+            $this->json(['ok' => true, 'data' => $repo->getListaPorCliente($idControladora, $idCliente)]);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'error' => $e->getMessage(), 'data' => []]);
+        }
+    }
+
     /**
      * Reenvía los documentos legales (acuerdo de datos + contrato de uso) al
      * correo de una empresa ya existente.

@@ -66,6 +66,7 @@ class Empresa extends BaseModel
                 e.obligado_contabilidad, COALESCE(e.max_usuarios, 3) AS max_usuarios,
                 e.id_empresa_suscripciones, COALESCE(e.es_administradora_suscripciones, false) AS es_administradora_suscripciones,
                 e.id_cliente_facturado,
+                e.id_suscripcion,
                 COALESCE(NULLIF(ctrl.nombre_comercial,''), ctrl.nombre) AS ctrl_nombre, ctrl.ruc AS ctrl_ruc, ctrl.establecimiento AS ctrl_estab,
                 cli.nombre AS cli_nombre, cli.identificacion AS cli_identificacion,
                 p.nombre AS nombre_provincia, c.nombre AS nombre_ciudad
@@ -243,8 +244,13 @@ class Empresa extends BaseModel
             ? (int) $data['id_cliente_facturado'] : null;
         $idEmpFactSql = $idEmpFact !== null ? (string) $idEmpFact : 'NULL';
 
-        $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, obligado_contabilidad, max_usuarios, id_empresa_suscripciones, es_administradora_suscripciones, id_cliente_facturado)
-            VALUES ('{$nombre}', '{$nombreComercial}', '{$ruc}', '{$estEsc}', '{$direccion}', '{$telefono}', '{$tipo}', '{$nomRepLegal}', '{$cedRepLegal}', '{$mail}', '{$codProv}', '{$codCiudad}', '{$estado}', NOW(), '{$idUsuario}', '{$nombreContador}', '{$rucContador}', {$valCobroSql}, {$vigenciaDesde}, {$vigenciaHasta}, {$estadoPago}, '{$obligadoCont}', {$maxUsuarios}, {$idEmpSuscSql}, {$esAdminSql}, {$idEmpFactSql})";
+        // Suscripción específica que cubre a esta empresa (reventa con varias suscripciones).
+        $idSusc = isset($data['id_suscripcion']) && $data['id_suscripcion'] !== '' && (int) $data['id_suscripcion'] > 0
+            ? (int) $data['id_suscripcion'] : null;
+        $idSuscSql = $idSusc !== null ? (string) $idSusc : 'NULL';
+
+        $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, obligado_contabilidad, max_usuarios, id_empresa_suscripciones, es_administradora_suscripciones, id_cliente_facturado, id_suscripcion)
+            VALUES ('{$nombre}', '{$nombreComercial}', '{$ruc}', '{$estEsc}', '{$direccion}', '{$telefono}', '{$tipo}', '{$nomRepLegal}', '{$cedRepLegal}', '{$mail}', '{$codProv}', '{$codCiudad}', '{$estado}', NOW(), '{$idUsuario}', '{$nombreContador}', '{$rucContador}', {$valCobroSql}, {$vigenciaDesde}, {$vigenciaHasta}, {$estadoPago}, '{$obligadoCont}', {$maxUsuarios}, {$idEmpSuscSql}, {$esAdminSql}, {$idEmpFactSql}, {$idSuscSql})";
         $this->execute($sql);
         $id = $this->lastInsertId('empresas_id_seq');
 
@@ -301,7 +307,7 @@ class Empresa extends BaseModel
         }
 
         $sets = [];
-        $campos = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_cliente_facturado'];
+        $campos = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_cliente_facturado', 'id_suscripcion'];
         foreach ($campos as $c) {
             if (array_key_exists($c, $data)) {
                 if (in_array($c, ['valor_cobro'], true)) {
@@ -310,7 +316,7 @@ class Empresa extends BaseModel
                 } elseif ($c === 'max_usuarios') {
                     $v = (int) ($data[$c] ?? 3);
                     $sets[] = "{$c} = " . ($v > 0 ? $v : 3);
-                } elseif (in_array($c, ['id_empresa_suscripciones', 'id_cliente_facturado'], true)) {
+                } elseif (in_array($c, ['id_empresa_suscripciones', 'id_cliente_facturado', 'id_suscripcion'], true)) {
                     $v = $data[$c];
                     $sets[] = "{$c} = " . ($v === '' || $v === null || (int) $v <= 0 ? 'NULL' : (int) $v);
                 } elseif ($c === 'es_administradora_suscripciones') {

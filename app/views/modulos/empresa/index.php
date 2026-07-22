@@ -254,19 +254,34 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                             <div class="col-12">
                                 <div class="card bg-light border-0 mt-3">
                                     <div class="card-body p-3">
-                                        <?php $tieneSusc = !empty($suscripcion_info); ?>
+                                        <?php
+                                        $tieneSusc = !empty($suscripcion_info);
+                                        // Reventa con varias suscripciones del mismo cliente y ninguna
+                                        // asignada a esta empresa: no se puede saber cuál corresponde.
+                                        $suscVarias = (int) ($suscripcion_varias ?? 0);
+                                        ?>
                                         <div class="d-flex align-items-center justify-content-between mb-3">
                                             <h6 class="fw-bold mb-0 small text-primary"><i class="bi bi-shield-check me-2"></i>Suscripción y Vigencia del Sistema</h6>
                                             <?php if ($tieneSusc): ?>
                                                 <a href="<?= rtrim(BASE_URL, '/') ?>/modulos/suscripciones" class="badge bg-success bg-opacity-10 text-success text-decoration-none" style="font-size: 0.62rem;" title="Ver en el módulo de suscripciones">
                                                     <i class="bi bi-link-45deg"></i> Vinculada a suscripción
                                                 </a>
+                                            <?php elseif ($suscVarias > 1): ?>
+                                                <span class="badge bg-warning bg-opacity-10 text-warning" style="font-size: 0.62rem;"><i class="bi bi-exclamation-triangle"></i> Falta asignar</span>
                                             <?php else: ?>
                                                 <span class="badge bg-secondary bg-opacity-10 text-secondary" style="font-size: 0.62rem;"><i class="bi bi-pencil"></i> Datos manuales</span>
                                             <?php endif; ?>
                                         </div>
 
-                                        <?php if ($tieneSusc): ?>
+                                        <?php if (!$tieneSusc && $suscVarias > 1): ?>
+                                            <div class="alert alert-warning py-2 px-3 mb-0" style="font-size: 0.75rem;">
+                                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                                El cliente al que se factura tiene <strong><?= $suscVarias ?> suscripciones</strong>.
+                                                Para mostrar la que corresponde a esta empresa, asígnala en
+                                                <strong>Configuración → Empresas del sistema</strong>, editando esta empresa
+                                                en el campo <em>«Suscripción que cubre a esta empresa»</em>.
+                                            </div>
+                                        <?php elseif ($tieneSusc): ?>
                                             <?php
                                             $mapEstadoSusc = ['activo' => 'success', 'pausado' => 'warning', 'suspendido' => 'danger', 'cancelado' => 'secondary'];
                                             $mapEstadoPago = ['exitoso' => 'success', 'pendiente' => 'warning', 'fallido' => 'danger'];

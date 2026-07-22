@@ -107,6 +107,41 @@ class SuscripcionesRepository extends BaseRepository
         return $this->getResumenPorControladora($idControladora, 'c.id = :filtro', [':filtro' => $idCliente]);
     }
 
+    /**
+     * Resumen de UNA suscripción específica (reventa: el cliente facturado tiene
+     * varias suscripciones y esta empresa está vinculada a una en concreto).
+     */
+    public function getResumenPorSuscripcion(int $idControladora, int $idSuscripcion): array
+    {
+        if ($idControladora <= 0 || $idSuscripcion <= 0) {
+            return [];
+        }
+        return $this->getResumenPorControladora($idControladora, 's.id = :filtro', [':filtro' => $idSuscripcion]);
+    }
+
+    /** Suscripciones de un cliente, para elegir cuál corresponde a una empresa. */
+    public function getListaPorCliente(int $idControladora, int $idCliente): array
+    {
+        if ($idControladora <= 0 || $idCliente <= 0) {
+            return [];
+        }
+        $sql = "SELECT s.id, s.estado, s.fecha_inicio, s.fecha_fin, s.proximo_cobro,
+                       per.nombre AS periodicidad,
+                       COALESCE((SELECT SUM(d.cantidad * d.precio_unitario * (1 + d.porcentaje_iva / 100))
+                                 FROM suscripciones_detalle d
+                                 WHERE d.id_suscripcion = s.id AND d.eliminado = false), 0) AS monto
+                  FROM suscripciones s
+                  LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
+                 WHERE s.id_empresa = :ctrl
+                   AND s.id_cliente = :cli
+                   AND s.eliminado = false
+                 ORDER BY (s.estado = 'activo') DESC, s.proximo_cobro ASC, s.id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':ctrl' => $idControladora, ':cli' => $idCliente]);
+
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getResumenPorControladoraYRuc(int $idControladora, string $ruc): array
     {
         $ruc = preg_replace('/\D/', '', (string) $ruc);

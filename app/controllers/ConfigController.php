@@ -476,6 +476,7 @@ class ConfigController extends Controller
             'enviarDocumentosLegales' => 'enviarDocumentosLegales',
             'historialDocumentosLegales' => 'historialDocumentosLegalesJson',
             'descargarDocumentoLegal' => 'descargarDocumentoLegal',
+            'suscripcionesCliente' => 'suscripcionesClienteJson',
             'delete' => 'delete',
             default => 'index',
         };

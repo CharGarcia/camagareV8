@@ -174,6 +174,7 @@ function estadoPagoBadge($estado) {
                         data-id-empresa-suscripciones="<?= (int)($r['id_empresa_suscripciones'] ?? 0) ?>"
                         data-es-administradora="<?= !empty($r['es_administradora_suscripciones']) ? '1' : '0' ?>"
                         data-id-cliente-facturado="<?= (int)($r['id_cliente_facturado'] ?? 0) ?>"
+                        data-id-suscripcion="<?= (int)($r['id_suscripcion'] ?? 0) ?>"
                         data-ctrl-label="<?= htmlspecialchars(trim(($r['ctrl_nombre'] ?? '') . (!empty($r['ctrl_ruc']) ? ' — ' . $r['ctrl_ruc'] . ' (' . ($r['ctrl_estab'] ?? '') . ')' : ''))) ?>"
                         data-fact-label="<?= htmlspecialchars(trim(($r['cli_nombre'] ?? '') . (!empty($r['cli_identificacion']) ? ' — ' . $r['cli_identificacion'] : ''))) ?>"
                         data-usuarios="<?= count($usuarios) ?>">
@@ -547,6 +548,16 @@ function estadoPagoBadge($estado) {
                                     <div id="edit-fact-dropdown" class="list-group position-absolute w-100 shadow" style="display:none;z-index:2000;max-height:220px;overflow:auto;"></div>
                                     <div class="form-text">Busca entre los <strong>clientes de la empresa controladora</strong> seleccionada arriba. Si eliges uno, esa selección manda y la ficha muestra solo estado, periodicidad y vigencia (sin montos). Si lo dejas vacío, se aplica la regla por RUC propio.</div>
                                 </div>
+                                <div class="col-12" id="edit-susc-wrap" style="display:none;">
+                                    <label for="edit-id-suscripcion" class="form-label">Suscripción que cubre a esta empresa</label>
+                                    <select id="edit-id-suscripcion" name="id_suscripcion" class="form-select form-select-sm">
+                                        <option value="">— Automático (si el cliente tiene una sola) —</option>
+                                    </select>
+                                    <div class="form-text">
+                                        Cuando el cliente facturado tiene <strong>varias suscripciones</strong> (una por cada empresa suya),
+                                        indica aquí cuál corresponde a <strong>esta</strong> empresa. Si no la eliges, la ficha avisará que falta asignarla.
+                                    </div>
+                                </div>
                                 <div class="col-12">
                                     <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg"></i> Guardar cambios</button>
                                 </div>
@@ -787,6 +798,8 @@ function estadoPagoBadge($estado) {
             factId.value  = hasFact ? el.dataset.idClienteFacturado : '';
             factTxt.value = hasFact ? (el.dataset.factLabel || '') : '';
         }
+        // Selector de suscripción específica (solo aplica en reventa)
+        cargarSuscripcionesCliente(el.dataset.idSuscripcion || '');
         document.getElementById('tab-empresas-general').click();
         cargarUsuarios();
         cargarUsuariosDisponibles();
@@ -811,6 +824,54 @@ function estadoPagoBadge($estado) {
             })
             .catch(function() { select.innerHTML = '<option value="">Error</option>'; });
     }
+
+    /**
+     * Carga las suscripciones del cliente facturado para elegir cuál cubre a
+     * esta empresa. Solo tiene sentido en reventa (hay cliente facturado); si
+     * el cliente tiene una sola, el selector queda oculto (se resuelve solo).
+     */
+    window.cargarSuscripcionesCliente = function(idSeleccionada) {
+        var wrap = document.getElementById('edit-susc-wrap');
+        var sel  = document.getElementById('edit-id-suscripcion');
+        if (!wrap || !sel) return;
+
+        var idCtrl = (document.getElementById('edit-ctrl-id') || {}).value || '';
+        var idCli  = (document.getElementById('edit-fact-id') || {}).value || '';
+
+        // Sin cliente facturado no hay reventa: no aplica.
+        if (!idCli) {
+            wrap.style.display = 'none';
+            sel.innerHTML = '<option value="">— Automático —</option>';
+            return;
+        }
+
+        fetch(base + '/config/empresas-sistema?action=suscripcionesCliente&id_controladora=' +
+              encodeURIComponent(idCtrl) + '&id_cliente=' + encodeURIComponent(idCli), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            var rows = (res && res.data) ? res.data : [];
+            // Con 0 o 1 suscripción no hay ambigüedad: se resuelve automáticamente.
+            if (rows.length < 2 && !idSeleccionada) {
+                wrap.style.display = 'none';
+                return;
+            }
+            var html = '<option value="">— Automático (si el cliente tiene una sola) —</option>';
+            rows.forEach(function(s) {
+                var monto = parseFloat(s.monto || 0).toFixed(2);
+                var txt = '#' + s.id + ' · ' + (s.periodicidad || 'sin periodicidad') +
+                          ' · $' + monto + ' · ' + (s.estado || '') +
+                          (s.proximo_cobro ? ' · próx. ' + s.proximo_cobro : '');
+                html += '<option value="' + s.id + '"' +
+                        (String(s.id) === String(idSeleccionada) ? ' selected' : '') + '>' +
+                        txt.replace(/</g, '&lt;') + '</option>';
+            });
+            sel.innerHTML = html;
+            wrap.style.display = '';
+        })
+        .catch(function() { wrap.style.display = 'none'; });
+    };
 
     // ── Documentos legales del sistema (acuerdo de datos + contrato de uso) ──
     function fmtFecha(s) {
@@ -1464,6 +1525,12 @@ function estadoPagoBadge($estado) {
                     return Promise.resolve({ error: 'Seleccione primero la empresa que controla las suscripciones.' });
                 }
                 return fetchJson(base + '/config/empresas-sistema?action=buscarClientes&q=' + encodeURIComponent(q) + '&id_empresa=' + encodeURIComponent(idEmp));
+            },
+            // Al cambiar el cliente facturado, recargar sus suscripciones.
+            function () {
+                if (p === 'edit' && typeof window.cargarSuscripcionesCliente === 'function') {
+                    window.cargarSuscripcionesCliente('');
+                }
             }
         );
     });
