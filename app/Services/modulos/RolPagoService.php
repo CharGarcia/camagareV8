@@ -252,6 +252,12 @@ class RolPagoService
                 if ($esMensual) {
                     $periodos = json_decode((string) ($emp['periodos_json'] ?? ''), true) ?: [];
                     $dias = self::diasTrabajadosMes($anio, $mes, $periodos);
+
+                    // Fondos de reserva "a partir del año": el motor de cálculo no conoce
+                    // el período del rol, así que aquí se resuelve si ya corresponde.
+                    if ((string) ($emp['fondos_reserva'] ?? '') === 'desde_anio') {
+                        $emp['fondos_reserva_aplica'] = self::cumplioAnioServicio($anio, $mes, $periodos);
+                    }
                 }
 
                 $calc = $this->calc->calcular($emp, $tipo, $salario, $rubrosF, $noveds, $neteo, $vacacion, $dias, $anticiposMap, $prestamosNoDesemb, $tramosIr, (float) ($rebajaGastoMap[$idEmp] ?? 0.0));
@@ -309,6 +315,49 @@ class RolPagoService
      *
      * @param array<int,array{i?:?string,s?:?string}> $periodos
      */
+    /**
+     * ¿El empleado ya completó su año de servicio a efectos de fondos de reserva
+     * en el rol de {anio}/{mes}?
+     *
+     * Los fondos de reserva se pagan a partir del decimotercer mes de trabajo. Para
+     * no pagar meses partidos, la regla aquí es: se paga desde el mes SIGUIENTE al
+     * aniversario, salvo que el aniversario caiga el día 1 (entonces ya en ese mes).
+     *
+     * La antigüedad se cuenta desde el último período de ingreso: si hubo salida y
+     * reingreso, el conteo empieza de nuevo.
+     *
+     * @param array $periodos [['i' => fecha_ingreso, 's' => fecha_salida], ...]
+     */
+    public static function cumplioAnioServicio(int $anio, int $mes, array $periodos): bool
+    {
+        // Ingreso vigente = el más reciente que no sea posterior al fin del mes.
+        $finMes = date('Y-m-t', mktime(0, 0, 0, $mes, 1, $anio));
+        $ingreso = null;
+        foreach ($periodos as $p) {
+            $i = substr((string) ($p['i'] ?? $p['fecha_ingreso'] ?? ''), 0, 10);
+            if ($i === '' || $i > $finMes) continue;
+            if ($ingreso === null || $i > $ingreso) {
+                $ingreso = $i;
+            }
+        }
+        if ($ingreso === null) {
+            return false; // sin fecha de ingreso no se puede afirmar la antigüedad
+        }
+
+        $aniversario = date('Y-m-d', strtotime($ingreso . ' +1 year'));
+
+        // Aniversario el día 1 → ese mismo mes ya cuenta completo.
+        if ((int) substr($aniversario, 8, 2) === 1) {
+            return $aniversario <= $finMes;
+        }
+
+        // En cualquier otro caso, desde el mes siguiente al aniversario.
+        $inicioMesRol = sprintf('%04d-%02d-01', $anio, $mes);
+        $inicioMesSiguienteAlAniversario = date('Y-m-01', strtotime(substr($aniversario, 0, 7) . '-01 +1 month'));
+
+        return $inicioMesRol >= $inicioMesSiguienteAlAniversario;
+    }
+
     public static function diasTrabajadosMes(int $anio, int $mes, array $periodos): int
     {
         if (empty($periodos)) return 30; // sin registros de períodos → mes completo

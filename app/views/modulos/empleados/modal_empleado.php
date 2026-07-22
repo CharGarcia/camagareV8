@@ -40,6 +40,75 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
 <style>
     /* Ancho del modal: un poco más angosto que modal-xl, pero suficiente para las pestañas */
     #modalEmpleado .modal-dialog { max-width: 1000px; }
+
+    /* Tooltip propio (amarillo). El `title` nativo no se puede colorear.
+       El texto se pasa en data-tip; se muestra al pasar el mouse sobre el ícono.
+       OJO: el contenedor debe ser un <span>, NO el <i> del ícono: Bootstrap Icons
+       dibuja su glifo con ::before y la punta del globo lo dejaría vacío. */
+    #modalEmpleado .cmg-tip { position: relative; cursor: help; display: inline-block; }
+    /* El ícono va en el mismo amarillo del globo, para que se note dentro de la etiqueta. */
+    #modalEmpleado .cmg-tip > i {
+        color: #997404;
+        background: #fff3cd;
+        border: 1px solid #ffda6a;
+        border-radius: 50%;
+        width: 1.05rem;
+        height: 1.05rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.68rem;
+        line-height: 1;
+        vertical-align: text-bottom;
+    }
+    #modalEmpleado .cmg-tip:hover > i { background: #ffe69c; }
+    #modalEmpleado .cmg-tip::after {
+        content: attr(data-tip);
+        position: absolute;
+        left: 0;
+        top: calc(100% + 8px);
+        z-index: 1090;
+        width: 265px;
+        white-space: normal;
+        text-align: left;
+        font-size: 0.72rem;
+        font-weight: 500;
+        font-style: normal;
+        line-height: 1.3;
+        letter-spacing: normal;
+        text-transform: none;
+        color: #664d03;
+        background: #fff3cd;
+        border: 1px solid #ffda6a;
+        border-left: 4px solid #ffc107;
+        border-radius: .375rem;
+        padding: .45rem .6rem;
+        box-shadow: 0 .3rem .75rem rgba(0, 0, 0, .18);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity .12s ease-in-out;
+        pointer-events: none;
+    }
+    /* Punta del globo */
+    #modalEmpleado .cmg-tip::before {
+        content: '';
+        position: absolute;
+        left: 6px;
+        top: calc(100% + 3px);
+        z-index: 1091;
+        border: 5px solid transparent;
+        border-bottom-color: #ffc107;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity .12s ease-in-out;
+        pointer-events: none;
+    }
+    #modalEmpleado .cmg-tip:hover::after,
+    #modalEmpleado .cmg-tip:hover::before { opacity: 1; visibility: visible; }
+
+    /* El ícono parpadea suavemente para llamar la atención. */
+    #modalEmpleado .cmg-tip-alerta > i { animation: cmgTipPulso 1.6s ease-in-out infinite; }
+    @keyframes cmgTipPulso { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
     /* Grilla estilo "detalle de factura" para Periodos y Rubros Fijos */
     #modalEmpleado .emp-grid th {
         font-size: 0.7rem !important;
@@ -219,10 +288,12 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                             <div class="row g-3">
                                 <!-- Fila 1: Fondos de Reserva · Décimo Tercero · Décimo Cuarto · Aporta al IESS -->
                                 <div class="col-md-3">
-                                    <label class="form-label mb-1 small fw-bold text-muted">Fondos de Reserva <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_fondos_reserva', 'fondos_reserva') ?></label>
-                                    <select class="form-select form-select-sm shadow-none" name="fondos_reserva" id="emp_fondos_reserva">
+                                    <label class="form-label mb-1 small fw-bold text-muted">Fondos de Reserva <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('empleados', 'emp_fondos_reserva', 'fondos_reserva') ?><span id="emp_fr_aviso" class="d-none"><i id="emp_fr_aviso_icono" class="bi"></i></span></label>
+                                    <select class="form-select form-select-sm shadow-none" name="fondos_reserva" id="emp_fondos_reserva"
+                                            onchange="window.frActualizarAviso && window.frActualizarAviso()">
                                         <option value="no_se_paga">No se paga</option>
                                         <option value="rol">En Rol Mensual</option>
+                                        <option value="desde_anio">Se paga a partir del año</option>
                                         <option value="planilla">Planilla IESS</option>
                                     </select>
                                 </div>

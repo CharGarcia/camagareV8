@@ -162,6 +162,19 @@ export async function obtenerFormasCobro() {
   return resp.data.data as FormaCobro[];
 }
 
+export type EstablecimientoIngreso = {
+  id_establecimiento: number;
+  establecimiento: string;
+  puntos_emision: { id_punto_emision: number; punto_emision: string }[];
+};
+
+/** Series (establecimiento-punto de emisión) disponibles para el Ingreso del cobro; no se
+ * limitan al establecimiento de la factura (el Ingreso es un documento propio). */
+export async function obtenerSeriesIngreso() {
+  const resp = await api.get('/facturas-venta/series-ingreso');
+  return resp.data.data as { establecimientos: EstablecimientoIngreso[]; id_punto_emision_favorito: number | null };
+}
+
 export type TipoOperacionBancaria = 'TRANSFERENCIA' | 'DEPOSITO' | 'DEBITO' | 'CHEQUE';
 
 export type CobroInput = {
@@ -169,6 +182,10 @@ export type CobroInput = {
   monto: number;
   id_forma_cobro: number;
   observaciones?: string;
+  /** Serie del ingreso; si se omite el servidor la resuelve solo (favorito o establecimiento de la factura). */
+  id_punto_emision?: number;
+  /** Fecha del ingreso (YYYY-MM-DD); por defecto hoy. */
+  fecha_emision?: string;
   /** Solo si la forma de cobro elegida es de tipo BANCO. */
   tipo_operacion_bancaria?: TipoOperacionBancaria;
   numero_referencia?: string;

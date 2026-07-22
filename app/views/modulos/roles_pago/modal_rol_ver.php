@@ -53,14 +53,14 @@
 
 <!-- Mini-modal: Generar egresos de nómina en lote -->
 <div class="modal fade" id="modalEgresoLote" tabindex="-1" aria-hidden="true" style="z-index:1075;">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content shadow-lg border-0">
             <div class="modal-header bg-light py-2">
                 <h6 class="modal-title fw-bold"><i class="bi bi-cash-coin me-2 text-success"></i>Generar egresos de nómina</h6>
                 <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">
-                <p class="small text-muted mb-3">Se generará <b>un egreso por empleado</b> con saldo pendiente en este rol, con el neto a pagar. Los ya pagados se omiten.</p>
+                <p class="small text-muted mb-2">Se generará <b>un egreso por cada empleado marcado</b>, con su neto pendiente. Los empleados ya pagados no aparecen en la lista.</p>
                 <div class="row g-2">
                     <div class="col-6">
                         <label class="form-label small fw-bold">Fecha de pago</label>
@@ -98,6 +98,36 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Selección de empleados a los que se generará el egreso -->
+                <div class="d-flex justify-content-between align-items-center mt-3 mb-1">
+                    <label class="form-label small fw-bold mb-0">Empleados a pagar</label>
+                    <div class="d-flex gap-1">
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" onclick="window.eglMarcarTodos(true)">Marcar todos</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" onclick="window.eglMarcarTodos(false)">Ninguno</button>
+                    </div>
+                </div>
+                <div class="border rounded-2" style="max-height:230px;overflow:auto;">
+                    <table class="table table-sm table-hover mb-0 align-middle" style="font-size:0.78rem;">
+                        <thead class="table-light" style="position:sticky;top:0;z-index:1;">
+                            <tr>
+                                <th style="width:34px;" class="text-center">
+                                    <input type="checkbox" class="form-check-input m-0" id="egl_chk_todos"
+                                           onchange="window.eglMarcarTodos(this.checked)" checked>
+                                </th>
+                                <th>Empleado</th>
+                                <th style="width:110px;" class="text-end">Neto</th>
+                                <th style="width:110px;" class="text-end">Saldo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="egl_empleados"></tbody>
+                    </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center bg-light border rounded-2 mt-1 px-2 py-1">
+                    <span class="small text-muted"><span id="egl_sel_conteo" class="fw-bold">0</span> empleado(s) seleccionado(s)</span>
+                    <span class="small">Total a pagar: <span id="egl_sel_total" class="fw-bold">0.00</span></span>
+                </div>
+
                 <div id="egl_msg" class="mt-2"></div>
             </div>
             <div class="modal-footer bg-light border-top p-2">

@@ -27,7 +27,8 @@ class RolEgresoLoteService
     }
 
     /**
-     * @param array $opts ['fecha'=>string, 'id_forma_pago'=>int, 'id_punto_emision'=>int]
+     * @param array $opts ['fecha'=>string, 'id_forma_pago'=>int, 'id_punto_emision'=>int,
+     *                     'ids_detalle'=>int[] líneas marcadas; vacío = todos los pendientes]
      * @return array{creados:int,total:float,omitidos:int,errores:array<int,array{empleado:string,error:string}>}
      */
     public function generar(int $idRol, int $idEmpresa, int $idUsuario, array $opts): array
@@ -83,12 +84,31 @@ class RolEgresoLoteService
         $secSvc  = new SecuencialService();
         $periodo = str_pad((string) $cab['periodo_mes'], 2, '0', STR_PAD_LEFT) . '/' . $cab['periodo_anio'];
 
-        $creados = 0; $total = 0.0; $omitidos = 0; $errores = [];
+        // Empleados marcados por el usuario. Si no viene ninguno se procesan todos
+        // los pendientes (comportamiento anterior). Se filtra contra el detalle real
+        // del rol, así que un id ajeno simplemente no coincide con ninguna línea.
+        $idsMarcados = array_values(array_unique(array_filter(
+            array_map('intval', (array) ($opts['ids_detalle'] ?? [])),
+            fn($v) => $v > 0
+        )));
+        $soloMarcados = !empty($idsMarcados);
+        if ($soloMarcados) {
+            $seleccion = array_flip($idsMarcados);
+            $coinciden = array_filter($detalle, fn($d) => isset($seleccion[(int) $d['id']]));
+            if (empty($coinciden)) {
+                throw new \Exception('Los empleados seleccionados no pertenecen a este rol.');
+            }
+        }
+
+        $creados = 0; $total = 0.0; $omitidos = 0; $noSeleccionados = 0; $errores = [];
 
         foreach ($detalle as $d) {
             $saldo = round((float) ($d['saldo'] ?? 0), 2);
             $nombre = (string) ($d['nombres_apellidos'] ?? ('#' . ($d['id_empleado'] ?? '')));
             if ($saldo <= 0.01) { $omitidos++; continue; } // ya pagado
+            if ($soloMarcados && !isset($seleccion[(int) $d['id']])) {
+                $noSeleccionados++; continue; // pendiente, pero el usuario no lo marcó
+            }
 
             try {
                 $sec = (int) ($secSvc->obtenerSiguienteSecuencial($idPunto, 'Egresos')['secuencial'] ?? 0);
@@ -137,9 +157,21 @@ class RolEgresoLoteService
             }
         }
 
-        $this->log->registrar($idUsuario, $idEmpresa, 'EGRESOS_LOTE', 'rol_cabecera', $idRol, null,
-            ['creados' => $creados, 'total' => round($total, 2), 'omitidos' => $omitidos, 'con_error' => count($errores)]);
+        $this->log->registrar($idUsuario, $idEmpresa, 'EGRESOS_LOTE', 'rol_cabecera', $idRol, null, [
+            'creados'          => $creados,
+            'total'            => round($total, 2),
+            'omitidos'         => $omitidos,
+            'no_seleccionados' => $noSeleccionados,
+            'seleccion'        => $soloMarcados ? $idsMarcados : 'todos',
+            'con_error'        => count($errores),
+        ]);
 
-        return ['creados' => $creados, 'total' => round($total, 2), 'omitidos' => $omitidos, 'errores' => $errores];
+        return [
+            'creados'          => $creados,
+            'total'            => round($total, 2),
+            'omitidos'         => $omitidos,
+            'no_seleccionados' => $noSeleccionados,
+            'errores'          => $errores,
+        ];
     }
 }

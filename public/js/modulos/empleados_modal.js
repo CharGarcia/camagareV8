@@ -44,6 +44,7 @@
         const tAsg = document.querySelector('#tablaAsignaciones tbody'); if (tAsg) tAsg.innerHTML = '';
         const tGp = document.querySelector('#tablaGastosPersonales tbody'); if (tGp) tGp.innerHTML = '';
         const asgJson = document.getElementById('asignaciones_horario_json'); if (asgJson) asgJson.value = '[]';
+        const frAviso = document.getElementById('emp_fr_aviso'); if (frAviso) { frAviso.className = 'd-none'; frAviso.removeAttribute('data-tip'); }
         cargarOpcionesHorario(); // refresca turnos/puntos (fire-and-forget; se re-consulta al agregar fila)
         if (alertElEmp) alertElEmp.classList.add('d-none');
 
@@ -161,6 +162,8 @@
                     tGp.innerHTML = '';
                     if (d.gastos_personales?.length) d.gastos_personales.forEach(g => window.agregarFilaGasto(g));
                 }
+
+                if (window.frActualizarAviso) window.frActualizarAviso();
             }
         } catch (e) {}
     };
@@ -324,12 +327,83 @@
         const row = document.createElement('tr');
         row.className = 'row-emp';
         row.innerHTML = `
-            <td class="ps-2"><input type="date" class="form-control form-control-sm input-emp dt-ingreso" value="${data.fecha_ingreso || ''}"></td>
-            <td><input type="date" class="form-control form-control-sm input-emp dt-salida" value="${data.fecha_salida || ''}"></td>
+            <td class="ps-2"><input type="date" class="form-control form-control-sm input-emp dt-ingreso" value="${data.fecha_ingreso || ''}" onchange="window.frActualizarAviso && window.frActualizarAviso()"></td>
+            <td><input type="date" class="form-control form-control-sm input-emp dt-salida" value="${data.fecha_salida || ''}" onchange="window.frActualizarAviso && window.frActualizarAviso()"></td>
             <td><input type="text" class="form-control form-control-sm input-emp dt-motivo" value="${data.motivo_salida || ''}" placeholder="Motivo de salida..."></td>
-            <td class="text-center"><button type="button" class="btn btn-sm p-1 border-0 remove-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
+            <td class="text-center"><button type="button" class="btn btn-sm p-1 border-0 remove-row" onclick="this.closest('tr').remove(); window.frActualizarAviso && window.frActualizarAviso();"><i class="bi bi-trash"></i></button></td>
         `;
         tbody.appendChild(row);
+        if (window.frActualizarAviso) window.frActualizarAviso();
+    };
+
+    // ------------------------------------------------------------------
+    // Fondos de reserva "a partir del año": avisa cuándo empieza a pagarse
+    // y cuando el empleado ya cumplió el año. El cambio es automático en el
+    // rol (RolPagoService::cumplioAnioServicio); esto solo lo hace visible.
+    // ------------------------------------------------------------------
+    const MESES_FR = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+    /** Fecha de ingreso vigente = la más reciente de la tabla de períodos. */
+    function frIngresoVigente() {
+        let max = '';
+        document.querySelectorAll('#tablaPeriodos tbody .dt-ingreso').forEach(i => {
+            const v = (i.value || '').substring(0, 10);
+            if (v && v > max) max = v;
+        });
+        return max || null;
+    }
+
+    /**
+     * Pinta el ícono del aviso. El detalle va en un tooltip amarillo propio
+     * (`.cmg-tip` + data-tip); el `title` nativo no se puede colorear.
+     * `alerta` hace parpadear el ícono cuando falta un dato.
+     */
+    function frMostrarAviso(icono, texto, alerta = false) {
+        const el = document.getElementById('emp_fr_aviso');
+        const ico = document.getElementById('emp_fr_aviso_icono');
+        if (!el || !ico) return;
+        el.className = 'ms-1 cmg-tip' + (alerta ? ' cmg-tip-alerta' : '');
+        el.setAttribute('data-tip', texto);
+        ico.className = `bi ${icono}`;
+    }
+
+    window.frActualizarAviso = function () {
+        const el = document.getElementById('emp_fr_aviso');
+        if (!el) return;
+
+        const ocultar = () => { el.className = 'd-none'; el.removeAttribute('data-tip'); };
+
+        const modo = document.getElementById('emp_fondos_reserva')?.value || '';
+        if (modo !== 'desde_anio') { ocultar(); return; }
+
+        const ingreso = frIngresoVigente();
+        if (!ingreso) {
+            frMostrarAviso('bi-exclamation-triangle-fill',
+                'Registre la fecha de ingreso en la pestaña Períodos: sin ella no se puede determinar cuándo empiezan a pagarse los fondos de reserva.',
+                true);
+            return;
+        }
+
+        // Aniversario = ingreso + 1 año. Se paga desde el mes siguiente, salvo
+        // que el aniversario caiga el día 1 (entonces ya en ese mismo mes).
+        const [a, m, d] = ingreso.split('-').map(Number);
+        const aniv = new Date(a + 1, m - 1, d);
+        const inicio = new Date(aniv.getFullYear(), aniv.getMonth() + (d === 1 ? 0 : 1), 1);
+
+        const fmt = f => `${String(f.getDate()).padStart(2, '0')}-${String(f.getMonth() + 1).padStart(2, '0')}-${f.getFullYear()}`;
+        const mesAnio = f => `${MESES_FR[f.getMonth()]} ${f.getFullYear()}`;
+
+        const hoy = new Date();
+        const yaEmpezo = new Date(hoy.getFullYear(), hoy.getMonth(), 1) >= inicio;
+
+        if (yaEmpezo) {
+            frMostrarAviso('bi-check-circle-fill',
+                `Ya cumplió el año (${fmt(aniv)}). Desde el rol de ${mesAnio(inicio)} se pagan los fondos de reserva en rol mensual.`);
+        } else {
+            frMostrarAviso('bi-clock-history',
+                `Cumple el año el ${fmt(aniv)}. Los fondos de reserva se empezarán a pagar en el rol de ${mesAnio(inicio)}.`);
+        }
     };
 
     window.agregarFilaRubro = function(data = {}) {

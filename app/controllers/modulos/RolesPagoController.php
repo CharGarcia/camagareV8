@@ -207,11 +207,35 @@ class RolesPagoController extends BaseModuloController
         $stC->execute([':e' => $idEmpresa]);
         $tieneConcepto = ((int) $stC->fetchColumn()) > 0;
 
-        // Empleados del rol que aún tienen saldo pendiente (para no permitir regenerar de más).
+        // Empleados del rol que aún tienen saldo pendiente: el usuario elige a
+        // cuáles generarles el egreso (los ya pagados no se listan).
         $idRol = (int) ($_GET['id_rol'] ?? 0);
-        $pendientes = $idRol > 0 ? (new RolPagoRepository())->contarLineasPendientesPago($idRol, $idEmpresa) : 0;
+        $empleados = [];
+        if ($idRol > 0) {
+            foreach ((new RolPagoRepository())->getDetalleCompleto($idRol, $idEmpresa) as $d) {
+                if (round((float) ($d['saldo'] ?? 0), 2) <= 0.01) {
+                    continue; // ya pagado
+                }
+                $empleados[] = [
+                    'id_detalle'        => (int) $d['id'],
+                    'nombres_apellidos' => (string) ($d['nombres_apellidos'] ?? ''),
+                    'identificacion'    => (string) ($d['identificacion'] ?? ''),
+                    'neto'              => round((float) $d['neto'], 2),
+                    'pagado'            => round((float) $d['pagado'], 2),
+                    'saldo'             => round((float) $d['saldo'], 2),
+                    'estado_pago'       => (string) $d['estado_pago'],
+                ];
+            }
+        }
 
-        echo json_encode(['ok' => true, 'formas' => $formas, 'puntos' => $puntos, 'tiene_concepto' => $tieneConcepto, 'pendientes' => $pendientes]);
+        echo json_encode([
+            'ok' => true,
+            'formas' => $formas,
+            'puntos' => $puntos,
+            'tiene_concepto' => $tieneConcepto,
+            'pendientes' => count($empleados),
+            'empleados' => $empleados,
+        ]);
         exit;
     }
 
@@ -231,6 +255,8 @@ class RolesPagoController extends BaseModuloController
                 'numero_cheque_inicial'    => (int) ($_POST['numero_cheque_inicial'] ?? 0),
                 // Fecha de cobro del cheque, aplica a todo el lote (control de posfechados)
                 'fecha_cobro'              => trim($_POST['fecha_cobro'] ?? ''),
+                // Empleados marcados por el usuario (líneas del rol). Vacío = todos los pendientes.
+                'ids_detalle'              => array_map('intval', (array) ($_POST['ids_detalle'] ?? [])),
             ];
             $svc = new \App\Services\modulos\RolEgresoLoteService(new LogSistemaService());
             $res = $svc->generar($idRol, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $opts);

@@ -189,11 +189,77 @@
             });
             if (!selP.options.length) { Swal.fire('Atención', 'No hay puntos de emisión configurados.', 'warning'); return; }
             if (!selF.options.length) { Swal.fire('Atención', 'No hay formas de pago para egresos configuradas.', 'warning'); return; }
+            eglPintarEmpleados(res.empleados || []);
             window.eglFormaChange();
             modalEgLote()?.show();
         } catch (e) {
             Swal.fire('Error de Red', 'No se pudo conectar con el servidor.', 'error');
         }
+    };
+
+    // ── Selección de empleados del lote ─────────────────────────────────────
+    // Se listan solo los que tienen saldo pendiente; arrancan todos marcados
+    // (es el caso habitual) y el usuario desmarca a quien no va a pagar ahora.
+    function eglPintarEmpleados(lista) {
+        const tb = $('egl_empleados');
+        if (!tb) return;
+        tb.innerHTML = '';
+
+        lista.forEach(e => {
+            const tr = document.createElement('tr');
+            tr.style.cursor = 'pointer';
+            tr.style.userSelect = 'none'; // evita seleccionar el texto al hacer clic repetido
+            tr.title = 'Clic para marcar o desmarcar';
+            // Marcar/desmarcar haciendo clic en cualquier parte de la fila. El clic
+            // sobre la casilla se deja pasar tal cual (si no, se alternaría dos veces).
+            tr.addEventListener('click', ev => {
+                if (ev.target.classList.contains('egl-chk')) return;
+                const chk = tr.querySelector('.egl-chk');
+                if (!chk) return;
+                chk.checked = !chk.checked;
+                window.eglActualizarSeleccion();
+            });
+
+            const parcial = e.estado_pago === 'parcial'
+                ? ` <span class="badge bg-warning bg-opacity-25 text-warning-emphasis border border-warning border-opacity-25">abonado ${money(e.pagado)}</span>`
+                : '';
+            tr.innerHTML =
+                `<td class="text-center"><input type="checkbox" class="form-check-input m-0 egl-chk"
+                     value="${e.id_detalle}" data-saldo="${e.saldo}" onchange="window.eglActualizarSeleccion()" checked></td>
+                 <td>${esc(e.nombres_apellidos)}${parcial}<div class="text-muted" style="font-size:0.7rem;">${esc(e.identificacion || '')}</div></td>
+                 <td class="text-end">${money(e.neto)}</td>
+                 <td class="text-end fw-bold">${money(e.saldo)}</td>`;
+            tb.appendChild(tr);
+        });
+
+        window.eglActualizarSeleccion();
+    }
+
+    window.eglMarcarTodos = function (marcar) {
+        document.querySelectorAll('#egl_empleados .egl-chk').forEach(c => { c.checked = !!marcar; });
+        window.eglActualizarSeleccion();
+    };
+
+    window.eglActualizarSeleccion = function () {
+        const chks = Array.from(document.querySelectorAll('#egl_empleados .egl-chk'));
+        const sel = chks.filter(c => c.checked);
+        const total = sel.reduce((s, c) => s + (parseFloat(c.dataset.saldo) || 0), 0);
+
+        // Resalta las filas marcadas para que la selección se vea de un vistazo.
+        chks.forEach(c => c.closest('tr')?.classList.toggle('table-active', c.checked));
+
+        if ($('egl_sel_conteo')) $('egl_sel_conteo').textContent = sel.length;
+        if ($('egl_sel_total')) $('egl_sel_total').textContent = money(total);
+
+        // Checkbox de la cabecera: marcado / vacío / indeterminado.
+        const todos = $('egl_chk_todos');
+        if (todos) {
+            todos.checked = sel.length > 0 && sel.length === chks.length;
+            todos.indeterminate = sel.length > 0 && sel.length < chks.length;
+        }
+
+        const btn = $('eglBtnConfirmar');
+        if (btn) btn.disabled = sel.length === 0;
     };
 
     // Muestra/oculta el bloque bancario según la forma de pago seleccionada.
@@ -214,6 +280,10 @@
         const btn = $('eglBtnConfirmar');
         const fecha = $('egl_fecha').value, idPunto = $('egl_punto').value, idForma = $('egl_forma').value;
         if (!fecha || !idPunto || !idForma) { Swal.fire('Requerido', 'Complete fecha, punto y forma de pago.', 'warning'); return; }
+
+        const marcados = Array.from(document.querySelectorAll('#egl_empleados .egl-chk:checked'));
+        if (!marcados.length) { Swal.fire('Requerido', 'Marque al menos un empleado.', 'warning'); return; }
+        const totalSel = marcados.reduce((s, c) => s + (parseFloat(c.dataset.saldo) || 0), 0);
         // Datos bancarios (si aplica).
         const esBanco = !$('egl_banco_wrap').classList.contains('d-none');
         let tipoOp = '', chequeIni = '', chequeFecha = '';
@@ -226,12 +296,17 @@
                 if (!chequeFecha) { Swal.fire('Requerido', 'Indique la fecha de cobro del cheque.', 'warning'); return; }
             }
         }
-        const conf = await Swal.fire({ icon: 'question', title: '¿Generar egresos?', text: 'Se creará un egreso por cada empleado con saldo pendiente.', showCancelButton: true, confirmButtonText: 'Sí, generar', cancelButtonText: 'Cancelar' });
+        const conf = await Swal.fire({
+            icon: 'question', title: '¿Generar egresos?',
+            html: `Se creará un egreso para <b>${marcados.length}</b> empleado(s) por un total de <b>${money(totalSel)}</b>.`,
+            showCancelButton: true, confirmButtonText: 'Sí, generar', cancelButtonText: 'Cancelar'
+        });
         if (!conf.isConfirmed) return;
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generando...';
         try {
             const fd = new FormData();
             fd.append('id_rol', rolActual.id); fd.append('fecha', fecha); fd.append('id_punto_emision', idPunto); fd.append('id_forma_pago', idForma);
+            marcados.forEach(c => fd.append('ids_detalle[]', c.value));
             if (esBanco) { fd.append('tipo_operacion_bancaria', tipoOp); if (tipoOp === 'CHEQUE') { fd.append('numero_cheque_inicial', chequeIni); fd.append('fecha_cobro', chequeFecha); } }
             const resp = await fetch(`${urlModulo}/generarEgresosLoteAjax`, { method: 'POST', body: fd });
             const res = await resp.json();
@@ -240,6 +315,7 @@
                 modalEgLote()?.hide();
                 let html = `<div class="small text-start">Se generaron <b>${res.creados}</b> egreso(s) por <b>${money(res.total || 0)}</b>.`;
                 if (res.omitidos) html += ` ${res.omitidos} ya estaban pagados.`;
+                if (res.no_seleccionados) html += ` ${res.no_seleccionados} quedaron pendientes por no estar marcados.`;
                 if (res.errores && res.errores.length) {
                     html += `<div class="alert alert-warning mt-2 mb-0 py-1 px-2"><b>${res.errores.length} con error:</b><ul class="mb-0 mt-1">` +
                         res.errores.map(e => `<li>${esc(e.empleado)}: ${esc(e.error)}</li>`).join('') + `</ul></div>`;
@@ -252,7 +328,8 @@
         } catch (e) {
             Swal.fire('Error de Red', 'No se pudo conectar con el servidor.', 'error');
         }
-        btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Generar egresos';
+        btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Generar egresos';
+        window.eglActualizarSeleccion(); // rehabilita el botón solo si sigue habiendo marcados
     };
 
     window.rolEliminarModal = async function () {

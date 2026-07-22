@@ -689,6 +689,56 @@ class FacturasVentaController extends ApiBaseController
     }
 
     /**
+     * GET /api/v1/facturas-venta/series-ingreso
+     * Series (establecimiento-punto de emisión) disponibles para el Ingreso que
+     * se genera al registrar un cobro. A diferencia de la serie de la factura, no
+     * se limita al establecimiento de la factura: el Ingreso es un documento propio
+     * y en la web su punto de emisión se elige libre desde cualquier establecimiento.
+     * Por defecto se preselecciona el favorito del usuario en el módulo Ingresos
+     * (misma estrellita que en /modulos/ingresos); si no tiene, el cliente cae a la
+     * primera opción disponible.
+     */
+    public function seriesIngreso(): void
+    {
+        $this->requireLeer();
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $empresaModel = new Empresa();
+        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+
+        $resultado = [];
+        foreach ($establecimientos as $est) {
+            $idEst = (int) $est['id'];
+            $puntos = $empresaModel->getPuntosEmision($idEst);
+            $resultado[] = [
+                'id_establecimiento' => $idEst,
+                'establecimiento' => $est['codigo'],
+                'puntos_emision' => array_map(static function (array $p): array {
+                    return [
+                        'id_punto_emision' => (int) $p['id'],
+                        'punto_emision' => $p['codigo_punto'],
+                    ];
+                }, $puntos),
+            ];
+        }
+
+        $idPuntoFavorito = null;
+        try {
+            $prefService = new \App\Services\UsuarioPreferenciaService(new \App\repositories\UsuarioPreferenciaRepository());
+            $prefs = $prefService->obtenerPreferencias($idUsuario, $idEmpresa, 'ingresos');
+            $idPuntoFavorito = isset($prefs['id_punto_emision']) ? (int) $prefs['id_punto_emision'] : null;
+        } catch (Throwable $e) {
+            // Sin favorito configurado o error leyéndolo: el cliente cae al primero disponible.
+        }
+
+        $this->jsonOk([
+            'establecimientos' => $resultado,
+            'id_punto_emision_favorito' => $idPuntoFavorito,
+        ]);
+    }
+
+    /**
      * GET /api/v1/facturas-venta/formas-cobro
      * Catálogo para el formulario de "Cobrar" (mismo filtro que usa la web en
      * getIngresosCatalogosAjax: activas y aplicables a Ingresos).
@@ -714,13 +764,15 @@ class FacturasVentaController extends ApiBaseController
      * POST /api/v1/facturas-venta/cobrar
      * body: {
      *   id_factura, monto, id_forma_cobro, observaciones?,
+     *   id_punto_emision? (serie del ingreso; si se omite se resuelve solo:
+     *     favorito del módulo 'ingresos' o primer punto activo del establecimiento
+     *     de la factura), fecha_emision? (YYYY-MM-DD; por defecto hoy),
      *   // Solo si la forma de cobro es tipo BANCO:
      *   tipo_operacion_bancaria? ('TRANSFERENCIA'|'DEPOSITO'|'DEBITO'|'CHEQUE'),
      *   numero_referencia?, fecha_cobro? (obligatoria si tipo_operacion_bancaria='CHEQUE')
      * }
      * Solo si la factura está 'autorizado' y tiene saldo pendiente > 0. Crea un
-     * ingreso real (mismo IngresoService::crear() que el "cobro rápido" web),
-     * con el punto de emisión de Ingresos resuelto automáticamente.
+     * ingreso real (mismo IngresoService::crear() que el "cobro rápido" web).
      */
     public function cobrar(): void
     {
@@ -790,26 +842,75 @@ class FacturasVentaController extends ApiBaseController
             }
         }
 
-        // Punto de emisión de Ingresos: se resuelve solo (el primero activo del
-        // mismo establecimiento de la factura) — es un detalle técnico, no algo
-        // que el usuario deba elegir para un cobro rápido desde el celular.
-        $idEstablecimiento = (int) $factura['id_establecimiento'];
-        $stPunto = $db->prepare(
-            "SELECT p.id, e.codigo AS establecimiento, p.codigo_punto AS punto_emision
-             FROM empresa_punto_emision p
-             JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
-             WHERE p.id_establecimiento = ? AND p.id_empresa = ? AND p.eliminado = false AND LOWER(p.estado) = 'activo'
-             ORDER BY p.codigo_punto ASC
-             LIMIT 1"
-        );
-        $stPunto->execute([$idEstablecimiento, $idEmpresa]);
-        $punto = $stPunto->fetch(PDO::FETCH_ASSOC);
+        // Punto de emisión de Ingresos: el usuario lo elige en la app (selector de
+        // "Serie" en el formulario de cobro, igual que el que ya existe para la
+        // factura); si no manda nada, se resuelve solo con el mismo criterio que
+        // antes: favorito real del módulo Ingresos (estrellita 'id_punto_emision',
+        // clave de módulo 'ingresos', ver PreferenciasHelper en
+        // app/views/modulos/ingresos/index.php) y, si tampoco hay favorito, el
+        // primer punto activo del mismo establecimiento de la factura.
+        $punto = null;
+        $idPuntoElegido = (int) ($body['id_punto_emision'] ?? 0);
+        if ($idPuntoElegido > 0) {
+            $stElegido = $db->prepare(
+                "SELECT p.id, p.id_establecimiento, e.codigo AS establecimiento, p.codigo_punto AS punto_emision
+                 FROM empresa_punto_emision p
+                 JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+                 WHERE p.id = ? AND p.id_empresa = ? AND p.eliminado = false AND LOWER(p.estado) = 'activo'"
+            );
+            $stElegido->execute([$idPuntoElegido, $idEmpresa]);
+            $punto = $stElegido->fetch(PDO::FETCH_ASSOC) ?: null;
+            if (!$punto) {
+                $this->jsonError('SERIE_INVALIDA', 'La serie seleccionada para el ingreso ya no está disponible.', 422);
+            }
+        }
+
+        if (!$punto) {
+            try {
+                $prefService = new \App\Services\UsuarioPreferenciaService(new \App\repositories\UsuarioPreferenciaRepository());
+                $prefs = $prefService->obtenerPreferencias($idUsuario, $idEmpresa, 'ingresos');
+                $idPuntoFavorito = isset($prefs['id_punto_emision']) ? (int) $prefs['id_punto_emision'] : 0;
+                if ($idPuntoFavorito > 0) {
+                    $stFav = $db->prepare(
+                        "SELECT p.id, p.id_establecimiento, e.codigo AS establecimiento, p.codigo_punto AS punto_emision
+                         FROM empresa_punto_emision p
+                         JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+                         WHERE p.id = ? AND p.id_empresa = ? AND p.eliminado = false AND LOWER(p.estado) = 'activo'"
+                    );
+                    $stFav->execute([$idPuntoFavorito, $idEmpresa]);
+                    $punto = $stFav->fetch(PDO::FETCH_ASSOC) ?: null;
+                }
+            } catch (Throwable $e) {
+                // Sin favorito configurado o error leyéndolo: se sigue con el fallback.
+            }
+        }
+
+        if (!$punto) {
+            $stPunto = $db->prepare(
+                "SELECT p.id, p.id_establecimiento, e.codigo AS establecimiento, p.codigo_punto AS punto_emision
+                 FROM empresa_punto_emision p
+                 JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+                 WHERE p.id_establecimiento = ? AND p.id_empresa = ? AND p.eliminado = false AND LOWER(p.estado) = 'activo'
+                 ORDER BY p.codigo_punto ASC
+                 LIMIT 1"
+            );
+            $stPunto->execute([(int) $factura['id_establecimiento'], $idEmpresa]);
+            $punto = $stPunto->fetch(PDO::FETCH_ASSOC);
+        }
+
         if (!$punto) {
             $this->jsonError('SIN_PUNTO_EMISION', 'No hay un punto de emisión activo para registrar el cobro.', 422);
         }
 
         $secRes = (new SecuencialService())->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos');
         $numDoc = $factura['establecimiento'] . '-' . $factura['punto_emision'] . '-' . $factura['secuencial'];
+
+        // Fecha del ingreso: la web siempre la pide (campo "Fecha", precargado con
+        // hoy pero editable) — aquí es opcional y por defecto es hoy.
+        $fechaEmisionIngreso = trim((string) ($body['fecha_emision'] ?? ''));
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaEmisionIngreso)) {
+            $fechaEmisionIngreso = date('Y-m-d');
+        }
 
         // saldo_anterior aquí es el que espera IngresoRules (solo resta cobros ya
         // registrados, igual que registrarCobroRapidoAjax en la web) — no el
@@ -818,11 +919,11 @@ class FacturasVentaController extends ApiBaseController
         // que un monto válido contra el completo también lo es contra este.
         $payload = [
             'id_empresa' => $idEmpresa,
-            'id_establecimiento' => $idEstablecimiento,
+            'id_establecimiento' => (int) $punto['id_establecimiento'],
             'id_punto_emision' => (int) $punto['id'],
             'id_cliente' => (int) $factura['id_cliente'],
             'id_usuario' => $idUsuario,
-            'fecha_emision' => date('Y-m-d'),
+            'fecha_emision' => $fechaEmisionIngreso,
             'establecimiento' => $punto['establecimiento'],
             'punto_emision' => $punto['punto_emision'],
             'secuencial' => $secRes['formateado'],

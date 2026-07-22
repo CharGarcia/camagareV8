@@ -43,7 +43,7 @@ class EmpleadoRules
             throw new Exception('El tipo de cuenta no es válido.');
         }
 
-        if (!empty($data['fondos_reserva']) && !in_array($data['fondos_reserva'], ['rol', 'planilla', 'no_se_paga'])) {
+        if (!empty($data['fondos_reserva']) && !in_array($data['fondos_reserva'], ['rol', 'desde_anio', 'planilla', 'no_se_paga'])) {
             throw new Exception('Opción de fondos de reserva no válida.');
         }
 

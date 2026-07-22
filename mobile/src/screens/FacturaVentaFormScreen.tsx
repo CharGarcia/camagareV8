@@ -13,6 +13,7 @@ import {
   descargarPdfFactura,
   enviarFacturaSri,
   EstablecimientoFactura,
+  EstablecimientoIngreso,
   FacturaCabecera,
   FacturaDetalleLinea,
   FacturaPago,
@@ -23,6 +24,7 @@ import {
   obtenerFormasCobro,
   obtenerSecuencial,
   obtenerSeries,
+  obtenerSeriesIngreso,
   registrarCobro,
   TipoOperacionBancaria,
   TotalPorTarifa,
@@ -99,6 +101,13 @@ export default function FacturaVentaFormScreen() {
   const [idFormaCobro, setIdFormaCobro] = useState<number | null>(null);
   const [observacionesCobro, setObservacionesCobro] = useState('');
   const [cobrando, setCobrando] = useState(false);
+  // Serie (establecimiento-punto) e fecha del Ingreso que se genera con el cobro —
+  // igual que en la web (selects "Serie"/"Fecha" del cobro rápido); por defecto la
+  // favorita del módulo Ingresos (o la primera) y hoy, pero el usuario puede cambiarlas.
+  const [establecimientosIngreso, setEstablecimientosIngreso] = useState<EstablecimientoIngreso[]>([]);
+  const [idPuntoEmisionCobro, setIdPuntoEmisionCobro] = useState<number | null>(null);
+  const [fechaEmisionCobro, setFechaEmisionCobro] = useState<Date>(() => new Date());
+  const [cargandoSeriesCobro, setCargandoSeriesCobro] = useState(false);
   // Solo aplican si la forma de cobro elegida es tipo BANCO (igual que el div
   // condicional "fvPagoDivBanco" de la web).
   const [tipoOperacionBancaria, setTipoOperacionBancaria] = useState<TipoOperacionBancaria | null>(null);
@@ -204,6 +213,14 @@ export default function FacturaVentaFormScreen() {
       }))
     );
   }
+
+  function aSerieOpcionesIngreso(seriesDisponibles: EstablecimientoIngreso[]) {
+    return seriesDisponibles.flatMap((e) =>
+      e.puntos_emision.map((p) => ({ id: p.id_punto_emision, label: `${e.establecimiento}-${p.punto_emision}` }))
+    );
+  }
+
+  const serieCobroOpciones = aSerieOpcionesIngreso(establecimientosIngreso);
 
   async function onSerieChange(
     idPunto: number | null,
@@ -480,11 +497,28 @@ export default function FacturaVentaFormScreen() {
   async function abrirFormCobro() {
     setMostrarFormCobro(true);
     setMontoCobro(saldoPendiente.toFixed(2));
+    setFechaEmisionCobro(new Date());
     if (formasCobro.length === 0) {
       try {
         setFormasCobro(await obtenerFormasCobro());
       } catch (err) {
         setError(mensajeError(err, 'No se pudieron cargar las formas de cobro.'));
+      }
+    }
+    if (establecimientosIngreso.length === 0) {
+      setCargandoSeriesCobro(true);
+      try {
+        const { establecimientos: series, id_punto_emision_favorito } = await obtenerSeriesIngreso();
+        setEstablecimientosIngreso(series);
+        const opciones = aSerieOpcionesIngreso(series);
+        if (opciones.length > 0) {
+          const favorita = opciones.find((o) => o.id === id_punto_emision_favorito);
+          setIdPuntoEmisionCobro((favorita ?? opciones[0]).id);
+        }
+      } catch (err) {
+        setError(mensajeError(err, 'No se pudo cargar la serie para el cobro.'));
+      } finally {
+        setCargandoSeriesCobro(false);
       }
     }
   }
@@ -516,6 +550,10 @@ export default function FacturaVentaFormScreen() {
       Alert.alert('Falta la forma de cobro', 'Selecciona cómo se recibió el pago.');
       return;
     }
+    if (!idPuntoEmisionCobro) {
+      Alert.alert('Falta la serie', 'Selecciona la serie con la que se registrará el ingreso.');
+      return;
+    }
     if (esFormaCobroBanco && !tipoOperacionBancaria) {
       Alert.alert('Falta la operación bancaria', 'Selecciona si fue transferencia, depósito, débito o cheque.');
       return;
@@ -532,6 +570,8 @@ export default function FacturaVentaFormScreen() {
         id_factura: id,
         monto,
         id_forma_cobro: idFormaCobro,
+        id_punto_emision: idPuntoEmisionCobro,
+        fecha_emision: fechaLocalISO(fechaEmisionCobro),
         observaciones: observacionesCobro.trim() || undefined,
         tipo_operacion_bancaria: esFormaCobroBanco ? tipoOperacionBancaria ?? undefined : undefined,
         numero_referencia: esFormaCobroBanco ? numeroReferenciaCobro.trim() || undefined : undefined,
@@ -649,6 +689,23 @@ export default function FacturaVentaFormScreen() {
         {puedeCobrar && mostrarFormCobro ? (
           <View style={styles.formCobroBox}>
             <Text style={styles.tituloBloque}>Registrar cobro</Text>
+
+            {cargandoSeriesCobro ? (
+              <ActivityIndicator color="#0d6efd" style={{ marginTop: 12 }} />
+            ) : (
+              <View style={{ marginTop: 12 }}>
+                <SelectorLista<number>
+                  label="Serie"
+                  value={idPuntoEmisionCobro}
+                  opciones={serieCobroOpciones}
+                  onChange={setIdPuntoEmisionCobro}
+                />
+              </View>
+            )}
+
+            <View style={{ marginTop: 12 }}>
+              <SelectorFechaHora label="Fecha" mode="date" value={fechaEmisionCobro} onChange={(d) => d && setFechaEmisionCobro(d)} permiteQuitar={false} />
+            </View>
 
             <Text style={styles.label}>Monto</Text>
             <TextInput style={styles.input} value={montoCobro} onChangeText={setMontoCobro} keyboardType="decimal-pad" />

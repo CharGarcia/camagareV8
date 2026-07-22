@@ -153,8 +153,15 @@ class RolCalculoService
         // 4) Beneficios (solo MENSUAL)
         $aportePatronal = 0.0;
         if ($esMensual) {
-            // Fondos de reserva (proporcional a días trabajados)
-            if (($emp['fondos_reserva'] ?? '') === 'rol' && $sueldoBase > 0) {
+            // Fondos de reserva (proporcional a días trabajados).
+            // 'desde_anio' = se paga solo una vez cumplido el año de servicio; quien
+            // resuelve si ya corresponde en este período es RolPagoService, que sí
+            // conoce el mes del rol y los períodos del empleado (fondos_reserva_aplica).
+            $modoFR = (string) ($emp['fondos_reserva'] ?? '');
+            $pagaFR = $modoFR === 'rol'
+                || ($modoFR === 'desde_anio' && $this->esVerdadero($emp['fondos_reserva_aplica'] ?? false));
+
+            if ($pagaFR && $sueldoBase > 0) {
                 $pctFR = (float) ($salario['fondo_reserva'] ?? 8.33);
                 $fr = round($sueldoBase * $factor * $pctFR / 100, 2);
                 $rubros[] = $this->r('ingreso', 'Fondos de Reserva', null, 'fondos', $fr, false);
