@@ -99,6 +99,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         onclick="CP.exportarPdf()" title="Exportar PDF">
                         <i class="bi bi-file-earmark-pdf"></i>
                     </button>
+                    <button id="cp-btn-correo" type="button" class="btn btn-outline-info btn-sm px-2 d-none"
+                        onclick="CP.enviarCorreo()" title="Enviar por correo">
+                        <i class="bi bi-envelope"></i>
+                    </button>
                     <?php if (!empty($perm['actualizar'])): ?>
                     <div class="vr mx-1" id="cp-vr2"></div>
                     <button id="cp-btn-aprobar" type="button" class="btn btn-outline-success btn-sm px-2 d-none"

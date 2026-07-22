@@ -63,6 +63,7 @@
         show('cp-btn-version', perm().crear && guardada);
         show('cp-vr1',         perm().crear && guardada);
         show('cp-btn-pdf',     guardada);
+        show('cp-btn-correo',  guardada);
         show('cp-vr2',         perm().actualizar && guardada);
         show('cp-btn-aprobar',  perm().actualizar && estado === 'borrador');
         show('cp-btn-rechazar', perm().actualizar && estado === 'aprobada');
@@ -107,7 +108,7 @@
         badge.className = 'badge d-none';
         badge.textContent = '';
 
-        ['cp-btn-factura', 'cp-btn-version', 'cp-vr1', 'cp-btn-pdf', 'cp-vr2',
+        ['cp-btn-factura', 'cp-btn-version', 'cp-vr1', 'cp-btn-pdf', 'cp-btn-correo', 'cp-vr2',
          'cp-btn-aprobar', 'cp-btn-rechazar', 'cp-btn-anular',
          'cp_btnEliminar', 'cp_btnGuardar'].forEach(id => {
             const el = $id(id); if (el) el.classList.add('d-none');
@@ -1210,6 +1211,44 @@
             window.open(`${urlBase()}/exportarPdfAjax?id=${id}`, '_blank');
         },
 
+        async enviarCorreo() {
+            const id = $id('cp_id').value;
+            if (!id) return;
+
+            const { value: correos, isConfirmed } = await Swal.fire({
+                title: 'Enviar por correo',
+                input: 'text',
+                inputLabel: 'Correo(s) destino, separados por coma. Déjelo vacío para usar el correo del cliente.',
+                inputPlaceholder: 'cliente@correo.com',
+                target: $id('modalCotizacionPublicidad'),
+                showCancelButton: true,
+                confirmButtonText: '<i class="bi bi-envelope me-1"></i> Enviar',
+                cancelButtonText: 'Cancelar',
+            });
+            if (!isConfirmed) return;
+
+            Swal.fire({
+                title: 'Enviando correo...',
+                allowOutsideClick: false,
+                target: $id('modalCotizacionPublicidad'),
+                didOpen: () => Swal.showLoading(),
+            });
+            try {
+                const fd = new FormData();
+                fd.append('id', id);
+                fd.append('correos', correos || '');
+                const data = await (await fetch(`${urlBase()}/enviarCorreoAjax`, { method: 'POST', body: fd })).json();
+                if (data.ok) {
+                    Swal.fire({ icon: 'success', title: 'Enviado', text: data.mensaje || 'Correo enviado correctamente.' });
+                } else {
+                    Swal.fire({ icon: 'error', title: 'Error', text: data.mensaje || 'No se pudo enviar el correo.' });
+                }
+            } catch (e) {
+                console.error(e);
+                Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo enviar el correo.' });
+            }
+        },
+
         /* ── Generar Factura (modal exclusivo) ────────────────── */
         async abrirGenerarFactura() {
             const id = $id('cp_id').value;
@@ -1456,6 +1495,44 @@
                 toast('Categoría eliminada');
             } catch (e) { console.error(e); toast('Error de conexión', 'error'); }
         },
+
+        editarCategoriaInline(id) {
+            const row = document.querySelector(`#cp_listaCategorias [data-id-categoria="${id}"]`);
+            if (!row) return;
+            row.querySelector('.cat-nombre-texto').classList.add('d-none');
+            row.querySelector('.cat-btn-editar')?.classList.add('d-none');
+            row.querySelector('.cat-btn-eliminar')?.classList.add('d-none');
+            row.querySelector('.cat-nombre-input').classList.remove('d-none');
+            row.querySelector('.cat-btn-guardar').classList.remove('d-none');
+            row.querySelector('.cat-btn-cancelar').classList.remove('d-none');
+            const inp = row.querySelector('.cat-nombre-input');
+            inp.focus();
+            inp.select();
+        },
+
+        cancelarEdicionCategoria() {
+            _renderCategorias();
+        },
+
+        async guardarCategoriaInline(id) {
+            const row = document.querySelector(`#cp_listaCategorias [data-id-categoria="${id}"]`);
+            if (!row) return;
+            const nombre = row.querySelector('.cat-nombre-input').value.trim();
+            if (!nombre) { toast('Ingrese el nombre de la categoría', 'error'); return; }
+            try {
+                const fd = new FormData();
+                fd.append('id', id);
+                fd.append('nombre', nombre);
+                const data = await (await fetch(`${urlBase()}/actualizarCategoriaAjax`, { method: 'POST', body: fd })).json();
+                if (!data.ok) { toast(data.error || 'No se pudo actualizar', 'error'); return; }
+                const cat = (CFG().categorias || []).find(c => parseInt(c.id) === parseInt(id));
+                if (cat) cat.nombre = nombre;
+                (CFG().categorias || []).sort((a, b) => a.nombre.localeCompare(b.nombre));
+                _renderCategorias();
+                _refrescarSelectsCategoria();
+                toast('Categoría actualizada');
+            } catch (e) { console.error(e); toast('Error de conexión', 'error'); }
+        },
     };
 
     function _renderCategorias() {
@@ -1467,11 +1544,16 @@
             return;
         }
         cont.innerHTML = lista.map(c => `
-            <div class="list-group-item d-flex justify-content-between align-items-center py-1 px-2">
-                <span class="small">${_esc(c.nombre)}</span>
-                ${perm().eliminar ? `<button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="CP.eliminarCategoria(${c.id})" title="Eliminar">
-                    <i class="bi bi-trash3"></i>
-                </button>` : ''}
+            <div class="list-group-item d-flex justify-content-between align-items-center py-1 px-2" data-id-categoria="${c.id}">
+                <span class="small cat-nombre-texto flex-grow-1">${_esc(c.nombre)}</span>
+                <input type="text" class="form-control form-control-sm cat-nombre-input d-none flex-grow-1" value="${_esc(c.nombre)}"
+                    onkeydown="if(event.key==='Enter'){CP.guardarCategoriaInline(${c.id});} else if(event.key==='Escape'){CP.cancelarEdicionCategoria();}">
+                <div class="d-flex align-items-center gap-1 ms-2 flex-shrink-0">
+                    ${perm().actualizar ? `<button type="button" class="btn btn-link btn-sm p-0 text-primary shadow-none border-0 cat-btn-editar" onclick="CP.editarCategoriaInline(${c.id})" title="Renombrar"><i class="bi bi-pencil"></i></button>` : ''}
+                    <button type="button" class="btn btn-link btn-sm p-0 text-success shadow-none border-0 cat-btn-guardar d-none" onclick="CP.guardarCategoriaInline(${c.id})" title="Guardar"><i class="bi bi-check-lg"></i></button>
+                    <button type="button" class="btn btn-link btn-sm p-0 text-muted shadow-none border-0 cat-btn-cancelar d-none" onclick="CP.cancelarEdicionCategoria()" title="Cancelar"><i class="bi bi-x-lg"></i></button>
+                    ${perm().eliminar ? `<button type="button" class="btn btn-link btn-sm p-0 text-danger shadow-none border-0 cat-btn-eliminar" onclick="CP.eliminarCategoria(${c.id})" title="Eliminar"><i class="bi bi-trash3"></i></button>` : ''}
+                </div>
             </div>`).join('');
     }
 

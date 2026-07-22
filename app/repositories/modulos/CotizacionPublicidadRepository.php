@@ -410,6 +410,27 @@ class CotizacionPublicidadRepository extends BaseRepository
         return (int) $this->query($sql, [$idEmpresa, $nombre, $idUsuario, $idUsuario])->fetchColumn();
     }
 
+    public function actualizarCategoria(int $id, int $idEmpresa, string $nombre, int $idUsuario): bool
+    {
+        $sql = "UPDATE cotizacion_publicidad_categorias
+                SET nombre = ?, updated_by = ?, updated_at = NOW()
+                WHERE id = ? AND id_empresa = ? AND eliminado = false";
+        $st = $this->query($sql, [$nombre, $idUsuario, $id, $idEmpresa]);
+        return $st->rowCount() > 0;
+    }
+
+    /**
+     * True si la categoría está referenciada en al menos una línea de una
+     * cotización no eliminada (bloquea el borrado para no dejar líneas huérfanas).
+     */
+    public function categoriaEnUso(int $idCategoria): bool
+    {
+        $sql = "SELECT COUNT(*) FROM cotizacion_publicidad_detalle d
+                INNER JOIN cotizacion_publicidad_cabecera c ON d.id_cotizacion = c.id
+                WHERE d.id_categoria = ? AND c.eliminado = false";
+        return (int) $this->query($sql, [$idCategoria])->fetchColumn() > 0;
+    }
+
     public function eliminarCategoria(int $id, int $idEmpresa, int $idUsuario): bool
     {
         $sql = "UPDATE cotizacion_publicidad_categorias

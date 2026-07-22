@@ -175,11 +175,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     </a>
                                 </li>
                             <?php endif; ?>
-                            <li class="nav-item" role="presentation">
-                                <a class="nav-link py-2 small" id="tab-info-btn" data-bs-toggle="tab" href="#pane-info" role="tab">
-                                    <i class="bi bi-info-circle me-1"></i> Información
-                                </a>
-                            </li>
                         </ul>
                     </div>
                     <div class="border-bottom mx-3 mb-3"></div>
@@ -197,50 +192,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <option value="1">Activo</option>
                                         <option value="0">Inactivo</option>
                                     </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="tab-pane fade" id="pane-info" role="tabpanel">
-                            <div class="card bg-light border-0 mb-3">
-                                <div class="card-body p-3 py-2">
-                                    <div class="d-flex align-items-center">
-                                        <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-2 me-3">
-                                            <i class="bi bi-box-seam fs-5"></i>
-                                        </div>
-                                        <div>
-                                            <span class="text-muted d-block small" style="font-size: 0.7rem">Productos Almacenados</span>
-                                            <span class="small fw-bold text-dark" id="info_productos_count">0 productos</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Tarjeta de Permisos -->
-                            <div class="col-12 px-3">
-                                <div class="p-2 border rounded-3 bg-white shadow-sm mt-0 mb-3 mx-3">
-                                    <div class="small fw-bold text-muted mb-2 d-flex align-items-center" style="font-size: 0.7rem;">
-                                        <i class="bi bi-key-fill text-warning me-2"></i> MIS PERMISOS EN ESTE MÓDULO
-                                    </div>
-                                    <div class="d-flex flex-wrap gap-2">
-                                        <span class="badge bg-<?= $perm['ver'] ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= $perm['ver'] ? 'success' : 'secondary' ?> border border-<?= $perm['ver'] ? 'success' : 'secondary' ?> border-opacity-25" style="font-size: 0.65rem;">VER</span>
-                                        <span class="badge bg-<?= $perm['crear'] ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= $perm['crear'] ? 'success' : 'secondary' ?> border border-<?= $perm['crear'] ? 'success' : 'secondary' ?> border-opacity-25" style="font-size: 0.65rem;">CREAR</span>
-                                        <span class="badge bg-<?= $perm['actualizar'] ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= $perm['actualizar'] ? 'success' : 'secondary' ?> border border-<?= $perm['actualizar'] ? 'success' : 'secondary' ?> border-opacity-25" style="font-size: 0.65rem;">MODIFICAR</span>
-                                        <span class="badge bg-<?= $perm['eliminar'] ? 'success' : 'secondary text-opacity-50' ?> bg-opacity-10 text-<?= $perm['eliminar'] ? 'success' : 'secondary' ?> border border-<?= $perm['eliminar'] ? 'success' : 'secondary' ?> border-opacity-25" style="font-size: 0.65rem;">ELIMINAR</span>
-                                        <?php if ($perm['todo']): ?>
-                                            <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" style="font-size: 0.65rem;">ACCESO TOTAL</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="bg-light rounded-3 p-3 border mb-3 mx-3">
-                                <h6 class="text-primary mb-3 small fw-bold"><i class="bi bi-clock-history me-2"></i>Historial de Cambios</h6>
-                                <div id="auditoriaTimelineBodega" class="position-relative mt-2" style="max-height: 250px; overflow-y: auto; padding-right: 5px;">
-                                    <div class="text-center py-4 text-muted small">
-                                        <div class="spinner-border spinner-border-sm mb-2" role="status"></div>
-                                        <div class="d-block">Cargando historial...</div>
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -406,7 +357,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 bootstrap.Tab.getInstance(document.getElementById('tab-general-btn'))?.show() || new bootstrap.Tab(document.getElementById('tab-general-btn')).show();
             }
             resetearInfoExtra();
-            document.getElementById('tab-info-btn').classList.add('disabled');
 
             const mo = document.getElementById('modalAlert');
             if (mo) mo.classList.add('d-none');
@@ -432,8 +382,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if (typeof bootstrap !== 'undefined') {
                 bootstrap.Tab.getInstance(document.getElementById('tab-general-btn'))?.show() || new bootstrap.Tab(document.getElementById('tab-general-btn')).show();
             }
-            document.getElementById('tab-info-btn').classList.remove('disabled');
-
             const mo = document.getElementById('modalAlert');
             if (mo) mo.classList.add('d-none');
 

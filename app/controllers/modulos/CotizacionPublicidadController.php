@@ -548,6 +548,27 @@ class CotizacionPublicidadController extends BaseModuloController
         exit;
     }
 
+    public function actualizarCategoriaAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            $this->requireActualizar();
+            $id        = (int) ($_POST['id'] ?? 0);
+            $nombre    = trim($_POST['nombre'] ?? '');
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+
+            if (!$id) throw new \RuntimeException('ID requerido.');
+            if ($nombre === '') throw new \RuntimeException('El nombre es obligatorio.');
+
+            $ok = $this->repository->actualizarCategoria($id, $idEmpresa, $nombre, $idUsuario);
+            echo json_encode(['ok' => $ok, 'id' => $id, 'nombre' => $nombre]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function eliminarCategoriaAjax(): void
     {
         header('Content-Type: application/json');
@@ -558,6 +579,9 @@ class CotizacionPublicidadController extends BaseModuloController
             $idUsuario = (int) $_SESSION['id_usuario'];
 
             if (!$id) throw new \RuntimeException('ID requerido.');
+            if ($this->repository->categoriaEnUso($id)) {
+                throw new \RuntimeException('No se puede eliminar: la categoría está en uso en una o más cotizaciones.');
+            }
 
             $ok = $this->repository->eliminarCategoria($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => $ok]);
@@ -643,6 +667,74 @@ class CotizacionPublicidadController extends BaseModuloController
             }
         } catch (\Throwable $e) {
             $this->renderPdfBasico($cabecera, $detalles, $empresa);
+        }
+        exit;
+    }
+
+    public function enviarCorreoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $id        = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id) {
+            echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
+            exit;
+        }
+
+        try {
+            $cabecera = $this->repository->getPorId($id);
+            if (!$cabecera || (int) $cabecera['id_empresa'] !== $idEmpresa) {
+                throw new \RuntimeException('Cotización no encontrada.');
+            }
+            $detalles = $this->repository->getDetalles($id);
+
+            $empresaModel = new Empresa();
+            $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+            $estabs       = $empresaModel->getEstablecimientos($idEmpresa);
+            if (!empty($estabs[0]['logo_ruta'])) {
+                $empresa['logo_ruta'] = $estabs[0]['logo_ruta'];
+            }
+
+            $numero    = str_pad((string) $cabecera['numero'], 3, '0', STR_PAD_LEFT) . '-' . date('Y', strtotime($cabecera['fecha_emision'])) . ' V' . $cabecera['version'];
+            $pdfString = $this->generarPdfString($cabecera, $detalles, $idEmpresa, $empresa);
+
+            $correosDestino = trim($_POST['correos'] ?? '');
+            if ($correosDestino === '') {
+                $correosDestino = (string) ($cabecera['cliente_email'] ?? '');
+            }
+            if ($correosDestino === '') {
+                echo json_encode(['ok' => false, 'mensaje' => 'El cliente no tiene correo registrado. Ingrese uno manualmente.']);
+                exit;
+            }
+
+            $clienteNombre = (string) ($cabecera['cliente_nombre'] ?? 'Cliente');
+            $empresaNombre = (string) ($empresa['nombre'] ?? '');
+            $asunto = 'Cotización de Publicidad ' . $numero . ($empresaNombre !== '' ? ' — ' . $empresaNombre : '');
+            $cuerpo = "<div style='font-family:Arial,sans-serif;line-height:1.5;'>"
+                . "<p>Estimad@ " . htmlspecialchars($clienteNombre) . ",</p>"
+                . "<p>Adjunto encontrará la cotización de publicidad <strong>" . htmlspecialchars($numero) . "</strong>"
+                . (!empty($cabecera['proyecto']) ? ' del proyecto <strong>' . htmlspecialchars($cabecera['proyecto']) . '</strong>' : '') . ".</p>"
+                . "<p>Saludos cordiales,<br>" . htmlspecialchars($empresaNombre) . "</p></div>";
+
+            $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+            $enviado  = $emailSvc->enviarPdfSimple(
+                $idEmpresa,
+                $correosDestino,
+                $clienteNombre,
+                $asunto,
+                $cuerpo,
+                $pdfString,
+                'CotizacionPublicidad_' . str_replace([' ', '/'], '_', $numero),
+                $empresaNombre
+            );
+
+            echo json_encode($enviado
+                ? ['ok' => true, 'mensaje' => 'Correo enviado correctamente.']
+                : ['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración de correo o el destinatario.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
         }
         exit;
     }
@@ -742,7 +834,7 @@ class CotizacionPublicidadController extends BaseModuloController
      * PDF de respaldo (sin plantilla configurada en /config/plantillas-pdf) generado
      * con TCPDF, forzando la descarga del archivo (Output ..., 'D').
      */
-    private function renderPdfBasico(array $cabecera, array $detalles, array $empresa = []): void
+    private function renderPdfBasico(array $cabecera, array $detalles, array $empresa = [], string $outputDest = 'D')
     {
         $numero = str_pad((string) $cabecera['numero'], 3, '0', STR_PAD_LEFT) . '-' . date('Y', strtotime($cabecera['fecha_emision'])) . ' V' . $cabecera['version'];
 
@@ -840,6 +932,24 @@ class CotizacionPublicidadController extends BaseModuloController
         }
 
         $nombreArchivo = 'CotizacionPublicidad_' . str_replace([' ', '/'], '_', $numero) . '.pdf';
-        $pdf->Output($nombreArchivo, 'D');
+        return $pdf->Output($nombreArchivo, $outputDest);
+    }
+
+    /**
+     * Genera el PDF de la cotización como string en memoria (para adjuntar por
+     * correo), reutilizando la plantilla activa si existe, o el PDF básico.
+     */
+    private function generarPdfString(array $cabecera, array $detalles, int $idEmpresa, array $empresa): string
+    {
+        try {
+            $renderer  = new \App\Services\PlantillasPdfRendererService();
+            $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'cotizacion_publicidad');
+            if ($plantilla) {
+                return (string) $renderer->generar($plantilla, $cabecera, $detalles, [], [], $empresa, 'S');
+            }
+        } catch (\Throwable $e) {
+            // Cae al PDF básico
+        }
+        return (string) $this->renderPdfBasico($cabecera, $detalles, $empresa, 'S');
     }
 }

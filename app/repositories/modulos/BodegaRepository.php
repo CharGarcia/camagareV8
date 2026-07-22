@@ -156,12 +156,14 @@ class BodegaRepository extends BaseRepository
      */
     public function getUsuariosAcceso(int $idBodega, int $idEmpresa): array
     {
+        // El acceso es por defecto: solo NO lo tiene quien esté marcado como
+        // denegado explícitamente (modelo "lista de denegados").
         $sql = "SELECT u.id, u.nombre, u.mail,
-                       (CASE WHEN ub.id IS NOT NULL AND ub.eliminado = false THEN true ELSE false END) AS tiene_acceso,
+                       (CASE WHEN COALESCE(ub.denegado, false) = true THEN false ELSE true END) AS tiene_acceso,
                        COALESCE(ub.es_default, false) AS es_default
                 FROM usuarios u
                 INNER JOIN empresa_asignada ea ON u.id = ea.id_usuario
-                LEFT JOIN usuarios_bodegas ub ON u.id = ub.id_usuario AND ub.id_bodega = :id_bodega 
+                LEFT JOIN usuarios_bodegas ub ON u.id = ub.id_usuario AND ub.id_bodega = :id_bodega
                      AND ub.id_empresa = :id_empresa AND ub.eliminado = false
                 WHERE ea.id_empresa = :id_empresa AND u.eliminado = false
                 ORDER BY u.nombre ASC";
@@ -179,30 +181,52 @@ class BodegaRepository extends BaseRepository
      */
     public function saveUsuariosAcceso(int $idBodega, int $idEmpresa, array $accesos, int $idUsuarioLogueado): void
     {
-        // 1. Marcar todos como eliminados para esta bodega (re-sincronización)
-        $sqlClear = "UPDATE usuarios_bodegas SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :u
-                     WHERE id_bodega = :id_b AND id_empresa = :id_e";
-        $stClear = $this->db->prepare($sqlClear);
-        $stClear->execute([':u' => $idUsuarioLogueado, ':id_b' => $idBodega, ':id_e' => $idEmpresa]);
-
-        // 2. Insertar o activar los accesos enviados
-        $sqlUpsert = "INSERT INTO usuarios_bodegas (id_empresa, id_usuario, id_bodega, es_default, created_by, updated_by)
-                      VALUES (:id_e, :id_u, :id_b, :def, :creBy, :creBy)
-                      ON CONFLICT (id_empresa, id_usuario, id_bodega) 
-                      DO UPDATE SET 
-                        es_default = EXCLUDED.es_default,
-                        eliminado = false,
-                        updated_by = EXCLUDED.updated_by,
-                        updated_at = CURRENT_TIMESTAMP";
-        
-        $stUpsert = $this->db->prepare($sqlUpsert);
+        // Modelo "lista de denegados": el acceso a las bodegas es por defecto.
+        // La UI envía SOLO los usuarios marcados (con acceso), así que hay que
+        // registrar explícitamente como denegados a los usuarios de la empresa
+        // que NO vinieron en la lista.
+        $concedidos = [];
+        $defaults   = [];
         foreach ($accesos as $acc) {
             if (empty($acc['id_usuario'])) continue;
+            $uid = (int)$acc['id_usuario'];
+            $concedidos[$uid] = true;
+            $defaults[$uid]   = !empty($acc['es_default']);
+        }
+
+        // Universo de usuarios de la empresa (los que puede listar la pestaña Accesos)
+        $stUsers = $this->db->prepare(
+            "SELECT DISTINCT u.id
+               FROM usuarios u
+               INNER JOIN empresa_asignada ea ON u.id = ea.id_usuario
+              WHERE ea.id_empresa = :id_e AND u.eliminado = false"
+        );
+        $stUsers->execute([':id_e' => $idEmpresa]);
+        $todosUsuarios = $stUsers->fetchAll(PDO::FETCH_COLUMN);
+
+        $sqlUpsert = "INSERT INTO usuarios_bodegas
+                          (id_empresa, id_usuario, id_bodega, es_default, denegado, created_by, updated_by, eliminado)
+                      VALUES (:id_e, :id_u, :id_b, :def, :den, :creBy, :creBy, false)
+                      ON CONFLICT (id_empresa, id_usuario, id_bodega)
+                      DO UPDATE SET
+                        es_default = EXCLUDED.es_default,
+                        denegado   = EXCLUDED.denegado,
+                        eliminado  = false,
+                        deleted_at = NULL,
+                        deleted_by = NULL,
+                        updated_by = EXCLUDED.updated_by,
+                        updated_at = CURRENT_TIMESTAMP";
+
+        $stUpsert = $this->db->prepare($sqlUpsert);
+        foreach ($todosUsuarios as $uid) {
+            $uid         = (int)$uid;
+            $tieneAcceso = isset($concedidos[$uid]);
             $stUpsert->execute([
                 ':id_e'  => $idEmpresa,
-                ':id_u'  => (int)$acc['id_usuario'],
+                ':id_u'  => $uid,
                 ':id_b'  => $idBodega,
-                ':def'   => !empty($acc['es_default']) ? 'true' : 'false',
+                ':def'   => ($tieneAcceso && !empty($defaults[$uid])) ? 'true' : 'false',
+                ':den'   => $tieneAcceso ? 'false' : 'true',
                 ':creBy' => $idUsuarioLogueado
             ]);
         }
@@ -235,13 +259,16 @@ class BodegaRepository extends BaseRepository
                     WHERE b.id_empresa = :id_e AND b.status = true AND b.eliminado = false
                     ORDER BY b.nombre ASC";
         } else {
-            // Usuarios Nivel 1: solo las que tienen acceso asignado
-            $sql = "SELECT b.id, b.nombre, 
+            // Usuarios Nivel 1: por defecto ven TODAS las bodegas de la empresa.
+            // Solo se excluyen aquellas con el acceso revocado explícitamente
+            // (usuarios_bodegas.denegado = true). Sin registro = con acceso.
+            $sql = "SELECT b.id, b.nombre,
                            COALESCE(ub.es_default, false) as es_default
                     FROM bodegas b
-                    INNER JOIN usuarios_bodegas ub ON b.id = ub.id_bodega 
-                    WHERE ub.id_usuario = :id_u AND ub.id_empresa = :id_e 
-                      AND ub.eliminado = false AND b.status = true AND b.eliminado = false
+                    LEFT JOIN usuarios_bodegas ub ON b.id = ub.id_bodega
+                         AND ub.id_usuario = :id_u AND ub.id_empresa = :id_e AND ub.eliminado = false
+                    WHERE b.id_empresa = :id_e AND b.status = true AND b.eliminado = false
+                      AND COALESCE(ub.denegado, false) = false
                     ORDER BY b.nombre ASC";
         }
 
