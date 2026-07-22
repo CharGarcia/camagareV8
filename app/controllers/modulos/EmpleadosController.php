@@ -55,18 +55,42 @@ class EmpleadosController extends BaseModuloController
         $aportePer    = (float) ($_GET['aporte_personal'] ?? 9.45);
         $anio         = (int) ($_GET['anio'] ?? date('Y'));
         $excluido     = (int) ($_GET['excluir_calculo_ir'] ?? 0) === 1;
+        $idEmpleado   = (int) ($_GET['id_empleado'] ?? 0);
 
         $irService = new ImpuestoRentaEmpleadoService();
         $tramos = $irService->getTramosAnio($anio);
-        $gastoPersonalMaximo = $irService->getGastoPersonalMaximo($anio);
+        $params = $irService->getParametrosAnio($anio);
 
+        // Proyección de gastos personales del empleado (form. SRI-GP). El modal envía
+        // lo que hay en pantalla para que la vista previa sea inmediata; si no viene,
+        // se lee lo guardado. Sin proyección presentada => no hay rebaja.
+        $proyectado = (isset($_GET['gasto_personal_proyectado']) && $_GET['gasto_personal_proyectado'] !== '')
+            ? (float) $_GET['gasto_personal_proyectado']
+            : null;
+        $cargas   = isset($_GET['cargas_familiares']) ? (int) $_GET['cargas_familiares'] : null;
+        $especial = isset($_GET['caso_especial']) ? ((int) $_GET['caso_especial'] === 1) : null;
+
+        $gp = $irService->getRebajaGastoPersonal(
+            (int) $_SESSION['id_empresa'],
+            $idEmpleado,
+            $anio,
+            $proyectado,
+            $cargas,
+            $especial
+        );
+
+        // Los gastos personales NO reducen la base: rebajan el impuesto causado.
         $ingresoAnual = $sueldoBase * 12;
         $aporteIessAnual = round($ingresoAnual * $aportePer / 100, 2);
-        $baseImponibleAnual = max(0.0, $ingresoAnual - $aporteIessAnual - $gastoPersonalMaximo);
+        $baseImponibleAnual = max(0.0, $ingresoAnual - $aporteIessAnual);
 
-        $retencionMensual = ($excluido || $sueldoBase <= 0)
+        $sinCalculo = $excluido || $sueldoBase <= 0;
+        $impuestoCausado = $sinCalculo ? 0.0 : ImpuestoRentaEmpleadoService::impuestoCausado($baseImponibleAnual, $tramos);
+        $rebajaAplicada = $sinCalculo ? 0.0 : min($gp['rebaja'], $impuestoCausado);
+
+        $retencionMensual = $sinCalculo
             ? 0.0
-            : ImpuestoRentaEmpleadoService::calcularRetencionMensual($sueldoBase, $aportePer, $tramos, $gastoPersonalMaximo);
+            : ImpuestoRentaEmpleadoService::calcularRetencionMensual($sueldoBase, $aportePer, $tramos, $gp['rebaja']);
 
         echo json_encode([
             'ok' => true,
@@ -75,8 +99,21 @@ class EmpleadosController extends BaseModuloController
             'excluido' => $excluido,
             'ingreso_gravado_anual' => round($ingresoAnual, 2),
             'aporte_iess_anual' => $aporteIessAnual,
-            'gasto_personal_maximo' => $gastoPersonalMaximo,
             'base_imponible_anual' => round($baseImponibleAnual, 2),
+            'impuesto_causado' => $impuestoCausado,
+            // Gastos personales
+            'gasto_personal_proyectado' => $gp['proyectado'],
+            'gasto_personal_tope' => $gp['tope'],
+            'gasto_personal_base_rebaja' => $gp['base_rebaja'],
+            'gasto_personal_topado' => $gp['topado'],
+            'cargas_familiares' => $gp['cargas'],
+            'caso_especial' => $gp['caso_especial'],
+            'porcentaje_rebaja' => $gp['porcentaje'],
+            'rebaja_gastos_personales' => $rebajaAplicada,
+            'rebaja_limitada_por_impuesto' => !$sinCalculo && $gp['rebaja'] > $impuestoCausado,
+            'canasta_basica' => $params['canasta_basica'],
+            'parametros_configurados' => $params['configurado'],
+            // Resultado
             'retencion_mensual' => $retencionMensual,
             'retencion_anual' => round($retencionMensual * 12, 2),
         ]);
@@ -653,6 +690,11 @@ class EmpleadosController extends BaseModuloController
         // asignaciones_horario_json siempre presente (aunque sea '[]') → así se pueden vaciar.
         if (isset($_POST['asignaciones_horario_json'])) {
             $data['asignaciones_horario'] = json_decode($_POST['asignaciones_horario_json'] ?: '[]', true) ?: [];
+        }
+        // Proyección de gastos personales (form. SRI-GP): también siempre presente,
+        // para poder borrar la proyección de un año dejando la tabla vacía.
+        if (isset($_POST['gastos_personales_json'])) {
+            $data['gastos_personales'] = json_decode($_POST['gastos_personales_json'] ?: '[]', true) ?: [];
         }
 
         return $data;

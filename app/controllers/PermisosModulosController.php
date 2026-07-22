@@ -127,6 +127,8 @@ class PermisosModulosController extends Controller
             $limiteUsuarios = $this->modelEmpresa->getLimiteUsuariosEmpresa($idEmpresaActual);
         }
 
+        $combosActivos = (new \App\models\ComboSubmodulo())->getActivos();
+
         $this->viewWithLayout('layouts.main', 'permisosModulos.index', [
             'titulo' => 'Permisos de módulos a usuarios',
             'nivel' => $nivel,
@@ -138,6 +140,7 @@ class PermisosModulosController extends Controller
             'opcionesUsuarios' => $opcionesUsuarios,
             'opcionesEmpresas' => $opcionesEmpresas,
             'limiteUsuarios' => $limiteUsuarios,
+            'combosActivos' => $combosActivos,
         ]);
     }
 

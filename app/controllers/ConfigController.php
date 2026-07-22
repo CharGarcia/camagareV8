@@ -75,6 +75,24 @@ class ConfigController extends Controller
         }
     }
 
+    public function combosSubmodulos(): void
+    {
+        $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
+        $c = new CombosSubmodulosController();
+        $method = match ($sub) {
+            'store'    => 'store',
+            'update'   => 'update',
+            'eliminar' => 'eliminar',
+            'aplicar'  => 'aplicar',
+            default    => 'index',
+        };
+        if (method_exists($c, $method)) {
+            $c->$method();
+        } else {
+            $c->index();
+        }
+    }
+
     public function moduloStoreModulo(): void { (new ModuloController())->storeModulo(); }
     public function moduloUpdateModulo(): void { (new ModuloController())->updateModulo(); }
 

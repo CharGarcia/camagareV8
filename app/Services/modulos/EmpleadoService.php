@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\modulos;
 
 use App\repositories\modulos\EmpleadoRepository;
+use App\repositories\modulos\GastoPersonalRepository;
 use App\Rules\modulos\EmpleadoRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\RolPagoService;
@@ -45,6 +46,7 @@ class EmpleadoService
         $empleado['periodos'] = $this->repository->getPeriodos($id, $idEmpresa);
         $empleado['rubros'] = $this->repository->getRubrosFijos($id, $idEmpresa);
         $empleado['asignaciones_horario'] = $this->repository->getAsignacionesHorario($id, $idEmpresa);
+        $empleado['gastos_personales'] = $this->gastoRepo()->getPorEmpleado($id, $idEmpresa);
 
         return $empleado;
     }
@@ -77,6 +79,9 @@ class EmpleadoService
             }
             if (isset($data['asignaciones_horario'])) {
                 $this->repository->syncAsignacionesHorario($id, $idEmpresa, $data['asignaciones_horario'], $idUsuario);
+            }
+            if (isset($data['gastos_personales'])) {
+                $this->gastoRepo()->sync($id, $idEmpresa, $data['gastos_personales'], $idUsuario);
             }
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'CREAR', 'empleados', $id, null, $data);
@@ -124,7 +129,7 @@ class EmpleadoService
 
         // 2) Confirmación: si el cambio afecta al rol y hay roles abiertos (generado sin pagar),
         //    pedir confirmación; al confirmar se regenerarán tras guardar.
-        $afecta = $this->cambioAfectaRol($old, $data, $periodosViejos, $periodosNuevos);
+        $afecta = $this->cambioAfectaRol($old, $data, $periodosViejos, $periodosNuevos, $id, $idEmpresa);
         $rolesAbiertos = $afecta ? $rolSvc->getRolesAbiertosEmpleado($idEmpresa, $id) : [];
         if (!empty($rolesAbiertos) && empty($data['confirmar_roles'])) {
             throw new ConfirmacionRolRequeridaException($rolesAbiertos);
@@ -143,6 +148,9 @@ class EmpleadoService
             }
             if (isset($data['asignaciones_horario'])) {
                 $this->repository->syncAsignacionesHorario($id, $idEmpresa, $data['asignaciones_horario'], $idUsuario);
+            }
+            if (isset($data['gastos_personales'])) {
+                $this->gastoRepo()->sync($id, $idEmpresa, $data['gastos_personales'], $idUsuario);
             }
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR', 'empleados', $id, $old, $data);
@@ -167,7 +175,7 @@ class EmpleadoService
     }
 
     /** ¿El cambio toca algún dato que interviene en el cálculo del rol? */
-    private function cambioAfectaRol(array $old, array $data, array $periodosViejos, ?array $periodosNuevos): bool
+    private function cambioAfectaRol(array $old, array $data, array $periodosViejos, ?array $periodosNuevos, int $id, int $idEmpresa): bool
     {
         foreach (['sueldo_base', 'valor_semanal', 'valor_quincena', 'aporte_personal', 'aporte_patronal'] as $f) {
             if (array_key_exists($f, $data) && round((float) ($old[$f] ?? 0), 2) !== round((float) $data[$f], 2)) {
@@ -179,8 +187,61 @@ class EmpleadoService
                 return true;
             }
         }
+        // Excluir del cálculo de IR: en BD es booleano, en el formulario llega 'si'/'no'.
+        if (array_key_exists('excluir_calculo_ir', $data)) {
+            $bool = fn($v) => in_array($v, [true, 1, '1', 't', 'true', 'si'], true);
+            if ($bool($old['excluir_calculo_ir'] ?? false) !== $bool($data['excluir_calculo_ir'])) {
+                return true;
+            }
+        }
+        // La proyección de gastos personales cambia la retención de IR del rol mensual.
+        if (isset($data['gastos_personales'])
+            && $this->gastosPersonalesCambiaron($id, $idEmpresa, $data['gastos_personales'])) {
+            return true;
+        }
         return $periodosNuevos !== null && $this->periodosCambiaron($periodosViejos, $periodosNuevos);
     }
+
+    /**
+     * ¿Cambió la proyección de gastos personales de algún año? Se comparan total,
+     * cargas familiares y caso especial: los tres mueven la rebaja de IR.
+     */
+    private function gastosPersonalesCambiaron(int $id, int $idEmpresa, array $nuevos): bool
+    {
+        $esVerdadero = fn($v) => in_array($v, [true, 1, '1', 't', 'true', 'si'], true);
+
+        $norm = function (array $filas, bool $desdeBd) use ($esVerdadero): array {
+            $out = [];
+            foreach ($filas as $f) {
+                $anio = (int) ($f['anio'] ?? 0);
+                if ($anio <= 0) continue;
+                if ($desdeBd) {
+                    $total = (float) ($f['total_proyectado'] ?? 0);
+                } else {
+                    $total = 0.0;
+                    foreach (GastoPersonalRepository::RUBROS as $r) {
+                        $total += max(0.0, (float) ($f[$r] ?? 0));
+                    }
+                }
+                $out[$anio] = round($total, 2)
+                    . '|' . max(0, (int) ($f['numero_cargas_familiares'] ?? 0))
+                    . '|' . ($esVerdadero($f['caso_especial'] ?? false) ? '1' : '0');
+            }
+            ksort($out);
+            return $out;
+        };
+
+        $viejos = $this->gastoRepo()->getPorEmpleado($id, $idEmpresa);
+
+        return $norm($viejos, true) !== $norm($nuevos, false);
+    }
+
+    private function gastoRepo(): GastoPersonalRepository
+    {
+        return $this->gastoRepository ??= new GastoPersonalRepository();
+    }
+
+    private ?GastoPersonalRepository $gastoRepository = null;
 
     private function periodosCambiaron(array $viejos, array $nuevos): bool
     {

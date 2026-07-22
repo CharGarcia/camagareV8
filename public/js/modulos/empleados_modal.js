@@ -42,6 +42,7 @@
         document.querySelector('#tablaPeriodos tbody').innerHTML = '';
         document.querySelector('#tablaRubros tbody').innerHTML = '';
         const tAsg = document.querySelector('#tablaAsignaciones tbody'); if (tAsg) tAsg.innerHTML = '';
+        const tGp = document.querySelector('#tablaGastosPersonales tbody'); if (tGp) tGp.innerHTML = '';
         const asgJson = document.getElementById('asignaciones_horario_json'); if (asgJson) asgJson.value = '[]';
         cargarOpcionesHorario(); // refresca turnos/puntos (fire-and-forget; se re-consulta al agregar fila)
         if (alertElEmp) alertElEmp.classList.add('d-none');
@@ -153,6 +154,13 @@
                     await cargarOpcionesHorario();
                     if (d.asignaciones_horario?.length) d.asignaciones_horario.forEach(a => window.agregarFilaAsignacion(a));
                 }
+
+                // Proyección de gastos personales (form. SRI-GP), un registro por año.
+                const tGp = document.querySelector('#tablaGastosPersonales tbody');
+                if (tGp) {
+                    tGp.innerHTML = '';
+                    if (d.gastos_personales?.length) d.gastos_personales.forEach(g => window.agregarFilaGasto(g));
+                }
             }
         } catch (e) {}
     };
@@ -185,51 +193,130 @@
     };
 
     /**
-     * Carga la proyección informativa de retención de Impuesto a la Renta
-     * (relación de dependencia) con el sueldo/aporte actuales del formulario.
-     * Solo lectura: el valor real que se retiene lo calcula el rol de pagos al generarse.
+     * Proyección informativa de retención de Impuesto a la Renta (relación de
+     * dependencia) con el sueldo/aporte actuales del formulario.
+     *
+     * La caja de resultados es markup estático (mismo formato que los totales de
+     * la factura de venta): aquí solo se actualizan los valores. Así la pantalla
+     * NO se mueve mientras se escriben los gastos personales.
+     *
+     * Solo lectura: el valor que realmente se retiene lo calcula el rol de pagos.
      */
-    window.empIrCargar = async function() {
-        const cont = document.getElementById('empIrContenido');
-        if (!cont) return;
-        const sueldo = parseFloat(document.getElementById('emp_sueldo_base')?.value || '0');
-        const aportePer = parseFloat(document.getElementById('emp_aporte_personal')?.value || '9.45');
-        const excluido = document.getElementById('emp_excluir_calculo_ir')?.value === 'si' ? 1 : 0;
+    let irTimer = null;
+    let irPeticion = 0;
 
-        cont.innerHTML = '<div class="text-center py-3 small text-muted"><div class="spinner-border spinner-border-sm mb-2"></div><br>Calculando proyección...</div>';
+    /** Dispara el recálculo con debounce (evita una petición por tecla). */
+    window.empIrCargar = function() {
+        clearTimeout(irTimer);
+        irTimer = setTimeout(empIrCalcular, 300);
+    };
+
+    async function empIrCalcular() {
+        const lbl = id => document.getElementById(id);
+        if (!lbl('ir-lbl-mensual')) return;
+
+        const sueldo = parseFloat(lbl('emp_sueldo_base')?.value || '0');
+        const aportePer = parseFloat(lbl('emp_aporte_personal')?.value || '9.45');
+        const excluido = lbl('emp_excluir_calculo_ir')?.value === 'si' ? 1 : 0;
+
+        const spinner = lbl('empIrSpinner');
+        if (spinner) spinner.classList.remove('d-none');
+
+        const miPeticion = ++irPeticion;
 
         try {
+            const anioActual = new Date().getFullYear();
             const params = new URLSearchParams({ sueldo_base: sueldo, aporte_personal: aportePer, excluir_calculo_ir: excluido });
+            params.set('id_empleado', lbl('emp_id')?.value || '0');
+            // Proyección tal como está en pantalla (aunque no se haya guardado aún).
+            const fila = gpFilaAnio(anioActual);
+            if (fila) {
+                params.set('gasto_personal_proyectado', String(fila.total));
+                params.set('cargas_familiares', String(fila.cargas));
+                params.set('caso_especial', fila.especial ? '1' : '0');
+            }
+
             const resp = await fetch(`${urlModuloEmp}/proyeccionIrAjax?${params}`);
             const r = await resp.json();
-            if (!r.ok) { cont.innerHTML = '<div class="alert alert-danger small mb-0">No se pudo calcular la proyección.</div>'; return; }
 
-            const money = v => '$' + Number(v).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-            let avisoTramos = '';
+            // Respuesta obsoleta (llegó después de una petición más nueva): descartar.
+            if (miPeticion !== irPeticion) return;
+            if (!r.ok) { empIrAviso('danger', 'No se pudo calcular la proyección.'); return; }
+
+            const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            lbl('ir-lbl-ingreso').textContent = money(r.ingreso_gravado_anual);
+            lbl('ir-lbl-iess').textContent    = money(r.aporte_iess_anual);
+            lbl('ir-lbl-base').textContent    = money(r.base_imponible_anual);
+            lbl('ir-lbl-causado').textContent = money(r.impuesto_causado);
+            lbl('ir-lbl-rebaja').textContent  = money(r.rebaja_gastos_personales);
+            lbl('ir-lbl-pct').textContent     = `(${Number(r.porcentaje_rebaja).toFixed(0)}%)`;
+            lbl('ir-lbl-anual').textContent   = money(r.retencion_anual);
+            lbl('ir-lbl-mensual').textContent = money(r.retencion_mensual);
+
+            // Tope de la fila del año en curso (columna "Tope" de la tabla).
+            const filaAnio = gpFilaAnio(r.anio);
+            if (filaAnio) {
+                const celda = filaAnio.tr.querySelector('.gp-tope');
+                if (celda) celda.textContent = r.gasto_personal_tope > 0 ? money(r.gasto_personal_tope) : 'sin tope';
+            }
+
+            // Nota bajo la rebaja: de dónde sale el valor.
+            const nota = lbl('ir-lbl-gasto-nota');
+            if (r.gasto_personal_proyectado === null) {
+                nota.textContent = 'sin proyección presentada';
+                nota.className = 'text-end text-muted mb-1';
+            } else if (r.rebaja_limitada_por_impuesto) {
+                nota.textContent = 'la rebaja no puede superar el impuesto causado';
+                nota.className = 'text-end text-warning-emphasis mb-1';
+            } else if (r.gasto_personal_topado) {
+                nota.textContent = `proyectó ${money(r.gasto_personal_proyectado)}, topado a ${money(r.gasto_personal_tope)}`;
+                nota.className = 'text-end text-warning-emphasis mb-1';
+            } else if (!r.parametros_configurados) {
+                nota.textContent = 'sin canasta básica configurada para ' + r.anio;
+                nota.className = 'text-end text-warning-emphasis mb-1';
+            } else {
+                const detalle = r.caso_especial
+                    ? 'caso especial'
+                    : `${r.cargas_familiares} carga${r.cargas_familiares === 1 ? '' : 's'}`;
+                nota.textContent = `${Number(r.porcentaje_rebaja).toFixed(0)}% de ${money(r.gasto_personal_base_rebaja)} · tope ${money(r.gasto_personal_tope)} (${detalle})`;
+                nota.className = 'text-end text-muted mb-1';
+            }
+            nota.style.fontSize = '0.68rem';
+
+            // Avisos: se arman todos juntos para que la altura del bloque cambie una sola vez.
+            let avisos = '';
             if (!r.tramos_cargados) {
-                avisoTramos = `<div class="alert alert-warning small py-2 mb-3"><i class="bi bi-exclamation-triangle me-1"></i>
-                    No hay tabla de tramos de Impuesto a la Renta cargada para ${r.anio}. La retención se muestra en $0.00
+                avisos += `<div class="alert alert-warning small py-2 mb-2"><i class="bi bi-exclamation-triangle me-1"></i>
+                    No hay tabla de tramos de Impuesto a la Renta cargada para ${r.anio}. La retención se muestra en 0.00
                     hasta que se configure en <strong>Config &rarr; Tramos de Impuesto a la Renta</strong>.</div>`;
             }
-            let avisoExcluido = excluido ? '<div class="alert alert-secondary small py-2 mb-3"><i class="bi bi-slash-circle me-1"></i>Este empleado está excluido del cálculo automático de IR.</div>' : '';
+            if (!r.parametros_configurados) {
+                avisos += `<div class="alert alert-warning small py-2 mb-2"><i class="bi bi-exclamation-triangle me-1"></i>
+                    No está configurada la <strong>canasta familiar básica</strong> de ${r.anio}, así que la rebaja se calcula
+                    sobre la proyección completa sin tope. Cárguela en <strong>Config &rarr; Tramos de Impuesto a la Renta</strong>.</div>`;
+            }
+            if (excluido) {
+                avisos += '<div class="alert alert-secondary small py-2 mb-2"><i class="bi bi-slash-circle me-1"></i>Este empleado está excluido del cálculo automático de IR.</div>';
+            }
+            if (r.gasto_personal_proyectado === null && !excluido) {
+                avisos += `<div class="alert alert-info small py-2 mb-2"><i class="bi bi-info-circle me-1"></i>
+                    El empleado no tiene proyección de gastos personales para ${r.anio}, por lo que <strong>no se aplica rebaja</strong>.
+                    Regístrela arriba (formulario SRI-GP) para reducir la retención.</div>`;
+            }
+            document.getElementById('empIrAvisos').innerHTML = avisos;
 
-            cont.innerHTML = `
-                ${avisoTramos}${avisoExcluido}
-                <table class="table table-sm table-borderless mb-0" style="font-size:0.82rem;">
-                    <tbody>
-                        <tr><td class="text-muted">Ingreso gravado anual proyectado (sueldo x 12)</td><td class="text-end fw-bold">${money(r.ingreso_gravado_anual)}</td></tr>
-                        <tr><td class="text-muted">(–) Aporte IESS personal anual</td><td class="text-end">${money(r.aporte_iess_anual)}</td></tr>
-                        <tr><td class="text-muted">(–) Gasto personal máximo deducible (${r.anio})</td><td class="text-end">${money(r.gasto_personal_maximo)}</td></tr>
-                        <tr class="border-top"><td class="fw-bold">Base imponible anual</td><td class="text-end fw-bold">${money(r.base_imponible_anual)}</td></tr>
-                        <tr><td class="text-muted">Retención anual estimada</td><td class="text-end">${money(r.retencion_anual)}</td></tr>
-                        <tr class="border-top"><td class="fw-bold text-primary">Retención mensual estimada</td><td class="text-end fw-bold text-primary">${money(r.retencion_mensual)}</td></tr>
-                    </tbody>
-                </table>
-                <p class="text-muted small mt-2 mb-0"><i class="bi bi-info-circle me-1"></i>Proyección informativa con el sueldo y % de aporte IESS actuales del formulario (método simplificado, ingreso mensual estable durante el año). El valor real que se retiene se calcula al generar cada rol de pagos mensual.</p>`;
         } catch (e) {
-            cont.innerHTML = '<div class="alert alert-danger small mb-0">Error al calcular la proyección.</div>';
+            if (miPeticion === irPeticion) empIrAviso('danger', 'Error al calcular la proyección.');
+        } finally {
+            if (miPeticion === irPeticion && spinner) spinner.classList.add('d-none');
         }
-    };
+    }
+
+    function empIrAviso(tipo, texto) {
+        const cont = document.getElementById('empIrAvisos');
+        if (cont) cont.innerHTML = `<div class="alert alert-${tipo} small py-2 mb-2">${texto}</div>`;
+    }
 
     window.agregarFilaPeriodo = function(data = {}) {
         const tbody = document.querySelector('#tablaPeriodos tbody');
@@ -370,6 +457,106 @@
         });
         const asgInput = document.getElementById('asignaciones_horario_json');
         if (asgInput) asgInput.value = JSON.stringify(asignaciones);
+
+        const gastos = [];
+        document.querySelectorAll('#tablaGastosPersonales tbody tr').forEach(tr => {
+            const inpAnio = tr.querySelector('.gp-anio');
+            if (!inpAnio) return;
+            const anio = parseInt(inpAnio.value || '0', 10);
+            if (!anio) return;
+            const fila = {
+                anio: anio,
+                numero_cargas_familiares: tr.querySelector('.gp-cargas')?.value || '0',
+                caso_especial: !!tr.querySelector('.gp-especial')?.checked
+            };
+            GP_RUBROS.forEach(r => { fila[r] = tr.querySelector('.gp-' + r)?.value || '0'; });
+            gastos.push(fila);
+        });
+        const gpInput = document.getElementById('gastos_personales_json');
+        if (gpInput) gpInput.value = JSON.stringify(gastos);
+    }
+
+    // ------------------------------------------------------------------
+    // Proyección de gastos personales (form. SRI-GP), por año.
+    // El total de la fila del año en curso es lo que se descuenta (topado al
+    // máximo del año) al calcular la retención de Impuesto a la Renta.
+    // ------------------------------------------------------------------
+    const GP_RUBROS = ['vivienda', 'salud', 'educacion', 'alimentacion', 'vestimenta', 'turismo'];
+
+    function gpTotalFila(tr) {
+        let t = 0;
+        GP_RUBROS.forEach(r => { t += parseFloat(tr.querySelector('.gp-' + r)?.value || '0') || 0; });
+        return t;
+    }
+
+    window.gpRecalcular = function(el) {
+        const tr = el ? el.closest('tr') : null;
+        if (tr) {
+            const tot = tr.querySelector('.gp-total');
+            if (tot) tot.textContent = gpTotalFila(tr).toFixed(2);
+        }
+        // El deducible cambió: refresca la proyección de retención.
+        if (window.empIrCargar) window.empIrCargar();
+    };
+
+    window.agregarFilaGasto = function(data = {}) {
+        const tbody = document.querySelector('#tablaGastosPersonales tbody');
+        if (!tbody) return;
+
+        const anio = parseInt(data.anio || new Date().getFullYear(), 10);
+        // Un solo registro por año (índice único en BD): si ya existe, no duplica.
+        const yaExiste = Array.from(tbody.querySelectorAll('.gp-anio'))
+            .some(i => parseInt(i.value || '0', 10) === anio);
+        if (yaExiste && !data.anio) {
+            Swal.fire({ icon: 'info', title: 'Año repetido', text: 'Ya existe una proyección para ' + anio + '. Edítela o cambie el año.' });
+            return;
+        }
+
+        const inp = (clase, valor, paso) =>
+            `<td class="p-0"><input type="number" step="${paso}" min="0" class="form-control form-control-sm border-0 ${clase}"
+                style="padding:0 4px;height:20px;font-size:0.78rem;" value="${valor}" oninput="window.gpRecalcular(this)"></td>`;
+
+        const esp = [true, 1, '1', 't', 'true', 'si'].includes(data.caso_especial) ? 'checked' : '';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+            `<td class="p-0"><input type="number" class="form-control form-control-sm border-0 gp-anio"
+                style="padding:0 4px;height:20px;font-size:0.78rem;" value="${anio}" oninput="window.gpRecalcular(this)"></td>` +
+            GP_RUBROS.map(r => inp('gp-' + r, Number(data[r] || 0).toFixed(2), '0.01')).join('') +
+            inp('gp-cargas', parseInt(data.numero_cargas_familiares || 0, 10), '1') +
+            `<td class="text-center p-0"><input type="checkbox" class="form-check-input gp-especial m-0" ${esp}
+                title="Discapacidad o enfermedad catastrófica: tope de 100 canastas" onchange="window.gpRecalcular(this)"></td>` +
+            `<td class="text-end fw-bold gp-total" style="font-size:0.78rem;">0.00</td>` +
+            `<td class="text-end text-muted gp-tope" style="font-size:0.78rem;">–</td>` +
+            `<td class="text-center p-0"><button type="button" class="btn btn-sm btn-link text-danger p-0"
+                onclick="const t=this.closest('tr'); t.remove(); window.gpRecalcular(null);" title="Quitar"><i class="bi bi-trash"></i></button></td>`;
+        tbody.appendChild(tr);
+
+        tr.querySelector('.gp-total').textContent = gpTotalFila(tr).toFixed(2);
+    };
+
+    /** Datos de la fila del año indicado tal como están en pantalla. null si no hay fila. */
+    function gpFilaAnio(anio) {
+        for (const tr of document.querySelectorAll('#tablaGastosPersonales tbody tr')) {
+            if (parseInt(tr.querySelector('.gp-anio')?.value || '0', 10) === anio) {
+                return {
+                    tr: tr,
+                    total: gpTotalFila(tr),
+                    cargas: parseInt(tr.querySelector('.gp-cargas')?.value || '0', 10) || 0,
+                    especial: !!tr.querySelector('.gp-especial')?.checked
+                };
+            }
+        }
+        return null;
+    }
+
+    /** Total proyectado para un año concreto según lo que hay en pantalla. null si no hay fila. */
+    function gpTotalAnio(anio) {
+        const filas = document.querySelectorAll('#tablaGastosPersonales tbody tr');
+        for (const tr of filas) {
+            if (parseInt(tr.querySelector('.gp-anio')?.value || '0', 10) === anio) return gpTotalFila(tr);
+        }
+        return null;
     }
 
     // Botón "Imprimir PDF" de la barra superior del modal.

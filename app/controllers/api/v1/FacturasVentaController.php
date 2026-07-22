@@ -23,6 +23,16 @@
  *   HTTP hasta ~18s con sleep() en el peor caso). El cliente móvil debe usar un
  *   timeout generoso para esta llamada específica y avisar al usuario que no
  *   cierre la app ni pierda señal durante la espera.
+ * - "Cobrar" (registrar un ingreso contra la factura) reutiliza el mismo
+ *   IngresoService::crear() que usa el "cobro rápido" de la web (mismo payload,
+ *   ver FacturaVentaController::registrarCobroRapidoAjax en el módulo web) —
+ *   pero a propósito es MÁS estricto que la web: solo se habilita si la factura
+ *   ya está 'autorizado' por el SRI (la web permite cobrar en efectivo/
+ *   transferencia incluso en borrador; para móvil eso es un riesgo — no cobrar
+ *   contra un documento que el SRI podría todavía rechazar). El punto de
+ *   emisión de Ingresos se resuelve automáticamente (el primero activo del
+ *   mismo establecimiento de la factura) — no se le pide al usuario elegirlo,
+ *   es un detalle técnico irrelevante para un cobro rápido desde el celular.
  */
 
 declare(strict_types=1);
@@ -38,9 +48,12 @@ use App\models\Vendedor;
 use App\repositories\modulos\BodegaRepository;
 use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\FacturaVentaRepository;
+use App\repositories\modulos\IngresoRepository;
 use App\Rules\modulos\FacturaVentaRules;
+use App\Rules\modulos\IngresoRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\FacturaVentaService;
+use App\Services\modulos\IngresoService;
 use App\Services\SecuencialService;
 use App\Services\Sri\SriEnvioService;
 use PDO;
@@ -85,7 +98,19 @@ class FacturasVentaController extends ApiBaseController
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
 
-        $this->jsonOk($result['rows'], [
+        // getListado() ya trae total_cobrado/total_nc/total_retencion por fila
+        // (las usa para el badge de estado de pago) — solo falta el saldo en sí.
+        $rows = $result['rows'];
+        foreach ($rows as &$r) {
+            $saldo = (float) $r['importe_total']
+                - (float) ($r['total_cobrado'] ?? 0)
+                - (float) ($r['total_nc'] ?? 0)
+                - (float) ($r['total_retencion'] ?? 0);
+            $r['saldo_pendiente'] = max(0.0, round($saldo, 2));
+        }
+        unset($r);
+
+        $this->jsonOk($rows, [
             'page' => $page,
             'per_page' => $perPage,
             'total' => $total,
@@ -124,6 +149,10 @@ class FacturasVentaController extends ApiBaseController
             // Desglose de subtotales/IVA por tarifa (mismo agrupado que la web muestra
             // en "Subtotal {tarifa}" / "(+) IVA {tarifa}%"), listo para pintar tal cual.
             'totales_iva' => $this->agruparTotalesPorTarifa($detalles),
+            // Para decidir si mostrar "Cobrar" y precargar el monto. Igual que el
+            // saldo que ya muestra la pestaña "Pagos" de la web (importe - cobros -
+            // retenciones - notas de crédito), no solo importe - cobros.
+            'saldo_pendiente' => $this->calcularSaldoPendiente($id, $idEmpresa, $factura)['saldo_pendiente'],
         ]);
     }
 
@@ -657,5 +686,239 @@ class FacturasVentaController extends ApiBaseController
         $st->execute([':id' => $idProducto, ':e' => $idEmpresa]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
+    }
+
+    /**
+     * GET /api/v1/facturas-venta/formas-cobro
+     * Catálogo para el formulario de "Cobrar" (mismo filtro que usa la web en
+     * getIngresosCatalogosAjax: activas y aplicables a Ingresos).
+     */
+    public function formasCobro(): void
+    {
+        $this->requireLeer();
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $db = Database::getConnection();
+        $st = $db->prepare(
+            "SELECT id, nombre, tipo
+             FROM empresa_formas_pago
+             WHERE id_empresa = ? AND eliminado = false AND activo = true
+               AND (aplica_en IN ('AMBAS','INGRESO') OR aplica_en IS NULL)
+             ORDER BY nombre ASC"
+        );
+        $st->execute([$idEmpresa]);
+        $this->jsonOk($st->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /**
+     * POST /api/v1/facturas-venta/cobrar
+     * body: {
+     *   id_factura, monto, id_forma_cobro, observaciones?,
+     *   // Solo si la forma de cobro es tipo BANCO:
+     *   tipo_operacion_bancaria? ('TRANSFERENCIA'|'DEPOSITO'|'DEBITO'|'CHEQUE'),
+     *   numero_referencia?, fecha_cobro? (obligatoria si tipo_operacion_bancaria='CHEQUE')
+     * }
+     * Solo si la factura está 'autorizado' y tiene saldo pendiente > 0. Crea un
+     * ingreso real (mismo IngresoService::crear() que el "cobro rápido" web),
+     * con el punto de emisión de Ingresos resuelto automáticamente.
+     */
+    public function cobrar(): void
+    {
+        $this->requireActualizar();
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->jsonError('METODO_NO_PERMITIDO', 'Use POST.', 405);
+        }
+
+        $body = $this->getJsonBody();
+        $idFactura = (int) ($body['id_factura'] ?? 0);
+        $idFormaCobro = (int) ($body['id_forma_cobro'] ?? 0);
+        $monto = round((float) ($body['monto'] ?? 0), 2);
+
+        if ($idFactura <= 0 || $idFormaCobro <= 0 || $monto <= 0) {
+            $this->jsonError('DATOS_INCOMPLETOS', 'Faltan datos (factura/forma de cobro/monto).', 422);
+        }
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $factura = $this->repository->getPorId($idFactura);
+        if (!$factura || (int) ($factura['id_empresa'] ?? 0) !== $idEmpresa) {
+            $this->jsonError('NO_ENCONTRADO', 'Factura no encontrada.', 404);
+        }
+        if (($factura['estado'] ?? '') !== 'autorizado') {
+            $this->jsonError('NO_AUTORIZADA', 'Solo se pueden cobrar facturas ya autorizadas por el SRI.', 409);
+        }
+
+        $saldo = $this->calcularSaldoPendiente($idFactura, $idEmpresa, $factura);
+        if ($saldo['saldo_pendiente'] <= 0.01) {
+            $this->jsonError('YA_PAGADA', 'Esta factura ya no tiene saldo pendiente.', 409);
+        }
+        if ($monto > $saldo['saldo_pendiente'] + 0.01) {
+            $this->jsonError(
+                'MONTO_EXCEDE_SALDO',
+                sprintf('El monto ($%s) no puede superar el saldo pendiente ($%s).', number_format($monto, 2), number_format($saldo['saldo_pendiente'], 2)),
+                422
+            );
+        }
+
+        $db = Database::getConnection();
+        $stForma = $db->prepare('SELECT id, tipo FROM empresa_formas_pago WHERE id = ? AND id_empresa = ? AND eliminado = false AND activo = true');
+        $stForma->execute([$idFormaCobro, $idEmpresa]);
+        $forma = $stForma->fetch(PDO::FETCH_ASSOC);
+        if (!$forma) {
+            $this->jsonError('FORMA_COBRO_INVALIDA', 'La forma de cobro no es válida.', 422);
+        }
+
+        // Datos bancarios: solo tienen sentido si la forma de cobro es tipo BANCO
+        // (mismo condicionamiento que el div "fvPagoDivBanco" de la web — Op.
+        // Bancaria: Transferencia/Depósito/Débito/Cheque + Nº referencia/cheque).
+        $tipoOperacionBancaria = null;
+        $numeroReferencia = null;
+        $fechaCobro = null;
+        if (strtoupper((string) ($forma['tipo'] ?? '')) === 'BANCO') {
+            $tipoOperacionBancaria = strtoupper(trim((string) ($body['tipo_operacion_bancaria'] ?? '')));
+            if (!in_array($tipoOperacionBancaria, ['TRANSFERENCIA', 'DEPOSITO', 'DEBITO', 'CHEQUE'], true)) {
+                $this->jsonError('TIPO_OPERACION_REQUERIDO', 'Selecciona el tipo de operación bancaria (transferencia, depósito, débito o cheque).', 422);
+            }
+            $numeroReferencia = trim((string) ($body['numero_referencia'] ?? '')) ?: null;
+            if ($tipoOperacionBancaria === 'CHEQUE') {
+                $fechaCobro = trim((string) ($body['fecha_cobro'] ?? ''));
+                if ($fechaCobro === '') {
+                    $this->jsonError('FECHA_COBRO_REQUERIDA', 'Indica la fecha en que se podrá cobrar el cheque.', 422);
+                }
+            }
+        }
+
+        // Punto de emisión de Ingresos: se resuelve solo (el primero activo del
+        // mismo establecimiento de la factura) — es un detalle técnico, no algo
+        // que el usuario deba elegir para un cobro rápido desde el celular.
+        $idEstablecimiento = (int) $factura['id_establecimiento'];
+        $stPunto = $db->prepare(
+            "SELECT p.id, e.codigo AS establecimiento, p.codigo_punto AS punto_emision
+             FROM empresa_punto_emision p
+             JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+             WHERE p.id_establecimiento = ? AND p.id_empresa = ? AND p.eliminado = false AND LOWER(p.estado) = 'activo'
+             ORDER BY p.codigo_punto ASC
+             LIMIT 1"
+        );
+        $stPunto->execute([$idEstablecimiento, $idEmpresa]);
+        $punto = $stPunto->fetch(PDO::FETCH_ASSOC);
+        if (!$punto) {
+            $this->jsonError('SIN_PUNTO_EMISION', 'No hay un punto de emisión activo para registrar el cobro.', 422);
+        }
+
+        $secRes = (new SecuencialService())->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos');
+        $numDoc = $factura['establecimiento'] . '-' . $factura['punto_emision'] . '-' . $factura['secuencial'];
+
+        // saldo_anterior aquí es el que espera IngresoRules (solo resta cobros ya
+        // registrados, igual que registrarCobroRapidoAjax en la web) — no el
+        // saldo_pendiente "completo" (que además resta retenciones/NC) que se usó
+        // arriba para decidir si dejar cobrar. El completo es siempre <= este, así
+        // que un monto válido contra el completo también lo es contra este.
+        $payload = [
+            'id_empresa' => $idEmpresa,
+            'id_establecimiento' => $idEstablecimiento,
+            'id_punto_emision' => (int) $punto['id'],
+            'id_cliente' => (int) $factura['id_cliente'],
+            'id_usuario' => $idUsuario,
+            'fecha_emision' => date('Y-m-d'),
+            'establecimiento' => $punto['establecimiento'],
+            'punto_emision' => $punto['punto_emision'],
+            'secuencial' => $secRes['formateado'],
+            'numero_ingreso' => $punto['establecimiento'] . '-' . $punto['punto_emision'] . '-' . $secRes['formateado'],
+            'tipo_ingreso' => 'FACTURA_VENTA',
+            'id_ingreso_concepto' => null,
+            'monto_total' => $monto,
+            'observaciones' => trim((string) ($body['observaciones'] ?? '')) ?: ('Cobro de factura ' . $numDoc),
+            'recibo_de' => $factura['cliente_nombre'] ?? '',
+            'id_recibo_cliente' => (int) $factura['id_cliente'],
+            'detalles' => [[
+                'tipo_documento' => 'FACTURA',
+                'id_referencia_documento' => $idFactura,
+                'numero_documento' => $numDoc,
+                'descripcion' => 'Cobro de factura ' . $numDoc,
+                'monto_documento' => (float) $factura['importe_total'],
+                'saldo_anterior' => $saldo['saldo_anterior_simple'],
+                'monto_cobrado' => $monto,
+                'saldo_actual' => max(0.0, $saldo['saldo_anterior_simple'] - $monto),
+            ]],
+            'pagos' => [[
+                'id_forma_cobro' => $idFormaCobro,
+                'monto' => $monto,
+                // La web manda el mismo Nº ingresado tanto en 'referencia' como en
+                // 'numero_cheque' (un solo input para ambos) — se replica igual.
+                'referencia' => $numeroReferencia,
+                'tipo_operacion_bancaria' => $tipoOperacionBancaria,
+                'numero_cheque' => $numeroReferencia,
+                'fecha_cobro' => $fechaCobro ?: null,
+            ]],
+        ];
+
+        try {
+            $ingresoService = new IngresoService(new IngresoRepository(), new IngresoRules(), new LogSistemaService());
+            $idIngreso = $ingresoService->crear($payload);
+        } catch (Throwable $e) {
+            $this->jsonError('ERROR_GUARDAR', $e->getMessage(), 422);
+        }
+
+        $this->jsonOk(['id_ingreso' => $idIngreso], [], 201);
+    }
+
+    /**
+     * Saldo pendiente de una factura: importe - cobros ya registrados -
+     * retenciones - notas de crédito (igual al cálculo que hace el JS de la
+     * pestaña "Pagos" de la web — ver factura_venta/index.php ~6260).
+     * También devuelve 'saldo_anterior_simple' (solo importe - cobros, sin
+     * retenciones/NC), que es lo que espera IngresoRules como saldo_anterior.
+     *
+     * @return array{importe_total:float,total_cobrado:float,total_retenciones:float,total_nc:float,saldo_anterior_simple:float,saldo_pendiente:float}
+     */
+    private function calcularSaldoPendiente(int $idFactura, int $idEmpresa, array $factura): array
+    {
+        $db = Database::getConnection();
+        $importeTotal = (float) $factura['importe_total'];
+        $numeroFactura = $factura['establecimiento'] . '-' . $factura['punto_emision'] . '-' . $factura['secuencial'];
+
+        $stCobrado = $db->prepare(
+            "SELECT COALESCE(SUM(id2.monto_cobrado), 0)
+             FROM ingresos_detalle id2
+             INNER JOIN ingresos_cabecera ic2 ON id2.id_ingreso = ic2.id
+             WHERE id2.tipo_documento = 'FACTURA' AND id2.id_referencia_documento = ?
+               AND ic2.estado != 'anulado' AND ic2.eliminado = false"
+        );
+        $stCobrado->execute([$idFactura]);
+        $totalCobrado = (float) $stCobrado->fetchColumn();
+
+        $stRet = $db->prepare(
+            "SELECT COALESCE(SUM(r.total_renta + r.total_iva + r.total_isd), 0)
+             FROM retencion_venta_cabecera r
+             WHERE r.id_empresa = ? AND r.eliminado = false
+               AND (r.id_venta = ?
+                    OR EXISTS (SELECT 1 FROM retencion_venta_detalle rd
+                               WHERE rd.id_retencion = r.id AND rd.num_doc_sustento = ?))"
+        );
+        $stRet->execute([$idEmpresa, $idFactura, $numeroFactura]);
+        $totalRetenciones = (float) $stRet->fetchColumn();
+
+        $stNc = $db->prepare(
+            "SELECT COALESCE(SUM(nc.importe_total), 0)
+             FROM notas_credito_cabecera nc
+             WHERE nc.num_doc_modificado = ? AND nc.id_empresa = ? AND nc.eliminado = false AND nc.estado != 'anulado'"
+        );
+        $stNc->execute([$numeroFactura, $idEmpresa]);
+        $totalNc = (float) $stNc->fetchColumn();
+
+        $saldoAnteriorSimple = round($importeTotal - $totalCobrado, 2);
+        $saldoPendiente = round($importeTotal - $totalCobrado - $totalRetenciones - $totalNc, 2);
+
+        return [
+            'importe_total' => round($importeTotal, 2),
+            'total_cobrado' => round($totalCobrado, 2),
+            'total_retenciones' => round($totalRetenciones, 2),
+            'total_nc' => round($totalNc, 2),
+            'saldo_anterior_simple' => max(0.0, $saldoAnteriorSimple),
+            'saldo_pendiente' => max(0.0, $saldoPendiente),
+        ];
     }
 }

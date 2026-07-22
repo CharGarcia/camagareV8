@@ -9,9 +9,11 @@
 /** @var array $modulos */
 /** @var array $opcionesUsuarios */
 /** @var array $opcionesEmpresas */
+/** @var array $combosActivos */
 $base = BASE_URL;
 $opcionesUsuarios = $opcionesUsuarios ?? [];
 $opcionesEmpresas = $opcionesEmpresas ?? [];
+$combosActivos = $combosActivos ?? [];
 $msg = $_SESSION['permisos_msg'] ?? null;
 unset($_SESSION['permisos_msg']);
 $limiteUsuarios = $limiteUsuarios ?? null;
@@ -90,41 +92,71 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
         <form method="GET" action="<?= $base ?>/config/permisos-modulos" id="form-permisos-buscar">
             <input type="hidden" name="mostrar" value="1">
             <input type="hidden" name="u" id="input-u" value="<?= (int)$idUsuarioSel ?>">
-            <div id="paso1" class="row g-3 align-items-end" style="display:<?= ($idUsuarioSel && $idEmpresaSel) ? 'none' : 'flex' ?>;">
-                <div class="col-md-6">
-                    <label class="form-label small">Usuario</label>
-                    <select id="select-usuario" class="form-select">
-                        <option value="">Seleccione usuario...</option>
-                        <?php foreach ($opcionesUsuarios as $opt): ?>
-                            <option value="<?= (int)$opt['value'] ?>" <?= ($opt['value'] ?? 0) == $idUsuarioSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-6 d-flex align-items-end">
-                    <button type="button" id="btn-siguiente" class="btn btn-primary"><i class="bi bi-arrow-right"></i> Siguiente</button>
+            <div id="paso1" style="display:<?= ($idUsuarioSel && $idEmpresaSel) ? 'none' : 'block' ?>;">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-9">
+                        <label class="form-label small">Usuario</label>
+                        <select id="select-usuario" class="form-select">
+                            <option value="">Seleccione usuario...</option>
+                            <?php foreach ($opcionesUsuarios as $opt): ?>
+                                <option value="<?= (int)$opt['value'] ?>" <?= ($opt['value'] ?? 0) == $idUsuarioSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" id="btn-siguiente" class="btn btn-primary w-100"><i class="bi bi-arrow-right"></i> Seleccionar empresa</button>
+                    </div>
                 </div>
             </div>
-            <div id="paso2" class="row g-3 align-items-end" style="display:<?= ($idUsuarioSel && $idEmpresaSel) ? 'flex' : 'none' ?>;">
-                <div class="col-md-4">
-                    <label class="form-label small">Usuario</label>
-                    <input type="text" id="usuario-texto" class="form-control bg-light" readonly value="<?= htmlspecialchars(($usuarioSel['nombre'] ?? '') . ' (' . ($usuarioSel['cedula'] ?? '') . ')') ?>">
+            <div id="paso2" style="display:<?= ($idUsuarioSel && $idEmpresaSel) ? 'block' : 'none' ?>;">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label small">Usuario</label>
+                        <input type="text" id="usuario-texto" class="form-control bg-light" readonly value="<?= htmlspecialchars(($usuarioSel['nombre'] ?? '') . ' (' . ($usuarioSel['cedula'] ?? '') . ')') ?>">
+                    </div>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label small">Empresa</label>
-                    <select id="select-empresa" name="e" class="form-select">
-                        <?php foreach ($opcionesEmpresas as $opt): ?>
-                            <option value="<?= (int)$opt['value'] ?>" <?= ($opt['value'] ?? 0) == $idEmpresaSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-4 d-flex align-items-end gap-2">
-                    <button type="button" id="btn-anterior" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Anterior</button>
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-eye"></i> Mostrar</button>
+                <div class="row g-3 mt-1 align-items-end">
+                    <div class="col-md-8">
+                        <label class="form-label small">Empresa</label>
+                        <select id="select-empresa" name="e" class="form-select">
+                            <?php foreach ($opcionesEmpresas as $opt): ?>
+                                <option value="<?= (int)$opt['value'] ?>" <?= ($opt['value'] ?? 0) == $idEmpresaSel ? 'selected' : '' ?>><?= htmlspecialchars($opt['text'] ?? '') ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div id="empresa-msg" class="text-danger small mt-1 d-none"><i class="bi bi-exclamation-circle"></i> Debe seleccionar una empresa.</div>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end gap-2">
+                        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-eye"></i> Mostrar módulos</button>
+                        <button type="button" id="btn-anterior" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Empezar de nuevo</button>
+                    </div>
                 </div>
             </div>
         </form>
     </div>
 </div>
+
+<script>
+(function() {
+    var form = document.getElementById('form-permisos-buscar');
+    var selectEmpresa = document.getElementById('select-empresa');
+    var empresaMsg = document.getElementById('empresa-msg');
+    if (!form || !selectEmpresa || !empresaMsg) return;
+
+    form.addEventListener('submit', function(e) {
+        if (!selectEmpresa.value) {
+            e.preventDefault();
+            empresaMsg.classList.remove('d-none');
+            selectEmpresa.focus();
+        } else {
+            empresaMsg.classList.add('d-none');
+        }
+    });
+
+    selectEmpresa.addEventListener('change', function() {
+        empresaMsg.classList.add('d-none');
+    });
+})();
+</script>
 
 <?php if (!empty($modulos)): ?>
     <div class="card" id="card-modulos">
@@ -132,6 +164,11 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             <strong><i class="bi bi-person-fill"></i> <?= htmlspecialchars($usuarioSel['nombre'] ?? '') ?> - <i class="bi bi-building"></i> <?= htmlspecialchars($empresaSel['nombre_comercial'] ?? $empresaSel['ruc'] ?? '') ?></strong>
             <?php if ((int)($usuarioSel['nivel'] ?? 0) < 3): ?>
             <div class="d-flex gap-2 flex-wrap">
+                <?php if ($nivel >= 3 && !empty($combosActivos)): ?>
+                <button type="button" class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalAplicarCombo">
+                    <i class="bi bi-box-seam"></i> Aplicar combo
+                </button>
+                <?php endif; ?>
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCopiarDesdeEmpresa">
                     <i class="bi bi-building-gear"></i> Copiar desde otra empresa
                 </button>
@@ -340,6 +377,104 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             });
         })();
     </script>
+
+    <!-- Modal Aplicar combo -->
+    <?php if ($nivel >= 3 && !empty($combosActivos)): ?>
+    <div class="modal fade" id="modalAplicarCombo" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-box-seam"></i> Aplicar combo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-light border small mb-3">
+                        <i class="bi bi-info-circle"></i> Se agregarán con acceso total los submódulos del combo a
+                        <strong><?= htmlspecialchars($usuarioSel['nombre'] ?? '') ?></strong>
+                        en <strong><?= htmlspecialchars($empresaSel['nombre_comercial'] ?? $empresaSel['ruc'] ?? '') ?></strong>.
+                        Los permisos que ya tenía <strong>no se eliminan</strong>.
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Combo</label>
+                        <select id="combo-select" class="form-select">
+                            <option value="">Seleccione un combo...</option>
+                            <?php foreach ($combosActivos as $c): ?>
+                            <option value="<?= (int) $c['id'] ?>">
+                                <?= htmlspecialchars($c['nombre']) ?> (<?= (int) $c['total_submodulos'] ?> submódulos<?= $c['precio'] !== null ? ', $' . number_format((float) $c['precio'], 2) : '' ?>)
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div id="combo-aplicar-msg" class="small mt-2"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" id="btn-aplicar-combo" class="btn btn-success"><i class="bi bi-box-seam"></i> Aplicar combo</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            var modalEl = document.getElementById('modalAplicarCombo');
+            if (!modalEl) return;
+
+            var base = '<?= $base ?>';
+            var idUsuario = '<?= (int)$idUsuarioSel ?>';
+            var idEmpresa = '<?= (int)$idEmpresaSel ?>';
+            var selCombo = document.getElementById('combo-select');
+            var btnAplicar = document.getElementById('btn-aplicar-combo');
+            var msgEl = document.getElementById('combo-aplicar-msg');
+
+            function setMsg(tipo, texto) {
+                var c = tipo === 'ok' ? 'text-success' : (tipo === 'err' ? 'text-danger' : 'text-secondary');
+                msgEl.className = c + ' small mt-2';
+                msgEl.innerHTML = texto;
+            }
+
+            btnAplicar.addEventListener('click', function() {
+                var idCombo = selCombo.value;
+                if (!idCombo) { setMsg('err', 'Seleccione un combo.'); return; }
+
+                btnAplicar.disabled = true;
+                setMsg('load', '<i class="bi bi-arrow-repeat"></i> Aplicando...');
+
+                var fd = new FormData();
+                fd.append('id_combo', idCombo);
+                fd.append('id_usuario', idUsuario);
+                fd.append('id_empresa', idEmpresa);
+
+                fetch(base + '/config/combos-submodulos?action=aplicar', {
+                    method: 'POST', body: fd, credentials: 'same-origin',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(j) {
+                    if (j.ok) {
+                        setMsg('ok', '<i class="bi bi-check-circle-fill"></i> Combo "' + j.combo + '" aplicado (' + j.aplicados + ' submódulos). Actualizando lista...');
+                        setTimeout(function() {
+                            window.location.href = base + '/config/permisos-modulos?u=' + idUsuario + '&e=' + idEmpresa + '&mostrar=1';
+                        }, 900);
+                    } else {
+                        btnAplicar.disabled = false;
+                        setMsg('err', '<i class="bi bi-x-circle-fill"></i> ' + (j.error || 'Error al aplicar el combo.'));
+                    }
+                })
+                .catch(function() {
+                    btnAplicar.disabled = false;
+                    setMsg('err', 'Error de conexión.');
+                });
+            });
+
+            modalEl.addEventListener('hidden.bs.modal', function() {
+                selCombo.value = '';
+                btnAplicar.disabled = false;
+                setMsg('', '');
+            });
+        })();
+    </script>
+    <?php endif; ?>
 
     <!-- Modal Copiar permisos a otro usuario -->
     <div class="modal fade" id="modalCopiarPermisos" tabindex="-1" aria-hidden="true">
@@ -621,7 +756,10 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
                 .then(function(r) { return r.json(); })
                 .then(function(j) {
                     if (j.ok) {
-                        setMsg('ok', '<i class="bi bi-check-circle-fill"></i> Permisos copiados correctamente. <a href="javascript:location.reload()">Recargar</a> para ver los cambios.');
+                        setMsg('ok', '<i class="bi bi-check-circle-fill"></i> Permisos copiados correctamente. Actualizando lista...');
+                        setTimeout(function() {
+                            window.location.href = base + '/config/permisos-modulos?u=' + idUsuario + '&e=' + idEmpresaActual + '&mostrar=1';
+                        }, 900);
                     } else {
                         btnCopiar.disabled = false;
                         setMsg('err', '<i class="bi bi-x-circle-fill"></i> ' + (j.error || 'Error al copiar.'));
@@ -730,7 +868,7 @@ $limiteLleno = $limiteUsuarios !== null && $limiteUsuarios['actual'] >= $limiteU
             actualizarUsuarioPaso2();
             cargarEmpresas(idU);
             paso1.style.display = 'none';
-            paso2.style.display = 'flex';
+            paso2.style.display = 'block';
         });
 
         btnAnterior.addEventListener('click', function() {

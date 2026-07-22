@@ -39,9 +39,10 @@ class ImpuestoRentaTramosController extends Controller
         $st->execute([':a' => $anio]);
         $tramos = $st->fetchAll(PDO::FETCH_ASSOC);
 
-        $st2 = $this->db->prepare("SELECT gasto_personal_maximo FROM impuesto_renta_parametros WHERE anio = :a");
-        $st2->execute([':a' => $anio]);
-        $gastoPersonalMaximo = (float) ($st2->fetchColumn() ?: 0);
+        // Parámetros de gastos personales: la rebaja se calcula sobre la canasta
+        // familiar básica del año y el número de canastas según cargas familiares.
+        $ir = new \App\Services\modulos\ImpuestoRentaEmpleadoService();
+        $parametros = $ir->getParametrosAnio($anio);
 
         $st3 = $this->db->query("SELECT DISTINCT anio FROM impuesto_renta_tramos ORDER BY anio DESC");
         $aniosConfigurados = $st3->fetchAll(PDO::FETCH_COLUMN);
@@ -51,7 +52,7 @@ class ImpuestoRentaTramosController extends Controller
             'fullWidth' => true,
             'anio' => $anio,
             'tramos' => $tramos,
-            'gastoPersonalMaximo' => $gastoPersonalMaximo,
+            'parametros' => $parametros,
             'aniosConfigurados' => $aniosConfigurados,
         ]);
     }
@@ -115,7 +116,10 @@ class ImpuestoRentaTramosController extends Controller
         $this->redirect(BASE_URL . self::BASE_PATH . '?anio=' . $anio);
     }
 
-    /** Guarda el tope de gasto personal deducible del año. */
+    /**
+     * Guarda los parámetros de gastos personales del año: canasta familiar básica,
+     * porcentaje de rebaja y número de canastas según cargas familiares.
+     */
     public function guardarParametros(): void
     {
         $this->requireNivel(3);
@@ -124,21 +128,51 @@ class ImpuestoRentaTramosController extends Controller
         }
 
         $anio = (int) ($_POST['anio'] ?? 0);
-        $gastoPersonalMaximo = (float) ($_POST['gasto_personal_maximo'] ?? 0);
-        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
-
         if ($anio <= 0) {
             $this->redirect(BASE_URL . self::BASE_PATH);
         }
 
+        $canasta   = max(0.0, (float) ($_POST['canasta_basica'] ?? 0));
+        $pctRebaja = max(0.0, (float) ($_POST['porcentaje_rebaja'] ?? 18));
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+
+        // Factores (canastas) por número de cargas + caso especial.
+        $factores = [];
+        foreach (['0', '1', '2', '3', '4', '5', 'especial'] as $k) {
+            $v = (float) ($_POST['factor_' . $k] ?? 0);
+            if ($v > 0) {
+                $factores[$k] = $v;
+            }
+        }
+        if (!$factores) {
+            $factores = \App\Services\modulos\ImpuestoRentaEmpleadoService::FACTORES_DEFECTO;
+        }
+
+        // gasto_personal_maximo queda como referencia: el tope sin cargas (7 canastas).
+        $topeSinCargas = round($canasta * (float) ($factores['0'] ?? 7), 2);
+
         $st = $this->db->prepare(
-            "INSERT INTO impuesto_renta_parametros (anio, gasto_personal_maximo, updated_by)
-             VALUES (:a, :g, :u)
-             ON CONFLICT (anio) DO UPDATE SET gasto_personal_maximo = EXCLUDED.gasto_personal_maximo,
-                updated_by = EXCLUDED.updated_by, updated_at = CURRENT_TIMESTAMP"
+            "INSERT INTO impuesto_renta_parametros
+                (anio, gasto_personal_maximo, canasta_basica, porcentaje_rebaja, factores_canastas, updated_by)
+             VALUES (:a, :g, :c, :p, :f, :u)
+             ON CONFLICT (anio) DO UPDATE SET
+                gasto_personal_maximo = EXCLUDED.gasto_personal_maximo,
+                canasta_basica        = EXCLUDED.canasta_basica,
+                porcentaje_rebaja     = EXCLUDED.porcentaje_rebaja,
+                factores_canastas     = EXCLUDED.factores_canastas,
+                updated_by            = EXCLUDED.updated_by,
+                updated_at            = CURRENT_TIMESTAMP"
         );
-        $st->execute([':a' => $anio, ':g' => $gastoPersonalMaximo, ':u' => $idUsuario]);
-        $_SESSION['config_msg'] = ['success', 'Parámetros del año guardados.'];
+        $st->execute([
+            ':a' => $anio,
+            ':g' => $topeSinCargas,
+            ':c' => $canasta,
+            ':p' => $pctRebaja,
+            ':f' => json_encode($factores),
+            ':u' => $idUsuario,
+        ]);
+
+        $_SESSION['config_msg'] = ['success', 'Parámetros de gastos personales guardados.'];
         $this->redirect(BASE_URL . self::BASE_PATH . '?anio=' . $anio);
     }
 }

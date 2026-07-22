@@ -2,7 +2,7 @@
 /** @var string $titulo */
 /** @var int $anio */
 /** @var array $tramos */
-/** @var float $gastoPersonalMaximo */
+/** @var array $parametros canasta_basica, porcentaje_rebaja, factores, configurado */
 /** @var array $aniosConfigurados */
 $base = BASE_URL;
 $msg = $_SESSION['config_msg'] ?? null;
@@ -66,8 +66,12 @@ $hayTramos = !empty($tramos);
             <div class="lbl">Tramos <?= $anio ?></div>
         </div>
         <div class="irt-kpi text-center">
-            <div class="val">$<?= number_format($gastoPersonalMaximo, 2) ?></div>
-            <div class="lbl">Gasto personal</div>
+            <div class="val">$<?= number_format((float) $parametros['canasta_basica'], 2) ?></div>
+            <div class="lbl">Canasta básica</div>
+        </div>
+        <div class="irt-kpi text-center">
+            <div class="val"><?= number_format((float) $parametros['porcentaje_rebaja'], 0) ?>%</div>
+            <div class="lbl">Rebaja</div>
         </div>
     </div>
 </div>
@@ -129,20 +133,76 @@ $hayTramos = !empty($tramos);
     <div class="col-lg-4">
         <div class="card cmg-table-card border-0 shadow-sm">
             <div class="card-header bg-white border-bottom py-2">
-                <h6 class="fw-bold small text-uppercase text-muted mb-0"><i class="bi bi-wallet2 me-1"></i>Gasto personal deducible (<?= $anio ?>)</h6>
+                <h6 class="fw-bold small text-uppercase text-muted mb-0"><i class="bi bi-wallet2 me-1"></i>Gastos personales (<?= $anio ?>)</h6>
             </div>
             <div class="card-body">
+                <?php
+                    $canasta  = (float) $parametros['canasta_basica'];
+                    $pct      = (float) $parametros['porcentaje_rebaja'];
+                    $factores = $parametros['factores'];
+                    $etiquetas = [
+                        '0' => 'Sin cargas', '1' => '1 carga', '2' => '2 cargas',
+                        '3' => '3 cargas', '4' => '4 cargas', '5' => '5 o más',
+                        'especial' => 'Discapacidad / enf. catastrófica',
+                    ];
+                ?>
                 <form method="POST" action="<?= $base ?>/config/impuesto-renta-tramos-guardar-parametros">
                     <input type="hidden" name="anio" value="<?= $anio ?>">
-                    <label class="form-label small mb-1">Tope de gasto personal máximo deducible (anual)</label>
-                    <div class="input-group input-group-sm mb-2">
-                        <span class="input-group-text">$</span>
-                        <input type="number" step="0.01" name="gasto_personal_maximo" class="form-control" value="<?= number_format($gastoPersonalMaximo, 2, '.', '') ?>">
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-7">
+                            <label class="form-label small mb-1">Canasta familiar básica (enero)</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">$</span>
+                                <input type="number" step="0.01" min="0" name="canasta_basica" class="form-control"
+                                       value="<?= number_format($canasta, 2, '.', '') ?>">
+                            </div>
+                        </div>
+                        <div class="col-5">
+                            <label class="form-label small mb-1">Rebaja</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" step="0.01" min="0" name="porcentaje_rebaja" class="form-control"
+                                       value="<?= number_format($pct, 2, '.', '') ?>">
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
                     </div>
+
+                    <label class="form-label small mb-1">Canastas según cargas familiares</label>
+                    <table class="table table-sm table-bordered align-middle mb-2" style="font-size:0.75rem;">
+                        <thead class="table-light">
+                            <tr><th>Cargas</th><th style="width:80px;">Canastas</th><th class="text-end" style="width:95px;">Tope</th></tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($etiquetas as $clave => $texto): ?>
+                            <?php $f = (float) ($factores[$clave] ?? 0); ?>
+                            <tr>
+                                <td class="text-muted"><?= $texto ?></td>
+                                <td class="p-0">
+                                    <input type="number" step="1" min="0" name="factor_<?= $clave ?>"
+                                           class="form-control form-control-sm border-0 irt-factor"
+                                           data-clave="<?= $clave ?>"
+                                           style="padding:0 4px;height:22px;font-size:0.75rem;"
+                                           value="<?= $f > 0 ? (int) $f : '' ?>">
+                                </td>
+                                <td class="text-end fw-bold irt-tope" data-clave="<?= $clave ?>">
+                                    <?= $canasta > 0 && $f > 0 ? '$' . number_format($canasta * $f, 2) : '–' ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+
                     <button type="submit" class="btn btn-outline-primary btn-sm w-100"><i class="bi bi-check-lg"></i> Guardar</button>
                 </form>
+
                 <hr class="my-3">
-                <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>Se resta del ingreso gravado anual proyectado antes de aplicar la tabla de tramos (método simplificado, ver <code>ImpuestoRentaEmpleadoService</code>). Dejar en $0.00 si no aplica deducción.</p>
+                <p class="text-muted small mb-0">
+                    <i class="bi bi-info-circle me-1"></i>Los gastos personales <strong>no reducen la base imponible</strong>:
+                    generan una rebaja del impuesto causado igual al <strong><?= number_format($pct, 0) ?>%</strong> del menor
+                    valor entre lo que el empleado proyecta y su tope. El tope de cada empleado depende de sus cargas familiares
+                    (se registran en la ficha del empleado &rarr; pestaña <em>Imp. Renta</em>). Ver <code>ImpuestoRentaEmpleadoService</code>.
+                </p>
             </div>
         </div>
     </div>
@@ -209,4 +269,27 @@ function abrirModalEditar(t) {
     document.getElementById('t_porcentaje_excedente').value = t.porcentaje_excedente;
     new bootstrap.Modal(document.getElementById('modalTramo')).show();
 }
+</script>
+
+<script>
+// Topes en vivo: canasta básica x número de canastas de cada fila.
+(function () {
+    const inpCanasta = document.querySelector('input[name="canasta_basica"]');
+    if (!inpCanasta) return;
+
+    const money = v => '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    function recalcular() {
+        const canasta = parseFloat(inpCanasta.value || '0') || 0;
+        document.querySelectorAll('.irt-factor').forEach(inp => {
+            const celda = document.querySelector(`.irt-tope[data-clave="${inp.dataset.clave}"]`);
+            if (!celda) return;
+            const f = parseFloat(inp.value || '0') || 0;
+            celda.textContent = (canasta > 0 && f > 0) ? money(canasta * f) : '–';
+        });
+    }
+
+    inpCanasta.addEventListener('input', recalcular);
+    document.querySelectorAll('.irt-factor').forEach(i => i.addEventListener('input', recalcular));
+})();
 </script>

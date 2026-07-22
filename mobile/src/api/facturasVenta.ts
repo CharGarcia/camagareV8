@@ -15,6 +15,8 @@ export type FacturaListado = {
   estado: string;
   cliente_nombre: string;
   cliente_ruc: string;
+  /** importe - cobros - retenciones - notas de crédito. */
+  saldo_pendiente: number;
 };
 
 export async function listarFacturas(params: { buscar?: string; page?: number } = {}) {
@@ -73,6 +75,8 @@ export async function obtenerFactura(id: number) {
     detalles: FacturaDetalleLinea[];
     pagos: FacturaPago[];
     totales_iva: TotalPorTarifa[];
+    /** importe - cobros ya registrados - retenciones - notas de crédito. */
+    saldo_pendiente: number;
   };
 }
 
@@ -149,6 +153,33 @@ export type ResultadoEnvioSri = {
 export async function enviarFacturaSri(id: number) {
   const resp = await api.post('/facturas-venta/enviar-sri', { id }, { timeout: 45000 });
   return resp.data.data as ResultadoEnvioSri;
+}
+
+export type FormaCobro = { id: number; nombre: string; tipo: string };
+
+export async function obtenerFormasCobro() {
+  const resp = await api.get('/facturas-venta/formas-cobro');
+  return resp.data.data as FormaCobro[];
+}
+
+export type TipoOperacionBancaria = 'TRANSFERENCIA' | 'DEPOSITO' | 'DEBITO' | 'CHEQUE';
+
+export type CobroInput = {
+  id_factura: number;
+  monto: number;
+  id_forma_cobro: number;
+  observaciones?: string;
+  /** Solo si la forma de cobro elegida es de tipo BANCO. */
+  tipo_operacion_bancaria?: TipoOperacionBancaria;
+  numero_referencia?: string;
+  /** Obligatoria si tipo_operacion_bancaria === 'CHEQUE' (fecha en que se podrá cobrar). */
+  fecha_cobro?: string;
+};
+
+/** Solo funciona si la factura está 'autorizado' y tiene saldo pendiente > 0. */
+export async function registrarCobro(input: CobroInput) {
+  const resp = await api.post('/facturas-venta/cobrar', input);
+  return resp.data.data as { id_ingreso: number };
 }
 
 /** Descarga el PDF al almacenamiento local de la app y devuelve el URI del archivo. */

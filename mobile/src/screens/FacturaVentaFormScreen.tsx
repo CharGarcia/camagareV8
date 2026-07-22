@@ -16,11 +16,15 @@ import {
   FacturaCabecera,
   FacturaDetalleLinea,
   FacturaPago,
+  FormaCobro,
   FormaPagoSri,
   obtenerCatalogosFacturas,
   obtenerFactura,
+  obtenerFormasCobro,
   obtenerSecuencial,
   obtenerSeries,
+  registrarCobro,
+  TipoOperacionBancaria,
   TotalPorTarifa,
   VendedorFactura,
 } from '../api/facturasVenta';
@@ -50,6 +54,13 @@ const COLOR_ESTADO: Record<string, string> = {
   ANULADO: '#6c757d',
 };
 
+const TIPOS_OPERACION_BANCARIA: { id: TipoOperacionBancaria; label: string }[] = [
+  { id: 'TRANSFERENCIA', label: 'Transferencia' },
+  { id: 'DEPOSITO', label: 'Depósito' },
+  { id: 'DEBITO', label: 'Débito' },
+  { id: 'CHEQUE', label: 'Cheque' },
+];
+
 function fechaLocalISO(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -77,8 +88,22 @@ export default function FacturaVentaFormScreen() {
   const [detallesLectura, setDetallesLectura] = useState<FacturaDetalleLinea[]>([]);
   const [pagosLectura, setPagosLectura] = useState<FacturaPago[]>([]);
   const [totalesIva, setTotalesIva] = useState<TotalPorTarifa[]>([]);
+  const [saldoPendiente, setSaldoPendiente] = useState(0);
   const [descargandoPdf, setDescargandoPdf] = useState(false);
   const [enviandoSri, setEnviandoSri] = useState(false);
+
+  // Cobrar (solo si estado === 'autorizado' y saldoPendiente > 0)
+  const [mostrarFormCobro, setMostrarFormCobro] = useState(false);
+  const [formasCobro, setFormasCobro] = useState<FormaCobro[]>([]);
+  const [montoCobro, setMontoCobro] = useState('');
+  const [idFormaCobro, setIdFormaCobro] = useState<number | null>(null);
+  const [observacionesCobro, setObservacionesCobro] = useState('');
+  const [cobrando, setCobrando] = useState(false);
+  // Solo aplican si la forma de cobro elegida es tipo BANCO (igual que el div
+  // condicional "fvPagoDivBanco" de la web).
+  const [tipoOperacionBancaria, setTipoOperacionBancaria] = useState<TipoOperacionBancaria | null>(null);
+  const [numeroReferenciaCobro, setNumeroReferenciaCobro] = useState('');
+  const [fechaCobroCheque, setFechaCobroCheque] = useState<Date | null>(null);
 
   // Serie/secuencial (solo modo creación; en edición quedan fijos)
   const [establecimientos, setEstablecimientos] = useState<EstablecimientoFactura[]>([]);
@@ -124,6 +149,7 @@ export default function FacturaVentaFormScreen() {
       setDetallesLectura(data.detalles);
       setPagosLectura(data.pagos);
       setTotalesIva(data.totales_iva);
+      setSaldoPendiente(data.saldo_pendiente);
     } catch (err) {
       setError(mensajeError(err, 'No se pudo cargar la factura.'));
     } finally {
@@ -451,6 +477,82 @@ export default function FacturaVentaFormScreen() {
     }
   }
 
+  async function abrirFormCobro() {
+    setMostrarFormCobro(true);
+    setMontoCobro(saldoPendiente.toFixed(2));
+    if (formasCobro.length === 0) {
+      try {
+        setFormasCobro(await obtenerFormasCobro());
+      } catch (err) {
+        setError(mensajeError(err, 'No se pudieron cargar las formas de cobro.'));
+      }
+    }
+  }
+
+  function onCambiarFormaCobro(id: number | null) {
+    setIdFormaCobro(id);
+    // Al cambiar de forma de cobro se limpian los datos bancarios: si la nueva
+    // forma no es tipo BANCO no aplican, y si sí lo es, mejor no arrastrar los
+    // de una forma distinta.
+    setTipoOperacionBancaria(null);
+    setNumeroReferenciaCobro('');
+    setFechaCobroCheque(null);
+  }
+
+  const formaCobroSeleccionada = formasCobro.find((f) => f.id === idFormaCobro) ?? null;
+  const esFormaCobroBanco = formaCobroSeleccionada?.tipo === 'BANCO';
+
+  async function confirmarCobro(id: number) {
+    const monto = Number(montoCobro.replace(',', '.'));
+    if (!monto || monto <= 0) {
+      Alert.alert('Monto inválido', 'Ingresa un monto mayor a cero.');
+      return;
+    }
+    if (monto > saldoPendiente + 0.01) {
+      Alert.alert('Monto inválido', `El monto no puede superar el saldo pendiente ($${saldoPendiente.toFixed(2)}).`);
+      return;
+    }
+    if (!idFormaCobro) {
+      Alert.alert('Falta la forma de cobro', 'Selecciona cómo se recibió el pago.');
+      return;
+    }
+    if (esFormaCobroBanco && !tipoOperacionBancaria) {
+      Alert.alert('Falta la operación bancaria', 'Selecciona si fue transferencia, depósito, débito o cheque.');
+      return;
+    }
+    if (esFormaCobroBanco && tipoOperacionBancaria === 'CHEQUE' && !fechaCobroCheque) {
+      Alert.alert('Falta la fecha del cheque', 'Indica la fecha en que se podrá cobrar el cheque.');
+      return;
+    }
+
+    setCobrando(true);
+    setError(null);
+    try {
+      await registrarCobro({
+        id_factura: id,
+        monto,
+        id_forma_cobro: idFormaCobro,
+        observaciones: observacionesCobro.trim() || undefined,
+        tipo_operacion_bancaria: esFormaCobroBanco ? tipoOperacionBancaria ?? undefined : undefined,
+        numero_referencia: esFormaCobroBanco ? numeroReferenciaCobro.trim() || undefined : undefined,
+        fecha_cobro: esFormaCobroBanco && tipoOperacionBancaria === 'CHEQUE' && fechaCobroCheque ? fechaLocalISO(fechaCobroCheque) : undefined,
+      });
+      Alert.alert('Cobro registrado', `Se registró un cobro de $${monto.toFixed(2)}.`);
+      setMostrarFormCobro(false);
+      setMontoCobro('');
+      setIdFormaCobro(null);
+      setObservacionesCobro('');
+      setTipoOperacionBancaria(null);
+      setNumeroReferenciaCobro('');
+      setFechaCobroCheque(null);
+      await cargarFactura();
+    } catch (err) {
+      setError(mensajeError(err, 'No se pudo registrar el cobro.'));
+    } finally {
+      setCobrando(false);
+    }
+  }
+
   if (cargando) {
     return (
       <View style={styles.centrado}>
@@ -468,6 +570,7 @@ export default function FacturaVentaFormScreen() {
       );
     }
     const esBorrador = cabeceraLectura.estado === 'borrador';
+    const puedeCobrar = cabeceraLectura.estado === 'autorizado' && saldoPendiente > 0.01;
     const color = COLOR_ESTADO[(cabeceraLectura.estado || '').toUpperCase()] ?? '#6c757d';
     return (
       <ScrollView style={styles.container} contentContainerStyle={{ padding: 16 }}>
@@ -529,6 +632,88 @@ export default function FacturaVentaFormScreen() {
 
         {pagosLectura.length > 0 ? (
           <Text style={styles.dato}>Forma de pago: {pagosLectura[0].nombre_forma_pago}</Text>
+        ) : null}
+
+        {cabeceraLectura.estado === 'autorizado' ? (
+          <Text style={[styles.dato, saldoPendiente > 0.01 ? styles.saldoPendienteTexto : styles.saldoPagadoTexto]}>
+            {saldoPendiente > 0.01 ? `Saldo pendiente: $${saldoPendiente.toFixed(2)}` : 'Factura pagada'}
+          </Text>
+        ) : null}
+
+        {puedeCobrar && !mostrarFormCobro ? (
+          <TouchableOpacity style={styles.botonCobrar} onPress={abrirFormCobro} disabled={enviandoSri || descargandoPdf}>
+            <Text style={styles.botonGuardarTexto}>Cobrar</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {puedeCobrar && mostrarFormCobro ? (
+          <View style={styles.formCobroBox}>
+            <Text style={styles.tituloBloque}>Registrar cobro</Text>
+
+            <Text style={styles.label}>Monto</Text>
+            <TextInput style={styles.input} value={montoCobro} onChangeText={setMontoCobro} keyboardType="decimal-pad" />
+
+            <View style={{ marginTop: 12 }}>
+              <SelectorLista<number>
+                label="Forma de cobro"
+                value={idFormaCobro}
+                opciones={formasCobro.map((f) => ({ id: f.id, label: f.nombre }))}
+                onChange={onCambiarFormaCobro}
+              />
+            </View>
+
+            {esFormaCobroBanco ? (
+              <View style={styles.bancoBox}>
+                <View style={{ marginTop: 0 }}>
+                  <SelectorLista<TipoOperacionBancaria>
+                    label="Operación bancaria"
+                    value={tipoOperacionBancaria}
+                    opciones={TIPOS_OPERACION_BANCARIA}
+                    onChange={setTipoOperacionBancaria}
+                  />
+                </View>
+
+                <Text style={styles.label}>Nº de referencia / cheque</Text>
+                <TextInput
+                  style={styles.input}
+                  value={numeroReferenciaCobro}
+                  onChangeText={setNumeroReferenciaCobro}
+                  placeholder="Opcional"
+                />
+
+                {tipoOperacionBancaria === 'CHEQUE' ? (
+                  <View style={{ marginTop: 12 }}>
+                    <SelectorFechaHora
+                      label="Fecha de cobro del cheque"
+                      mode="date"
+                      value={fechaCobroCheque}
+                      onChange={setFechaCobroCheque}
+                    />
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            <Text style={styles.label}>Observaciones</Text>
+            <TextInput style={styles.input} value={observacionesCobro} onChangeText={setObservacionesCobro} placeholder="Opcional" multiline />
+
+            <View style={styles.filaBotonesCobro}>
+              <TouchableOpacity
+                style={[styles.botonCancelar, { flex: 1, marginTop: 0, justifyContent: 'center' }]}
+                onPress={() => setMostrarFormCobro(false)}
+                disabled={cobrando}
+              >
+                <Text style={styles.botonCancelarTexto}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.botonCobrar, { flex: 1, marginTop: 0 }]}
+                onPress={() => confirmarCobro(cabeceraLectura.id)}
+                disabled={cobrando}
+              >
+                {cobrando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonGuardarTexto}>Registrar cobro</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
         ) : null}
 
         {esBorrador ? (
@@ -766,6 +951,19 @@ const styles = StyleSheet.create({
   botonPdf: { backgroundColor: '#198754', borderRadius: 8, paddingVertical: 14, marginTop: 12, alignItems: 'center' },
   botonCancelar: { borderRadius: 8, paddingVertical: 12, marginTop: 20, alignItems: 'center', borderWidth: 1, borderColor: '#ccc' },
   botonCancelarTexto: { color: '#666', fontWeight: '600' },
+  botonCobrar: { backgroundColor: '#fd7e14', borderRadius: 8, paddingVertical: 14, marginTop: 12, alignItems: 'center' },
+  saldoPendienteTexto: { color: '#fd7e14', fontWeight: '700' },
+  saldoPagadoTexto: { color: '#198754', fontWeight: '700' },
+  formCobroBox: { backgroundColor: '#fff', borderRadius: 10, padding: 16, marginTop: 12 },
+  bancoBox: {
+    backgroundColor: '#fff8e6',
+    borderWidth: 1,
+    borderColor: '#ffe69c',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+  },
+  filaBotonesCobro: { flexDirection: 'row', gap: 10, marginTop: 20, alignItems: 'stretch' },
   botonGuardarTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
   bloque: { backgroundColor: '#fff', borderRadius: 10, padding: 16, marginBottom: 16 },
   tituloBloque: { fontSize: 16, fontWeight: '700' },

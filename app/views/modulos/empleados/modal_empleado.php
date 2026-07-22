@@ -282,8 +282,99 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                     </select>
                                 </div>
                             </div>
-                            <div id="empIrContenido" class="border rounded-3 p-3 bg-light">
-                                <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>Abre esta pestaña para calcular la proyección.</p>
+
+                            <!-- Proyección de gastos personales presentada por el empleado (form. SRI-GP) -->
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <h6 class="fw-bold small text-uppercase text-muted mb-0">
+                                    <i class="bi bi-receipt me-1"></i>Proyección de gastos personales
+                                </h6>
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="window.agregarFilaGasto && window.agregarFilaGasto()">
+                                    <i class="bi bi-plus-lg me-1"></i>Agregar año
+                                </button>
+                            </div>
+                            <p class="text-muted small mb-2">
+                                Lo que el empleado declara que gastará en el año (formulario SRI-GP). Genera una
+                                <strong>rebaja del impuesto causado</strong> equivalente a un porcentaje del menor valor entre
+                                lo proyectado y su tope. El tope se fija en canastas familiares básicas según las
+                                <strong>cargas familiares</strong> (7 sin cargas … 20 con 5 o más; 100 en caso de discapacidad o
+                                enfermedad catastrófica). Sin proyección presentada no hay rebaja.
+                            </p>
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm table-bordered align-middle mb-0" id="tablaGastosPersonales" style="font-size:0.78rem;">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width:80px;">Año</th>
+                                            <th>Vivienda</th>
+                                            <th>Salud</th>
+                                            <th>Educación</th>
+                                            <th>Alimentación</th>
+                                            <th>Vestimenta</th>
+                                            <th>Turismo</th>
+                                            <th style="width:70px;">Cargas</th>
+                                            <th style="width:52px;" title="Discapacidad o enfermedad catastrófica, rara u huérfana (100 canastas)">Esp.</th>
+                                            <th style="width:100px;">Total</th>
+                                            <th style="width:110px;">Tope</th>
+                                            <th style="width:36px;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <input type="hidden" name="gastos_personales_json" id="gastos_personales_json" value="[]">
+
+                            <div class="row g-3">
+                                <!-- Izquierda: avisos -->
+                                <div class="col-md-7">
+                                    <div id="empIrAvisos"></div>
+                                    <p class="text-muted small mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>Proyección informativa con el sueldo y % de aporte IESS
+                                        actuales del formulario (ingreso mensual estable durante el año). El valor que realmente se
+                                        retiene se calcula al generar cada rol de pagos mensual.
+                                    </p>
+                                </div>
+
+                                <!-- Derecha: caja de totales (mismo formato que la factura de venta) -->
+                                <div class="col-md-5">
+                                    <div class="bg-white border rounded p-2 shadow-sm position-relative" style="font-size:0.75rem;">
+                                        <div id="empIrSpinner" class="position-absolute top-0 end-0 m-2 d-none">
+                                            <span class="spinner-border spinner-border-sm text-primary"></span>
+                                        </div>
+
+                                        <div class="d-flex justify-content-between align-items-center mb-1 fw-bold border-bottom pb-1">
+                                            <span class="text-muted">Ingreso gravado anual</span>
+                                            <span id="ir-lbl-ingreso">0.00</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="text-muted">(-) Aporte IESS personal</span>
+                                            <span class="fw-bold text-dark" id="ir-lbl-iess">0.00</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center mb-1 border-top pt-1 fw-bold">
+                                            <span class="text-muted">Base imponible anual</span>
+                                            <span id="ir-lbl-base">0.00</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="text-muted">Impuesto causado</span>
+                                            <span class="fw-bold text-dark" id="ir-lbl-causado">0.00</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="text-muted">(-) Rebaja gastos personales <span id="ir-lbl-pct" class="text-muted"></span></span>
+                                            <span class="fw-bold text-dark" id="ir-lbl-rebaja">0.00</span>
+                                        </div>
+                                        <div class="text-end text-muted mb-1" id="ir-lbl-gasto-nota" style="font-size:0.68rem;"></div>
+
+                                        <div class="d-flex justify-content-between align-items-center mb-1 border-top pt-1">
+                                            <span class="text-muted">Retención anual estimada</span>
+                                            <span class="fw-bold text-dark" id="ir-lbl-anual">0.00</span>
+                                        </div>
+
+                                        <hr class="my-1 opacity-25">
+
+                                        <div class="d-flex justify-content-between align-items-center bg-light border py-1 px-2 rounded">
+                                            <span class="fw-bold text-dark" style="font-size:0.8rem;">RETENCIÓN MENSUAL</span>
+                                            <span class="fw-bold text-dark" style="font-size:1rem;" id="ir-lbl-mensual">0.00</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
