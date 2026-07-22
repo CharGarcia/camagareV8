@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services\modulos;
 
+use App\repositories\modulos\ClienteRepository;
 use App\repositories\modulos\ConsignacionVentaEntregaRepository;
 use App\repositories\modulos\ConsignacionVentaRepository;
 use App\repositories\modulos\InventarioRepository;
@@ -17,6 +18,7 @@ class ConsignacionVentaService
     private ConsignacionVentaRules $rules;
     private LogSistemaService $logService;
     private InventarioRepository $inventarioRepo;
+    private ClienteRepository $clienteRepo;
 
     public function __construct(
         ConsignacionVentaRepository $repository,
@@ -27,6 +29,7 @@ class ConsignacionVentaService
         $this->rules = $rules;
         $this->logService = $logService;
         $this->inventarioRepo = new InventarioRepository();
+        $this->clienteRepo = new ClienteRepository();
     }
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro): array
@@ -604,6 +607,19 @@ class ConsignacionVentaService
             ]);
 
             $this->repository->updateEstado($idConsignacion, $idEmpresa, 'Entregada', $idUsuario);
+
+            // La ubicación GPS de la entrega es más confiable que una geocodificación
+            // aproximada por dirección: se sobrescribe siempre (decisión del usuario),
+            // así el "Mapa de Clientes" queda con el punto real de la última entrega.
+            if (isset($data['latitud'], $data['longitud']) && $data['latitud'] !== null && $data['longitud'] !== null) {
+                $this->clienteRepo->updateCoordenadas(
+                    (int) $cab['id_cliente'],
+                    $idEmpresa,
+                    (float) $data['latitud'],
+                    (float) $data['longitud'],
+                    $idUsuario
+                );
+            }
 
             $this->logService->registrar(
                 $idUsuario, $idEmpresa, 'REGISTRAR_ENTREGA', 'consignaciones_ventas', $idConsignacion,

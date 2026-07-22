@@ -48,6 +48,7 @@
                                 <option value="NINGUNO" selected>Detallado (Ninguno)</option>
                                 <option value="CLIENTE">Por Cliente</option>
                                 <option value="PRODUCTO">Por Producto</option>
+                                <option value="VARIANTE">Por Variante</option>
                                 <option value="FECHA">Por Fecha</option>
                                 <option value="MES">Por Mes</option>
                             </select>
@@ -113,6 +114,18 @@
                             </div>
                             <div id="rv-dropdown-items" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: calc(100% - 1.5rem); max-height: 250px; overflow-y: auto; margin-top: 2px;"></div>
                             <small class="text-muted" style="font-size:.62rem;">Busca por el ítem/descripción de las líneas de venta.</small>
+                        </div>
+
+                        <div class="col-md-3 position-relative">
+                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size: 0.65rem;"><i class="bi bi-palette me-1"></i>Variante</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                                <input type="text" name="variante_texto" id="rv-variante-texto" class="form-control border-start-0 px-1 shadow-none"
+                                       placeholder="Ej: Rojo, Talla M..." autocomplete="off" onchange="window.RV_generarReporte()">
+                                <button type="button" class="btn btn-outline-secondary" title="Limpiar"
+                                        onclick="document.getElementById('rv-variante-texto').value=''; window.RV_generarReporte();"><i class="bi bi-x-lg"></i></button>
+                            </div>
+                            <small class="text-muted" style="font-size:.62rem;">Busca por la variante elegida (Color/Talla) en las líneas de venta.</small>
                         </div>
 
                         <div class="col-md-3 position-relative">

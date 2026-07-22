@@ -141,6 +141,13 @@ return [
         'legacy_rutas' => ['modulos/cargas_inventario'],
     ],
 
+    // Carga masiva de productos/servicios por Excel. Actualizar id_submodulo con
+    // el id real del submódulo al registrarlo en submodulos_menu.
+    'modulos/carga-productos' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => ['modulos/carga_productos'],
+    ],
+
     // ─── APROBACIONES (config) ────────────────────────────────────────────────
     // Configuración: qué checkpoints exigen aprobación y quién aprueba, por
     // empresa (la bandeja de solicitudes se retiró; solo queda la config).

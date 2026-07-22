@@ -208,7 +208,7 @@ window.RV_generarReporte = function () {
     RV_dibujarCabecera(agruparPor);
 
     const tbody = document.getElementById('rv_tbody');
-    const colSpanActual = agruparPor === 'NINGUNO' ? 12 : (agruparPor === 'PRODUCTO' ? 7 : 6);
+    const colSpanActual = agruparPor === 'NINGUNO' ? 12 : (agruparPor === 'PRODUCTO' ? 7 : (agruparPor === 'VARIANTE' ? 8 : 6));
     tbody.innerHTML = `<tr><td colspan="${colSpanActual}" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div><br><span class="text-muted small mt-2 d-inline-block">Generando reporte...</span></td></tr>`;
 
     fetch(BASE_URL + '/' + RUTA_MODULO + '/generarAjax', {
@@ -319,7 +319,11 @@ function RV_dibujarGrafico(rawData, agrupacion) {
     } else if (agrupacion === 'PRODUCTO') {
         labels = rawData.map(r => r.producto_nombre);
         dataTotales = rawData.map(r => parseFloat(r.total));
-        defaultType = 'bar'; 
+        defaultType = 'bar';
+    } else if (agrupacion === 'VARIANTE') {
+        labels = rawData.map(r => r.producto_nombre + ' (' + r.variante_nombre + ': ' + r.variante_valor + ')');
+        dataTotales = rawData.map(r => parseFloat(r.total));
+        defaultType = 'bar';
     } else if (agrupacion === 'FECHA') {
         let sortedData = [...rawData].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
         labels = sortedData.map(r => r.fecha);
@@ -398,6 +402,17 @@ function RV_dibujarCabecera(agruparPor) {
     } else if (agruparPor === 'PRODUCTO') {
         theadHtml += `
             <th class="ps-4">Producto</th>
+            <th class="text-center">Cantidad Vendida</th>
+            <th class="text-center">Tipo IVA</th>
+            <th class="text-end">Base 0% / Exento</th>
+            <th class="text-end">Base IVA</th>
+            <th class="text-end">Total IVA</th>
+            <th class="text-end pe-4">Gran Total</th>
+        `;
+    } else if (agruparPor === 'VARIANTE') {
+        theadHtml += `
+            <th class="ps-4">Producto</th>
+            <th>Variante</th>
             <th class="text-center">Cantidad Vendida</th>
             <th class="text-center">Tipo IVA</th>
             <th class="text-end">Base 0% / Exento</th>

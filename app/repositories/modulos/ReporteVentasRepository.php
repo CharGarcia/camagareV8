@@ -151,6 +151,17 @@ class ReporteVentasRepository extends BaseRepository
             $params[':prodtxt'] = '%' . trim($filtros['producto_texto']) . '%';
         }
 
+        // Filtro por Variante = texto de la variante elegida en la línea (Color/Talla, etc.)
+        if (!empty($filtros['variante_texto'])) {
+            $where .= " AND EXISTS (
+                SELECT 1 FROM {$f['det']} vdv
+                JOIN productos_variantes pv ON pv.id = vdv.id_producto_variante
+                WHERE vdv.{$f['fk_det']} = {$aliasVenta}.id
+                  AND (pv.nombre ILIKE :vartxt OR pv.valor ILIKE :vartxt)
+            )";
+            $params[':vartxt'] = '%' . trim($filtros['variante_texto']) . '%';
+        }
+
         // Filtro por Información Adicional del documento (campos adicionales nombre/valor)
         if (!empty($filtros['buscar_info'])) {
             $where .= " AND EXISTS (
@@ -267,6 +278,44 @@ class ReporteVentasRepository extends BaseRepository
             LEFT JOIN {$f['imp']} i ON i.{$f['fk_imp']} = d.id
             WHERE {$where}
             GROUP BY d.id_producto, p.codigo, COALESCE(p.nombre, d.descripcion), COALESCE(i.tarifa, 0)
+            ORDER BY cantidad_vendida DESC
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Reporte agrupado por variante de producto (Color/Talla, etc. —
+     * productos_variantes). Solo incluye líneas que efectivamente tienen una
+     * variante elegida (id_producto_variante no nulo); el resto del reporte
+     * ("Por Producto") ya las cubre de forma agregada sin distinguir variante.
+     */
+    public function getReporteAgrupadoVariante(int $idEmpresa, array $filtros): array
+    {
+        $f = $this->fuente($filtros);
+        list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v', 'd');
+
+        $sql = "
+            SELECT
+                d.id_producto_variante,
+                COALESCE(p.nombre, d.descripcion) as producto_nombre,
+                pv.nombre as variante_nombre,
+                pv.valor as variante_valor,
+                COALESCE(i.tarifa, 0) as tarifa_iva,
+                SUM(d.cantidad) as cantidad_vendida,
+                SUM(CASE WHEN i.tarifa = 0 THEN i.base_imponible ELSE 0 END) as base_0,
+                SUM(CASE WHEN i.tarifa > 0 THEN i.base_imponible ELSE 0 END) as base_iva,
+                SUM(COALESCE(i.valor, 0)) as valor_iva,
+                SUM(d.precio_total_sin_impuesto + COALESCE(i.valor, 0)) as total
+            FROM {$f['det']} d
+            JOIN {$f['cab']} v ON v.id = d.{$f['fk_det']}
+            JOIN productos_variantes pv ON pv.id = d.id_producto_variante
+            LEFT JOIN productos p ON p.id = d.id_producto
+            LEFT JOIN {$f['imp']} i ON i.{$f['fk_imp']} = d.id
+            WHERE {$where}
+            GROUP BY d.id_producto_variante, COALESCE(p.nombre, d.descripcion), pv.nombre, pv.valor, COALESCE(i.tarifa, 0)
             ORDER BY cantidad_vendida DESC
         ";
 

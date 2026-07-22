@@ -505,6 +505,11 @@ class FacturaVentaRepository extends BaseRepository
             $params[] = $data['info_adicional'] ?? null;
         }
 
+        if (in_array('id_producto_variante', $colsOpcionales) && !empty($data['id_producto_variante'])) {
+            $cols[]   = 'id_producto_variante';
+            $params[] = (int) $data['id_producto_variante'];
+        }
+
         $colSql = implode(', ', $cols);
         $valSql = implode(', ', array_fill(0, count($params), '?'));
         $sql    = "INSERT INTO ventas_detalle ({$colSql}) VALUES ({$valSql}) RETURNING id";

@@ -105,6 +105,13 @@ class CajaPosController extends BaseModuloController
         $result = $repo->getListado($idEmpresa, $buscar, 1, 24, 'nombre', 'ASC', null, 'venta', true);
         $rows = $result['rows'];
 
+        // Igual que Factura de Venta/Recibos de Venta: variantes (Color/Talla,
+        // con recargo opcional de precio) por producto, para el selector del POS.
+        foreach ($rows as &$p) {
+            $p['variantes'] = $repo->getVariantes((int) $p['id'], $idEmpresa);
+        }
+        unset($p);
+
         $idBodega = $this->resolverBodega($idEmpresa, (int) ($_GET['id_bodega'] ?? 0));
         if ($idBodega) {
             $idsInventariables = array_values(array_filter(array_map(

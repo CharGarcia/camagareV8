@@ -534,6 +534,24 @@ class ReciboVentaRepository extends BaseRepository
         $st->execute([':k' => $idKardex, ':id' => $idDetalle]);
     }
 
+    /**
+     * Enlaza una línea de detalle con la variante de producto elegida
+     * (Color/Talla, etc. — productos_variantes). Protegido: si la columna
+     * id_producto_variante aún no existe (migración no aplicada), no falla.
+     */
+    public function setDetalleVariante(int $idDetalle, ?int $idProductoVariante): void
+    {
+        if (empty($idProductoVariante)) {
+            return;
+        }
+        try {
+            $sql = "UPDATE recibos_venta_detalle SET id_producto_variante = :idv WHERE id = :id";
+            $this->query($sql, [':idv' => $idProductoVariante, ':id' => $idDetalle]);
+        } catch (\Throwable $e) {
+            error_log('[ReciboVenta] No se pudo enlazar id_producto_variante (¿migración pendiente?): ' . $e->getMessage());
+        }
+    }
+
     public function getTipoIdCliente(int $idCliente, int $idEmpresa): ?array
     {
         $sql = "SELECT c.tipo_id, c.identificacion,

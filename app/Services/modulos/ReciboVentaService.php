@@ -192,6 +192,10 @@ class ReciboVentaService
                 $idDetalle      = $this->repository->insertDetalle($d);
                 $d['id']        = $idDetalle;
 
+                if (!empty($d['id_producto_variante'])) {
+                    $this->repository->setDetalleVariante($idDetalle, (int) $d['id_producto_variante']);
+                }
+
                 if (!empty($d['lote']) || !empty($d['caducidad']) || !empty($d['nup'])) {
                     $this->repository->updateDetalleLoteNup($idDetalle, [
                         'numero_lote'     => !empty($d['lote'])      ? $d['lote']      : null,

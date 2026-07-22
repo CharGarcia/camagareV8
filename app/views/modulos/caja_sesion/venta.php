@@ -1080,10 +1080,22 @@ $rutaAjax = $base . '/' . $rutaModulo;
             }
         }
 
+        // Si el producto tiene variantes (Color/Talla, con recargo opcional),
+        // hay que elegir cuál antes de seguir — cambia el precio y la línea
+        // debe quedar identificada como esa variante, no el producto genérico.
+        let variante = null;
+        if (p.variantes && p.variantes.length) {
+            variante = await elegirVariante(p);
+            if (!variante) { $buscar.focus(); return; } // cancelado
+        }
+        const idVariante = variante ? variante.id : null;
+
         // Con NÚP obligatorio cada unidad es su propia línea (un número de
-        // serie por línea) — nunca se fusiona con una existente.
+        // serie por línea) — nunca se fusiona con una existente. Tampoco se
+        // fusiona entre variantes distintas del mismo producto (ej. Rojo vs
+        // Azul deben quedar en líneas separadas).
         if (!necesitaNup) {
-            const existente = cart.find(l => l.id_producto === idProducto);
+            const existente = cart.find(l => l.id_producto === idProducto && (l.id_producto_variante || null) === idVariante);
             if (existente) {
                 existente.cantidad += 1;
                 renderCart();
@@ -1111,16 +1123,55 @@ $rutaAjax = $base . '/' . $rutaModulo;
         cart.push({
             uid: ++lineSeq,
             id_producto: idProducto,
-            descripcion: p.nombre,
-            precio_unitario: parseFloat(p.precio_base || 0),
+            descripcion: p.nombre + (variante ? ' — ' + variante.nombre + ': ' + variante.valor : ''),
+            precio_unitario: parseFloat(p.precio_base || 0) + (variante ? variante.precioAdicional : 0),
             pct_iva: parseFloat(p.porcentaje_iva_final || 0),
             cantidad: 1,
             lote,
             caducidad,
             nup,
+            id_producto_variante: idVariante,
         });
         renderCart();
         $buscar.focus();
+    }
+
+    /**
+     * Modal rápido para elegir la variante (Color/Talla) de un producto antes
+     * de agregarlo — devuelve {id, nombre, valor, precioAdicional} o null si
+     * se cancela. El recargo (si tiene) se suma al precio de la línea.
+     */
+    async function elegirVariante(p) {
+        const opciones = p.variantes.map(v =>
+            `<option value="${v.id}" data-nombre="${escapeHtml(v.nombre)}" data-valor="${escapeHtml(v.valor)}" data-precio="${parseFloat(v.precio_adicional || 0)}">`
+            + `${escapeHtml(v.nombre)}: ${escapeHtml(v.valor)} (+${money(v.precio_adicional || 0)})</option>`
+        ).join('');
+
+        const res = await Swal.fire({
+            title: escapeHtml(p.nombre),
+            html: '<div class="text-start">' +
+                  '<label class="form-label small fw-semibold text-uppercase text-muted mb-1">Elige la variante</label>' +
+                  '<select id="pv-swal-variante" class="form-select form-select-sm">' +
+                  '<option value="">Selecciona...</option>' + opciones +
+                  '</select></div>',
+            showCancelButton: true,
+            confirmButtonText: 'Continuar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#0d6efd',
+            focusConfirm: false,
+            preConfirm: () => {
+                const sel = document.getElementById('pv-swal-variante');
+                if (!sel.value) { Swal.showValidationMessage('Elige una variante.'); return false; }
+                const opt = sel.options[sel.selectedIndex];
+                return {
+                    id: parseInt(sel.value, 10),
+                    nombre: opt.dataset.nombre,
+                    valor: opt.dataset.valor,
+                    precioAdicional: parseFloat(opt.dataset.precio || 0),
+                };
+            },
+        });
+        return res.isConfirmed ? res.value : null;
     }
 
     function seleccionarLote(p, necesitaNup) {
@@ -1705,6 +1756,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
             lote: l.lote || '',
             caducidad: l.caducidad || '',
             nup: l.nup || '',
+            id_producto_variante: l.id_producto_variante || '',
         }))));
 
         try {

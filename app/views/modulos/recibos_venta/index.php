@@ -1392,6 +1392,7 @@ $totalPages = $totalPagesOriginal;
                 codigo_principal: tr.querySelector('.input-codigo').value,
                 descripcion: desc,
                 info_adicional: tr.querySelector('.input-adicional').value,
+                id_producto_variante: tr.querySelector('.input-id-variante').value || '',
                 id_unidad_medida: tr.querySelector('.input-medida').value || '',
                 id_bodega: idBodega,
                 cantidad: tr.querySelector('.input-cantidad').value,
@@ -3204,6 +3205,7 @@ $totalPages = $totalPagesOriginal;
                 <input type="hidden" class="input-id-producto">
                 <input type="hidden" class="input-codigo">
                 <input type="hidden" class="input-casillero">
+                <input type="hidden" class="input-id-variante">
                 <input type="hidden" class="input-es-libre" value="0">
                 <input type="hidden" class="input-ice-pct" value="0">
                 <input type="hidden" class="input-ice-cod" value="">
@@ -3309,9 +3311,11 @@ $totalPages = $totalPagesOriginal;
                     opt.textContent = `${v.nombre}: ${v.valor} (+${parseFloat(v.precio_adicional || 0).toFixed(2)})`;
                     opt.dataset.nombre = v.nombre;
                     opt.dataset.valor = v.valor;
+                    opt.dataset.id = v.id;
                     selVar.appendChild(opt);
                 });
                 selVar.onchange = () => {
+                    row.querySelector('.input-id-variante').value = selVar.selectedIndex > 0 ? (selVar.options[selVar.selectedIndex].dataset.id || '') : '';
                     const base = parseFloat(row.querySelector('.input-precio-base-original').value) || 0;
                     const add = parseFloat(selVar.value) || 0;
                     const total = base + add;
@@ -4608,16 +4612,27 @@ $totalPages = $totalPagesOriginal;
                         opt.textContent = `${v.nombre}: ${v.valor} (+${parseFloat(v.precio_adicional || 0).toFixed(2)})`;
                         opt.dataset.nombre = v.nombre;
                         opt.dataset.valor = v.valor;
+                        opt.dataset.id = v.id;
                         selVar.appendChild(opt);
                     });
 
-                    // Identificar si hay una variante aplicada (viendo la info adicional del Ã­tem)
-                    if (d.info_adicional) {
-                        const optMatch = Array.from(selVar.options).find(o => d.info_adicional.includes(`${o.dataset.nombre}: ${o.dataset.valor}`));
-                        if (optMatch) selVar.value = optMatch.value;
+                    // Preseleccionar la variante guardada: primero por id (dato estructurado,
+                    // confiable); si la línea es de antes de esta columna, cae al fuzzy-match
+                    // viejo sobre el texto libre de "info adicional".
+                    let optMatch = null;
+                    if (d.id_producto_variante) {
+                        optMatch = Array.from(selVar.options).find(o => String(o.dataset.id) === String(d.id_producto_variante));
+                    }
+                    if (!optMatch && d.info_adicional) {
+                        optMatch = Array.from(selVar.options).find(o => d.info_adicional.includes(`${o.dataset.nombre}: ${o.dataset.valor}`));
+                    }
+                    if (optMatch) {
+                        selVar.value = optMatch.value;
+                        tr.querySelector('.input-id-variante').value = optMatch.dataset.id || '';
                     }
 
                     selVar.onchange = () => {
+                        tr.querySelector('.input-id-variante').value = selVar.selectedIndex > 0 ? (selVar.options[selVar.selectedIndex].dataset.id || '') : '';
                         const base = parseFloat(tr.querySelector('.input-precio-base-original').value) || 0;
                         const add = parseFloat(selVar.value) || 0;
                         tr.querySelector('.input-precio').value = (base + add).toFixed(DEC_PRECIO);

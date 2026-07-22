@@ -58,6 +58,7 @@ class ReporteVentasController extends BaseModuloController
             'id_cliente'     => $_REQUEST['id_cliente'] ?? '',
             'id_producto'    => $_REQUEST['id_producto'] ?? '',
             'producto_texto' => trim($_REQUEST['producto_texto'] ?? ''),
+            'variante_texto' => trim($_REQUEST['variante_texto'] ?? ''),
             'estado'         => $_REQUEST['estado'] ?? 'TODOS',
             'buscar_info'    => trim($_REQUEST['buscar_info'] ?? ''),
         ];
@@ -78,6 +79,8 @@ class ReporteVentasController extends BaseModuloController
                 $rows = $this->repository->getReporteAgrupadoCliente($idEmpresa, $filtros);
             } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
                 $rows = $this->repository->getReporteAgrupadoProducto($idEmpresa, $filtros);
+            } elseif ($filtros['agrupar_por'] === 'VARIANTE') {
+                $rows = $this->repository->getReporteAgrupadoVariante($idEmpresa, $filtros);
             } elseif ($filtros['agrupar_por'] === 'FECHA') {
                 $rows = $this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros);
             } elseif ($filtros['agrupar_por'] === 'MES') {
@@ -96,7 +99,8 @@ class ReporteVentasController extends BaseModuloController
             ob_start();
             if (empty($rows)) {
                 $colSpan = ($filtros['agrupar_por'] === 'NINGUNO') ? 12 :
-                           (($filtros['agrupar_por'] === 'PRODUCTO') ? 7 : 6);
+                           (($filtros['agrupar_por'] === 'PRODUCTO') ? 7 :
+                           (($filtros['agrupar_por'] === 'VARIANTE') ? 8 : 6));
                 echo '<tr><td colspan="'.$colSpan.'" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-bar-graph fs-3 d-block mb-2"></i>No se encontraron resultados.</td></tr>';
             } else {
                 foreach ($rows as $r) {
@@ -133,7 +137,7 @@ class ReporteVentasController extends BaseModuloController
         // Solo el modo detallado corresponde a un documento real: se marca la fila
         // para poder abrir el panel lateral con su detalle (ver offcanvas_doc_preview).
         $attrs = '';
-        if (!in_array($agruparPor, ['CLIENTE', 'PRODUCTO', 'FECHA', 'MES'], true) && !empty($r['id'])) {
+        if (!in_array($agruparPor, ['CLIENTE', 'PRODUCTO', 'VARIANTE', 'FECHA', 'MES'], true) && !empty($r['id'])) {
             $tipoDoc = ($tipoDocumento === 'RECIBO') ? 'RECIBO' : 'FACTURA';
             $attrs = ' style="cursor:pointer;" title="Clic para ver el detalle"'
                    . ' data-doc-id="' . (int)$r['id'] . '"'
@@ -159,6 +163,16 @@ class ReporteVentasController extends BaseModuloController
         } elseif ($agruparPor === 'PRODUCTO') {
             $tarifa = (float)($r['tarifa_iva'] ?? 0);
             $html .= "<td><span class='fw-bold'>".htmlspecialchars($r['producto_nombre'] ?? '')."</span><br><small class='text-muted'>".htmlspecialchars($r['producto_codigo'] ?? '')."</small></td>";
+            $html .= "<td class='text-center'>".(float)($r['cantidad_vendida'] ?? 0)."</td>";
+            $html .= "<td class='text-center'>{$tarifa}%</td>";
+            $html .= "<td class='text-end'>$base0</td>";
+            $html .= "<td class='text-end'>$baseIva</td>";
+            $html .= "<td class='text-end'>$iva</td>";
+            $html .= "<td class='text-end fw-bold text-success'>$total</td>";
+        } elseif ($agruparPor === 'VARIANTE') {
+            $tarifa = (float)($r['tarifa_iva'] ?? 0);
+            $html .= "<td>".htmlspecialchars($r['producto_nombre'] ?? '')."</td>";
+            $html .= "<td><span class='fw-bold'>".htmlspecialchars($r['variante_nombre'] ?? '')."</span>: ".htmlspecialchars($r['variante_valor'] ?? '')."</td>";
             $html .= "<td class='text-center'>".(float)($r['cantidad_vendida'] ?? 0)."</td>";
             $html .= "<td class='text-center'>{$tarifa}%</td>";
             $html .= "<td class='text-end'>$base0</td>";
@@ -291,6 +305,8 @@ class ReporteVentasController extends BaseModuloController
             $rows = $this->repository->getReporteAgrupadoCliente($idEmpresa, $filtros);
         } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
             $rows = $this->repository->getReporteAgrupadoProducto($idEmpresa, $filtros);
+        } elseif ($filtros['agrupar_por'] === 'VARIANTE') {
+            $rows = $this->repository->getReporteAgrupadoVariante($idEmpresa, $filtros);
         } elseif ($filtros['agrupar_por'] === 'FECHA') {
             $rows = $this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros);
         } elseif ($filtros['agrupar_por'] === 'MES') {
@@ -324,6 +340,22 @@ class ReporteVentasController extends BaseModuloController
                     $exportData[] = [
                         $r['producto_codigo'],
                         $r['producto_nombre'],
+                        (float)$r['cantidad_vendida'],
+                        $r['tarifa_iva'] . '%',
+                        (float)$r['base_0'],
+                        (float)$r['base_iva'],
+                        (float)$r['valor_iva'],
+                        (float)$r['total']
+                    ];
+                }
+            } elseif ($filtros['agrupar_por'] === 'VARIANTE') {
+                $headers = ['Producto', 'Variante', 'Valor', 'Cant. Vendida', 'Tipo IVA', 'Base 0%', 'Base IVA', 'IVA', 'Total'];
+                $exportData = [];
+                foreach ($rows as $r) {
+                    $exportData[] = [
+                        $r['producto_nombre'],
+                        $r['variante_nombre'],
+                        $r['variante_valor'],
                         (float)$r['cantidad_vendida'],
                         $r['tarifa_iva'] . '%',
                         (float)$r['base_0'],
@@ -399,6 +431,8 @@ class ReporteVentasController extends BaseModuloController
             $rows = $this->repository->getReporteAgrupadoCliente($idEmpresa, $filtros);
         } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
             $rows = $this->repository->getReporteAgrupadoProducto($idEmpresa, $filtros);
+        } elseif ($filtros['agrupar_por'] === 'VARIANTE') {
+            $rows = $this->repository->getReporteAgrupadoVariante($idEmpresa, $filtros);
         } elseif ($filtros['agrupar_por'] === 'FECHA') {
             $rows = $this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros);
         } elseif ($filtros['agrupar_por'] === 'MES') {
@@ -406,7 +440,7 @@ class ReporteVentasController extends BaseModuloController
         } else {
             $rows = $this->repository->getReporteDetallado($idEmpresa, $filtros);
         }
-        
+
         $totales = $this->repository->getEstadisticas($idEmpresa, $filtros);
 
         try {
@@ -438,6 +472,8 @@ class ReporteVentasController extends BaseModuloController
                         <tr><th>Cliente</th><th>Nro Facturas</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
                     <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
                         <tr><th>Producto</th><th>Cant.</th><th>T. IVA</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
+                    <?php elseif ($filtros['agrupar_por'] === 'VARIANTE'): ?>
+                        <tr><th>Producto</th><th>Variante</th><th>Cant.</th><th>T. IVA</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
                     <?php elseif ($filtros['agrupar_por'] === 'FECHA'): ?>
                         <tr><th>Fecha</th><th>Nro Facturas</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>Total</th></tr>
                     <?php elseif ($filtros['agrupar_por'] === 'MES'): ?>
@@ -458,6 +494,15 @@ class ReporteVentasController extends BaseModuloController
                                 <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
                             <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
                                 <td><?= htmlspecialchars($r['producto_nombre']) ?></td>
+                                <td class="text-center"><?= (float)$r['cantidad_vendida'] ?></td>
+                                <td class="text-center"><?= $r['tarifa_iva'] ?>%</td>
+                                <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
+                                <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
+                                <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
+                                <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
+                            <?php elseif ($filtros['agrupar_por'] === 'VARIANTE'): ?>
+                                <td><?= htmlspecialchars($r['producto_nombre']) ?></td>
+                                <td><?= htmlspecialchars($r['variante_nombre']) ?>: <?= htmlspecialchars($r['variante_valor']) ?></td>
                                 <td class="text-center"><?= (float)$r['cantidad_vendida'] ?></td>
                                 <td class="text-center"><?= $r['tarifa_iva'] ?>%</td>
                                 <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
@@ -501,6 +546,8 @@ class ReporteVentasController extends BaseModuloController
                             <th colspan="2" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
                         <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
                             <th colspan="3" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
+                        <?php elseif ($filtros['agrupar_por'] === 'VARIANTE'): ?>
+                            <th colspan="4" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
                         <?php else: ?>
                             <th colspan="7" class="text-center" style="font-size: 10pt; vertical-align: middle;">TOTALES GENERALES:</th>
                         <?php endif; ?>
