@@ -125,11 +125,18 @@ class SuscripcionesRepository extends BaseRepository
         if ($idControladora <= 0 || $idCliente <= 0) {
             return [];
         }
+        // Se incluyen `info_adicional` (pares concepto/detalle, donde se suele
+        // anotar el nombre del cliente final) y las descripciones del detalle,
+        // para poder distinguir una suscripción de otra en el selector.
         $sql = "SELECT s.id, s.estado, s.fecha_inicio, s.fecha_fin, s.proximo_cobro,
+                       s.observaciones, s.info_adicional,
                        per.nombre AS periodicidad,
                        COALESCE((SELECT SUM(d.cantidad * d.precio_unitario * (1 + d.porcentaje_iva / 100))
                                  FROM suscripciones_detalle d
-                                 WHERE d.id_suscripcion = s.id AND d.eliminado = false), 0) AS monto
+                                 WHERE d.id_suscripcion = s.id AND d.eliminado = false), 0) AS monto,
+                       (SELECT string_agg(d.descripcion, ' | ' ORDER BY d.orden, d.id)
+                          FROM suscripciones_detalle d
+                         WHERE d.id_suscripcion = s.id AND d.eliminado = false) AS items
                   FROM suscripciones s
                   LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
                  WHERE s.id_empresa = :ctrl
@@ -138,8 +145,47 @@ class SuscripcionesRepository extends BaseRepository
                  ORDER BY (s.estado = 'activo') DESC, s.proximo_cobro ASC, s.id ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':ctrl' => $idControladora, ':cli' => $idCliente]);
+        $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-        return $st->fetchAll(PDO::FETCH_ASSOC);
+        // Aplana info_adicional a texto legible: "concepto: detalle · concepto: detalle"
+        foreach ($rows as &$r) {
+            $r['info_texto'] = $this->aplanarInfoAdicional($r['info_adicional'] ?? null);
+        }
+        unset($r);
+
+        return $rows;
+    }
+
+    /**
+     * Convierte el JSON de info_adicional ([{concepto, detalle}, ...]) en texto
+     * legible: "concepto: detalle · concepto: detalle". Devuelve '' si no hay.
+     */
+    private function aplanarInfoAdicional($info): string
+    {
+        if ($info === null || $info === '') {
+            return '';
+        }
+        $arr = is_array($info) ? $info : json_decode((string) $info, true);
+        if (!is_array($arr)) {
+            return '';
+        }
+
+        $partes = [];
+        foreach ($arr as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $concepto = trim((string) ($item['concepto'] ?? ''));
+            $detalle  = trim((string) ($item['detalle'] ?? ''));
+            if ($concepto === '' && $detalle === '') {
+                continue;
+            }
+            $partes[] = ($concepto !== '' && $detalle !== '')
+                ? $concepto . ': ' . $detalle
+                : ($concepto !== '' ? $concepto : $detalle);
+        }
+
+        return implode(' · ', $partes);
     }
 
     public function getResumenPorControladoraYRuc(int $idControladora, string $ruc): array

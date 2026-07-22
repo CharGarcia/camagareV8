@@ -556,6 +556,8 @@ function estadoPagoBadge($estado) {
                                     <div class="form-text">
                                         Cuando el cliente facturado tiene <strong>varias suscripciones</strong> (una por cada empresa suya),
                                         indica aquí cuál corresponde a <strong>esta</strong> empresa. Si no la eliges, la ficha avisará que falta asignarla.
+                                        <br>Cada opción muestra primero el <strong>detalle adicional</strong> de la suscripción
+                                        (donde se suele anotar el nombre del cliente final), para distinguirlas.
                                     </div>
                                 </div>
                                 <div class="col-12">
@@ -860,7 +862,15 @@ function estadoPagoBadge($estado) {
             var html = '<option value="">— Automático (si el cliente tiene una sola) —</option>';
             rows.forEach(function(s) {
                 var monto = parseFloat(s.monto || 0).toFixed(2);
-                var txt = '#' + s.id + ' · ' + (s.periodicidad || 'sin periodicidad') +
+                // El detalle adicional (donde se anota el cliente final) va primero:
+                // es lo que permite distinguir una suscripción de otra.
+                var etiqueta = (s.info_texto || '').trim();
+                if (!etiqueta) etiqueta = (s.items || '').trim();
+                if (!etiqueta) etiqueta = (s.observaciones || '').trim();
+                if (etiqueta.length > 60) etiqueta = etiqueta.substring(0, 60) + '…';
+
+                var txt = (etiqueta ? etiqueta + '  —  ' : '') +
+                          '#' + s.id + ' · ' + (s.periodicidad || 'sin periodicidad') +
                           ' · $' + monto + ' · ' + (s.estado || '') +
                           (s.proximo_cobro ? ' · próx. ' + s.proximo_cobro : '');
                 html += '<option value="' + s.id + '"' +
