@@ -1836,35 +1836,66 @@ class MigracionMysqlService
         $qMap->execute([$idEmpresa]);
         foreach ($qMap->fetchAll(PDO::FETCH_ASSOC) as $r) { $mapFact[(string) $r['id_origen']] = (int) $r['id_destino']; }
 
-        // Formas de pago SRI: viejo formas_pago_ventas → nuevo ventas_pagos. Ojo: en el viejo la
-        // columna se llama id_forma_pago pero guarda el CÓDIGO SRI ('01','20'…), no el id del catálogo.
-        $fpStmt   = $mysql->prepare("SELECT id_forma_pago, valor_pago FROM formas_pago_ventas WHERE ruc_empresa = :r AND serie_factura = :s AND secuencial_factura = :sec");
+        // Formas de pago SRI (viejo formas_pago_ventas → nuevo ventas_pagos) e info adicional
+        // (viejo detalle_adicional_factura → nuevo ventas_adicional).
+        // RENDIMIENTO: la BD vieja está en OTRO servidor y detalle_adicional_factura NO tiene índice
+        // (una consulta por factura = escaneo completo de ~1.1M filas + viaje de red). Por eso se
+        // PRECARGAN ambas tablas del tenant en memoria UNA sola vez (1 escaneo, no N), agrupadas por
+        // serie|secuencial. La clave se normaliza a (int) el secuencial (viejo lo guarda ora varchar
+        // ora int). La carga es perezosa: no se toca la BD vieja si no hay facturas que procesar.
         $insPagoV = $pg->prepare("INSERT INTO ventas_pagos (id_venta, forma_pago, total, plazo, unidad_tiempo) VALUES (?, ?, ?, ?, ?)");
         $delPagoV = $pg->prepare("DELETE FROM ventas_pagos WHERE id_venta = ?");
-        // Información adicional: viejo detalle_adicional_factura → nuevo ventas_adicional.
-        $adStmt   = $mysql->prepare("SELECT adicional_concepto, adicional_descripcion FROM detalle_adicional_factura WHERE ruc_empresa = :r AND serie_factura = :s AND secuencial_factura = :sec ORDER BY id_detalle");
         $insAdic  = $pg->prepare("INSERT INTO ventas_adicional (id_venta, nombre, valor) VALUES (?, ?, ?)");
         $delAdic  = $pg->prepare("DELETE FROM ventas_adicional WHERE id_venta = ?");
 
+        // Vendedor de cada factura: viejo vendedores_ventas (id_venta = id_encabezado_factura →
+        // id_vendedor) → nuevo ventas_cabecera.id_vendedor, mapeando el id viejo al nuevo con el
+        // mapa de la entidad 'vendedores' (requiere haberlos migrado antes; si no, queda null).
+        $mapVend = $this->mapaDe($pg, $idEmpresa, 'vendedores');
+
+        $pagosMap = null; $adicMap = null; $vendMap = null; // se llenan en la 1ª llamada a $migrarHijos
+        $precargar = function () use ($mysql, $base, &$pagosMap, &$adicMap, &$vendMap): void {
+            if ($pagosMap !== null) { return; }
+            $pagosMap = []; $adicMap = []; $vendMap = [];
+            $q = $mysql->query("SELECT serie_factura, secuencial_factura, id_forma_pago, valor_pago FROM formas_pago_ventas WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base));
+            foreach ($q as $r) {
+                $k = $r['serie_factura'] . '|' . (int) $r['secuencial_factura'];
+                $pagosMap[$k][] = ['fp' => $r['id_forma_pago'], 'val' => $r['valor_pago']];
+            }
+            $q = $mysql->query("SELECT serie_factura, secuencial_factura, adicional_concepto, adicional_descripcion FROM detalle_adicional_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_detalle");
+            foreach ($q as $r) {
+                $k = $r['serie_factura'] . '|' . (int) $r['secuencial_factura'];
+                $adicMap[$k][] = ['n' => $r['adicional_concepto'], 'd' => $r['adicional_descripcion']];
+            }
+            // Solo las ventas cuyo id_venta es una factura de este tenant (id_venta = id_encabezado_factura).
+            $q = $mysql->query("SELECT vv.id_venta, vv.id_vendedor FROM vendedores_ventas vv JOIN encabezado_factura ef ON ef.id_encabezado_factura = vv.id_venta WHERE LEFT(ef.ruc_empresa, 10) = " . $mysql->quote($base));
+            foreach ($q as $r) { $vendMap[(int) $r['id_venta']] = (int) $r['id_vendedor']; }
+        };
+        // Devuelve el id_vendedor NUEVO de una factura vieja (o null). Fuerza la precarga.
+        $vendedorDe = function (int $oldFactura) use ($precargar, &$vendMap, $mapVend): ?int {
+            $precargar();
+            $ov = $vendMap[$oldFactura] ?? 0;
+            return ($ov > 0 && isset($mapVend[(string) $ov])) ? (int) $mapVend[(string) $ov] : null;
+        };
+
         // Copia pagos SRI + info adicional de una factura. Idempotente (borra antes de insertar):
         // re-correr la migración completa los datos sin duplicarlos.
-        $migrarHijos = function (int $idVenta, array $ef, int $dias) use ($fpStmt, $insPagoV, $delPagoV, $adStmt, $insAdic, $delAdic): void {
-            $args = [':r' => $ef['ruc_empresa'], ':s' => $ef['serie_factura'], ':sec' => $ef['secuencial_factura']];
+        $migrarHijos = function (int $idVenta, array $ef, int $dias) use (&$pagosMap, &$adicMap, $precargar, $insPagoV, $delPagoV, $insAdic, $delAdic): void {
+            $precargar();
+            $k = $ef['serie_factura'] . '|' . (int) $ef['secuencial_factura'];
 
             $delPagoV->execute([$idVenta]);
-            $fpStmt->execute($args);
-            foreach ($fpStmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
-                $fp = str_pad(trim((string) $f['id_forma_pago']), 2, '0', STR_PAD_LEFT);
+            foreach ($pagosMap[$k] ?? [] as $f) {
+                $fp = str_pad(trim((string) $f['fp']), 2, '0', STR_PAD_LEFT);
                 if ($fp === '' || $fp === '00') { continue; }
-                $insPagoV->execute([$idVenta, $fp, (float) $f['valor_pago'], $dias, 'dias']);
+                $insPagoV->execute([$idVenta, $fp, (float) $f['val'], $dias, 'dias']);
             }
 
             $delAdic->execute([$idVenta]);
-            $adStmt->execute($args);
-            foreach ($adStmt->fetchAll(PDO::FETCH_ASSOC) as $a) {
-                $nom = trim((string) $a['adicional_concepto']);
+            foreach ($adicMap[$k] ?? [] as $a) {
+                $nom = trim((string) $a['n']);
                 if ($nom === '') { continue; }
-                $insAdic->execute([$idVenta, mb_substr($nom, 0, 300), mb_substr(trim((string) $a['adicional_descripcion']), 0, 300)]);
+                $insAdic->execute([$idVenta, mb_substr($nom, 0, 300), mb_substr(trim((string) $a['d']), 0, 300)]);
             }
         };
 
@@ -1879,7 +1910,7 @@ class MigracionMysqlService
             }
             return $plazoCli[$idCliente];
         };
-        $updCabV = $pg->prepare("UPDATE ventas_cabecera SET dias_credito = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $updCabV = $pg->prepare("UPDATE ventas_cabecera SET dias_credito = ?, id_vendedor = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $qCliDe  = $pg->prepare("SELECT id_cliente FROM ventas_cabecera WHERE id = ?");
 
         $sql = "SELECT id_encabezado_factura, ruc_empresa, fecha_factura, serie_factura, secuencial_factura, id_cliente, observaciones_factura, estado_sri, total_factura, ambiente, aut_sri, propina
@@ -1901,7 +1932,7 @@ class MigracionMysqlService
                     $pg->beginTransaction();
                     $qCliDe->execute([$idExist]);
                     $dias = $diasDe((int) $qCliDe->fetchColumn());
-                    $updCabV->execute([$dias, $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idExist]);
+                    $updCabV->execute([$dias, $vendedorDe($old), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idExist]);
                     $migrarHijos($idExist, $ef, $dias);
                     $pg->commit();
                     $res['ya_migrados']++;
@@ -1952,6 +1983,7 @@ class MigracionMysqlService
                     'observaciones' => self::nz($ef['observaciones_factura']),
                     'clave_acceso' => self::nz($ef['aut_sri']),
                     'dias_credito' => $diasDe($idCliente),
+                    'id_vendedor' => $vendedorDe($old),
                     'tipo_ambiente' => $this->ambienteEmpresa($pg, $idEmpresa),
                     'tipo_registro' => 'migrado',
                 ]);
@@ -2320,6 +2352,32 @@ class MigracionMysqlService
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
         $oldCliRuc   = $mysql->prepare("SELECT ruc FROM clientes WHERE id = :id LIMIT 1");
 
+        // Info adicional: viejo detalle_adicional_nc → nuevo notas_credito_adicional. La NC destino
+        // NO tiene columna de vendedor ni tabla de formas de pago (las NC no llevan <pagos>), así que
+        // solo se completa la info adicional. RENDIMIENTO: detalle_adicional_nc no tiene índice útil
+        // → se PRECARGA una vez el tenant en memoria (por serie|secuencial), carga perezosa.
+        $insAdicNc = $pg->prepare("INSERT INTO notas_credito_adicional (id_nota_credito, nombre, valor) VALUES (?, ?, ?)");
+        $delAdicNc = $pg->prepare("DELETE FROM notas_credito_adicional WHERE id_nota_credito = ?");
+        $adicMapNc = null;
+        $migrarAdicNc = function (int $idNc, array $ec) use ($mysql, $base, &$adicMapNc, $insAdicNc, $delAdicNc): void {
+            if ($adicMapNc === null) {
+                $adicMapNc = [];
+                $q = $mysql->query("SELECT serie_nc, secuencial_nc, adicional_concepto, adicional_descripcion FROM detalle_adicional_nc WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY id_detalle");
+                foreach ($q as $r) { $adicMapNc[$r['serie_nc'] . '|' . (int) $r['secuencial_nc']][] = ['n' => $r['adicional_concepto'], 'd' => $r['adicional_descripcion']]; }
+            }
+            $delAdicNc->execute([$idNc]); // idempotente
+            foreach ($adicMapNc[$ec['serie_nc'] . '|' . (int) $ec['secuencial_nc']] ?? [] as $a) {
+                $nom = trim((string) $a['n']);
+                if ($nom === '') { continue; }
+                $insAdicNc->execute([$idNc, mb_substr($nom, 0, 300), mb_substr(trim((string) $a['d']), 0, 300)]);
+            }
+        };
+        // NC ya migradas por la herramienta (vinculado IS NOT TRUE): al re-correr se les completa la info adicional.
+        $mapNc = [];
+        $qMapNc = $pg->prepare("SELECT id_origen, id_destino FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'notas_credito' AND vinculado IS NOT TRUE");
+        $qMapNc->execute([$idEmpresa]);
+        foreach ($qMapNc->fetchAll(PDO::FETCH_ASSOC) as $r) { $mapNc[(string) $r['id_origen']] = (int) $r['id_destino']; }
+
         $insCab = $pg->prepare(
             "INSERT INTO notas_credito_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, cod_doc_modificado, num_doc_modificado, fecha_emision_docs_sustento, motivo, total_sin_impuestos, total_descuento, importe_total, estado, clave_acceso, tipo_ambiente, created_by)
              VALUES (:e, :est, :pto, :cli, :u, :fe, :estc, :ptoc, :sec, '01', :ndm, :fds, :mot, :tsi, :tdes, :tot, :estado, :clave, :amb, :cb) RETURNING id"
@@ -2342,6 +2400,21 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_encabezado_nc'];
+
+            // Ya migrada por la herramienta: reconciliar info adicional (completa re-corridas viejas).
+            if (isset($mapNc[(string) $old])) {
+                try {
+                    $pg->beginTransaction();
+                    $migrarAdicNc($mapNc[(string) $old], $ec);
+                    $pg->commit();
+                    $res['ya_migrados']++;
+                } catch (Throwable $ex) {
+                    if ($pg->inTransaction()) { $pg->rollBack(); }
+                    $res['errores']++;
+                    if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); }
+                }
+                continue;
+            }
             if ($this->yaMigradoDoc($idEmpresa, 'notas_credito', 'notas_credito_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
@@ -2387,6 +2460,8 @@ class MigracionMysqlService
                     $pct = self::IVA_PCT[$cod] ?? 0;
                     $insImp->execute([':d' => $idDet, ':cp' => ($cod === '' ? '0' : $cod), ':tar' => $pct, ':base' => round($base_i, 2), ':val' => round($base_i * $pct / 100, 2)]);
                 }
+
+                $migrarAdicNc($idNc, $ec); // info adicional
 
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idNc, ':cn' => "$estab-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
                 $pg->commit();
@@ -2598,9 +2673,64 @@ class MigracionMysqlService
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
         $oldCliRuc   = $mysql->prepare("SELECT ruc FROM clientes WHERE id = :id LIMIT 1");
 
+        // Info adicional (viejo detalle_adicional_recibo, enlaza por id_encabezado_recibo → nuevo
+        // recibos_venta_adicional) + vendedor (viejo vendedores_recibos: id_recibo → id_vendedor,
+        // mapeado a nuevo vía la entidad 'vendedores') + días de crédito (del cliente, como facturas).
+        // El viejo NO tiene formas de pago propias de recibos. RENDIMIENTO: detalle_adicional_recibo
+        // (118K filas) no tiene índice útil → se PRECARGA el tenant en memoria una vez (perezoso).
+        $mapVend   = $this->mapaDe($pg, $idEmpresa, 'vendedores');
+        $insAdicR  = $pg->prepare("INSERT INTO recibos_venta_adicional (id_recibo, nombre, valor) VALUES (?, ?, ?)");
+        $delAdicR  = $pg->prepare("DELETE FROM recibos_venta_adicional WHERE id_recibo = ?");
+        $adicMapR = null; $vendMapR = null;
+        $precargarR = function () use ($mysql, $base, &$adicMapR, &$vendMapR): void {
+            if ($adicMapR !== null) { return; }
+            $adicMapR = []; $vendMapR = [];
+            // detalle_adicional_recibo se enlaza por id_encabezado_recibo, pero esa tabla no trae
+            // ruc_empresa → se acota por JOIN al encabezado del tenant.
+            $q = $mysql->query("SELECT da.id_encabezado_recibo, da.adicional_concepto, da.adicional_descripcion
+                                  FROM detalle_adicional_recibo da JOIN encabezado_recibo er ON er.id_encabezado_recibo = da.id_encabezado_recibo
+                                 WHERE LEFT(er.ruc_empresa, 10) = " . $mysql->quote($base) . " ORDER BY da.id");
+            foreach ($q as $r) { $adicMapR[(int) $r['id_encabezado_recibo']][] = ['n' => $r['adicional_concepto'], 'd' => $r['adicional_descripcion']]; }
+            $q = $mysql->query("SELECT vr.id_recibo, vr.id_vendedor
+                                  FROM vendedores_recibos vr JOIN encabezado_recibo er ON er.id_encabezado_recibo = vr.id_recibo
+                                 WHERE LEFT(er.ruc_empresa, 10) = " . $mysql->quote($base));
+            foreach ($q as $r) { $vendMapR[(int) $r['id_recibo']] = (int) $r['id_vendedor']; }
+        };
+        $vendedorRDe = function (int $oldRecibo) use ($precargarR, &$vendMapR, $mapVend): ?int {
+            $precargarR();
+            $ov = $vendMapR[$oldRecibo] ?? 0;
+            return ($ov > 0 && isset($mapVend[(string) $ov])) ? (int) $mapVend[(string) $ov] : null;
+        };
+        $migrarAdicR = function (int $idRec, int $oldRecibo) use ($precargarR, &$adicMapR, $insAdicR, $delAdicR): void {
+            $precargarR();
+            $delAdicR->execute([$idRec]); // idempotente
+            foreach ($adicMapR[$oldRecibo] ?? [] as $a) {
+                $nom = trim((string) $a['n']);
+                if ($nom === '') { continue; }
+                $insAdicR->execute([$idRec, mb_substr($nom, 0, 300), mb_substr(trim((string) $a['d']), 0, 300)]);
+            }
+        };
+        // Días de crédito del cliente (misma fuente que facturas).
+        $qPlazoR = $pg->prepare("SELECT COALESCE(plazo, 0) FROM clientes WHERE id = ?");
+        $plazoRCache = [];
+        $diasRDe = function (int $idCliente) use (&$plazoRCache, $qPlazoR): int {
+            if (!array_key_exists($idCliente, $plazoRCache)) {
+                $qPlazoR->execute([$idCliente]);
+                $plazoRCache[$idCliente] = (int) $qPlazoR->fetchColumn();
+            }
+            return $plazoRCache[$idCliente];
+        };
+        // Recibos ya migrados por la herramienta (vinculado IS NOT TRUE): reconciliar hijos + cabecera.
+        $mapRec = [];
+        $qMapRec = $pg->prepare("SELECT id_origen, id_destino FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'recibos' AND vinculado IS NOT TRUE");
+        $qMapRec->execute([$idEmpresa]);
+        foreach ($qMapRec->fetchAll(PDO::FETCH_ASSOC) as $r) { $mapRec[(string) $r['id_origen']] = (int) $r['id_destino']; }
+        $updCabR = $pg->prepare("UPDATE recibos_venta_cabecera SET id_vendedor = ?, dias_credito = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $qCliRDe = $pg->prepare("SELECT id_cliente FROM recibos_venta_cabecera WHERE id = ?");
+
         $insCab = $pg->prepare(
-            "INSERT INTO recibos_venta_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, recibo_numero, con_impuestos, total_sin_impuestos, total_descuento, importe_total, propina, moneda, tipo_ambiente, created_by)
-             VALUES (:e, :est, :pto, :cli, :u, :fe, :estc, :ptoc, :sec, :num, :ci, :tsi, :tdes, :tot, :prop, 'DOLAR', :amb, :cb) RETURNING id"
+            "INSERT INTO recibos_venta_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_cliente, id_usuario, id_vendedor, dias_credito, fecha_emision, establecimiento, punto_emision, secuencial, recibo_numero, con_impuestos, total_sin_impuestos, total_descuento, importe_total, propina, moneda, tipo_ambiente, created_by)
+             VALUES (:e, :est, :pto, :cli, :u, :vend, :dias, :fe, :estc, :ptoc, :sec, :num, :ci, :tsi, :tdes, :tot, :prop, 'DOLAR', :amb, :cb) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO recibos_venta_detalle (id_recibo, id_producto, id_bodega, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)
@@ -2620,6 +2750,24 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_encabezado_recibo'];
+
+            // Ya migrado por la herramienta: reconciliar vendedor + días de crédito + info adicional.
+            if (isset($mapRec[(string) $old])) {
+                $idExist = $mapRec[(string) $old];
+                try {
+                    $pg->beginTransaction();
+                    $qCliRDe->execute([$idExist]);
+                    $updCabR->execute([$vendedorRDe($old), $diasRDe((int) $qCliRDe->fetchColumn()), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idExist]);
+                    $migrarAdicR($idExist, $old);
+                    $pg->commit();
+                    $res['ya_migrados']++;
+                } catch (Throwable $ex) {
+                    if ($pg->inTransaction()) { $pg->rollBack(); }
+                    $res['errores']++;
+                    if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); }
+                }
+                continue;
+            }
             if ($this->yaMigradoDoc($idEmpresa, 'recibos', 'recibos_venta_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ec['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idCliente) { $res['omitidos']++; continue; }
@@ -2649,6 +2797,7 @@ class MigracionMysqlService
 
                 $insCab->execute([
                     ':e' => $idEmpresa, ':est' => $idEst, ':pto' => $idPto, ':cli' => $idCliente, ':u' => $idUsuario,
+                    ':vend' => $vendedorRDe($old), ':dias' => $diasRDe($idCliente),
                     ':fe' => substr((string) $ec['fecha_recibo'], 0, 10), ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec,
                     ':num' => "$estab-$pto-$sec", ':ci' => $conImp, ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
                     ':tot' => (float) $ec['total_recibo'], ':prop' => (float) $ec['propina'], ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':cb' => $idUsuario,
@@ -2668,6 +2817,8 @@ class MigracionMysqlService
                     $pct = self::IVA_PCT[$cod] ?? 0;
                     $insImp->execute([':d' => $idDet, ':cp' => ($cod === '' ? '0' : $cod), ':tar' => $pct, ':base' => round($base_i, 2), ':val' => round($base_i * $pct / 100, 2)]);
                 }
+
+                $migrarAdicR($idRec, $old); // info adicional
 
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idRec, ':cn' => "$estab-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
                 $pg->commit();

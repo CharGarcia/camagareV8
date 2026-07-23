@@ -56,7 +56,11 @@ class MesasController extends BaseModuloController
         if (!$sesion) {
             $this->view('modulos.caja_sesion.venta_placeholder', [
                 'titulo'         => 'Punto de Venta — Restaurante',
-                'rutaModulo'     => 'modulos/caja-pos',
+                // Con ?volver=mesas: al abrir el turno en Cajas, "Continuar al
+                // Punto de Venta" (standalone.php) regresa aquí (mesas/tablero)
+                // en vez de caer al mostrador — cierra el círculo Punto de
+                // Venta → POS Restaurante. Ver CajaPosController::index().
+                'rutaModulo'     => 'modulos/caja-pos?volver=mesas',
                 'idPuntoEmision' => $idPuntoEmision,
             ]);
             return;
