@@ -88,6 +88,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
         .pv-qty { display: flex; align-items: center; gap: 4px; }
         .pv-qty button { width: 22px; height: 22px; line-height: 1; padding: 0; }
         .pv-qty span { min-width: 20px; text-align: center; font-size: .8rem; }
+        .pv-linea .btn-desc { width: 30px; height: 22px; line-height: 1; padding: 0; font-size: .7rem; }
         .pv-linea .total { font-size: .82rem; font-weight: 600; min-width: 56px; text-align: right; }
         .pv-linea .rm { color: #dc3545; cursor: pointer; }
 
@@ -987,9 +988,9 @@ $rutaAjax = $base . '/' . $rutaModulo;
         let subtotal = 0, totalIva = 0;
         const impMap = {};
         cart.forEach(l => {
-            const base = l.precio_unitario * l.cantidad;
-            subtotal += base;
-            const ivaLinea = base * l.pct_iva / 100;
+            const baseNeta = Math.max(0, l.precio_unitario * l.cantidad - (l.descuento || 0));
+            subtotal += baseNeta;
+            const ivaLinea = baseNeta * l.pct_iva / 100;
             const lbl = `IVA ${l.pct_iva}%`;
             impMap[lbl] = (impMap[lbl] || 0) + ivaLinea;
         });
@@ -997,11 +998,12 @@ $rutaAjax = $base . '/' . $rutaModulo;
         const total = subtotal + totalIva;
 
         const lineas = cart.map(l => {
-            const base = l.precio_unitario * l.cantidad;
-            const extra = (l.lote ? ` — Lote ${l.lote}` : '') + (l.nup ? ` — S/N ${l.nup}` : '');
+            const baseNeta = Math.max(0, l.precio_unitario * l.cantidad - (l.descuento || 0));
+            const extra = (l.lote ? ` — Lote ${l.lote}` : '') + (l.nup ? ` — S/N ${l.nup}` : '')
+                        + ((l.descuento || 0) > 0 ? ` — desc. $${fmt(l.descuento)}` : '');
             return `<tr><td colspan="2" style="padding:1px 0;">${escapeHtml(l.descripcion + extra)}</td></tr>
                 <tr><td style="padding:1px 0;color:#555;">${fmt(l.cantidad)} x $${fmt(l.precio_unitario)} (IVA ${l.pct_iva}%)</td>
-                <td style="padding:1px 0;text-align:right;font-weight:bold;">$${fmt(base)}</td></tr>`;
+                <td style="padding:1px 0;text-align:right;font-weight:bold;">$${fmt(baseNeta)}</td></tr>`;
         }).join('<tr><td colspan="2"><hr style="margin:2px 0;border-color:#ccc;"></td></tr>');
 
         const ivaLineas = Object.entries(impMap).map(([lbl, val]) =>
@@ -1194,6 +1196,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
             caducidad,
             nup,
             id_producto_variante: idVariante,
+            descuento: 0,
         });
         renderCart();
         enfocarBuscador();
@@ -1361,9 +1364,9 @@ $rutaAjax = $base . '/' . $rutaModulo;
     function totalCarrito() {
         let subtotal = 0, iva = 0;
         cart.forEach(l => {
-            const base = l.precio_unitario * l.cantidad;
-            subtotal += base;
-            iva += base * l.pct_iva / 100;
+            const baseNeta = Math.max(0, l.precio_unitario * l.cantidad - (l.descuento || 0));
+            subtotal += baseNeta;
+            iva += baseNeta * l.pct_iva / 100;
         });
         return { subtotal, iva, total: subtotal + iva };
     }
@@ -1383,6 +1386,71 @@ $rutaAjax = $base . '/' . $rutaModulo;
         renderCart();
     }
 
+    /**
+     * Descuento por línea (Porcentaje o Valor fijo, con opción de aplicar a
+     * todo el carrito) — mismo patrón que "Aplicar descuento rápido" de
+     * Factura de Venta, adaptado al carrito del POS.
+     */
+    async function abrirDescuentoLinea(uid) {
+        const linea = cart.find(l => l.uid === uid);
+        if (!linea) return;
+
+        // Si la línea ya tiene un descuento aplicado, se precarga como Valor ($)
+        // (es lo único que queda guardado — no se recuerda si en su momento se
+        // escribió como porcentaje o como valor fijo).
+        const descActual = linea.descuento || 0;
+        const esValorActual = descActual > 0;
+
+        const res = await Swal.fire({
+            title: 'Aplicar descuento',
+            html: '<div class="text-start">' +
+                  '<div class="btn-group w-100 mb-2" role="group">' +
+                  '<input type="radio" class="btn-check" name="pv-desc-tipo" id="pv-desc-porc" value="P"' + (esValorActual ? '' : ' checked') + '>' +
+                  '<label class="btn btn-outline-primary btn-sm" for="pv-desc-porc">Porcentaje (%)</label>' +
+                  '<input type="radio" class="btn-check" name="pv-desc-tipo" id="pv-desc-val" value="V"' + (esValorActual ? ' checked' : '') + '>' +
+                  '<label class="btn btn-outline-primary btn-sm" for="pv-desc-val">Valor ($)</label>' +
+                  '</div>' +
+                  '<label class="form-label small fw-semibold text-uppercase text-muted mb-1">Descuento</label>' +
+                  '<input type="number" id="pv-desc-input" class="form-control form-control-sm" value="' + descActual + '" step="any" min="0">' +
+                  '<div class="form-check form-switch mt-2">' +
+                  '<input class="form-check-input" type="checkbox" id="pv-desc-todo">' +
+                  '<label class="form-check-label small" for="pv-desc-todo">Aplicar a todas las líneas del carrito</label>' +
+                  '</div>' +
+                  '</div>',
+            showCancelButton: true,
+            confirmButtonText: 'Aplicar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#0d6efd',
+            focusConfirm: false,
+            didOpen: () => {
+                const $input = document.getElementById('pv-desc-input');
+                $input.focus();
+                $input.select();
+            },
+            preConfirm: () => {
+                const tipo = document.querySelector('input[name="pv-desc-tipo"]:checked').value;
+                const valor = parseFloat(document.getElementById('pv-desc-input').value) || 0;
+                const todo = document.getElementById('pv-desc-todo').checked;
+                if (valor < 0) { Swal.showValidationMessage('El descuento no puede ser negativo.'); return false; }
+                if (tipo === 'P' && valor > 100) { Swal.showValidationMessage('El porcentaje no puede ser mayor a 100.'); return false; }
+                return { tipo, valor, todo };
+            },
+        });
+        if (!res.isConfirmed) return;
+
+        const { tipo, valor, todo } = res.value;
+        const calcularDescuento = (l) => {
+            const base = l.precio_unitario * l.cantidad;
+            return tipo === 'P' ? Math.round(base * valor) / 100 : Math.min(valor, base);
+        };
+        if (todo) {
+            cart.forEach(l => { l.descuento = calcularDescuento(l); });
+        } else {
+            linea.descuento = calcularDescuento(linea);
+        }
+        renderCart();
+    }
+
     function renderCart() {
         if (!cart.length) {
             $lineas.innerHTML = '<div class="text-center py-4 pv-empty small">El carrito está vacío.<br>Toca un producto para agregarlo.</div>';
@@ -1390,10 +1458,13 @@ $rutaAjax = $base . '/' . $rutaModulo;
             $lineas.innerHTML = '';
             cart.forEach(l => {
                 const base = l.precio_unitario * l.cantidad;
+                const descuento = l.descuento || 0;
+                const baseNeta = Math.max(0, base - descuento);
                 const row = document.createElement('div');
                 row.className = 'pv-linea';
                 const loteTag = l.lote ? ' <span class="badge bg-secondary bg-opacity-25 text-secondary">Lote ' + escapeHtml(l.lote) + '</span>' : '';
                 const nupTag = l.nup ? ' <span class="badge bg-info bg-opacity-25 text-info">S/N ' + escapeHtml(l.nup) + '</span>' : '';
+                const descTag = descuento > 0 ? ' <span class="badge bg-danger bg-opacity-10 text-danger">-' + money(descuento) + '</span>' : '';
                 const qtyHtml = l.nup
                     ? '<span class="small text-muted">1 unidad</span>'
                     : '<div class="pv-qty">' +
@@ -1401,13 +1472,18 @@ $rutaAjax = $base . '/' . $rutaModulo;
                         '<span>' + l.cantidad + '</span>' +
                         '<button type="button" class="btn btn-outline-secondary btn-sm" data-act="mas">+</button>' +
                       '</div>';
+                const totalHtml = descuento > 0
+                    ? '<span class="text-decoration-line-through text-muted small d-block">' + money(base) + '</span>' + money(baseNeta)
+                    : money(baseNeta);
                 row.innerHTML =
-                    '<div class="desc"><div class="n">' + escapeHtml(l.descripcion) + loteTag + nupTag + '</div><div class="p">' + money(l.precio_unitario) + ' c/u</div></div>' +
+                    '<div class="desc"><div class="n">' + escapeHtml(l.descripcion) + loteTag + nupTag + descTag + '</div><div class="p">' + money(l.precio_unitario) + ' c/u</div></div>' +
                     qtyHtml +
-                    '<div class="total">' + money(base) + '</div>' +
+                    '<button type="button" class="btn btn-outline-secondary btn-desc" data-act="desc" title="Aplicar descuento"><i class="bi bi-percent"></i></button>' +
+                    '<div class="total">' + totalHtml + '</div>' +
                     '<i class="bi bi-x-lg rm" data-act="rm"></i>';
                 row.querySelector('[data-act="menos"]')?.addEventListener('click', () => cambiarCantidad(l.uid, -1));
                 row.querySelector('[data-act="mas"]')?.addEventListener('click', () => cambiarCantidad(l.uid, 1));
+                row.querySelector('[data-act="desc"]').addEventListener('click', () => abrirDescuentoLinea(l.uid));
                 row.querySelector('[data-act="rm"]').addEventListener('click', () => quitarLinea(l.uid));
                 $lineas.appendChild(row);
             });
@@ -1820,6 +1896,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
             caducidad: l.caducidad || '',
             nup: l.nup || '',
             id_producto_variante: l.id_producto_variante || '',
+            descuento: l.descuento || 0,
         }))));
 
         try {

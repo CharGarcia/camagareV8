@@ -53,7 +53,7 @@ class MesaRepository extends BaseRepository
 
         $offset = ($page - 1) * $perPage;
         
-        $sqlRows = "SELECT m.id, m.nombre, m.estado, m.created_at
+        $sqlRows = "SELECT m.id, m.nombre, m.estado, m.ubicacion, m.created_at
                     FROM {$this->table} m
                     {$whereSql}
                     ORDER BY {$col} {$dir}";
@@ -111,9 +111,9 @@ class MesaRepository extends BaseRepository
     public function create(array $data): int
     {
         $sql = "INSERT INTO {$this->table} (
-                    id_empresa, id_usuario, created_by, nombre, estado, eliminado, created_at
+                    id_empresa, id_usuario, created_by, nombre, estado, ubicacion, eliminado, created_at
                 ) VALUES (
-                    :id_empresa, :id_usuario, :created_by, :nombre, :estado, :eliminado, CURRENT_TIMESTAMP
+                    :id_empresa, :id_usuario, :created_by, :nombre, :estado, :ubicacion, :eliminado, CURRENT_TIMESTAMP
                 )";
         $st = $this->db->prepare($sql);
         $st->execute([
@@ -122,6 +122,7 @@ class MesaRepository extends BaseRepository
             ':created_by' => $data['created_by'],
             ':nombre'      => $data['nombre'],
             ':estado'      => $data['estado'] ?? 'disponible',
+            ':ubicacion'   => $data['ubicacion'] ?: null,
             ':eliminado'   => $data['eliminado'] ? 'true' : 'false'
         ]);
         return (int) $this->lastInsertId();
@@ -129,9 +130,10 @@ class MesaRepository extends BaseRepository
 
     public function update(int $id, int $idEmpresa, array $data): bool
     {
-        $sql = "UPDATE {$this->table} SET 
+        $sql = "UPDATE {$this->table} SET
                 nombre = :nombre,
                 estado = :estado,
+                ubicacion = :ubicacion,
                 updated_by = :updated_by,
                 updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
@@ -139,10 +141,33 @@ class MesaRepository extends BaseRepository
         return $st->execute([
             ':nombre'      => $data['nombre'],
             ':estado'      => $data['estado'],
+            ':ubicacion'   => $data['ubicacion'] ?: null,
             ':updated_by'  => $data['updated_by'],
             ':id'          => $id,
             ':id_empresa'  => $idEmpresa
         ]);
+    }
+
+    /** Transición de estado interna (disponible|ocupada|por_cobrar), usada por ComandaService al abrir/cerrar comandas. */
+    public function actualizarEstado(int $id, int $idEmpresa, string $estado): void
+    {
+        $sql = "UPDATE {$this->table} SET estado = :estado, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':estado' => $estado, ':id' => $id, ':id_empresa' => $idEmpresa]);
+    }
+
+    /**
+     * Posición libre de la mesa en el lienzo del tablero (porcentaje 0-100).
+     * No se audita en log_sistema: es una preferencia visual del salón, igual
+     * que el ancho de columnas de una tabla, no un dato de negocio.
+     */
+    public function actualizarPosicion(int $id, int $idEmpresa, float $posX, float $posY): void
+    {
+        $sql = "UPDATE {$this->table} SET pos_x = :x, pos_y = :y, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':x' => $posX, ':y' => $posY, ':id' => $id, ':id_empresa' => $idEmpresa]);
     }
 
     public function delete(int $id, int $idEmpresa, int $idUsuario): bool

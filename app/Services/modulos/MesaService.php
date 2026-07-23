@@ -43,6 +43,7 @@ class MesaService
                 'created_by' => (int)$data['id_usuario'],
                 'nombre'     => mb_strtoupper($nombre, 'UTF-8'),
                 'estado'     => $data['estado'] ?? 'disponible',
+                'ubicacion'  => trim((string) ($data['ubicacion'] ?? '')) ?: null,
                 'eliminado'  => false
             ];
 
@@ -68,6 +69,9 @@ class MesaService
 
     public function actualizar(int $id, int $idEmpresa, array $data): void
     {
+        // El controller no siempre trae id_empresa dentro de $data (viene aparte
+        // como argumento); MesaRules::validar() sí lo exige, así que se completa aquí.
+        $data['id_empresa'] = $idEmpresa;
         $this->rules->validar($data);
 
         $nombre = trim($data['nombre']);
@@ -86,6 +90,7 @@ class MesaService
             $updateData = [
                 'nombre'     => mb_strtoupper($nombre, 'UTF-8'),
                 'estado'     => $data['estado'] ?? 'disponible',
+                'ubicacion'  => trim((string) ($data['ubicacion'] ?? '')) ?: null,
                 'updated_by' => (int)$data['id_usuario']
             ];
 
@@ -144,5 +149,13 @@ class MesaService
     public function findById(int $id, int $idEmpresa): ?array
     {
         return $this->repository->getDetalleCompleto($id, $idEmpresa);
+    }
+
+    /** Reubicar una mesa en el lienzo del tablero (arrastrar y soltar). */
+    public function actualizarPosicion(int $id, int $idEmpresa, float $posX, float $posY): void
+    {
+        $posX = max(0.0, min(100.0, $posX));
+        $posY = max(0.0, min(100.0, $posY));
+        $this->repository->actualizarPosicion($id, $idEmpresa, $posX, $posY);
     }
 }

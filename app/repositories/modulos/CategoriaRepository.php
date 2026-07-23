@@ -156,7 +156,7 @@ class CategoriaRepository extends BaseRepository
      */
     public function update(int $id, int $idEmpresa, array $data): bool
     {
-        $sql = "UPDATE {$this->table} SET 
+        $sql = "UPDATE {$this->table} SET
                 nombre = :nombre,
                 status = :status,
                 updated_by = :updated_by,

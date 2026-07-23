@@ -445,14 +445,35 @@ class CarWashController extends BaseModuloController
         header('Content-Type: application/json');
         try {
             $idEmpresa = (int) $_SESSION['id_empresa'];
-            $buscar = trim($_GET['q'] ?? $_GET['term'] ?? '');
-            $repo = new \App\repositories\modulos\ProductoRepository();
-            $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, 'venta', true);
-            $rows = array_map(function ($p) use ($repo, $idEmpresa) {
+            $buscar   = trim($_GET['q'] ?? $_GET['term'] ?? '');
+            $idBodega = (int) ($_GET['id_bodega'] ?? 0);
+            $idOrden  = (int) ($_GET['id_orden'] ?? 0); // excluye lo ya consumido por esta misma orden
+
+            $repo    = new \App\repositories\modulos\ProductoRepository();
+            $repoInv = new \App\repositories\modulos\InventarioRepository();
+            $result  = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, 'venta', true);
+
+            $rows = array_map(function ($p) use ($repo, $repoInv, $idEmpresa, $idBodega, $idOrden) {
                 $p['precios_lista'] = $repo->getPrecios((int) $p['id'], $idEmpresa);
                 $p['variantes']     = $repo->getVariantes((int) $p['id'], $idEmpresa);
+
+                $esInv = ($p['inventariable'] == true || $p['inventariable'] === 'true' || $p['inventariable'] == 1)
+                         && (($p['tipo_produccion'] ?? '01') !== '02');
+                $stock = 0.0;
+                if ($idBodega > 0 && $esInv) {
+                    $stock = $repoInv->getStockActual(
+                        (int) $p['id'],
+                        $idBodega,
+                        $idEmpresa,
+                        $idOrden > 0 ? $idOrden : null,
+                        $idOrden > 0 ? 'carwash_orden' : null
+                    );
+                }
+                $p['stock_actual']  = $stock;
+                $p['controla_stock'] = $esInv;
                 return $p;
             }, $result['rows']);
+
             echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
@@ -464,6 +485,33 @@ class CarWashController extends BaseModuloController
     public function buscarProductosAjax(): void
     {
         $this->getProductosAjax();
+    }
+
+    /** Saldo disponible de un producto en una bodega (para el saldo por línea de la grilla). */
+    public function getStockAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $idEmpresa  = (int) $_SESSION['id_empresa'];
+            $idProducto = (int) ($_GET['id_producto'] ?? 0);
+            $idBodega   = (int) ($_GET['id_bodega'] ?? 0);
+            $idOrden    = (int) ($_GET['id_orden'] ?? 0);
+            if (!$idProducto || !$idBodega) {
+                echo json_encode(['ok' => false, 'stock' => 0]);
+                exit;
+            }
+            $repoInv = new \App\repositories\modulos\InventarioRepository();
+            $stock = $repoInv->getStockActual(
+                $idProducto, $idBodega, $idEmpresa,
+                $idOrden > 0 ? $idOrden : null,
+                $idOrden > 0 ? 'carwash_orden' : null
+            );
+            echo json_encode(['ok' => true, 'stock' => $stock]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'stock' => 0, 'error' => $e->getMessage()]);
+        }
+        exit;
     }
 
     /** Lotes disponibles de un producto/bodega (para columnas de lote, igual que factura/recibo). */

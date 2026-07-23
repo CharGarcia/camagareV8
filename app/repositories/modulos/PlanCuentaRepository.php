@@ -321,6 +321,29 @@ class PlanCuentaRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Cuentas de un nivel específico, opcionalmente acotadas a las hijas de un código padre.
+     * Sirve tanto para listar las raíces (nivel 1, sin prefijo) como las cuentas de nivel 4
+     * bajo una raíz elegida (prefijo = código de la raíz).
+     */
+    public function getCuentasPorNivel(int $idEmpresa, string $nivel, ?string $prefijoCodigo = null): array
+    {
+        $sql = "SELECT id, codigo, nombre FROM {$this->table}
+                WHERE id_empresa = :id_e AND eliminado = false AND nivel = :nivel";
+        $params = [':id_e' => $idEmpresa, ':nivel' => $nivel];
+
+        if ($prefijoCodigo !== null && $prefijoCodigo !== '') {
+            $sql .= " AND codigo LIKE :prefijo";
+            $params[':prefijo'] = $prefijoCodigo . '.%';
+        }
+
+        $sql .= " ORDER BY codigo ASC";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function searchCuentas(int $idEmpresa, string $q, string $tipo = '', int $limit = 10): array
     {
         $params = [':id_e' => $idEmpresa, ':q' => "%$q%"];

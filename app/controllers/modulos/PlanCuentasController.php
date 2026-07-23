@@ -246,6 +246,26 @@ class PlanCuentasController extends BaseModuloController
         exit;
     }
 
+    public function getCuentasPorNivelAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $nivel     = trim($_GET['nivel'] ?? '');
+        $prefijo   = trim($_GET['prefijo'] ?? '');
+
+        if ($nivel === '') {
+            echo json_encode(['ok' => false, 'error' => 'Nivel requerido']);
+            exit;
+        }
+
+        $repo = new PlanCuentaRepository();
+        $data = $repo->getCuentasPorNivel($idEmpresa, $nivel, $prefijo !== '' ? $prefijo : null);
+
+        echo json_encode(['ok' => true, 'data' => $data]);
+        exit;
+    }
+
     public function initPlanAjax(): void
     {
         $this->requireCrear();

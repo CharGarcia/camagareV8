@@ -45,10 +45,16 @@ class CajaPosController extends BaseModuloController
     {
         $this->requireLeer();
 
+        // De dónde vino: si llegó desde el tablero de mesas (POS Restaurantes,
+        // módulo independiente), "Continuar al Punto de Venta" debe devolverlo
+        // ahí y no al mostrador — ver standalone.php.
+        $volverA = ($_GET['volver'] ?? '') === 'mesas' ? 'mesas' : null;
+
         $this->view('modulos.caja_sesion.standalone', [
             'titulo' => 'Caja — Punto de Venta',
             'rutaModulo' => self::RUTA_MODULO,
             'perm' => $this->getPermisos(),
+            'volverA' => $volverA,
         ]);
     }
 

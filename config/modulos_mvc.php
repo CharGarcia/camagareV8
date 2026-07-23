@@ -118,6 +118,37 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // POS Restaurantes: mesas + comandas + cocina/barra. Modo alterno del
+    // Punto de Venta (empresa_establecimiento.modo_pos = 'restaurante'),
+    // convive con modulos/caja-pos (mostrador). Ver
+    // database/migrations/20260723_create_pos_restaurante.sql.
+    // El menú "Restaurante" (modulos_menu.id=4) y sus 3 submódulos ya estaban
+    // registrados en submodulos_menu de antes; Mesas ya tenía controlador
+    // (MesasController) sin registrar aquí. Comandas y kds se agregan en las
+    // fases siguientes del módulo (sus controladores aún no existen).
+    'modulos/mesas' => [
+        'id_submodulo' => 6, // submodulos_menu.id = 6 (Mesas, menú "Restaurante")
+        'legacy_rutas' => [],
+    ],
+    'modulos/comandas' => [
+        'id_submodulo' => 19, // submodulos_menu.id = 19 (Comandas, menú "Restaurante")
+        'legacy_rutas' => [],
+    ],
+    'modulos/kds' => [
+        'id_submodulo' => 219, // submodulos_menu.id = 219 (Configuración kds, menú "Restaurante")
+        'legacy_rutas' => [],
+    ],
+
+    // Menú (carta del restaurante): catálogo con fotos, opcionalmente vinculado
+    // a productos/combos del sistema. Se usa en modulos/comandas/ver y en el
+    // portal público QR (fase siguiente). Registrar el submódulo manualmente
+    // en submodulos_menu (ideal: dentro del menú "Restaurante") y actualizar
+    // este id_submodulo con el id real.
+    'modulos/menu' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     'modulos/notas_credito' => [
         'id_submodulo' => 165,
         'legacy_rutas' => [

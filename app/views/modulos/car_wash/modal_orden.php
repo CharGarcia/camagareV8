@@ -125,15 +125,16 @@
                             <table class="table table-sm table-detalle mb-0 text-nowrap">
                                 <thead>
                                     <tr class="table-light border-bottom">
-                                        <th class="ps-3 py-2 small fw-bold text-muted" style="width: 22%;">Descripción</th>
-                                        <th class="py-2 small fw-bold text-muted" style="width: 12%;">Adicional</th>
-                                        <th class="py-2 small fw-bold text-muted col-medida-header <?= (($empresa['mostrar_unidad_medida'] ?? true) === 'true' || ($empresa['mostrar_unidad_medida'] ?? true) === true) ? '' : 'd-none' ?>" style="width: 8%;">Medida</th>
+                                        <th class="ps-3 py-2 small fw-bold text-muted" style="width: 20%;">Descripción</th>
+                                        <th class="py-2 small fw-bold text-muted" style="width: 8%;">Adicional</th>
+                                        <th class="py-2 small fw-bold text-muted col-medida-header <?= (($empresa['mostrar_unidad_medida'] ?? true) === 'true' || ($empresa['mostrar_unidad_medida'] ?? true) === true) ? '' : 'd-none' ?>" style="width: 7%;">Medida</th>
+                                        <th class="py-2 small fw-bold text-muted" style="width: 11%;">Bodega</th>
                                         <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Cant.</th>
-                                        <th class="py-2 small fw-bold text-muted" style="width: 12%;">Precios</th>
-                                        <th class="py-2 small fw-bold text-muted text-end" style="width: 9%;">P. Sin Imp.</th>
-                                        <th class="py-2 small fw-bold text-muted text-end" style="width: 9%;">P. Con Imp.</th>
-                                        <th class="py-2 small fw-bold text-muted text-end" style="width: 7%;">Desc.</th>
-                                        <th class="py-2 small fw-bold text-muted text-center" style="width: 7%;">Iva</th>
+                                        <th class="py-2 small fw-bold text-muted" style="width: 10%;">Precios</th>
+                                        <th class="py-2 small fw-bold text-muted text-end" style="width: 8%;">P. Sin Imp.</th>
+                                        <th class="py-2 small fw-bold text-muted text-end" style="width: 8%;">P. Con Imp.</th>
+                                        <th class="py-2 small fw-bold text-muted text-end" style="width: 6%;">Desc.</th>
+                                        <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Iva</th>
                                         <?php if (!empty($empresa['obligatorio_lotes']) && ($empresa['obligatorio_lotes'] === 'true' || $empresa['obligatorio_lotes'] === true)): ?>
                                             <th class="py-2 small fw-bold text-muted text-center" style="width:8%;">Lote</th>
                                         <?php endif; ?>
@@ -143,7 +144,7 @@
                                         <?php if (!empty($empresa['obligatorio_nup']) && ($empresa['obligatorio_nup'] === 'true' || $empresa['obligatorio_nup'] === true)): ?>
                                             <th class="py-2 small fw-bold text-muted text-center" style="width:9%;">NUP / Serial</th>
                                         <?php endif; ?>
-                                        <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 11%;">Subtotal</th>
+                                        <th class="py-2 small fw-bold text-muted text-end pe-4" style="width: 10%;">Subtotal</th>
                                         <th style="width: 40px;"></th>
                                     </tr>
                                 </thead>
@@ -501,6 +502,40 @@
     const r2 = v => Math.round(v * 100) / 100;
     function cwDebounce(fn, wait) { let t; return function (...a) { clearTimeout(t); t = setTimeout(() => fn.apply(this, a), wait); }; }
 
+    // Opciones de bodega para cada línea (por defecto, la bodega de la cabecera).
+    function cwOpcionesBodega(idSel) {
+        const bods = window.CW_BODEGAS || [];
+        const def = idSel || (document.getElementById('cw_id_bodega') ? document.getElementById('cw_id_bodega').value : '');
+        let html = '<option value="">— Bodega —</option>';
+        bods.forEach(b => { html += `<option value="${b.id}" ${String(b.id) === String(def) ? 'selected' : ''}>${esc(b.nombre)}</option>`; });
+        return html;
+    }
+
+    // Al cambiar la bodega de una línea se recalcula su saldo disponible.
+    window.cwBodegaLineaChange = function (el) { cwActualizarSaldoFila(el.closest('tr')); };
+
+    // Muestra el saldo del producto de la fila en la bodega elegida.
+    async function cwActualizarSaldoFila(tr) {
+        if (!tr) return;
+        const cont = tr.querySelector('.span-saldo-info');
+        const lbl  = tr.querySelector('.lbl-saldo-valor');
+        if (!cont || !lbl) return;
+        const idProd = tr.querySelector('.input-id-producto') ? tr.querySelector('.input-id-producto').value : '';
+        const idBod  = tr.querySelector('.input-bodega') ? tr.querySelector('.input-bodega').value : '';
+        if (!idProd || !idBod || tr.dataset.controlaStock !== '1') { cont.classList.add('d-none'); return; }
+        try {
+            const idOrd = document.getElementById('cw_id').value || 0;
+            const res = await fetch(`${RUTA}/getStockAjax?id_producto=${idProd}&id_bodega=${idBod}&id_orden=${idOrd}`);
+            const data = await res.json();
+            if (!data.ok) { cont.classList.add('d-none'); return; }
+            const st = parseFloat(data.stock || 0);
+            lbl.textContent = st.toFixed(2);
+            cont.classList.remove('d-none');
+            cont.classList.toggle('text-danger', st <= 0);
+            cont.classList.toggle('text-muted', st > 0);
+        } catch (e) { cont.classList.add('d-none'); }
+    }
+
     // Crea una fila vacía de la grilla y cablea su búsqueda de producto.
     window.cwAgregarLinea = function () {
         const tbody = document.getElementById('cw_tbodyDetalle');
@@ -519,11 +554,15 @@
                 <div class="mt-1 container-variante d-none">
                     <select class="form-select form-select-sm input-detalle input-variante" style="font-size:0.7rem; height:24px; padding:0 5px;"><option value="">Variantes...</option></select>
                 </div>
+                <div class="mt-1 small fw-bold text-muted span-saldo-info d-none" style="font-size:0.68rem;">
+                    <i class="bi bi-box-seam me-1 text-primary"></i>Saldo: <span class="lbl-saldo-valor">0.00</span>
+                </div>
             </td>
             <td><input type="text" class="form-control form-control-sm input-detalle input-adicional text-muted fst-italic" placeholder="Info adicional"></td>
             <td class="${EMPRESA_CONFIG.mostrar_unidad_medida ? '' : 'd-none'}">
                 <select class="form-select form-select-sm input-detalle input-medida d-none"><option value="">Medida</option></select>
             </td>
+            <td><select class="form-select form-select-sm input-detalle input-bodega" onchange="cwBodegaLineaChange(this)">${cwOpcionesBodega()}</select></td>
             <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="1" step="any" oninput="cwCalcFila(this)"></td>
             <td><select class="form-select form-select-sm input-detalle input-lista-precios"><option value="">P. Base</option></select></td>
             <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${(0).toFixed(DEC_PRECIO)}" step="any" oninput="cwCalcSinImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(${DEC_PRECIO})" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
@@ -556,7 +595,11 @@
             dropdownGlobal.classList.remove('d-none');
             dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">Buscando...</div>';
             try {
-                const resp = await fetch(`${RUTA}/getProductosAjax?q=${encodeURIComponent(q)}`);
+                // Stock según la bodega de ESTA línea (si no tiene, la de la cabecera).
+                const idBod = (tr.querySelector('.input-bodega') && tr.querySelector('.input-bodega').value)
+                    || document.getElementById('cw_id_bodega').value || 0;
+                const idOrd = document.getElementById('cw_id').value || 0;
+                const resp = await fetch(`${RUTA}/getProductosAjax?q=${encodeURIComponent(q)}&id_bodega=${idBod}&id_orden=${idOrd}`);
                 const json = await resp.json();
                 dropdownGlobal.innerHTML = '';
                 if (json.data && json.data.length > 0) {
@@ -564,11 +607,25 @@
                         const b = document.createElement('button');
                         b.type = 'button';
                         b.className = 'list-group-item list-group-item-action small py-1 border-bottom';
+                        // Stock disponible (solo productos que controlan inventario)
+                        let stockBadge = '';
+                        if (p.controla_stock) {
+                            const st = parseFloat(p.stock_actual || 0);
+                            const cls = st > 0 ? 'success' : 'danger';
+                            stockBadge = `<span class="badge bg-${cls} bg-opacity-10 text-${cls} border border-${cls} border-opacity-25 me-1">Stock: ${st.toFixed(2)}</span>`;
+                        }
                         b.innerHTML = `<div class="d-flex justify-content-between align-items-center text-start">
                                 <div class="pe-3"><div class="fw-bold text-dark">${esc(p.nombre)}</div>
                                 <div class="x-small text-muted">${esc(p.codigo || '')} ${p.codigo_barras ? '| ' + esc(p.codigo_barras) : ''}</div></div>
-                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-10">$${parseFloat(p.precio_base || 0).toFixed(2)}</span></div>`;
-                        b.onmousedown = (evt) => { evt.preventDefault(); cwSeleccionarProductoEnFila(p, tr); dropdownGlobal.classList.add('d-none'); };
+                                <div class="text-nowrap">${stockBadge}<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-10">$${parseFloat(p.precio_base || 0).toFixed(2)}</span></div></div>`;
+                        b.onmousedown = (evt) => {
+                            evt.preventDefault();
+                            if (p.controla_stock && parseFloat(p.stock_actual || 0) <= 0) {
+                                Swal.fire({ icon: 'warning', title: 'Sin stock', text: `"${p.nombre}" no tiene stock disponible en la bodega seleccionada.`, timer: 2600, showConfirmButton: false, target: document.getElementById('modalOrdenCW') });
+                            }
+                            cwSeleccionarProductoEnFila(p, tr);
+                            dropdownGlobal.classList.add('d-none');
+                        };
                         dropdownGlobal.appendChild(b);
                     });
                     if (EMPRESA_CONFIG.facturacion_libre) cwAgregarOpcionServicioLibre(q, tr, dropdownGlobal);
@@ -606,6 +663,7 @@
         row.dataset.idProducto = p.id;
         row.dataset.tipoProduccion = p.tipo_produccion || '01';
         row.dataset.inventariable = p.inventariable;
+        row.dataset.controlaStock = p.controla_stock ? '1' : '0';
         row.querySelector('.input-es-libre').value = '0';
         row.querySelector('.input-precio-base-original').value = p.precio_base || 0;
         row.querySelector('.input-ice-pct').value = p.valor_ice || 0;
@@ -687,6 +745,7 @@
 
         cwSyncPrecioIva(row.querySelector('.input-precio'));
         cwCalcFila(row.querySelector('.input-cantidad'));
+        cwActualizarSaldoFila(row);
         const inCant = row.querySelector('.input-cantidad'); inCant.focus(); inCant.select();
     };
 
@@ -795,6 +854,9 @@
         const tr = cwAgregarLinea();
         tr.dataset.idProducto = d.id_producto || '';
         tr.dataset.tipoProduccion = (d.tipo_linea === 'servicio') ? '02' : '01';
+        tr.dataset.controlaStock = (d.id_producto && d.tipo_linea === 'producto') ? '1' : '0';
+        const selBod = tr.querySelector('.input-bodega');
+        if (selBod && d.id_bodega) selBod.value = d.id_bodega;
         tr.querySelector('.input-descripcion').value = d.descripcion || '';
         tr.querySelector('.input-id-producto').value = d.id_producto || '';
         tr.querySelector('.input-es-libre').value = (d.es_libre === true || d.es_libre === 't' || d.es_libre === 'true' || d.es_libre === 1) ? '1' : '0';
@@ -817,6 +879,7 @@
         }
         cwSyncPrecioIva(tr.querySelector('.input-precio'));
         cwCalcFila(tr.querySelector('.input-cantidad'));
+        cwActualizarSaldoFila(tr);
     };
 
 
@@ -866,7 +929,7 @@
                 tipo_linea: (tipoProd === '02' || esLibre) ? 'servicio' : (idProd ? 'producto' : 'servicio'),
                 es_libre: esLibre,
                 descripcion: desc,
-                id_bodega: null,
+                id_bodega: (tr.querySelector('.input-bodega') && tr.querySelector('.input-bodega').value) || null,
                 id_tarifa_iva: optIva ? (optIva.dataset.id || null) : null,
                 cantidad: cant,
                 precio_unitario: num(tr.querySelector('.input-precio')?.value),

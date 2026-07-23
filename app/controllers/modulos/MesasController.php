@@ -4,15 +4,23 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
+use App\repositories\modulos\CajaSesionRepository;
+use App\repositories\modulos\ComandaRepository;
 use App\repositories\modulos\MesaRepository;
+use App\Rules\modulos\CajaSesionRules;
+use App\Rules\modulos\ComandaRules;
 use App\Rules\modulos\MesaRules;
 use App\Services\LogSistemaService;
+use App\Services\modulos\CajaSesionService;
+use App\Services\modulos\ComandaService;
 use App\Services\modulos\MesaService;
 
 class MesasController extends BaseModuloController
 {
     private const RUTA_MODULO = 'modulos/mesas';
     private MesaService $service;
+    private ComandaService $comandaService;
+    private CajaSesionService $cajaService;
 
     public function __construct()
     {
@@ -21,11 +29,54 @@ class MesasController extends BaseModuloController
         $rules = new MesaRules();
         $logService = new LogSistemaService();
         $this->service = new MesaService($repo, $rules, $logService);
+        $this->comandaService = new ComandaService(new ComandaRepository(), new ComandaRules(), $repo, $logService);
+        $this->cajaService = new CajaSesionService(new CajaSesionRepository(), new CajaSesionRules(), $logService);
     }
 
     protected function getRutaModulo(): string
     {
         return self::RUTA_MODULO;
+    }
+
+    /**
+     * Tablero operativo del modo restaurante (modulos/mesas/tablero): grid de
+     * mesas con su comanda abierta, si tiene. Requiere el mismo turno de caja
+     * que el mostrador (modulos/caja-pos) — el salón no vende sin turno
+     * abierto, y abrir/cerrar turno sigue viviendo solo en Cajas para no
+     * duplicar esa pantalla aquí.
+     */
+    public function tablero(): void
+    {
+        $this->requireLeer();
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idPuntoEmision = (int) ($_SESSION['pos_id_punto_emision'] ?? 0);
+        $sesion = $idPuntoEmision > 0 ? $this->cajaService->getSesionAbierta($idEmpresa, $idPuntoEmision) : null;
+
+        if (!$sesion) {
+            $this->view('modulos.caja_sesion.venta_placeholder', [
+                'titulo'         => 'Punto de Venta — Restaurante',
+                'rutaModulo'     => 'modulos/caja-pos',
+                'idPuntoEmision' => $idPuntoEmision,
+            ]);
+            return;
+        }
+
+        $this->view('modulos.mesas.tablero', [
+            'titulo'         => 'Mesas',
+            'rutaModulo'     => self::RUTA_MODULO,
+            'perm'           => $this->getPermisos(),
+            'idPuntoEmision' => $idPuntoEmision,
+            'sesion'         => $sesion,
+            'mesas'          => $this->comandaService->getTablero($idEmpresa),
+        ]);
+    }
+
+    public function tableroAjax(): void
+    {
+        $this->requireLeer();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $this->json(['ok' => true, 'data' => $this->comandaService->getTablero($idEmpresa)]);
     }
 
     public function index(): void
@@ -111,6 +162,7 @@ class MesasController extends BaseModuloController
                 $dataAttr = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
                 echo '<tr class="mesa-row" role="button" tabindex="0" data-row=\'' . $dataAttr . '\' onclick="abrirModalMesaEditar(this)">
                         <td class="ps-3 fw-medium" data-col="nombre">' . htmlspecialchars($r['nombre'] ?? '') . '</td>
+                        <td class="text-center" data-col="ubicacion">' . htmlspecialchars($r['ubicacion'] ?? '') . '</td>
                         <td class="text-center" data-col="estado">' . $estadoBadge . '</td>
                         <td class="text-center" data-col="created_at">' . htmlspecialchars($r['created_at'] ?? '') . '</td>
                       </tr>';
@@ -136,38 +188,6 @@ class MesasController extends BaseModuloController
             'pdf_url'   => BASE_URL . '/' . self::RUTA_MODULO . '/export-pdf?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
             'excel_url' => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir"
         ]);
-        exit;
-    }
-
-    public function getDetalleAjax(): void
-    {
-        $this->requireLeer();
-        header('Content-Type: application/json');
-
-        $id = (int) ($_GET['id'] ?? 0);
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-
-        try {
-            if ($id <= 0) throw new \Exception('ID no válido');
-
-            $mesa = $this->service->findById($id, $idEmpresa);
-
-            if (!$mesa) throw new \Exception('Mesa no encontrada');
-
-            $fmt = fn($d) => !empty($d) ? date('d-m-Y H:i:s', strtotime($d)) : '—';
-
-            echo json_encode([
-                'ok' => true,
-                'data' => [
-                    'creado_at' => $fmt($mesa['created_at'] ?? null),
-                    'creado_por' => $mesa['creado_por_nombre'] ?? 'Sistema',
-                    'actualizado_at' => $fmt($mesa['updated_at'] ?? null),
-                    'actualizado_por' => $mesa['actualizado_por_nombre'] ?? '—'
-                ]
-            ]);
-        } catch (\Throwable $e) {
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
         exit;
     }
 
@@ -232,9 +252,31 @@ class MesasController extends BaseModuloController
     private function recogerDatosFormulario(): array
     {
         return [
-            'nombre' => trim($_POST['nombre'] ?? ''),
-            'estado' => trim($_POST['estado'] ?? 'disponible'),
+            'nombre'    => trim($_POST['nombre'] ?? ''),
+            'estado'    => trim($_POST['estado'] ?? 'disponible'),
+            'ubicacion' => trim($_POST['ubicacion'] ?? ''),
         ];
+    }
+
+    /** Arrastrar y soltar en el tablero (modulos/mesas/tablero): guarda la nueva posición. */
+    public function actualizarPosicionAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $id = (int) ($_POST['id'] ?? 0);
+        $posX = (float) ($_POST['pos_x'] ?? -1);
+        $posY = (float) ($_POST['pos_y'] ?? -1);
+
+        try {
+            if ($id <= 0) throw new \Exception('Mesa no válida.');
+            $this->service->actualizarPosicion($id, $idEmpresa, $posX, $posY);
+            echo json_encode(['ok' => true]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
     }
 
     public function exportPdf(): void
@@ -313,14 +355,16 @@ class MesasController extends BaseModuloController
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 70%">Nombre</th>
-                            <th style="width: 30%">Estado</th>
+                            <th style="width: 45%">Nombre</th>
+                            <th style="width: 30%">Ubicación</th>
+                            <th style="width: 25%">Estado</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($rows as $r): ?>
                             <tr>
                                 <td><?= htmlspecialchars((string)($r['nombre'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string)($r['ubicacion'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars((string)($r['estado'] ?? '')) ?></td>
                             </tr>
                         <?php endforeach; ?>
@@ -365,11 +409,12 @@ class MesasController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $headers = ['Nombre', 'Estado', 'Fecha Registro'];
+            $headers = ['Nombre', 'Ubicación', 'Estado', 'Fecha Registro'];
             $exportData = [];
             foreach ($rows as $r) {
                 $exportData[] = [
                     (string)($r['nombre'] ?? ''),
+                    (string)($r['ubicacion'] ?? ''),
                     (string)($r['estado'] ?? ''),
                     (string)($r['created_at'] ?? '')
                 ];

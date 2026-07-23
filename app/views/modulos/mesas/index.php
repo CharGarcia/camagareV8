@@ -76,6 +76,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <?php
                 $columnasTabla = [
                     'nombre' => 'Nombre',
+                    'ubicacion' => 'Ubicación',
                     'estado' => 'Estado',
                     'created_at' => 'Registro'
                 ];
@@ -101,20 +102,22 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-3 sortable-header w-50" role="button" data-sort="nombre" data-col="nombre">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-center sortable-header w-25" role="button" data-sort="estado" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                        <th class="text-center sortable-header w-25" role="button" data-sort="created_at" data-col="created_at">Registro <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="ps-3 sortable-header" role="button" data-sort="nombre" data-col="nombre">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center" data-col="ubicacion">Ubicación</th>
+                        <th class="text-center sortable-header" role="button" data-sort="estado" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header" role="button" data-sort="created_at" data-col="created_at">Registro <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyMesas">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="3" class="text-center py-5 text-muted"><i class="bi bi-grid-3x3 fs-3 d-block mb-2"></i>No se encontraron mesas.</td>
+                            <td colspan="4" class="text-center py-5 text-muted"><i class="bi bi-grid-3x3 fs-3 d-block mb-2"></i>No se encontraron mesas.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <tr class="mesa-row" role="button" tabindex="0" data-row='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8') ?>' onclick="abrirModalMesaEditar(this)">
                                 <td class="ps-3 fw-medium" data-col="nombre"><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
+                                <td class="text-center" data-col="ubicacion"><?= htmlspecialchars($r['ubicacion'] ?? '') ?></td>
                                 <td class="text-center" data-col="estado">
                                     <?php if (($r['estado'] ?? 'disponible') === 'disponible'): ?>
                                         <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Disponible</span>
@@ -142,48 +145,31 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
                 <div class="modal-body pb-0">
-                    <div id="modalAlert" class="alert d-none mb-3 py-2 small shadow-sm border-0"></div>
                     <input type="hidden" name="id" id="mesa_id" value="">
 
-                    <ul class="nav nav-tabs mb-3" id="tabsMesa" role="tablist">
-                        <li class="nav-item">
-                            <button class="nav-link active" id="tab-general-btn" data-bs-toggle="tab" data-bs-target="#tab-general" type="button">General</button>
-                        </li>
-                        <li class="nav-item">
-                            <button class="nav-link disabled" id="tab-info-btn" data-bs-toggle="tab" data-bs-target="#tab-info" type="button">Información</button>
-                        </li>
-                    </ul>
-
-                    <div class="tab-content pb-3">
-                        <div class="tab-pane fade show active" id="tab-general">
-                            <div class="row g-3">
-                                <div class="col-12">
-                                    <label class="form-label small fw-bold">Nombre de la Mesa *</label>
-                                    <input type="text" class="form-control form-control-sm" name="nombre" id="mesa_nombre" required maxlength="100" placeholder="Ej. Mesa 01">
-                                </div>
-                                <div class="col-12">
-                                    <label class="form-label small fw-bold d-flex align-items-center">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('mesas', 'mesa_estado', 'estado') ?></label>
-                                    <select class="form-select form-select-sm" name="estado" id="mesa_estado">
-                                        <option value="disponible">Disponible</option>
-                                        <option value="ocupada">Ocupada</option>
-                                        <option value="mantenimiento">Mantenimiento</option>
-                                    </select>
-                                </div>
-                            </div>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">Nombre de la Mesa *</label>
+                            <input type="text" class="form-control form-control-sm" name="nombre" id="mesa_nombre" required maxlength="100" placeholder="Ej. Mesa 01">
                         </div>
-
-                        <div class="tab-pane fade" id="tab-info">
-                                <div class="card bg-light border-0 mb-3">
-                                    <div class="card-body p-3">
-                                        <h6 class="text-primary mb-3 small fw-bold"><i class="bi bi-clock-history me-2"></i>Historial de Cambios</h6>
-                                        <div id="auditoriaTimelineMesa" class="position-relative mt-2" style="max-height: 250px; overflow-y: auto; padding-right: 5px;">
-                                            <div class="text-center py-3 text-muted small">
-                                                <div class="spinner-border spinner-border-sm mb-2" role="status"></div>
-                                                <div class="d-block">Cargando historial...</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">Ubicación</label>
+                            <input type="text" class="form-control form-control-sm" name="ubicacion" id="mesa_ubicacion" maxlength="60" placeholder="Ej. Piso 1, Piso 2, Terraza..." list="mesa_ubicaciones_sugeridas">
+                            <datalist id="mesa_ubicaciones_sugeridas">
+                                <option value="Piso 1">
+                                <option value="Piso 2">
+                                <option value="Terraza">
+                                <option value="Salón principal">
+                            </datalist>
+                            <div class="form-text mt-0" style="font-size:0.65rem;">Agrupa las mesas por pestañas en el tablero (modulos/mesas/tablero).</div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold d-flex align-items-center">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('mesas', 'mesa_estado', 'estado') ?></label>
+                            <select class="form-select form-select-sm" name="estado" id="mesa_estado">
+                                <option value="disponible">Disponible</option>
+                                <option value="ocupada">Ocupada</option>
+                                <option value="mantenimiento">Mantenimiento</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -222,18 +208,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             return modalInst;
         }
 
+        function swalToast(icon, title) {
+            Swal.fire({ toast: true, position: 'top-end', icon, title, showConfirmButton: false, timer: 2500, timerProgressBar: true });
+        }
+        function swalError(html) {
+            Swal.fire({ icon: 'error', title: 'Error', html, confirmButtonColor: '#0d6efd', confirmButtonText: 'Aceptar' });
+        }
+
         window.abrirModalMesaCrear = function() {
             form.reset();
             document.getElementById('mesa_id').value = '';
             document.getElementById('tituloModal').textContent = 'Nueva Mesa';
-            document.getElementById('modalAlert').classList.add('d-none');
             document.getElementById('btnEliminar')?.classList.add('d-none');
-
-            if (typeof bootstrap !== 'undefined') {
-                const tabEl = document.getElementById('tab-general-btn');
-                bootstrap.Tab.getInstance(tabEl)?.show() || new bootstrap.Tab(tabEl).show();
-            }
-            document.getElementById('tab-info-btn').classList.add('disabled');
 
             if (typeof aplicarFavoritosModal === 'function') {
                 aplicarFavoritosModal();
@@ -248,19 +234,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             form.reset();
             document.getElementById('mesa_id').value = data.id;
             document.getElementById('mesa_nombre').value = data.nombre || '';
+            document.getElementById('mesa_ubicacion').value = data.ubicacion || '';
             document.getElementById('mesa_estado').value = data.estado || 'disponible';
 
             document.getElementById('tituloModal').textContent = 'Editar Mesa';
-            document.getElementById('modalAlert').classList.add('d-none');
             document.getElementById('btnEliminar')?.classList.remove('d-none');
 
-            if (typeof bootstrap !== 'undefined') {
-                const tabEl = document.getElementById('tab-general-btn');
-                bootstrap.Tab.getInstance(tabEl)?.show() || new bootstrap.Tab(tabEl).show();
-            }
-            document.getElementById('tab-info-btn').classList.remove('disabled');
-
-            fetchInformacionExtra(data.id);
             getModal()?.show();
         };
 
@@ -268,12 +247,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const btnSave = document.getElementById('btnGuardar');
-                const alertEl = document.getElementById('modalAlert');
                 const actionUrl = document.getElementById('mesa_id').value ? `${urlBase}/update` : `${urlBase}/store`;
 
                 btnSave.disabled = true;
                 btnSave.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
-                alertEl.classList.add('d-none');
 
                 try {
                     const fd = new FormData(form);
@@ -282,19 +259,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         body: fd
                     });
                     const json = await resp.json();
-                    alertEl.textContent = json.msg || json.error || 'Error';
-                    alertEl.className = 'alert mb-3 py-2 small shadow-sm border-0 ' + (json.ok ? 'alert-success' : 'alert-danger');
-                    alertEl.classList.remove('d-none');
                     if (json.ok) {
-                        setTimeout(() => {
-                            getModal()?.hide();
-                            fetchSearch(window.currentPage || 1);
-                        }, 800);
+                        swalToast('success', json.msg || 'Guardado correctamente.');
+                        getModal()?.hide();
+                        fetchSearch(window.currentPage || 1);
                     } else {
+                        swalError(json.error || 'No se pudo guardar la mesa.');
                         btnSave.disabled = false;
                         btnSave.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
                     }
                 } catch (err) {
+                    swalError('Error de conexión al guardar.');
                     btnSave.disabled = false;
                     btnSave.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
                 }
@@ -303,7 +278,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         window.eliminarMesa = async function() {
             const id = document.getElementById('mesa_id').value;
-            if (!id || !confirm('¿Seguro que desea eliminar esta mesa?')) return;
+            if (!id) return;
+
+            const { isConfirmed } = await Swal.fire({
+                title: '¿Eliminar esta mesa?',
+                text: 'Esta acción no se puede deshacer.',
+                icon: 'warning', showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#dc3545',
+            });
+            if (!isConfirmed) return;
+
             const btnDlt = document.getElementById('btnEliminar');
             btnDlt.disabled = true;
             try {
@@ -315,90 +300,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 });
                 const json = await resp.json();
                 if (json.ok) {
+                    swalToast('success', json.msg || 'Mesa eliminada correctamente.');
                     getModal()?.hide();
                     fetchSearch(window.currentPage || 1);
                 } else {
+                    swalError(json.error || 'No se pudo eliminar la mesa.');
                     btnDlt.disabled = false;
                 }
             } catch (err) {
+                swalError('Error de conexión al eliminar.');
                 btnDlt.disabled = false;
             }
         };
-
-        async function fetchInformacionExtra(id) {
-            try {
-                const resp = await fetch(`${urlBase}/getDetalleAjax?id=${id}`);
-                const json = await resp.json();
-                if (json.ok) {
-                    const d = json.data;
-                    fetchHistorialMesa(id);
-                }
-            } catch (e) {}
-        }
-
-        async function fetchHistorialMesa(id) {
-            const container = document.getElementById('auditoriaTimelineMesa');
-            if (!container || !id) return;
-
-            try {
-                const resp = await fetch(`${urlBase}/getHistorialAjax?id=${id}&tabla=mesas`);
-                const json = await resp.json();
-
-                if (json.ok && json.data.length > 0) {
-                    let html = '<div class="timeline-border position-absolute h-100 border-start border-2 border-primary border-opacity-10" style="left: 10px; top: 0;"></div>';
-
-                    json.data.forEach(log => {
-                        const icon = log.accion.includes('Crear') ? 'bi-plus-circle-fill text-success' :
-                                   log.accion.includes('Actualizar') ? 'bi-pencil-fill text-primary' :
-                                   log.accion.includes('Eliminar') ? 'bi-trash-fill text-danger' :
-                                   'bi-clock-history text-secondary';
-
-                        html += `
-                            <div class="timeline-item position-relative mb-3 ps-4">
-                                <div class="timeline-icon position-absolute rounded-circle bg-white d-flex align-items-center justify-content-center shadow-sm border" 
-                                     style="left: 0; top: 0; width: 22px; height: 22px; z-index: 2;">
-                                    <i class="bi ${icon}" style="font-size: 0.7rem;"></i>
-                                </div>
-                                <div class="timeline-content">
-                                    <div class="d-flex justify-content-between align-items-center mb-0">
-                                        <span class="fw-bold" style="font-size: 0.75rem;">${log.accion}</span>
-                                        <span class="text-muted" style="font-size: 0.65rem;">${log.created_at}</span>
-                                    </div>
-                                    <div class="text-muted mb-1" style="font-size: 0.7rem;">
-                                        <i class="bi bi-person me-1"></i> ${log.usuario_nombre || 'SISTEMA'}
-                                    </div>
-                                    <div class="bg-light rounded p-1 border border-light-subtle shadow-sm" style="font-size: 0.65rem;">
-                                        ${renderDetalleHistorialMesa(log.detalles)}
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = `<div class="text-center py-4 text-muted small">No hay historial de cambios.</div>`;
-                }
-            } catch (e) {
-                container.innerHTML = `<div class="text-center py-3 text-danger small">Error de carga.</div>`;
-            }
-        }
-
-        function renderDetalleHistorialMesa(detalle) {
-            if (!detalle || detalle.length === 0) return '<span class="text-muted">Sin detalles específicos</span>';
-            if (typeof detalle === 'string') return detalle;
-            if (Array.isArray(detalle)) {
-                return `<ul class="list-unstyled mb-0">
-                    ${detalle.map(d => {
-                        if (typeof d === 'object') {
-                            const antes = d.antes !== null ? `<span class="text-decoration-line-through text-muted">${d.antes}</span> ` : '';
-                            return `<li><i class="bi bi-dot"></i> <span class="fw-bold">${d.campo}:</span> ${antes}<i class="bi bi-arrow-right mx-1"></i> ${d.despues}</li>`;
-                        }
-                        return `<li><i class="bi bi-dot"></i> ${d}</li>`;
-                    }).join('')}
-                </ul>`;
-            }
-            return '<span class="text-muted">Acción registrada</span>';
-        }
 
         const inputBuscar = document.getElementById('buscarMesa');
         window.currentSort = 'id';

@@ -1828,6 +1828,60 @@ class MigracionMysqlService
         );
         $prodPorCod = $this->productosPorCodigo($pg, $idEmpresa);
 
+        // Facturas ya migradas POR ESTA HERRAMIENTA (vinculado IS NOT TRUE): al re-correr se les
+        // completan las formas de pago, la info adicional y los días de crédito. Las "vinculadas"
+        // son documentos nativos del sistema nuevo y no se tocan.
+        $mapFact = [];
+        $qMap = $pg->prepare("SELECT id_origen, id_destino FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'facturas' AND vinculado IS NOT TRUE");
+        $qMap->execute([$idEmpresa]);
+        foreach ($qMap->fetchAll(PDO::FETCH_ASSOC) as $r) { $mapFact[(string) $r['id_origen']] = (int) $r['id_destino']; }
+
+        // Formas de pago SRI: viejo formas_pago_ventas → nuevo ventas_pagos. Ojo: en el viejo la
+        // columna se llama id_forma_pago pero guarda el CÓDIGO SRI ('01','20'…), no el id del catálogo.
+        $fpStmt   = $mysql->prepare("SELECT id_forma_pago, valor_pago FROM formas_pago_ventas WHERE ruc_empresa = :r AND serie_factura = :s AND secuencial_factura = :sec");
+        $insPagoV = $pg->prepare("INSERT INTO ventas_pagos (id_venta, forma_pago, total, plazo, unidad_tiempo) VALUES (?, ?, ?, ?, ?)");
+        $delPagoV = $pg->prepare("DELETE FROM ventas_pagos WHERE id_venta = ?");
+        // Información adicional: viejo detalle_adicional_factura → nuevo ventas_adicional.
+        $adStmt   = $mysql->prepare("SELECT adicional_concepto, adicional_descripcion FROM detalle_adicional_factura WHERE ruc_empresa = :r AND serie_factura = :s AND secuencial_factura = :sec ORDER BY id_detalle");
+        $insAdic  = $pg->prepare("INSERT INTO ventas_adicional (id_venta, nombre, valor) VALUES (?, ?, ?)");
+        $delAdic  = $pg->prepare("DELETE FROM ventas_adicional WHERE id_venta = ?");
+
+        // Copia pagos SRI + info adicional de una factura. Idempotente (borra antes de insertar):
+        // re-correr la migración completa los datos sin duplicarlos.
+        $migrarHijos = function (int $idVenta, array $ef, int $dias) use ($fpStmt, $insPagoV, $delPagoV, $adStmt, $insAdic, $delAdic): void {
+            $args = [':r' => $ef['ruc_empresa'], ':s' => $ef['serie_factura'], ':sec' => $ef['secuencial_factura']];
+
+            $delPagoV->execute([$idVenta]);
+            $fpStmt->execute($args);
+            foreach ($fpStmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
+                $fp = str_pad(trim((string) $f['id_forma_pago']), 2, '0', STR_PAD_LEFT);
+                if ($fp === '' || $fp === '00') { continue; }
+                $insPagoV->execute([$idVenta, $fp, (float) $f['valor_pago'], $dias, 'dias']);
+            }
+
+            $delAdic->execute([$idVenta]);
+            $adStmt->execute($args);
+            foreach ($adStmt->fetchAll(PDO::FETCH_ASSOC) as $a) {
+                $nom = trim((string) $a['adicional_concepto']);
+                if ($nom === '') { continue; }
+                $insAdic->execute([$idVenta, mb_substr($nom, 0, 300), mb_substr(trim((string) $a['adicional_descripcion']), 0, 300)]);
+            }
+        };
+
+        // Días de crédito: el sistema viejo no los guarda por factura, solo el plazo del cliente
+        // (clientes.plazo, que sí se migra). Es la misma fuente que usa el sistema nuevo al facturar.
+        $qPlazo   = $pg->prepare("SELECT COALESCE(plazo, 0) FROM clientes WHERE id = ?");
+        $plazoCli = [];
+        $diasDe = function (int $idCliente) use (&$plazoCli, $qPlazo): int {
+            if (!array_key_exists($idCliente, $plazoCli)) {
+                $qPlazo->execute([$idCliente]);
+                $plazoCli[$idCliente] = (int) $qPlazo->fetchColumn();
+            }
+            return $plazoCli[$idCliente];
+        };
+        $updCabV = $pg->prepare("UPDATE ventas_cabecera SET dias_credito = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $qCliDe  = $pg->prepare("SELECT id_cliente FROM ventas_cabecera WHERE id = ?");
+
         $sql = "SELECT id_encabezado_factura, ruc_empresa, fecha_factura, serie_factura, secuencial_factura, id_cliente, observaciones_factura, estado_sri, total_factura, ambiente, aut_sri, propina
                   FROM encabezado_factura WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_factura', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_factura";
         if ($limite > 0) {
@@ -1838,6 +1892,26 @@ class MigracionMysqlService
         while ($ef = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ef['id_encabezado_factura'];
+
+            // Ya migrada por la herramienta: reconciliar (formas de pago SRI, info adicional y días
+            // de crédito). Así una re-corrida completa lo que corridas anteriores no trajeron.
+            if (isset($mapFact[(string) $old])) {
+                $idExist = $mapFact[(string) $old];
+                try {
+                    $pg->beginTransaction();
+                    $qCliDe->execute([$idExist]);
+                    $dias = $diasDe((int) $qCliDe->fetchColumn());
+                    $updCabV->execute([$dias, $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idExist]);
+                    $migrarHijos($idExist, $ef, $dias);
+                    $pg->commit();
+                    $res['ya_migrados']++;
+                } catch (Throwable $ex) {
+                    if ($pg->inTransaction()) { $pg->rollBack(); }
+                    $res['errores']++;
+                    if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 160); }
+                }
+                continue;
+            }
             if ($this->yaMigradoDoc($idEmpresa, 'facturas', 'ventas_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
 
             $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ef['id_cliente'], $idEmpresa, $idUsuario, $mysql, $pg);
@@ -1877,6 +1951,7 @@ class MigracionMysqlService
                     'moneda' => 'DOLAR', 'estado' => $estado,
                     'observaciones' => self::nz($ef['observaciones_factura']),
                     'clave_acceso' => self::nz($ef['aut_sri']),
+                    'dias_credito' => $diasDe($idCliente),
                     'tipo_ambiente' => $this->ambienteEmpresa($pg, $idEmpresa),
                     'tipo_registro' => 'migrado',
                 ]);
@@ -1901,6 +1976,8 @@ class MigracionMysqlService
                         'tarifa' => $pct, 'base_imponible' => round($base_i, 2), 'valor' => round($base_i * $pct / 100, 2),
                     ]);
                 }
+
+                $migrarHijos($idVenta, $ef, $diasDe($idCliente)); // formas de pago SRI + info adicional
 
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idVenta, ':cn' => "$estab-$pto-$secuencial", ':vin' => 'f', ':cb' => $idUsuario]);
                 $pg->commit();

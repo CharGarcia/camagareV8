@@ -4,12 +4,14 @@
  * en ventana aparte). No usa el layout principal. Mismo patrón que el
  * visor de Videos de Ayuda (app/views/videosAyuda/visor.php).
  *
- * @var string $titulo
- * @var string $rutaModulo
- * @var array  $perm
+ * @var string  $titulo
+ * @var string  $rutaModulo
+ * @var array   $perm
+ * @var ?string $volverA  'mesas' si se llegó desde el tablero de mesas (POS Restaurantes); null = mostrador (comportamiento de siempre)
  */
 $base = rtrim(BASE_URL ?? '', '/');
 $rutaAjax = $base . '/' . $rutaModulo;
+$volverA = $volverA ?? null;
 ?><!DOCTYPE html>
 <html lang="es">
 <head>
@@ -128,6 +130,11 @@ $rutaAjax = $base . '/' . $rutaModulo;
 <script>
 (function () {
     const AJAX = "<?= $rutaAjax ?>";
+    const BASE = "<?= $base ?>";
+    // 'mesas' si se llegó desde el tablero de mesas — "Continuar" debe volver
+    // ahí, no al mostrador (modulos/caja-pos/venta). Ver CajaPosController::index().
+    const VOLVER_A = <?= json_encode($volverA) ?>;
+    const URL_CONTINUAR = VOLVER_A === 'mesas' ? (BASE + '/modulos/mesas/tablero') : (AJAX + '/venta');
     const $est = document.getElementById('cx-establecimiento');
     const $pto = document.getElementById('cx-punto');
     const $loading = document.getElementById('cx-loading');
@@ -202,7 +209,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 document.getElementById('cx-turno-cajero').textContent = 'Cajero: ' + (sesionActual.cajero_nombre || '—');
                 document.getElementById('cx-turno-desde').textContent = 'Abierta: ' + sesionActual.fecha_apertura;
                 document.getElementById('cx-turno-fondo').textContent = money(sesionActual.fondo_inicial);
-                document.getElementById('cx-btn-continuar').href = AJAX + '/venta';
+                document.getElementById('cx-btn-continuar').href = URL_CONTINUAR;
                 $panelTurno.classList.remove('d-none');
             } else {
                 $panelAbrir.classList.remove('d-none');

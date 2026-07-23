@@ -71,7 +71,7 @@
         
         const cstat = document.getElementById('categoria_status_modal');
         if (cstat) cstat.value = data.status ?? '1';
-        
+
         const title = document.getElementById('tituloModalCat');
         if (title) title.textContent = 'Editar Categoría';
         

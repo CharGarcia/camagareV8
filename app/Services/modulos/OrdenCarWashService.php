@@ -22,6 +22,10 @@ class OrdenCarWashService
     private OrdenCarWashRepository $repository;
     private OrdenCarWashRules $rules;
     private LogSistemaService $logService;
+    private ?InventarioService $inventarioService = null;
+
+    /** Tipo de referencia en el kardex para los movimientos de la orden. */
+    private const REF_TIPO = 'carwash_orden';
 
     public function __construct(
         OrdenCarWashRepository $repository,
@@ -31,6 +35,95 @@ class OrdenCarWashService
         $this->repository = $repository;
         $this->rules      = $rules;
         $this->logService = $logService;
+    }
+
+    private function getInventarioService(): InventarioService
+    {
+        if ($this->inventarioService === null) {
+            $this->inventarioService = new InventarioService(
+                new \App\repositories\modulos\InventarioRepository(),
+                $this->logService
+            );
+        }
+        return $this->inventarioService;
+    }
+
+    /**
+     * Líneas de la orden en el formato que espera el motor de inventario.
+     * Solo productos del catálogo (los servicios libres no mueven stock);
+     * el propio motor ignora los no inventariables y los de tipo servicio.
+     */
+    private function detallesParaInventario(array $detalles, int $idBodega): array
+    {
+        $out = [];
+        foreach ($detalles as $d) {
+            $cant = (float) ($d['cantidad'] ?? 0);
+            $idProd = (int) ($d['id_producto'] ?? 0);
+            if ($cant <= 0 || $idProd <= 0) continue;
+            $out[] = [
+                'id_producto' => $idProd,
+                'id_bodega'   => (int) ($d['id_bodega'] ?? 0) ?: $idBodega,
+                'cantidad'    => $cant,
+                'nombre'      => $d['descripcion'] ?? '',
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Registra la SALIDA de inventario de la orden (los productos se consumen al
+     * realizar el servicio). Respeta la config de la empresa: si el establecimiento
+     * no trabaja con inventario, el motor no hace nada; si exige stock positivo,
+     * lanza excepción cuando no alcanza.
+     */
+    private function aplicarSalidaInventario(int $idOrden, int $idEmpresa, int $idUsuario, array $detalles, int $idEstablecimiento, int $idBodega, string $numeroOrden, bool $esEdicion): void
+    {
+        if ($idEstablecimiento <= 0) return;
+        $lineas = $this->detallesParaInventario($detalles, $idBodega);
+        if (empty($lineas)) return;
+
+        $this->getInventarioService()->procesarSalidaPorVenta(
+            $idOrden, $lineas, $idEstablecimiento, $idEmpresa, $idUsuario,
+            'Orden Car-Wash # ' . $numeroOrden, $esEdicion, self::REF_TIPO
+        );
+    }
+
+    /** Revierte (devuelve al stock) los movimientos de inventario de la orden. */
+    private function revertirInventario(int $idOrden, int $idEmpresa, int $idUsuario): void
+    {
+        $this->getInventarioService()->revertirMovimientosPorReferencia(self::REF_TIPO, $idOrden, $idEmpresa, $idUsuario);
+    }
+
+    /**
+     * La bodega es OBLIGATORIA en las líneas de productos que descuentan inventario
+     * (inventariables y no-servicio). Los servicios e ítems libres no la requieren.
+     * Si el establecimiento no trabaja con inventario, no se exige nada.
+     */
+    private function validarBodegasLineas(array $detalles, int $idBodegaDefault, int $idEmpresa, int $idEstablecimiento): void
+    {
+        if ($idEstablecimiento <= 0) return;
+        try {
+            $estConfig = (new \App\repositories\modulos\EmpresaRepository())->getEstablecimientoConfig($idEstablecimiento);
+        } catch (\Throwable $e) {
+            return;
+        }
+        if (!($estConfig['facturacion_inventario'] ?? false)) return;
+
+        $prodRepo = new \App\repositories\modulos\ProductoRepository();
+        foreach ($detalles as $d) {
+            $idProd = (int) ($d['id_producto'] ?? 0);
+            $cant   = (float) ($d['cantidad'] ?? 0);
+            if ($idProd <= 0 || $cant <= 0) continue;
+
+            $bodega = (int) ($d['id_bodega'] ?? 0) ?: $idBodegaDefault;
+            if ($bodega > 0) continue;
+
+            $info  = $prodRepo->getInfoControlInventario($idProd, $idEmpresa);
+            $esInv = !empty($info['inventariable']) && (($info['tipo_produccion'] ?? '01') !== '02');
+            if ($esInv) {
+                throw new Exception('Seleccione la bodega para el producto "' . trim((string) ($d['descripcion'] ?? '')) . '".');
+            }
+        }
     }
 
     // ─── Lecturas ─────────────────────────────────────────────────────────────
@@ -122,6 +215,14 @@ class OrdenCarWashService
             $this->repository->updateTotales($idOrden, $idEmpresa, $tot['subtotal'], $tot['descuento'], $tot['iva'], $tot['total']);
             $cabecera = array_merge($cabecera, $tot);
 
+            // Salida de inventario: los productos se consumen al realizar el servicio.
+            // Valida bodega por línea y stock según la config (rollback si algo falla).
+            $this->validarBodegasLineas($data['detalles'], (int) ($data['id_bodega'] ?? 0), $idEmpresa, $idEstab);
+            $this->aplicarSalidaInventario(
+                $idOrden, $idEmpresa, $idUsuario, $data['detalles'],
+                $idEstab, (int) ($data['id_bodega'] ?? 0), $numeroOrden, false
+            );
+
             $this->logService->registrar($idUsuario, $idEmpresa, 'CREAR_ORDEN_CARWASH', 'carwash_ordenes', $idOrden, null, $cabecera);
 
             $db->commit();
@@ -178,6 +279,16 @@ class OrdenCarWashService
                 'updated_by'        => $idUsuario,
                 'updated_at'        => date('Y-m-d H:i:s'),
             ]);
+
+            // Inventario: se revierte la salida anterior y se vuelve a aplicar con las líneas nuevas.
+            $this->validarBodegasLineas($data['detalles'], (int) ($data['id_bodega'] ?? 0), $idEmpresa, (int) ($data['id_establecimiento'] ?? $cab['id_establecimiento'] ?? 0));
+            $this->revertirInventario($id, $idEmpresa, $idUsuario);
+            $this->aplicarSalidaInventario(
+                $id, $idEmpresa, $idUsuario, $data['detalles'],
+                (int) ($data['id_establecimiento'] ?? $cab['id_establecimiento'] ?? 0),
+                (int) ($data['id_bodega'] ?? 0),
+                (string) ($cab['numero_orden'] ?? ''), true
+            );
 
             $this->logService->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR_ORDEN_CARWASH', 'carwash_ordenes', $id, $cab, $data);
 
@@ -239,6 +350,8 @@ class OrdenCarWashService
         $db = Database::getConnection();
         try {
             $db->beginTransaction();
+            // Devolver al stock lo que la orden había consumido.
+            $this->revertirInventario($id, $idEmpresa, $idUsuario);
             $this->repository->eliminar($id, $idEmpresa, $idUsuario);
             $this->logService->registrar($idUsuario, $idEmpresa, 'ELIMINAR_ORDEN_CARWASH', 'carwash_ordenes', $id, $cab, null);
             $db->commit();
@@ -379,23 +492,40 @@ class OrdenCarWashService
             'info_adicional'      => is_array($orden['info_adicional'] ?? null) ? $orden['info_adicional'] : [],
         ];
 
-        if ($tipo === 'FACTURA') {
-            $svc = new FacturaVentaService(
-                new \App\repositories\modulos\FacturaVentaRepository(),
-                new \App\Rules\modulos\FacturaVentaRules(),
-                $this->logService
-            );
-            $idDoc = $svc->crear($payload);
-        } else {
-            $payload['con_impuestos'] = true;
-            $payload['estado']        = 'borrador';
-            $payload['plazo']         = 0;
-            $svc = new ReciboVentaService(
-                new \App\repositories\modulos\ReciboVentaRepository(),
-                new \App\Rules\modulos\ReciboVentaRules(),
-                $this->logService
-            );
-            $idDoc = $svc->crear($payload);
+        // El documento hace su propia salida de inventario: primero devolvemos al stock
+        // lo que consumió la orden, para no descontar dos veces.
+        $this->revertirInventario($idOrden, $idEmpresa, $idUsuario);
+
+        try {
+            if ($tipo === 'FACTURA') {
+                $svc = new FacturaVentaService(
+                    new \App\repositories\modulos\FacturaVentaRepository(),
+                    new \App\Rules\modulos\FacturaVentaRules(),
+                    $this->logService
+                );
+                $idDoc = $svc->crear($payload);
+            } else {
+                $payload['con_impuestos'] = true;
+                $payload['estado']        = 'borrador';
+                $payload['plazo']         = 0;
+                $svc = new ReciboVentaService(
+                    new \App\repositories\modulos\ReciboVentaRepository(),
+                    new \App\Rules\modulos\ReciboVentaRules(),
+                    $this->logService
+                );
+                $idDoc = $svc->crear($payload);
+            }
+        } catch (\Throwable $e) {
+            // Si falla la emisión, restauramos la salida de inventario de la orden.
+            try {
+                $this->aplicarSalidaInventario(
+                    $idOrden, $idEmpresa, $idUsuario, $detalles, $idEstab, $idBodegaExtra,
+                    (string) ($orden['numero_orden'] ?? ''), false
+                );
+            } catch (\Throwable $e2) {
+                error_log("[CarWash] No se pudo restaurar el inventario de la orden {$idOrden}: " . $e2->getMessage());
+            }
+            throw $e;
         }
 
         // Marcar la orden como facturada con el documento generado.

@@ -104,9 +104,20 @@ $base = BASE_URL;
                     <i class="bi bi-sliders me-1"></i> Configurar Asientos
                 </button>
             </div>
+            <?php if (\App\Helpers\Permisos::puedeCrear('modulos/plan-cuentas')): ?>
+            <div class="col-md-6 col-lg-3">
+                <button type="button" class="btn btn-outline-primary btn-sm px-4 shadow-sm w-100 py-2 fw-medium" onclick="abrirModalCrearCuentaContable()">
+                    <i class="bi bi-plus-circle me-1"></i> Crear Cuenta Contable
+                </button>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>
+
+<?php if (\App\Helpers\Permisos::puedeCrear('modulos/plan-cuentas')): ?>
+    <?php require_once MVC_APP . '/views/partials/modal_crear_cuenta_contable.php'; ?>
+<?php endif; ?>
 
 <!-- Panel de Configuración en Acordeones (Oculto por defecto) -->
 <div id="seccionAcordeones" style="display: none;" class="mb-4">
