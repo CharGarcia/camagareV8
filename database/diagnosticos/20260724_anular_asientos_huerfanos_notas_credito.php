@@ -1,0 +1,89 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Anula los asientos contables huérfanos de Notas de Crédito ELIMINADAS (mismo patrón que
+ * el script equivalente de Facturas de Venta: 20260724_anular_asientos_huerfanos_facturas.php).
+ *
+ * Usa App\Services\modulos\AsientoContableService::anular() -- el mismo camino que usa la
+ * aplicación -- así que además de marcar el asiento como 'anulado', desvincula
+ * notas_credito_cabecera.id_asiento_contable y registra auditoría en log_sistema.
+ *
+ * Uso (en el servidor, desde la raíz del proyecto):
+ *   php database/diagnosticos/20260724_anular_asientos_huerfanos_notas_credito.php <id_empresa> <id_usuario> [--dry-run]
+ *
+ * Ejemplo (vista previa, no cambia nada):
+ *   php database/diagnosticos/20260724_anular_asientos_huerfanos_notas_credito.php 1 2 --dry-run
+ *
+ * Ejemplo (aplica la corrección de verdad):
+ *   php database/diagnosticos/20260724_anular_asientos_huerfanos_notas_credito.php 1 2
+ */
+
+require __DIR__ . '/../../bootstrap.php';
+
+$idEmpresa = isset($argv[1]) ? (int) $argv[1] : 0;
+$idUsuario = isset($argv[2]) ? (int) $argv[2] : 0;
+$dryRun = in_array('--dry-run', $argv, true);
+
+if ($idEmpresa <= 0 || $idUsuario <= 0) {
+    fwrite(STDERR, "Uso: php " . basename(__FILE__) . " <id_empresa> <id_usuario> [--dry-run]\n");
+    exit(1);
+}
+
+$pdo = \App\core\Database::getConnection();
+
+$sql = "SELECT ac.id AS id_asiento, ac.numero_comprobante, ac.total_debe,
+               nc.id AS id_nc,
+               nc.establecimiento || '-' || nc.punto_emision || '-' || nc.secuencial AS numero_nc
+        FROM notas_credito_cabecera nc
+        JOIN asientos_contables_cabecera ac
+             ON ac.id_empresa = nc.id_empresa
+            AND ac.modulo_origen = 'nota_credito'
+            AND ac.id_referencia_origen = nc.id
+        WHERE nc.id_empresa = :id_empresa
+          AND nc.eliminado = true
+          AND ac.eliminado = false
+          AND ac.estado <> 'anulado'
+        ORDER BY ac.id";
+$stmt = $pdo->prepare($sql);
+$stmt->execute([':id_empresa' => $idEmpresa]);
+$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+echo "Encontrados " . count($rows) . " asientos huérfanos de Notas de Crédito para empresa {$idEmpresa}.\n";
+if (!$rows) {
+    exit(0);
+}
+
+foreach ($rows as $r) {
+    echo "  - asiento {$r['id_asiento']} ({$r['numero_comprobante']}), NC {$r['numero_nc']} (id_nc {$r['id_nc']}), \${$r['total_debe']}\n";
+}
+
+if ($dryRun) {
+    echo "\n--dry-run: no se aplicó ningún cambio.\n";
+    exit(0);
+}
+
+echo "\nAplicando...\n";
+
+$asientoService = new \App\Services\modulos\AsientoContableService(
+    new \App\repositories\modulos\AsientoContableRepository(),
+    new \App\Rules\modulos\AsientoContableRules(),
+    new \App\Services\LogSistemaService()
+);
+
+$ok = 0;
+$fallos = 0;
+foreach ($rows as $r) {
+    echo "Anulando asiento {$r['id_asiento']} ({$r['numero_comprobante']})... ";
+    try {
+        $asientoService->anular((int) $r['id_asiento'], $idEmpresa, $idUsuario);
+        echo "OK\n";
+        $ok++;
+    } catch (\Throwable $e) {
+        echo "ERROR: " . $e->getMessage() . "\n";
+        $fallos++;
+    }
+}
+
+echo "\nResumen: {$ok} anulados correctamente, {$fallos} con error.\n";

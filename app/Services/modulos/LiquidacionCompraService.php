@@ -316,10 +316,34 @@ class LiquidacionCompraService
 
     public function eliminar(int $id, int $idEmpresa, int $idUsuario): bool
     {
+        $cabecera = $this->repository->getPorId($id);
+        if (!$cabecera || (int)$cabecera['id_empresa'] !== $idEmpresa) {
+            throw new \Exception('Liquidación no encontrada.');
+        }
+
         $db = \App\core\Database::getConnection();
         $db->beginTransaction();
 
         try {
+            // Anular el asiento contable de la liquidación si existe (mismo patrón que
+            // FacturaVentaService::eliminar()): un borrador no debería tener asiento activo
+            // tras el fix en crear(), pero esto cierra el hueco para datos previos al fix.
+            $idAsientoLiq = (int)($cabecera['id_asiento_contable'] ?? 0);
+            if ($idAsientoLiq > 0) {
+                $asientoService = new \App\Services\modulos\AsientoContableService(
+                    new \App\repositories\modulos\AsientoContableRepository(),
+                    new \App\Rules\modulos\AsientoContableRules(),
+                    $this->logService
+                );
+                try {
+                    $asientoService->anular($idAsientoLiq, $idEmpresa, $idUsuario);
+                } catch (\Throwable $eA) {
+                    if (stripos($eA->getMessage(), 'ya se encuentra anulado') === false) {
+                        throw $eA;
+                    }
+                }
+            }
+
             $sql = "UPDATE liquidaciones_cabecera SET eliminado = true, deleted_at = NOW(), deleted_by = ? WHERE id = ? AND id_empresa = ?";
             $st = $db->prepare($sql);
             $st->execute([$idUsuario, $id, $idEmpresa]);

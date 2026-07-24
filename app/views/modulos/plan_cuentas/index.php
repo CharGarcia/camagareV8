@@ -19,6 +19,8 @@ $base = BASE_URL;
 $urlBasePC = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 
 $conteoTotal = $conteoTotal ?? 0;
+$jerarquiaIncompleta = $jerarquiaIncompleta ?? false;
+$hayCuentasUsadas = $hayCuentasUsadas ?? false;
 $rows       = $rows ?? [];
 $centros    = $centros ?? [];
 $proyectos  = $proyectos ?? [];
@@ -49,12 +51,12 @@ $proyectos  = $proyectos ?? [];
                 <i class="bi bi-magic"></i> Cargar Plan de Cuentas Modelo
             </button>
         <?php endif; ?>
-        <?php if ($perm['crear'] && $conteoTotal > 0): ?>
+        <?php if ($perm['crear'] && $conteoTotal > 0 && $jerarquiaIncompleta): ?>
             <button type="button" id="btnRepararPlan" class="btn btn-outline-secondary shadow-sm btn-sm px-3" onclick="repararJerarquia()" title="Crea las cuentas padre faltantes (útil tras una migración)">
                 <i class="bi bi-diagram-3"></i> Reparar Jerarquía
             </button>
         <?php endif; ?>
-        <?php if (!empty($perm['eliminar']) && $conteoTotal > 0): ?>
+        <?php if (!empty($perm['eliminar']) && $conteoTotal > 0 && !$hayCuentasUsadas): ?>
             <button type="button" id="btnEliminarPlan" class="btn btn-outline-danger shadow-sm btn-sm px-3" onclick="eliminarPlanCompleto()">
                 <i class="bi bi-trash3"></i> Eliminar Plan de Cuentas
             </button>

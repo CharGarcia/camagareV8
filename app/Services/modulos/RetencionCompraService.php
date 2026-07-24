@@ -255,6 +255,20 @@ class RetencionCompraService
         if ($managed) $db->beginTransaction();
 
         try {
+            // Anular el asiento contable de la retención si existe (mismo patrón que
+            // anular(), líneas 206-217): un borrador/pendiente no debería tener asiento
+            // activo, pero esto cierra el hueco si lo llegó a tener.
+            $idAsiento = (int)($cabecera['id_asiento_contable'] ?? 0);
+            if ($idAsiento > 0) {
+                try {
+                    $this->asientoContableService()->anular($idAsiento, $idEmpresa, $idUsuario);
+                } catch (\Throwable $eA) {
+                    if (stripos($eA->getMessage(), 'ya se encuentra anulado') === false) {
+                        throw $eA;
+                    }
+                }
+            }
+
             $this->repository->eliminarLogico($id, $idEmpresa, $idUsuario);
 
             $this->logService->registrar(

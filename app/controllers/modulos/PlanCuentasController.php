@@ -49,6 +49,8 @@ class PlanCuentasController extends BaseModuloController
         
         $repo = new PlanCuentaRepository();
         $conteoTotalEmpresa = $repo->contarPorEmpresa($idEmpresa);
+        $jerarquiaIncompleta = $repo->tieneJerarquiaIncompleta($idEmpresa);
+        $hayCuentasUsadas = $repo->tieneCuentasUsadas($idEmpresa);
 
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
 
@@ -74,6 +76,8 @@ class PlanCuentasController extends BaseModuloController
             'centros'    => $centros,
             'proyectos'  => $proyectos,
             'conteoTotal' => $conteoTotalEmpresa,
+            'jerarquiaIncompleta' => $jerarquiaIncompleta,
+            'hayCuentasUsadas' => $hayCuentasUsadas,
             'fullWidth'  => true,
         ]);
     }

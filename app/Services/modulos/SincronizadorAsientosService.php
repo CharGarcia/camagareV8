@@ -181,10 +181,11 @@ class SincronizadorAsientosService
             tablaVerif: 'retencion_venta_cabecera'
         );
 
-        // 5b. Retenciones en Compras (emitidas al proveedor; solo se filtra por asiento faltante)
+        // 5b. Retenciones en Compras: mismo criterio que facturas/NC/liquidaciones, solo se
+        //     contabiliza el documento vigente ya autorizado por el SRI, nunca el borrador.
         $this->sincronizarModulo(
             $db,
-            "SELECT id FROM retencion_compra_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL" . $excMig('retenciones_compra', 'retencion_compra_cabecera.id'),
+            "SELECT id FROM retencion_compra_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'autorizada'" . $excMig('retenciones_compra', 'retencion_compra_cabecera.id'),
             [$idEmpresa],
             function() {
                 return new \App\Services\modulos\RetencionCompraService(

@@ -267,6 +267,26 @@ class PlanCuentaRepository extends BaseRepository
     }
 
     /**
+     * Indica si al menos una cuenta de la empresa ya tiene movimientos contables
+     * (está referenciada por un detalle de asiento activo del diario). No modifica datos.
+     */
+    public function tieneCuentasUsadas(int $idEmpresa): bool
+    {
+        $sql = "SELECT EXISTS (
+                    SELECT 1
+                    FROM {$this->table} pc
+                    INNER JOIN asientos_contables_detalle acd
+                            ON acd.id_cuenta_contable = pc.id
+                           AND acd.id_empresa = pc.id_empresa
+                           AND acd.eliminado = false
+                    WHERE pc.id_empresa = :id_e AND pc.eliminado = false
+                )";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_e' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
      * Elimina lógicamente solo las cuentas que NO han sido usadas.
      * Una cuenta se conserva si tiene movimientos contables (detalle de asiento activo)
      * o si es ancestro (cuenta padre) de una cuenta usada — para no romper la jerarquía.
@@ -317,6 +337,31 @@ class PlanCuentaRepository extends BaseRepository
             ];
         }
         return $mapa;
+    }
+
+    /**
+     * Indica si la jerarquía del plan está incompleta: existe alguna cuenta activa
+     * de nivel > 1 cuyo padre inmediato NO existe activo. Basta verificar el padre
+     * inmediato de cada cuenta: si toda la cadena estuviera rota, el eslabón faltante
+     * más cercano igual se detecta aquí. No modifica datos.
+     */
+    public function tieneJerarquiaIncompleta(int $idEmpresa): bool
+    {
+        $sql = "SELECT EXISTS (
+                    SELECT 1 FROM {$this->table} c
+                    WHERE c.id_empresa = :id_e
+                      AND c.eliminado = false
+                      AND c.codigo LIKE '%.%'
+                      AND NOT EXISTS (
+                            SELECT 1 FROM {$this->table} p
+                            WHERE p.id_empresa = c.id_empresa
+                              AND p.eliminado = false
+                              AND p.codigo = regexp_replace(c.codigo, '\.[^.]+$', '')
+                      )
+                )";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_e' => $idEmpresa]);
+        return (bool) $st->fetchColumn();
     }
 
     /**
