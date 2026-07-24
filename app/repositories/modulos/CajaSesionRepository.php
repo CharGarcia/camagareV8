@@ -34,6 +34,27 @@ class CajaSesionRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /**
+     * Cualquier turno abierto de la empresa, sin importar el punto de emisión
+     * — usado por el portal público QR (modulos/comandas no exige que el
+     * cliente sepa el punto de emisión, solo que el restaurante esté
+     * operando; el punto de emisión real se resuelve normal al cobrar).
+     */
+    public function getAbiertaPorEmpresa(int $idEmpresa): ?array
+    {
+        $sql = "SELECT cs.*, u.nombre AS cajero_nombre
+                FROM {$this->table} cs
+                LEFT JOIN usuarios u ON u.id = cs.id_usuario
+                WHERE cs.id_empresa = :id_empresa
+                  AND cs.estado = 'abierta'
+                  AND cs.eliminado = false
+                LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     public function create(array $data): int
     {
         $sql = "INSERT INTO {$this->table} (

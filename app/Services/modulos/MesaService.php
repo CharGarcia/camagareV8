@@ -38,13 +38,15 @@ class MesaService
         $this->repository->beginTransaction();
         try {
             $insertData = [
-                'id_empresa' => $idEmpresa,
-                'id_usuario' => (int)$data['id_usuario'],
-                'created_by' => (int)$data['id_usuario'],
-                'nombre'     => mb_strtoupper($nombre, 'UTF-8'),
-                'estado'     => $data['estado'] ?? 'disponible',
-                'ubicacion'  => trim((string) ($data['ubicacion'] ?? '')) ?: null,
-                'eliminado'  => false
+                'id_empresa'      => $idEmpresa,
+                'id_usuario'      => (int)$data['id_usuario'],
+                'created_by'      => (int)$data['id_usuario'],
+                'nombre'          => mb_strtoupper($nombre, 'UTF-8'),
+                'estado'          => $data['estado'] ?? 'disponible',
+                'ubicacion'       => trim((string) ($data['ubicacion'] ?? '')) ?: null,
+                'permite_factura' => array_key_exists('permite_factura', $data) ? (bool) $data['permite_factura'] : true,
+                'permite_recibo'  => (bool) ($data['permite_recibo'] ?? false),
+                'eliminado'       => false
             ];
 
             $id = $this->repository->create($insertData);
@@ -88,10 +90,12 @@ class MesaService
         $this->repository->beginTransaction();
         try {
             $updateData = [
-                'nombre'     => mb_strtoupper($nombre, 'UTF-8'),
-                'estado'     => $data['estado'] ?? 'disponible',
-                'ubicacion'  => trim((string) ($data['ubicacion'] ?? '')) ?: null,
-                'updated_by' => (int)$data['id_usuario']
+                'nombre'          => mb_strtoupper($nombre, 'UTF-8'),
+                'estado'          => $data['estado'] ?? 'disponible',
+                'ubicacion'       => trim((string) ($data['ubicacion'] ?? '')) ?: null,
+                'permite_factura' => array_key_exists('permite_factura', $data) ? (bool) $data['permite_factura'] : true,
+                'permite_recibo'  => (bool) ($data['permite_recibo'] ?? false),
+                'updated_by'      => (int)$data['id_usuario']
             ];
 
             $this->repository->update($id, $idEmpresa, $updateData);
@@ -149,6 +153,38 @@ class MesaService
     public function findById(int $id, int $idEmpresa): ?array
     {
         return $this->repository->getDetalleCompleto($id, $idEmpresa);
+    }
+
+    /** Token del QR de la mesa — lo genera la primera vez que se pide (no exige un paso aparte de "activar QR"). */
+    public function getOrCrearQrToken(int $id, int $idEmpresa): string
+    {
+        $mesa = $this->repository->getDetalleCompleto($id, $idEmpresa);
+        if (!$mesa) {
+            throw new Exception('La mesa no existe.');
+        }
+        if (!empty($mesa['qr_token'])) {
+            return $mesa['qr_token'];
+        }
+        $token = $this->repository->regenerarQrToken($id, $idEmpresa);
+        if (!$token) {
+            throw new Exception('No se pudo generar el código QR de la mesa.');
+        }
+        return $token;
+    }
+
+    /** Invalida el QR anterior (por si se filtró o hay que reimprimirlo) y genera uno nuevo. */
+    public function regenerarQrToken(int $id, int $idEmpresa, int $idUsuario): string
+    {
+        $mesa = $this->repository->getDetalleCompleto($id, $idEmpresa);
+        if (!$mesa) {
+            throw new Exception('La mesa no existe.');
+        }
+        $token = $this->repository->regenerarQrToken($id, $idEmpresa);
+        if (!$token) {
+            throw new Exception('No se pudo regenerar el código QR de la mesa.');
+        }
+        $this->logService->registrar($idUsuario, $idEmpresa, 'REGENERAR_QR_MESA', 'mesas', $id, null, ['qr_token' => 'regenerado']);
+        return $token;
     }
 
     /** Reubicar una mesa en el lienzo del tablero (arrastrar y soltar). */

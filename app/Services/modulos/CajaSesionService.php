@@ -35,6 +35,12 @@ class CajaSesionService
         return $this->repository->getAbiertaPorPuntoEmision($idEmpresa, $idPuntoEmision);
     }
 
+    /** Cualquier turno abierto de la empresa (portal público QR — ver CajaSesionRepository::getAbiertaPorEmpresa). */
+    public function getSesionAbiertaEmpresa(int $idEmpresa): ?array
+    {
+        return $this->repository->getAbiertaPorEmpresa($idEmpresa);
+    }
+
     public function abrir(array $data): array
     {
         $this->rules->validarApertura($data);

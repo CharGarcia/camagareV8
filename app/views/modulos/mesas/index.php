@@ -171,6 +171,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <option value="mantenimiento">Mantenimiento</option>
                             </select>
                         </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold d-block">Documento al "Pedir mi cuenta" (portal QR)</label>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="permite_factura" id="mesa_permite_factura" checked>
+                                <label class="form-check-label small" for="mesa_permite_factura">Factura <span class="text-muted">(principal)</span></label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="permite_recibo" id="mesa_permite_recibo">
+                                <label class="form-check-label small" for="mesa_permite_recibo">Recibo de venta</label>
+                            </div>
+                            <div class="form-text mt-1" style="font-size:0.65rem;">Marca uno o los dos. Si se permiten los dos, el cliente ve Factura preseleccionada. Debe quedar al menos uno marcado.</div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer justify-content-between bg-light">
@@ -215,8 +227,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             Swal.fire({ icon: 'error', title: 'Error', html, confirmButtonColor: '#0d6efd', confirmButtonText: 'Aceptar' });
         }
 
+        function resetBtnGuardar() {
+            const btnSave = document.getElementById('btnGuardar');
+            btnSave.disabled = false;
+            btnSave.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+        }
+
         window.abrirModalMesaCrear = function() {
             form.reset();
+            resetBtnGuardar();
             document.getElementById('mesa_id').value = '';
             document.getElementById('tituloModal').textContent = 'Nueva Mesa';
             document.getElementById('btnEliminar')?.classList.add('d-none');
@@ -232,10 +251,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         window.abrirModalMesaEditar = function(row) {
             const data = JSON.parse(row.dataset.row);
             form.reset();
+            resetBtnGuardar();
             document.getElementById('mesa_id').value = data.id;
             document.getElementById('mesa_nombre').value = data.nombre || '';
             document.getElementById('mesa_ubicacion').value = data.ubicacion || '';
             document.getElementById('mesa_estado').value = data.estado || 'disponible';
+            document.getElementById('mesa_permite_factura').checked = (data.permite_factura === 'true' || data.permite_factura === true);
+            document.getElementById('mesa_permite_recibo').checked = (data.permite_recibo === 'true' || data.permite_recibo === true);
 
             document.getElementById('tituloModal').textContent = 'Editar Mesa';
             document.getElementById('btnEliminar')?.classList.remove('d-none');
@@ -246,6 +268,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         if (form) {
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
+
+                if (!document.getElementById('mesa_permite_factura').checked && !document.getElementById('mesa_permite_recibo').checked) {
+                    swalError('Marca al menos un documento (Factura o Recibo) para el portal QR.');
+                    return;
+                }
+
                 const btnSave = document.getElementById('btnGuardar');
                 const actionUrl = document.getElementById('mesa_id').value ? `${urlBase}/update` : `${urlBase}/store`;
 
@@ -262,6 +290,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     if (json.ok) {
                         swalToast('success', json.msg || 'Guardado correctamente.');
                         getModal()?.hide();
+                        resetBtnGuardar();
                         fetchSearch(window.currentPage || 1);
                     } else {
                         swalError(json.error || 'No se pudo guardar la mesa.');

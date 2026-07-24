@@ -142,6 +142,40 @@ class ClienteRepository extends BaseRepository
     }
 
     /**
+     * Busca por identificación + empresa, INCLUYENDO eliminados (a propósito:
+     * si el cliente se había borrado, se reactiva y se reutiliza en vez de
+     * crear un duplicado) — mismo criterio que ya usa Factura Express QR.
+     */
+    public function findByIdentificacion(int $idEmpresa, string $identificacion): ?array
+    {
+        $sql = "SELECT * FROM {$this->table} WHERE identificacion = :ident AND id_empresa = :empresa LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':ident' => $identificacion, ':empresa' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Reactiva (si estaba eliminado) y refresca nombre/email/teléfono de un cliente existente. */
+    public function reactivarYActualizar(int $id, array $data): void
+    {
+        $sql = "UPDATE {$this->table} SET
+                    nombre = :nombre,
+                    email = COALESCE(NULLIF(:email, ''), email),
+                    telefono = COALESCE(NULLIF(:tel, ''), telefono),
+                    eliminado = false,
+                    updated_at = CURRENT_TIMESTAMP, updated_by = :uid
+                WHERE id = :id";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':nombre' => $data['nombre'],
+            ':email'  => $data['email'] ?? '',
+            ':tel'    => $data['telefono'] ?? '',
+            ':uid'    => $data['id_usuario'],
+            ':id'     => $id,
+        ]);
+    }
+
+    /**
      * Inserta un nuevo cliente con campos de auditoría.
      */
     public function create(array $data): int

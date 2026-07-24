@@ -174,7 +174,7 @@ class MenuRepository extends BaseRepository
         $sql = "SELECT m.id, m.id_producto, m.nombre, m.descripcion, m.precio, m.imagen,
                        m.destacado, m.orden,
                        COALESCE(c.id_estacion_impresion, cp.id_estacion_impresion) AS id_estacion_impresion,
-                       p.codigo AS producto_codigo, p.inventariable, p.tipo_produccion,
+                       p.codigo AS producto_codigo, p.codigo_barras, p.codigo_auxiliar, p.inventariable, p.tipo_produccion,
                        COALESCE(p.tarifa_iva, m.id_tarifa_iva) AS id_tarifa_iva,
                        COALESCE(tp.porcentaje_iva, ti.porcentaje_iva, 0) AS porcentaje_iva,
                        COALESCE(tp.codigo, ti.codigo, '0') AS codigo_iva
@@ -189,6 +189,23 @@ class MenuRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Mismo shape que getDisponibles() pero para un solo ítem — usado al agregarlo a una comanda. */
+    public function getDisponibleById(int $id, int $idEmpresa): ?array
+    {
+        $sql = "SELECT m.id, m.id_producto, m.nombre, m.descripcion, m.precio, m.imagen,
+                       COALESCE(c.id_estacion_impresion, cp.id_estacion_impresion) AS id_estacion_impresion,
+                       COALESCE(p.tarifa_iva, m.id_tarifa_iva) AS id_tarifa_iva
+                FROM menu_items m
+                LEFT JOIN productos p ON p.id = m.id_producto
+                LEFT JOIN menu_categorias c ON c.id = m.id_categoria
+                LEFT JOIN categorias cp ON cp.id = p.id_categoria
+                WHERE m.id = :id AND m.id_empresa = :e AND m.eliminado = false AND m.disponible = true";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
     }
 
     public function existeParaProducto(int $idProducto, int $idEmpresa, ?int $excluirId = null): bool

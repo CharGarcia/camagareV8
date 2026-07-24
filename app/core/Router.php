@@ -183,6 +183,17 @@ class Router
                 $_GET['token']   = $parts[1] ?? '';
             }
 
+            // /pedido/{token}/* → portal público QR de la mesa (POS Restaurantes, sin auth)
+            if (($parts[0] ?? '') === 'pedido') {
+                $controller = 'PedidoPublico';
+                $_GET['token'] = $parts[1] ?? '';
+                $sub = $parts[2] ?? '';
+                $accionesAjax = ['menu', 'estado', 'agregar', 'quitar', 'enviar', 'cuenta', 'asistencia', 'cancelar-asistencia', 'pagar', 'sri'];
+                $action = (!empty($_GET['token']) && in_array($sub, $accionesAjax, true))
+                    ? $this->toCamelCase($sub) . 'Ajax'
+                    : 'index';
+            }
+
             // /payphone/* → retorno de pagos Payphone (sin auth)
             if (($parts[0] ?? '') === 'payphone') {
                 $controller = 'Payphone';

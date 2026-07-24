@@ -53,7 +53,7 @@ class MesaRepository extends BaseRepository
 
         $offset = ($page - 1) * $perPage;
         
-        $sqlRows = "SELECT m.id, m.nombre, m.estado, m.ubicacion, m.created_at
+        $sqlRows = "SELECT m.id, m.nombre, m.estado, m.ubicacion, m.permite_factura, m.permite_recibo, m.created_at
                     FROM {$this->table} m
                     {$whereSql}
                     ORDER BY {$col} {$dir}";
@@ -111,9 +111,9 @@ class MesaRepository extends BaseRepository
     public function create(array $data): int
     {
         $sql = "INSERT INTO {$this->table} (
-                    id_empresa, id_usuario, created_by, nombre, estado, ubicacion, eliminado, created_at
+                    id_empresa, id_usuario, created_by, nombre, estado, ubicacion, permite_factura, permite_recibo, eliminado, created_at
                 ) VALUES (
-                    :id_empresa, :id_usuario, :created_by, :nombre, :estado, :ubicacion, :eliminado, CURRENT_TIMESTAMP
+                    :id_empresa, :id_usuario, :created_by, :nombre, :estado, :ubicacion, :p_factura, :p_recibo, :eliminado, CURRENT_TIMESTAMP
                 )";
         $st = $this->db->prepare($sql);
         $st->execute([
@@ -123,6 +123,8 @@ class MesaRepository extends BaseRepository
             ':nombre'      => $data['nombre'],
             ':estado'      => $data['estado'] ?? 'disponible',
             ':ubicacion'   => $data['ubicacion'] ?: null,
+            ':p_factura'   => (!array_key_exists('permite_factura', $data) || $data['permite_factura']) ? 'true' : 'false',
+            ':p_recibo'    => !empty($data['permite_recibo']) ? 'true' : 'false',
             ':eliminado'   => $data['eliminado'] ? 'true' : 'false'
         ]);
         return (int) $this->lastInsertId();
@@ -134,6 +136,8 @@ class MesaRepository extends BaseRepository
                 nombre = :nombre,
                 estado = :estado,
                 ubicacion = :ubicacion,
+                permite_factura = :p_factura,
+                permite_recibo = :p_recibo,
                 updated_by = :updated_by,
                 updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
@@ -142,6 +146,8 @@ class MesaRepository extends BaseRepository
             ':nombre'      => $data['nombre'],
             ':estado'      => $data['estado'],
             ':ubicacion'   => $data['ubicacion'] ?: null,
+            ':p_factura'   => !empty($data['permite_factura']) ? 'true' : 'false',
+            ':p_recibo'    => !empty($data['permite_recibo']) ? 'true' : 'false',
             ':updated_by'  => $data['updated_by'],
             ':id'          => $id,
             ':id_empresa'  => $idEmpresa
@@ -168,6 +174,37 @@ class MesaRepository extends BaseRepository
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
         $st = $this->db->prepare($sql);
         $st->execute([':x' => $posX, ':y' => $posY, ':id' => $id, ':id_empresa' => $idEmpresa]);
+    }
+
+    // ─── QR de la mesa (portal público de pedido) ─────────────────────────────
+
+    /**
+     * Genera (o regenera) el token público de la mesa — regenerar invalida
+     * cualquier QR impreso anterior. bin2hex(random_bytes) no es adivinable
+     * ni correlativo, a diferencia de usar el id de la mesa.
+     */
+    public function regenerarQrToken(int $id, int $idEmpresa): ?string
+    {
+        $token = bin2hex(random_bytes(20));
+        $sql = "UPDATE {$this->table} SET qr_token = :t, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND id_empresa = :e AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':t' => $token, ':id' => $id, ':e' => $idEmpresa]);
+        return $st->rowCount() > 0 ? $token : null;
+    }
+
+    /**
+     * Búsqueda pública por token (portal QR, sin sesión): el token en sí es
+     * el límite de seguridad, no se filtra por empresa porque el visitante
+     * todavía no la conoce — de ahí se resuelve id_empresa hacia adelante.
+     */
+    public function getByQrToken(string $token): ?array
+    {
+        $sql = "SELECT * FROM {$this->table} WHERE qr_token = :t AND eliminado = false LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':t' => $token]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
     }
 
     public function delete(int $id, int $idEmpresa, int $idUsuario): bool

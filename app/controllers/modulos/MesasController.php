@@ -14,6 +14,7 @@ use App\Services\LogSistemaService;
 use App\Services\modulos\CajaSesionService;
 use App\Services\modulos\ComandaService;
 use App\Services\modulos\MesaService;
+use App\Services\modulos\PosVentaService;
 
 class MesasController extends BaseModuloController
 {
@@ -29,8 +30,9 @@ class MesasController extends BaseModuloController
         $rules = new MesaRules();
         $logService = new LogSistemaService();
         $this->service = new MesaService($repo, $rules, $logService);
-        $this->comandaService = new ComandaService(new ComandaRepository(), new ComandaRules(), $repo, $logService);
         $this->cajaService = new CajaSesionService(new CajaSesionRepository(), new CajaSesionRules(), $logService);
+        $ventaService = new PosVentaService($this->cajaService, $logService);
+        $this->comandaService = new ComandaService(new ComandaRepository(), new ComandaRules(), $repo, $logService, $ventaService);
     }
 
     protected function getRutaModulo(): string
@@ -66,6 +68,9 @@ class MesasController extends BaseModuloController
             return;
         }
 
+        $empresaModel = new \App\models\Empresa();
+        $empresa = $empresaModel->getPorId($idEmpresa) ?? [];
+
         $this->view('modulos.mesas.tablero', [
             'titulo'         => 'Mesas',
             'rutaModulo'     => self::RUTA_MODULO,
@@ -73,6 +78,7 @@ class MesasController extends BaseModuloController
             'idPuntoEmision' => $idPuntoEmision,
             'sesion'         => $sesion,
             'mesas'          => $this->comandaService->getTablero($idEmpresa),
+            'empresaNombre'  => $empresa['nombre_comercial'] ?? $empresa['nombre'] ?? '',
         ]);
     }
 
@@ -255,11 +261,76 @@ class MesasController extends BaseModuloController
 
     private function recogerDatosFormulario(): array
     {
+        $permiteFactura = isset($_POST['permite_factura']);
+        $permiteRecibo  = isset($_POST['permite_recibo']);
+        if (!$permiteFactura && !$permiteRecibo) {
+            $permiteFactura = true; // nunca dejar la mesa sin ningún documento habilitado
+        }
         return [
-            'nombre'    => trim($_POST['nombre'] ?? ''),
-            'estado'    => trim($_POST['estado'] ?? 'disponible'),
-            'ubicacion' => trim($_POST['ubicacion'] ?? ''),
+            'nombre'          => trim($_POST['nombre'] ?? ''),
+            'estado'          => trim($_POST['estado'] ?? 'disponible'),
+            'ubicacion'       => trim($_POST['ubicacion'] ?? ''),
+            'permite_factura' => $permiteFactura,
+            'permite_recibo'  => $permiteRecibo,
         ];
+    }
+
+    /** QR de la mesa (portal público de pedido) — lo genera la primera vez que se pide. */
+    public function getQrAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $id = (int) ($_POST['id_mesa'] ?? $_GET['id_mesa'] ?? 0);
+
+        try {
+            if ($id <= 0) throw new \Exception('Mesa no válida.');
+            $token = $this->service->getOrCrearQrToken($id, $idEmpresa);
+            $url = $this->urlPublicaQr($token);
+            echo json_encode(['ok' => true, 'token' => $token, 'url' => $url]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Invalida el QR impreso anterior (se filtró, hay que reimprimirlo, etc.) y genera uno nuevo. */
+    public function regenerarQrAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $id = (int) ($_POST['id_mesa'] ?? 0);
+
+        try {
+            if ($id <= 0) throw new \Exception('Mesa no válida.');
+            $token = $this->service->regenerarQrToken($id, $idEmpresa, $idUsuario);
+            $url = $this->urlPublicaQr($token);
+            echo json_encode(['ok' => true, 'msg' => 'QR regenerado; el anterior ya no funciona.', 'token' => $token, 'url' => $url]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * URL pública completa del portal de pedido. Un QR necesita una URL
+     * absoluta (con dominio) para poder escanearse desde cualquier celular —
+     * usa APP_URL (dominio real de producción) si está configurado; si no
+     * (entorno local sin config/local.php app_url), arma el absoluto con el
+     * host de la petición actual, para poder probar el QR igual en local.
+     */
+    private function urlPublicaQr(string $token): string
+    {
+        $dominio = defined('APP_URL') && APP_URL !== '' ? rtrim(APP_URL, '/') : '';
+        if ($dominio === '') {
+            $esquema = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            $dominio = $esquema . '://' . $host;
+        }
+        $base = $dominio . rtrim(BASE_URL ?? '', '/');
+        return $base . '/pedido/' . $token;
     }
 
     /** Arrastrar y soltar en el tablero (modulos/mesas/tablero): guarda la nueva posición. */

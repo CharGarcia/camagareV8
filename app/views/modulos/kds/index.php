@@ -49,7 +49,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
 <div class="kd-header d-flex align-items-center justify-content-between">
     <div class="d-flex align-items-center gap-3">
         <i class="bi bi-egg-fried fs-4"></i>
-        <div class="fw-semibold">Cocina / Barra</div>
+        <div class="fw-semibold">Pantalla de preparación</div>
         <div class="kd-tabs d-flex gap-1">
             <?php if (empty($estaciones)): ?>
                 <span class="text-muted small">Sin estaciones configuradas — créalas en Menú → pestaña Estaciones.</span>

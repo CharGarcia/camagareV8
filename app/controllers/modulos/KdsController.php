@@ -3,13 +3,17 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
+use App\repositories\modulos\CajaSesionRepository;
 use App\repositories\modulos\ComandaRepository;
 use App\repositories\modulos\MenuRepository;
 use App\repositories\modulos\MesaRepository;
+use App\Rules\modulos\CajaSesionRules;
 use App\Rules\modulos\ComandaRules;
 use App\Services\LogSistemaService;
+use App\Services\modulos\CajaSesionService;
 use App\Services\modulos\ComandaService;
 use App\Services\modulos\KdsService;
+use App\Services\modulos\PosVentaService;
 use Exception;
 
 /**
@@ -33,7 +37,9 @@ class KdsController extends BaseModuloController
         $comandaRepo = new ComandaRepository();
         $logService = new LogSistemaService();
         $this->kdsService = new KdsService($comandaRepo, new MenuRepository());
-        $this->comandaService = new ComandaService($comandaRepo, new ComandaRules(), new MesaRepository(), $logService);
+        $cajaService = new CajaSesionService(new CajaSesionRepository(), new CajaSesionRules(), $logService);
+        $ventaService = new PosVentaService($cajaService, $logService);
+        $this->comandaService = new ComandaService($comandaRepo, new ComandaRules(), new MesaRepository(), $logService, $ventaService);
     }
 
     protected function getRutaModulo(): string
@@ -41,7 +47,15 @@ class KdsController extends BaseModuloController
         return self::RUTA_MODULO;
     }
 
-    /** Pantalla standalone (tablet/monitor fijo por estación: cocina, barra, o las que el restaurante haya creado). */
+    /**
+     * Pantalla standalone (tablet/monitor fijo por estación: cocina, barra, o
+     * las que el restaurante haya creado). A propósito NO usa el patrón de
+     * "URL limpia" (sesión) de comandas/ver: aquí puede haber varias pantallas
+     * físicas abiertas a la vez (una en cocina, otra en barra, etc.), cada una
+     * con su propio ?id_estacion= en la URL/marcador — si viviera en sesión,
+     * todas las pantallas abiertas con el mismo usuario cambiarían de estación
+     * juntas cada vez que una de ellas cambiara de pestaña.
+     */
     public function index(): void
     {
         $this->requireLeer();
@@ -51,7 +65,7 @@ class KdsController extends BaseModuloController
         $idEstacion = $this->resolverEstacion($estaciones, (int) ($_GET['id_estacion'] ?? 0));
 
         $this->view('modulos.kds.index', [
-            'titulo'     => 'Cocina/Barra',
+            'titulo'     => 'Pantalla de preparación',
             'rutaModulo' => self::RUTA_MODULO,
             'perm'       => $this->getPermisos(),
             'estaciones' => $estaciones,
@@ -64,14 +78,14 @@ class KdsController extends BaseModuloController
     {
         $this->requireLeer();
 
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idEstacion = (int) ($_GET['id_estacion'] ?? 0);
+
         // Solo lectura y de alta frecuencia (polling): liberar el lock de
         // sesión cuanto antes, mismo criterio que ContadoresController::navbarAjax.
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
         }
-
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idEstacion = (int) ($_GET['id_estacion'] ?? 0);
 
         $this->json(['ok' => true, 'data' => $idEstacion ? $this->kdsService->getComandas($idEmpresa, $idEstacion) : []]);
     }

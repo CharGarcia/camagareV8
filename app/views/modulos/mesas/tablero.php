@@ -17,6 +17,7 @@
  * @var int    $idPuntoEmision
  * @var array  $sesion
  * @var array  $mesas
+ * @var string $empresaNombre
  */
 $base = rtrim(BASE_URL ?? '', '/');
 $rutaAjax = $base . '/' . $rutaModulo;
@@ -63,6 +64,16 @@ $rutaAjax = $base . '/' . $rutaModulo;
         .mt-mesa .info { font-size: .74rem; color: #6c7688; margin-top: 6px; }
         .mt-mesa .total { font-size: .95rem; font-weight: 700; margin-top: 2px; color: #1c1f24; }
         .mt-empty { color: #8a94a6; padding: 40px; text-align: center; }
+
+        .mt-avisos { position: absolute; top: -8px; right: -8px; display: flex; gap: 4px; }
+        .mt-aviso { display: flex; align-items: center; gap: 3px; font-size: .64rem; font-weight: 700; padding: 2px 6px; border-radius: 999px; color: #fff; box-shadow: 0 1px 3px rgba(16,24,40,.25); }
+        .mt-aviso.enviar { background: #b5792c; }
+        .mt-aviso.entregar { background: #3f7d64; }
+        .mt-aviso.asistencia { background: #a5433a; animation: mt-pulse 1.2s infinite; }
+        .mt-mesa.pide-asistencia { border-left-color: #a5433a; box-shadow: 0 0 0 2px rgba(165,67,58,.35); }
+        @keyframes mt-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+        .mt-qr-trigg { position: absolute; top: -8px; left: -8px; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 1px solid #dadde2; display: flex; align-items: center; justify-content: center; color: #495057; box-shadow: 0 1px 3px rgba(16,24,40,.2); font-size: .8rem; }
+        .mt-qr-trigg:hover { background: #f4f6f9; }
     </style>
 </head>
 <body>
@@ -89,6 +100,33 @@ $rutaAjax = $base . '/' . $rutaModulo;
     </div>
 </div>
 
+<!-- Modal: QR de la mesa (portal público de pedido) -->
+<div class="modal fade" id="mdQr" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="bi bi-qr-code me-1"></i>QR de <span id="qr-mesa-nombre"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center">
+        <div id="qr-imagen-wrap" class="mb-3">
+          <span class="spinner-border spinner-border-sm"></span>
+        </div>
+        <div class="input-group input-group-sm mb-2">
+          <input type="text" class="form-control" id="qr-link" readonly>
+          <button type="button" class="btn btn-outline-secondary" id="qr-btn-copiar" title="Copiar enlace"><i class="bi bi-clipboard"></i></button>
+        </div>
+        <div class="small text-muted">El cliente escanea este QR desde su celular para ver el menú y pedir directo a esta mesa.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-danger btn-sm me-auto" id="qr-btn-regenerar"><i class="bi bi-arrow-repeat me-1"></i>Regenerar (invalida el anterior)</button>
+        <button type="button" class="btn btn-primary btn-sm" id="qr-btn-imprimir"><i class="bi bi-printer me-1"></i>Imprimir</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
@@ -97,6 +135,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
     const AJAX = "<?= $rutaAjax ?>";
     const PUEDE_CREAR = <?= !empty($perm['crear']) ? 'true' : 'false' ?>;
     const PUEDE_EDITAR = <?= !empty($perm['actualizar']) ? 'true' : 'false' ?>;
+    const EMPRESA_NOMBRE = <?= json_encode($empresaNombre ?? '', JSON_UNESCAPED_UNICODE) ?>;
     const $canvas = document.getElementById('mt-canvas');
     const $zonas = document.getElementById('mt-zonas');
     let mesas = <?= json_encode($mesas, JSON_UNESCAPED_UNICODE) ?>;
@@ -156,14 +195,26 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 info = m.capacidad + ' puestos';
             }
 
+            const pendientes = parseInt(m.pendientes_comanda || 0, 10);
+            const listos = parseInt(m.listos_comanda || 0, 10);
+            const asistencia = !!m.solicita_asistencia;
+            const avisos = (pendientes > 0 || listos > 0 || asistencia) ? `
+                <div class="mt-avisos">
+                    ${asistencia ? '<span class="mt-aviso asistencia" title="El cliente pidió que se acerque un mesero"><i class="bi bi-hand-index-thumb"></i></span>' : ''}
+                    ${pendientes > 0 ? '<span class="mt-aviso enviar" title="Por enviar a preparación"><i class="bi bi-send"></i>' + pendientes + '</span>' : ''}
+                    ${listos > 0 ? '<span class="mt-aviso entregar" title="Listo para entregar"><i class="bi bi-check2-circle"></i>' + listos + '</span>' : ''}
+                </div>` : '';
+
             const el = document.createElement('button');
             el.type = 'button';
-            el.className = 'mt-mesa ' + estado + (PUEDE_EDITAR ? ' editable' : '');
+            el.className = 'mt-mesa ' + estado + (PUEDE_EDITAR ? ' editable' : '') + (asistencia ? ' pide-asistencia' : '');
             el.style.left = pos.x + '%';
             el.style.top = pos.y + '%';
             el.dataset.id = m.id;
             el.dataset.idComanda = m.id_comanda || '';
             el.innerHTML = `
+                ${avisos}
+                <span class="mt-qr-trigg" data-qr="${m.id}" title="Ver código QR de la mesa"><i class="bi bi-qr-code"></i></span>
                 <div>
                     <div class="nombre">${escapeHtml(m.nombre)}</div>
                     <div class="estado">${ocupada ? 'Ocupada' : (estado === 'disponible' ? 'Disponible' : estado)}</div>
@@ -220,6 +271,15 @@ $rutaAjax = $base . '/' . $rutaModulo;
     const UMBRAL_ARRASTRE = 6; // px: menos que esto se trata como un simple clic (abrir mesa)
 
     function engancharArrastre(el) {
+        const qrTrigg = el.querySelector('.mt-qr-trigg');
+        if (qrTrigg) {
+            qrTrigg.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+            qrTrigg.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                abrirModalQr(el.dataset.id);
+            });
+        }
+
         el.addEventListener('pointerdown', (ev) => {
             if (ev.button !== undefined && ev.button !== 0) return;
             arrastre = {
@@ -287,6 +347,100 @@ $rutaAjax = $base . '/' . $rutaModulo;
             if (d.ok) { mesas = d.data; renderZonas(); render(); }
         } catch (e) { /* silencioso: reintenta en el próximo ciclo */ }
     }
+
+    // ─── QR de la mesa ────────────────────────────────────────────────────
+    const mdQrEl = document.getElementById('mdQr');
+    const mdQr = mdQrEl ? new bootstrap.Modal(mdQrEl) : null;
+    let idMesaQr = null;
+
+    function pintarQr(url) {
+        document.getElementById('qr-link').value = url;
+        document.getElementById('qr-imagen-wrap').innerHTML =
+            '<img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(url) + '" alt="QR" style="border:1px solid #dee2e6;border-radius:8px;">';
+    }
+
+    async function abrirModalQr(idMesa) {
+        idMesaQr = idMesa;
+        const m = mesas.find(x => String(x.id) === String(idMesa));
+        document.getElementById('qr-mesa-nombre').textContent = m ? m.nombre : '';
+        document.getElementById('qr-imagen-wrap').innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        document.getElementById('qr-link').value = '';
+        mdQr && mdQr.show();
+
+        try {
+            const fd = new FormData();
+            fd.append('id_mesa', idMesa);
+            const r = await fetch(AJAX + '/getQrAjax', { method: 'POST', body: fd });
+            const d = await r.json();
+            if (!d.ok) { swalError(d.error || 'No se pudo generar el QR.'); mdQr && mdQr.hide(); return; }
+            pintarQr(d.url);
+        } catch (e) { swalError('Error de conexión.'); mdQr && mdQr.hide(); }
+    }
+
+    // Tarjeta imprimible (mismo patrón que la tirilla: ventana nueva + window.print(),
+    // sin PDF) — pensada para imprimir y pegar/parar en la mesa física.
+    function imprimirQr() {
+        const url = document.getElementById('qr-link').value;
+        if (!url) return;
+        const mesaNombre = document.getElementById('qr-mesa-nombre').textContent;
+        const qrImgUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=340x340&data=' + encodeURIComponent(url);
+
+        const html = `<!DOCTYPE html><html lang="es"><head>
+            <meta charset="UTF-8">
+            <title>QR - ${mesaNombre}</title>
+            <style>
+                @page { size: A5 portrait; margin: 10mm; }
+                * { box-sizing: border-box; }
+                body { font-family: Arial, Helvetica, sans-serif; text-align: center; margin: 0; padding: 0; color: #1c1f24; }
+                .empresa { font-size: 14px; color: #6c7688; margin-bottom: 4px; }
+                .mesa { font-size: 28px; font-weight: 800; margin: 4px 0 16px; }
+                img { width: 260px; height: 260px; }
+                .instr { font-size: 15px; font-weight: 600; margin-top: 16px; }
+                .sub { font-size: 12px; color: #6c7688; margin-top: 4px; }
+                @media print { button { display: none; } }
+            </style>
+        </head><body>
+            ${EMPRESA_NOMBRE ? `<div class="empresa">${EMPRESA_NOMBRE}</div>` : ''}
+            <div class="mesa">Mesa ${escapeHtml(mesaNombre)}</div>
+            <img src="${qrImgUrl}" alt="QR">
+            <div class="instr"><i>📱</i> Escanea para ver el menú y pedir</div>
+            <div class="sub">Directo desde tu celular, sin apps</div>
+            <script>window.onload=function(){window.print();};<\/script>
+        </body></html>`;
+
+        const win = window.open('', '_blank', 'width=420,height=600,scrollbars=yes');
+        if (!win) { swalError('Permite ventanas emergentes para imprimir el QR.'); return; }
+        win.document.write(html);
+        win.document.close();
+    }
+    document.getElementById('qr-btn-imprimir')?.addEventListener('click', imprimirQr);
+
+    document.getElementById('qr-btn-copiar')?.addEventListener('click', async () => {
+        const val = document.getElementById('qr-link').value;
+        if (!val) return;
+        try {
+            await navigator.clipboard.writeText(val);
+            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Enlace copiado', showConfirmButton: false, timer: 1600 });
+        } catch (e) { /* portapapeles no disponible (http sin permiso, etc.) — el input ya queda seleccionable */ }
+    });
+
+    document.getElementById('qr-btn-regenerar')?.addEventListener('click', async () => {
+        if (!idMesaQr) return;
+        const { isConfirmed } = await Swal.fire({
+            title: '¿Regenerar el QR?', text: 'El código impreso anteriormente dejará de funcionar.',
+            icon: 'warning', showCancelButton: true, confirmButtonText: 'Sí, regenerar', cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#dc3545',
+        });
+        if (!isConfirmed) return;
+        try {
+            const fd = new FormData();
+            fd.append('id_mesa', idMesaQr);
+            const r = await fetch(AJAX + '/regenerarQrAjax', { method: 'POST', body: fd });
+            const d = await r.json();
+            if (!d.ok) { swalError(d.error || 'No se pudo regenerar el QR.'); return; }
+            pintarQr(d.url);
+        } catch (e) { swalError('Error de conexión.'); }
+    });
 
     renderZonas();
     render();

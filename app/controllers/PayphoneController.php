@@ -78,6 +78,9 @@ class PayphoneController extends Controller
     /**
      * Acciones específicas por módulo cuando un pago se aprueba.
      * Para factura_venta: genera automáticamente el Ingreso (cobro) vinculado.
+     * Para comanda_grupo_cobro (portal QR de mesas): cobra el grupo — genera
+     * la Factura/Recibo, mueve inventario y cierra la comanda/libera la mesa
+     * si no queda nada más pendiente, igual que si lo cobrara el mesero.
      */
     private function procesarAprobacion(array $trans): void
     {
@@ -89,6 +92,21 @@ class PayphoneController extends Controller
                     new \App\Services\LogSistemaService()
                 );
                 $svc->generarIngresoDesdePayphone($trans);
+            } elseif (($trans['modulo'] ?? '') === 'comanda_grupo_cobro') {
+                $logService  = new \App\Services\LogSistemaService();
+                $cajaService = new \App\Services\modulos\CajaSesionService(
+                    new \App\repositories\modulos\CajaSesionRepository(),
+                    new \App\Rules\modulos\CajaSesionRules(),
+                    $logService
+                );
+                $comandaService = new \App\Services\modulos\ComandaService(
+                    new \App\repositories\modulos\ComandaRepository(),
+                    new \App\Rules\modulos\ComandaRules(),
+                    new \App\repositories\modulos\MesaRepository(),
+                    $logService,
+                    new \App\Services\modulos\PosVentaService($cajaService, $logService)
+                );
+                $comandaService->cobrarGrupoDesdePayphone($trans);
             }
         } catch (\Throwable $e) {
             // No bloquear la pantalla de éxito del cliente si falla el registro
