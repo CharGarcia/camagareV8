@@ -132,8 +132,12 @@ class NotaCreditoService
         }
 
         // Asiento contable FUERA de la transacción: la NC ya está guardada; un fallo no la revierte.
+        // Solo NC 'autorizado' se contabilizan: un borrador no debe generar un asiento activo,
+        // o queda huérfano si el borrador se descarta después.
         try {
-            $this->procesarAsientoContable($idNC, $data);
+            if (($data['estado'] ?? 'borrador') === 'autorizado') {
+                $this->procesarAsientoContable($idNC, $data);
+            }
         } catch (\Throwable $eAs) {
             error_log("[NotaCredito] Asiento no generado para NC $idNC: " . $eAs->getMessage());
         }
@@ -371,6 +375,25 @@ class NotaCreditoService
                 $invService->revertirMovimientosPorReferencia('nota_credito', $id, $idEmpresa, $idUsuario, true);
             }
 
+            // Anular el asiento contable de la NC si existe (mismo patrón que
+            // FacturaVentaService::eliminar()): un borrador no debería tener asiento activo
+            // tras el fix en crear(), pero esto cierra el hueco para datos previos al fix.
+            $idAsientoNc = (int)($nc['id_asiento_contable'] ?? 0);
+            if ($idAsientoNc > 0) {
+                $asientoService = new \App\Services\modulos\AsientoContableService(
+                    new \App\repositories\modulos\AsientoContableRepository(),
+                    new \App\Rules\modulos\AsientoContableRules(),
+                    $this->logService
+                );
+                try {
+                    $asientoService->anular($idAsientoNc, $idEmpresa, $idUsuario);
+                } catch (\Throwable $eA) {
+                    if (stripos($eA->getMessage(), 'ya se encuentra anulado') === false) {
+                        throw $eA;
+                    }
+                }
+            }
+
             $this->repository->eliminarLogico($id, $idUsuario);
 
             $this->logService->registrar(
@@ -415,6 +438,25 @@ class NotaCreditoService
             // Limpiar casilleros de declaracion 104
             $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
             $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'notas de credito', $id);
+
+            // Anular el asiento contable de la NC si existe (antes no se hacía: una NC
+            // anulada quedaba con su asiento "contabilizado" activo, igual que el hueco
+            // ya corregido en eliminar()).
+            $idAsientoNc = (int)($nc['id_asiento_contable'] ?? 0);
+            if ($idAsientoNc > 0) {
+                $asientoService = new \App\Services\modulos\AsientoContableService(
+                    new \App\repositories\modulos\AsientoContableRepository(),
+                    new \App\Rules\modulos\AsientoContableRules(),
+                    $this->logService
+                );
+                try {
+                    $asientoService->anular($idAsientoNc, $idEmpresa, $idUsuario);
+                } catch (\Throwable $eA) {
+                    if (stripos($eA->getMessage(), 'ya se encuentra anulado') === false) {
+                        throw $eA;
+                    }
+                }
+            }
 
             $this->repository->updateEstado($id, 'anulado');
 

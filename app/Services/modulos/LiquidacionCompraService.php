@@ -90,8 +90,12 @@ class LiquidacionCompraService
         }
 
         // Asiento contable FUERA de la transacción: un fallo no revierte la liquidación guardada.
+        // Solo liquidaciones 'autorizado' se contabilizan: un borrador no debe generar un
+        // asiento activo, o queda huérfano si el borrador se descarta después.
         try {
-            $this->procesarAsientoContable($id, $data);
+            if (($data['estado'] ?? 'borrador') === 'autorizado') {
+                $this->procesarAsientoContable($id, $data);
+            }
         } catch (\Throwable $eAs) {
             error_log("[Liquidacion] Asiento no generado para liquidación $id: " . $eAs->getMessage());
         }
@@ -269,6 +273,24 @@ class LiquidacionCompraService
         $db = \App\core\Database::getConnection();
         $db->beginTransaction();
         try {
+            // Anular el asiento contable de la liquidación si existe (antes no se hacía:
+            // quedaba con su asiento "contabilizado" activo tras anular el documento).
+            $idAsientoLiq = (int)($cabecera['id_asiento_contable'] ?? 0);
+            if ($idAsientoLiq > 0) {
+                $asientoService = new \App\Services\modulos\AsientoContableService(
+                    new \App\repositories\modulos\AsientoContableRepository(),
+                    new \App\Rules\modulos\AsientoContableRules(),
+                    $this->logService
+                );
+                try {
+                    $asientoService->anular($idAsientoLiq, $idEmpresa, $idUsuario);
+                } catch (\Throwable $eA) {
+                    if (stripos($eA->getMessage(), 'ya se encuentra anulado') === false) {
+                        throw $eA;
+                    }
+                }
+            }
+
             $st = $db->prepare("UPDATE liquidaciones_cabecera SET estado = 'anulado', updated_at = NOW(), updated_by = ? WHERE id = ? AND id_empresa = ?");
             $st->execute([$idUsuario, $id, $idEmpresa]);
 

@@ -175,7 +175,7 @@ class PlanCuentaService
         }
 
         // Ordenar por profundidad (padres primero) y luego por código
-        uksort($requeridos, fn($a, $b) => (strlen($a) <=> strlen($b)) ?: strcmp($a, $b));
+        uksort($requeridos, fn($a, $b) => (strlen((string) $a) <=> strlen((string) $b)) ?: strcmp((string) $a, (string) $b));
 
         // Lookup de nombres del plan modelo
         $nombresModelo = [];
