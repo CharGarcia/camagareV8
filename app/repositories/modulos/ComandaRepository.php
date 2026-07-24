@@ -260,6 +260,15 @@ class ComandaRepository extends BaseRepository
     }
 
     /** Anula todas las líneas activas de la comanda (usado al anular la comanda completa: saca todo del KDS). */
+    /** Cuenta las líneas de la comanda (agregadas o ya anuladas) — usado para exigir motivo al anular la comanda completa. */
+    public function contarLineas(int $idComanda, int $idEmpresa): int
+    {
+        $sql = "SELECT COUNT(*) FROM comanda_detalle WHERE id_comanda = :ic AND id_empresa = :e AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([':ic' => $idComanda, ':e' => $idEmpresa]);
+        return (int) $st->fetchColumn();
+    }
+
     public function anularLineasDeComanda(int $idComanda, int $idEmpresa): void
     {
         $sql = "UPDATE comanda_detalle SET estado_linea = 'anulado'
@@ -389,15 +398,43 @@ class ComandaRepository extends BaseRepository
         return $val !== false && $val !== null ? (int) $val : null;
     }
 
-    /** Líneas activas (no anuladas) que todavía no están asignadas a ningún grupo de cobro. */
+    /**
+     * Líneas activas (no anuladas) que todavía no están asignadas a ningún
+     * grupo de cobro — ni "por ítems" (id_grupo_cobro) ni ya metidas en un
+     * pool de "partes iguales" (comanda_grupo_partes_lineas).
+     */
     public function getLineasSinGrupo(int $idComanda, int $idEmpresa): array
     {
-        $sql = "SELECT * FROM comanda_detalle
-                WHERE id_comanda = :ic AND id_empresa = :e AND eliminado = false
-                  AND estado_linea != 'anulado' AND id_grupo_cobro IS NULL
-                ORDER BY id ASC";
+        $sql = "SELECT d.* FROM comanda_detalle d
+                LEFT JOIN comanda_grupo_partes_lineas gpl ON gpl.id_linea = d.id
+                WHERE d.id_comanda = :ic AND d.id_empresa = :e AND d.eliminado = false
+                  AND d.estado_linea != 'anulado' AND d.id_grupo_cobro IS NULL
+                  AND gpl.id IS NULL
+                ORDER BY d.id ASC";
         $st = $this->db->prepare($sql);
         $st->execute([':ic' => $idComanda, ':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Vincula las líneas del "pool" compartido de una división en partes iguales (todas las N partes lo comparten). */
+    public function agregarLineasAPoolPartes(int $idGrupoRaiz, array $idsLineas): void
+    {
+        $sql = "INSERT INTO comanda_grupo_partes_lineas (id_grupo_raiz, id_linea) VALUES (:g, :l)";
+        $st = $this->db->prepare($sql);
+        foreach ($idsLineas as $idLinea) {
+            $st->execute([':g' => $idGrupoRaiz, ':l' => (int) $idLinea]);
+        }
+    }
+
+    /** Líneas del pool compartido de una división en partes iguales (para armar los ítems fraccionados de cada parte al cobrar). */
+    public function getLineasDelPoolPartes(int $idGrupoRaiz, int $idEmpresa): array
+    {
+        $sql = "SELECT d.* FROM comanda_detalle d
+                JOIN comanda_grupo_partes_lineas gpl ON gpl.id_linea = d.id
+                WHERE gpl.id_grupo_raiz = :g AND d.id_empresa = :e AND d.eliminado = false
+                ORDER BY d.id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':g' => $idGrupoRaiz, ':e' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -413,22 +450,27 @@ class ComandaRepository extends BaseRepository
     {
         $sql = "INSERT INTO comanda_grupos_cobro (
                     id_empresa, id_comanda, numero_grupo, etiqueta, tipo_split, created_by,
-                    id_cliente, tipo_documento_solicitado, origen
+                    id_cliente, tipo_documento_solicitado, origen,
+                    id_grupo_padre, numero_parte, total_partes
                 ) VALUES (
                     :e, :ic, :num, :et, :split, :cb,
-                    :cli, :tds, :origen
+                    :cli, :tds, :origen,
+                    :padre, :nparte, :tpartes
                 ) RETURNING id";
         $st = $this->db->prepare($sql);
         $st->execute([
-            ':e'      => $d['id_empresa'],
-            ':ic'     => $d['id_comanda'],
-            ':num'    => $d['numero_grupo'],
-            ':et'     => $d['etiqueta'],
-            ':split'  => $d['tipo_split'] ?? 'items',
-            ':cb'     => $d['created_by'],
-            ':cli'    => $d['id_cliente'] ?? null,
-            ':tds'    => $d['tipo_documento_solicitado'] ?? null,
-            ':origen' => $d['origen'] ?? 'mesero',
+            ':e'       => $d['id_empresa'],
+            ':ic'      => $d['id_comanda'],
+            ':num'     => $d['numero_grupo'],
+            ':et'      => $d['etiqueta'],
+            ':split'   => $d['tipo_split'] ?? 'items',
+            ':cb'      => $d['created_by'],
+            ':cli'     => $d['id_cliente'] ?? null,
+            ':tds'     => $d['tipo_documento_solicitado'] ?? null,
+            ':origen'  => $d['origen'] ?? 'mesero',
+            ':padre'   => $d['id_grupo_padre'] ?? null,
+            ':nparte'  => $d['numero_parte'] ?? null,
+            ':tpartes' => $d['total_partes'] ?? null,
         ]);
         return (int) $st->fetchColumn();
     }
@@ -487,6 +529,25 @@ class ComandaRepository extends BaseRepository
     {
         $sql = "UPDATE comanda_detalle SET id_grupo_cobro = NULL WHERE id_grupo_cobro = :g AND id_empresa = :e";
         $this->db->prepare($sql)->execute([':g' => $idGrupo, ':e' => $idEmpresa]);
+    }
+
+    /** Todas las "partes" (hermanos) de una división en partes iguales, incluida la raíz — para deshacer el split completo. */
+    public function getGruposHermanos(int $idGrupoRaiz, int $idEmpresa): array
+    {
+        $sql = "SELECT * FROM comanda_grupos_cobro
+                WHERE id_empresa = :e AND eliminado = false
+                  AND (id = :g OR id_grupo_padre = :g)
+                ORDER BY numero_parte ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':g' => $idGrupoRaiz, ':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Libera el pool compartido de una división en partes iguales (al deshacer el split completo). */
+    public function liberarPoolPartes(int $idGrupoRaiz): void
+    {
+        $sql = "DELETE FROM comanda_grupo_partes_lineas WHERE id_grupo_raiz = :g";
+        $this->db->prepare($sql)->execute([':g' => $idGrupoRaiz]);
     }
 
     public function eliminarGrupo(int $idGrupo, int $idEmpresa, int $idUsuario): void

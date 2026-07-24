@@ -31,6 +31,14 @@ class ComandaRules
         }
     }
 
+    /** Exige motivo al anular la comanda completa solo si ya tiene ítems (agregados o ya anulados) — una comanda vacía se anula libre. */
+    public function validarMotivoAnulacion(int $totalLineas, string $motivo): void
+    {
+        if ($totalLineas > 0 && trim($motivo) === '') {
+            throw new Exception('Esta comanda ya tiene ítems registrados; indica un motivo para anularla.');
+        }
+    }
+
     public function validarLinea(array $item): void
     {
         if (empty($item['id_producto']) && empty($item['id_menu_item'])) {

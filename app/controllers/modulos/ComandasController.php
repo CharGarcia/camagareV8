@@ -416,6 +416,24 @@ class ComandasController extends BaseModuloController
         $this->json(['ok' => true, 'data' => $result['rows']]);
     }
 
+    /** Catálogo de tipos de identificación para el mini-formulario "Nuevo cliente" del cobro — mismo criterio que CajaPosController::getTiposIdClienteAjax. */
+    public function getTiposIdClienteAjax(): void
+    {
+        $this->requireLeer();
+        $modelTipos = new \App\models\IdentificadorCompradorVendedor();
+        $todos = $modelTipos->getAll('codigo', 'ASC');
+        $tipos = array_values(array_filter($todos, function ($r) {
+            if ((int) ($r['tipo'] ?? 0) !== 1 || (int) ($r['status'] ?? 1) !== 1) {
+                return false;
+            }
+            $nombre = strtoupper((string) ($r['nombre'] ?? ''));
+            $codigo = strtoupper((string) ($r['codigo'] ?? ''));
+            return !str_contains($nombre, 'CONSUMIDOR') && !str_contains($codigo, 'CONSUMIDOR');
+        }));
+
+        $this->json(['ok' => true, 'data' => $tipos]);
+    }
+
     /** Formas de pago de la empresa — mismo endpoint/criterio que CajaPosController::getFormasPagoAjax. */
     public function getFormasPagoAjax(): void
     {
@@ -462,6 +480,26 @@ class ComandasController extends BaseModuloController
 
             $idGrupo = $this->service->crearGrupoCobro($idComanda, $idEmpresa, $idUsuario, $idsLineas, $etiqueta);
             $this->json(['ok' => true, 'msg' => 'Grupo de cobro creado.', 'id' => $idGrupo]);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
+    public function crearGruposPartesIgualesAjax(): void
+    {
+        $this->requireCrear();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $idComanda = (int) ($_POST['id_comanda'] ?? 0);
+            if ($idComanda <= 0) throw new Exception('Comanda no válida.');
+
+            $idsLineas = array_map('intval', json_decode($_POST['ids_lineas'] ?? '[]', true) ?: []);
+            $numPartes = (int) ($_POST['num_partes'] ?? 0);
+
+            $idsGrupos = $this->service->crearGruposPartesIguales($idComanda, $idEmpresa, $idUsuario, $idsLineas, $numPartes);
+            $this->json(['ok' => true, 'msg' => 'Cuenta dividida en ' . count($idsGrupos) . ' partes.', 'ids' => $idsGrupos]);
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }

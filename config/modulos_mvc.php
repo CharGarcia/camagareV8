@@ -458,6 +458,13 @@ return [
         'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],
+    'modulos/reporte-restaurante' => [
+        // Registrar el submódulo en submodulos_menu (id_modulo = 9, Reportes) con
+        // ruta = 'modulos/reporte-restaurante', y actualizar este id_submodulo con
+        // el id real. Asignar permisos en /config/permisos-modulos.
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
     'modulos/reporte_compras' => [
         'id_submodulo' => 39,
         'legacy_rutas' => [],

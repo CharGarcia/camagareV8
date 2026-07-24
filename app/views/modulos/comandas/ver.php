@@ -173,6 +173,19 @@ $rutaAjax = $base . '/' . $rutaModulo;
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
+        <div class="mb-2">
+          <div class="btn-group w-100" role="group">
+            <input type="radio" class="btn-check" name="cb-modo-split" id="cb-modo-items" value="items" checked>
+            <label class="btn btn-outline-secondary btn-sm" for="cb-modo-items">Por ítems</label>
+            <input type="radio" class="btn-check" name="cb-modo-split" id="cb-modo-partes" value="partes_iguales">
+            <label class="btn btn-outline-secondary btn-sm" for="cb-modo-partes">Partes iguales</label>
+          </div>
+        </div>
+        <div class="mb-2 d-none" id="cb-num-partes-wrap">
+          <label class="form-label small mb-1">¿Entre cuántas partes?</label>
+          <input type="number" class="form-control form-control-sm" id="cb-num-partes" min="2" value="2" style="max-width:100px;">
+          <div class="form-text mt-0" style="font-size:0.65rem;">Cada ítem seleccionado se reparte en partes iguales — cada parte genera su propio documento.</div>
+        </div>
         <div class="d-flex justify-content-between align-items-center mb-2">
           <div class="fw-semibold small">Ítems sin cobrar</div>
           <button type="button" class="btn btn-sm btn-link p-0" id="cb-toggle-todos">Marcar/desmarcar todos</button>
@@ -211,7 +224,10 @@ $rutaAjax = $base . '/' . $rutaModulo;
         </div>
         <div class="mb-2 position-relative">
           <label class="form-label small mb-1">Cliente (opcional; Consumidor Final si se deja vacío)</label>
-          <input type="text" class="form-control form-control-sm" id="pg-cliente-buscar" placeholder="Buscar cliente por nombre/identificación...">
+          <div class="input-group input-group-sm">
+            <input type="text" class="form-control form-control-sm" id="pg-cliente-buscar" placeholder="Buscar cliente por nombre/identificación...">
+            <button type="button" class="btn btn-outline-secondary" id="pg-btn-nuevo-cliente" title="Nuevo cliente"><i class="bi bi-person-plus"></i></button>
+          </div>
           <input type="hidden" id="pg-id-cliente" value="0">
           <div id="pg-cliente-resultados" class="list-group position-absolute w-100" style="z-index:1080;"></div>
         </div>
@@ -245,6 +261,53 @@ $rutaAjax = $base . '/' . $rutaModulo;
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
         <button type="button" class="btn btn-success btn-sm" id="pg-btn-confirmar"><i class="bi bi-check-lg me-1"></i>Confirmar cobro</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: nuevo cliente (mini-formulario, mismo patrón que caja_sesion/venta.php) -->
+<div class="modal fade" id="modalClienteNuevo" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="bi bi-person-plus-fill me-1"></i>Nuevo cliente</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Tipo ID</label>
+            <select id="ncTipoId" class="form-select form-select-sm"></select>
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-semibold text-uppercase text-muted mb-1 d-flex align-items-center justify-content-between">
+              <span>Identificación</span>
+              <span id="ncSriEstado" class="badge bg-secondary d-none" style="font-size:.62rem;"></span>
+            </label>
+            <input type="text" id="ncIdentificacion" class="form-control form-control-sm" autocomplete="off">
+            <div id="ncIdentificacionError" class="text-danger" style="display:none; font-size:.72rem;"></div>
+          </div>
+          <div class="col-12">
+            <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Nombre / Razón social</label>
+            <input type="text" id="ncNombre" class="form-control form-control-sm">
+          </div>
+          <div class="col-12">
+            <label class="form-label small fw-semibold text-uppercase text-muted mb-1">
+              Correo(s) <small class="text-muted text-lowercase">— para factura electrónica, separados por coma</small>
+            </label>
+            <input type="text" id="ncEmail" class="form-control form-control-sm" placeholder="correo@ejemplo.com, otro@ejemplo.com" autocomplete="off">
+            <div id="ncEmailError" class="text-danger" style="display:none; font-size:.72rem;"></div>
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-semibold text-uppercase text-muted mb-1">Teléfono</label>
+            <input type="text" id="ncTelefono" class="form-control form-control-sm">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnGuardarClienteNuevo">Guardar y usar</button>
       </div>
     </div>
   </div>
@@ -928,16 +991,29 @@ $rutaAjax = $base . '/' . $rutaModulo;
     const $btnAnular = document.getElementById('cm-btn-anular');
     if ($btnAnular) {
         $btnAnular.addEventListener('click', async () => {
-            const { isConfirmed } = await Swal.fire({
+            const tieneItems = detalles.length > 0;
+            const { value: motivo, isConfirmed } = await Swal.fire({
                 title: '¿Anular esta comanda?',
-                text: 'La mesa quedará disponible y se perderán los ítems agregados.',
+                html: tieneItems
+                    ? 'La mesa quedará disponible y se perderán los ítems agregados. <strong>Esta comanda ya tiene ítems registrados — indica el motivo:</strong>'
+                    : 'La mesa quedará disponible.',
                 icon: 'warning', showCancelButton: true,
+                input: tieneItems ? 'textarea' : undefined,
+                inputPlaceholder: 'Ej. el cliente se fue sin pedir, pedido duplicado, etc.',
                 confirmButtonText: 'Sí, anular', cancelButtonText: 'Cancelar',
                 confirmButtonColor: '#dc3545',
+                preConfirm: (val) => {
+                    if (tieneItems && !String(val || '').trim()) {
+                        Swal.showValidationMessage('Escribe el motivo de la anulación.');
+                        return false;
+                    }
+                    return val;
+                },
             });
             if (!isConfirmed) return;
             const fd = new FormData();
             fd.append('id', ID_COMANDA);
+            fd.append('motivo', motivo || '');
             try {
                 const r = await fetch(AJAX + '/anularAjax', { method: 'POST', body: fd });
                 const d = await r.json();
@@ -951,6 +1027,8 @@ $rutaAjax = $base . '/' . $rutaModulo;
 
     const mdCobro = document.getElementById('mdCobro') ? new bootstrap.Modal('#mdCobro') : null;
     const mdPago = document.getElementById('mdPago') ? new bootstrap.Modal('#mdPago') : null;
+    const modalClienteNuevo = document.getElementById('modalClienteNuevo') ? new bootstrap.Modal('#modalClienteNuevo') : null;
+    let tiposIdCargados = false;
     const $cbLista = document.getElementById('cb-lista-lineas');
     const $cbTotalSel = document.getElementById('cb-total-sel');
 
@@ -980,9 +1058,24 @@ $rutaAjax = $base . '/' . $rutaModulo;
         $cbTotalSel.textContent = money(total);
     }
 
+    function actualizarModoSplit() {
+        const esPartes = document.getElementById('cb-modo-partes').checked;
+        document.getElementById('cb-num-partes-wrap').classList.toggle('d-none', !esPartes);
+        document.getElementById('cb-btn-armar').innerHTML = esPartes
+            ? '<i class="bi bi-collection me-1"></i>Dividir en partes'
+            : '<i class="bi bi-check2-square me-1"></i>Cobrar seleccionados';
+    }
+    document.querySelectorAll('input[name="cb-modo-split"]').forEach(r => r.addEventListener('change', actualizarModoSplit));
+
     const $btnCobrar = document.getElementById('cm-btn-cobrar');
     if ($btnCobrar && mdCobro) {
-        $btnCobrar.addEventListener('click', () => { renderListaCobro(); mdCobro.show(); });
+        $btnCobrar.addEventListener('click', () => {
+            document.getElementById('cb-modo-items').checked = true;
+            document.getElementById('cb-num-partes').value = '2';
+            actualizarModoSplit();
+            renderListaCobro();
+            mdCobro.show();
+        });
     }
 
     $cbLista.addEventListener('change', (ev) => { if (ev.target.classList.contains('cb-check')) recalcularSeleccion(); });
@@ -1074,6 +1167,25 @@ $rutaAjax = $base . '/' . $rutaModulo;
         const ids = Array.from($cbLista.querySelectorAll('.cb-check:checked')).map(c => c.dataset.id);
         if (!ids.length) { swalError('Selecciona al menos un ítem.'); return; }
         const monto = Array.from($cbLista.querySelectorAll('.cb-check:checked')).reduce((a, c) => a + parseFloat(c.dataset.monto || 0), 0);
+        const esPartes = document.getElementById('cb-modo-partes').checked;
+
+        if (esPartes) {
+            const numPartes = parseInt(document.getElementById('cb-num-partes').value || '0', 10);
+            if (numPartes < 2) { swalError('Divide entre al menos 2 partes.'); return; }
+            const fd = new FormData();
+            fd.append('id_comanda', ID_COMANDA);
+            fd.append('ids_lineas', JSON.stringify(ids));
+            fd.append('num_partes', numPartes);
+            try {
+                const r = await fetch(AJAX + '/crearGruposPartesIgualesAjax', { method: 'POST', body: fd });
+                const d = await r.json();
+                if (!d.ok) { swalError(d.error || 'No se pudo dividir la cuenta.'); return; }
+                mdCobro && mdCobro.hide();
+                await refrescarComanda();
+                swalToast('success', d.msg || 'Cuenta dividida.');
+            } catch (e) { swalError('Error de conexión.'); }
+            return;
+        }
 
         const fd = new FormData();
         fd.append('id_comanda', ID_COMANDA);
@@ -1145,6 +1257,237 @@ $rutaAjax = $base . '/' . $rutaModulo;
         document.getElementById('pg-cliente-buscar').value = item.dataset.nombre;
         document.getElementById('pg-cliente-resultados').innerHTML = '';
         revisarLimiteConsumidorFinal();
+    });
+
+    // ─── Nuevo cliente desde el cobro (mismo patrón que caja_sesion/venta.php) ──
+    function fijarClienteEnPago(idCliente, nombre) {
+        document.getElementById('pg-id-cliente').value = idCliente;
+        document.getElementById('pg-cliente-buscar').value = nombre;
+        document.getElementById('pg-cliente-resultados').innerHTML = '';
+        revisarLimiteConsumidorFinal();
+    }
+
+    document.getElementById('pg-btn-nuevo-cliente').addEventListener('click', async () => {
+        if (!tiposIdCargados) {
+            try {
+                const res = await fetch(AJAX + '/getTiposIdClienteAjax', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                const json = await res.json();
+                const $sel = document.getElementById('ncTipoId');
+                $sel.innerHTML = '<option value="">Seleccione...</option>';
+                (json.data || []).forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.codigo;
+                    opt.textContent = t.nombre;
+                    $sel.appendChild(opt);
+                });
+                tiposIdCargados = true;
+            } catch (e) {
+                swalError('No se pudo cargar el catálogo de tipos de identificación.');
+                return;
+            }
+        }
+        ['ncIdentificacion', 'ncNombre', 'ncEmail', 'ncTelefono'].forEach(id => document.getElementById(id).value = '');
+        limpiarErrorIdentificacionNc();
+        limpiarBadgeSriNc();
+        document.getElementById('ncEmailError').style.display = 'none';
+        if (typeof window.aplicarFavoritosModal === 'function') {
+            window.aplicarFavoritosModal('#modalClienteNuevo');
+        }
+        aplicarReglasIdentificacionNc();
+        modalClienteNuevo && modalClienteNuevo.show();
+    });
+
+    function getTipoNormalizadoNc() {
+        const sel = document.getElementById('ncTipoId');
+        if (!sel) return '';
+        const codigo = (sel.value || '').trim().toUpperCase();
+        const texto = (sel.options[sel.selectedIndex]?.text || '').toUpperCase();
+        if (texto.includes('PASAPORTE') || codigo.includes('PAS')) return 'PASAPORTE';
+        if (texto.includes('CEDULA') || texto.includes('CÉDULA') || codigo.includes('CED')) return 'CEDULA';
+        if (texto.includes('RUC')) return 'RUC';
+        return codigo;
+    }
+
+    function aplicarReglasIdentificacionNc() {
+        const tipo = getTipoNormalizadoNc();
+        const campo = document.getElementById('ncIdentificacion');
+        campo.setAttribute('inputmode', tipo === 'PASAPORTE' ? 'text' : 'numeric');
+        campo.maxLength = tipo === 'RUC' ? 13 : (tipo === 'CEDULA' ? 10 : 20);
+        limpiarErrorIdentificacionNc();
+        limpiarBadgeSriNc();
+    }
+
+    function validarIdentificacionNc() {
+        const tipo = getTipoNormalizadoNc();
+        const valor = document.getElementById('ncIdentificacion').value.trim();
+        switch (tipo) {
+            case 'RUC':
+                if (!/^\d{13}$/.test(valor)) { mostrarErrorIdentificacionNc('El RUC debe tener exactamente 13 dígitos numéricos.'); return false; }
+                if (!['001', '002'].includes(valor.slice(-3))) { mostrarErrorIdentificacionNc('Los últimos 3 dígitos del RUC deben ser 001 o 002.'); return false; }
+                break;
+            case 'CEDULA':
+                if (!/^\d{10}$/.test(valor)) { mostrarErrorIdentificacionNc('La cédula debe tener exactamente 10 dígitos numéricos.'); return false; }
+                break;
+            case 'PASAPORTE':
+                if (valor.length === 0 || valor.length > 20) { mostrarErrorIdentificacionNc('El pasaporte puede tener hasta 20 caracteres.'); return false; }
+                break;
+            default:
+                if (valor.length === 0) { mostrarErrorIdentificacionNc('Ingrese la identificación.'); return false; }
+        }
+        limpiarErrorIdentificacionNc();
+        return true;
+    }
+
+    function mostrarErrorIdentificacionNc(msg) {
+        const el = document.getElementById('ncIdentificacionError');
+        el.textContent = msg;
+        el.style.display = 'block';
+    }
+    function limpiarErrorIdentificacionNc() {
+        const el = document.getElementById('ncIdentificacionError');
+        el.textContent = '';
+        el.style.display = 'none';
+    }
+    function mostrarBadgeSriNc(texto, clase) {
+        const el = document.getElementById('ncSriEstado');
+        el.className = 'badge ' + clase;
+        el.textContent = texto;
+        el.classList.remove('d-none');
+    }
+    function limpiarBadgeSriNc() {
+        document.getElementById('ncSriEstado').classList.add('d-none');
+    }
+
+    function validarEmailsNc() {
+        const campo = document.getElementById('ncEmail');
+        const errEl = document.getElementById('ncEmailError');
+        const raw = campo.value.trim();
+
+        if (raw === '') {
+            errEl.textContent = 'El correo es obligatorio (se usa para enviar la factura electrónica).';
+            errEl.style.display = 'block';
+            return false;
+        }
+
+        const correos = raw.split(',').map(s => s.trim()).filter(s => s !== '');
+        const reEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const invalidos = correos.filter(c => !reEmail.test(c));
+        if (invalidos.length > 0) {
+            errEl.textContent = 'Correo(s) inválido(s): ' + invalidos.join(', ');
+            errEl.style.display = 'block';
+            return false;
+        }
+        errEl.style.display = 'none';
+        return true;
+    }
+    document.getElementById('ncEmail').addEventListener('blur', validarEmailsNc);
+
+    document.getElementById('ncTipoId').addEventListener('change', aplicarReglasIdentificacionNc);
+
+    document.getElementById('ncIdentificacion').addEventListener('keydown', (ev) => {
+        const tipo = getTipoNormalizadoNc();
+        if (tipo !== 'RUC' && tipo !== 'CEDULA') return;
+        const permitidos = ['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+        if (ev.ctrlKey || ev.metaKey || permitidos.includes(ev.key)) return;
+        if (!/^\d$/.test(ev.key)) ev.preventDefault();
+    });
+
+    let sriDebounceNc = null;
+    document.getElementById('ncIdentificacion').addEventListener('input', () => {
+        limpiarErrorIdentificacionNc();
+        limpiarBadgeSriNc();
+        clearTimeout(sriDebounceNc);
+        const tipo = getTipoNormalizadoNc();
+        const valor = document.getElementById('ncIdentificacion').value.trim();
+        const longEsperada = { RUC: 13, CEDULA: 10 }[tipo];
+        if (!longEsperada || valor.length !== longEsperada) return;
+        sriDebounceNc = setTimeout(() => {
+            if (validarIdentificacionNc()) consultarSriNc(valor);
+        }, 700);
+    });
+
+    async function consultarSriNc(identificacion) {
+        mostrarBadgeSriNc('Consultando…', 'bg-secondary');
+        try {
+            const fd = new FormData();
+            fd.append('identificacion', identificacion);
+            const res = await fetch(BASE + '/modulos/clientes/consultarSri', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const json = await res.json();
+            if (!json.ok) { mostrarBadgeSriNc('No encontrado', 'bg-warning text-dark'); return; }
+
+            if (json.source === 'cliente') {
+                mostrarBadgeSriNc('Ya existe', 'bg-info text-dark');
+                const usar = await Swal.fire({
+                    icon: 'info',
+                    title: 'Este cliente ya existe',
+                    html: 'Ya tienes registrado a <b>' + escapeHtml(json.data.nombre) + '</b> con esta identificación.',
+                    showCancelButton: true,
+                    confirmButtonText: 'Usar este cliente',
+                    cancelButtonText: 'Seguir editando',
+                    confirmButtonColor: '#0d6efd',
+                });
+                if (usar.isConfirmed) {
+                    fijarClienteEnPago(json.data.id, json.data.nombre);
+                    modalClienteNuevo && modalClienteNuevo.hide();
+                } else {
+                    if (json.data.nombre) document.getElementById('ncNombre').value = json.data.nombre;
+                    if (json.data.mail) document.getElementById('ncEmail').value = json.data.mail;
+                }
+                return;
+            }
+
+            const etiqueta = json.source === 'proveedor' ? '✓ Ya es proveedor' : '✓ SRI';
+            mostrarBadgeSriNc(etiqueta, 'bg-success');
+            if (json.data?.nombre) document.getElementById('ncNombre').value = json.data.nombre;
+            if (json.data?.mail) document.getElementById('ncEmail').value = json.data.mail;
+        } catch (e) {
+            mostrarBadgeSriNc('Error de consulta', 'bg-danger');
+        }
+    }
+
+    document.getElementById('btnGuardarClienteNuevo').addEventListener('click', async () => {
+        const tipoId = document.getElementById('ncTipoId').value;
+        const identificacion = document.getElementById('ncIdentificacion').value.trim();
+        const nombre = document.getElementById('ncNombre').value.trim();
+        const email = document.getElementById('ncEmail').value.trim();
+        const telefono = document.getElementById('ncTelefono').value.trim();
+
+        if (!tipoId || !identificacion || !nombre || !email) {
+            swalWarning('Completa tipo de identificación, identificación, nombre y correo.');
+            return;
+        }
+        if (!validarIdentificacionNc() || !validarEmailsNc()) {
+            return;
+        }
+
+        const fd = new FormData();
+        fd.append('tipo_id', tipoId);
+        fd.append('identificacion', identificacion);
+        fd.append('nombre', nombre);
+        fd.append('email', email);
+        fd.append('telefono', telefono);
+
+        const $btn = document.getElementById('btnGuardarClienteNuevo');
+        $btn.disabled = true;
+        try {
+            const res = await fetch(BASE + '/modulos/clientes/store', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const json = await res.json();
+            if (!json.ok) {
+                swalError(json.error || 'No se pudo crear el cliente.');
+                return;
+            }
+            // store() no devuelve el id creado: se re-consulta por identificación para autoseleccionarlo.
+            const resBuscar = await fetch(AJAX + '/getClientesAjax?q=' + encodeURIComponent(identificacion), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const jsonBuscar = await resBuscar.json();
+            const match = (jsonBuscar.data || []).find(c => c.identificacion === identificacion) || (jsonBuscar.data || [])[0];
+            if (match) fijarClienteEnPago(match.id, match.nombre);
+            modalClienteNuevo && modalClienteNuevo.hide();
+            swalToast('success', 'Cliente creado y seleccionado.');
+        } catch (e) {
+            swalError('Error de conexión al crear el cliente.');
+        } finally {
+            $btn.disabled = false;
+        }
     });
 
     // ─── Vista previa de la cuenta (ANTES de cobrar) ────────────────────────

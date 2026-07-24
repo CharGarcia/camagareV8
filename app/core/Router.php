@@ -202,6 +202,15 @@ class Router
                 $action = in_array($sub, $accionesValidas, true) ? $this->toCamelCase($sub) : 'retorno';
             }
 
+            // /nuvei/* → webhook y páginas públicas de Nuvei (sin auth)
+            // Fase 1: solo 'webhook'. Fases posteriores agregan 'pago' y 'linktopay-retorno'.
+            if (($parts[0] ?? '') === 'nuvei') {
+                $controller = 'Nuvei';
+                $sub        = $parts[1] ?? 'webhook';
+                $accionesValidas = ['webhook'];
+                $action = in_array($sub, $accionesValidas, true) ? $this->toCamelCase($sub) : 'webhook';
+            }
+
             // /reservas/{slug}/* → portal público de reserva de citas (sin auth)
             if (($parts[0] ?? '') === 'reservas') {
                 $controller = 'Reservas';

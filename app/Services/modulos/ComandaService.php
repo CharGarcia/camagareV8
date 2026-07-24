@@ -414,6 +414,7 @@ class ComandaService
         if (($comanda['estado'] ?? '') !== 'abierta') {
             throw new Exception('Solo se puede anular una comanda abierta.');
         }
+        $this->rules->validarMotivoAnulacion($this->repository->contarLineas($idComanda, $idEmpresa), $motivo);
 
         $this->db->beginTransaction();
         try {
@@ -471,7 +472,20 @@ class ComandaService
     {
         $grupos = $this->repository->getGruposDeComanda($idComanda, $idEmpresa);
         foreach ($grupos as &$g) {
-            $g['lineas'] = $this->repository->getLineasDelGrupo((int) $g['id'], $idEmpresa);
+            if (($g['tipo_split'] ?? 'items') === 'partes_iguales') {
+                $idGrupoRaiz = (int) ($g['id_grupo_padre'] ?? $g['id']);
+                $numPartes = max(1, (int) ($g['total_partes'] ?? 1));
+                $pool = $this->repository->getLineasDelPoolPartes($idGrupoRaiz, $idEmpresa);
+                // Solo para mostrar el monto de ESTA parte (1/N del pool compartido) — el
+                // cobro real recalcula lo mismo en cobrarGrupo(), esto no lo reemplaza.
+                foreach ($pool as &$l) {
+                    $l['subtotal'] = round(((float) $l['subtotal']) / $numPartes, 2);
+                }
+                unset($l);
+                $g['lineas'] = $pool;
+            } else {
+                $g['lineas'] = $this->repository->getLineasDelGrupo((int) $g['id'], $idEmpresa);
+            }
         }
         unset($g);
         return $grupos;
@@ -534,6 +548,78 @@ class ComandaService
 
             $this->db->commit();
             return $idGrupo;
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Divide la cuenta en N partes iguales: cada línea del "pool" se reparte
+     * proporcionalmente entre las N partes (no una línea completa por parte,
+     * como en crearGrupoCobro) — al cobrar cada parte se genera su propio
+     * documento con el detalle real de productos a 1/N de cantidad, ver
+     * cobrarGrupo(). Retorna los ids de los N grupos creados.
+     */
+    public function crearGruposPartesIguales(int $idComanda, int $idEmpresa, int $idUsuario, array $idsLineas, int $numPartes): array
+    {
+        if ($numPartes < 2) {
+            throw new Exception('Debes dividir entre al menos 2 partes.');
+        }
+        $comanda = $this->repository->find($idComanda, $idEmpresa);
+        $this->rules->validarPuedeModificar($comanda);
+
+        $disponibles = $this->repository->getLineasSinGrupo($idComanda, $idEmpresa);
+        $idsPedidos = array_map('intval', $idsLineas);
+        $idsDisponibles = array_map(fn($l) => (int) $l['id'], $disponibles);
+        foreach ($idsPedidos as $id) {
+            if (!in_array($id, $idsDisponibles, true)) {
+                throw new Exception('Uno de los ítems ya está en otro grupo de cobro o no existe.');
+            }
+        }
+        $lineas = array_values(array_filter($disponibles, fn($l) => in_array((int) $l['id'], $idsPedidos, true)));
+        foreach ($lineas as $l) {
+            $this->rules->validarLineaCobrable($l);
+        }
+        $this->rules->validarLineasParaGrupo($lineas);
+
+        $totalPool = array_sum(array_map(fn($l) => (float) $l['subtotal'], $lineas));
+        $montoParte = round($totalPool / $numPartes, 2);
+
+        $this->db->beginTransaction();
+        try {
+            $ids = array_map(fn($l) => (int) $l['id'], $lineas);
+            $numeroBase = $this->repository->getSiguienteNumeroGrupo($idComanda);
+            $idsGrupos = [];
+            $idGrupoRaiz = null;
+
+            for ($parte = 1; $parte <= $numPartes; $parte++) {
+                $idGrupo = $this->repository->crearGrupoCobro([
+                    'id_empresa'     => $idEmpresa,
+                    'id_comanda'     => $idComanda,
+                    'numero_grupo'   => $numeroBase + $parte - 1,
+                    'etiqueta'       => "Parte {$parte} de {$numPartes}",
+                    'tipo_split'     => 'partes_iguales',
+                    'created_by'     => $idUsuario,
+                    'id_grupo_padre' => $idGrupoRaiz,
+                    'numero_parte'   => $parte,
+                    'total_partes'   => $numPartes,
+                ]);
+                if ($idGrupoRaiz === null) {
+                    $idGrupoRaiz = $idGrupo;
+                }
+                $idsGrupos[] = $idGrupo;
+            }
+
+            $this->repository->agregarLineasAPoolPartes($idGrupoRaiz, $ids);
+
+            $this->logService->registrar(
+                $idUsuario, $idEmpresa, 'CREAR_GRUPOS_PARTES_IGUALES', 'comanda_grupos_cobro', $idGrupoRaiz,
+                null, ['id_comanda' => $idComanda, 'lineas' => $ids, 'num_partes' => $numPartes, 'monto_parte' => $montoParte, 'grupos' => $idsGrupos]
+            );
+
+            $this->db->commit();
+            return $idsGrupos;
         } catch (Throwable $e) {
             if ($this->db->inTransaction()) $this->db->rollBack();
             throw $e;
@@ -721,11 +807,49 @@ class ComandaService
             throw new Exception('Solo se puede deshacer un grupo pendiente de cobro.');
         }
 
+        if (($grupo['tipo_split'] ?? 'items') === 'partes_iguales') {
+            $this->eliminarSplitPartesIguales($grupo, $idEmpresa, $idUsuario);
+            return;
+        }
+
         $this->db->beginTransaction();
         try {
             $this->repository->liberarLineasDelGrupo($idGrupo, $idEmpresa);
             $this->repository->eliminarGrupo($idGrupo, $idEmpresa, $idUsuario);
             $this->logService->registrar($idUsuario, $idEmpresa, 'ELIMINAR_GRUPO_COBRO', 'comanda_grupos_cobro', $idGrupo, $grupo, ['eliminado' => true]);
+            $this->db->commit();
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Deshace una división en partes iguales COMPLETA (todas sus N partes a
+     * la vez) — no tiene sentido borrar una sola parte y dejar el pool
+     * compartido a medias. Si alguna parte ya se cobró, no se puede deshacer
+     * ninguna (el dinero de esa parte ya generó un documento fiscal real).
+     */
+    private function eliminarSplitPartesIguales(array $grupo, int $idEmpresa, int $idUsuario): void
+    {
+        $idGrupoRaiz = (int) ($grupo['id_grupo_padre'] ?? $grupo['id']);
+        $hermanos = $this->repository->getGruposHermanos($idGrupoRaiz, $idEmpresa);
+        foreach ($hermanos as $h) {
+            if (($h['estado'] ?? '') !== 'pendiente') {
+                throw new Exception('No se puede deshacer: ya se cobró al menos una de las partes de esta división.');
+            }
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $this->repository->liberarPoolPartes($idGrupoRaiz);
+            foreach ($hermanos as $h) {
+                $this->repository->eliminarGrupo((int) $h['id'], $idEmpresa, $idUsuario);
+            }
+            $this->logService->registrar(
+                $idUsuario, $idEmpresa, 'ELIMINAR_SPLIT_PARTES_IGUALES', 'comanda_grupos_cobro', $idGrupoRaiz,
+                null, ['grupos' => array_map(fn($h) => (int) $h['id'], $hermanos)]
+            );
             $this->db->commit();
         } catch (Throwable $e) {
             if ($this->db->inTransaction()) $this->db->rollBack();
@@ -756,7 +880,14 @@ class ComandaService
             throw new Exception('Comanda no encontrada.');
         }
 
-        $lineas = $this->repository->getLineasDelGrupo($idGrupo, $idEmpresa);
+        $esPartesIguales = ($grupo['tipo_split'] ?? 'items') === 'partes_iguales';
+        if ($esPartesIguales) {
+            $idGrupoRaiz = (int) ($grupo['id_grupo_padre'] ?? $grupo['id']);
+            $numPartes = max(1, (int) ($grupo['total_partes'] ?? 1));
+            $lineas = $this->repository->getLineasDelPoolPartes($idGrupoRaiz, $idEmpresa);
+        } else {
+            $lineas = $this->repository->getLineasDelGrupo($idGrupo, $idEmpresa);
+        }
         if (empty($lineas)) {
             throw new Exception('El grupo no tiene ítems.');
         }
@@ -774,11 +905,14 @@ class ComandaService
             throw new Exception('No se pudo determinar el punto de emisión de esta comanda (la mesa se abrió sin un turno de caja asociado).');
         }
 
+        // En "partes iguales" cada línea del pool se reparte 1/N entre cada
+        // parte (misma unidad, misma tarifa de IVA) — el precio_unitario no
+        // cambia, así que el subtotal de cada parte queda proporcional.
         $items = array_map(fn($l) => [
             'id_producto'     => (int) $l['id_producto'],
-            'cantidad'        => (float) $l['cantidad'],
+            'cantidad'        => $esPartesIguales ? round((float) $l['cantidad'] / $numPartes, 4) : (float) $l['cantidad'],
             'precio_unitario' => (float) $l['precio_unitario'],
-            'descuento'       => (float) $l['descuento'],
+            'descuento'       => $esPartesIguales ? round((float) $l['descuento'] / $numPartes, 2) : (float) $l['descuento'],
             'descripcion'     => (string) $l['descripcion'],
             'lote'            => (string) ($l['lote'] ?? ''),
             'caducidad'       => (string) ($l['caducidad'] ?? ''),
