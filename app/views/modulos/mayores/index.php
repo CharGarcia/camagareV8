@@ -100,8 +100,14 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
         </form>
     </div>
 
-    <!-- Exportación -->
-    <div class="d-flex justify-content-end bg-light px-3 py-2 border-bottom">
+    <!-- Buscador en pantalla + Exportación -->
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 bg-light px-3 py-2 border-bottom">
+        <div class="position-relative" style="max-width: 320px; width: 100%;">
+            <i class="bi bi-search position-absolute text-muted" style="left: 10px; top: 50%; transform: translateY(-50%); font-size: 0.8rem; pointer-events: none;"></i>
+            <input type="text" class="form-control form-control-sm shadow-none ps-4" id="buscadorMayorTexto"
+                   placeholder="Buscar en el reporte (cuenta, tercero, comprobante, glosa...)"
+                   autocomplete="off" oninput="filtrarMayorEnPantalla()">
+        </div>
         <div class="btn-group btn-group-sm shadow-sm">
             <button type="button" class="btn btn-white border px-3" title="Descargar PDF" onclick="exportar('pdf')">
                 <i class="bi bi-file-earmark-pdf text-danger"></i> PDF
@@ -335,16 +341,19 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
                     <th width="9%" class="text-end">Debe</th>
                     <th width="9%" class="text-end">Haber</th>
                     <th width="10%" class="text-end">Saldo</th>
-                </tr></thead><tbody>`;
+                </tr></thead>`;
 
         data.cuentas.forEach(cuenta => {
+            // Un <tbody> por cuenta (HTML permite varios) para poder mostrar/ocultar el
+            // grupo completo al filtrar con el buscador, sin tocar el <thead>.
+            html += `<tbody class="grupo-cuenta">`;
             html += `<tr class="tr-grupo"><td colspan="8"><i class="bi bi-journal-text me-2"></i> ${cuenta.codigo} - ${cuenta.nombre}</td></tr>`;
 
             cuenta.movimientos.forEach(mov => {
                 const de = parseFloat(mov.debe) || 0;
                 const ha = parseFloat(mov.haber) || 0;
                 const glosa = mov.referencia_detalle || mov.concepto || '';
-                html += `<tr>
+                html += `<tr class="fila-mov">
                     <td class="text-center">${mov.fecha_asiento}</td>
                     <td class="text-center"><a href="#" onclick="event.preventDefault(); ASIENTO_abrirModal(${mov.id_asiento});" class="text-decoration-none fw-bold" title="Ver asiento contable">${mov.numero_comprobante || 'S/N'}</a></td>
                     <td>${mov.documento_referencia || ''}</td>
@@ -363,17 +372,67 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
                         <td class="text-end">${formatMoney(cuenta.saldo_final)}</td>
                     </tr>`;
             html += '<tr><td colspan="8" style="height:12px; border:none;"></td></tr>';
+            html += '</tbody>';
         });
 
-        html += `<tr class="tr-total-general">
+        html += `<tbody><tr class="tr-total-general">
                     <td colspan="5" class="text-end">TOTAL GENERAL</td>
                     <td class="text-end">${formatMoney(data.totales.debe)}</td>
                     <td class="text-end">${formatMoney(data.totales.haber)}</td>
                     <td></td>
-                </tr>`;
+                </tr></tbody>`;
 
-        html += '</tbody></table>';
+        html += '</table>';
         document.getElementById('content-reporte').innerHTML = html;
+
+        // Si ya había texto escrito en el buscador (ej. el usuario generó otro reporte
+        // sin borrar la búsqueda), reaplica el filtro sobre el nuevo contenido.
+        filtrarMayorEnPantalla();
+    }
+
+    // ── Buscador en pantalla: filtra sobre el reporte ya renderizado, sin ir al servidor ──
+    function filtrarMayorEnPantalla() {
+        const inputEl = document.getElementById('buscadorMayorTexto');
+        if (!inputEl) return;
+        const q = inputEl.value.trim().toLowerCase();
+        const grupos = document.querySelectorAll('#content-reporte tbody.grupo-cuenta');
+        let algunGrupoVisible = false;
+
+        grupos.forEach(tbody => {
+            if (!q) {
+                tbody.style.display = '';
+                tbody.querySelectorAll('tr.fila-mov').forEach(tr => { tr.style.display = ''; });
+                algunGrupoVisible = true;
+                return;
+            }
+
+            const nombreCuenta = (tbody.querySelector('tr.tr-grupo')?.textContent || '').toLowerCase();
+            const coincideCuenta = nombreCuenta.includes(q);
+            let algunaFilaVisible = false;
+
+            tbody.querySelectorAll('tr.fila-mov').forEach(tr => {
+                const visible = coincideCuenta || tr.textContent.toLowerCase().includes(q);
+                tr.style.display = visible ? '' : 'none';
+                if (visible) algunaFilaVisible = true;
+            });
+
+            const grupoVisible = coincideCuenta || algunaFilaVisible;
+            tbody.style.display = grupoVisible ? '' : 'none';
+            if (grupoVisible) algunGrupoVisible = true;
+        });
+
+        let msgVacio = document.getElementById('mayorSinResultadosBusqueda');
+        if (q && grupos.length && !algunGrupoVisible) {
+            if (!msgVacio) {
+                msgVacio = document.createElement('p');
+                msgVacio.id = 'mayorSinResultadosBusqueda';
+                msgVacio.className = 'text-muted text-center py-4 small';
+                msgVacio.innerHTML = '<i class="bi bi-search me-1"></i> Ningún movimiento coincide con la búsqueda.';
+                document.getElementById('content-reporte').appendChild(msgVacio);
+            }
+        } else if (msgVacio) {
+            msgVacio.remove();
+        }
     }
 
     function exportar(formato) {

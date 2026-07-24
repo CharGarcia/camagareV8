@@ -115,12 +115,12 @@ class MayoresService
     public function exportarExcel(array $datos, string $empresaNombre, string $rangoFechas): void
     {
         $headers = ['Fecha', 'Comprobante', 'Documento Ref.', 'Tercero', 'Glosa', 'Debe', 'Haber', 'Saldo'];
-        $dataExport = [];
+        $secciones = [];
 
         foreach ($datos['cuentas'] as $cuenta) {
-            $dataExport[] = [$cuenta['codigo'] . ' - ' . $cuenta['nombre'], '', '', '', '', '', '', ''];
+            $filas = [];
             foreach ($cuenta['movimientos'] as $mov) {
-                $dataExport[] = [
+                $filas[] = [
                     $mov['fecha_asiento'],
                     $mov['numero_comprobante'] ?: 'S/N',
                     $mov['documento_referencia'] ?: '',
@@ -131,13 +131,17 @@ class MayoresService
                     $mov['saldo_acumulado'],
                 ];
             }
-            $dataExport[] = ['', '', '', '', 'SUBTOTAL ' . $cuenta['codigo'], $cuenta['subtotal_debe'], $cuenta['subtotal_haber'], $cuenta['saldo_final']];
-            $dataExport[] = ['', '', '', '', '', '', '', ''];
+
+            $secciones[] = [
+                'titulo'  => $cuenta['codigo'] . ' - ' . $cuenta['nombre'],
+                'filas'   => $filas,
+                'resumen' => ['', '', '', '', 'SUBTOTAL ' . $cuenta['codigo'], $cuenta['subtotal_debe'], $cuenta['subtotal_haber'], $cuenta['saldo_final']],
+            ];
         }
 
-        $dataExport[] = ['', '', '', '', 'TOTAL GENERAL', $datos['totales']['debe'], $datos['totales']['haber'], ''];
+        $filaFinal = ['', '', '', '', 'TOTAL GENERAL', $datos['totales']['debe'], $datos['totales']['haber'], ''];
 
-        $this->reportService->exportToExcel('Mayores', $headers, $dataExport, 'Mayores', "{$empresaNombre} - Mayores ({$rangoFechas})");
+        $this->reportService->exportToExcelSeccionado('Mayores', $headers, $secciones, 'Mayores', "{$empresaNombre} - Mayores ({$rangoFechas})", $filaFinal);
     }
 
     public function exportarPdf(array $datos, string $empresaNombre, string $rangoFechas): void
