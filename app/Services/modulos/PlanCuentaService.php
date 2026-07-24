@@ -136,6 +136,124 @@ class PlanCuentaService
         }
     }
 
+    /**
+     * Repara la jerarquía del plan: por cada cuenta activa, garantiza que existan todas
+     * sus cuentas padre (ancestros por prefijo de código). Las que existen pero están
+     * eliminadas lógicamente se restauran; las que no existen se crean.
+     * El nombre del padre se toma del plan modelo si el código coincide; si no, se usa
+     * un nombre provisional ("CUENTA {codigo}") que el usuario puede renombrar luego.
+     * Devuelve ['creadas' => int, 'restauradas' => int, 'detalle' => string[]].
+     */
+    public function repararCuentasFaltantes(int $idEmpresa, int $idUsuario): array
+    {
+        $mapa = $this->repository->getMapaCodigos($idEmpresa);
+
+        // Cuentas activas (las visibles en el árbol): codigo => nombre
+        $activos = [];
+        foreach ($mapa as $codigo => $info) {
+            if (!$info['eliminado']) $activos[$codigo] = $info['nombre'];
+        }
+
+        // Ancestros requeridos por cada cuenta activa (todos los prefijos).
+        // Además, por cada ancestro guardamos el nombre del descendiente más profundo
+        // (normalmente la cuenta de movimiento nivel 5) para usarlo como nombre por defecto.
+        $requeridos = [];  // codigo => nivel
+        $nombreDesc = [];  // codigo ancestro => nombre del descendiente más profundo
+        $profDesc   = [];  // codigo ancestro => profundidad de ese descendiente
+        foreach ($activos as $codigo => $nombre) {
+            $partes = explode('.', $codigo);
+            $prof   = count($partes);
+            for ($i = 1; $i < $prof; $i++) {
+                $anc = implode('.', array_slice($partes, 0, $i));
+                $requeridos[$anc] = $i; // nivel = número de segmentos
+                if (!isset($profDesc[$anc]) || $prof > $profDesc[$anc]) {
+                    $profDesc[$anc]   = $prof;
+                    $nombreDesc[$anc] = $nombre;
+                }
+            }
+        }
+
+        // Ordenar por profundidad (padres primero) y luego por código
+        uksort($requeridos, fn($a, $b) => (strlen($a) <=> strlen($b)) ?: strcmp($a, $b));
+
+        // Lookup de nombres del plan modelo
+        $nombresModelo = [];
+        foreach (self::getCuentasModeloArray() as $m) {
+            $nombresModelo[$m['codigo']] = $m['nombre'];
+        }
+
+        $creadas = 0;
+        $restauradas = 0;
+        $detalle = [];
+
+        $this->repository->beginTransaction();
+        try {
+            foreach ($requeridos as $codigo => $nivel) {
+                // Ya existe y está activa: nada que hacer
+                if (isset($mapa[$codigo]) && !$mapa[$codigo]['eliminado']) {
+                    continue;
+                }
+
+                // Existe pero eliminada: restaurar
+                if (isset($mapa[$codigo]) && $mapa[$codigo]['eliminado']) {
+                    $this->repository->restaurarCuenta($mapa[$codigo]['id'], $idEmpresa, $idUsuario);
+                    $mapa[$codigo]['eliminado'] = false;
+                    $restauradas++;
+                    $detalle[] = $codigo . ' (restaurada)';
+                    continue;
+                }
+
+                // No existe: crear. Nombre por prioridad:
+                //   1) plan modelo (si el código coincide)
+                //   2) nombre de la cuenta descendiente más profunda (nivel 5)
+                //   3) genérico
+                $nombre = $nombresModelo[$codigo]
+                    ?? ($nombreDesc[$codigo] ?? ('CUENTA ' . $codigo));
+                if ($nivel >= 1 && $nivel <= 4) {
+                    $nombre = mb_strtoupper($nombre);
+                }
+
+                $id = $this->repository->create([
+                    'id_empresa'  => $idEmpresa,
+                    'id_usuario'  => $idUsuario,
+                    'codigo'      => $codigo,
+                    'nivel'       => $nivel,
+                    'nombre'      => $nombre,
+                    'codigo_sri'  => '',
+                    'status'      => 1,
+                    'created_by'  => $idUsuario,
+                    'id_centro_costos' => null,
+                    'id_proyecto' => null,
+                    'supercias_esf' => null,
+                    'supercias_eri' => null,
+                    'supercias_ecp_codigo' => null,
+                    'supercias_ecp_subcodigo' => null,
+                ]);
+                $mapa[$codigo] = ['id' => (int) $id, 'eliminado' => false];
+                $creadas++;
+                $detalle[] = $codigo . ' - ' . $nombre;
+            }
+
+            if ($creadas > 0 || $restauradas > 0) {
+                $this->logService->registrar(
+                    $idUsuario,
+                    $idEmpresa,
+                    'REPARAR JERARQUIA',
+                    'plan_cuentas',
+                    null,
+                    null,
+                    ['creadas' => $creadas, 'restauradas' => $restauradas, 'detalle' => $detalle]
+                );
+            }
+
+            $this->repository->commit();
+            return ['creadas' => $creadas, 'restauradas' => $restauradas, 'detalle' => $detalle];
+        } catch (Exception $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+    }
+
     public static function getCuentasModeloArray(): array
     {
         return [

@@ -138,7 +138,12 @@ class ReporteVentasController extends BaseModuloController
         // para poder abrir el panel lateral con su detalle (ver offcanvas_doc_preview).
         $attrs = '';
         if (!in_array($agruparPor, ['CLIENTE', 'PRODUCTO', 'VARIANTE', 'FECHA', 'MES'], true) && !empty($r['id'])) {
-            $tipoDoc = ($tipoDocumento === 'RECIBO') ? 'RECIBO' : 'FACTURA';
+            // En el neto (Facturas − NC) cada fila trae su propio tipo; si no, deriva del filtro.
+            $tipoDoc = $r['_doc_tipo'] ?? match ($tipoDocumento) {
+                'RECIBO'       => 'RECIBO',
+                'NOTA_CREDITO' => 'NOTA_CREDITO',
+                default        => 'FACTURA',
+            };
             $attrs = ' style="cursor:pointer;" title="Clic para ver el detalle"'
                    . ' data-doc-id="' . (int)$r['id'] . '"'
                    . ' data-doc-tipo="' . $tipoDoc . '"'

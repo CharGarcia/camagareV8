@@ -49,6 +49,11 @@ $proyectos  = $proyectos ?? [];
                 <i class="bi bi-magic"></i> Cargar Plan de Cuentas Modelo
             </button>
         <?php endif; ?>
+        <?php if ($perm['crear'] && $conteoTotal > 0): ?>
+            <button type="button" id="btnRepararPlan" class="btn btn-outline-secondary shadow-sm btn-sm px-3" onclick="repararJerarquia()" title="Crea las cuentas padre faltantes (útil tras una migración)">
+                <i class="bi bi-diagram-3"></i> Reparar Jerarquía
+            </button>
+        <?php endif; ?>
         <?php if (!empty($perm['eliminar']) && $conteoTotal > 0): ?>
             <button type="button" id="btnEliminarPlan" class="btn btn-outline-danger shadow-sm btn-sm px-3" onclick="eliminarPlanCompleto()">
                 <i class="bi bi-trash3"></i> Eliminar Plan de Cuentas
@@ -59,6 +64,10 @@ $proyectos  = $proyectos ?? [];
         <div class="input-group input-group-sm" style="width: 250px;">
             <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
             <input type="text" id="buscarPC" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar cuenta..." onkeyup="debounceSearch()">
+        </div>
+        <div class="btn-group btn-group-sm shadow-sm">
+            <button type="button" class="btn btn-white border px-3" title="Desplegar todo" onclick="expandirTodo()"><i class="bi bi-arrows-expand text-secondary"></i></button>
+            <button type="button" class="btn btn-white border px-3" title="Contraer todo" onclick="colapsarTodo()"><i class="bi bi-arrows-collapse text-secondary"></i></button>
         </div>
         <div class="btn-group btn-group-sm shadow-sm">
             <a href="<?= $urlBasePC ?>/export-pdf" class="btn btn-white border px-3" title="Descargar PDF"><i class="bi bi-file-earmark-pdf text-danger"></i></a>
@@ -433,6 +442,41 @@ $proyectos  = $proyectos ?? [];
                 const json = await resp.json();
                 if (json.ok) {
                     Swal.fire('¡Éxito!', json.msg, 'success').then(() => location.reload());
+                } else {
+                    Swal.fire('Error', json.error, 'error');
+                }
+            } catch (e) {
+                Swal.fire('Error', 'Error de conexión', 'error');
+            }
+        };
+
+        window.expandirTodo = function() {
+            document.querySelectorAll('#tree-container .accordion-collapse').forEach(el => el.classList.add('show'));
+            document.querySelectorAll('#tree-container .accordion-button').forEach(btn => btn.classList.remove('collapsed'));
+        };
+
+        window.colapsarTodo = function() {
+            document.querySelectorAll('#tree-container .accordion-collapse').forEach(el => el.classList.remove('show'));
+            document.querySelectorAll('#tree-container .accordion-button').forEach(btn => btn.classList.add('collapsed'));
+        };
+
+        window.repararJerarquia = async function() {
+            const result = await Swal.fire({
+                title: '¿Reparar jerarquía?',
+                html: 'Se crearán las cuentas <b>padre faltantes</b> para las cuentas existentes (útil tras una migración).<br>Las cuentas padre que no coincidan con el plan modelo quedarán con un nombre provisional que podrás editar.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, reparar',
+                cancelButtonText: 'Cancelar'
+            });
+
+            if (!result.isConfirmed) return;
+
+            try {
+                const resp = await fetch(`${urlBase}/repararFaltantesAjax`, { method: 'POST' });
+                const json = await resp.json();
+                if (json.ok) {
+                    Swal.fire('Listo', json.msg, 'success').then(() => location.reload());
                 } else {
                     Swal.fire('Error', json.error, 'error');
                 }

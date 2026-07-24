@@ -37,18 +37,11 @@
                                 <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rc_tipo_comprobante', 'tipo_comprobante') ?>
                             </label>
                             <select name="tipo_comprobante" id="rc_tipo_comprobante" class="form-select form-select-sm shadow-none border">
-                                <option value="">Compras (todas)</option>
-                                <option value="01">01 - Factura</option>
-                                <option value="03">03 - Liquidación de Compra</option>
-                                <option value="04">04 - Nota de Crédito</option>
-                                <option value="05">05 - Nota de Débito</option>
-                                <option value="09">09 - Tiquete de Máquina</option>
+                                <option value="">Todas las compras (NC restan)</option>
                                 <?php foreach (($tiposComprobante ?? []) as $tc): ?>
-                                    <?php if (!in_array($tc['tipo_comprobante'], ['01','03','04','05','09'])): ?>
-                                        <option value="<?= htmlspecialchars($tc['tipo_comprobante']) ?>">
-                                            <?= htmlspecialchars($tc['tipo_comprobante']) ?> - <?= htmlspecialchars($tc['nombre']) ?>
-                                        </option>
-                                    <?php endif; ?>
+                                    <option value="<?= htmlspecialchars($tc['tipo_comprobante']) ?>">
+                                        <?= htmlspecialchars($tc['tipo_comprobante']) ?> - <?= htmlspecialchars($tc['nombre']) ?>
+                                    </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>

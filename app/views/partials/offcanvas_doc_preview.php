@@ -108,6 +108,7 @@
         VENTA:         { url: BASE + '/modulos/factura-venta/getFacturaAjax',        badge: 'FACTURA DE VENTA', sujeto: 'Cliente',   forma: 'cabecera' },
         RECIBO:        { url: BASE + '/modulos/recibo-venta/getFacturaAjax',         badge: 'RECIBO DE VENTA',  sujeto: 'Cliente',   forma: 'cabecera' },
         RECIBO_VENTA:  { url: BASE + '/modulos/recibo-venta/getFacturaAjax',         badge: 'RECIBO DE VENTA',  sujeto: 'Cliente',   forma: 'cabecera' },
+        NOTA_CREDITO:  { url: BASE + '/modulos/notas_credito/getNcAjax',             badge: 'NOTA DE CRÉDITO',  sujeto: 'Cliente',   forma: 'cabecera' },
         COMPRA:        { url: BASE + '/modulos/compras/getCompraAjax',               badge: 'FACTURA DE COMPRA', sujeto: 'Proveedor', forma: 'data' },
         LIQUIDACION:   { url: BASE + '/modulos/liquidacion-compra/getLiquidacionAjax', badge: 'LIQUIDACIÓN',    sujeto: 'Proveedor', forma: 'cabecera' },
         IMPORTACION:   { url: BASE + '/modulos/importaciones/getImportacionAjax',     badge: 'IMPORTACIÓN',     sujeto: 'Proveedor exterior', forma: 'data' }

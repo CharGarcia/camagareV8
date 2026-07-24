@@ -297,6 +297,42 @@ class PlanCuentaRepository extends BaseRepository
         return $st->rowCount();
     }
 
+    /**
+     * Devuelve todas las cuentas de la empresa (activas y eliminadas lógicamente)
+     * como mapa codigo => ['id' => int, 'nombre' => string, 'eliminado' => bool].
+     * Usado para reparar la jerarquía (detectar y restaurar/crear cuentas padre faltantes).
+     */
+    public function getMapaCodigos(int $idEmpresa): array
+    {
+        $sql = "SELECT id, codigo, nombre, eliminado FROM {$this->table} WHERE id_empresa = :id_e";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_e' => $idEmpresa]);
+
+        $mapa = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $mapa[$row['codigo']] = [
+                'id'        => (int) $row['id'],
+                'nombre'    => (string) $row['nombre'],
+                'eliminado' => (bool) $row['eliminado'],
+            ];
+        }
+        return $mapa;
+    }
+
+    /**
+     * Restaura (des-elimina) una cuenta previamente eliminada lógicamente.
+     */
+    public function restaurarCuenta(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $sql = "UPDATE {$this->table} SET
+                    eliminado = false,
+                    updated_by = :id_u,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND id_empresa = :id_e";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $id, ':id_e' => $idEmpresa, ':id_u' => $idUsuario]);
+    }
+
     public function findByCodigo(string $codigo, int $idEmpresa): ?array
     {
         $sql = "SELECT id, codigo, nombre FROM {$this->table} WHERE codigo = :codigo AND id_empresa = :id_empresa AND eliminado = false LIMIT 1";

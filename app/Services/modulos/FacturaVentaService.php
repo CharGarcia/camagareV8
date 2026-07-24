@@ -931,11 +931,30 @@ class FacturaVentaService
             throw new \Exception('Solo se pueden eliminar facturas en estado borrador.');
         }
 
+        // Ingresos asociados: un borrador normal no tiene, pero el POS genera el Ingreso
+        // (cobro de tesorería) en el acto aunque la factura quede en borrador. Al eliminarla
+        // hay que revertirlo, igual que hace anular(); si no hay ninguno, no se hace nada.
+        $ingresoRepo = new \App\repositories\modulos\IngresoRepository();
+        $ingresosAsociados = $ingresoRepo->getIngresosActivosPorFactura($id, $idEmpresa);
+
         $db = Database::getConnection();
         $managedTransaction = !$db->inTransaction();
         if ($managedTransaction) $db->beginTransaction();
 
         try {
+            // Anular por completo los ingresos asociados (ingreso + sus pagos + asiento),
+            // aunque el cobro incluya otras facturas.
+            if (!empty($ingresosAsociados)) {
+                $ingresoService = new \App\Services\modulos\IngresoService(
+                    $ingresoRepo,
+                    new \App\Rules\modulos\IngresoRules(),
+                    $this->logService
+                );
+                foreach ($ingresosAsociados as $ing) {
+                    $ingresoService->anular((int)$ing['id_ingreso'], $idEmpresa, $idUsuario);
+                }
+            }
+
             $this->repository->eliminarLogico($id, $idUsuario);
 
             // Revertir inventario si existiera algo (aunque en borrador no deberÃ­a haber kardex, pero por seguridad)

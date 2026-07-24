@@ -36,6 +36,8 @@
                             <select name="tipo_documento" id="rv_tipo_documento" class="form-select form-select-sm shadow-none border" onchange="window.RV_generarReporte()">
                                 <option value="FACTURA" selected>Facturas de Venta</option>
                                 <option value="RECIBO">Recibos de Venta</option>
+                                <option value="NOTA_CREDITO">Notas de Crédito en Ventas</option>
+                                <option value="FACTURA_MENOS_NC">Facturas de Ventas − NC Ventas</option>
                             </select>
                         </div>
                         

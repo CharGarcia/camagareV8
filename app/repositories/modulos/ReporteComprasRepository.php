@@ -15,6 +15,20 @@ class ReporteComprasRepository extends BaseRepository
     }
 
     /**
+     * Expresión de signo por tipo de comprobante para netear las compras.
+     * Solo en la vista "Todas las compras" (sin filtro de tipo) las Notas de
+     * Crédito de compra (04) RESTAN; si se filtra por un tipo específico, cada
+     * documento se muestra con su valor natural (signo = 1).
+     */
+    private function signoNc(array $filtros): string
+    {
+        if (!empty($filtros['tipo_comprobante'])) {
+            return "1";
+        }
+        return "CASE WHEN c.tipo_comprobante = '04' THEN -1 ELSE 1 END";
+    }
+
+    /**
      * Obtiene los años disponibles con compras registradas para la empresa.
      */
     public function getAniosDisponibles(int $idEmpresa): array
@@ -123,6 +137,7 @@ class ReporteComprasRepository extends BaseRepository
     public function getReporteDetallado(int $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'c');
+        $sgn = $this->signoNc($filtros);
 
         $sql = "
             WITH bases AS (" . $this->getCteBasesImpuestos() . ")
@@ -136,10 +151,10 @@ class ReporteComprasRepository extends BaseRepository
                 COALESCE(ca.comprobante, c.tipo_comprobante) as tipo_comprobante_nombre,
                 COALESCE(usr.nombre, '') as usuario_nombre,
                 COALESCE(c.numero_autorizacion, '') as numero_autorizacion,
-                COALESCE(b.base_0, 0)    as base_0,
-                COALESCE(b.base_iva, 0)  as base_iva,
-                COALESCE(b.valor_iva, 0) as valor_iva,
-                c.importe_total          as total,
+                (COALESCE(b.base_0, 0)    * {$sgn}) as base_0,
+                (COALESCE(b.base_iva, 0)  * {$sgn}) as base_iva,
+                (COALESCE(b.valor_iva, 0) * {$sgn}) as valor_iva,
+                (c.importe_total          * {$sgn}) as total,
                 COALESCE((
                     SELECT SUM(r.total_retenido)
                     FROM retencion_compra_cabecera r
@@ -165,6 +180,7 @@ class ReporteComprasRepository extends BaseRepository
     public function getReporteAgrupadoProveedor(int $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'c');
+        $sgn = $this->signoNc($filtros);
 
         $sql = "
             WITH bases AS (" . $this->getCteBasesImpuestos() . ")
@@ -173,10 +189,10 @@ class ReporteComprasRepository extends BaseRepository
                 p.identificacion  as proveedor_ruc,
                 p.razon_social    as proveedor_nombre,
                 COUNT(c.id) as cantidad_comprobantes,
-                SUM(COALESCE(b.base_0, 0))   as base_0,
-                SUM(COALESCE(b.base_iva, 0)) as base_iva,
-                SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
-                SUM(c.importe_total) as total
+                SUM(COALESCE(b.base_0, 0)   * {$sgn}) as base_0,
+                SUM(COALESCE(b.base_iva, 0) * {$sgn}) as base_iva,
+                SUM(COALESCE(b.valor_iva, 0) * {$sgn}) as valor_iva,
+                SUM(c.importe_total * {$sgn}) as total
             FROM compras_cabecera c
             JOIN proveedores p ON p.id = c.id_proveedor
             LEFT JOIN bases b ON b.id_compra = c.id
@@ -196,6 +212,7 @@ class ReporteComprasRepository extends BaseRepository
     public function getReporteAgrupadoProducto(int $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'c', 'd');
+        $sgn = $this->signoNc($filtros);
 
         $sql = "
             SELECT
@@ -203,11 +220,11 @@ class ReporteComprasRepository extends BaseRepository
                 COALESCE(prod.codigo, '') as producto_codigo,
                 COALESCE(prod.nombre, d.descripcion) as producto_nombre,
                 COALESCE(i.tarifa, 0) as tarifa_iva,
-                SUM(d.cantidad) as cantidad_comprada,
-                SUM(CASE WHEN i.tarifa = 0 THEN i.base_imponible ELSE 0 END) as base_0,
-                SUM(CASE WHEN i.tarifa > 0 THEN i.base_imponible ELSE 0 END) as base_iva,
-                SUM(COALESCE(i.valor, 0)) as valor_iva,
-                SUM(d.precio_total_sin_impuesto + COALESCE(i.valor, 0)) as total
+                SUM(d.cantidad * {$sgn}) as cantidad_comprada,
+                SUM((CASE WHEN i.tarifa = 0 THEN i.base_imponible ELSE 0 END) * {$sgn}) as base_0,
+                SUM((CASE WHEN i.tarifa > 0 THEN i.base_imponible ELSE 0 END) * {$sgn}) as base_iva,
+                SUM(COALESCE(i.valor, 0) * {$sgn}) as valor_iva,
+                SUM((d.precio_total_sin_impuesto + COALESCE(i.valor, 0)) * {$sgn}) as total
             FROM compras_detalle d
             JOIN compras_cabecera c ON c.id = d.id_compra
             LEFT JOIN productos prod ON prod.id = d.id_producto
@@ -228,16 +245,17 @@ class ReporteComprasRepository extends BaseRepository
     public function getReporteAgrupadoFecha(int $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'c');
+        $sgn = $this->signoNc($filtros);
 
         $sql = "
             WITH bases AS (" . $this->getCteBasesImpuestos() . ")
             SELECT
                 c.fecha_emision as fecha,
                 COUNT(c.id) as cantidad_comprobantes,
-                SUM(COALESCE(b.base_0, 0))   as base_0,
-                SUM(COALESCE(b.base_iva, 0)) as base_iva,
-                SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
-                SUM(c.importe_total) as total
+                SUM(COALESCE(b.base_0, 0)   * {$sgn}) as base_0,
+                SUM(COALESCE(b.base_iva, 0) * {$sgn}) as base_iva,
+                SUM(COALESCE(b.valor_iva, 0) * {$sgn}) as valor_iva,
+                SUM(c.importe_total * {$sgn}) as total
             FROM compras_cabecera c
             LEFT JOIN bases b ON b.id_compra = c.id
             WHERE {$where}
@@ -256,16 +274,17 @@ class ReporteComprasRepository extends BaseRepository
     public function getReporteAgrupadoMes(int $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'c');
+        $sgn = $this->signoNc($filtros);
 
         $sql = "
             WITH bases AS (" . $this->getCteBasesImpuestos() . ")
             SELECT
                 TO_CHAR(c.fecha_emision, 'YYYY-MM') as mes,
                 COUNT(c.id) as cantidad_comprobantes,
-                SUM(COALESCE(b.base_0, 0))   as base_0,
-                SUM(COALESCE(b.base_iva, 0)) as base_iva,
-                SUM(COALESCE(b.valor_iva, 0)) as valor_iva,
-                SUM(c.importe_total) as total
+                SUM(COALESCE(b.base_0, 0)   * {$sgn}) as base_0,
+                SUM(COALESCE(b.base_iva, 0) * {$sgn}) as base_iva,
+                SUM(COALESCE(b.valor_iva, 0) * {$sgn}) as valor_iva,
+                SUM(c.importe_total * {$sgn}) as total
             FROM compras_cabecera c
             LEFT JOIN bases b ON b.id_compra = c.id
             WHERE {$where}
@@ -326,14 +345,15 @@ class ReporteComprasRepository extends BaseRepository
     public function getEstadisticas(int $idEmpresa, array $filtros): array
     {
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'c');
+        $sgn = $this->signoNc($filtros);
 
         $sql = "
             WITH bases AS (" . $this->getCteBasesImpuestos() . ")
             SELECT
-                SUM(COALESCE(b.base_0, 0))    as total_base_0,
-                SUM(COALESCE(b.base_iva, 0))  as total_base_iva,
-                SUM(COALESCE(b.valor_iva, 0)) as total_iva,
-                SUM(c.importe_total)           as gran_total,
+                SUM(COALESCE(b.base_0, 0)    * {$sgn}) as total_base_0,
+                SUM(COALESCE(b.base_iva, 0)  * {$sgn}) as total_base_iva,
+                SUM(COALESCE(b.valor_iva, 0) * {$sgn}) as total_iva,
+                SUM(c.importe_total          * {$sgn}) as gran_total,
                 COUNT(c.id)                    as total_documentos
             FROM compras_cabecera c
             LEFT JOIN bases b ON b.id_compra = c.id
@@ -362,6 +382,7 @@ class ReporteComprasRepository extends BaseRepository
                 FROM compras_cabecera c
                 LEFT JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = c.tipo_comprobante
                 WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+                  AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                 ORDER BY c.tipo_comprobante";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':id_empresa' => $idEmpresa]);

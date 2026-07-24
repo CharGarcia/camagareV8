@@ -16,14 +16,20 @@ class ReporteVentasRepository extends BaseRepository
 
     /**
      * Configuración de la fuente de datos según el tipo de documento:
-     * FACTURA (ventas_*) o RECIBO (recibos_venta_*). Las tablas de recibos
-     * son espejo de las de ventas, con FKs distintas y sin retenciones/clave.
+     *  - FACTURA         → ventas_*
+     *  - RECIBO          → recibos_venta_*
+     *  - NOTA_CREDITO    → notas_credito_*  (notas de crédito en ventas)
+     * Todas las tablas son espejo entre sí (FKs distintas). Las notas de crédito
+     * no llevan vendedor ni retenciones.
+     *
+     * El tipo especial FACTURA_MENOS_NC (facturas − notas de crédito) NO tiene
+     * fuente propia: se resuelve combinando FACTURA y NOTA_CREDITO (ver esNeto()).
      */
     private function fuente(array $filtros): array
     {
-        $esRecibo = (($filtros['tipo_documento'] ?? 'FACTURA') === 'RECIBO');
+        $tipo = $filtros['tipo_documento'] ?? 'FACTURA';
 
-        if ($esRecibo) {
+        if ($tipo === 'RECIBO') {
             return [
                 'cab'         => 'recibos_venta_cabecera',
                 'det'         => 'recibos_venta_detalle',
@@ -35,6 +41,23 @@ class ReporteVentasRepository extends BaseRepository
                 'estado_ok'   => "{alias}.estado NOT IN ('borrador', 'anulado')",
                 'retenciones' => false,
                 'clave'       => false,
+                'vendedor'    => true,
+            ];
+        }
+
+        if ($tipo === 'NOTA_CREDITO') {
+            return [
+                'cab'         => 'notas_credito_cabecera',
+                'det'         => 'notas_credito_detalle',
+                'imp'         => 'notas_credito_detalle_impuestos',
+                'adic'        => 'notas_credito_adicional',
+                'fk_det'      => 'id_nota_credito',
+                'fk_imp'      => 'id_nota_credito_detalle',
+                'fk_adic'     => 'id_nota_credito',
+                'estado_ok'   => "{alias}.estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')",
+                'retenciones' => false,
+                'clave'       => true,
+                'vendedor'    => false,   // notas_credito_cabecera no tiene id_vendedor
             ];
         }
 
@@ -49,7 +72,70 @@ class ReporteVentasRepository extends BaseRepository
             'estado_ok'   => "{alias}.estado IN ('autorizado', 'autorizada', 'AUTORIZADO', 'AUTORIZADA')",
             'retenciones' => true,
             'clave'       => true,
+            'vendedor'    => true,
         ];
+    }
+
+    /** ¿El reporte es el neto "Facturas − Notas de crédito"? */
+    private function esNeto(array $filtros): bool
+    {
+        return ($filtros['tipo_documento'] ?? '') === 'FACTURA_MENOS_NC';
+    }
+
+    /**
+     * Combina un método de reporte para FACTURA y NOTA_CREDITO restando la NC.
+     * - $claves: columnas que identifican cada grupo (para agrupados). Si es null,
+     *   es el modo detallado: devuelve facturas (+) seguidas de NC (−).
+     * - $restar: campos monetarios (la NC se resta).
+     * - $sumar:  campos de conteo (se suman ambos: total de documentos).
+     */
+    private function combinarNeto(int $idEmpresa, array $filtros, string $metodo, ?array $claves, array $restar, array $sumar = []): array
+    {
+        $fFac = array_merge($filtros, ['tipo_documento' => 'FACTURA']);
+        $fNc  = array_merge($filtros, ['tipo_documento' => 'NOTA_CREDITO']);
+        $fac  = $this->$metodo($idEmpresa, $fFac);
+        $nc   = $this->$metodo($idEmpresa, $fNc);
+
+        // Modo detallado: mezclar filas, negando montos de las NC.
+        if ($claves === null) {
+            foreach ($fac as &$r) { $r['_doc_tipo'] = 'FACTURA'; }
+            unset($r);
+            foreach ($nc as &$r) {
+                foreach ($restar as $c) { $r[$c] = -(float)($r[$c] ?? 0); }
+                $r['_doc_tipo'] = 'NOTA_CREDITO';
+            }
+            unset($r);
+            $all = array_merge($fac, $nc);
+            usort($all, fn($a, $b) => strcmp((string)($b['fecha_emision'] ?? ''), (string)($a['fecha_emision'] ?? '')));
+            return $all;
+        }
+
+        // Modo agrupado: indexar por clave y restar las NC.
+        $keyOf = function (array $r) use ($claves): string {
+            $k = '';
+            foreach ($claves as $c) { $k .= '|' . ($r[$c] ?? ''); }
+            return $k;
+        };
+
+        $idx = [];
+        foreach ($fac as $r) { $idx[$keyOf($r)] = $r; }
+        foreach ($nc as $r) {
+            $k = $keyOf($r);
+            if (!isset($idx[$k])) {
+                // Grupo que solo tiene NC (sin facturas): partir de esta fila con
+                // montos y conteos en 0 para que el resultado quede en negativo.
+                $base = $r;
+                foreach ($restar as $c) { $base[$c] = 0; }
+                foreach ($sumar  as $c) { $base[$c] = 0; }
+                $idx[$k] = $base;
+            }
+            foreach ($restar as $c) { $idx[$k][$c] = (float)($idx[$k][$c] ?? 0) - (float)($r[$c] ?? 0); }
+            foreach ($sumar  as $c) { $idx[$k][$c] = (float)($idx[$k][$c] ?? 0) + (float)($r[$c] ?? 0); }
+        }
+
+        $out = array_values($idx);
+        usort($out, fn($a, $b) => ((float)($b['total'] ?? 0)) <=> ((float)($a['total'] ?? 0)));
+        return $out;
     }
 
     /**
@@ -180,6 +266,11 @@ class ReporteVentasRepository extends BaseRepository
      */
     public function getReporteDetallado(int $idEmpresa, array $filtros): array
     {
+        if ($this->esNeto($filtros)) {
+            return $this->combinarNeto($idEmpresa, $filtros, 'getReporteDetallado', null,
+                ['base_0', 'base_iva', 'valor_iva', 'total']);
+        }
+
         $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
 
@@ -187,6 +278,9 @@ class ReporteVentasRepository extends BaseRepository
         $reten = $f['retenciones']
             ? "COALESCE((SELECT SUM(r.total_iva + r.total_renta + r.total_isd) FROM retencion_venta_cabecera r WHERE r.id_venta = v.id AND r.eliminado = false), 0)"
             : "0";
+        // Las notas de crédito no tienen id_vendedor: se omite el join.
+        $vendedorSel  = $f['vendedor'] ? "COALESCE(vend.nombre, '')" : "''";
+        $vendedorJoin = $f['vendedor'] ? "LEFT JOIN vendedores vend ON vend.id = v.id_vendedor" : "";
 
         $sql = "
             WITH bases AS (" . $this->getCteBasesImpuestos($f) . ")
@@ -201,7 +295,7 @@ class ReporteVentasRepository extends BaseRepository
                 COALESCE(b.base_iva, 0) as base_iva,
                 COALESCE(b.valor_iva, 0) as valor_iva,
                 v.importe_total          as total,
-                COALESCE(vend.nombre, '')   as vendedor_nombre,
+                {$vendedorSel}              as vendedor_nombre,
                 COALESCE(ucaj.nombre, '')   as cajero_nombre,
                 COALESCE(uusr.nombre, '')   as usuario_nombre,
                 {$clave} as clave_acceso,
@@ -209,7 +303,7 @@ class ReporteVentasRepository extends BaseRepository
             FROM {$f['cab']} v
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN bases b ON b.id_doc = v.id
-            LEFT JOIN vendedores  vend ON vend.id = v.id_vendedor
+            {$vendedorJoin}
             LEFT JOIN usuarios    ucaj ON ucaj.id = v.id_usuario
             LEFT JOIN usuarios    uusr ON uusr.id = v.created_by
             WHERE {$where}
@@ -226,6 +320,11 @@ class ReporteVentasRepository extends BaseRepository
      */
     public function getReporteAgrupadoCliente(int $idEmpresa, array $filtros): array
     {
+        if ($this->esNeto($filtros)) {
+            return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoCliente', ['id_cliente'],
+                ['base_0', 'base_iva', 'valor_iva', 'total'], ['cantidad_facturas']);
+        }
+
         $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
 
@@ -258,6 +357,11 @@ class ReporteVentasRepository extends BaseRepository
      */
     public function getReporteAgrupadoProducto(int $idEmpresa, array $filtros): array
     {
+        if ($this->esNeto($filtros)) {
+            return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoProducto', ['id_producto', 'tarifa_iva'],
+                ['base_0', 'base_iva', 'valor_iva', 'total'], ['cantidad_vendida']);
+        }
+
         $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v', 'd');
 
@@ -294,6 +398,17 @@ class ReporteVentasRepository extends BaseRepository
      */
     public function getReporteAgrupadoVariante(int $idEmpresa, array $filtros): array
     {
+        if ($this->esNeto($filtros)) {
+            return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoVariante', ['id_producto_variante', 'tarifa_iva'],
+                ['base_0', 'base_iva', 'valor_iva', 'total'], ['cantidad_vendida']);
+        }
+
+        // Las notas de crédito no registran variantes (no hay id_producto_variante),
+        // por lo que este agrupado no aplica para ellas.
+        if (($filtros['tipo_documento'] ?? '') === 'NOTA_CREDITO') {
+            return [];
+        }
+
         $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v', 'd');
 
@@ -329,6 +444,11 @@ class ReporteVentasRepository extends BaseRepository
      */
     public function getReporteAgrupadoFecha(int $idEmpresa, array $filtros): array
     {
+        if ($this->esNeto($filtros)) {
+            return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoFecha', ['fecha'],
+                ['base_0', 'base_iva', 'valor_iva', 'total'], ['cantidad_facturas']);
+        }
+
         $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
 
@@ -358,6 +478,11 @@ class ReporteVentasRepository extends BaseRepository
      */
     public function getReporteAgrupadoMes(int $idEmpresa, array $filtros): array
     {
+        if ($this->esNeto($filtros)) {
+            return $this->combinarNeto($idEmpresa, $filtros, 'getReporteAgrupadoMes', ['mes'],
+                ['base_0', 'base_iva', 'valor_iva', 'total'], ['cantidad_facturas']);
+        }
+
         $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
 
@@ -431,6 +556,18 @@ class ReporteVentasRepository extends BaseRepository
      */
     public function getEstadisticas(int $idEmpresa, array $filtros): array
     {
+        if ($this->esNeto($filtros)) {
+            $sf = $this->getEstadisticas($idEmpresa, array_merge($filtros, ['tipo_documento' => 'FACTURA']));
+            $sn = $this->getEstadisticas($idEmpresa, array_merge($filtros, ['tipo_documento' => 'NOTA_CREDITO']));
+            return [
+                'total_base_0'     => $sf['total_base_0']   - $sn['total_base_0'],
+                'total_base_iva'   => $sf['total_base_iva'] - $sn['total_base_iva'],
+                'total_iva'        => $sf['total_iva']      - $sn['total_iva'],
+                'gran_total'       => $sf['gran_total']     - $sn['gran_total'],
+                'total_documentos' => $sf['total_documentos'] + $sn['total_documentos'],
+            ];
+        }
+
         $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v');
 
@@ -462,6 +599,16 @@ class ReporteVentasRepository extends BaseRepository
 
     public function getResumenEstados(int $idEmpresa, array $filtros): array
     {
+        if ($this->esNeto($filtros)) {
+            $rf = $this->getResumenEstados($idEmpresa, array_merge($filtros, ['tipo_documento' => 'FACTURA']));
+            $rn = $this->getResumenEstados($idEmpresa, array_merge($filtros, ['tipo_documento' => 'NOTA_CREDITO']));
+            return [
+                'autorizados' => $rf['autorizados'] + $rn['autorizados'],
+                'anulados'    => $rf['anulados']    + $rn['anulados'],
+                'borradores'  => $rf['borradores']  + $rn['borradores'],
+            ];
+        }
+
         $f = $this->fuente($filtros);
         list($where, $params) = $this->buildWhereYParams($idEmpresa, $filtros, 'v', null, false);
 

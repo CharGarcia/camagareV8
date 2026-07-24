@@ -654,7 +654,19 @@ class AuditoriaContableRepository extends BaseRepository
         return $out;
     }
 
-    /** Más de un asiento vivo para el mismo documento (modulo_origen + id_referencia_origen). */
+    /**
+     * Más de un asiento vivo para el mismo documento (modulo_origen + id_referencia_origen).
+     *
+     * Excluye modulo_origen='migracion': a diferencia de los módulos operativos (que usan un
+     * modulo_origen propio por tabla, donde id_referencia_origen sí identifica un único
+     * documento), TODOS los documentos migrados comparten modulo_origen='migracion', mientras
+     * que id_referencia_origen es el id real de su fila en la tabla nueva de Postgres (que
+     * empieza en 1 en cada tabla: notas_credito_cabecera, retencion_venta_cabecera, etc.).
+     * Agruparlos junto con el resto produce falsos positivos masivos (un documento de una
+     * tabla con id=24 "coincide" con otro de una tabla distinta con id=24). Coherente con el
+     * resto de esta clase, que ya excluye lo migrado de la auditoría/regeneración (ver
+     * sqlExcluirMigrados() y el comentario de $origenes arriba).
+     */
     private function detectarDuplicados(int $idEmpresa, ?string $soloOrigen,
         ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
@@ -678,6 +690,7 @@ class AuditoriaContableRepository extends BaseRepository
                   AND CAST(tipo_ambiente AS VARCHAR(1)) = {$amb}
                   AND modulo_origen IS NOT NULL
                   AND modulo_origen <> 'manual'
+                  AND modulo_origen <> 'migracion'
                   AND id_referencia_origen IS NOT NULL
                   {$filtroOrigen}
                   {$rango}

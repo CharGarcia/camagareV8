@@ -48,10 +48,17 @@ class Application
                 $_SESSION = [];
             }
         } elseif (session_status() === PHP_SESSION_NONE) {
+            $lifetime = (int) ($this->config['session']['lifetime'] ?? 7200);
             session_name($this->config['session']['name'] ?? 'PHPSESSID');
+            // El servidor debe conservar el archivo de sesión al menos tanto como dura la
+            // cookie: sin esto, session.gc_maxlifetime queda en el default del php.ini del
+            // sistema (24 min en muchas instalaciones Ubuntu/Debian), y el propio SO borra
+            // el archivo de sesión por inactividad mucho antes de que la cookie expire,
+            // cerrando la sesión "de pronto" aunque el navegador la crea válida por 2h.
+            ini_set('session.gc_maxlifetime', (string) $lifetime);
             // Cookie path=/ para que funcione cuando BASE_URL está vacío (sitio en raíz)
             session_set_cookie_params([
-                'lifetime' => $this->config['session']['lifetime'] ?? 7200,
+                'lifetime' => $lifetime,
                 'path' => '/',
                 'domain' => '',
                 'secure' => false,

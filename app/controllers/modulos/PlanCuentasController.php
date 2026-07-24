@@ -387,6 +387,34 @@ class PlanCuentasController extends BaseModuloController
         exit;
     }
 
+    public function repararFaltantesAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $r = $this->service->repararCuentasFaltantes($idEmpresa, $idUsuario);
+            $total = $r['creadas'] + $r['restauradas'];
+
+            if ($total === 0) {
+                $msg = 'No se encontraron cuentas padre faltantes; la jerarquía ya está completa.';
+            } else {
+                $msg = "Jerarquía reparada: {$r['creadas']} cuentas creadas";
+                if ($r['restauradas'] > 0) {
+                    $msg .= " y {$r['restauradas']} restauradas";
+                }
+                $msg .= '.';
+            }
+            echo json_encode(['ok' => true, 'msg' => $msg, 'creadas' => $r['creadas'], 'restauradas' => $r['restauradas']]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function eliminarPlanAjax(): void
     {
         $this->requireEliminar();

@@ -134,35 +134,53 @@ class AsientoContableRepository
     {
         $tipoComprobante = strtolower(trim($tipoComprobante));
         $prefijos = [
-            'diario'              => 'DI',
-            'apertura'            => 'AP',
-            'cierre'              => 'CI',
-            'adquisiciones'       => 'AD',
-            'egresos'             => 'EG',
-            'ingresos'            => 'IN',
-            'ventas'              => 'VE',
-            'retenciones_ventas'  => 'RV',
-            'retenciones_compras' => 'RC',
-            'nomina'              => 'NO',
-            'consignacion'        => 'CV',
+            'diario'               => 'DI',
+            'apertura'             => 'AP',
+            'cierre'               => 'CI',
+            'adquisiciones'        => 'AD', // valor histórico sin uso: los Services reales graban tipo_comprobante='compras'
+            'compras'              => 'CO',
+            'egresos'              => 'EG',
+            'ingresos'             => 'IN',
+            'ventas'               => 'VE',
+            'retenciones_ventas'   => 'RV', // sin uso hoy: retenciones de venta graban tipo_comprobante='ventas'
+            'retenciones_compras'  => 'RC', // sin uso hoy: retenciones de compra graban tipo_comprobante='compras'
+            'nomina'               => 'NO',
+            'consignacion'         => 'CV',
+            'retorno_consignacion' => 'RT',
+            'cambio_producto'      => 'CP',
+            'declaracion_retenciones' => 'DR',
+            'declaracion_iva'      => 'DV',
+            'importaciones'        => 'IM',
+            'traspasos'            => 'TR',
         ];
+        // Sin esto, cualquier tipo_comprobante no listado cae en 'DI' y comparte numeración
+        // con el diario real: dos documentos de tipos distintos pueden terminar con el MISMO
+        // numero_comprobante (ej. una Compra y un asiento de diario, ambos "DI-000003").
         $prefijo = $prefijos[$tipoComprobante] ?? 'DI';
 
-        $sql = "SELECT numero_comprobante FROM asientos_contables_cabecera 
-                WHERE id_empresa = :id_empresa AND tipo_comprobante = :tipo
-                ORDER BY id DESC LIMIT 1";
+        // Filtra por el PREFIJO resuelto (no por tipo_comprobante crudo) y exige el formato
+        // exacto "PREFIJO-NNNNNN". Antes tomaba "ORDER BY id DESC LIMIT 1" sin exigir formato:
+        // si el último id de ese tipo_comprobante resultaba ser un código heredado de la
+        // migración desde MySQL (ej. 'NCV2672', sin guion en esa posición), el parseo fallaba
+        // silenciosamente y el contador volvía a 1, repitiendo números ya usados (ej. 'VE-000001'
+        // otra vez para una factura nueva, chocando con una factura real de meses atrás).
+        $sql = "SELECT numero_comprobante FROM asientos_contables_cabecera
+                WHERE id_empresa = :id_empresa
+                  AND numero_comprobante ~ :patron
+                ORDER BY (SPLIT_PART(numero_comprobante, '-', 2))::int DESC
+                LIMIT 1";
         $pdo = \App\core\Database::getConnection();
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([':id_empresa' => $idEmpresa, ':tipo' => $tipoComprobante]);
+        $stmt->execute([
+            ':id_empresa' => $idEmpresa,
+            ':patron'     => '^' . $prefijo . '-[0-9]+$',
+        ]);
         $ultimo = $stmt->fetchColumn();
 
         $siguiente = 1;
         if ($ultimo) {
-            // Asume formato PREFIJO-0000001
             $partes = explode('-', $ultimo);
-            if (count($partes) === 2) {
-                $siguiente = (int)$partes[1] + 1;
-            }
+            $siguiente = (int)end($partes) + 1;
         }
 
         return $prefijo . '-' . str_pad((string)$siguiente, 6, '0', STR_PAD_LEFT);
