@@ -779,9 +779,14 @@ class FacturaVentaService
 
         // Generar asiento contable FUERA de la transacciÃ³n principal
         // para que un fallo en el asiento nunca revierta la factura ya guardada.
+        // Solo facturas 'autorizado' se contabilizan (igual que actualizar(), lÃ­nea ~552):
+        // un borrador no debe generar un asiento activo, o queda huÃ©rfano si el borrador
+        // se descarta despuÃ©s (eliminar() no anula asientos por diseÃ±o de los borradores).
         $this->lastAsientoWarning = null;
         try {
-            $this->procesarAsientoContable($idVenta, $data, $numFactura);
+            if (($data['estado'] ?? 'borrador') === 'autorizado') {
+                $this->procesarAsientoContable($idVenta, $data, $numFactura);
+            }
         } catch (\Throwable $eAsiento) {
             error_log("[FacturaVenta] Asiento no generado para factura $idVenta: " . $eAsiento->getMessage());
             $this->lastAsientoWarning = $eAsiento->getMessage();
@@ -952,6 +957,26 @@ class FacturaVentaService
                 );
                 foreach ($ingresosAsociados as $ing) {
                     $ingresoService->anular((int)$ing['id_ingreso'], $idEmpresa, $idUsuario);
+                }
+            }
+
+            // Anular el asiento contable de la factura si existe (mismo patrón que anular(),
+            // línea ~870): un borrador no debería tener asiento activo tras el fix en crear(),
+            // pero esto cierra el hueco para cualquier borrador que ya lo tenga (datos previos
+            // al fix, o generado por otro flujo como la sincronización).
+            $idAsiento = (int)($cabecera['id_asiento_contable'] ?? 0);
+            if ($idAsiento > 0) {
+                $asientoService = new \App\Services\modulos\AsientoContableService(
+                    new \App\repositories\modulos\AsientoContableRepository(),
+                    new \App\Rules\modulos\AsientoContableRules(),
+                    $this->logService
+                );
+                try {
+                    $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
+                } catch (\Throwable $eA) {
+                    if (stripos($eA->getMessage(), 'ya se encuentra anulado') === false) {
+                        throw $eA;
+                    }
                 }
             }
 
