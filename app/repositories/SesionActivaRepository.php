@@ -38,12 +38,18 @@ class SesionActivaRepository
     }
 
     /**
-     * Obtiene la sesión activa de un usuario para un canal (si existe).
+     * Obtiene la sesión activa "vigente" de un usuario para un canal (si existe).
+     * Solo cuenta como activa si tuvo actividad dentro de $maxMinutos: una sesión
+     * marcada activa=TRUE pero con última actividad más vieja que eso es una sesión
+     * que murió sin logout explícito (navegador cerrado, PC apagada, expiró sola) y
+     * no debe bloquear un nuevo login con el aviso de "sesión activa en otro lado".
      */
-    public function obtenerSesionActiva(int $idUsuario, string $canal = 'web'): ?array
+    public function obtenerSesionActiva(int $idUsuario, string $canal = 'web', int $maxMinutos = 120): ?array
     {
+        $maxMinutos = max(1, $maxMinutos);
         $sql = "SELECT * FROM sesiones_activas
                 WHERE id_usuario = :id_usuario AND activa = TRUE AND canal = :canal
+                  AND ultima_actividad > NOW() - INTERVAL '{$maxMinutos} minutes'
                 ORDER BY ultima_actividad DESC
                 LIMIT 1";
         $st = $this->db->prepare($sql);

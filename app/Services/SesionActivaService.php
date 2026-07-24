@@ -20,12 +20,15 @@ class SesionActivaService
     }
 
     /**
-     * Verifica si el usuario ya tiene una sesión activa en el canal indicado.
-     * Retorna la sesión activa o null.
+     * Verifica si el usuario ya tiene una sesión activa vigente en el canal indicado
+     * (con actividad dentro del tiempo de vida configurado de la sesión). Retorna la
+     * sesión activa o null.
      */
     public function obtenerSesionActiva(int $idUsuario, string $canal = 'web'): ?array
     {
-        return $this->repo->obtenerSesionActiva($idUsuario, $canal);
+        $config = require MVC_CONFIG . '/app.php';
+        $maxMinutos = (int) ceil((int) ($config['session']['lifetime'] ?? 7200) / 60);
+        return $this->repo->obtenerSesionActiva($idUsuario, $canal, $maxMinutos);
     }
 
     /**
