@@ -161,6 +161,7 @@ class PlanCuentaService
         $nombreDesc = [];  // codigo ancestro => nombre del descendiente más profundo
         $profDesc   = [];  // codigo ancestro => profundidad de ese descendiente
         foreach ($activos as $codigo => $nombre) {
+            $codigo = (string) $codigo; // claves numéricas ("1") vuelven int en PHP
             $partes = explode('.', $codigo);
             $prof   = count($partes);
             for ($i = 1; $i < $prof; $i++) {
@@ -189,6 +190,7 @@ class PlanCuentaService
         $this->repository->beginTransaction();
         try {
             foreach ($requeridos as $codigo => $nivel) {
+                $codigo = (string) $codigo; // claves numéricas ("1") vuelven int en PHP
                 // Ya existe y está activa: nada que hacer
                 if (isset($mapa[$codigo]) && !$mapa[$codigo]['eliminado']) {
                     continue;
