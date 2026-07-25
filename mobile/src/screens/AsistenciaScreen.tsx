@@ -44,6 +44,8 @@ export default function AsistenciaScreen() {
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [procesando, setProcesando] = useState(false);
   const [tokenManual, setTokenManual] = useState('');
+  const [tokenPuntoManual, setTokenPuntoManual] = useState('');
+  const [mostrarManualPunto, setMostrarManualPunto] = useState(false);
   const [errorVincular, setErrorVincular] = useState<string | null>(null);
 
   const [permiso, solicitarPermiso] = useCameraPermissions();
@@ -143,6 +145,14 @@ export default function AsistenciaScreen() {
     if (!t) return;
     setTokenManual('');
     procesarTokenEmpleado(t);
+  }
+
+  function guardarTokenPuntoManual() {
+    const t = tokenPuntoManual.trim();
+    if (!t) return;
+    setTokenPuntoManual('');
+    setMostrarManualPunto(false);
+    procesarTokenPunto(t);
   }
 
   async function cambiarCredencial() {
@@ -260,6 +270,27 @@ export default function AsistenciaScreen() {
           <TouchableOpacity style={styles.botonPrimario} onPress={() => abrirEscaneo('punto')} disabled={procesando}>
             {procesando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonPrimarioTexto}>Escanear punto de servicio</Text>}
           </TouchableOpacity>
+
+          {mostrarManualPunto ? (
+            <View style={{ width: '100%', marginTop: 14 }}>
+              <TextInput
+                style={styles.input}
+                value={tokenPuntoManual}
+                onChangeText={setTokenPuntoManual}
+                placeholder="PT-..."
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity style={styles.botonSecundario} onPress={guardarTokenPuntoManual} disabled={procesando || !tokenPuntoManual.trim()}>
+                {procesando ? <ActivityIndicator color="#0d6efd" /> : <Text style={styles.botonSecundarioTexto}>Ingresar</Text>}
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={{ marginTop: 14 }} onPress={() => setMostrarManualPunto(true)}>
+              <Text style={styles.volver}>¿No puedes escanear? Ingresa el código a mano</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity style={{ marginTop: 20 }} onPress={cambiarCredencial}>
             <Text style={styles.volver}>Cambiar credencial</Text>
           </TouchableOpacity>

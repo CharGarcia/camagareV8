@@ -11,6 +11,24 @@ foreach ($empresas as $e) {
     }
 }
 $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - ' . (!empty($empresaSel['nombre_comercial']) ? $empresaSel['nombre_comercial'] : $empresaSel['nombre'])) : '';
+
+// Ruta MVC de la pantalla actual (p. ej. 'modulos/clientes' o 'config/permisos-modulos').
+// Sirve para la AYUDA CONTEXTUAL: el botón del manual abre directamente el
+// artículo del módulo en el que está el usuario. Se calcula aquí, una sola vez,
+// para no tener que tocar las vistas de cada módulo.
+$rutaActualAyuda = '';
+$uriAyuda = (string) (parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '');
+$baseAyuda = rtrim((string) (parse_url((string) $base, PHP_URL_PATH) ?? ''), '/');
+if ($baseAyuda !== '' && str_starts_with($uriAyuda, $baseAyuda)) {
+    $uriAyuda = substr($uriAyuda, strlen($baseAyuda));
+}
+$partesAyuda = array_values(array_filter(explode('/', trim($uriAyuda, '/')), static fn($p) => $p !== ''));
+if (($partesAyuda[0] ?? '') === 'modulos' && !empty($partesAyuda[1])) {
+    $rutaActualAyuda = 'modulos/' . $partesAyuda[1];
+} elseif (($partesAyuda[0] ?? '') === 'config' && !empty($partesAyuda[1])) {
+    $rutaActualAyuda = 'config/' . $partesAyuda[1];
+}
+$urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . urlencode($rutaActualAyuda) : '');
 ?>
 <script>
     window.CMS_CONFIG = {
@@ -362,9 +380,20 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                 <i class="bi bi-cash-coin"></i>
             </a>
             <?php endif; ?>
+            <?php if (\App\Helpers\Permisos::puedeVer('modulos/mesas')): ?>
+            <a href="<?= $base ?>/modulos/mesas/tablero" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Restaurante"
+               target="_blank" rel="noopener">
+                <i class="fa-solid fa-utensils"></i>
+            </a>
+            <?php endif; ?>
+            <a href="<?= htmlspecialchars($urlManual) ?>" class="btn btn-outline-light btn-sm cmg-navbar-btn"
+               title="Manual del sistema<?= $rutaActualAyuda !== '' ? ' (ayuda de esta pantalla)' : '' ?>"
+               target="_blank" rel="noopener">
+                <i class="bi bi-journal-bookmark-fill"></i>
+            </a>
             <a href="<?= $base ?>/videos-ayuda" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Videos de ayuda"
                target="_blank" rel="noopener">
-                <i class="bi bi-question-circle-fill"></i>
+                <i class="bi bi-play-btn-fill"></i>
             </a>
             <a href="<?= $base ?>/config" class="btn btn-outline-light btn-sm cmg-navbar-btn" title="Configuración">
                 <i class="bi bi-gear-fill"></i>
@@ -508,9 +537,19 @@ $valorInicial = $empresaSel ? (($empresaSel['establecimiento'] ?? '001') . ' - '
                     <i class="bi bi-cash-coin me-1"></i>Punto de Venta
                 </a>
                 <?php endif; ?>
+                <?php if (\App\Helpers\Permisos::puedeVer('modulos/mesas')): ?>
+                <a href="<?= $base ?>/modulos/mesas/tablero" class="btn btn-outline-primary btn-sm flex-grow-1"
+                   target="_blank" rel="noopener">
+                    <i class="fa-solid fa-utensils me-1"></i>Restaurante
+                </a>
+                <?php endif; ?>
+                <a href="<?= htmlspecialchars($urlManual) ?>" class="btn btn-outline-primary btn-sm flex-grow-1"
+                   target="_blank" rel="noopener">
+                    <i class="bi bi-journal-bookmark-fill me-1"></i>Manual
+                </a>
                 <a href="<?= $base ?>/videos-ayuda" class="btn btn-outline-primary btn-sm flex-grow-1"
                    target="_blank" rel="noopener">
-                    <i class="bi bi-question-circle-fill me-1"></i>Ayuda
+                    <i class="bi bi-play-btn-fill me-1"></i>Videos
                 </a>
                 <a href="<?= $base ?>/config" class="btn btn-outline-secondary btn-sm flex-grow-1">
                     <i class="bi bi-gear-fill me-1"></i>Ajustes

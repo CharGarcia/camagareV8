@@ -34,6 +34,47 @@ class ModuloSubmodulo extends BaseModel
     }
 
     /**
+     * Submódulos activos con ruta, junto al nombre del módulo al que pertenecen.
+     *
+     * Lo usa el Doctor del Manual del Sistema para saber qué pantallas existen y
+     * cuáles no tienen documentación. Soporta las dos variantes de esquema
+     * (columna id o id_modulo/id_submodulo) igual que el resto del modelo.
+     *
+     * @return array<int,array{ruta:string,nombre_submodulo:string,nombre_modulo:?string}>
+     */
+    public function getRutasConNombre(): array
+    {
+        $filtro = "sm.ruta IS NOT NULL AND sm.ruta <> '' AND COALESCE(sm.status, 1) = 1";
+        $orden  = "ORDER BY mm.nombre_modulo ASC, sm.nombre_submodulo ASC";
+
+        $queries = [
+            "SELECT sm.ruta, sm.nombre_submodulo, mm.nombre_modulo
+               FROM submodulos_menu sm INNER JOIN modulos_menu mm ON mm.id = sm.id_modulo
+              WHERE {$filtro} {$orden}",
+            "SELECT sm.ruta, sm.nombre_submodulo, mm.nombre_modulo
+               FROM submodulos_menu sm INNER JOIN modulos_menu mm ON mm.id_modulo = sm.id_modulo
+              WHERE {$filtro} {$orden}",
+            // Último recurso: sin el nombre del módulo padre.
+            "SELECT sm.ruta, sm.nombre_submodulo, NULL AS nombre_modulo
+               FROM submodulos_menu sm
+              WHERE {$filtro} ORDER BY sm.nombre_submodulo ASC",
+        ];
+
+        foreach ($queries as $sql) {
+            try {
+                $rows = $this->query($sql);
+                if (!empty($rows)) {
+                    return $rows;
+                }
+            } catch (\Throwable $e) {
+                continue;
+            }
+        }
+
+        return [];
+    }
+
+    /**
      * Lista de módulos con paginación y búsqueda.
      * Usa LEFT JOIN para incluir todos los módulos aunque no tengan icono asignado.
      */

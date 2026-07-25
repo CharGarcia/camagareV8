@@ -4,6 +4,12 @@
     const BASE = window.IA_SOPORTE_URL;
     const PERM = window.IA_SOPORTE_PERM || {};
 
+    // Raíz del sistema, para enlazar las fuentes que vienen del Manual.
+    // IA_SOPORTE_URL apunta al módulo (…/modulos/ia-soporte), no a la raíz.
+    const MANUAL_URL = (window.CMS_CONFIG && window.CMS_CONFIG.baseUrl)
+        ? window.CMS_CONFIG.baseUrl + '/documentacion'
+        : String(BASE || '').replace(/\/modulos\/[^/]*$/, '') + '/documentacion';
+
     let conversacionActualId = null;
     let pollDocumentosTimer = null;
     let agentesCache = [];
@@ -264,14 +270,31 @@
         const fuentesHtml = tieneFuentes
             ? '<div class="ia-soporte-fuentes"><i class="bi bi-bookmark"></i> Fuentes (clic para ver el texto exacto):</div>'
               + '<div class="ia-fuentes-lista">'
-              + m.fuentes.map((f) => `
+              + m.fuentes.map((f) => {
+                    // Fuentes del Manual del Sistema: abren el artículo en el
+                    // manual. Los mensajes antiguos no traen "tipo" y siguen
+                    // tratándose como documentos cargados por la empresa.
+                    if (f.tipo === 'manual') {
+                        const destino = MANUAL_URL + '?slug=' + encodeURIComponent(f.slug || '')
+                            + (f.ancla ? '&ancla=' + encodeURIComponent(f.ancla) : '');
+                        const donde = f.seccion ? escapeHtml(f.titulo) + ' › ' + escapeHtml(f.seccion) : escapeHtml(f.titulo);
+                        return `
+                    <div class="ia-fuente-item">
+                        <a class="ia-fuente-chip" href="${destino}" target="_blank" rel="noopener">
+                            <i class="bi bi-journal-bookmark-fill"></i> ${donde} <span class="text-muted">(manual)</span>
+                        </a>
+                    </div>
+                `;
+                    }
+                    return `
                     <div class="ia-fuente-item">
                         <button type="button" class="ia-fuente-chip" data-id-documento="${f.id_documento}" data-chunk-index="${f.chunk_index}">
                             <i class="bi bi-chevron-right"></i> ${escapeHtml(f.titulo)}${f.pagina ? ' (pág. ' + f.pagina + ')' : ''}
                         </button>
                         <div class="ia-fuente-texto d-none"></div>
                     </div>
-                `).join('')
+                `;
+                }).join('')
               + '</div>'
             : '';
         const avisoHtml = sinContexto

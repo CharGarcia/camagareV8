@@ -47,7 +47,7 @@ $esSuperadmin = !empty($esSuperadmin);
     <!-- Encabezado -->
     <div class="va-header d-flex align-items-center justify-content-between gap-2 px-3 py-2 bg-primary text-white shadow-sm">
         <div class="d-flex align-items-center gap-2">
-            <i class="bi bi-question-circle-fill fs-4"></i>
+            <i class="bi bi-play-btn-fill fs-4"></i>
             <div>
                 <div class="fw-semibold lh-1"><?= htmlspecialchars($titulo) ?></div>
                 <small class="text-white-50">Videos de ayuda del sistema</small>

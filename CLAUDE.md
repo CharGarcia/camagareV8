@@ -225,6 +225,7 @@ Todo módulo nuevo debe contemplar desde el diseño: **multiempresa, permisos, a
 8. **JS** en `public/js/modulos/{nombre}.js`.
 9. **Registrar la ruta** en `config/modulos_mvc.php` con `id_submodulo` y `legacy_rutas` (ese archivo documenta el procedimiento exacto).
 10. **Menú y permisos** (BD): registrar/actualizar el submódulo en `submodulos_menu` (campo `ruta` = ruta MVC, p. ej. `modulos/productos`) y asignar permisos en `modulos_asignados`. Verificar en `/config/permisos-modulos`.
+11. **Documentar el módulo** en `docs/manual/modulos/{ruta-mvc}.md` siguiendo `docs/manual/_PLANTILLA.md`. **Sin ese archivo el módulo no está terminado** (ver §12).
 
 ---
 
@@ -232,3 +233,37 @@ Todo módulo nuevo debe contemplar desde el diseño: **multiempresa, permisos, a
 
 - **Responder siempre en español.**
 - **Nunca** usar herramientas de simulación de pantalla ni agentes de navegación (browser_subagent, etc.) para comprobar o validar, bajo ninguna circunstancia.
+
+---
+
+## 12. Documentación obligatoria (Manual del Sistema)
+
+El manual que leen los usuarios vive en **`/documentacion`** y su contenido son
+**archivos Markdown del repositorio**, en `docs/manual/`. La documentación es
+parte del entregable, no un extra posterior.
+
+**Regla:** todo módulo nuevo, y todo cambio que altere lo que el usuario ve o
+hace, incluye su archivo `.md` **en el mismo cambio que el código**. Un módulo
+sin `.md` no está terminado.
+
+- **Dónde**: la ruta del archivo es la dirección del artículo.
+  `docs/manual/modulos/clientes.md` → `modulos/clientes`. Carpetas: `modulos/`,
+  `config/`, `guias/` (procesos que cruzan módulos) y `conceptos/`.
+- **Cómo**: copiar `docs/manual/_PLANTILLA.md` y respetar sus secciones (qué es,
+  requisitos, cómo se usa, campos, permisos, reglas de negocio, integraciones,
+  errores frecuentes, historial de cambios).
+- **Al modificar un módulo ya documentado**: actualizar las secciones afectadas y
+  añadir una línea al *Historial de cambios* con la nueva versión.
+- **Publicación**: `git pull` en el servidor y luego el botón **Sincronizar** de
+  `/documentacion/gestion` (solo nivel 3). El sincronizador cruza por `slug`,
+  detecta cambios por hash y **nunca sobrescribe** los artículos escritos desde
+  la pantalla (`origen = 'manual'`).
+- **Configuración**: los artículos bajo `config/` se fuerzan automáticamente a
+  `visibilidad = 'superadmin'` por su ruta. No depende de marcarlo a mano.
+- **Formato**: Markdown acotado (`App\lib\MarkdownSimple`): encabezados
+  `##`/`###`/`####`, listas, tablas, citas, bloques de código, énfasis y
+  enlaces. El HTML crudo se escapa y se ve como texto.
+- Cada `##` se indexa por separado y el buscador lleva directo a esa sección:
+  los títulos deben decir de qué tratan. Las **etiquetas** del front-matter pesan
+  igual que el título, así que deben incluir los sinónimos que usaría alguien
+  que no conoce el sistema.
