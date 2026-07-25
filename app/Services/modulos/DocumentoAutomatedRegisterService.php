@@ -1658,9 +1658,11 @@ class DocumentoAutomatedRegisterService
             
             // 1. Consultar el proveedor y su configuración de pagos y retenciones
             $stProv = $db->prepare("
-                SELECT id_forma_pago_predeterminada, tipo_operacion_bancaria_predeterminada, monto_maximo_auto_pago,
+                SELECT id_forma_pago_predeterminada, tipo_operacion_bancaria_predeterminada,
+                       monto_minimo_auto_pago, monto_maximo_auto_pago,
+                       plazo, unidad_tiempo,
                        id_retencion_renta, id_retencion_iva, id_egreso_concepto_predeterminado
-                FROM proveedores 
+                FROM proveedores
                 WHERE id = ? AND id_empresa = ? LIMIT 1
             ");
             $stProv->execute([$idProv, $idEmpresa]);
@@ -1708,14 +1710,18 @@ class DocumentoAutomatedRegisterService
             }
             
             $idFormaPago = (int) $prov['id_forma_pago_predeterminada'];
+            $montoMinimo = !empty($prov['monto_minimo_auto_pago']) ? (float)$prov['monto_minimo_auto_pago'] : null;
             $montoMaximo = !empty($prov['monto_maximo_auto_pago']) ? (float)$prov['monto_maximo_auto_pago'] : null;
             $tipoOp = !empty($prov['tipo_operacion_bancaria_predeterminada']) ? $prov['tipo_operacion_bancaria_predeterminada'] : null;
-            
-            // 2. Comprobar el límite máximo para auto-generar (si es cero o nulo, no hay restricción)
+
+            // 2. Comprobar el rango configurado para auto-generar (cero o nulo = sin restricción)
+            if ($montoMinimo !== null && $montoMinimo > 0.001 && $totalCompra < ($montoMinimo - 0.001)) {
+                return " | Pago omitido ($" . number_format($totalCompra, 2) . " no alcanza el mínimo de $" . number_format($montoMinimo, 2) . ").";
+            }
             if ($montoMaximo !== null && $montoMaximo > 0.001 && $totalCompra > ($montoMaximo + 0.001)) {
                 return " | Pago omitido ($" . number_format($totalCompra, 2) . " supera límite de $" . number_format($montoMaximo, 2) . ").";
             }
-            
+
             // 3. Localizar el primer punto de emisión y establecimiento activo de la empresa
             $stPto = $db->prepare("
                 SELECT pe.id AS id_punto, pe.codigo_punto AS punto, es.id AS id_estab, es.codigo AS estab
@@ -1754,7 +1760,25 @@ class DocumentoAutomatedRegisterService
             $egresoService = new \App\Services\modulos\EgresoService($egresoRepo, $egresoRules, $logService);
             
             $fechaHoy = date('Y-m-d');
-            
+
+            // 5.b Cheque: numeración correlativa automática y fecha de cobro diferida
+            //     por los días de crédito del proveedor (fecha de emisión + plazo).
+            $numeroCheque = null;
+            $fechaCobro   = $fechaEmisionDoc;
+
+            if ($tipoOp === 'CHEQUE') {
+                $ultimoCheque = $egresoRepo->getUltimoNumeroCheque($idFormaPago);
+                $numeroCheque = \App\Helpers\NumeroCheque::siguiente($ultimoCheque);
+                if ($numeroCheque === '') {
+                    return " | Pago automático omitido: No hay un número de cheque previo correlativo para la forma de pago; regístrelo manualmente.";
+                }
+                $fechaCobro = $this->calcularFechaCobroCredito(
+                    $fechaEmisionDoc,
+                    (int) ($prov['plazo'] ?? 0),
+                    (string) ($prov['unidad_tiempo'] ?? 'DIAS')
+                );
+            }
+
             // 6. Ensamblado del payload estandarizado del Egreso
             $dataEgreso = [
                 'id_empresa'         => $idEmpresa,
@@ -1790,20 +1814,43 @@ class DocumentoAutomatedRegisterService
                         'id_forma_pago'           => $idFormaPago,
                         'monto'                   => $totalCompra,
                         'tipo_operacion_bancaria' => $tipoOp,
-                        'fecha_cobro'             => $fechaEmisionDoc
+                        'numero_cheque'           => $numeroCheque,
+                        'fecha_cobro'             => $fechaCobro
                     ]
                 ]
             ];
-            
+
             // 7. Registrar el egreso ejecutando todas las validaciones de negocio
             $idEgreso = $egresoService->registrar($dataEgreso);
-            
-            return " | Pago automático generado: " . $numeroEgreso . ".";
-            
+
+            $sufijoCheque = $numeroCheque !== null ? " (cheque #{$numeroCheque}, cobro {$fechaCobro})" : "";
+            return " | Pago automático generado: " . $numeroEgreso . $sufijoCheque . ".";
+
         } catch (\Throwable $e) {
             // Interceptamos la excepción para NO detener el registro de la compra si falla el egreso.
             // El error quedará documentado visualmente en el historial del log SRI.
             return " | Fallo al generar Pago automático: " . $e->getMessage();
         }
+    }
+
+    /**
+     * Fecha de cobro del cheque = fecha de emisión del documento + días de crédito
+     * del proveedor. Respeta la unidad de tiempo configurada (días, meses o años).
+     */
+    private function calcularFechaCobroCredito(string $fechaEmision, int $plazo, string $unidadTiempo): string
+    {
+        if ($plazo <= 0) {
+            return $fechaEmision;
+        }
+
+        $unidad = strtoupper(trim($unidadTiempo));
+        $intervalo = match ($unidad) {
+            'MESES', 'MES'          => "+{$plazo} months",
+            'ANOS', 'AÑOS', 'ANIOS' => "+{$plazo} years",
+            default                 => "+{$plazo} days",
+        };
+
+        $ts = strtotime($intervalo, strtotime($fechaEmision));
+        return $ts !== false ? date('Y-m-d', $ts) : $fechaEmision;
     }
 }

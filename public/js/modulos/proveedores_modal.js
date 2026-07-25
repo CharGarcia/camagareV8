@@ -71,6 +71,29 @@
             divOp.classList.add('d-none');
             selOp.value = '';
         }
+        toggleChequeProv();
+    }
+
+    // ─── Cheque: bloque solo informativo ─────────────────────────────────────
+    // El número y la fecha de cobro reales se resuelven al generar el egreso,
+    // no al configurar el proveedor.
+    function toggleChequeProv() {
+        const selOp  = document.getElementById('prov_tipo_operacion_bancaria');
+        const divOp  = document.getElementById('prov_div_op_bancaria');
+        const divChq = document.getElementById('prov_div_cheque');
+        if (!selOp || !divOp || !divChq) return;
+
+        const esCheque = !divOp.classList.contains('d-none') && selOp.value === 'CHEQUE';
+        divChq.classList.toggle('d-none', !esCheque);
+        if (esCheque) actualizarReglaFechaChequeProv();
+    }
+
+    /** Refleja los días de crédito vigentes en la nota de la fecha de cobro. */
+    function actualizarReglaFechaChequeProv() {
+        const el = document.getElementById('prov_cheque_plazo_txt');
+        if (!el) return;
+        const plazo = parseInt(document.getElementById('prov_plazo')?.value, 10) || 0;
+        el.textContent = plazo > 0 ? ` (actualmente ${plazo} día(s))` : ' (actualmente sin días de crédito)';
     }
 
     async function cargarCatalogosInitProv() {
@@ -273,6 +296,8 @@
         if (divOp) divOp.classList.add('d-none');
         const selOp = document.getElementById('prov_tipo_operacion_bancaria');
         if (selOp) selOp.value = '';
+        const divChq = document.getElementById('prov_div_cheque');
+        if (divChq) divChq.classList.add('d-none');
         const brenta = document.getElementById('busqueda_retencion_renta');
         if (brenta) brenta.value = '';
         const biva = document.getElementById('busqueda_retencion_iva');
@@ -396,6 +421,7 @@
         setVal('prov_forma_pago', data.id_forma_pago_predeterminada);
         setVal('prov_tipo_operacion_bancaria', data.tipo_operacion_bancaria_predeterminada);
         toggleOperacionBancaria(data.id_forma_pago_predeterminada);
+        setVal('prov_monto_minimo', data.monto_minimo_auto_pago);
         setVal('prov_monto_maximo', data.monto_maximo_auto_pago);
         if (data.id_egreso_concepto_predeterminado) {
             setVal('prov_id_egreso_concepto', data.id_egreso_concepto_predeterminado);
@@ -612,6 +638,12 @@
             selFp.addEventListener('change', toggleOperacionBancaria);
         }
 
+        const selOpBanco = document.getElementById('prov_tipo_operacion_bancaria');
+        if (selOpBanco) selOpBanco.addEventListener('change', toggleChequeProv);
+
+        const inpPlazo = document.getElementById('prov_plazo');
+        if (inpPlazo) inpPlazo.addEventListener('input', actualizarReglaFechaChequeProv);
+
         // Tab Ubicación: inicializar/actualizar mapa cuando el contenedor ya es visible
         const tabUbicBtn = document.getElementById('prov-tab-ubicacion-btn');
         if (tabUbicBtn) {
@@ -654,6 +686,10 @@
         } catch (e) { if (sw) sw.classList.add('d-none'); window.mostrarBadgeSri('Error', 'bg-danger'); }
     }
 
+    function fmtMoneyProv(n) {
+        return (parseFloat(n) || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
     window.fetchInformacionExtraProv = async function(id) {
         try {
             const resp = await fetch(`${urlBaseProv}/getDetalleAjax?id=${id}`);
@@ -662,14 +698,16 @@
                 const d = json.data;
                 const elCom = document.getElementById('info_compras');
                 if (elCom) elCom.textContent = d.compras_realizadas || '0';
-                if (d.stats) {
-                    if (document.getElementById('stat_documentos')) document.getElementById('stat_documentos').value = d.stats.documentos_recibidos || '0';
-                    if (document.getElementById('stat_total')) document.getElementById('stat_total').value = parseFloat(d.stats.total_compras || 0).toFixed(2);
-                    if (document.getElementById('stat_por_pagar')) document.getElementById('stat_por_pagar').value = parseFloat(d.stats.por_pagar || 0).toFixed(2);
-                }
 
-                // Inhabilitar identificación si tiene transacciones
-                const inUso = (parseInt(d.compras_realizadas, 10) || 0) > 0 || (parseInt(d.stats?.documentos_recibidos, 10) || 0) > 0;
+                const setStat = (idEl, val) => { const el = document.getElementById(idEl); if (el) el.value = val; };
+                const s = d.stats || {};
+                setStat('stat_documentos', (parseInt(s.documentos_recibidos, 10) || 0).toLocaleString('es-EC'));
+                setStat('stat_total', fmtMoneyProv(s.total_compras));
+                setStat('stat_por_pagar', fmtMoneyProv(s.por_pagar));
+
+                // Inhabilitar identificación si el proveedor ya está en uso (mismo
+                // criterio que valida el backend al actualizar).
+                const inUso = d.en_uso === true;
                 const selId = document.getElementById('prov_tipo_id');
                 const inpId = document.getElementById('prov_identificacion');
                 if (selId) {
@@ -685,10 +723,11 @@
     };
 
     window.resetearInfoExtraProv = function() {
-        const ids = ['info_compras', 'stat_documentos', 'stat_total', 'stat_por_pagar'];
-        ids.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el[el.tagName === 'INPUT' ? 'value' : 'textContent'] = (id.includes('stat') && id !== 'stat_documentos') ? '0.00' : '0';
+        const el = document.getElementById('info_compras');
+        if (el) el.textContent = '0';
+        ['stat_documentos', 'stat_total', 'stat_por_pagar'].forEach(id => {
+            const inp = document.getElementById(id);
+            if (inp) inp.value = (id === 'stat_documentos') ? '0' : '0.00';
         });
 
         const selId = document.getElementById('prov_tipo_id');

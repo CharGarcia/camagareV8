@@ -163,7 +163,7 @@ class AuditoriaContableRepository extends BaseRepository
             'fecha'          => 'fecha_emision',
             'estado_filtro'  => "d.estado <> 'Anulada'",
             'tiene_estado'   => true,
-            'chequear_monto' => false, // el asiento es reclasificación a costo, no al total de venta
+            'chequear_monto' => 'informativo', // el asiento es reclasificación a costo, no al total de venta
             'regenerable'    => true,
             'tiene_id_asiento' => true,
             'entidad_mig'    => 'consignaciones',
@@ -190,7 +190,7 @@ class AuditoriaContableRepository extends BaseRepository
             // retorna sin generar en Borrador). Con "<> 'Anulada'" los Borrador salían como faltantes.
             'estado_filtro'  => "d.estado = 'Emitida'",
             'tiene_estado'   => true,
-            'chequear_monto' => false, // el asiento va a costo del inventario devuelto
+            'chequear_monto' => 'informativo', // el asiento va a costo del inventario devuelto
             'regenerable'    => true,  // RetornoCvService ya expone procesarAsientoContablePorSincronizacion
             'tiene_id_asiento' => true,
             'entidad_mig'    => null,
@@ -202,7 +202,7 @@ class AuditoriaContableRepository extends BaseRepository
             // Solo los 'Emitida' tienen impacto contable (el service no genera en Borrador).
             'estado_filtro'  => "COALESCE(d.estado,'') = 'Emitida'",
             'tiene_estado'   => true,
-            'chequear_monto' => false, // asiento a costo; el total del documento no es comparable
+            'chequear_monto' => 'informativo', // asiento a costo; el total del documento no es comparable
             'regenerable'    => true,  // CambioProductoCvService ya expone procesarAsientoContablePorSincronizacion
             'tiene_id_asiento' => true,
             'entidad_mig'    => null,
@@ -224,7 +224,7 @@ class AuditoriaContableRepository extends BaseRepository
             'fecha'          => 'fecha_pago',
             'estado_filtro'  => "d.estado <> 'anulado'",
             'tiene_estado'   => true,
-            'chequear_monto' => false, // el asiento incluye aportes/provisiones: no cuadra con total_neto
+            'chequear_monto' => 'informativo', // el asiento incluye aportes/provisiones: no cuadra con total_neto
             'regenerable'    => false, // RolAsientoService::contabilizar() tiene otra firma
             'tiene_id_asiento' => false, // rol_cabecera no tiene id_asiento_contable
             'entidad_mig'    => null,
@@ -372,10 +372,17 @@ class AuditoriaContableRepository extends BaseRepository
                                 . 'LEFT JOIN empleados em ON em.id = d.id_empleado',
                 'entidad' => 'COALESCE(e.razon_social, em.nombres_apellidos)',
             ],
-            // El rol de pagos no tiene entidad única: se identifica por su descripción/período
+            // El rol de pagos agrupa a varios empleados: si es uno solo se muestra su nombre,
+            // si son varios se indica cuántos (no hay una entidad única como en el resto).
             'nomina' => [
                 'numero' => "COALESCE(NULLIF(d.descripcion,''), CONCAT('Rol ', d.periodo_mes, '/', d.periodo_anio))",
-                'entidad_join' => '', 'entidad' => 'NULL',
+                'entidad_join' => '',
+                'entidad' => "(SELECT CASE WHEN COUNT(*) = 1 THEN MAX(em.nombres_apellidos)
+                                           WHEN COUNT(*) > 1 THEN CONCAT(COUNT(*), ' empleados')
+                                           ELSE NULL END
+                                 FROM rol_detalle rd
+                                 LEFT JOIN empleados em ON em.id = rd.id_empleado
+                                WHERE rd.id_rol = d.id)",
             ],
             default => ['numero' => 'NULL', 'entidad_join' => '', 'entidad' => 'NULL'],
         };
@@ -534,8 +541,6 @@ class AuditoriaContableRepository extends BaseRepository
                     "Documento vigente sin asiento contable.", $r['fecha_documento']);
                 continue;
             }
-            // Orígenes cuyo total no es comparable con el del asiento (nómina, cambios a costo,
-            // consignaciones) solo se auditan por «faltante».
             if (empty($cfg['chequear_monto'])) {
                 continue;
             }
@@ -544,9 +549,20 @@ class AuditoriaContableRepository extends BaseRepository
             // «Ajuste por redondeo» del asiento (mismo tope que AsientoBuilderService); solo es
             // hallazgo real cuando la diferencia supera ese margen.
             if (abs(round($montoDoc - $montoAsiento, 2)) > 0.03) {
-                $out[] = $this->normalizar('monto_no_coincide', $origen, (int) $r['id_documento'], (int) $r['id_asiento'],
+                // Orígenes cuyo total NO es comparable 1 a 1 con el del asiento por diseño
+                // (nómina incluye aportes patronales, cambios de producto van a costo,
+                // consignaciones reclasifican inventario) se reportan como informativos:
+                // se muestran para revisión pero no cuentan como error de cuadre.
+                $esInformativo = ($cfg['chequear_monto'] === 'informativo');
+                $out[] = $this->normalizar(
+                    $esInformativo ? 'monto_informativo' : 'monto_no_coincide',
+                    $origen, (int) $r['id_documento'], (int) $r['id_asiento'],
                     $montoDoc, $montoAsiento, round($montoDoc - $montoAsiento, 2),
-                    "El total del documento no coincide con el total del asiento.", $r['fecha_documento']);
+                    $esInformativo
+                        ? "El total del documento difiere del asiento (esperado en este módulo: el asiento incluye conceptos que no están en el total del documento). Informativo."
+                        : "El total del documento no coincide con el total del asiento.",
+                    $r['fecha_documento']
+                );
             }
         }
         return $out;
@@ -1060,6 +1076,12 @@ class AuditoriaContableRepository extends BaseRepository
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa, ':amb' => $ambiente];
 
+        // getBaseWhere() agrega "AND i.created_by = :id_usuario_filtro" cuando el usuario no
+        // tiene permiso 'todo'; sin ligar el parámetro aquí, la consulta lanzaba PDOException.
+        if ($idUsuarioFiltro !== null) {
+            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+        }
+
         $where = $this->getBaseWhere($idEmpresa, 'i', $idUsuarioFiltro)
                . " AND i.tipo_ambiente = :amb"
                . $this->sqlRangoFecha('i.fecha_documento', $fechaDesde, $fechaHasta, $params);
@@ -1107,9 +1129,19 @@ class AuditoriaContableRepository extends BaseRepository
         $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
 
         // documento_numero y entidad_nombre se guardan al detectar (ver enriquecerHallazgos).
-        $sql = "SELECT i.*, u.nombre AS revisado_por_nombre
+        // Los datos del asiento (número, tipo, fecha, estado) se traen en vivo: cambian cuando
+        // el asiento se anula o regenera, así que no tiene sentido congelarlos en la incidencia.
+        $sql = "SELECT i.*, u.nombre AS revisado_por_nombre,
+                       ac.numero_comprobante AS asiento_numero,
+                       ac.tipo_comprobante   AS asiento_tipo,
+                       ac.fecha_asiento      AS asiento_fecha,
+                       ac.estado             AS asiento_estado,
+                       ac.total_debe         AS asiento_debe,
+                       ac.total_haber        AS asiento_haber
                 FROM auditoria_contable_incidencias i
                 LEFT JOIN usuarios u ON i.revisado_por = u.id
+                LEFT JOIN asientos_contables_cabecera ac
+                       ON ac.id = i.id_asiento AND ac.id_empresa = i.id_empresa
                 $where
                 ORDER BY i.$ordenCol $ordenDir
                 LIMIT $perPage OFFSET $offset";

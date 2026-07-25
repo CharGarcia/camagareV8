@@ -36,6 +36,12 @@
           "photosPermission": "CaMaGaRe usa tus fotos solo para la imagen del producto que estás creando o editando.",
           "cameraPermission": "CaMaGaRe usa la cámara solo para tomar la foto del producto que estás creando o editando."
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "CaMaGaRe usa la cámara para escanear el código QR y tomar la selfie al marcar tu asistencia."
+        }
       ]
     ]
   }

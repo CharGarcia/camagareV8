@@ -207,7 +207,12 @@ class RolAsientoService
             $asientoService = new AsientoContableService(new AsientoContableRepository(), new AsientoContableRules(), $this->log);
             $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
         } catch (\Throwable $e) {
-            // continuar: igual desvinculamos del rol
+            // Un período cerrado debe abortar la operación completa: si se tragara, el rol
+            // quedaría anulado con su asiento aún vigente (descuadre silencioso).
+            if (stripos($e->getMessage(), 'contable cerrado') !== false) {
+                throw $e;
+            }
+            // Otros errores: continuar, igual desvinculamos del rol
         }
         $this->repo->setIdAsiento((int) $cab['id'], null);
     }

@@ -75,6 +75,81 @@ class MayoresController extends BaseModuloController
         }
     }
 
+    /**
+     * Cuenta cuántos documentos operativos están pendientes de generar su asiento contable,
+     * sin generar nada. La vista lo consulta al cargar para preguntar al usuario si desea
+     * generarlos ahora o continuar sin generar.
+     */
+    public function contarPendientesAjax(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+
+            $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
+            echo json_encode(['ok' => true, 'pendientes' => $sincronizador->contarPendientes($idEmpresa)]);
+        } catch (\Throwable $th) {
+            echo json_encode(['ok' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
+    /**
+     * Genera los asientos contables pendientes (documentos sin asiento). Se invoca por AJAX
+     * desde la vista solo si el usuario acepta el aviso de pendientes. Libera el lock de sesión
+     * y amplía el tiempo de ejecución porque puede tardar cuando hay muchos documentos.
+     */
+    public function sincronizarAjax(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            @set_time_limit(300);
+
+            $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
+            $sincronizador->sincronizar($idEmpresa, $idUsuario);
+
+            echo json_encode([
+                'success'   => true,
+                'warnings'  => $sincronizador->getWarnings(),
+                'generados' => $sincronizador->getGenerados(),
+            ]);
+        } catch (\Throwable $th) {
+            echo json_encode(['success' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
+    /**
+     * Detalle del documento que originó el asiento (factura, compra, egreso…), para el modal de
+     * solo lectura que se abre desde la columna "Documento Ref.". Valida el permiso de lectura
+     * de Mayores: no expone nada que el usuario no vea ya en el reporte.
+     */
+    public function getDocumentoOrigenAjax(): void
+    {
+        $this->requireLeer();
+        try {
+            $servicio = new \App\Services\modulos\DocumentoOrigenService();
+            $datos = $servicio->getDetalle(
+                trim($_GET['modulo'] ?? ''),
+                (int) ($_GET['id'] ?? 0),
+                (int) $_SESSION['id_empresa']
+            );
+            $this->json(['success' => true, 'data' => $datos]);
+        } catch (\Throwable $th) {
+            $this->json(['success' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
     public function getCuentasAjax(): void
     {
         $this->requireLeer();

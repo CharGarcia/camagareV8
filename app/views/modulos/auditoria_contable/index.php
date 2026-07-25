@@ -46,11 +46,13 @@ $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
 $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 // Etiquetas de tipo (para tarjetas-resumen) y colores
-$tipoOrden = ['faltante','duplicado','monto_no_coincide','descuadrado','cab_vs_detalle','huerfano','estado_incoherente','ambiente_incoherente'];
+$tipoOrden = ['faltante','duplicado','monto_no_coincide','descuadrado','cab_vs_detalle','huerfano','estado_incoherente','ambiente_incoherente','monto_informativo'];
 $tipoColor = [
     'faltante' => 'danger', 'duplicado' => 'warning', 'monto_no_coincide' => 'warning',
     'descuadrado' => 'danger', 'cab_vs_detalle' => 'danger', 'huerfano' => 'secondary',
     'estado_incoherente' => 'primary', 'ambiente_incoherente' => 'info',
+    // Informativo: se muestra para revisión pero no cuenta como error de cuadre.
+    'monto_informativo' => 'secondary',
 ];
 $totalIncidencias = array_sum($resumen);
 ?>
@@ -66,34 +68,101 @@ $totalIncidencias = array_sum($resumen);
     .aud-card-resumen.activa { outline: 2px solid var(--bs-primary); }
 </style>
 
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
     <h5 class="mb-0 fw-bold"><i class="bi bi-clipboard-check me-1 text-primary"></i> <?= htmlspecialchars($titulo) ?></h5>
-    <div class="d-flex gap-2 align-items-center flex-wrap">
-        <div class="d-flex align-items-center gap-1">
-            <label class="small text-muted mb-0">Desde</label>
-            <input type="date" id="audFechaDesde" class="form-control form-control-sm" style="width:auto"
-                   value="<?= htmlspecialchars((string) ($fechaDesde ?? '')) ?>" title="Fecha desde">
-            <label class="small text-muted mb-0 ms-1">Hasta</label>
-            <input type="date" id="audFechaHasta" class="form-control form-control-sm" style="width:auto"
-                   value="<?= htmlspecialchars((string) ($fechaHasta ?? '')) ?>" title="Fecha hasta">
-            <button type="button" id="audLimpiarFechas" class="btn btn-sm btn-outline-secondary" title="Limpiar fechas">
-                <i class="bi bi-x-lg"></i>
-            </button>
+</div>
+
+<!-- Barra de filtros: el período y los orígenes acotan TANTO el listado como las 3 acciones -->
+<div class="card border-0 shadow-sm rounded-3 mb-3">
+    <div class="card-body p-3 bg-light bg-opacity-50">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-bold text-secondary mb-1">Año</label>
+                <select id="audAnio" class="form-select form-select-sm shadow-none">
+                    <?php
+                    $anioActual = (int) date('Y');
+                    $anioSel = !empty($fechaDesde) ? (int) substr((string) $fechaDesde, 0, 4) : $anioActual;
+                    for ($a = $anioActual + 1; $a >= $anioActual - 6; $a--): ?>
+                        <option value="<?= $a ?>" <?= $a === $anioSel ? 'selected' : '' ?>><?= $a ?></option>
+                    <?php endfor; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-bold text-secondary mb-1">Mes</label>
+                <select id="audMes" class="form-select form-select-sm shadow-none">
+                    <option value="0">Todo el año</option>
+                    <?php
+                    $meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+                    foreach ($meses as $i => $m): ?>
+                        <option value="<?= $i + 1 ?>"><?= $m ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-bold text-secondary mb-1">Desde</label>
+                <input type="date" id="audFechaDesde" class="form-control form-control-sm shadow-none"
+                       value="<?= htmlspecialchars((string) ($fechaDesde ?? '')) ?>" title="Fecha desde (libre)">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-bold text-secondary mb-1">Hasta</label>
+                <input type="date" id="audFechaHasta" class="form-control form-control-sm shadow-none"
+                       value="<?= htmlspecialchars((string) ($fechaHasta ?? '')) ?>" title="Fecha hasta (libre)">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-bold text-secondary mb-1">
+                    Orígenes
+                    <span class="text-muted fw-normal" id="audOrigenResumen">(todos)</span>
+                </label>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle w-100 text-start shadow-none text-truncate"
+                            type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" id="audOrigenBtn">
+                        Todos
+                    </button>
+                    <div class="dropdown-menu p-2" style="max-height:280px; overflow-y:auto; min-width:250px;">
+                        <div class="d-flex gap-1 mb-2">
+                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="audOrigenTodos">Todos</button>
+                            <span class="text-muted small">·</span>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="audOrigenNinguno">Ninguno</button>
+                        </div>
+                        <?php foreach ($origenes as $o): ?>
+                            <label class="dropdown-item px-2 py-1 small d-flex align-items-center gap-2" style="cursor:pointer;">
+                                <input type="checkbox" class="form-check-input m-0 js-aud-origen" value="<?= htmlspecialchars($o) ?>">
+                                <span><?= htmlspecialchars($origenLabels[$o] ?? $o) ?></span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-bold text-secondary mb-1">&nbsp;</label>
+                <button type="button" id="audLimpiarFechas" class="btn btn-sm btn-outline-secondary w-100 text-nowrap" title="Limpiar período y orígenes">
+                    <i class="bi bi-x-lg me-1"></i> Limpiar filtros
+                </button>
+            </div>
         </div>
-        <select id="audOrigenAuditar" class="form-select form-select-sm" style="width:auto" title="Limitar a un origen">
-            <option value="">Todos los orígenes</option>
-            <?php foreach ($origenes as $o): ?>
-                <option value="<?= htmlspecialchars($o) ?>"><?= htmlspecialchars($origenLabels[$o] ?? $o) ?></option>
-            <?php endforeach; ?>
-        </select>
-        <button type="button" id="btnEjecutarAuditoria" class="btn btn-primary btn-sm px-3 shadow-sm">
-            <i class="bi bi-play-circle me-1"></i> Ejecutar auditoría
-        </button>
-        <?php if (!empty($perm['eliminar'])): ?>
-            <button type="button" id="btnRegenerar" class="btn btn-outline-danger btn-sm px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalRegenerar">
-                <i class="bi bi-arrow-repeat me-1"></i> Regenerar asientos
+
+        <!-- Las 3 acciones, separadas y explicadas -->
+        <div class="d-flex gap-2 flex-wrap mt-3 pt-3 border-top">
+            <button type="button" id="btnEjecutarAuditoria" class="btn btn-primary btn-sm px-3 shadow-sm"
+                    title="Solo revisa y registra hallazgos. NO modifica ningún asiento contable.">
+                <i class="bi bi-search me-1"></i> Ejecutar auditoría
             </button>
-        <?php endif; ?>
+            <?php if (!empty($perm['eliminar'])): ?>
+                <button type="button" id="btnRegenerar" class="btn btn-warning btn-sm px-3 shadow-sm text-dark"
+                        data-bs-toggle="modal" data-bs-target="#modalRegenerar"
+                        title="Anula y vuelve a crear los asientos del filtro con la configuración contable actual.">
+                    <i class="bi bi-arrow-repeat me-1"></i> Generar asientos
+                </button>
+                <button type="button" id="btnAnularMasivo" class="btn btn-outline-danger btn-sm px-3 shadow-sm"
+                        data-bs-toggle="modal" data-bs-target="#modalAnular"
+                        title="Anula los asientos del filtro y deja los documentos SIN contabilidad. Reversible.">
+                    <i class="bi bi-slash-circle me-1"></i> Eliminar asientos
+                </button>
+            <?php endif; ?>
+            <span class="small text-muted align-self-center ms-1">
+                <i class="bi bi-info-circle me-1"></i>Las tres acciones usan el período y los orígenes seleccionados arriba.
+            </span>
+        </div>
     </div>
 </div>
 
@@ -145,11 +214,15 @@ $totalIncidencias = array_sum($resumen);
                     'origen'          => 'Origen',
                     'documento'       => 'Documento',
                     'entidad'         => 'Cliente / Proveedor',
-                    'asiento'         => 'Asiento',
+                    'asiento'         => 'ID asiento',
+                    'asiento_numero'  => 'N° comprobante',
+                    'asiento_tipo'    => 'Tipo comp.',
+                    'asiento_fecha'   => 'Fecha asiento',
+                    'asiento_estado'  => 'Estado asiento',
                     'monto_documento' => 'Monto doc.',
                     'monto_asiento'   => 'Monto asiento',
                     'diferencia'      => 'Diferencia',
-                    'fecha'           => 'Fecha',
+                    'fecha'           => 'Fecha doc.',
                     'revision'        => 'Revisión',
                 ];
                 echo \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo);
@@ -173,13 +246,17 @@ $totalIncidencias = array_sum($resumen);
                         <?php
                         $ths = [
                             'tipo' => 'Tipo', 'origen' => 'Origen', 'documento' => 'Documento',
-                            'entidad' => 'Cliente / Proveedor', 'asiento' => 'Asiento',
+                            'entidad' => 'Cliente / Proveedor', 'asiento' => 'ID asiento',
+                            'asiento_numero' => 'N° comprobante', 'asiento_tipo' => 'Tipo comp.',
+                            'asiento_fecha' => 'Fecha asiento', 'asiento_estado' => 'Estado asiento',
                             'monto_documento' => 'Monto doc.', 'monto_asiento' => 'Monto asiento', 'diferencia' => 'Diferencia',
-                            'fecha' => 'Fecha', 'revision' => 'Revisión',
+                            'fecha' => 'Fecha doc.', 'revision' => 'Revisión',
                         ];
                         $sortMap = [
                             'tipo' => 'tipo_hallazgo', 'origen' => 'modulo_origen', 'documento' => 'documento_numero',
                             'entidad' => 'entidad_nombre', 'asiento' => 'id_asiento',
+                            'asiento_numero' => 'id_asiento', 'asiento_tipo' => 'id_asiento',
+                            'asiento_fecha' => 'id_asiento', 'asiento_estado' => 'id_asiento',
                             'monto_documento' => 'diferencia', 'monto_asiento' => 'diferencia',
                             'diferencia' => 'diferencia', 'fecha' => 'fecha_documento', 'revision' => 'estado_revision',
                         ];
@@ -198,75 +275,14 @@ $totalIncidencias = array_sum($resumen);
                 </thead>
                 <tbody id="audTbody">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="11" class="text-center py-5 text-muted">
+                        <tr><td colspan="15" class="text-center py-5 text-muted">
                             <i class="bi bi-clipboard-check fs-3 d-block mb-2"></i>
                             <?= $vista === 'corregidas'
                                 ? 'Todavía no hay incidencias corregidas.'
                                 : 'Sin incidencias pendientes. Pulse «Ejecutar auditoría» para verificar.' ?>
                         </td></tr>
                     <?php else: ?>
-                        <?php
-                        // Render inicial server-side reutilizando la misma estructura del searchAjax.
-                        $tipoClase = [
-                            'faltante' => 'bg-danger bg-opacity-10 text-danger border-danger',
-                            'duplicado' => 'bg-warning bg-opacity-10 text-warning border-warning',
-                            'monto_no_coincide' => 'bg-warning bg-opacity-10 text-warning border-warning',
-                            'descuadrado' => 'bg-danger bg-opacity-10 text-danger border-danger',
-                            'cab_vs_detalle' => 'bg-danger bg-opacity-10 text-danger border-danger',
-                            'huerfano' => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
-                            'estado_incoherente' => 'bg-primary bg-opacity-10 text-primary border-primary',
-                            'ambiente_incoherente' => 'bg-info bg-opacity-10 text-info border-info',
-                        ];
-                        $revClase = [
-                            'pendiente' => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
-                            'revisada' => 'bg-info bg-opacity-10 text-info border-info',
-                            'justificada' => 'bg-success bg-opacity-10 text-success border-success',
-                            'resuelta' => 'bg-success bg-opacity-10 text-success border-success',
-                        ];
-                        $revLabel = ['pendiente'=>'Pendiente','revisada'=>'Revisada','justificada'=>'Justificada','resuelta'=>'Resuelta'];
-                        foreach ($rows as $r):
-                            $tipo = (string) $r['tipo_hallazgo'];
-                            $rev  = (string) ($r['estado_revision'] ?? 'pendiente');
-                            $origen = (string) $r['modulo_origen'];
-                        ?>
-                            <tr data-id="<?= (int) $r['id'] ?>" data-tipo="<?= htmlspecialchars($tipo) ?>"
-                                data-origen="<?= htmlspecialchars($origen) ?>"
-                                data-doc="<?= (int) ($r['id_documento'] ?? 0) ?>" data-asiento="<?= (int) ($r['id_asiento'] ?? 0) ?>">
-                                <td data-col="tipo"><span class="badge <?= $tipoClase[$tipo] ?? 'bg-secondary' ?> border"><?= htmlspecialchars($tipoLabels[$tipo] ?? $tipo) ?></span></td>
-                                <td data-col="origen"><?= htmlspecialchars($origenLabels[$origen] ?? $origen) ?></td>
-                                <?php
-                                $numDoc = trim((string) ($r['documento_numero'] ?? ''));
-                                $entidadNom = trim((string) ($r['entidad_nombre'] ?? ''));
-                                ?>
-                                <td data-col="documento" class="text-center"><?= $numDoc !== '' ? htmlspecialchars($numDoc) : ($r['id_documento'] !== null ? '#' . (int) $r['id_documento'] : '—') ?></td>
-                                <td data-col="entidad" class="text-truncate" style="max-width:220px" title="<?= htmlspecialchars($entidadNom) ?>"><?= $entidadNom !== '' ? htmlspecialchars($entidadNom) : '—' ?></td>
-                                <td data-col="asiento" class="text-center"><?= $r['id_asiento'] !== null ? '#' . (int) $r['id_asiento'] : '—' ?></td>
-                                <td data-col="monto_documento" class="text-end"><?= $r['monto_documento'] !== null ? number_format((float) $r['monto_documento'], 2) : '—' ?></td>
-                                <td data-col="monto_asiento" class="text-end"><?= $r['monto_asiento'] !== null ? number_format((float) $r['monto_asiento'], 2) : '—' ?></td>
-                                <td data-col="diferencia" class="text-end"><?= $r['diferencia'] !== null ? number_format((float) $r['diferencia'], 2) : '—' ?></td>
-                                <td data-col="fecha" class="text-center"><?= !empty($r['fecha_documento']) ? date('d-m-Y', strtotime((string) $r['fecha_documento'])) : '—' ?></td>
-                                <td data-col="revision"><span class="badge <?= $revClase[$rev] ?? 'bg-secondary' ?> border"><?= $revLabel[$rev] ?? $rev ?></span><div class="small text-muted"><?= htmlspecialchars((string) ($r['detalle'] ?? '')) ?></div></td>
-                                <td data-col="acciones" class="text-end pe-3 text-nowrap">
-                                    <?php if ($tipo === 'faltante' && !empty($perm['crear'])): ?>
-                                        <button class="btn btn-sm btn-outline-success js-aud-generar" title="Generar asiento"><i class="bi bi-magic"></i></button>
-                                    <?php endif; ?>
-                                    <?php if ($tipo === 'duplicado' && !empty($perm['eliminar'])): ?>
-                                        <button class="btn btn-sm btn-outline-warning js-aud-duplicado" title="Resolver duplicado"><i class="bi bi-files"></i></button>
-                                    <?php endif; ?>
-                                    <?php if ($tipo === 'ambiente_incoherente' && !empty($perm['actualizar'])): ?>
-                                        <button class="btn btn-sm btn-outline-info js-aud-ambiente" title="Corregir ambiente"><i class="bi bi-arrow-repeat"></i></button>
-                                    <?php endif; ?>
-                                    <?php if (in_array($tipo, ['monto_no_coincide','descuadrado','cab_vs_detalle'], true)
-                                              && !empty($perm['eliminar'])
-                                              && in_array($origen, ($origenesRegenerables ?? []), true)): ?>
-                                        <button class="btn btn-sm btn-outline-danger js-aud-regen-doc" title="Regenerar este asiento"><i class="bi bi-arrow-clockwise"></i></button>
-                                    <?php endif; ?>
-                                    <?php if (!empty($perm['actualizar'])): ?>
-                                        <button class="btn btn-sm btn-outline-primary js-aud-revisar" title="Marcar revisión"><i class="bi bi-check2-square"></i></button>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
+                        <?= $filasHtml ?? "" ?>
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -307,7 +323,7 @@ $totalIncidencias = array_sum($resumen);
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
             <div class="modal-header bg-light">
-                <h5 class="modal-title fw-bold"><i class="bi bi-arrow-repeat text-danger me-2"></i>Regenerar asientos</h5>
+                <h5 class="modal-title fw-bold"><i class="bi bi-arrow-repeat text-danger me-2"></i>Generar asientos</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -361,7 +377,67 @@ $totalIncidencias = array_sum($resumen);
             </div>
             <div class="modal-footer">
                 <button type="button" id="btnCerrarRegenerar" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" id="btnConfirmarRegenerar" class="btn btn-danger btn-sm"><i class="bi bi-arrow-repeat me-1"></i>Regenerar</button>
+                <button type="button" id="btnConfirmarRegenerar" class="btn btn-danger btn-sm"><i class="bi bi-arrow-repeat me-1"></i>Generar asientos</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Anulación masiva: solo anula, NO regenera. Deja los documentos sin contabilidad. -->
+<div class="modal fade" id="modalAnular" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold"><i class="bi bi-slash-circle text-danger me-2"></i>Eliminar asientos</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger small">
+                    <strong><i class="bi bi-exclamation-octagon me-1"></i>Qué hace y qué repercute</strong>
+                    <ul class="mb-1 mt-2 ps-3">
+                        <li><strong>Anula</strong> los asientos del período y orígenes seleccionados y <strong>desvincula</strong> sus documentos.</li>
+                        <li>Los documentos quedan <strong>SIN contabilidad</strong> hasta que se regeneren: sus valores desaparecen de Balance, Estado de Resultados y Mayores.</li>
+                        <li>Es <strong>reversible</strong>: los asientos quedan marcados como anulados (no se borran), y se pueden volver a generar con «Generar asientos».</li>
+                        <li><strong>No</strong> se tocan: períodos contables cerrados, asientos de <strong>tipo Diario</strong> (manuales y de activos fijos), ni los insertados por la migración.</li>
+                    </ul>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold">Origen</label>
+                    <select id="anuOrigen" class="form-select form-select-sm">
+                        <option value="__todos__">Todos los orígenes (excepto Diario)</option>
+                        <?php foreach ($origenes as $o): ?>
+                            <option value="<?= htmlspecialchars($o) ?>"><?= htmlspecialchars($origenLabels[$o] ?? $o) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text small">Se precarga con lo seleccionado en la barra de filtros.</div>
+                </div>
+                <div class="row g-2">
+                    <div class="col">
+                        <label class="form-label small fw-semibold">Desde (opcional)</label>
+                        <input type="date" id="anuDesde" class="form-control form-control-sm">
+                    </div>
+                    <div class="col">
+                        <label class="form-label small fw-semibold">Hasta (opcional)</label>
+                        <input type="date" id="anuHasta" class="form-control form-control-sm">
+                    </div>
+                </div>
+
+                <div id="anuProgresoBox" class="mt-3 d-none">
+                    <div class="d-flex justify-content-between align-items-center small fw-semibold mb-1">
+                        <span id="anuProgresoPaso" class="text-muted">Preparando…</span>
+                        <span id="anuProgresoPct" class="text-muted">0%</span>
+                    </div>
+                    <div class="progress" style="height:8px">
+                        <div id="anuProgresoBarra" class="progress-bar progress-bar-striped progress-bar-animated bg-danger"
+                             role="progressbar" style="width:0%"></div>
+                    </div>
+                    <div id="anuProgresoLog" class="border rounded-3 bg-light mt-2 p-2 small text-muted"
+                         style="max-height:180px;overflow:auto;font-family:monospace;font-size:.72rem"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btnCerrarAnular" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnConfirmarAnular" class="btn btn-danger btn-sm"><i class="bi bi-slash-circle me-1"></i>Eliminar asientos</button>
             </div>
         </div>
     </div>

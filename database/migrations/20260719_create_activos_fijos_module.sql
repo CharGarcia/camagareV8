@@ -2,6 +2,10 @@
 -- Alta de activos (desde línea de factura de compra o manual) + depreciación
 -- en línea recta contabilizada en lote mensual (ver AsientoBuilderService::
 -- generarAsientoAltaActivoFijo / generarAsientoDepreciacionLote).
+--
+-- SUPERADA EN PARTE por 20260725_activos_fijos_cuentas_por_activo.sql: las 3
+-- cuentas contables ya no viven en activos_fijos_categorias sino en activos_fijos.
+-- Ejecutar ambas migraciones, en orden, en un despliegue nuevo.
 -- -----------------------------------------------------
 BEGIN;
 

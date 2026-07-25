@@ -55,7 +55,7 @@ class ActivosFijosCategoriasController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-diagram-3 fs-3 d-block mb-2"></i>No hay categorías registradas.</td></tr>';
+            echo '<tr><td colspan="4" class="text-center py-5 text-muted"><i class="bi bi-diagram-3 fs-3 d-block mb-2"></i>No hay categorías registradas.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 // Postgres vía PDO devuelve boolean como 't'/'f': empty('f') sería false, hay que comparar explícito.
@@ -65,9 +65,7 @@ class ActivosFijosCategoriasController extends BaseModuloController
                 echo '<tr role="button" onclick="AFC_abrirModal(' . (int) $r['id'] . ')">
                         <td class="ps-3" data-col="nombre">' . htmlspecialchars($r['nombre']) . '</td>
                         <td class="text-end" data-col="porcentaje">' . number_format((float) $r['porcentaje_depreciacion_anual'], 2) . '%</td>
-                        <td data-col="cuenta_activo">' . htmlspecialchars(($r['cuenta_activo_codigo'] ?? '') . ' - ' . ($r['cuenta_activo_nombre'] ?? '')) . '</td>
-                        <td data-col="cuenta_dep_acum">' . htmlspecialchars(($r['cuenta_dep_acum_codigo'] ?? '') . ' - ' . ($r['cuenta_dep_acum_nombre'] ?? '')) . '</td>
-                        <td data-col="cuenta_gasto">' . htmlspecialchars(($r['cuenta_gasto_codigo'] ?? '') . ' - ' . ($r['cuenta_gasto_nombre'] ?? '')) . '</td>
+                        <td data-col="observaciones">' . htmlspecialchars((string) ($r['observaciones'] ?? '')) . '</td>
                         <td class="text-center pe-3" data-col="estado"><span class="badge ' . $estCls . ' border border-opacity-25">' . $estTxt . '</span></td>
                       </tr>';
             }

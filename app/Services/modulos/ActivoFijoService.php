@@ -13,6 +13,12 @@ use App\Services\LogSistemaService;
 
 class ActivoFijoService
 {
+    /** Código del concepto de Configuración Contable que resuelve la contrapartida del alta manual. */
+    private const CODIGO_CONTRAPARTIDA = 'CONTRAPARTIDAALTAACTIVOFIJO';
+
+    /** Aviso de la última operación cuando la contrapartida se propagó a Configuración Contable. */
+    private ?string $avisoContrapartida = null;
+
     public function __construct(
         private ActivoFijoRepository $repository,
         private ActivoFijoCategoriaRepository $categoriaRepository,
@@ -21,6 +27,11 @@ class ActivoFijoService
         private ActivoFijoRules $rules,
         private LogSistemaService $logService
     ) {
+    }
+
+    public function getAvisoContrapartida(): ?string
+    {
+        return $this->avisoContrapartida;
     }
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuario): array
@@ -38,8 +49,103 @@ class ActivoFijoService
         return $this->repository->getHistorialDepreciaciones($idActivo);
     }
 
+    /**
+     * Cuenta contrapartida configurada como regla general en Configuración Contable
+     * (concepto 'activos_fijos_alta'). Es la que se precarga en el modal del activo.
+     *
+     * @return array{id:int,codigo:?string,nombre:?string}|null
+     */
+    public function getContrapartidaConfigurada(int $idEmpresa): ?array
+    {
+        $regla = $this->buscarReglaContrapartida($idEmpresa);
+        if (!$regla || empty($regla['id_cuenta'])) {
+            return null;
+        }
+        return [
+            'id'     => (int) $regla['id_cuenta'],
+            'codigo' => $regla['cuenta_codigo'] ?? null,
+            'nombre' => $regla['cuenta_nombre'] ?? null,
+        ];
+    }
+
+    /** Regla general del concepto 'activos_fijos_alta' con código CONTRAPARTIDAALTAACTIVOFIJO. */
+    private function buscarReglaContrapartida(int $idEmpresa): ?array
+    {
+        $programadoRepo = new \App\repositories\modulos\AsientoProgramadoRepository();
+        foreach ($programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'activos_fijos_alta') as $r) {
+            if (strtoupper((string) $r['codigo']) === self::CODIGO_CONTRAPARTIDA) {
+                return $r;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Propaga la cuenta contrapartida elegida en el activo a la regla general de
+     * Configuración Contable, para que los siguientes activos la traigan precargada.
+     * No borra la regla cuando el activo se guarda sin cuenta: solo escribe cuando hay
+     * una cuenta nueva y distinta de la ya configurada.
+     *
+     * Debe invocarse FUERA de una transacción: AsientoProgramadoService abre la suya.
+     */
+    private function sincronizarContrapartidaGeneral(int $idEmpresa, int $idCuenta, int $idUsuario): void
+    {
+        $regla = $this->buscarReglaContrapartida($idEmpresa);
+        if (!$regla) {
+            throw new \Exception(
+                'No existe el concepto «Activos Fijos - Alta» en el catálogo de asientos tipo ' .
+                '(código ' . self::CODIGO_CONTRAPARTIDA . ').'
+            );
+        }
+        if ((int) ($regla['id_cuenta'] ?? 0) === $idCuenta) {
+            return; // ya está configurada con esa cuenta
+        }
+
+        $idAsientoTipo   = (int) $regla['id_asiento_tipo'];
+        $programadoRepo  = new \App\repositories\modulos\AsientoProgramadoRepository();
+        $programadoSvc   = new AsientoProgramadoService();
+        $reglaExistente  = $programadoRepo->getReglaGeneralPorAsientoTipo($idEmpresa, $idAsientoTipo);
+
+        $payload = [
+            'id_asiento_tipo' => $idAsientoTipo,
+            'id_cuenta'       => $idCuenta,
+            'id_referencia'   => $idAsientoTipo,
+            'tipo_referencia' => 'asientos tipo',
+        ];
+
+        if ($reglaExistente) {
+            $payload['updated_by'] = $idUsuario;
+            $programadoSvc->actualizar((int) $reglaExistente['id'], $payload, $idEmpresa, $idUsuario);
+        } else {
+            $programadoSvc->registrar($payload, $idEmpresa, $idUsuario);
+        }
+
+        $this->avisoContrapartida = 'La cuenta contrapartida también se actualizó en Configuración Contable.';
+    }
+
+    /**
+     * Guarda la contrapartida del activo y la propaga a Configuración Contable. Un fallo
+     * aquí no invalida el activo (ya guardado): se registra en el log y se sigue.
+     */
+    private function procesarContrapartida(array $data): void
+    {
+        if (($data['origen'] ?? 'manual') !== 'manual' || empty($data['id_cuenta_contrapartida_alta'])) {
+            return;
+        }
+        try {
+            $this->sincronizarContrapartidaGeneral(
+                (int) $data['id_empresa'],
+                (int) $data['id_cuenta_contrapartida_alta'],
+                (int) $data['id_usuario']
+            );
+        } catch (\Throwable $e) {
+            error_log('[ActivoFijo] Contrapartida no propagada a Configuración Contable: ' . $e->getMessage());
+        }
+    }
+
     public function crear(array $data): int
     {
+        $this->avisoContrapartida = null;
         $data['origen'] = $data['origen'] ?? 'manual';
 
         if ($data['origen'] === 'compra') {
@@ -55,6 +161,8 @@ class ActivoFijoService
                 $data['nombre'] = $detalleCompra['descripcion'];
             }
             $data['proveedor_texto'] = null;
+            // La contrapartida es del asiento de alta manual; una compra ya trae su propio asiento.
+            $data['id_cuenta_contrapartida_alta'] = null;
         } else {
             $data['id_compra'] = null;
             $data['id_compra_detalle'] = null;
@@ -97,8 +205,11 @@ class ActivoFijoService
             throw $e;
         }
 
+        // Fuera de la transacción: la contrapartida elegida se propaga a Configuración
+        // Contable y un fallo de configuración contable no revierte el alta.
+        $this->procesarContrapartida($data);
+
         // Asiento de alta SOLO si es manual (una compra ya tiene su propio asiento).
-        // Fuera de la transacción: un fallo de configuración contable no revierte el alta.
         if ($data['origen'] === 'manual') {
             try {
                 $this->procesarAsientoAlta($id, $data);
@@ -112,10 +223,16 @@ class ActivoFijoService
 
     public function actualizar(int $id, array $data): int
     {
+        $this->avisoContrapartida = null;
         $idEmpresa = (int) $data['id_empresa'];
         $activo = $this->repository->getPorId($id, $idEmpresa);
         if (!$activo) {
             throw new \Exception('Activo fijo no encontrado.');
+        }
+        // El origen se fija en el alta: no se toma del formulario.
+        $data['origen'] = $activo['origen'];
+        if ($data['origen'] !== 'manual') {
+            $data['id_cuenta_contrapartida_alta'] = null;
         }
 
         $this->rules->validarEdicion($activo, $data);
@@ -145,6 +262,10 @@ class ActivoFijoService
             $db->rollBack();
             throw $e;
         }
+
+        // Fuera de la transacción (AsientoProgramadoService abre la suya).
+        $this->procesarContrapartida($data);
+
         return $id;
     }
 

@@ -61,13 +61,22 @@
         });
     }
 
-    setupTypeahead(
-        document.getElementById('af-contrapartida-txt'),
-        document.getElementById('af-contrapartida-dropdown'),
-        document.getElementById('af-contrapartida-id'),
-        async (q) => { const j = await fetchJson(`${CTA_URL}/searchAjaxCuentas?q=${encodeURIComponent(q)}`); return j.ok ? j.data : []; },
-        (it) => `${it.codigo} - ${it.nombre}`
-    );
+    async function buscarCuentas(q) {
+        const j = await fetchJson(`${CTA_URL}/searchAjaxCuentas?q=${encodeURIComponent(q)}`);
+        return j.ok ? j.data : [];
+    }
+    const labelCuenta = (it) => `${it.codigo} - ${it.nombre}`;
+
+    // Cuentas contables del activo (antes vivían en la categoría) + contrapartida del alta.
+    ['cuenta-activo', 'cuenta-dep', 'cuenta-gasto', 'contrapartida'].forEach(k => {
+        setupTypeahead(
+            document.getElementById(`af-${k}-txt`),
+            document.getElementById(`af-${k}-dropdown`),
+            document.getElementById(`af-${k}-id`),
+            buscarCuentas,
+            labelCuenta
+        );
+    });
 
     // ── Listado / búsqueda / paginación / orden ────────────────────────────
 
@@ -76,7 +85,7 @@
     window.AF_fetchSearch = async function (p = 1) {
         const b = document.getElementById('txtBuscarAF')?.value || '';
         const tbody = document.getElementById('tbodyAF');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5"><span class="spinner-border text-primary"></span></td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-5"><span class="spinner-border text-primary"></span></td></tr>';
         try {
             const res = await fetchJson(`${AF_URL}/searchAjax?b=${encodeURIComponent(b)}&page=${p}&sort=${window.currentSort}&dir=${window.currentDir}`);
             if (tbody) tbody.innerHTML = res.rows;
@@ -147,6 +156,24 @@
             `<option value="${c.id}">${c.nombre} (${parseFloat(c.porcentaje_depreciacion_anual).toFixed(2)}%)</option>`
         ).join('');
         if (selectedId) sel.value = selectedId;
+    }
+
+    // ── Contrapartida del alta (regla general de Configuración Contable) ────
+
+    // La cuenta configurada en Configuración Contable se precarga en el modal; si el
+    // usuario la cambia aquí, el backend la escribe de vuelta en esa configuración.
+    async function precargarContrapartida() {
+        const hidden = document.getElementById('af-contrapartida-id');
+        if (hidden.value) return; // ya hay una cuenta (activo guardado o elección del usuario)
+        try {
+            const res = await fetchJson(`${AF_URL}/getContrapartidaConfigAjax`);
+            if (!res.ok || !res.data) return;
+            if (hidden.value) return; // pudo llenarse mientras respondía el fetch
+            hidden.value = res.data.id;
+            document.getElementById('af-contrapartida-txt').value = `${res.data.codigo} - ${res.data.nombre}`;
+        } catch (e) {
+            console.error('No se pudo leer la cuenta contrapartida configurada:', e);
+        }
     }
 
     // ── Origen: Manual / Desde factura de compra ───────────────────────────
@@ -233,8 +260,10 @@
         document.getElementById('af-id-compra').value = '';
         document.getElementById('af-id-compra-detalle').value = '';
         document.getElementById('af-id-proveedor').value = '';
-        document.getElementById('af-contrapartida-id').value = '';
-        document.getElementById('af-contrapartida-txt').value = '';
+        ['cuenta-activo', 'cuenta-dep', 'cuenta-gasto', 'contrapartida'].forEach(k => {
+            document.getElementById(`af-${k}-id`).value = '';
+            document.getElementById(`af-${k}-txt`).value = '';
+        });
         document.getElementById('af-compra-buscar').value = '';
         document.getElementById('af-compra-info').innerHTML = '&nbsp;';
         document.getElementById('af-compra-lineas-cont').classList.add('d-none');
@@ -251,7 +280,8 @@
 
     function setCamposHabilitados(habilitado) {
         ['af-nombre', 'af-codigo', 'af-valor-adquisicion', 'af-fecha-adquisicion', 'af-proveedor-texto',
-         'af-categoria', 'af-valor-residual', 'af-observaciones', 'af-contrapartida-txt']
+         'af-categoria', 'af-valor-residual', 'af-observaciones', 'af-contrapartida-txt',
+         'af-cuenta-activo-txt', 'af-cuenta-dep-txt', 'af-cuenta-gasto-txt']
             .forEach(id => { const el = document.getElementById(id); if (el) el.disabled = !habilitado; });
     }
 
@@ -281,6 +311,19 @@
             document.getElementById('af-observaciones').value = a.observaciones || '';
             await pintarCategorias(a.id_categoria);
 
+            const setCuenta = (k, id, codigo, nombre) => {
+                document.getElementById(`af-${k}-id`).value = id || '';
+                document.getElementById(`af-${k}-txt`).value = codigo ? `${codigo} - ${nombre}` : '';
+            };
+            setCuenta('cuenta-activo', a.id_cuenta_activo, a.cuenta_activo_codigo, a.cuenta_activo_nombre);
+            setCuenta('cuenta-dep', a.id_cuenta_depreciacion_acumulada, a.cuenta_dep_acum_codigo, a.cuenta_dep_acum_nombre);
+            setCuenta('cuenta-gasto', a.id_cuenta_gasto_depreciacion, a.cuenta_gasto_codigo, a.cuenta_gasto_nombre);
+            setCuenta('contrapartida', a.id_cuenta_contrapartida_alta, a.cuenta_contrapartida_codigo, a.cuenta_contrapartida_nombre);
+
+            // La contrapartida solo aplica al alta manual; si vino de una compra, se oculta.
+            document.getElementById('af-contrapartida-cont').classList.toggle('d-none', a.origen === 'compra');
+            if (a.origen !== 'compra') await precargarContrapartida();
+
             document.getElementById('af-resumen').classList.remove('d-none');
             document.getElementById('af-resumen-acumulada').textContent = fmtMoney(a.depreciacion_acumulada);
             document.getElementById('af-resumen-libros').textContent = fmtMoney(a.valor_en_libros);
@@ -308,6 +351,7 @@
         }
 
         document.getElementById('af-fecha-adquisicion').value = new Date().toISOString().slice(0, 10);
+        precargarContrapartida();
         new bootstrap.Modal(document.getElementById('modalActivoFijo')).show();
     };
 
@@ -345,6 +389,9 @@
             Swal.fire('Atención', 'Seleccione la categoría del activo.', 'warning');
             return;
         }
+        if (!document.getElementById('af-cuenta-activo-id').value) { Swal.fire('Atención', 'Seleccione la cuenta de Activo desde la lista.', 'warning'); return; }
+        if (!document.getElementById('af-cuenta-dep-id').value) { Swal.fire('Atención', 'Seleccione la cuenta de Depreciación Acumulada desde la lista.', 'warning'); return; }
+        if (!document.getElementById('af-cuenta-gasto-id').value) { Swal.fire('Atención', 'Seleccione la cuenta de Gasto por Depreciación desde la lista.', 'warning'); return; }
 
         const fd = new FormData(form);
         const btn = document.getElementById('af-btn-guardar');

@@ -74,6 +74,22 @@ class ProveedorRules
             $errores[] = 'El tipo de identificación es obligatorio.';
         }
 
+        // Rango de monto para auto generar el pago (ambos límites son opcionales)
+        $montoMin = isset($data['monto_minimo_auto_pago']) && $data['monto_minimo_auto_pago'] !== '' && $data['monto_minimo_auto_pago'] !== null
+            ? (float) $data['monto_minimo_auto_pago'] : null;
+        $montoMax = isset($data['monto_maximo_auto_pago']) && $data['monto_maximo_auto_pago'] !== '' && $data['monto_maximo_auto_pago'] !== null
+            ? (float) $data['monto_maximo_auto_pago'] : null;
+
+        if ($montoMin !== null && $montoMin < 0) {
+            $errores[] = 'El monto mínimo para auto generar el pago no puede ser negativo.';
+        }
+        if ($montoMax !== null && $montoMax < 0) {
+            $errores[] = 'El monto máximo para auto generar el pago no puede ser negativo.';
+        }
+        if ($montoMin !== null && $montoMax !== null && $montoMin > 0 && $montoMax > 0 && $montoMin > $montoMax) {
+            $errores[] = 'El monto mínimo para auto generar el pago no puede ser mayor que el monto máximo.';
+        }
+
         if (!empty(trim($data['email'] ?? ''))) {
             $emails = array_map('trim', explode(',', trim($data['email'])));
             foreach ($emails as $email) {

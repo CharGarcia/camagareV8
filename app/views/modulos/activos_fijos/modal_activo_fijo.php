@@ -62,26 +62,22 @@
                             <!-- Panel: Manual -->
                             <div id="af-panel-manual">
                                 <div class="row g-3">
-                                    <div class="col-md-8">
+                                    <div class="col-12">
                                         <label class="form-label small fw-bold">Nombre / Descripción del Activo</label>
                                         <input type="text" name="nombre" id="af-nombre" class="form-control form-control-sm" required>
                                     </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold">Código (opcional)</label>
-                                        <input type="text" name="codigo" id="af-codigo" class="form-control form-control-sm">
-                                    </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-3">
                                         <label class="form-label small fw-bold">Valor de Adquisición</label>
                                         <div class="input-group input-group-sm">
                                             <span class="input-group-text">$</span>
                                             <input type="number" step="0.01" min="0.01" name="valor_adquisicion" id="af-valor-adquisicion" class="form-control text-end" required>
                                         </div>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-3">
                                         <label class="form-label small fw-bold">Fecha de Adquisición</label>
                                         <input type="date" name="fecha_adquisicion" id="af-fecha-adquisicion" class="form-control form-control-sm" max="<?= date('Y-m-d') ?>" required>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-6">
                                         <label class="form-label small fw-bold">Proveedor (texto libre, opcional)</label>
                                         <input type="text" name="proveedor_texto" id="af-proveedor-texto" class="form-control form-control-sm">
                                     </div>
@@ -102,12 +98,64 @@
                                         <input type="number" step="0.01" min="0" name="valor_residual" id="af-valor-residual" class="form-control text-end" value="0">
                                     </div>
                                 </div>
-                                <div class="col-md-4" id="af-contrapartida-cont">
-                                    <label class="form-label small fw-bold">Cuenta Contrapartida (opcional)</label>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Código (opcional)</label>
+                                    <input type="text" name="codigo" id="af-codigo" class="form-control form-control-sm">
+                                </div>
+                            </div>
+
+                            <hr>
+                            <p class="text-muted small mb-2"><i class="bi bi-info-circle me-1"></i>Cuentas contables de este activo: las usan el asiento de alta y el de depreciación mensual.</p>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Cuenta de Activo</label>
                                     <div class="position-relative">
-                                        <input type="text" id="af-contrapartida-txt" class="form-control form-control-sm" placeholder="Usa la regla general si no se elige" autocomplete="off">
+                                        <input type="text" id="af-cuenta-activo-txt" class="form-control form-control-sm" placeholder="Buscar cuenta..." autocomplete="off" required>
+                                        <input type="hidden" name="id_cuenta_activo" id="af-cuenta-activo-id">
+                                        <div class="list-group af-dropdown" id="af-cuenta-activo-dropdown"></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Cuenta Depreciación Acumulada</label>
+                                    <div class="position-relative">
+                                        <input type="text" id="af-cuenta-dep-txt" class="form-control form-control-sm" placeholder="Buscar cuenta..." autocomplete="off" required>
+                                        <input type="hidden" name="id_cuenta_depreciacion_acumulada" id="af-cuenta-dep-id">
+                                        <div class="list-group af-dropdown" id="af-cuenta-dep-dropdown"></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Cuenta Gasto Depreciación</label>
+                                    <div class="position-relative">
+                                        <input type="text" id="af-cuenta-gasto-txt" class="form-control form-control-sm" placeholder="Buscar cuenta..." autocomplete="off" required>
+                                        <input type="hidden" name="id_cuenta_gasto_depreciacion" id="af-cuenta-gasto-id">
+                                        <div class="list-group af-dropdown" id="af-cuenta-gasto-dropdown"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-1" id="af-contrapartida-cont">
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Cuenta Contrapartida</label>
+                                    <div class="position-relative">
+                                        <input type="text" id="af-contrapartida-txt" class="form-control form-control-sm" placeholder="Buscar cuenta..." autocomplete="off">
                                         <input type="hidden" name="id_cuenta_contrapartida_alta" id="af-contrapartida-id">
                                         <div class="list-group af-dropdown" id="af-contrapartida-dropdown"></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-8">
+                                    <div class="af-ayuda border rounded-3 bg-light bg-opacity-50 px-2 py-1 h-100">
+                                        <div class="fw-bold text-secondary mb-1">
+                                            <i class="bi bi-info-circle me-1"></i>¿Cuándo se usa la cuenta contrapartida?
+                                        </div>
+                                        <ul class="mb-1 ps-3 text-muted">
+                                            <li>Es el <strong>Haber</strong> del asiento de alta: contra qué entró el activo — bancos o caja si lo pagaste, cuentas por pagar si quedaste debiendo, capital si fue un aporte.</li>
+                                            <li>Se usa <strong>una sola vez</strong>, al registrar el activo de forma <strong>manual</strong>. Si el activo viene de una factura de compra, esa compra ya generó su asiento y esta cuenta no interviene.</li>
+                                            <li><strong>No</strong> es la Cuenta Gasto Depreciación: esa se usa cada mes, en el asiento de depreciación.</li>
+                                        </ul>
+                                        <div class="text-secondary border-top pt-1">
+                                            Se precarga desde <em>Contabilidad → Configuración contable</em>, concepto «Activos Fijos - Alta».
+                                            Si la cambias aquí, <strong>también se actualiza allá</strong> para los próximos activos.
+                                        </div>
                                     </div>
                                 </div>
                             </div>

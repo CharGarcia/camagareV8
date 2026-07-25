@@ -5,6 +5,8 @@ const REFRESH_KEY = 'cmg_refresh_token';
 const EMPRESA_KEY = 'cmg_id_empresa';
 const DEVICE_ID_KEY = 'cmg_dispositivo_id';
 const SERIE_KEY = 'cmg_serie_pedidos';
+const ASISTENCIA_EMP_TOKEN_KEY = 'cmg_asistencia_emp_token';
+const ASISTENCIA_EMP_NOMBRE_KEY = 'cmg_asistencia_emp_nombre';
 
 export async function getAccessToken(): Promise<string | null> {
   return SecureStore.getItemAsync(ACCESS_KEY);
@@ -70,4 +72,26 @@ export async function setSerieSeleccionada(serie: SerieGuardada): Promise<void> 
 
 export async function clearSerie(): Promise<void> {
   await SecureStore.deleteItemAsync(SERIE_KEY);
+}
+
+export type CredencialAsistencia = { token: string; nombre: string };
+
+/** Credencial de asistencia (token de empleados_biometria) vinculada a este celular.
+ * Independiente del login de `usuarios`: el personal que marca asistencia (ej. guardias)
+ * no necesariamente tiene cuenta en el sistema. */
+export async function getCredencialAsistencia(): Promise<CredencialAsistencia | null> {
+  const token = await SecureStore.getItemAsync(ASISTENCIA_EMP_TOKEN_KEY);
+  if (!token) return null;
+  const nombre = (await SecureStore.getItemAsync(ASISTENCIA_EMP_NOMBRE_KEY)) ?? '';
+  return { token, nombre };
+}
+
+export async function setCredencialAsistencia(cred: CredencialAsistencia): Promise<void> {
+  await SecureStore.setItemAsync(ASISTENCIA_EMP_TOKEN_KEY, cred.token);
+  await SecureStore.setItemAsync(ASISTENCIA_EMP_NOMBRE_KEY, cred.nombre);
+}
+
+export async function clearCredencialAsistencia(): Promise<void> {
+  await SecureStore.deleteItemAsync(ASISTENCIA_EMP_TOKEN_KEY);
+  await SecureStore.deleteItemAsync(ASISTENCIA_EMP_NOMBRE_KEY);
 }

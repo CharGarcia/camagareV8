@@ -324,6 +324,15 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
         }
     }
 
+    // La columna Documento Ref. es un enlace al documento (factura, compra, egreso…) cuando el
+    // asiento tiene uno identificado; si no, queda como texto.
+    function docRefHtml(mov) {
+        const texto = mov.documento_referencia || '';
+        if (!mov.modulo_documento || !mov.id_documento) return texto;
+        return `<a href="#" onclick="event.preventDefault(); DOCORIGEN_abrirModal('${mov.modulo_documento}', ${mov.id_documento});"
+                   class="text-decoration-none" title="Ver el documento">${texto}</a>`;
+    }
+
     function renderMayor(data) {
         if (!data.cuentas || !data.cuentas.length) {
             document.getElementById('content-reporte').innerHTML =
@@ -356,7 +365,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
                 html += `<tr class="fila-mov">
                     <td class="text-center">${mov.fecha_asiento}</td>
                     <td class="text-center"><a href="#" onclick="event.preventDefault(); ASIENTO_abrirModal(${mov.id_asiento});" class="text-decoration-none fw-bold" title="Ver asiento contable">${mov.numero_comprobante || 'S/N'}</a></td>
-                    <td>${mov.documento_referencia || ''}</td>
+                    <td>${docRefHtml(mov)}</td>
                     <td>${mov.tercero || ''}</td>
                     <td><small>${glosa}</small></td>
                     <td class="text-end ${de > 0 ? 'text-dark' : 'text-muted'}">${formatMoney(de)}</td>
@@ -445,9 +454,31 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
         const accion = formato === 'pdf' ? 'exportPdf' : 'exportExcel';
         window.open(`${urlBase}/${accion}?${params.toString()}`, '_blank');
     }
+
+    // ── Aviso de asientos pendientes de generar ─────────────────────────────────────
+    // Al abrir el módulo se consulta cuántos documentos están sin asiento y se pregunta al
+    // usuario si desea generarlos ahora o continuar sin generar. Si genera y ya había un
+    // reporte en pantalla, se vuelve a generar para reflejar los asientos nuevos. Se difiere
+    // a DOMContentLoaded porque el helper (asientos_pendientes.js) se carga al final del cuerpo.
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof window.CMG_verificarAsientosPendientes !== 'function') return;
+        window.CMG_verificarAsientosPendientes({
+            urlBase: urlBase,
+            onGenerado: () => {
+                const cont = document.getElementById('content-reporte');
+                if (cont && cont.innerHTML.trim() && typeof generarReporte === 'function') generarReporte();
+            }
+        });
+    });
 </script>
 
 <!-- Modal del Asiento Contable reutilizado para ver el detalle del comprobante -->
 <script>window.BASE_URL = '<?= $base ?>';</script>
 <?php include __DIR__ . '/../asientos_contables/modal_asiento.php'; ?>
 <script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= time() ?>"></script>
+
+<!-- Modal del documento origen: lo abre la columna Documento Ref. -->
+<?php include __DIR__ . '/../documento_origen/modal_documento.php'; ?>
+<script>window.DOCORIGEN_URL = '<?= $urlBaseReporte ?>/getDocumentoOrigenAjax';</script>
+<script src="<?= $base ?>/js/modulos/documento_origen_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/asientos_pendientes.js?v=<?= time() ?>"></script>

@@ -19,14 +19,16 @@ class ProveedorRepository extends BaseRepository
     public function __construct()
     {
         parent::__construct('proveedores');
-        $this->ensureGeoColumns();
+        $this->ensureColumnasOpcionales();
     }
 
     /**
-     * Agrega las columnas de geolocalización si aún no existen.
+     * Agrega las columnas de geolocalización y el límite inferior del rango de
+     * auto pago si aún no existen (ver database/migrations/
+     * 20260725_proveedores_monto_minimo_auto_pago.sql).
      * Seguro de ejecutar múltiples veces gracias a IF NOT EXISTS.
      */
-    private function ensureGeoColumns(): void
+    private function ensureColumnasOpcionales(): void
     {
         if (self::$geoMigrated) return;
         self::$geoMigrated = true;
@@ -34,6 +36,7 @@ class ProveedorRepository extends BaseRepository
             $this->db->exec("ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS latitud         DECIMAL(10,8) DEFAULT NULL");
             $this->db->exec("ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS longitud         DECIMAL(11,8) DEFAULT NULL");
             $this->db->exec("ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS geocodificado_en TIMESTAMP     DEFAULT NULL");
+            $this->db->exec("ALTER TABLE proveedores ADD COLUMN IF NOT EXISTS monto_minimo_auto_pago NUMERIC(14,2) DEFAULT NULL");
         } catch (\Throwable) {
             // Las columnas ya existen o el motor no soporta IF NOT EXISTS — se ignora
         }
@@ -191,34 +194,163 @@ class ProveedorRepository extends BaseRepository
     }
 
     /**
-     * Obtiene estadísticas de compras del proveedor.
-     * En caso de que la tabla 'compras' no exista, regresa 0.
+     * Resumen comercial del proveedor (solo lectura) para el modal:
+     *
+     *  - documentos_recibidos: compras (facturas, NC y ND) + liquidaciones de compra.
+     *  - total_compras:        neto comprado = facturas + liquidaciones − NC + ND.
+     *  - por_pagar:            saldo pendiente con el mismo criterio de Cuentas por
+     *                          Pagar (documento − pagado − retenido − NC + ND), más
+     *                          los saldos iniciales CXP pendientes.
+     *
+     * Se limita al ambiente activo de la empresa, igual que el resto de módulos
+     * transaccionales. Si algo falla devuelve ceros sin romper el modal.
      */
     public function getEstadisticas(int $id, int $idEmpresa): array
     {
         $stats = [
             'documentos_recibidos' => 0,
-            'total_compras' => 0.00,
-            'por_pagar' => 0.00
+            'total_compras'        => 0.00,
+            'por_pagar'            => 0.00,
         ];
+
+        $params = [':id' => $id, ':id_empresa' => $idEmpresa];
+
         try {
-            // Adaptar los nombres reales de columnas cuando se cree la tabla compras
-            $sql = "SELECT COUNT(*) as docs, COALESCE(SUM(total), 0) as total, COALESCE(SUM(saldo), 0) as saldo 
-                    FROM compras 
-                    WHERE id_proveedor = :id 
-                      AND id_empresa = :id_empresa 
-                      AND eliminado = false";
-            $st = $this->db->prepare($sql);
-            $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
-            $row = $st->fetch(PDO::FETCH_ASSOC);
-            if ($row) {
-                $stats['documentos_recibidos'] = (int)$row['docs'];
-                $stats['total_compras'] = (float)$row['total'];
-                $stats['por_pagar'] = (float)$row['saldo'];
+            // Ambiente activo de la empresa ('1' pruebas | '2' producción)
+            $stA = $this->db->prepare("SELECT CAST(tipo_ambiente AS VARCHAR) FROM empresas WHERE id = :id_empresa LIMIT 1");
+            $stA->execute([':id_empresa' => $idEmpresa]);
+            $amb = $stA->fetchColumn();
+            $amb = $amb !== false && $amb !== null ? (string) $amb : null;
+
+            $filtroAmbC = '';
+            $filtroAmbL = '';
+            if ($amb !== null) {
+                $filtroAmbC = " AND CAST(c.tipo_ambiente AS VARCHAR) = :amb";
+                $filtroAmbL = " AND CAST(l.tipo_ambiente AS VARCHAR) = :amb";
+                $params[':amb'] = $amb;
             }
+
+            $sql = "
+                WITH pagado AS (
+                    SELECT ed.tipo_documento,
+                           ed.id_referencia_documento AS id_doc,
+                           SUM(ed.monto_pagado)       AS total_pagado
+                    FROM egresos_detalle ed
+                    INNER JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                    WHERE ed.tipo_documento IN ('COMPRA','LIQUIDACION')
+                      AND ec.estado   != 'anulado'
+                      AND ec.eliminado = false
+                      AND ed.eliminado = false
+                    GROUP BY ed.tipo_documento, ed.id_referencia_documento
+                ),
+                nc_nd AS (
+                    SELECT nc.documento_modificado,
+                           SUM(CASE WHEN nc.tipo_comprobante = '04' THEN nc.importe_total ELSE 0 END) AS total_nc,
+                           SUM(CASE WHEN nc.tipo_comprobante = '05' THEN nc.importe_total ELSE 0 END) AS total_nd
+                    FROM compras_cabecera nc
+                    WHERE nc.tipo_comprobante IN ('04','05')
+                      AND nc.eliminado    = false
+                      AND nc.id_empresa   = :id_empresa
+                      AND nc.id_proveedor = :id
+                    GROUP BY nc.documento_modificado
+                ),
+                ret AS (
+                    SELECT r.id_compra, r.id_liquidacion, SUM(r.total_retenido) AS total_retenido
+                    FROM retencion_compra_cabecera r
+                    WHERE r.eliminado = false
+                      AND UPPER(r.estado) NOT IN ('ANULADO','BORRADOR','PENDIENTE')
+                    GROUP BY r.id_compra, r.id_liquidacion
+                ),
+                docs AS (
+                    -- Facturas de compra
+                    SELECT c.importe_total                                          AS total,
+                           c.importe_total
+                             - COALESCE(pg.total_pagado, 0)
+                             - COALESCE(rt.total_retenido, 0)
+                             - COALESCE(nn.total_nc, 0)
+                             + COALESCE(nn.total_nd, 0)                             AS saldo
+                    FROM compras_cabecera c
+                    LEFT JOIN pagado pg ON pg.tipo_documento = 'COMPRA' AND pg.id_doc = c.id
+                    LEFT JOIN nc_nd  nn ON nn.documento_modificado =
+                              CONCAT(c.establecimiento_prov,'-',c.punto_emision_prov,'-',c.secuencial_prov)
+                    LEFT JOIN ret    rt ON rt.id_compra = c.id AND rt.id_liquidacion IS NULL
+                    WHERE c.id_empresa       = :id_empresa
+                      AND c.id_proveedor     = :id
+                      AND c.eliminado        = false
+                      AND c.tipo_comprobante = '01'
+                      {$filtroAmbC}
+
+                    UNION ALL
+
+                    -- Liquidaciones de compra
+                    SELECT l.importe_total                                          AS total,
+                           l.importe_total
+                             - COALESCE(pg.total_pagado, 0)
+                             - COALESCE(rt.total_retenido, 0)                       AS saldo
+                    FROM liquidaciones_cabecera l
+                    LEFT JOIN pagado pg ON pg.tipo_documento = 'LIQUIDACION' AND pg.id_doc = l.id
+                    LEFT JOIN ret    rt ON rt.id_liquidacion = l.id
+                    WHERE l.id_empresa   = :id_empresa
+                      AND l.id_proveedor = :id
+                      AND l.eliminado    = false
+                      AND LOWER(COALESCE(l.estado,'')) <> 'anulado'
+                      {$filtroAmbL}
+                )
+                SELECT COALESCE(SUM(total), 0)                                   AS total_bruto,
+                       COALESCE(SUM(CASE WHEN saldo > 0 THEN saldo ELSE 0 END), 0) AS saldo
+                FROM docs";
+
+            $st = $this->db->prepare($sql);
+            $st->execute($params);
+            $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+
+            // Neto comprado: al bruto de facturas/liquidaciones se le restan las NC
+            // y se le suman las ND del proveedor.
+            $sqlNcNd = "SELECT
+                            COALESCE(SUM(CASE WHEN c.tipo_comprobante = '04' THEN c.importe_total ELSE 0 END), 0) AS total_nc,
+                            COALESCE(SUM(CASE WHEN c.tipo_comprobante = '05' THEN c.importe_total ELSE 0 END), 0) AS total_nd
+                        FROM compras_cabecera c
+                        WHERE c.id_empresa   = :id_empresa
+                          AND c.id_proveedor = :id
+                          AND c.eliminado    = false
+                          AND c.tipo_comprobante IN ('04','05')
+                          {$filtroAmbC}";
+            $stN = $this->db->prepare($sqlNcNd);
+            $stN->execute($params);
+            $rowN = $stN->fetch(PDO::FETCH_ASSOC) ?: ['total_nc' => 0, 'total_nd' => 0];
+
+            $stats['total_compras'] = (float) ($row['total_bruto'] ?? 0)
+                                    - (float) ($rowN['total_nc'] ?? 0)
+                                    + (float) ($rowN['total_nd'] ?? 0);
+            $stats['por_pagar']     = (float) ($row['saldo'] ?? 0);
+
+            // Cantidad de documentos recibidos (compras de cualquier tipo + liquidaciones)
+            $sqlDocs = "SELECT
+                            (SELECT COUNT(*) FROM compras_cabecera c
+                              WHERE c.id_empresa = :id_empresa AND c.id_proveedor = :id
+                                AND c.eliminado = false {$filtroAmbC})
+                          + (SELECT COUNT(*) FROM liquidaciones_cabecera l
+                              WHERE l.id_empresa = :id_empresa AND l.id_proveedor = :id
+                                AND l.eliminado = false {$filtroAmbL}) AS docs";
+            $stD = $this->db->prepare($sqlDocs);
+            $stD->execute($params);
+            $stats['documentos_recibidos'] = (int) $stD->fetchColumn();
         } catch (\Throwable $e) {
-            // Tabla compras aún no migrada
+            // Alguna tabla transaccional aún no existe en esta instalación
         }
+
+        // Saldos iniciales CXP pendientes (tabla independiente, sin ambiente)
+        try {
+            $sqlSi = "SELECT COALESCE(SUM(CASE WHEN saldo_pendiente > 0 THEN saldo_pendiente ELSE 0 END), 0)
+                      FROM saldos_iniciales_cxp
+                      WHERE id_empresa = :id_empresa AND id_proveedor = :id AND eliminado = false";
+            $stSi = $this->db->prepare($sqlSi);
+            $stSi->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+            $stats['por_pagar'] += (float) $stSi->fetchColumn();
+        } catch (\Throwable $e) {
+            // Módulo de saldos iniciales no instalado
+        }
+
         return $stats;
     }
 
@@ -228,7 +360,8 @@ class ProveedorRepository extends BaseRepository
                     id_empresa, id_usuario, created_by, razon_social, nombre_comercial, tipo_id_proveedor,
                     identificacion, email, direccion, provincia, ciudad, telefono, tipo_empresa, plazo, unidad_tiempo, relacionado,
                     id_banco, tipo_cta, numero_cta,
-                    status, eliminado, created_at, id_forma_pago_predeterminada, monto_maximo_auto_pago,
+                    status, eliminado, created_at, id_forma_pago_predeterminada,
+                    monto_minimo_auto_pago, monto_maximo_auto_pago,
                     id_retencion_renta, id_retencion_iva, id_sustento_tributario,
                     tipo_operacion_bancaria_predeterminada, id_egreso_concepto_predeterminado,
                     latitud, longitud, geocodificado_en
@@ -236,7 +369,8 @@ class ProveedorRepository extends BaseRepository
                     :id_empresa, :id_usuario, :created_by, :razon_social, :nombre_comercial, :tipo_id_proveedor,
                     :identificacion, :email, :direccion, :provincia, :ciudad, :telefono, :tipo_empresa, :plazo, :unidad_tiempo, :relacionado,
                     :id_banco, :tipo_cta, :numero_cta,
-                    :status, :eliminado, CURRENT_TIMESTAMP, :id_forma_pago_predeterminada, :monto_maximo_auto_pago,
+                    :status, :eliminado, CURRENT_TIMESTAMP, :id_forma_pago_predeterminada,
+                    :monto_minimo_auto_pago, :monto_maximo_auto_pago,
                     :id_retencion_renta, :id_retencion_iva, :id_sustento_tributario,
                     :tipo_operacion_bancaria_predeterminada, :id_egreso_concepto_predeterminado,
                     :latitud::numeric, :longitud::numeric, :geocodificado_en::timestamp
@@ -265,6 +399,7 @@ class ProveedorRepository extends BaseRepository
             ':status'             => !empty($data['status']) ? 'true' : 'false',
             ':eliminado'          => !empty($data['eliminado']) ? 'true' : 'false',
             ':id_forma_pago_predeterminada' => $data['id_forma_pago_predeterminada'] ?? null,
+            ':monto_minimo_auto_pago'       => $data['monto_minimo_auto_pago'] ?? null,
             ':monto_maximo_auto_pago'       => $data['monto_maximo_auto_pago'] ?? null,
             ':id_retencion_renta'           => !empty($data['id_retencion_renta']) ? $data['id_retencion_renta'] : null,
             ':id_retencion_iva'             => !empty($data['id_retencion_iva']) ? $data['id_retencion_iva'] : null,
@@ -304,6 +439,7 @@ class ProveedorRepository extends BaseRepository
                 numero_cta = :numero_cta,
                 id_forma_pago_predeterminada = :id_forma_pago_predeterminada,
                 tipo_operacion_bancaria_predeterminada = :tipo_operacion_bancaria_predeterminada,
+                monto_minimo_auto_pago = :monto_minimo_auto_pago,
                 monto_maximo_auto_pago = :monto_maximo_auto_pago,
                 id_retencion_renta = :id_retencion_renta,
                 id_retencion_iva = :id_retencion_iva,
@@ -334,6 +470,7 @@ class ProveedorRepository extends BaseRepository
             ':numero_cta'         => $data['numero_cta'] ?? null,
             ':id_forma_pago_predeterminada' => $data['id_forma_pago_predeterminada'] ?? null,
             ':tipo_operacion_bancaria_predeterminada' => $data['tipo_operacion_bancaria_predeterminada'] ?? null,
+            ':monto_minimo_auto_pago'       => $data['monto_minimo_auto_pago'] ?? null,
             ':monto_maximo_auto_pago'       => $data['monto_maximo_auto_pago'] ?? null,
             ':id_retencion_renta'           => !empty($data['id_retencion_renta']) ? $data['id_retencion_renta'] : null,
             ':id_retencion_iva'             => !empty($data['id_retencion_iva']) ? $data['id_retencion_iva'] : null,

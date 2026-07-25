@@ -197,25 +197,31 @@ if (!defined('LEAFLET_LOADED')) {
 
                                 <!-- Resumen Comercial (Lectura) -->
                                 <div class="col-12 mt-4">
-                                    <h6 class="small fw-bold text-primary mb-3 border-bottom pb-2"><i class="bi bi-graph-up me-2"></i>Resumen Comercial</h6>
+                                    <h6 class="small fw-bold text-primary mb-3 border-bottom pb-2">
+                                        <i class="bi bi-graph-up me-2"></i>Resumen Comercial
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 fw-normal ms-1">Solo lectura</span>
+                                    </h6>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label small fw-bold text-muted">Documentos Recibidos</label>
-                                    <input type="text" class="form-control form-control-sm fw-medium" id="stat_documentos" readonly value="0">
+                                    <input type="text" class="form-control form-control-sm fw-medium text-end bg-light" id="stat_documentos" readonly tabindex="-1" value="0">
+                                    <div class="form-text text-muted" style="font-size: 10px;">Compras, notas de crédito/débito y liquidaciones.</div>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label small fw-bold text-muted">Total Compras</label>
                                     <div class="input-group input-group-sm">
-                                        <span class="input-group-text">$</span>
-                                        <input type="text" class="form-control form-control-sm fw-medium text-end" id="stat_total" readonly value="0.00">
+                                        <span class="input-group-text bg-light">$</span>
+                                        <input type="text" class="form-control form-control-sm fw-medium text-end bg-light" id="stat_total" readonly tabindex="-1" value="0.00">
                                     </div>
+                                    <div class="form-text text-muted" style="font-size: 10px;">Neto: facturas y liquidaciones − NC + ND.</div>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label small fw-bold text-muted">Por Pagar</label>
                                     <div class="input-group input-group-sm">
-                                        <span class="input-group-text">$</span>
-                                        <input type="text" class="form-control form-control-sm fw-medium text-end text-danger" id="stat_por_pagar" readonly value="0.00">
+                                        <span class="input-group-text bg-light">$</span>
+                                        <input type="text" class="form-control form-control-sm fw-medium text-end text-danger bg-light" id="stat_por_pagar" readonly tabindex="-1" value="0.00">
                                     </div>
+                                    <div class="form-text text-muted" style="font-size: 10px;">Saldo pendiente (incluye saldos iniciales).</div>
                                 </div>
                             </div>
                         </div>
@@ -249,7 +255,7 @@ if (!defined('LEAFLET_LOADED')) {
                         <!-- Pestaña Pagos -->
                         <div class="tab-pane fade" id="prov-tab-pagos" role="tabpanel">
                             <div class="alert alert-secondary bg-light border-0 small mb-3">
-                                <i class="bi bi-info-circle me-1"></i> Determine la forma de pago por defecto y el monto máximo para auto generar pagos al registrar compras.
+                                <i class="bi bi-info-circle me-1"></i> Determine la forma de pago por defecto y el rango de monto para auto generar pagos al registrar compras.
                             </div>
                             <div class="row g-3">
                                 <div class="col-md-6">
@@ -265,15 +271,52 @@ if (!defined('LEAFLET_LOADED')) {
                                         <option value="TRANSFERENCIA">Transferencia</option>
                                         <option value="DEPOSITO">Depósito</option>
                                         <option value="DEBITO">Débito</option>
+                                        <option value="CHEQUE">Cheque</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Monto máximo para auto generar pago</label>
-                                    <div class="input-group input-group-sm">
-                                        <span class="input-group-text bg-light border-secondary-subtle">$</span>
-                                        <input type="number" step="0.01" min="0" class="form-control form-control-sm border-secondary-subtle" name="monto_maximo_auto_pago" id="prov_monto_maximo" placeholder="0.00" autocomplete="off">
+
+                                <!-- Rango de monto para auto generar el pago -->
+                                <div class="col-12">
+                                    <label class="form-label small fw-bold mb-1"><i class="bi bi-rulers me-1"></i>Rango de monto para auto generar pago</label>
+                                    <div class="row g-2">
+                                        <div class="col-md-6">
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light border-secondary-subtle" style="min-width:118px;">Mayor o igual a</span>
+                                                <span class="input-group-text bg-light border-secondary-subtle">$</span>
+                                                <input type="number" step="0.01" min="0" class="form-control form-control-sm border-secondary-subtle" name="monto_minimo_auto_pago" id="prov_monto_minimo" placeholder="0.00" autocomplete="off">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light border-secondary-subtle" style="min-width:118px;">Menor o igual a</span>
+                                                <span class="input-group-text bg-light border-secondary-subtle">$</span>
+                                                <input type="number" step="0.01" min="0" class="form-control form-control-sm border-secondary-subtle" name="monto_maximo_auto_pago" id="prov_monto_maximo" placeholder="0.00" autocomplete="off">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="form-text text-muted" style="font-size: 10px;">
+                                        Deje un campo vacío (o en 0) para no aplicar ese límite. El pago automático solo se genera si el total del documento cae dentro del rango.
                                     </div>
                                 </div>
+
+                                <!-- Información del pago con cheque (solo cuando la operación bancaria es CHEQUE) -->
+                                <div class="col-12 d-none" id="prov_div_cheque">
+                                    <div class="p-2 bg-white border rounded shadow-sm">
+                                        <div class="small fw-bold text-primary mb-2"><i class="bi bi-card-checklist me-1"></i>Pago con cheque</div>
+                                        <ul class="small text-muted mb-0 ps-3">
+                                            <li>
+                                                <span class="fw-bold">N° de cheque:</span>
+                                                se asignará automáticamente el consecutivo siguiente al último cheque emitido con esta forma de pago.
+                                            </li>
+                                            <li>
+                                                <span class="fw-bold">Fecha de cobro:</span>
+                                                fecha de emisión del documento de compra + los <em>Días de Crédito</em> de la pestaña Comercial
+                                                <span id="prov_cheque_plazo_txt" class="fw-bold text-dark"></span>.
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold"><i class="bi bi-tags me-1"></i>Concepto de egreso predeterminado</label>
                                     <select class="form-select form-select-sm bg-light" id="prov_id_egreso_concepto" disabled>

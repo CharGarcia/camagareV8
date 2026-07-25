@@ -103,6 +103,29 @@ class AsientosContablesController extends BaseModuloController
         }
     }
 
+    /**
+     * Cuenta cuántos documentos operativos están pendientes de generar su asiento contable,
+     * sin generar nada. La vista lo consulta al cargar para preguntar al usuario si desea
+     * generarlos ahora o continuar sin generar.
+     */
+    public function contarPendientesAjax(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+
+            $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
+            echo json_encode(['ok' => true, 'pendientes' => $sincronizador->contarPendientes($idEmpresa)]);
+        } catch (\Throwable $th) {
+            echo json_encode(['ok' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
     public function searchAjax(): void
     {
         $this->requireLeer();

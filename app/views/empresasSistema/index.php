@@ -299,7 +299,33 @@ function estadoPagoBadge($estado) {
                         </div>
                         <div class="col-12">
                             <label for="crear-mail" class="form-label">Correo</label>
-                            <input type="email" id="crear-mail" name="mail" class="form-control form-control-sm" placeholder="correo@empresa.com">
+                            <div class="input-group input-group-sm">
+                                <input type="email" id="crear-mail" name="mail" class="form-control form-control-sm" placeholder="correo@empresa.com">
+                                <span class="input-group-text bg-white">
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="crear-crear-usuario" name="crear_usuario_admin" value="1" checked>
+                                        <label class="form-check-label small" for="crear-crear-usuario" title="Crea un usuario administrador con este correo y le envía la invitación para registrarse">
+                                            Crear usuario administrador
+                                        </label>
+                                    </div>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-12" id="crear-combo-wrap">
+                            <label for="crear-combo" class="form-label">Combo de submódulos para el usuario</label>
+                            <select id="crear-combo" name="id_combo_submodulos" class="form-select form-select-sm">
+                                <option value="">— Ninguno (sin submódulos preasignados) —</option>
+                                <?php foreach (($combosSubmodulos ?? []) as $combo): ?>
+                                    <option value="<?= (int)$combo['id'] ?>">
+                                        <?= htmlspecialchars($combo['nombre']) ?> (<?= (int)($combo['total_submodulos'] ?? 0) ?> submódulos)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text">
+                                Al crear la empresa se crea el usuario administrador y se le asignan automáticamente
+                                los submódulos del combo seleccionado (permisos totales). Se administran en
+                                <strong>Configuración → Combos de submódulos</strong>.
+                            </div>
                         </div>
                         <div class="col-md-4">
                             <label for="crear-provincia" class="form-label">Provincia</label>
@@ -1172,6 +1198,19 @@ function estadoPagoBadge($estado) {
         crearProvincia.addEventListener('change', function() {
             cargarCiudades(this.value, 'crear-ciudad', '');
         });
+    }
+
+    // El selector de combo solo aplica si se va a crear el usuario administrador.
+    var chkCrearUsuario = document.getElementById('crear-crear-usuario');
+    var comboWrap = document.getElementById('crear-combo-wrap');
+    function toggleComboWrap() {
+        if (comboWrap && chkCrearUsuario) {
+            comboWrap.style.display = chkCrearUsuario.checked ? '' : 'none';
+        }
+    }
+    if (chkCrearUsuario) {
+        chkCrearUsuario.addEventListener('change', toggleComboWrap);
+        toggleComboWrap();
     }
 
     function consultarRucSri() {

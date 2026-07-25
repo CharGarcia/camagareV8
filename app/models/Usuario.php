@@ -482,7 +482,7 @@ class Usuario extends BaseModel
      * Crear usuario por correo (invitación). El usuario completará registro y clave vía correo.
      * Cedula temporal = correo. Password = token aleatorio hasta que se registre.
      */
-    public function crearPorCorreo(string $nombre, string $correo, int $idAdmin): array
+    public function crearPorCorreo(string $nombre, string $correo, int $idAdmin, int $nivel = 1): array
     {
         $nombre = $this->escape(trim($nombre));
         $correo = trim($correo);
@@ -498,17 +498,21 @@ class Usuario extends BaseModel
             throw new \InvalidArgumentException('Ya existe un usuario con ese correo.');
         }
 
+        // Nivel: 1 (usuario) o 2 (administrador). Nunca super admin por esta vía.
+        $nivel = in_array($nivel, [1, 2], true) ? $nivel : 1;
+
         $token = bin2hex(random_bytes(16));
         $hash = password_hash($token, PASSWORD_DEFAULT) ?: md5($token);
 
-        $sql = "INSERT INTO usuarios (nombre, cedula, password, nivel, estado, mail, token, telefono) 
-                VALUES (:nombre, :cedula, :password, 1, 1, :mail, :token, :telefono)";
+        $sql = "INSERT INTO usuarios (nombre, cedula, password, nivel, estado, mail, token, telefono)
+                VALUES (:nombre, :cedula, :password, :nivel, 1, :mail, :token, :telefono)";
         
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
             ':nombre'   => trim($nombre),
             ':cedula'   => substr(md5($correo), 0, 15), // Hash único de máx 15 caracteres
             ':password' => $hash,
+            ':nivel'    => $nivel,
             ':mail'     => trim($correo),
             ':token'    => $token,
             ':telefono' => '' // Teléfono vacío por defecto en invitación

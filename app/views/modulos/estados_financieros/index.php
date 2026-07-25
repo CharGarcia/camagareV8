@@ -12,12 +12,6 @@ $base = BASE_URL;
 $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
 $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 ?>
-<!-- Estado de la generación de asientos pendientes (se completa en segundo plano vía JS) -->
-<div id="ef-sync-status" class="alert alert-info d-flex align-items-center shadow-sm mb-3" role="alert">
-    <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
-    <span>Verificando y generando asientos contables pendientes, espere un momento…</span>
-</div>
-<div id="ef-warnings"></div>
 <div id="ef-depreciacion-warning"></div>
 
 <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -165,8 +159,8 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                             <tr>
                                 <th>Fecha</th>
                                 <th>Asiento</th>
-                                <th>Referencia</th>
-                                <th>Concepto</th>
+                                <th>Documento Ref.</th>
+                                <th>Glosa</th>
                                 <th>Debe</th>
                                 <th>Haber</th>
                                 <th>Saldo</th>
@@ -197,61 +191,21 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
     const urlBase = '<?= $urlBaseReporte ?>';
     const urlBaseActivosFijos = '<?= $urlBaseActivosFijos ?>';
 
-    // ── Generación de asientos pendientes en segundo plano ──────────────────────────
-    // La página ya cargó; disparamos la sincronización sin bloquearla y mostramos el
-    // avance en el banner #ef-sync-status. Al terminar se muestran los avisos (si hay).
-    (function sincronizarAsientosPendientes() {
-        const box = document.getElementById('ef-sync-status');
-        const warnBox = document.getElementById('ef-warnings');
-        if (!box) return;
-
-        const escapeHtml = (s) => String(s).replace(/[&<>"']/g,
-            c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-        fetch(`${urlBase}/sincronizarAjax`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-            .then(r => r.json())
-            .then(json => {
-                box.remove();
-                let html = '';
-
-                if (json && !json.success) {
-                    // Falló la corrida completa (no se pudo ni ejecutar la generación).
-                    html =
-                        `<div class="alert alert-danger alert-dismissible fade show shadow-sm mb-3" role="alert">
-                            <i class="bi bi-x-octagon-fill me-2"></i> No se pudieron generar los asientos pendientes: ${escapeHtml(json.error || 'error')}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>`;
-                } else if (json && json.success) {
-                    // Asientos generados en esta corrida (aviso informativo).
-                    if (json.generados > 0) {
-                        html +=
-                            `<div class="alert alert-success alert-dismissible fade show shadow-sm mb-3" role="alert">
-                                <i class="bi bi-check-circle-fill me-2"></i> Se generaron <strong>${json.generados}</strong> asiento(s) contable(s) que estaban pendientes.
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                            </div>`;
-                    }
-                    // Pendientes con error / avisos de configuración: incluyen el motivo real.
-                    if (Array.isArray(json.warnings) && json.warnings.length) {
-                        const items = json.warnings.map(w => `<li class="mb-1">${escapeHtml(w)}</li>`).join('');
-                        html +=
-                            `<div class="alert alert-warning alert-dismissible fade show shadow-sm mb-3" role="alert">
-                                <strong><i class="bi bi-exclamation-triangle-fill me-2"></i> Asientos pendientes o con error:</strong>
-                                <ul class="mb-0 mt-2">${items}</ul>
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                            </div>`;
-                    }
+    // ── Aviso de asientos pendientes de generar ─────────────────────────────────────
+    // Al cargar, se consulta cuántos documentos están sin asiento y se pregunta al usuario
+    // si desea generarlos ahora o continuar sin generar. Si genera, se refresca el reporte.
+    // Se difiere a DOMContentLoaded porque el helper (asientos_pendientes.js) se carga al
+    // final del cuerpo, después de este script inline.
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof window.CMG_verificarAsientosPendientes === 'function') {
+            window.CMG_verificarAsientosPendientes({
+                urlBase: urlBase,
+                onGenerado: () => {
+                    if (typeof generarReporte === 'function') generarReporte();
                 }
-
-                warnBox.innerHTML = html;
-            })
-            .catch(() => {
-                const sp = box.querySelector('.spinner-border'); if (sp) sp.remove();
-                box.classList.remove('alert-info');
-                box.classList.add('alert-danger');
-                box.querySelector('span').textContent =
-                    'No se pudo completar la generación de asientos. Recargue la página para reintentar.';
             });
-    })();
+        }
+    });
 
     // ── Aviso de depreciación de activos fijos pendiente ─────────────────────────
     // Solo informativo (sin botón de acceso directo): revisa el año/mes que el usuario
@@ -524,6 +478,15 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
         window.open(url, '_blank');
     }
 
+    // La columna Documento Ref. es un enlace al documento (factura, compra, egreso…) cuando el
+    // asiento tiene uno identificado; si no, queda como texto.
+    function docRefHtml(item) {
+        const texto = item.documento_referencia || '';
+        if (!item.modulo_documento || !item.id_documento) return texto;
+        return `<a href="#" onclick="event.preventDefault(); DOCORIGEN_abrirModal('${item.modulo_documento}', ${item.id_documento});"
+                   class="text-decoration-none" title="Ver el documento">${texto}</a>`;
+    }
+
     async function verMayorAuxiliar(codigoCuenta, nombreCuenta) {
         const modal = new bootstrap.Modal(document.getElementById('modalMayor'));
         document.getElementById('tituloModalMayor').innerHTML = `<i class="bi bi-journal-text text-primary me-2"></i> Mayor: ${codigoCuenta} - ${nombreCuenta}`;
@@ -558,7 +521,7 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
                     html += `<tr>
                         <td class="text-center">${item.fecha_asiento}</td>
                         <td class="text-center"><a href="#" onclick="event.preventDefault(); ASIENTO_abrirModal(${item.id_asiento});" class="text-decoration-none fw-bold" title="Ver asiento contable">${item.numero_comprobante || 'S/N'}</a></td>
-                        <td>${item.documento_referencia || ''}</td>
+                        <td>${docRefHtml(item)}</td>
                         <td><small>${item.referencia_detalle || item.concepto || ''}</small></td>
                         <td class="text-end ${de > 0 ? 'text-dark' : 'text-muted'}">${formatMoney(de)}</td>
                         <td class="text-end ${ha > 0 ? 'text-dark' : 'text-muted'}">${formatMoney(ha)}</td>
@@ -581,8 +544,15 @@ $urlBaseActivosFijos = rtrim($base, '/') . '/modulos/activos-fijos';
 <script>window.BASE_URL = '<?= $base ?>';</script>
 <?php include __DIR__ . '/../asientos_contables/modal_asiento.php'; ?>
 <script src="<?= $base ?>/js/modulos/asientos_contables_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/asientos_pendientes.js?v=<?= time() ?>"></script>
+
+<!-- Modal del documento origen: lo abre la columna Documento Ref. del mayor auxiliar -->
+<?php include __DIR__ . '/../documento_origen/modal_documento.php'; ?>
+<script>window.DOCORIGEN_URL = '<?= $urlBaseReporte ?>/getDocumentoOrigenAjax';</script>
+<script src="<?= $base ?>/js/modulos/documento_origen_modal.js?v=<?= time() ?>"></script>
+
 <script>
-    // Apilar el modal del Asiento por encima del modal del Mayor (z-index correcto).
+    // Apilar el modal del Asiento y el del Documento por encima del modal del Mayor (z-index).
     document.addEventListener('show.bs.modal', function (e) {
         const abiertos = document.querySelectorAll('.modal.show').length;
         if (abiertos > 0) {

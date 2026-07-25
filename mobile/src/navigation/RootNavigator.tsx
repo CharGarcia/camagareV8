@@ -17,10 +17,12 @@ import ProductosListScreen from '../screens/ProductosListScreen';
 import ProductoFormScreen from '../screens/ProductoFormScreen';
 import FacturasVentaListScreen from '../screens/FacturasVentaListScreen';
 import FacturaVentaFormScreen from '../screens/FacturaVentaFormScreen';
+import AsistenciaScreen from '../screens/AsistenciaScreen';
 
 export type RootStackParamList = {
   Login: undefined;
   SeleccionEmpresa: undefined;
+  Asistencia: undefined;
   Menu: undefined;
   SeleccionSerie: undefined;
   PedidosList: undefined;
@@ -71,6 +73,9 @@ export default function RootNavigator() {
             <Stack.Screen name="FacturaVentaForm" component={FacturaVentaFormScreen} options={{ title: 'Factura' }} />
           </>
         )}
+        {/* Fuera del bloqueo de login a propósito: quien marca asistencia (ej. guardias)
+            no necesariamente tiene usuario del sistema. */}
+        <Stack.Screen name="Asistencia" component={AsistenciaScreen} options={{ title: 'Marcar asistencia' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

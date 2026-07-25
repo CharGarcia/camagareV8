@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\repositories\modulos;
 
 use App\core\Database;
+use App\Traits\DocumentoOrigenAsientoTrait;
 use PDO;
 
 class EstadosFinancierosRepository
 {
+    use DocumentoOrigenAsientoTrait;
+
     private PDO $db;
 
     public function __construct()
@@ -162,24 +165,45 @@ class EstadosFinancierosRepository
             $params[':id_proyecto'] = $idProyecto;
         }
 
-        $sql = "SELECT 
+        $sql = $this->sqlMayorAuxiliar($whereSql, $this->sqlDocumentoOrigenAsiento());
+
+        try {
+            $st = $this->db->prepare($sql);
+            $st->execute($params);
+            return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (\PDOException $e) {
+            // Igual que en Mayores: si falta alguna tabla o columna de documento en esta
+            // instalación, se muestra el auxiliar con lo que traiga la línea del asiento.
+            error_log('Estados Financieros: no se pudo resolver el documento origen del asiento. ' . $e->getMessage());
+            $st = $this->db->prepare($this->sqlMayorAuxiliar($whereSql, self::$docOrigenNeutro));
+            $st->execute($params);
+            return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        }
+    }
+
+    /**
+     * Consulta del mayor auxiliar. Documento y glosa se resuelven en cascada (línea → documento
+     * origen → cabecera del asiento) porque no todas las líneas los guardan; ver el trait.
+     */
+    private function sqlMayorAuxiliar(string $whereSql, string $docOrigen): string
+    {
+        return "SELECT
                     ac.id as id_asiento,
                     ac.fecha_asiento,
                     ac.numero_comprobante,
                     ac.concepto,
-                    ad.referencia_detalle,
-                    ad.documento_referencia,
+                    COALESCE(NULLIF(ad.referencia_detalle, ''), ac.concepto) AS referencia_detalle,
+                    COALESCE(NULLIF(ad.documento_referencia, ''), NULLIF(doc.numero_documento, ''), ac.numero_comprobante) AS documento_referencia,
                     ad.debe,
                     ad.haber,
-                    pc.codigo as codigo_cuenta
+                    pc.codigo as codigo_cuenta,
+                    doc.modulo_doc AS modulo_documento,
+                    doc.id_doc AS id_documento
                 FROM asientos_contables_detalle ad
                 INNER JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
                 INNER JOIN plan_cuentas pc ON ad.id_cuenta_contable = pc.id
+                $docOrigen
                 $whereSql
                 ORDER BY ac.fecha_asiento ASC, ac.id ASC";
-
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 }

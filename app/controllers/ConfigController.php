@@ -632,6 +632,7 @@ class ConfigController extends Controller
             'config-aplicar'     => 'configAplicarAjax',
             'eliminar-preview'   => 'eliminarPreviewAjax',
             'eliminar'           => 'eliminarAjax',
+            'verificar-existentes' => 'verificarExistentesAjax',
             default              => 'index',
         };
         if (method_exists($c, $method)) {

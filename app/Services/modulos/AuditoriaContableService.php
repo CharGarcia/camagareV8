@@ -324,6 +324,94 @@ class AuditoriaContableService
         ];
     }
 
+    // ==================================================================
+    //  ANULACIÓN MASIVA (sin regenerar)
+    // ==================================================================
+
+    /**
+     * Dimensiona una corrida de ANULACIÓN: igual que planRegeneracion(), pero admite
+     * cualquier origen (no solo los regenerables), porque anular no necesita que el
+     * Service del módulo sepa rehacer el asiento.
+     *
+     * A diferencia de la regeneración, aquí los documentos quedan SIN contabilidad:
+     * es un paso previo deliberado a re-generar o re-migrar.
+     */
+    public function planAnulacion(int $idEmpresa, ?string $origen = null, ?string $fechaDesde = null, ?string $fechaHasta = null): array
+    {
+        $this->rules->validarRango($fechaDesde, $fechaHasta);
+
+        $todos    = $this->repo->getOrigenes();
+        $origenes = ($origen !== null && $origen !== '') ? [$origen] : $todos;
+
+        $plan = [];
+        $total = 0;
+        $cerrados = 0;
+        foreach ($origenes as $o) {
+            if (!$this->repo->esOrigenValido($o)) {
+                throw new \Exception("Origen no válido: «{$o}».");
+            }
+            $c = $this->repo->contarAsientosDeOrigen($idEmpresa, $o, $fechaDesde, $fechaHasta);
+            $plan[]    = ['origen' => $o, 'pendientes' => $c['pendientes'], 'cerrados' => $c['cerrados']];
+            $total    += $c['pendientes'];
+            $cerrados += $c['cerrados'];
+        }
+
+        return [
+            'origenes'  => $plan,
+            'total'     => $total,
+            'cerrados'  => $cerrados,
+            'lote'      => self::LOTE_REGENERACION,
+            'id_maximo' => $this->repo->getMaxIdAsiento($idEmpresa),
+        ];
+    }
+
+    /**
+     * Procesa UN lote de anulación: anula (soft-delete reversible) hasta `$limite` asientos
+     * del origen y desvincula sus documentos. NO regenera nada — es la fase 1 de
+     * regenerarLote() por separado.
+     *
+     * Los asientos de tipo Diario y los de período cerrado quedan excluidos por la propia
+     * consulta del repositorio (nunca se tocan).
+     */
+    public function anularLote(int $idEmpresa, int $idUsuario, string $origen, ?string $fechaDesde = null,
+        ?string $fechaHasta = null, int $limite = self::LOTE_REGENERACION, ?int $idMaximo = null): array
+    {
+        if (!$this->repo->esOrigenValido($origen)) {
+            throw new \Exception("Origen no válido: «{$origen}».");
+        }
+        $this->rules->validarRango($fechaDesde, $fechaHasta);
+        $limite = max(1, min(200, $limite));
+
+        $asientos = $this->repo->getAsientosDeOrigen($idEmpresa, $origen, $fechaDesde, $fechaHasta, $limite, $idMaximo);
+        if (empty($asientos)) {
+            return ['anulados' => 0, 'documentos' => 0, 'restantes' => 0];
+        }
+
+        $docs     = [];
+        $anulados = 0;
+        $this->repo->beginTransaction();
+        try {
+            foreach ($asientos as $a) {
+                $this->repo->anularAsiento((int) $a['id'], $idEmpresa, $idUsuario);
+                if (!empty($a['id_referencia_origen'])) {
+                    $docs[(int) $a['id_referencia_origen']] = true;
+                    $this->repo->desvincularDocumento($origen, (int) $a['id_referencia_origen'], $idEmpresa);
+                }
+                $anulados++;
+            }
+            $this->repo->commit();
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+
+        return [
+            'anulados'   => $anulados,
+            'documentos' => count($docs),
+            'restantes'  => $this->repo->contarAsientosDeOrigen($idEmpresa, $origen, $fechaDesde, $fechaHasta, $idMaximo)['pendientes'],
+        ];
+    }
+
     /**
      * Anula y vuelve a generar todos los asientos de un origen (opcionalmente
      * acotado por rango de fechas), respetando los períodos contables cerrados.
@@ -660,6 +748,24 @@ class AuditoriaContableService
                 return new ReciboVentaService(
                     new \App\repositories\modulos\ReciboVentaRepository(),
                     new \App\Rules\modulos\ReciboVentaRules(),
+                    $log
+                );
+            case 'retorno_cv':
+                return new \App\Services\modulos\RetornoCvService(
+                    new \App\repositories\modulos\RetornoCvRepository(),
+                    new \App\Rules\modulos\RetornoCvRules(),
+                    $log
+                );
+            case 'cambio_producto_cv':
+                return new \App\Services\modulos\CambioProductoCvService(
+                    new \App\repositories\modulos\CambioProductoCvRepository(),
+                    new \App\Rules\modulos\CambioProductoCvRules(),
+                    $log
+                );
+            case 'FACTURACION_CV':
+                return new \App\Services\modulos\ConsignacionFacturaService(
+                    new \App\repositories\modulos\ConsignacionFacturaRepository(),
+                    new \App\Rules\modulos\ConsignacionFacturaRules(),
                     $log
                 );
             default:

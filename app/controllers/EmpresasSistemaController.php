@@ -61,6 +61,7 @@ class EmpresasSistemaController extends Controller
             'titulo' => 'Empresas del sistema',
             'fullWidth' => true,
             'estadoDocs' => (new \App\Services\DocumentosLegalesService())->getEstadoPorEmpresa(),
+            'combosSubmodulos' => (new \App\models\ComboSubmodulo())->getActivos(),
             'rows' => $rows,
             'total' => $total,
             'page' => $page,
@@ -128,14 +129,27 @@ class EmpresasSistemaController extends Controller
             }
             (new \App\Services\EmpresaInicializadorService())->inicializar($id, $idUsuario);
 
+            // Crear usuario administrador (opcional, por check) + asignar combo de
+            // submódulos + enviarle la invitación. No interrumpe la creación.
+            $crearUsuario = !empty($_POST['crear_usuario_admin']);
+            $idCombo      = (int) ($_POST['id_combo_submodulos'] ?? 0);
+            $msgUsuario   = '';
+            $usuarioOk    = true;
+            if ($crearUsuario) {
+                $res = $this->crearUsuarioAdminParaEmpresa($id, $data, $idUsuario, $idCombo);
+                $msgUsuario = ' ' . $res['msg'];
+                $usuarioOk  = $res['ok'];
+            }
+
             // Envío automático de los documentos legales (acuerdo de datos +
             // contrato de uso). No interrumpe la creación si falla el correo.
             $errDocs = (new \App\Services\DocumentosLegalesService())->enviarAEmpresaSinFallar($id, $idUsuario);
             $msgOk = $errDocs === null
                 ? 'Empresa creada correctamente. Se enviaron los documentos legales a ' . ($data['mail'] ?? 'su correo') . '.'
                 : 'Empresa creada correctamente, pero NO se pudieron enviar los documentos legales: ' . $errDocs;
+            $msgOk .= $msgUsuario;
 
-            $_SESSION['empresas_msg'] = [$errDocs === null ? 'success' : 'warning', $msgOk];
+            $_SESSION['empresas_msg'] = [($errDocs === null && $usuarioOk) ? 'success' : 'warning', $msgOk];
             if ($esAjax) {
                 $this->json(['ok' => true, 'msg' => $msgOk]);
                 return;
@@ -155,6 +169,71 @@ class EmpresasSistemaController extends Controller
         }
 
         $this->redirect(BASE_URL . self::BASE_PATH);
+    }
+
+    /**
+     * Crea el usuario administrador de una empresa recién creada, lo asigna a la
+     * empresa, le aplica el combo de submódulos elegido y le envía la invitación
+     * de registro. Es NO fatal: cualquier fallo se reporta pero no revierte la
+     * creación de la empresa.
+     *
+     * @return array{ok:bool, msg:string}
+     */
+    private function crearUsuarioAdminParaEmpresa(int $idEmpresa, array $data, int $idAdmin, int $idCombo): array
+    {
+        $correo = trim((string) ($data['mail'] ?? ''));
+        if ($correo === '' || !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+            return ['ok' => false, 'msg' => 'No se creó el usuario administrador: la empresa no tiene un correo válido.'];
+        }
+
+        // Nombre del usuario: representante legal, o el nombre (comercial) de la empresa.
+        $nombreUsuario = trim((string) ($data['nom_rep_legal'] ?? ''));
+        if ($nombreUsuario === '') {
+            $nombreUsuario = trim((string) ($data['nombre_comercial'] ?? $data['nombre'] ?? 'Administrador'));
+        }
+
+        try {
+            $modelUsuario = new \App\models\Usuario();
+
+            // Nivel 2 = Administrador de la empresa.
+            $resultado = $modelUsuario->crearPorCorreo($nombreUsuario, $correo, $idAdmin, 2);
+            $idNuevo   = (int) $resultado['id'];
+            $token     = (string) $resultado['token'];
+
+            // Asignar la empresa al nuevo usuario.
+            (new EmpresaAsignada())->asignar($idEmpresa, $idNuevo, $idAdmin);
+
+            // Aplicar el combo de submódulos (permisos totales) si se eligió uno.
+            $msgCombo = '';
+            if ($idCombo > 0) {
+                $resCombo = (new \App\models\ComboSubmodulo())->aplicarAUsuario($idCombo, $idNuevo, $idEmpresa, $idAdmin);
+                $msgCombo = !empty($resCombo['ok'])
+                    ? ' Se asignaron ' . (int) $resCombo['aplicados'] . ' submódulos del combo «' . ($resCombo['combo']['nombre'] ?? '') . '».'
+                    : ' (No se pudo aplicar el combo de submódulos).';
+            }
+
+            // Enviar la invitación de registro al usuario.
+            $correoOk = false;
+            if ($token !== '') {
+                $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+                $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                $urlInvite = $scheme . '://' . $host . rtrim(BASE_URL, '/') . '/registro/index/' . urlencode($correo) . '/' . $token;
+
+                require_once MVC_APP . '/helpers/mail.php';
+                $correoOk = enviar_correo_nuevo_usuario($nombreUsuario, $correo, $urlInvite);
+            }
+
+            $msgCorreo = $correoOk
+                ? ' Se envió la invitación de registro a ' . $correo . '.'
+                : ' (Usuario creado, pero no se pudo enviar la invitación por correo).';
+
+            return ['ok' => true, 'msg' => 'Usuario administrador creado.' . $msgCombo . $msgCorreo];
+        } catch (\InvalidArgumentException $e) {
+            // Caso típico: el correo ya pertenece a otro usuario.
+            return ['ok' => false, 'msg' => 'No se creó el usuario administrador: ' . $e->getMessage()];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'msg' => 'No se creó el usuario administrador: ' . $e->getMessage()];
+        }
     }
 
     public function update(): void

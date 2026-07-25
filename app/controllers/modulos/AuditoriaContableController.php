@@ -41,6 +41,7 @@ class AuditoriaContableController extends BaseModuloController
         'faltante'             => 'Falta asiento',
         'duplicado'            => 'Duplicado',
         'monto_no_coincide'    => 'Monto no coincide',
+        'monto_informativo'    => 'Monto (informativo)',
         'descuadrado'          => 'Descuadrado',
         'cab_vs_detalle'       => 'Cabecera ≠ detalle',
         'huerfano'             => 'Huérfano',
@@ -52,6 +53,7 @@ class AuditoriaContableController extends BaseModuloController
         'faltante'             => 'bg-danger bg-opacity-10 text-danger border-danger',
         'duplicado'            => 'bg-warning bg-opacity-10 text-warning border-warning',
         'monto_no_coincide'    => 'bg-warning bg-opacity-10 text-warning border-warning',
+        'monto_informativo'    => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
         'descuadrado'          => 'bg-danger bg-opacity-10 text-danger border-danger',
         'cab_vs_detalle'       => 'bg-danger bg-opacity-10 text-danger border-danger',
         'huerfano'             => 'bg-secondary bg-opacity-10 text-secondary border-secondary',
@@ -167,6 +169,9 @@ class AuditoriaContableController extends BaseModuloController
             'base'        => BASE_URL,
             'rutaModulo'  => $this->getRutaModulo(),
             'resumen'     => $this->service->getResumen($idEmpresa),
+            // Filas ya renderizadas con el MISMO helper que usa searchAjax(): antes la vista
+            // duplicaba este HTML y había que mantener las dos copias en sync.
+            'filasHtml'   => implode('', array_map(fn($r) => $this->construirFila($r, $perm), $result['rows'])),
             'origenes'    => $this->service->getOrigenes(),
             'origenesRegenerables' => $this->service->getOrigenesRegenerables(),
             'origenLabels'=> self::ORIGEN_LABEL,
@@ -255,6 +260,19 @@ class AuditoriaContableController extends BaseModuloController
         $entidad = trim((string) ($r['entidad_nombre'] ?? ''));
         $entidad = $entidad !== '' ? htmlspecialchars($entidad) : '—';
         $asiento = $r['id_asiento'] !== null ? '#' . (int) $r['id_asiento'] : '—';
+        // Datos del asiento (vienen del JOIN en vivo: pueden ser NULL si el asiento no existe)
+        $asiNum   = trim((string) ($r['asiento_numero'] ?? ''));
+        $asiNum   = $asiNum !== '' ? htmlspecialchars($asiNum) : '—';
+        $asiTipo  = trim((string) ($r['asiento_tipo'] ?? ''));
+        $asiTipo  = $asiTipo !== '' ? htmlspecialchars(ucfirst($asiTipo)) : '—';
+        $asiFecha = !empty($r['asiento_fecha']) ? date('d-m-Y', strtotime((string) $r['asiento_fecha'])) : '—';
+        $asiEst   = trim((string) ($r['asiento_estado'] ?? ''));
+        $asiEstBadge = $asiEst !== ''
+            ? '<span class="badge ' . ($asiEst === 'anulado'
+                ? 'bg-danger bg-opacity-10 text-danger border-danger'
+                : 'bg-success bg-opacity-10 text-success border-success')
+              . ' border">' . htmlspecialchars(ucfirst($asiEst)) . '</span>'
+            : '—';
         $mDoc    = $r['monto_documento'] !== null ? number_format((float) $r['monto_documento'], 2) : '—';
         $mAsi    = $r['monto_asiento'] !== null ? number_format((float) $r['monto_asiento'], 2) : '—';
         $dif     = $r['diferencia'] !== null ? number_format((float) $r['diferencia'], 2) : '—';
@@ -270,6 +288,10 @@ class AuditoriaContableController extends BaseModuloController
             . '<td data-col="documento" class="text-center">' . $doc . '</td>'
             . '<td data-col="entidad" class="text-truncate" style="max-width:220px" title="' . $entidad . '">' . $entidad . '</td>'
             . '<td data-col="asiento" class="text-center">' . $asiento . '</td>'
+            . '<td data-col="asiento_numero" class="text-center">' . $asiNum . '</td>'
+            . '<td data-col="asiento_tipo" class="text-center">' . $asiTipo . '</td>'
+            . '<td data-col="asiento_fecha" class="text-center">' . $asiFecha . '</td>'
+            . '<td data-col="asiento_estado" class="text-center">' . $asiEstBadge . '</td>'
             . '<td data-col="monto_documento" class="text-end">' . $mDoc . '</td>'
             . '<td data-col="monto_asiento" class="text-end">' . $mAsi . '</td>'
             . '<td data-col="diferencia" class="text-end">' . $dif . '</td>'
@@ -562,6 +584,125 @@ class AuditoriaContableController extends BaseModuloController
             $_SESSION[self::SESION_REGEN] = $c;
 
             echo json_encode(['ok' => true, 'data' => $r]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Clave de sesión de la corrida de ANULACIÓN en curso (independiente de la de regeneración). */
+    private const SESION_ANULAR = 'aud_anular_corrida';
+
+    /**
+     * Dimensiona una corrida de ANULACIÓN masiva y la deja abierta en sesión.
+     * A diferencia de la regeneración, acepta cualquier origen (no solo los regenerables),
+     * porque anular no requiere que el módulo sepa rehacer el asiento.
+     */
+    public function planAnulacionAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $origen     = trim($_POST['origen'] ?? '');
+        $origen     = ($origen === '' || $origen === self::ORIGEN_TODOS) ? null : $origen;
+        $fechaDesde = $this->normalizarFecha($_POST['fecha_desde'] ?? null);
+        $fechaHasta = $this->normalizarFecha($_POST['fecha_hasta'] ?? null);
+
+        try {
+            $plan = $this->service->planAnulacion($idEmpresa, $origen, $fechaDesde, $fechaHasta);
+
+            $_SESSION[self::SESION_ANULAR] = [
+                'id_empresa'  => $idEmpresa,
+                'origen'      => $origen,
+                'origenes'    => array_column($plan['origenes'], 'origen'),
+                'fecha_desde' => $fechaDesde,
+                'fecha_hasta' => $fechaHasta,
+                'id_maximo'   => $plan['id_maximo'],
+                'total'       => $plan['total'],
+                'omitidos'    => $plan['cerrados'],
+                'anulados'    => 0,
+                'documentos'  => 0,
+            ];
+
+            foreach ($plan['origenes'] as &$o) {
+                $o['label'] = self::ORIGEN_LABEL[$o['origen']] ?? $o['origen'];
+            }
+            unset($o);
+
+            echo json_encode(['ok' => true, 'data' => $plan]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Procesa un lote de anulación del origen indicado. Devuelve cuántos quedan. */
+    public function anularLoteAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $origen    = trim($_POST['origen'] ?? '');
+
+        $c = $_SESSION[self::SESION_ANULAR] ?? null;
+        if (!is_array($c) || (int) ($c['id_empresa'] ?? 0) !== $idEmpresa) {
+            echo json_encode(['ok' => false, 'error' => 'La anulación no está abierta (o cambió la empresa activa). Vuelva a iniciarla.']);
+            exit;
+        }
+        if (!in_array($origen, $c['origenes'] ?? [], true)) {
+            echo json_encode(['ok' => false, 'error' => 'Ese origen no forma parte de la anulación en curso.']);
+            exit;
+        }
+
+        try {
+            $r = $this->service->anularLote($idEmpresa, $idUsuario, $origen,
+                $c['fecha_desde'], $c['fecha_hasta'],
+                AuditoriaContableService::LOTE_REGENERACION, (int) $c['id_maximo']);
+
+            $c['anulados']   += $r['anulados'];
+            $c['documentos'] += $r['documentos'];
+            $_SESSION[self::SESION_ANULAR] = $c;
+
+            echo json_encode(['ok' => true, 'data' => $r]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Cierra la corrida de anulación: registra la corrida y re-audita una vez. */
+    public function finalizarAnulacionAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $c = $_SESSION[self::SESION_ANULAR] ?? null;
+        if (!is_array($c) || (int) ($c['id_empresa'] ?? 0) !== $idEmpresa) {
+            echo json_encode(['ok' => false, 'error' => 'No hay una anulación abierta.']);
+            exit;
+        }
+
+        try {
+            $this->service->registrarCorridaRegeneracion($idEmpresa, $idUsuario, [
+                'total'       => (int) $c['total'],
+                'anulados'    => (int) $c['anulados'],
+                'regenerados' => 0,
+                'omitidos'    => (int) $c['omitidos'],
+                'errores'     => 0,
+                'faltantes'   => 0,
+            ], $c['origen'], $c['fecha_desde'], $c['fecha_hasta']);
+
+            unset($_SESSION[self::SESION_ANULAR]);
+
+            $this->service->ejecutarAuditoria($idEmpresa, $idUsuario, null, $c['fecha_desde'], $c['fecha_hasta']);
+
+            echo json_encode(['ok' => true, 'data' => ['anulados' => (int) $c['anulados'], 'documentos' => (int) $c['documentos']]]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

@@ -15,7 +15,6 @@ $buscar = $buscar ?? '';
 <style>
     .afc-scroll { max-height: calc(100dvh - 240px); overflow-y: auto; }
     .afc-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
-    .afc-dropdown { position: absolute; z-index: 1080; max-height: 220px; overflow-y: auto; display: none; width: 100%; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -46,15 +45,13 @@ $buscar = $buscar ?? '';
                     <tr>
                         <th class="ps-3" data-col="nombre">Categoría</th>
                         <th class="text-end" data-col="porcentaje">% Anual</th>
-                        <th data-col="cuenta_activo">Cuenta Activo</th>
-                        <th data-col="cuenta_dep_acum">Cuenta Dep. Acumulada</th>
-                        <th data-col="cuenta_gasto">Cuenta Gasto Depreciación</th>
+                        <th data-col="observaciones">Observaciones</th>
                         <th class="text-center pe-3" data-col="estado">Estado</th>
                     </tr>
                 </thead>
                 <tbody id="tbodyAFC">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-diagram-3 fs-3 d-block mb-2"></i>No hay categorías registradas.</td></tr>
+                        <tr><td colspan="4" class="text-center py-5 text-muted"><i class="bi bi-diagram-3 fs-3 d-block mb-2"></i>No hay categorías registradas.</td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <?php
@@ -66,9 +63,7 @@ $buscar = $buscar ?? '';
                             <tr role="button" onclick="AFC_abrirModal(<?= (int) $r['id'] ?>)">
                                 <td class="ps-3" data-col="nombre"><?= htmlspecialchars($r['nombre']) ?></td>
                                 <td class="text-end" data-col="porcentaje"><?= number_format((float) $r['porcentaje_depreciacion_anual'], 2) ?>%</td>
-                                <td data-col="cuenta_activo"><?= htmlspecialchars(($r['cuenta_activo_codigo'] ?? '') . ' - ' . ($r['cuenta_activo_nombre'] ?? '')) ?></td>
-                                <td data-col="cuenta_dep_acum"><?= htmlspecialchars(($r['cuenta_dep_acum_codigo'] ?? '') . ' - ' . ($r['cuenta_dep_acum_nombre'] ?? '')) ?></td>
-                                <td data-col="cuenta_gasto"><?= htmlspecialchars(($r['cuenta_gasto_codigo'] ?? '') . ' - ' . ($r['cuenta_gasto_nombre'] ?? '')) ?></td>
+                                <td data-col="observaciones"><?= htmlspecialchars((string) ($r['observaciones'] ?? '')) ?></td>
                                 <td class="text-center pe-3" data-col="estado"><span class="badge <?= $estCls ?> border border-opacity-25"><?= $estTxt ?></span></td>
                             </tr>
                         <?php endforeach; ?>
@@ -103,28 +98,10 @@ $buscar = $buscar ?? '';
                             </div>
                         </div>
                     </div>
-                    <hr>
-                    <p class="text-muted small mb-2"><i class="bi bi-info-circle me-1"></i>Cuentas contables que usará el asiento de depreciación de esta categoría.</p>
-                    <div class="row g-3">
-                        <div class="col-md-4 position-relative">
-                            <label class="form-label small fw-bold">Cuenta de Activo</label>
-                            <input type="text" id="afc-cuenta-activo-txt" class="form-control form-control-sm" placeholder="Buscar cuenta..." autocomplete="off" required>
-                            <input type="hidden" name="id_cuenta_activo" id="afc-cuenta-activo-id">
-                            <div class="list-group afc-dropdown" id="afc-cuenta-activo-dropdown"></div>
-                        </div>
-                        <div class="col-md-4 position-relative">
-                            <label class="form-label small fw-bold">Cuenta Depreciación Acumulada</label>
-                            <input type="text" id="afc-cuenta-dep-txt" class="form-control form-control-sm" placeholder="Buscar cuenta..." autocomplete="off" required>
-                            <input type="hidden" name="id_cuenta_depreciacion_acumulada" id="afc-cuenta-dep-id">
-                            <div class="list-group afc-dropdown" id="afc-cuenta-dep-dropdown"></div>
-                        </div>
-                        <div class="col-md-4 position-relative">
-                            <label class="form-label small fw-bold">Cuenta Gasto Depreciación</label>
-                            <input type="text" id="afc-cuenta-gasto-txt" class="form-control form-control-sm" placeholder="Buscar cuenta..." autocomplete="off" required>
-                            <input type="hidden" name="id_cuenta_gasto_depreciacion" id="afc-cuenta-gasto-id">
-                            <div class="list-group afc-dropdown" id="afc-cuenta-gasto-dropdown"></div>
-                        </div>
-                    </div>
+                    <p class="text-muted small mt-3 mb-0">
+                        <i class="bi bi-info-circle me-1"></i>Las cuentas contables (Activo, Depreciación Acumulada y Gasto por Depreciación)
+                        se configuran en cada activo fijo, no en la categoría.
+                    </p>
                     <div class="row g-3 mt-1">
                         <div class="col-md-8">
                             <label class="form-label small fw-bold">Observaciones</label>
@@ -156,7 +133,6 @@ $buscar = $buscar ?? '';
 
 <script>
     window.AFC_URL_BASE = '<?= $urlBase ?>';
-    window.AFC_CUENTAS_URL = '<?= $base ?>/modulos/plan-cuentas';
     window.AFC_PERM = <?= json_encode($perm) ?>;
 </script>
 <script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/activos_fijos_categorias.js?v=<?= time() ?>"></script>

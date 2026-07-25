@@ -36,14 +36,8 @@ class ActivoFijoCategoriaRepository extends BaseRepository
         ]);
 
         $sql = "SELECT c.*,
-                       pa.codigo AS cuenta_activo_codigo, pa.nombre AS cuenta_activo_nombre,
-                       pd.codigo AS cuenta_dep_acum_codigo, pd.nombre AS cuenta_dep_acum_nombre,
-                       pg.codigo AS cuenta_gasto_codigo, pg.nombre AS cuenta_gasto_nombre,
                        (SELECT COUNT(*) FROM activos_fijos af WHERE af.id_categoria = c.id AND af.eliminado = false) AS cantidad_activos
                 FROM activos_fijos_categorias c
-                LEFT JOIN plan_cuentas pa ON pa.id = c.id_cuenta_activo
-                LEFT JOIN plan_cuentas pd ON pd.id = c.id_cuenta_depreciacion_acumulada
-                LEFT JOIN plan_cuentas pg ON pg.id = c.id_cuenta_gasto_depreciacion
                 $where
                 ORDER BY c.nombre ASC";
 
@@ -62,7 +56,7 @@ class ActivoFijoCategoriaRepository extends BaseRepository
     public function getActivasParaSelect(int $idEmpresa): array
     {
         return $this->query(
-            "SELECT id, nombre, porcentaje_depreciacion_anual, id_cuenta_activo, id_cuenta_depreciacion_acumulada, id_cuenta_gasto_depreciacion
+            "SELECT id, nombre, porcentaje_depreciacion_anual
              FROM activos_fijos_categorias
              WHERE id_empresa = :id_empresa AND eliminado = false AND estado = true
              ORDER BY nombre ASC",
@@ -94,17 +88,13 @@ class ActivoFijoCategoriaRepository extends BaseRepository
     {
         $sql = "INSERT INTO activos_fijos_categorias (
                     id_empresa, nombre, porcentaje_depreciacion_anual,
-                    id_cuenta_activo, id_cuenta_depreciacion_acumulada, id_cuenta_gasto_depreciacion,
                     estado, observaciones, created_by, updated_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id";
+                ) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id";
 
         return (int) $this->query($sql, [
             (int) $data['id_empresa'],
             $data['nombre'],
             (float) $data['porcentaje_depreciacion_anual'],
-            (int) $data['id_cuenta_activo'],
-            (int) $data['id_cuenta_depreciacion_acumulada'],
-            (int) $data['id_cuenta_gasto_depreciacion'],
             !empty($data['estado']) ? 'true' : 'false',
             $data['observaciones'] ?? null,
             (int) $data['id_usuario'],
@@ -116,16 +106,12 @@ class ActivoFijoCategoriaRepository extends BaseRepository
     {
         $sql = "UPDATE activos_fijos_categorias SET
                     nombre = ?, porcentaje_depreciacion_anual = ?,
-                    id_cuenta_activo = ?, id_cuenta_depreciacion_acumulada = ?, id_cuenta_gasto_depreciacion = ?,
                     estado = ?, observaciones = ?, updated_by = ?, updated_at = NOW()
                 WHERE id = ? AND id_empresa = ? AND eliminado = false";
 
         $this->query($sql, [
             $data['nombre'],
             (float) $data['porcentaje_depreciacion_anual'],
-            (int) $data['id_cuenta_activo'],
-            (int) $data['id_cuenta_depreciacion_acumulada'],
-            (int) $data['id_cuenta_gasto_depreciacion'],
             !empty($data['estado']) ? 'true' : 'false',
             $data['observaciones'] ?? null,
             (int) $data['id_usuario'],

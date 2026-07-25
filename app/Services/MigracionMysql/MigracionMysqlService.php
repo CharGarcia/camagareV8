@@ -208,6 +208,54 @@ class MigracionMysqlService
         'inventario'   => ['cab' => 'inventario_kardex',           'fecha' => 'fecha_movimiento'],
     ];
 
+    /** Tabla destino (sistema nuevo) por entidad. Se usa para avisar de registros ya existentes. */
+    private const DESTINO_TABLA = [
+        'plan_cuentas' => 'plan_cuentas', 'clientes' => 'clientes', 'productos' => 'productos',
+        'proveedores' => 'proveedores', 'vendedores' => 'vendedores', 'bodegas' => 'bodegas',
+        'facturas' => 'ventas_cabecera', 'notas_credito' => 'notas_credito_cabecera',
+        'retenciones_venta' => 'retencion_venta_cabecera', 'retenciones_compra' => 'retencion_compra_cabecera',
+        'recibos' => 'recibos_venta_cabecera', 'liquidaciones' => 'liquidaciones_cabecera',
+        'guias' => 'guias_remision_cabecera', 'compras' => 'compras_cabecera',
+        'ingresos' => 'ingresos_cabecera', 'egresos' => 'egresos_cabecera',
+        'inventario' => 'inventario_kardex', 'contabilidad' => 'asientos_contables_cabecera',
+        'proformas' => 'proformas_cabecera', 'consignaciones' => 'consignaciones_ventas',
+        'consignaciones_fact' => 'consignaciones_facturas', 'consignaciones_ret' => 'retornos_cv',
+        'cambios_producto' => 'cambios_producto_cv',
+    ];
+
+    /**
+     * Cuántos registros hay YA en el módulo destino que NO provienen de la migración (nativos:
+     * capturados en el sistema nuevo o por otra vía). Sirve para AVISAR antes de migrar que esos
+     * documentos podrían duplicarse. La migración deduplica por número/identificación (docExistente),
+     * pero este aviso da visibilidad al usuario. Nativo = fila viva (eliminado=false) del módulo cuyo
+     * id NO está en el mapa de migración de esa entidad; para contabilidad = asiento con
+     * modulo_origen <> 'migracion' (los migrados y sus cierres son 'migracion').
+     *
+     * @param string[] $entidades
+     * @return array<string,array{label:string,nativos:int}>
+     */
+    public function contarDestinoNoMigrado(array $entidades, int $idEmpresa): array
+    {
+        $pg = Database::getConnection();
+        $out = [];
+        foreach ($entidades as $ent) {
+            if (!isset(self::DESTINO_TABLA[$ent]) || !isset(self::ENTIDADES[$ent])) { continue; }
+            $tabla = self::DESTINO_TABLA[$ent];
+            $label = self::ENTIDADES[$ent]['label'] ?? $ent;
+            if ($ent === 'contabilidad') {
+                $st = $pg->prepare("SELECT COUNT(*) FROM asientos_contables_cabecera WHERE id_empresa = ? AND eliminado = false AND modulo_origen <> 'migracion'");
+                $st->execute([$idEmpresa]);
+            } else {
+                $st = $pg->prepare("SELECT COUNT(*) FROM $tabla t WHERE t.id_empresa = ? AND t.eliminado = false
+                    AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map m WHERE m.id_empresa = t.id_empresa AND m.entidad = ? AND m.id_destino = t.id)");
+                $st->execute([$idEmpresa, $ent]);
+            }
+            $n = (int) $st->fetchColumn();
+            if ($n > 0) { $out[$ent] = ['label' => $label, 'nativos' => $n]; }
+        }
+        return $out;
+    }
+
     /** Catálogos: NO se eliminan con esta herramienta (se auto-corrigen al re-migrar por reconciliación). */
     private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'proveedores', 'vendedores', 'bodegas'];
 

@@ -41,6 +41,41 @@ class EgresoService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);
     }
 
+    /**
+     * Actualiza la fecha de cobro de un cheque emitido, solo si aún NO fue
+     * reportado como cobrado (conciliado en Control Bancario con fecha_banco).
+     */
+    public function actualizarFechaCobroCheque(int $idEmpresa, int $idPago, string $fecha, int $idUsuario): void
+    {
+        $pago = $this->repository->getPagoChequeParaEdicion($idEmpresa, $idPago);
+        if (!$pago) {
+            throw new \RuntimeException('Pago no encontrado.');
+        }
+        if (strtoupper((string) $pago['tipo_operacion_bancaria']) !== 'CHEQUE') {
+            throw new \RuntimeException('El pago no es un cheque.');
+        }
+        if (strtoupper((string) $pago['egreso_estado']) === 'ANULADO') {
+            throw new \RuntimeException('El egreso está anulado.');
+        }
+        // PDO/pgsql devuelve el boolean como 't'/'f'.
+        $conciliado = in_array($pago['cheque_conciliado'], [true, 't', '1', 1], true);
+        if ($conciliado) {
+            throw new \RuntimeException('El cheque ya fue reportado como cobrado (conciliado en Control Bancario); no se puede modificar la fecha de cobro.');
+        }
+
+        $d = \DateTime::createFromFormat('Y-m-d', $fecha);
+        if (!$d || $d->format('Y-m-d') !== $fecha) {
+            throw new \InvalidArgumentException('Fecha de cobro inválida.');
+        }
+
+        $antes = ['fecha_cobro' => $pago['fecha_cobro']];
+        $this->repository->actualizarFechaCobro($idPago, $fecha);
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa, 'ACTUALIZAR_FECHA_COBRO_CHEQUE', 'egresos_pagos', $idPago,
+            $antes, ['fecha_cobro' => $fecha]
+        );
+    }
+
     public function getPorId(int $id, int $idEmpresa): ?array
     {
         $egreso = $this->repository->getPorId($id, $idEmpresa);

@@ -35,6 +35,8 @@ class ActivoFijoRules
             throw new \Exception('El nombre/descripción del activo es obligatorio.');
         }
 
+        $this->validarCuentas($data);
+
         $valorAdquisicion = (float) ($data['valor_adquisicion'] ?? 0);
         if ($valorAdquisicion <= 0) {
             throw new \Exception('El valor de adquisición debe ser mayor a cero.');
@@ -68,12 +70,32 @@ class ActivoFijoRules
     }
 
     /**
+     * Cuentas contables del activo: se configuran en el propio activo (la categoría solo
+     * agrupa y fija el % de depreciación). Las usan el asiento de alta manual y el de
+     * depreciación mensual, por eso son obligatorias.
+     */
+    private function validarCuentas(array $data): void
+    {
+        if (empty($data['id_cuenta_activo'])) {
+            throw new \Exception('Debe seleccionar la cuenta contable del Activo.');
+        }
+        if (empty($data['id_cuenta_depreciacion_acumulada'])) {
+            throw new \Exception('Debe seleccionar la cuenta contable de Depreciación Acumulada.');
+        }
+        if (empty($data['id_cuenta_gasto_depreciacion'])) {
+            throw new \Exception('Debe seleccionar la cuenta contable de Gasto por Depreciación.');
+        }
+    }
+
+    /**
      * Categoría, valor de adquisición y fecha se fijan en el alta (definen el cálculo de
-     * depreciación) y no se editan después. Si ya hay depreciaciones generadas, solo se
-     * permiten cambios descriptivos (validados en el repository, sin reglas de negocio aquí).
+     * depreciación) y no se editan después. Las cuentas contables sí se pueden corregir
+     * siempre (afectan los asientos futuros, no los ya contabilizados).
      */
     public function validarEdicion(array $activoActual, array $data): void
     {
+        $this->validarCuentas($data);
+
         if ($this->repository->tieneDepreciacionesGeneradas((int) $activoActual['id'])) {
             return;
         }

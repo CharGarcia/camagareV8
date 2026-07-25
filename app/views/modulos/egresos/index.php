@@ -107,11 +107,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="egr-header d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-cash-stack me-1 text-primary"></i> <?= htmlspecialchars($titulo) ?></h5>
-    <?php if ($perm['crear']): ?>
-        <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="abrirModalEgreso()">
-            <i class="bi bi-plus-lg me-1"></i> Nuevo
-        </button>
-    <?php endif; ?>
+    <div class="d-flex gap-2">
+        <?php if (!empty($perm['ver'])): ?>
+            <button type="button" class="btn btn-outline-secondary btn-sm px-3 shadow-sm" onclick="abrirModalChequesImprimir()" title="Imprimir cheques emitidos">
+                <i class="bi bi-printer me-1"></i> Imprimir cheques
+            </button>
+        <?php endif; ?>
+        <?php if ($perm['crear']): ?>
+            <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="abrirModalEgreso()">
+                <i class="bi bi-plus-lg me-1"></i> Nuevo
+            </button>
+        <?php endif; ?>
+    </div>
 </div>
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
@@ -1207,6 +1214,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         if (val === 'CHEQUE') {
             divs.forEach(d => d.classList.remove('d-none'));
             recargarSecuenciaCheque();
+            // Fecha de cobro por defecto = hoy (si está vacía).
+            const fch = document.getElementById('eg-add-pago-fecha-cheque');
+            if (fch && !fch.value) fch.value = new Date().toISOString().slice(0, 10);
         } else {
             divs.forEach(d => d.classList.add('d-none'));
         }
@@ -1247,11 +1257,25 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 if (!txtRef.trim()) txtRef = '-';
 
                 const btnTrash = esEgresoAnulado ? '' : `<button type="button" class="btn btn-link btn-sm text-danger p-0" onclick="pagosEgreso.splice(${i},1);renderPagosEgreso();"><i class="bi bi-trash"></i></button>`;
-                
+                // Imprimir cheque: solo para pagos con cheque YA guardados (con id de BD).
+                const btnChq = (p.tipo_operacion_bancaria === 'CHEQUE' && p.id_pago)
+                    ? `<button type="button" class="btn btn-link btn-sm text-success p-0 ms-1 align-baseline" title="Imprimir cheque" onclick="imprimirChequeIndividual(${p.id_pago})"><i class="bi bi-printer"></i></button>`
+                    : '';
+
+                // Cheque: permitir editar la fecha de cobro solo si NO está reportado como cobrado (conciliado).
+                let btnEditFecha = '', badgeCobrado = '';
+                if (p.tipo_operacion_bancaria === 'CHEQUE' && p.id_pago) {
+                    if (p.conciliado) {
+                        badgeCobrado = ` <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" title="Cheque conciliado en Control Bancario"><i class="bi bi-lock-fill"></i> cobrado</span>`;
+                    } else if (!esEgresoAnulado) {
+                        btnEditFecha = `<button type="button" class="btn btn-link btn-sm text-primary p-0 ms-1 align-baseline" title="Editar fecha de cobro" onclick="editarFechaCobroCheque(${p.id_pago}, '${p.fecha_cobro || ''}', ${i})"><i class="bi bi-pencil"></i></button>`;
+                    }
+                }
+
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td><span class="badge bg-secondary bg-opacity-10 text-secondary border border-opacity-25">${p.nombre}</span></td>
-                    <td class="small">${txtRef}</td>
+                    <td class="small">${txtRef} ${btnChq}${btnEditFecha}${badgeCobrado}</td>
                     <td class="text-end fw-bold text-primary">$${p.monto.toFixed(2)}</td>
                     <td class="text-center">${btnTrash}</td>
                 `;
@@ -1264,6 +1288,127 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         f.innerText = '$ ' + sum.toFixed(2);
         const final = parseFloat(document.getElementById('eg-final-total').innerText.replace('$ ','')) || 0;
         f.className = 'fw-bold ' + (Math.abs(sum - final) < 0.01 ? 'text-success' : 'text-danger');
+    }
+
+    // ── Impresión de cheques ──────────────────────────────────────────────────
+    function descargarChequesPdf(ids) {
+        const a = document.createElement('a');
+        a.href = `${EGR_URL}/imprimirCheque?ids=${ids}`;
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+
+    async function imprimirChequeIndividual(idPago) {
+        try {
+            const res = await (await fetch(`${EGR_URL}/estadoChequesAjax?ids=${idPago}`)).json();
+            const est = (res.estados && res.estados[idPago]) ? res.estados[idPago] : null;
+            if (est && est.veces > 0) {
+                const c = await Swal.fire({
+                    icon: 'warning',
+                    title: 'Cheque ya impreso',
+                    html: `Este cheque ya se imprimió <b>${est.veces}</b> vez(ces).<br>Última impresión: ${est.ultima_fecha || ''}.<br><br>¿Deseas <b>reimprimirlo</b>?`,
+                    showCancelButton: true, confirmButtonText: 'Sí, reimprimir', cancelButtonText: 'Cancelar'
+                });
+                if (!c.isConfirmed) return;
+            }
+        } catch (e) { /* si falla el estado, seguimos igual */ }
+        descargarChequesPdf(idPago);
+    }
+
+    async function editarFechaCobroCheque(idPago, fechaActual, index) {
+        const { value: nueva } = await Swal.fire({
+            title: 'Fecha de cobro del cheque',
+            html: `<input type="date" id="swal-fecha-cobro" class="swal2-input" value="${fechaActual || ''}">`,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: 'Guardar',
+            cancelButtonText: 'Cancelar',
+            preConfirm: () => {
+                const v = document.getElementById('swal-fecha-cobro').value;
+                if (!v) { Swal.showValidationMessage('Ingrese una fecha'); return false; }
+                return v;
+            }
+        });
+        if (!nueva) return;
+        const fd = new FormData();
+        fd.append('id_pago', idPago);
+        fd.append('fecha_cobro', nueva);
+        try {
+            const res = await (await fetch(`${EGR_URL}/actualizarFechaCobroChequeAjax`, { method: 'POST', body: fd })).json();
+            if (!res.ok) { Swal.fire('No se pudo', res.mensaje, 'warning'); return; }
+            if (pagosEgreso[index]) pagosEgreso[index].fecha_cobro = nueva;
+            renderPagosEgreso();
+            Swal.fire({ icon: 'success', title: 'Actualizada', text: res.mensaje, timer: 1400, showConfirmButton: false });
+        } catch (e) {
+            Swal.fire('Error', 'No se pudo actualizar la fecha.', 'error');
+        }
+    }
+
+    function abrirModalChequesImprimir() {
+        new bootstrap.Modal(document.getElementById('modalChequesImprimir')).show();
+        cargarChequesImprimir();
+    }
+
+    async function cargarChequesImprimir() {
+        const forma = document.getElementById('chq-filtro-forma').value;
+        const desde = document.getElementById('chq-filtro-desde').value;
+        const hasta = document.getElementById('chq-filtro-hasta').value;
+        const b     = document.getElementById('chq-filtro-buscar').value;
+        const soloP = document.getElementById('chq-filtro-pendientes').checked ? '1' : '0';
+        const tb = document.getElementById('chq-tbody');
+        const chkAll = document.getElementById('chq-check-all');
+        if (chkAll) chkAll.checked = false;
+        tb.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted">Cargando…</td></tr>';
+        try {
+            const url = `${EGR_URL}/chequesPorImprimirAjax?id_forma_pago=${forma}&desde=${desde}&hasta=${hasta}&b=${encodeURIComponent(b)}&solo_pendientes=${soloP}`;
+            const res = await (await fetch(url)).json();
+            tb.innerHTML = '';
+            if (!res.ok || !res.cheques.length) {
+                tb.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted">No hay cheques que coincidan.</td></tr>';
+                return;
+            }
+            res.cheques.forEach(c => {
+                const impreso = !!c.impreso_id;
+                const badge = impreso
+                    ? `<span class="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-25" title="Impreso ${c.impreso_fecha || ''} por ${c.impreso_usuario || ''}">Impreso</span>`
+                    : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pendiente</span>`;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="text-center"><input type="checkbox" class="chq-check form-check-input" value="${c.id_pago}" data-impreso="${impreso ? 1 : 0}"></td>
+                    <td class="fw-bold">${c.numero_cheque || '-'}</td>
+                    <td class="small">${c.fecha_cheque || '-'}</td>
+                    <td class="small">${c.beneficiario || ''}</td>
+                    <td class="text-end fw-bold text-primary">$${parseFloat(c.monto || 0).toFixed(2)}</td>
+                    <td class="small text-muted">${(c.banco_nombre || '').trim()} ${c.cuenta_numero || ''}</td>
+                    <td class="text-center">${badge}</td>`;
+                tb.appendChild(tr);
+            });
+        } catch (e) {
+            tb.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-danger">Error al cargar.</td></tr>';
+        }
+    }
+
+    function chqToggleAll(el) {
+        document.querySelectorAll('.chq-check').forEach(c => c.checked = el.checked);
+    }
+
+    async function imprimirChequesSeleccionados() {
+        const checks = [...document.querySelectorAll('.chq-check:checked')];
+        if (!checks.length) { Swal.fire('Sin selección', 'Selecciona al menos un cheque.', 'info'); return; }
+        const ids = checks.map(c => c.value);
+        const yaImpresos = checks.filter(c => c.dataset.impreso === '1').length;
+        if (yaImpresos > 0) {
+            const r = await Swal.fire({
+                icon: 'warning', title: 'Reimpresión',
+                html: `<b>${yaImpresos}</b> de ${ids.length} cheque(s) ya fueron impresos.<br>¿Continuar e imprimir de todas formas?`,
+                showCancelButton: true, confirmButtonText: 'Sí, imprimir', cancelButtonText: 'Cancelar'
+            });
+            if (!r.isConfirmed) return;
+        }
+        descargarChequesPdf(ids.join(','));
+        setTimeout(cargarChequesImprimir, 1500); // refrescar estados tras imprimir
     }
 
     function addEgresoPago() {
@@ -1638,14 +1783,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 renderDocsEgreso();
             }
 
-            pagosEgreso = (e.pagos||[]).map(p=>({ 
-                id_forma: p.id_forma_pago, 
-                nombre: p.forma_pago_nombre, 
-                monto: parseFloat(p.monto), 
+            pagosEgreso = (e.pagos||[]).map(p=>({
+                id_pago: p.id,
+                id_forma: p.id_forma_pago,
+                nombre: p.forma_pago_nombre,
+                monto: parseFloat(p.monto),
                 ref: p.referencia,
                 tipo_operacion_bancaria: p.tipo_operacion_bancaria,
                 numero_cheque: p.numero_cheque,
-                fecha_cobro: p.fecha_cobro
+                fecha_cobro: p.fecha_cobro,
+                conciliado: (p.cheque_conciliado === true || p.cheque_conciliado === 't' || p.cheque_conciliado === 1 || p.cheque_conciliado === '1')
             }));
 
             esEgresoAnulado = (e.estado === 'anulado');
@@ -2736,6 +2883,74 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             </div>
         </div>
     </div>
+</div>
+
+<!-- ===== Modal: Imprimir cheques (masivo) ===== -->
+<div class="modal fade" id="modalChequesImprimir" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold"><i class="bi bi-printer me-2 text-primary"></i>Imprimir cheques</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-2 align-items-end">
+          <div class="col-md-3">
+            <label class="form-label small fw-bold">Cuenta / Banco</label>
+            <select id="chq-filtro-forma" class="form-select form-select-sm" onchange="cargarChequesImprimir()">
+              <option value="0">Todas</option>
+              <?php foreach ($formasPago as $fp): if (strtoupper($fp['tipo'] ?? '') !== 'BANCO') continue; ?>
+                <option value="<?= (int)$fp['id'] ?>"><?= htmlspecialchars($fp['nombre']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small fw-bold">Desde (cobro)</label>
+            <input type="date" id="chq-filtro-desde" class="form-control form-control-sm" onchange="cargarChequesImprimir()">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small fw-bold">Hasta (cobro)</label>
+            <input type="date" id="chq-filtro-hasta" class="form-control form-control-sm" onchange="cargarChequesImprimir()">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small fw-bold">Buscar</label>
+            <input type="text" id="chq-filtro-buscar" class="form-control form-control-sm" placeholder="N° cheque, beneficiario, egreso…" onkeyup="if(event.key==='Enter')cargarChequesImprimir()">
+          </div>
+          <div class="col-md-2">
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="chq-filtro-pendientes" checked onchange="cargarChequesImprimir()">
+              <label class="form-check-label small" for="chq-filtro-pendientes">Solo pendientes</label>
+            </div>
+          </div>
+        </div>
+        <div class="table-responsive" style="max-height:52vh;overflow:auto;">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-light" style="position:sticky;top:0;z-index:1;">
+              <tr>
+                <th class="text-center" style="width:36px;"><input type="checkbox" id="chq-check-all" class="form-check-input" onclick="chqToggleAll(this)"></th>
+                <th>N° Cheque</th>
+                <th>Fecha cobro</th>
+                <th>Beneficiario</th>
+                <th class="text-end">Monto</th>
+                <th>Cuenta</th>
+                <th class="text-center">Estado</th>
+              </tr>
+            </thead>
+            <tbody id="chq-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer d-flex justify-content-between flex-wrap gap-2">
+        <span class="small text-muted"><i class="bi bi-info-circle me-1"></i>Los cheques ya impresos se marcan; puedes reimprimir confirmando.</span>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="imprimirChequesSeleccionados()">
+            <i class="bi bi-printer me-1"></i> Imprimir seleccionados
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <?php

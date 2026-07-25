@@ -7,7 +7,8 @@
 --
 -- Nota: las cuentas de Activo, Depreciación Acumulada y Gasto por
 -- Depreciación NO pasan por este catálogo — se leen directo de
--- activos_fijos_categorias (cada categoría define sus 3 cuentas).
+-- activos_fijos (cada activo define sus 3 cuentas; ver
+-- 20260725_activos_fijos_cuentas_por_activo.sql).
 -- Estas dos filas solo resuelven: (a) la contrapartida del alta
 -- manual (sin factura de compra), y (b) el ajuste de redondeo del
 -- lote mensual de depreciación.

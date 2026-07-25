@@ -457,6 +457,11 @@ class ConsignacionVentaService
                     );
                     $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
                 } catch (\Throwable $e) {
+                    // Un período cerrado debe abortar: si no, el documento quedaría anulado
+                    // con su asiento aún vigente (descuadre silencioso).
+                    if (stripos($e->getMessage(), 'contable cerrado') !== false) {
+                        throw $e;
+                    }
                     error_log("[Consignacion] No se pudo anular el asiento $idAsiento: " . $e->getMessage());
                 }
             }

@@ -97,6 +97,29 @@ class EstadosFinancierosController extends BaseModuloController
         }
     }
 
+    /**
+     * Cuenta cuántos documentos operativos están pendientes de generar su asiento contable,
+     * sin generar nada. La vista lo consulta al cargar para preguntar al usuario si desea
+     * generarlos ahora o continuar sin generar.
+     */
+    public function contarPendientesAjax(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+
+            $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
+            echo json_encode(['ok' => true, 'pendientes' => $sincronizador->contarPendientes($idEmpresa)]);
+        } catch (\Throwable $th) {
+            echo json_encode(['ok' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
     public function generarEstadoResultados(): void
     {
         try {
@@ -237,6 +260,28 @@ class EstadosFinancierosController extends BaseModuloController
 
             echo json_encode(['success' => true, 'data' => $datos]);
         } catch (Exception $e) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Detalle del documento que originó el asiento (factura, compra, egreso…), para el modal de
+     * solo lectura que se abre desde la columna "Documento Ref." del mayor auxiliar. Valida el
+     * permiso de lectura de Estados Financieros: no expone nada que el usuario no vea ya.
+     */
+    public function getDocumentoOrigenAjax(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $this->requireLeer();
+            $servicio = new \App\Services\modulos\DocumentoOrigenService();
+            $datos = $servicio->getDetalle(
+                trim($_GET['modulo'] ?? ''),
+                (int) ($_GET['id'] ?? 0),
+                (int) $_SESSION['id_empresa']
+            );
+            echo json_encode(['success' => true, 'data' => $datos]);
+        } catch (\Throwable $e) {
             echo json_encode(['success' => false, 'error' => $e->getMessage()]);
         }
     }

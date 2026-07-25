@@ -26,7 +26,7 @@
         return anio >= 1900 && anio <= 2999;
     }
 
-    /** Rango de fechas activo en la barra superior (aplica al listado y a la auditoría). */
+    /** Rango de fechas activo en la barra superior (aplica al listado y a las 3 acciones). */
     function rangoFechas() {
         const d = document.getElementById('audFechaDesde')?.value || '';
         const h = document.getElementById('audFechaHasta')?.value || '';
@@ -34,6 +34,75 @@
             fecha_desde: fechaCompleta(d) ? d : '',
             fecha_hasta: fechaCompleta(h) ? h : '',
         };
+    }
+
+    /**
+     * Recalcula el rango de fechas desde los selects de año/mes. Los inputs de fecha quedan
+     * como override libre: si el usuario los edita a mano, manda lo que escribió.
+     * Mes 0 = todo el año. Mismo criterio que el módulo Mayores.
+     */
+    function actualizarFechasPorPeriodo() {
+        const anio = parseInt(document.getElementById('audAnio')?.value || '0', 10);
+        const mes = parseInt(document.getElementById('audMes')?.value || '0', 10);
+        if (!anio) return;
+
+        let ini, fin;
+        if (!mes) {
+            ini = `${anio}-01-01`;
+            fin = `${anio}-12-31`;
+        } else {
+            const mm = String(mes).padStart(2, '0');
+            ini = `${anio}-${mm}-01`;
+            fin = `${anio}-${mm}-${String(new Date(anio, mes, 0).getDate()).padStart(2, '0')}`;
+        }
+        const d = document.getElementById('audFechaDesde');
+        const h = document.getElementById('audFechaHasta');
+        if (d) d.value = ini;
+        if (h) h.value = fin;
+    }
+
+    /** Orígenes marcados en el dropdown. Array vacío = sin filtro (todos). */
+    function origenesSeleccionados() {
+        return Array.from(document.querySelectorAll('.js-aud-origen:checked')).map((c) => c.value);
+    }
+
+    /** Refresca el texto del botón del dropdown de orígenes. */
+    function refrescarEtiquetaOrigenes() {
+        const sel = origenesSeleccionados();
+        const btn = document.getElementById('audOrigenBtn');
+        const resumen = document.getElementById('audOrigenResumen');
+        const total = document.querySelectorAll('.js-aud-origen').length;
+        let txt;
+        if (sel.length === 0 || sel.length === total) txt = 'Todos';
+        else if (sel.length === 1) {
+            const lbl = document.querySelector('.js-aud-origen[value="' + sel[0] + '"]')?.closest('label')?.textContent?.trim();
+            txt = lbl || sel[0];
+        } else txt = sel.length + ' orígenes';
+        if (btn) btn.textContent = txt;
+        if (resumen) resumen.textContent = (sel.length === 0 || sel.length === total) ? '(todos)' : '(' + sel.length + ')';
+    }
+
+    /**
+     * Búsqueda efectiva del listado: lo que el usuario tecleó + el filtro de orígenes del
+     * dropdown, expresado con el token `origen:a,b,c` que el backend ya entiende
+     * (FiltrosBusqueda). Si el usuario ya escribió un `origen:` a mano, se respeta el suyo.
+     */
+    function buscarEfectivo() {
+        const sel = origenesSeleccionados();
+        const total = document.querySelectorAll('.js-aud-origen').length;
+        const base = state.buscar || '';
+        if (sel.length === 0 || sel.length === total) return base;
+        if (/(^|\s)(origen|modulo):/i.test(base)) return base;
+        return (base + ' origen:' + sel.join(',')).trim();
+    }
+
+    /**
+     * Origen a mandar a las acciones masivas: una sola selección se manda tal cual; varias o
+     * ninguna se mandan como «todos» (los endpoints procesan origen por origen).
+     */
+    function origenParaAccion() {
+        const sel = origenesSeleccionados();
+        return sel.length === 1 ? sel[0] : '__todos__';
     }
 
     // ---- Helpers HTTP ----
@@ -93,7 +162,7 @@
         if (page) state.page = page;
         const tbody = document.getElementById('audTbody');
         getJSON('searchAjax', Object.assign(
-            { b: state.buscar, page: state.page, sort: state.sort, dir: state.dir, vista: state.vista },
+            { b: buscarEfectivo(), page: state.page, sort: state.sort, dir: state.dir, vista: state.vista },
             rangoFechas()
         ))
             .then((res) => {
@@ -130,7 +199,9 @@
 
     // ---- Ejecutar auditoría ----
     function ejecutarAuditoria() {
-        const origen = document.getElementById('audOrigenAuditar').value;
+        // Una sola selección acota la auditoría a ese origen; varias/ninguna auditan todo.
+        const sel = origenesSeleccionados();
+        const origen = sel.length === 1 ? sel[0] : '';
         const btn = document.getElementById('btnEjecutarAuditoria');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Ejecutando…';
@@ -144,7 +215,7 @@
             .catch((e) => err(e.message))
             .finally(() => {
                 btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-play-circle me-1"></i> Ejecutar auditoría';
+                btn.innerHTML = '<i class="bi bi-search me-1"></i> Ejecutar auditoría';
             });
     }
 
@@ -388,22 +459,160 @@
         } finally {
             btn.disabled = false;
             btnCerrar.disabled = false;
-            btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Regenerar';
+            btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Generar asientos';
         }
+    }
+
+    // ---- Anulación masiva (solo anula, NO regenera) ----
+    /** Barra de progreso propia del modal de anulación (misma mecánica que regProgreso). */
+    const anuProgreso = {
+        mostrar() { document.getElementById('anuProgresoBox')?.classList.remove('d-none'); },
+        limpiar() {
+            const l = document.getElementById('anuProgresoLog');
+            if (l) l.innerHTML = '';
+            this.porcentaje(0, 1);
+        },
+        paso(txt) {
+            const p = document.getElementById('anuProgresoPaso');
+            if (p) p.textContent = txt;
+        },
+        log(txt, clase) {
+            const l = document.getElementById('anuProgresoLog');
+            if (!l) return;
+            const d = document.createElement('div');
+            if (clase) d.className = clase;
+            d.textContent = txt;
+            l.appendChild(d);
+            l.scrollTop = l.scrollHeight;
+        },
+        porcentaje(hechos, total) {
+            const pct = total > 0 ? Math.min(100, Math.round((hechos / total) * 100)) : 0;
+            const b = document.getElementById('anuProgresoBarra');
+            const t = document.getElementById('anuProgresoPct');
+            if (b) b.style.width = pct + '%';
+            if (t) t.textContent = pct + '%';
+        },
+    };
+
+    /** Encadena los lotes de anulación de un origen hasta agotarlo. */
+    async function anularOrigen(item, avance) {
+        let restantes = item.pendientes;
+        let anulados = 0;
+        const maxVueltas = Math.ceil(item.pendientes / (avance.lote || 25)) + 5;
+
+        for (let i = 0; i < maxVueltas && restantes > 0; i++) {
+            const res = await postForm('anularLoteAjax', { origen: item.origen });
+            if (!res.ok) {
+                anuProgreso.log('✗ ' + item.label + ': ' + res.error, 'text-danger');
+                return;
+            }
+            const d = res.data;
+            anulados += d.anulados;
+            avance.hechos += d.anulados;
+            anuProgreso.porcentaje(avance.hechos, avance.total);
+            if (d.anulados === 0) break;
+            restantes = d.restantes;
+        }
+        anuProgreso.log('✓ ' + item.label + ': ' + anulados + ' asiento(s) anulado(s)'
+            + (item.cerrados ? ' — ' + item.cerrados + ' omitido(s) por período cerrado' : ''));
+    }
+
+    async function correrAnulacion() {
+        const origen = document.getElementById('anuOrigen').value;
+        const desde = document.getElementById('anuDesde').value;
+        const hasta = document.getElementById('anuHasta').value;
+        const btn = document.getElementById('btnConfirmarAnular');
+        const btnCerrar = document.getElementById('btnCerrarAnular');
+
+        btn.disabled = true;
+        btnCerrar.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Anulando…';
+        anuProgreso.mostrar();
+        anuProgreso.limpiar();
+        anuProgreso.paso('Calculando el alcance…');
+
+        try {
+            const plan = await postForm('planAnulacionAjax', {
+                origen,
+                fecha_desde: fechaCompleta(desde) ? desde : '',
+                fecha_hasta: fechaCompleta(hasta) ? hasta : '',
+            });
+            if (!plan.ok) { err(plan.error); return; }
+
+            const d = plan.data || {};
+            const conPendientes = (d.origenes || []).filter((o) => o.pendientes > 0);
+            if (!conPendientes.length) {
+                anuProgreso.paso('Nada por anular');
+                anuProgreso.log('No hay asientos que anular con esos filtros.');
+                toast('info', 'No hay asientos que anular con esos filtros.');
+                return;
+            }
+
+            anuProgreso.log('Se anularán ' + d.total + ' asiento(s) en ' + conPendientes.length + ' módulo(s).');
+            if (d.cerrados) anuProgreso.log('⚠ ' + d.cerrados + ' quedan fuera por período contable cerrado.', 'text-warning');
+
+            const avance = { hechos: 0, total: d.total, lote: d.lote };
+            for (const item of conPendientes) {
+                anuProgreso.paso('Anulando ' + item.label + '…');
+                await anularOrigen(item, avance);
+            }
+
+            anuProgreso.paso('Cerrando…');
+            const fin = await postForm('finalizarAnulacionAjax', {});
+            if (!fin.ok) { err(fin.error); return; }
+
+            anuProgreso.porcentaje(1, 1);
+            anuProgreso.paso('Listo');
+            const f = fin.data || {};
+            Swal.fire({
+                title: 'Asientos eliminados',
+                html: '<div class="text-start small">'
+                    + '<div>Asientos anulados: <strong>' + (f.anulados || 0) + '</strong></div>'
+                    + '<div>Documentos que quedaron sin contabilidad: <strong>' + (f.documentos || 0) + '</strong></div>'
+                    + '<div class="mt-2 text-muted">Use «Generar asientos» para volver a crearlos.</div>'
+                    + '</div>',
+                icon: 'success',
+            });
+            fetchSearch(1);
+        } catch (e) {
+            err(e.message);
+        } finally {
+            btn.disabled = false;
+            btnCerrar.disabled = false;
+            btn.innerHTML = '<i class="bi bi-slash-circle me-1"></i>Eliminar asientos';
+        }
+    }
+
+    function confirmarAnular() {
+        const sel = document.getElementById('anuOrigen');
+        const todos = sel.value === '__todos__';
+        Swal.fire({
+            title: '¿Eliminar los asientos del filtro?',
+            html: (todos
+                    ? 'Se <strong>anularán</strong> los asientos de <strong>todos los módulos</strong> en el rango indicado.'
+                    : 'Se <strong>anularán</strong> los asientos de «' + sel.options[sel.selectedIndex].text + '».')
+                + '<br><br><span class="small text-danger">Los documentos quedarán <strong>SIN contabilidad</strong>: '
+                + 'desaparecen del Balance, Estado de Resultados y Mayores hasta que se regeneren.</span>'
+                + '<br><span class="small text-muted">Es reversible (los asientos quedan anulados, no se borran). '
+                + 'No se tocan los de tipo Diario, los de migración ni los de períodos cerrados.</span>',
+            icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Sí, eliminar',
+        }).then((r) => {
+            if (r.isConfirmed) correrAnulacion();
+        });
     }
 
     function confirmarRegenerar() {
         const sel = document.getElementById('regOrigen');
         const todos = sel.value === '__todos__';
         Swal.fire({
-            title: todos ? '¿Regenerar toda la contabilidad?' : '¿Regenerar asientos?',
+            title: todos ? '¿Generar los asientos de toda la contabilidad?' : '¿Generar asientos?',
             html: (todos
                     ? 'Se <strong>anularán y volverán a generar</strong> los asientos de <strong>todos los módulos</strong> con la configuración contable actual.'
                     : 'Se <strong>anularán</strong> los asientos de «' + sel.options[sel.selectedIndex].text + '» y se <strong>volverán a generar</strong>.')
                 + '<br><br><span class="small text-muted">No se tocan los asientos de <strong>tipo Diario</strong> '
                 + '(manuales y de activos fijos), los de la migración ni los de períodos cerrados. '
                 + 'Los comprobantes se renumeran.</span>',
-            icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Sí, regenerar',
+            icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Sí, generar',
         }).then((r) => {
             if (r.isConfirmed) correrRegeneracion();
         });
@@ -414,13 +623,69 @@
         document.getElementById('btnEjecutarAuditoria')?.addEventListener('click', ejecutarAuditoria);
         document.getElementById('btnGuardarRevision')?.addEventListener('click', guardarRevision);
         document.getElementById('btnConfirmarRegenerar')?.addEventListener('click', confirmarRegenerar);
+        document.getElementById('btnConfirmarAnular')?.addEventListener('click', confirmarAnular);
 
         // Al reabrir el modal, el progreso de la corrida anterior no debe seguir a la vista.
+        // Además se precargan origen y fechas desde la barra de filtros, para que las acciones
+        // masivas operen sobre lo mismo que el usuario está viendo en el listado.
         document.getElementById('modalRegenerar')?.addEventListener('show.bs.modal', () => {
             document.getElementById('regProgresoBox')?.classList.add('d-none');
             regProgreso.limpiar();
             regProgreso.paso('Preparando…');
+            const f = rangoFechas();
+            const d = document.getElementById('regDesde');
+            const h = document.getElementById('regHasta');
+            const o = document.getElementById('regOrigen');
+            if (d) d.value = f.fecha_desde;
+            if (h) h.value = f.fecha_hasta;
+            // Solo se precarga si ese origen existe en el selector (regenerables ⊂ orígenes).
+            if (o) {
+                const val = origenParaAccion();
+                o.value = Array.from(o.options).some((op) => op.value === val) ? val : '__todos__';
+            }
         });
+
+        document.getElementById('modalAnular')?.addEventListener('show.bs.modal', () => {
+            document.getElementById('anuProgresoBox')?.classList.add('d-none');
+            anuProgreso.limpiar();
+            anuProgreso.paso('Preparando…');
+            const f = rangoFechas();
+            const d = document.getElementById('anuDesde');
+            const h = document.getElementById('anuHasta');
+            const o = document.getElementById('anuOrigen');
+            if (d) d.value = f.fecha_desde;
+            if (h) h.value = f.fecha_hasta;
+            if (o) o.value = origenParaAccion();
+        });
+
+        // Período: los selects de año/mes recalculan el rango de fechas y refrescan.
+        document.getElementById('audAnio')?.addEventListener('change', () => {
+            actualizarFechasPorPeriodo();
+            fetchSearch(1);
+        });
+        document.getElementById('audMes')?.addEventListener('change', () => {
+            actualizarFechasPorPeriodo();
+            fetchSearch(1);
+        });
+
+        // Orígenes (multi-selección): acotan el listado y precargan las acciones masivas.
+        document.querySelectorAll('.js-aud-origen').forEach((chk) => {
+            chk.addEventListener('change', () => {
+                refrescarEtiquetaOrigenes();
+                fetchSearch(1);
+            });
+        });
+        document.getElementById('audOrigenTodos')?.addEventListener('click', () => {
+            document.querySelectorAll('.js-aud-origen').forEach((c) => { c.checked = true; });
+            refrescarEtiquetaOrigenes();
+            fetchSearch(1);
+        });
+        document.getElementById('audOrigenNinguno')?.addEventListener('click', () => {
+            document.querySelectorAll('.js-aud-origen').forEach((c) => { c.checked = false; });
+            refrescarEtiquetaOrigenes();
+            fetchSearch(1);
+        });
+        refrescarEtiquetaOrigenes();
 
         document.getElementById('audPrev')?.addEventListener('click', () => fetchSearch(state.page - 1));
         document.getElementById('audNext')?.addEventListener('click', () => fetchSearch(state.page + 1));
@@ -446,11 +711,16 @@
         // Filtro por fechas (aplica al listado; también acota la auditoría al ejecutarla)
         document.getElementById('audFechaDesde')?.addEventListener('change', () => fetchSearch(1));
         document.getElementById('audFechaHasta')?.addEventListener('change', () => fetchSearch(1));
+        // Limpia TODO el filtro: fechas, período y orígenes.
         document.getElementById('audLimpiarFechas')?.addEventListener('click', () => {
             const d = document.getElementById('audFechaDesde');
             const h = document.getElementById('audFechaHasta');
             if (d) d.value = '';
             if (h) h.value = '';
+            const mes = document.getElementById('audMes');
+            if (mes) mes.value = '0';
+            document.querySelectorAll('.js-aud-origen').forEach((c) => { c.checked = false; });
+            refrescarEtiquetaOrigenes();
             fetchSearch(1);
         });
 

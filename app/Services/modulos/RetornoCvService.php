@@ -543,6 +543,11 @@ class RetornoCvService
             $asientoService->anular($idAsiento, $idEmpresa, $idUsuario);
             $this->repository->updateAsientoContable($idRetorno, $idEmpresa, null);
         } catch (\Throwable $e) {
+            // Un período cerrado debe abortar: si no, el documento quedaría anulado con su
+            // asiento aún vigente (descuadre silencioso).
+            if (stripos($e->getMessage(), 'contable cerrado') !== false) {
+                throw $e;
+            }
             error_log("[RetornoCV] No se pudo anular el asiento del retorno $idRetorno: " . $e->getMessage());
         }
     }

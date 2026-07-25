@@ -35,6 +35,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     .af-row { cursor: pointer; }
     .af-row:hover { background-color: rgba(0, 0, 0, .04); }
     .af-dropdown { position: absolute; z-index: 1080; max-height: 240px; overflow-y: auto; display: none; width: 100%; }
+    /* Tarjeta de ayuda de la cuenta contrapartida: llena el espacio libre a la derecha del campo. */
+    .af-ayuda { font-size: .68rem; line-height: 1.35; }
+    .af-ayuda ul { margin-bottom: .25rem; }
+    .af-ayuda ul li { margin-bottom: .15rem; }
 </style>
 
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
@@ -76,6 +80,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'valor_adquisicion'      => 'Valor Adquisición',
                     'valor_en_libros'        => 'Valor en Libros',
                     'estado'                 => 'Estado',
+                    'cuenta_activo'          => 'Cuenta Activo',
+                    'cuenta_dep_acum'        => 'Cuenta Dep. Acumulada',
+                    'cuenta_gasto'           => 'Cuenta Gasto Depreciación',
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
@@ -127,12 +134,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <?php $renderHeader('fecha_adquisicion', 'Fecha Adquisición'); ?>
                         <?php $renderHeader('valor_adquisicion', 'Valor Adquisición', 'right'); ?>
                         <?php $renderHeader('valor_en_libros', 'Valor en Libros', 'right'); ?>
-                        <?php $renderHeader('estado', 'Estado', 'center', 'pe-3'); ?>
+                        <?php $renderHeader('estado', 'Estado', 'center'); ?>
+                        <th data-col="cuenta_activo">Cuenta Activo</th>
+                        <th data-col="cuenta_dep_acum">Cuenta Dep. Acumulada</th>
+                        <th class="pe-3" data-col="cuenta_gasto">Cuenta Gasto Depreciación</th>
                     </tr>
                 </thead>
                 <tbody id="tbodyAF">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-building fs-3 d-block mb-2"></i>No se encontraron activos fijos.</td></tr>
+                        <tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-building fs-3 d-block mb-2"></i>No se encontraron activos fijos.</td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <?php
@@ -151,7 +161,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td data-col="fecha_adquisicion"><?= !empty($r['fecha_adquisicion']) ? date('d-m-Y', strtotime($r['fecha_adquisicion'])) : '-' ?></td>
                                 <td class="text-end" data-col="valor_adquisicion">$<?= number_format((float) $r['valor_adquisicion'], 2) ?></td>
                                 <td class="text-end" data-col="valor_en_libros">$<?= number_format((float) $r['valor_en_libros'], 2) ?></td>
-                                <td class="text-center pe-3" data-col="estado"><span class="badge <?= $estCls ?> border border-opacity-25"><?= $estTxt ?></span></td>
+                                <td class="text-center" data-col="estado"><span class="badge <?= $estCls ?> border border-opacity-25"><?= $estTxt ?></span></td>
+                                <td data-col="cuenta_activo"><?= htmlspecialchars(trim(($r['cuenta_activo_codigo'] ?? '') . ' - ' . ($r['cuenta_activo_nombre'] ?? ''), ' -')) ?></td>
+                                <td data-col="cuenta_dep_acum"><?= htmlspecialchars(trim(($r['cuenta_dep_acum_codigo'] ?? '') . ' - ' . ($r['cuenta_dep_acum_nombre'] ?? ''), ' -')) ?></td>
+                                <td class="pe-3" data-col="cuenta_gasto"><?= htmlspecialchars(trim(($r['cuenta_gasto_codigo'] ?? '') . ' - ' . ($r['cuenta_gasto_nombre'] ?? ''), ' -')) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>

@@ -280,6 +280,51 @@ class AsientoContableRepository
         ]);
     }
 
+    /**
+     * Tercero y número del documento que originó un asiento (factura, compra, egreso…), para
+     * completar las líneas que no los traen. El mapa de módulos vive en
+     * App\Helpers\DocumentoOrigenAsiento; devuelve null si el módulo no tiene documento con
+     * tercero identificable (nómina, traspasos, activos fijos, declaraciones, asiento manual)
+     * o si su tabla todavía no existe en esta instalación.
+     *
+     * @return array{tipo_entidad: ?string, id_entidad: ?int, numero_documento: ?string}|null
+     */
+    public function getDatosDocumentoOrigen(?string $moduloOrigen, int $idReferenciaOrigen, int $idEmpresa): ?array
+    {
+        $doc = \App\Helpers\DocumentoOrigenAsiento::paraModulo($moduloOrigen);
+        if ($doc === null || $idReferenciaOrigen <= 0) {
+            return null;
+        }
+
+        $pdo = \App\core\Database::getConnection();
+        try {
+            // Las expresiones del mapa son constantes del código; los valores van preparados.
+            $sql = "SELECT ({$doc['tipo']})::varchar AS tipo_entidad,
+                           ({$doc['entidad']})::bigint AS id_entidad,
+                           ({$doc['numero']})::varchar AS numero_documento
+                    FROM {$doc['tabla']} t
+                    WHERE t.id = :id AND t.id_empresa = :id_empresa
+                    LIMIT 1";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([':id' => $idReferenciaOrigen, ':id_empresa' => $idEmpresa]);
+            $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            // Tabla o columna inexistente en esta instalación: el asiento se guarda igual.
+            error_log('Asientos: no se pudo leer el documento origen (' . $moduloOrigen . '). ' . $e->getMessage());
+            return null;
+        }
+
+        if (!$row) {
+            return null;
+        }
+
+        return [
+            'tipo_entidad' => $row['tipo_entidad'] !== null && $row['tipo_entidad'] !== '' ? (string) $row['tipo_entidad'] : null,
+            'id_entidad' => !empty($row['id_entidad']) ? (int) $row['id_entidad'] : null,
+            'numero_documento' => !empty($row['numero_documento']) ? (string) $row['numero_documento'] : null,
+        ];
+    }
+
     public function updateEstado(int $idAsiento, string $estado, int $updatedBy): void
     {
         $sql = "UPDATE asientos_contables_cabecera SET estado = :estado, updated_by = :updated_by, updated_at = CURRENT_TIMESTAMP WHERE id = :id";

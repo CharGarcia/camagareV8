@@ -7,13 +7,17 @@ namespace App\Services\modulos;
 use App\models\AsientoContableCabecera;
 use App\models\AsientoContableDetalle;
 use App\repositories\modulos\AsientoContableRepository;
+use App\repositories\modulos\PeriodosContablesRepository;
 use App\Rules\modulos\AsientoContableRules;
+use App\Rules\modulos\PeriodosContablesRules;
 use App\Services\LogSistemaService;
+use App\Services\modulos\PeriodosContablesService;
 
 class AsientoContableService
 {
     private AsientoContableCabecera $modelCabecera;
     private AsientoContableDetalle $modelDetalle;
+    private PeriodosContablesService $periodosService;
 
     public function __construct(
         private AsientoContableRepository $repository,
@@ -22,6 +26,14 @@ class AsientoContableService
     ) {
         $this->modelCabecera = new AsientoContableCabecera();
         $this->modelDetalle = new AsientoContableDetalle();
+
+        // Servicio de períodos: ningún asiento (manual ni automático) puede tocar un
+        // período contable cerrado. Mismo patrón de instanciación que EgresoService.
+        $this->periodosService = new PeriodosContablesService(
+            new PeriodosContablesRepository(),
+            new PeriodosContablesRules(),
+            $this->logService
+        );
     }
 
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir): array
@@ -64,6 +76,31 @@ class AsientoContableService
         // 2. Validaciones
         $this->rules->validarCabecera($cabeceraData);
         $this->rules->validarDetalles($detallesData);
+
+        // 2b. Período contable: ni se crea ni se modifica un asiento dentro de un período
+        // cerrado. En una edición se validan AMBAS fechas —la nueva y la que tiene hoy el
+        // asiento— para que no se pueda sacar un asiento de un período cerrado cambiándole
+        // la fecha, ni meterlo a uno cerrado.
+        $idAsientoPrevio = (int) ($cabeceraData['id'] ?? 0);
+        if (!empty($cabeceraData['fecha_asiento'])) {
+            $this->periodosService->validarFechaPermitida(
+                (string) $cabeceraData['fecha_asiento'],
+                $idEmpresa,
+                'No se puede registrar el asiento: la fecha ' . $cabeceraData['fecha_asiento']
+                    . ' corresponde a un período contable cerrado.'
+            );
+        }
+        if ($idAsientoPrevio > 0) {
+            $previo = $this->repository->getDetalleAsiento($idAsientoPrevio, $idEmpresa);
+            if (!empty($previo['fecha_asiento'])) {
+                $this->periodosService->validarFechaPermitida(
+                    (string) $previo['fecha_asiento'],
+                    $idEmpresa,
+                    'No se puede modificar el asiento: su fecha actual (' . $previo['fecha_asiento']
+                        . ') está en un período contable cerrado.'
+                );
+            }
+        }
 
         // 3. Iniciar Transacción (solo si no hay una activa — puede ser llamado desde otro servicio)
         $pdo = \App\core\Database::getConnection();
@@ -130,6 +167,16 @@ class AsientoContableService
                 $this->repository->deleteDetalles($idAsiento);
             }
 
+            // Tercero y número de documento del origen: los módulos que arman sus líneas a mano
+            // ya los mandan, pero las que vienen del builder/sincronizador llegan sin ellos y
+            // los reportes (Mayores, Libro Diario) quedan con las columnas Tercero y Documento
+            // en blanco. Se resuelven una sola vez por asiento y solo rellenan lo que falte.
+            $docOrigen = $this->repository->getDatosDocumentoOrigen(
+                $saveData['modulo_origen'],
+                (int) ($saveData['id_referencia_origen'] ?? 0),
+                $idEmpresa
+            );
+
             foreach ($detallesData as $det) {
                 $detData = [
                     'id_empresa' => $idEmpresa,
@@ -145,6 +192,17 @@ class AsientoContableService
                     'tipo_entidad' => $det['tipo_entidad'] ?? null,
                     'created_by' => $idUsuario,
                 ];
+
+                if ($docOrigen !== null) {
+                    if (empty($detData['id_entidad']) && !empty($docOrigen['id_entidad'])) {
+                        $detData['id_entidad'] = $docOrigen['id_entidad'];
+                        $detData['tipo_entidad'] = $docOrigen['tipo_entidad'];
+                    }
+                    if (trim((string) $detData['documento_referencia']) === '' && !empty($docOrigen['numero_documento'])) {
+                        $detData['documento_referencia'] = $docOrigen['numero_documento'];
+                    }
+                }
+
                 $this->repository->insertDetalle($detData);
             }
 
@@ -165,6 +223,14 @@ class AsientoContableService
         }
         if ($asiento['estado'] === 'anulado') {
             throw new \Exception('El asiento ya se encuentra anulado.');
+        }
+        if (!empty($asiento['fecha_asiento'])) {
+            $this->periodosService->validarFechaPermitida(
+                (string) $asiento['fecha_asiento'],
+                $idEmpresa,
+                'No se puede anular el asiento: su fecha (' . $asiento['fecha_asiento']
+                    . ') está en un período contable cerrado.'
+            );
         }
 
         $pdo = \App\core\Database::getConnection();
@@ -291,6 +357,14 @@ class AsientoContableService
         }
         if (strtolower(trim($asiento['tipo_comprobante'] ?? '')) !== 'diario') {
             throw new \Exception('Solo los asientos de tipo Diario se pueden restablecer a contabilizado.');
+        }
+        if (!empty($asiento['fecha_asiento'])) {
+            $this->periodosService->validarFechaPermitida(
+                (string) $asiento['fecha_asiento'],
+                $idEmpresa,
+                'No se puede restablecer el asiento: su fecha (' . $asiento['fecha_asiento']
+                    . ') está en un período contable cerrado.'
+            );
         }
 
         $pdo = \App\core\Database::getConnection();

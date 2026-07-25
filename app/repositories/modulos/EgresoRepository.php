@@ -130,12 +130,55 @@ class EgresoRepository extends BaseRepository
     {
         $sql = "SELECT ep.id, ep.id_egreso, ep.id_forma_pago, ep.monto, ep.referencia,
                        ep.tipo_operacion_bancaria, ep.numero_cheque, ep.fecha_cobro,
-                       efc.nombre AS forma_pago_nombre, efc.tipo AS forma_pago_tipo
+                       efc.nombre AS forma_pago_nombre, efc.tipo AS forma_pago_tipo,
+                       " . $this->sqlChequeConciliado('ep', 'efc') . " AS cheque_conciliado
                 FROM egresos_pagos ep
                 INNER JOIN empresa_formas_pago efc ON ep.id_forma_pago = efc.id
                 WHERE ep.id_egreso = ? AND ep.eliminado = FALSE
                 ORDER BY ep.id ASC";
         return $this->query($sql, [$idEgreso])->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Subconsulta EXISTS: TRUE si el cheque del pago ya fue conciliado en Control
+     * Bancario (tiene fecha_banco), es decir "reportado como cobrado". Se enlaza el
+     * pago con la línea bancaria del asiento del egreso (misma cuenta contable) y
+     * su clasificación en control_bancario_movimientos.
+     */
+    private function sqlChequeConciliado(string $ep, string $fp): string
+    {
+        return "EXISTS (
+                    SELECT 1
+                    FROM asientos_contables_cabecera acc
+                    JOIN asientos_contables_detalle acd ON acd.id_asiento = acc.id AND acd.eliminado = FALSE
+                    JOIN control_bancario_movimientos cbm ON cbm.id_asiento_detalle = acd.id AND cbm.eliminado = FALSE
+                    WHERE acc.modulo_origen = 'egreso'
+                      AND acc.id_referencia_origen = {$ep}.id_egreso
+                      AND acd.id_cuenta_contable = {$fp}.id_cuenta_contable
+                      AND cbm.fecha_banco IS NOT NULL
+                )";
+    }
+
+    /** Un pago-cheque con su estado de conciliación, para validar la edición de fecha. */
+    public function getPagoChequeParaEdicion(int $idEmpresa, int $idPago): ?array
+    {
+        $sql = "SELECT ep.id, ep.id_egreso, ep.tipo_operacion_bancaria, ep.fecha_cobro,
+                       e.estado AS egreso_estado,
+                       " . $this->sqlChequeConciliado('ep', 'efc') . " AS cheque_conciliado
+                FROM egresos_pagos ep
+                INNER JOIN empresa_formas_pago efc ON ep.id_forma_pago = efc.id
+                INNER JOIN egresos_cabecera e ON ep.id_egreso = e.id
+                WHERE ep.id = ? AND e.id_empresa = ? AND ep.eliminado = FALSE
+                LIMIT 1";
+        $row = $this->query($sql, [$idPago, $idEmpresa])->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Actualiza solo la fecha de cobro de un pago-cheque. */
+    public function actualizarFechaCobro(int $idPago, string $fecha): void
+    {
+        $this->query("UPDATE egresos_pagos SET fecha_cobro = :f WHERE id = :id",
+            [':f' => $fecha, ':id' => $idPago]);
     }
 
     public function getConceptosEgreso(int $idEmpresa): array

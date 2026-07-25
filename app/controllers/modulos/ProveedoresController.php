@@ -408,6 +408,9 @@ class ProveedoresController extends BaseModuloController
                     'actualizado_at' => $fmt($prov['updated_at'] ?? $prov['actualizado_at'] ?? null),
                     'actualizado_por' => $prov['actualizado_por_nombre'] ?? '—',
                     'compras_realizadas' => $stats['documentos_recibidos'],
+                    // Mismo criterio que ProveedorService::actualizar para bloquear
+                    // el cambio de tipo de ID / identificación.
+                    'en_uso' => $repo->estaEnUso($id, $idEmpresa),
                     'stats' => $stats
                 ]
             ]);
@@ -714,6 +717,7 @@ class ProveedoresController extends BaseModuloController
             'status'            => isset($_POST['status']) && $_POST['status'] == '1',
             'id_forma_pago_predeterminada' => empty($_POST['id_forma_pago_predeterminada']) ? null : (int)$_POST['id_forma_pago_predeterminada'],
             'tipo_operacion_bancaria_predeterminada' => empty($_POST['tipo_operacion_bancaria_predeterminada']) ? null : trim($_POST['tipo_operacion_bancaria_predeterminada']),
+            'monto_minimo_auto_pago'       => empty($_POST['monto_minimo_auto_pago']) ? null : (float)$_POST['monto_minimo_auto_pago'],
             'monto_maximo_auto_pago'       => empty($_POST['monto_maximo_auto_pago']) ? null : (float)$_POST['monto_maximo_auto_pago'],
             'id_retencion_renta'           => empty($_POST['id_retencion_renta']) ? null : (int)$_POST['id_retencion_renta'],
             'id_retencion_iva'             => empty($_POST['id_retencion_iva']) ? null : (int)$_POST['id_retencion_iva'],

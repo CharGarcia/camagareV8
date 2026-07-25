@@ -15,9 +15,72 @@ class SincronizadorAsientosService
     public function sincronizar(int $idEmpresa, int $idUsuario): void
     {
         $db = Database::getConnection();
+        $this->prepararEsquema($db);
 
-        // Asegurar que la columna id_asiento_contable exista en todas las tablas operativas
-        // antes de realizar cualquier consulta SELECT sobre ellas.
+        $excMig = $this->construirExclusionMigracion($db);
+        $trabajos = $this->construirTrabajos($idEmpresa, $excMig);
+
+        foreach ($trabajos as $t) {
+            $this->sincronizarModulo(
+                $db,
+                $t['sql'],
+                $t['params'],
+                $t['factory'],
+                $t['nombre'],
+                $t['dondeConfigurar'],
+                $t['tablaVerif'],
+                $t['colAsiento']
+            );
+        }
+
+        // Verificación proactiva: conceptos y formas SIN cuenta contable configurada
+        // (avisa aunque todavía no existan documentos pendientes).
+        $this->verificarConfiguracionCuentas($db, $idEmpresa);
+
+        // Consignaciones con costo en Kardex que no se pueden contabilizar por falta
+        // de la cuenta «Mercadería en Consignación» configurada.
+        $this->verificarConsignacionesPendientes($db, $idEmpresa);
+
+        // Facturas con costo en Kardex que no se puede contabilizar porque faltan las
+        // cuentas de Costo de Ventas e Inventario.
+        $this->verificarCosteoVentasPendiente($db, $idEmpresa);
+    }
+
+    /**
+     * Cuenta cuántos documentos operativos están pendientes de generar su asiento contable,
+     * SIN generarlos. Reutiliza exactamente las mismas consultas de detección que sincronizar()
+     * (envolviéndolas en un COUNT), para que la cifra mostrada al usuario coincida con lo que
+     * realmente se intentará generar. Los módulos cuya tabla/columna aún no exista (migración
+     * pendiente) se omiten silenciosamente.
+     */
+    public function contarPendientes(int $idEmpresa): int
+    {
+        $db = Database::getConnection();
+        $this->prepararEsquema($db);
+
+        $excMig = $this->construirExclusionMigracion($db);
+        $trabajos = $this->construirTrabajos($idEmpresa, $excMig);
+
+        $total = 0;
+        foreach ($trabajos as $t) {
+            try {
+                $st = $db->prepare("SELECT COUNT(*) FROM (" . $t['sql'] . ") AS _pend");
+                $st->execute($t['params']);
+                $total += (int) $st->fetchColumn();
+            } catch (\Throwable $e) {
+                // Tabla o columna inexistente (migración pendiente): se omite sin romper.
+            }
+        }
+
+        return $total;
+    }
+
+    /**
+     * Asegura que la columna id_asiento_contable exista en todas las tablas operativas
+     * antes de realizar cualquier consulta SELECT sobre ellas.
+     */
+    private function prepararEsquema(\PDO $db): void
+    {
         try {
             $db->exec("ALTER TABLE compras_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
             $db->exec("ALTER TABLE liquidaciones_cabecera ADD COLUMN IF NOT EXISTS id_asiento_contable INTEGER;");
@@ -31,25 +94,43 @@ class SincronizadorAsientosService
         } catch (\Throwable $e) {
             // Ignorar errores si no tiene permisos o ya existen
         }
+    }
 
-        // Los documentos traídos por la migración del sistema viejo NO deben generar asiento
-        // automático: su contabilidad viene del histórico migrado (modulo_origen='migracion').
-        // Si existe la tabla del mapa de migración, se excluyen esos documentos de la generación.
+    /**
+     * Devuelve un closure que genera el fragmento SQL para excluir los documentos INSERTADOS
+     * por la migración del sistema viejo (o '' si no aplica). Su contabilidad viene del histórico
+     * migrado (modulo_origen='migracion'), así que NO deben generar asiento automático.
+     * Se excluyen solo los que la migración creó (vinculado IS NOT TRUE); los 'vinculado'=true
+     * son documentos NATIVOS que la migración solo enlazó por número SRI, así que deben seguir
+     * generando su asiento normalmente.
+     */
+    private function construirExclusionMigracion(\PDO $db): callable
+    {
         $tieneMapMig = false;
         try {
             $tieneMapMig = (bool) $db->query("SELECT to_regclass('public.migracion_mysql_map')")->fetchColumn();
         } catch (\Throwable $e) {
             $tieneMapMig = false;
         }
-        // Devuelve el fragmento SQL que excluye los documentos INSERTADOS por la migración
-        // (o '' si no aplica). Se excluyen solo los que la migración creó (vinculado IS NOT TRUE);
-        // los 'vinculado'=true son documentos NATIVOS que la migración solo enlazó por número SRI,
-        // así que deben seguir generando su asiento normalmente.
+
         // $entidad e $idExpr son literales del código (no entrada de usuario) → seguros de interpolar.
-        $excMig = function (string $entidad, string $idExpr) use ($tieneMapMig): string {
+        return function (string $entidad, string $idExpr) use ($tieneMapMig): string {
             if (!$tieneMapMig) { return ''; }
             return " AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map mm WHERE mm.entidad = '{$entidad}' AND mm.id_destino = {$idExpr} AND mm.vinculado IS NOT TRUE) ";
         };
+    }
+
+    /**
+     * Construye la lista de "trabajos" de sincronización: cada entrada describe la consulta que
+     * detecta los documentos pendientes de un módulo y cómo generar su asiento. La usan tanto
+     * sincronizar() (para generar) como contarPendientes() (para solo contar), garantizando que
+     * ambos miren exactamente los mismos documentos.
+     *
+     * @return array<int, array{sql:string, params:array, factory:callable, nombre:string, dondeConfigurar:string, tablaVerif:?string, colAsiento:string}>
+     */
+    private function construirTrabajos(int $idEmpresa, callable $excMig): array
+    {
+        $trabajos = [];
 
         // 1. Facturas de Venta
         //    Se (re)generan dos grupos:
@@ -86,236 +167,232 @@ class SincronizadorAsientosService
                                 )
                           )" . $excMig('facturas', 'v.id');
 
-        $this->sincronizarModulo(
-            $db,
-            $sqlFacturas,
-            [$idEmpresa, $idEmpresa, $idEmpresa, $idEmpresa],
-            function() {
+        $trabajos[] = [
+            'sql'    => $sqlFacturas,
+            'params' => [$idEmpresa, $idEmpresa, $idEmpresa, $idEmpresa],
+            'factory' => function() {
                 return new \App\Services\modulos\FacturaVentaService(
                     new \App\repositories\modulos\FacturaVentaRepository(),
                     new \App\Rules\modulos\FacturaVentaRules(),
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Facturas de Venta',
-            tablaVerif: 'ventas_cabecera'
-        );
+            'nombre' => 'Facturas de Venta',
+            'dondeConfigurar' => 'Asientos Programados',
+            'tablaVerif' => 'ventas_cabecera',
+            'colAsiento' => 'id_asiento_contable',
+        ];
 
         // 1b. Recibos de Venta (espejo de la factura, reusa el concepto 'ventas_factura').
         //     Mismo criterio que la factura: solo se contabiliza el documento vigente ya emitido,
         //     nunca el borrador. Estados: borrador → emitido → facturado/anulado.
         //     Se excluyen además 'facturado' y 'anulado' porque su asiento se anula al facturar
         //     (ahí manda el de la factura, para no duplicar la venta) y al anular/eliminar.
-        $this->sincronizarModulo(
-            $db,
-            "SELECT id FROM recibos_venta_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'emitido'" . $excMig('recibos', 'recibos_venta_cabecera.id'),
-            [$idEmpresa],
-            function() {
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM recibos_venta_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'emitido'" . $excMig('recibos', 'recibos_venta_cabecera.id'),
+            'params' => [$idEmpresa],
+            'factory' => function() {
                 return new \App\Services\modulos\ReciboVentaService(
                     new \App\repositories\modulos\ReciboVentaRepository(),
                     new \App\Rules\modulos\ReciboVentaRules(),
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Recibos de Venta',
-            tablaVerif: 'recibos_venta_cabecera'
-        );
+            'nombre' => 'Recibos de Venta',
+            'dondeConfigurar' => 'Asientos Programados',
+            'tablaVerif' => 'recibos_venta_cabecera',
+            'colAsiento' => 'id_asiento_contable',
+        ];
 
         // 2. Liquidaciones de Compra
-        $this->sincronizarModulo(
-            $db,
-            "SELECT id FROM liquidaciones_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado IN ('autorizado', 'contabilizado')" . $excMig('liquidaciones', 'liquidaciones_cabecera.id'),
-            [$idEmpresa],
-            function() {
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM liquidaciones_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado IN ('autorizado', 'contabilizado')" . $excMig('liquidaciones', 'liquidaciones_cabecera.id'),
+            'params' => [$idEmpresa],
+            'factory' => function() {
                 return new \App\Services\modulos\LiquidacionCompraService(
                     new \App\repositories\modulos\LiquidacionCompraRepository(),
                     new \App\Rules\modulos\LiquidacionCompraRules(),
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Liquidaciones de Compra',
-            tablaVerif: 'liquidaciones_cabecera'
-        );
+            'nombre' => 'Liquidaciones de Compra',
+            'dondeConfigurar' => 'Asientos Programados',
+            'tablaVerif' => 'liquidaciones_cabecera',
+            'colAsiento' => 'id_asiento_contable',
+        ];
 
         // 3. Compras (no tiene columna estado)
-        $this->sincronizarModulo(
-            $db,
-            "SELECT id FROM compras_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL" . $excMig('compras', 'compras_cabecera.id'),
-            [$idEmpresa],
-            function() {
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM compras_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL" . $excMig('compras', 'compras_cabecera.id'),
+            'params' => [$idEmpresa],
+            'factory' => function() {
                 return new \App\Services\modulos\ComprasService();
             },
-            'Facturas de Compra',
-            tablaVerif: 'compras_cabecera'
-        );
+            'nombre' => 'Facturas de Compra',
+            'dondeConfigurar' => 'Asientos Programados',
+            'tablaVerif' => 'compras_cabecera',
+            'colAsiento' => 'id_asiento_contable',
+        ];
 
         // 4. Notas de Crédito
-        $this->sincronizarModulo(
-            $db,
-            "SELECT id FROM notas_credito_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado IN ('autorizado', 'contabilizado')" . $excMig('notas_credito', 'notas_credito_cabecera.id'),
-            [$idEmpresa],
-            function() {
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM notas_credito_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado IN ('autorizado', 'contabilizado')" . $excMig('notas_credito', 'notas_credito_cabecera.id'),
+            'params' => [$idEmpresa],
+            'factory' => function() {
                 return new \App\Services\modulos\NotaCreditoService(
                     new \App\repositories\modulos\NotaCreditoRepository(),
                     new \App\Rules\modulos\NotaCreditoRules(),
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Notas de Crédito',
-            tablaVerif: 'notas_credito_cabecera'
-        );
+            'nombre' => 'Notas de Crédito',
+            'dondeConfigurar' => 'Asientos Programados',
+            'tablaVerif' => 'notas_credito_cabecera',
+            'colAsiento' => 'id_asiento_contable',
+        ];
 
         // 5. Retenciones en Ventas (no se autorizan en SRI: solo se filtra por asiento faltante)
-        $this->sincronizarModulo(
-            $db,
-            "SELECT id FROM retencion_venta_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL" . $excMig('retenciones_venta', 'retencion_venta_cabecera.id'),
-            [$idEmpresa],
-            function() {
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM retencion_venta_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL" . $excMig('retenciones_venta', 'retencion_venta_cabecera.id'),
+            'params' => [$idEmpresa],
+            'factory' => function() {
                 return new \App\Services\modulos\RetencionVentaService(
                     new \App\repositories\modulos\RetencionVentaRepository(),
                     new \App\Rules\modulos\RetencionVentaRules(),
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Retenciones en Ventas',
-            tablaVerif: 'retencion_venta_cabecera'
-        );
+            'nombre' => 'Retenciones en Ventas',
+            'dondeConfigurar' => 'Asientos Programados',
+            'tablaVerif' => 'retencion_venta_cabecera',
+            'colAsiento' => 'id_asiento_contable',
+        ];
 
         // 5b. Retenciones en Compras: mismo criterio que facturas/NC/liquidaciones, solo se
         //     contabiliza el documento vigente ya autorizado por el SRI, nunca el borrador.
-        $this->sincronizarModulo(
-            $db,
-            "SELECT id FROM retencion_compra_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'autorizada'" . $excMig('retenciones_compra', 'retencion_compra_cabecera.id'),
-            [$idEmpresa],
-            function() {
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM retencion_compra_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'autorizada'" . $excMig('retenciones_compra', 'retencion_compra_cabecera.id'),
+            'params' => [$idEmpresa],
+            'factory' => function() {
                 return new \App\Services\modulos\RetencionCompraService(
                     new \App\repositories\modulos\RetencionCompraRepository(),
                     new \App\Rules\modulos\RetencionCompraRules(),
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Retenciones en Compras',
-            tablaVerif: 'retencion_compra_cabecera'
-        );
+            'nombre' => 'Retenciones en Compras',
+            'dondeConfigurar' => 'Asientos Programados',
+            'tablaVerif' => 'retencion_compra_cabecera',
+            'colAsiento' => 'id_asiento_contable',
+        ];
 
         // 6. Ingresos (cobros): contrapartida del concepto + formas de cobro
-        $this->sincronizarModulo(
-            $db,
-            "SELECT id FROM ingresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'anulado'" . $excMig('ingresos', 'ingresos_cabecera.id'),
-            [$idEmpresa],
-            function() {
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM ingresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'anulado'" . $excMig('ingresos', 'ingresos_cabecera.id'),
+            'params' => [$idEmpresa],
+            'factory' => function() {
                 return new \App\Services\modulos\IngresoService(
                     new \App\repositories\modulos\IngresoRepository(),
                     new \App\Rules\modulos\IngresoRules(),
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Ingresos',
-            'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)',
-            'ingresos_cabecera'
-        );
+            'nombre' => 'Ingresos',
+            'dondeConfigurar' => 'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)',
+            'tablaVerif' => 'ingresos_cabecera',
+            'colAsiento' => 'id_asiento_contable',
+        ];
 
         // 7. Egresos (pagos): contrapartida del concepto + formas de pago
-        $this->sincronizarModulo(
-            $db,
-            "SELECT id FROM egresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'anulado'" . $excMig('egresos', 'egresos_cabecera.id'),
-            [$idEmpresa],
-            function() {
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM egresos_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'anulado'" . $excMig('egresos', 'egresos_cabecera.id'),
+            'params' => [$idEmpresa],
+            'factory' => function() {
                 return new \App\Services\modulos\EgresoService(
                     new \App\repositories\modulos\EgresoRepository(),
                     new \App\Rules\modulos\EgresoRules(),
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Egresos',
-            'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)',
-            'egresos_cabecera'
-        );
+            'nombre' => 'Egresos',
+            'dondeConfigurar' => 'Configuración Contable (Ingresos/Egresos y Cobros/Pagos)',
+            'tablaVerif' => 'egresos_cabecera',
+            'colAsiento' => 'id_asiento_contable',
+        ];
 
         // 7b. Consignaciones en Ventas (reclasificación de inventario a costo).
         //     Se generan las que tengan las cuentas configuradas; el resto se avisa abajo.
-        $this->sincronizarModulo(
-            $db,
-            "SELECT id FROM consignaciones_ventas WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'Anulada'" . $excMig('consignaciones', 'consignaciones_ventas.id'),
-            [$idEmpresa],
-            function() {
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM consignaciones_ventas WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado <> 'Anulada'" . $excMig('consignaciones', 'consignaciones_ventas.id'),
+            'params' => [$idEmpresa],
+            'factory' => function() {
                 return new \App\Services\modulos\ConsignacionVentaService(
                     new \App\repositories\modulos\ConsignacionVentaRepository(),
                     new \App\Rules\modulos\ConsignacionVentaRules(),
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Consignaciones en Ventas',
-            'Configuración Contable (Consignaciones en Ventas)',
-            'consignaciones_ventas'
-        );
+            'nombre' => 'Consignaciones en Ventas',
+            'dondeConfigurar' => 'Configuración Contable (Consignaciones en Ventas)',
+            'tablaVerif' => 'consignaciones_ventas',
+            'colAsiento' => 'id_asiento_contable',
+        ];
 
         // 7c. Retornos de Consignaciones en Ventas (devolución del cliente: entrada de inventario).
         //     Solo los 'Emitida' tienen impacto contable (Borrador/Anulada no se contabilizan).
-        $this->sincronizarModulo(
-            $db,
-            "SELECT id FROM retornos_cv WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'Emitida'" . $excMig('retornos_cv', 'retornos_cv.id'),
-            [$idEmpresa],
-            function() {
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM retornos_cv WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'Emitida'" . $excMig('retornos_cv', 'retornos_cv.id'),
+            'params' => [$idEmpresa],
+            'factory' => function() {
                 return new \App\Services\modulos\RetornoCvService(
                     new \App\repositories\modulos\RetornoCvRepository(),
                     new \App\Rules\modulos\RetornoCvRules(),
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Retornos de Consignaciones',
-            'Configuración Contable (Retornos de Consignaciones)',
-            'retornos_cv'
-        );
+            'nombre' => 'Retornos de Consignaciones',
+            'dondeConfigurar' => 'Configuración Contable (Retornos de Consignaciones)',
+            'tablaVerif' => 'retornos_cv',
+            'colAsiento' => 'id_asiento_contable',
+        ];
 
         // 7c-bis. Cambios de productos (devuelve/entrega): asiento a costo del inventario movido.
         //         Solo los 'Emitida' tienen impacto contable (Borrador/Anulada no se contabilizan).
-        $this->sincronizarModulo(
-            $db,
-            "SELECT id FROM cambios_producto_cv WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'Emitida'",
-            [$idEmpresa],
-            function() {
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM cambios_producto_cv WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado = 'Emitida'",
+            'params' => [$idEmpresa],
+            'factory' => function() {
                 return new \App\Services\modulos\CambioProductoCvService(
                     new \App\repositories\modulos\CambioProductoCvRepository(),
                     new \App\Rules\modulos\CambioProductoCvRules(),
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Cambios de Productos',
-            'Configuración Contable (Cambios de productos)',
-            'cambios_producto_cv'
-        );
+            'nombre' => 'Cambios de Productos',
+            'dondeConfigurar' => 'Configuración Contable (Cambios de productos)',
+            'tablaVerif' => 'cambios_producto_cv',
+            'colAsiento' => 'id_asiento_contable',
+        ];
 
         // 7d. Facturación de Consignaciones (asiento INVERSO del reingreso de inventario).
         //     Solo las ya 'facturada' lo tienen; el enlace es id_asiento_reingreso (no id_asiento_contable).
-        $this->sincronizarModulo(
-            $db,
-            "SELECT id FROM consignaciones_facturas WHERE id_empresa = ? AND eliminado = false AND id_asiento_reingreso IS NULL AND estado = 'facturada'",
-            [$idEmpresa],
-            function() {
+        $trabajos[] = [
+            'sql'    => "SELECT id FROM consignaciones_facturas WHERE id_empresa = ? AND eliminado = false AND id_asiento_reingreso IS NULL AND estado = 'facturada'",
+            'params' => [$idEmpresa],
+            'factory' => function() {
                 return new \App\Services\modulos\ConsignacionFacturaService(
                     new \App\repositories\modulos\ConsignacionFacturaRepository(),
                     new \App\Rules\modulos\ConsignacionFacturaRules(),
                     new \App\Services\LogSistemaService()
                 );
             },
-            'Facturación de Consignaciones',
-            'Configuración Contable (Consignaciones en Ventas)',
-            'consignaciones_facturas',
-            'id_asiento_reingreso'
-        );
+            'nombre' => 'Facturación de Consignaciones',
+            'dondeConfigurar' => 'Configuración Contable (Consignaciones en Ventas)',
+            'tablaVerif' => 'consignaciones_facturas',
+            'colAsiento' => 'id_asiento_reingreso',
+        ];
 
-        // 8. Verificación proactiva: conceptos y formas SIN cuenta contable configurada
-        //    (avisa aunque todavía no existan documentos pendientes).
-        $this->verificarConfiguracionCuentas($db, $idEmpresa);
-
-        // 8b. Consignaciones con costo en Kardex que no se pueden contabilizar por falta
-        //     de la cuenta «Mercadería en Consignación» configurada.
-        $this->verificarConsignacionesPendientes($db, $idEmpresa);
-
-        // 9. Verificación proactiva: facturas con costo en Kardex que no se puede contabilizar
-        //    porque faltan las cuentas de Costo de Ventas e Inventario.
-        $this->verificarCosteoVentasPendiente($db, $idEmpresa);
+        return $trabajos;
     }
 
     /**

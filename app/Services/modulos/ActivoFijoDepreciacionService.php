@@ -146,11 +146,11 @@ class ActivoFijoDepreciacionService
                 throw new \Exception('No hay valores por depreciar en este período.');
             }
 
-            // Asiento consolidado (agrupado por categoría), dentro de la misma transacción.
+            // Asiento consolidado (agrupado por par de cuentas), dentro de la misma transacción.
             $builder = new AsientoBuilderService();
             $detallesSugeridos = $builder->generarAsientoDepreciacionLote($idEmpresa, $idLote);
             if (empty($detallesSugeridos)) {
-                throw new \Exception('No se pudo armar el asiento de depreciación: verifique las cuentas configuradas en las categorías.');
+                throw new \Exception('No se pudo armar el asiento de depreciación: verifique las cuentas contables configuradas en cada activo fijo.');
             }
 
             $detalles = [];

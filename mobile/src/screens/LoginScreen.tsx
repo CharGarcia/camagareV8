@@ -11,10 +11,14 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useAuth } from '../auth/AuthContext';
 import { mensajeError } from '../api/client';
 
 export default function LoginScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { login, avisoSesionActiva, forzarLoginDesdeAviso, descartarAvisoSesionActiva } = useAuth();
   const [cedula, setCedula] = useState('');
   const [password, setPassword] = useState('');
@@ -94,6 +98,10 @@ export default function LoginScreen() {
         <TouchableOpacity style={styles.boton} onPress={onSubmit} disabled={cargando}>
           {cargando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonTexto}>Ingresar</Text>}
         </TouchableOpacity>
+
+        <TouchableOpacity style={{ marginTop: 18 }} onPress={() => navigation.navigate('Asistencia')}>
+          <Text style={styles.enlaceAsistencia}>¿Vienes a marcar asistencia? Toca aquí</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Panel propio (no Alert.alert nativo) para poder controlar el flujo y mostrar
@@ -172,6 +180,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   botonTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  enlaceAsistencia: { color: '#666', fontSize: 13, textAlign: 'center', textDecorationLine: 'underline' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
   dialogo: { backgroundColor: '#fff', borderRadius: 12, padding: 20 },
   dialogoTitulo: { fontSize: 17, fontWeight: '700', marginBottom: 8 },

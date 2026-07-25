@@ -282,15 +282,40 @@ $base = BASE_URL;
             if (an.ok) { ambiente = an.ambiente; for (const [k, f] of Object.entries(an.data)) { estMap[k] = f.est_segundos || 0; labelMap[k] = f.label || k; totalMap[k] = f.total || 0; } }
         } catch (e) { /* sin estimación: se usa un aproximado */ }
 
+        // Aviso: registros que YA existen en el módulo destino y NO vienen de la migración
+        // (capturados en el nuevo sistema o por otra vía). Podrían duplicarse.
+        let existentes = {};
+        try {
+            const b = new URLSearchParams();
+            b.append('id_empresa', idEmpresa);
+            entidades.forEach(v => b.append('entidades[]', v));
+            const ex = await fetch(base + '/config/migrarMysql?action=verificar-existentes', { method: 'POST', body: b }).then(r => r.json());
+            if (ex.ok) existentes = ex.data || {};
+        } catch (e) { /* sin verificación: se continúa igual */ }
+
+        let avisoHtml = '';
+        const entExist = Object.keys(existentes);
+        if (entExist.length) {
+            const filas = entExist.map(k => `<tr><td class="text-start">${existentes[k].label}</td><td class="text-end fw-bold text-warning">${fmt(existentes[k].nativos)}</td></tr>`).join('');
+            avisoHtml =
+                `<div class="alert alert-warning text-start small mt-2 mb-0">
+                    <b><i class="bi bi-exclamation-triangle me-1"></i>Atención:</b> estos módulos YA tienen registros que <b>no</b> provienen de la migración:
+                    <table class="table table-sm mb-1 mt-1"><tbody>${filas}</tbody></table>
+                    La migración evita duplicar por número de documento / identificación, pero <b>revíselos</b>: si un registro nativo tiene distinto número al del sistema anterior, podría <b>duplicarse</b>.
+                 </div>`;
+        }
+
         const ambTxt = ambiente === '2' ? 'PRODUCCIÓN' : (ambiente === '1' ? 'PRUEBAS' : 'desconocido');
         const ambCls = ambiente === '2' ? 'text-danger' : 'text-success';
         const conf = await Swal.fire({
             title: '¿Migrar los datos seleccionados?',
             html: `Se traerán <b>${entidades.length}</b> tipo(s) de dato desde la base anterior.<br>
                    Ambiente de la empresa (destino): <b class="${ambCls}">${ambTxt}</b>${ambiente ? ' (' + ambiente + ')' : ''}<br>
-                   <span class="text-muted small">Es idempotente: no duplica lo ya migrado. Los documentos se marcan con este ambiente.</span>`,
-            icon: 'question', showCancelButton: true, confirmButtonText: 'Sí, migrar',
-            cancelButtonText: 'Cancelar', confirmButtonColor: '#198754'
+                   <span class="text-muted small">Es idempotente: no duplica lo ya migrado. Los documentos se marcan con este ambiente.</span>
+                   ${avisoHtml}`,
+            icon: entExist.length ? 'warning' : 'question', showCancelButton: true,
+            confirmButtonText: entExist.length ? 'Entiendo, migrar de todas formas' : 'Sí, migrar',
+            cancelButtonText: 'Cancelar', confirmButtonColor: entExist.length ? '#fd7e14' : '#198754'
         });
         if (!conf.isConfirmed) return;
 

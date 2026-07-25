@@ -67,10 +67,16 @@ class ActivoFijoRepository extends BaseRepository
         $sql = "SELECT a.*,
                        cat.nombre AS categoria_nombre,
                        cat.porcentaje_depreciacion_anual AS categoria_porcentaje,
-                       p.razon_social AS proveedor_nombre
+                       p.razon_social AS proveedor_nombre,
+                       pa.codigo AS cuenta_activo_codigo, pa.nombre AS cuenta_activo_nombre,
+                       pd.codigo AS cuenta_dep_acum_codigo, pd.nombre AS cuenta_dep_acum_nombre,
+                       pg.codigo AS cuenta_gasto_codigo, pg.nombre AS cuenta_gasto_nombre
                 FROM activos_fijos a
                 INNER JOIN activos_fijos_categorias cat ON a.id_categoria = cat.id
                 LEFT  JOIN proveedores p ON a.id_proveedor = p.id
+                LEFT  JOIN plan_cuentas pa ON pa.id = a.id_cuenta_activo
+                LEFT  JOIN plan_cuentas pd ON pd.id = a.id_cuenta_depreciacion_acumulada
+                LEFT  JOIN plan_cuentas pg ON pg.id = a.id_cuenta_gasto_depreciacion
                 $where
                 ORDER BY $ordenExpr $ordenDir
                 " . ($perPage > 0 ? "LIMIT $perPage OFFSET $offset" : "");
@@ -85,10 +91,18 @@ class ActivoFijoRepository extends BaseRepository
         $sql = "SELECT a.*,
                        cat.nombre AS categoria_nombre,
                        cat.porcentaje_depreciacion_anual AS categoria_porcentaje,
-                       p.razon_social AS proveedor_nombre
+                       p.razon_social AS proveedor_nombre,
+                       pa.codigo AS cuenta_activo_codigo, pa.nombre AS cuenta_activo_nombre,
+                       pd.codigo AS cuenta_dep_acum_codigo, pd.nombre AS cuenta_dep_acum_nombre,
+                       pg.codigo AS cuenta_gasto_codigo, pg.nombre AS cuenta_gasto_nombre,
+                       pc.codigo AS cuenta_contrapartida_codigo, pc.nombre AS cuenta_contrapartida_nombre
                 FROM activos_fijos a
                 INNER JOIN activos_fijos_categorias cat ON a.id_categoria = cat.id
                 LEFT  JOIN proveedores p ON a.id_proveedor = p.id
+                LEFT  JOIN plan_cuentas pa ON pa.id = a.id_cuenta_activo
+                LEFT  JOIN plan_cuentas pd ON pd.id = a.id_cuenta_depreciacion_acumulada
+                LEFT  JOIN plan_cuentas pg ON pg.id = a.id_cuenta_gasto_depreciacion
+                LEFT  JOIN plan_cuentas pc ON pc.id = a.id_cuenta_contrapartida_alta
                 WHERE a.id = :id AND a.id_empresa = :id_empresa AND a.eliminado = false";
         $row = $this->query($sql, [':id' => $id, ':id_empresa' => $idEmpresa])->fetch();
         return $row ?: null;
@@ -130,8 +144,9 @@ class ActivoFijoRepository extends BaseRepository
                     fecha_adquisicion, fecha_inicio_depreciacion,
                     valor_adquisicion, valor_residual, porcentaje_depreciacion_anual, valor_depreciable, meses_vida_util,
                     depreciacion_acumulada, valor_en_libros, estado,
+                    id_cuenta_activo, id_cuenta_depreciacion_acumulada, id_cuenta_gasto_depreciacion,
                     id_cuenta_contrapartida_alta, observaciones, created_by, updated_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id";
 
         return (int) $this->query($sql, [
@@ -155,6 +170,9 @@ class ActivoFijoRepository extends BaseRepository
             (float) ($data['depreciacion_acumulada'] ?? 0),
             (float) $data['valor_en_libros'],
             $data['estado'] ?? 'activo',
+            (int) $data['id_cuenta_activo'],
+            (int) $data['id_cuenta_depreciacion_acumulada'],
+            (int) $data['id_cuenta_gasto_depreciacion'],
             !empty($data['id_cuenta_contrapartida_alta']) ? (int) $data['id_cuenta_contrapartida_alta'] : null,
             $data['observaciones'] ?? null,
             (int) $data['id_usuario'],
@@ -171,7 +189,9 @@ class ActivoFijoRepository extends BaseRepository
     {
         $sql = "UPDATE activos_fijos SET
                     codigo = ?, nombre = ?, descripcion = ?,
-                    valor_residual = ?, valor_depreciable = ?, id_cuenta_contrapartida_alta = ?, observaciones = ?,
+                    valor_residual = ?, valor_depreciable = ?,
+                    id_cuenta_activo = ?, id_cuenta_depreciacion_acumulada = ?, id_cuenta_gasto_depreciacion = ?,
+                    id_cuenta_contrapartida_alta = ?, observaciones = ?,
                     updated_by = ?, updated_at = NOW()
                 WHERE id = ? AND id_empresa = ? AND eliminado = false";
 
@@ -181,6 +201,9 @@ class ActivoFijoRepository extends BaseRepository
             $data['descripcion'] ?? null,
             (float) $data['valor_residual'],
             (float) $data['valor_depreciable'],
+            (int) $data['id_cuenta_activo'],
+            (int) $data['id_cuenta_depreciacion_acumulada'],
+            (int) $data['id_cuenta_gasto_depreciacion'],
             !empty($data['id_cuenta_contrapartida_alta']) ? (int) $data['id_cuenta_contrapartida_alta'] : null,
             $data['observaciones'] ?? null,
             (int) $data['id_usuario'],
@@ -190,13 +213,17 @@ class ActivoFijoRepository extends BaseRepository
     }
 
     /**
-     * Solo campos descriptivos (sin tocar montos ni fechas): usado cuando el activo
-     * ya tiene depreciaciones generadas y esos valores quedan inmutables.
+     * Campos descriptivos + cuentas contables (sin tocar montos ni fechas): usado cuando el
+     * activo ya tiene depreciaciones generadas y esos valores quedan inmutables. Las cuentas
+     * sí se pueden corregir: los asientos ya contabilizados no cambian, pero los siguientes
+     * períodos usan las cuentas nuevas.
      */
     public function updateDescriptivo(int $id, array $data): void
     {
         $sql = "UPDATE activos_fijos SET
                     codigo = ?, nombre = ?, descripcion = ?, observaciones = ?,
+                    id_cuenta_activo = ?, id_cuenta_depreciacion_acumulada = ?, id_cuenta_gasto_depreciacion = ?,
+                    id_cuenta_contrapartida_alta = ?,
                     updated_by = ?, updated_at = NOW()
                 WHERE id = ? AND id_empresa = ? AND eliminado = false";
 
@@ -205,6 +232,10 @@ class ActivoFijoRepository extends BaseRepository
             $data['nombre'],
             $data['descripcion'] ?? null,
             $data['observaciones'] ?? null,
+            (int) $data['id_cuenta_activo'],
+            (int) $data['id_cuenta_depreciacion_acumulada'],
+            (int) $data['id_cuenta_gasto_depreciacion'],
+            !empty($data['id_cuenta_contrapartida_alta']) ? (int) $data['id_cuenta_contrapartida_alta'] : null,
             (int) $data['id_usuario'],
             $id,
             (int) $data['id_empresa'],
@@ -233,8 +264,7 @@ class ActivoFijoRepository extends BaseRepository
     {
         $finPeriodo = date('Y-m-t', mktime(0, 0, 0, $mes, 1, $anio));
 
-        $sql = "SELECT a.*, cat.nombre AS categoria_nombre,
-                       cat.id_cuenta_gasto_depreciacion, cat.id_cuenta_depreciacion_acumulada
+        $sql = "SELECT a.*, cat.nombre AS categoria_nombre
                 FROM activos_fijos a
                 INNER JOIN activos_fijos_categorias cat ON a.id_categoria = cat.id
                 WHERE a.id_empresa = :id_empresa

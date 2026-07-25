@@ -81,6 +81,9 @@ class MayoresService
                 'referencia_detalle' => $mov['referencia_detalle'],
                 'concepto' => $mov['concepto'],
                 'tercero' => $mov['nombre_entidad'],
+                // Documento origen: con esto la vista enlaza "Documento Ref." a su modal.
+                'modulo_documento' => $mov['modulo_documento'],
+                'id_documento' => $mov['id_documento'],
                 'debe' => $debe,
                 'haber' => $haber,
                 'saldo_acumulado' => $cuentas[$idCuenta]['saldo_arrastrado'],
@@ -146,7 +149,9 @@ class MayoresService
 
     public function exportarPdf(array $datos, string $empresaNombre, string $rangoFechas): void
     {
-        $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
+        // Horizontal: en vertical, con las 8 columnas (Documento Ref. incluida), el número de
+        // documento y el nombre del tercero se parten en varias líneas por fila.
+        $pdf = new TCPDF('L', 'mm', 'A4', true, 'UTF-8', false);
         $pdf->SetCreator('Sistema Contable');
         $pdf->SetAuthor($empresaNombre);
         $pdf->SetTitle('Mayores');
@@ -168,20 +173,36 @@ class MayoresService
             return number_format((float) $val, 2, '.', ',');
         };
 
+        // TCPDF no hereda el font-size del <tr> a las celdas: sin esto las tablas se dibujan al
+        // tamaño base (10) y el número de documento y el tercero se parten en varias líneas.
+        $pdf->SetFont('helvetica', '', 8);
+
+        // TCPDF dimensiona las columnas fila por fila: el width hay que repetirlo en cada celda,
+        // porque si solo va en el encabezado las filas de datos se reparten en partes iguales y
+        // quedan desalineadas (y el número de documento y el tercero se cortan en varias líneas).
+        $an = ['8%', '11%', '17%', '17%', '21%', '9%', '9%', '8%'];
+        $anSubtotal = '74%'; // las 5 primeras columnas, que el subtotal une con colspan
+
         foreach ($datos['cuentas'] as $cuenta) {
-            $html = '<table border="1" cellpadding="3">
+            // El título de la cuenta va en su propia tabla: un colspan en la primera fila también
+            // hace que TCPDF ignore los anchos de las columnas de abajo.
+            $pdf->writeHTML('<table border="1" cellpadding="2">
+                        <tr style="background-color:#e9ecef; font-weight:bold; font-size:9px;">
+                            <td>' . htmlspecialchars($cuenta['codigo'] . ' - ' . $cuenta['nombre']) . '</td>
+                        </tr>
+                    </table>', true, false, true, false, '');
+
+            $html = '<table border="1" cellpadding="2">
                         <thead>
-                            <tr style="background-color:#e9ecef; font-weight:bold; font-size:9px;">
-                                <th colspan="7">' . htmlspecialchars($cuenta['codigo'] . ' - ' . $cuenta['nombre']) . '</th>
-                            </tr>
                             <tr style="background-color:#f8f9fa; font-weight:bold; font-size:8px;">
-                                <th width="10%">Fecha</th>
-                                <th width="12%">Comprobante</th>
-                                <th width="16%">Tercero</th>
-                                <th width="30%">Glosa</th>
-                                <th width="10%" align="right">Debe</th>
-                                <th width="10%" align="right">Haber</th>
-                                <th width="12%" align="right">Saldo</th>
+                                <th width="' . $an[0] . '">Fecha</th>
+                                <th width="' . $an[1] . '">Comprobante</th>
+                                <th width="' . $an[2] . '">Documento Ref.</th>
+                                <th width="' . $an[3] . '">Tercero</th>
+                                <th width="' . $an[4] . '">Glosa</th>
+                                <th width="' . $an[5] . '" align="right">Debe</th>
+                                <th width="' . $an[6] . '" align="right">Haber</th>
+                                <th width="' . $an[7] . '" align="right">Saldo</th>
                             </tr>
                         </thead>
                         <tbody>';
@@ -189,21 +210,22 @@ class MayoresService
             foreach ($cuenta['movimientos'] as $mov) {
                 $glosa = $mov['referencia_detalle'] ?: $mov['concepto'];
                 $html .= '<tr style="font-size:8px;">
-                            <td>' . htmlspecialchars((string) $mov['fecha_asiento']) . '</td>
-                            <td>' . htmlspecialchars((string) ($mov['numero_comprobante'] ?: 'S/N')) . '</td>
-                            <td>' . htmlspecialchars((string) $mov['tercero']) . '</td>
-                            <td>' . htmlspecialchars((string) $glosa) . '</td>
-                            <td align="right">' . $formatoDinero($mov['debe']) . '</td>
-                            <td align="right">' . $formatoDinero($mov['haber']) . '</td>
-                            <td align="right">' . $formatoDinero($mov['saldo_acumulado']) . '</td>
+                            <td width="' . $an[0] . '">' . htmlspecialchars((string) $mov['fecha_asiento']) . '</td>
+                            <td width="' . $an[1] . '">' . htmlspecialchars((string) ($mov['numero_comprobante'] ?: 'S/N')) . '</td>
+                            <td width="' . $an[2] . '">' . htmlspecialchars((string) $mov['documento_referencia']) . '</td>
+                            <td width="' . $an[3] . '">' . htmlspecialchars((string) $mov['tercero']) . '</td>
+                            <td width="' . $an[4] . '">' . htmlspecialchars((string) $glosa) . '</td>
+                            <td width="' . $an[5] . '" align="right">' . $formatoDinero($mov['debe']) . '</td>
+                            <td width="' . $an[6] . '" align="right">' . $formatoDinero($mov['haber']) . '</td>
+                            <td width="' . $an[7] . '" align="right">' . $formatoDinero($mov['saldo_acumulado']) . '</td>
                         </tr>';
             }
 
             $html .= '<tr style="font-weight:bold; font-size:8px;">
-                        <td colspan="4" align="right">SUBTOTAL</td>
-                        <td align="right">' . $formatoDinero($cuenta['subtotal_debe']) . '</td>
-                        <td align="right">' . $formatoDinero($cuenta['subtotal_haber']) . '</td>
-                        <td align="right">' . $formatoDinero($cuenta['saldo_final']) . '</td>
+                        <td colspan="5" width="' . $anSubtotal . '" align="right">SUBTOTAL</td>
+                        <td width="' . $an[5] . '" align="right">' . $formatoDinero($cuenta['subtotal_debe']) . '</td>
+                        <td width="' . $an[6] . '" align="right">' . $formatoDinero($cuenta['subtotal_haber']) . '</td>
+                        <td width="' . $an[7] . '" align="right">' . $formatoDinero($cuenta['saldo_final']) . '</td>
                     </tr>';
 
             $html .= '</tbody></table><br>';

@@ -19,6 +19,8 @@ use App\Services\modulos\MarcacionService;
  * Flujo:
  *   /asistencia/app?e={tokenEmpleado}   → vincula el celular del empleado (guarda su token).
  *   /asistencia/marcar?p={tokenPunto}   → página de marcación (lee token del empleado + escaneo del punto).
+ *   GET /asistencia/info-qr?e=|p=       → JSON de solo lectura (nombre del empleado/punto), para clientes
+ *                                          nativos (app móvil) que no renderizan la vista HTML.
  *   POST /asistencia/registrar          → registra la marca (selfie + GPS + anti-fraude).
  *
  * La identidad viaja por token opaco (no datos personales en el QR).
@@ -52,6 +54,24 @@ class AsistenciaController extends Controller
             'exigeGps'   => !empty($punto['exige_gps']),
             'valido'     => (bool) $punto,
         ]);
+    }
+
+    /** GET JSON: info de un token (empleado o punto) para mostrar antes de marcar. Solo lectura. */
+    public function infoQr(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        $tokenEmpleado = trim($_GET['e'] ?? '');
+        $tokenPunto = trim($_GET['p'] ?? '');
+        if ($tokenEmpleado !== '') {
+            $emp = (new BiometriaRepository())->getByQrToken($tokenEmpleado);
+            echo json_encode(['ok' => true, 'valido' => (bool) $emp, 'nombre' => $emp['nombres_apellidos'] ?? null]);
+        } elseif ($tokenPunto !== '') {
+            $punto = (new AsistenciaPuntoRepository())->getByQrToken($tokenPunto);
+            echo json_encode(['ok' => true, 'valido' => (bool) $punto, 'nombre' => $punto['nombre'] ?? null, 'exige_gps' => !empty($punto['exige_gps'])]);
+        } else {
+            echo json_encode(['ok' => false, 'error' => 'Falta token.']);
+        }
+        exit;
     }
 
     /** POST: devuelve el descriptor facial del empleado (por su token) para reconocimiento 1:1. */

@@ -492,6 +492,100 @@ class EgresosController extends BaseModuloController
         exit;
     }
 
+    // ── Impresión de cheques ────────────────────────────────────────────────────
+
+    /** Estado de impresión de uno o varios pagos-cheque (JSON). */
+    public function estadoChequesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $ids = $this->parseIdsCheque($_GET['ids'] ?? ($_GET['id'] ?? ''));
+            $estados = (new \App\Services\modulos\ChequeImpresionService())->estado($idEmpresa, $ids);
+            echo json_encode(['ok' => true, 'estados' => $estados]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage(), 'estados' => []]);
+        }
+        exit;
+    }
+
+    /** Lista de cheques por imprimir para el modal masivo (JSON). */
+    public function chequesPorImprimirAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $filtros = [
+                'id_forma_pago'   => (int) ($_GET['id_forma_pago'] ?? 0),
+                'desde'           => trim($_GET['desde'] ?? ''),
+                'hasta'           => trim($_GET['hasta'] ?? ''),
+                'buscar'          => trim($_GET['b'] ?? ''),
+                'solo_pendientes' => (($_GET['solo_pendientes'] ?? '1') === '1'),
+            ];
+            $rows = (new \App\Services\modulos\ChequeImpresionService())->listarPorImprimir($idEmpresa, $filtros);
+            echo json_encode(['ok' => true, 'cheques' => $rows]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage(), 'cheques' => []]);
+        }
+        exit;
+    }
+
+    /** Genera y envía el PDF de los cheques indicados; registra la impresión. */
+    public function imprimirCheque(): void
+    {
+        $this->requireLeer();
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+            $ids = $this->parseIdsCheque($_GET['ids'] ?? ($_GET['id'] ?? ''));
+            if (empty($ids)) { http_response_code(400); echo 'Sin cheques seleccionados.'; exit; }
+
+            $pdf = (new \App\Services\modulos\ChequeImpresionService())
+                ->imprimirLote($idEmpresa, $ids, $idUsuario);
+
+            $nombre = (count($ids) === 1) ? ('Cheque_' . $ids[0] . '.pdf') : 'Cheques.pdf';
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="' . $nombre . '"');
+            header('Content-Length: ' . strlen($pdf));
+            echo $pdf;
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            echo 'Error al imprimir cheque: ' . $e->getMessage();
+        }
+        exit;
+    }
+
+    /** Actualiza la fecha de cobro de un cheque (si no está reportado como cobrado). */
+    public function actualizarFechaCobroChequeAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+            $idPago    = (int) ($_POST['id_pago'] ?? 0);
+            $fecha     = trim($_POST['fecha_cobro'] ?? '');
+            if (!$idPago || $fecha === '') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Datos incompletos.']); exit;
+            }
+            $this->service->actualizarFechaCobroCheque($idEmpresa, $idPago, $fecha, $idUsuario);
+            echo json_encode(['ok' => true, 'mensaje' => 'Fecha de cobro actualizada.', 'fecha_cobro' => $fecha]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Normaliza el parámetro ids ("1,2,3") a un array de enteros. */
+    private function parseIdsCheque($raw): array
+    {
+        $raw = is_array($raw) ? implode(',', $raw) : (string) $raw;
+        $ids = array_filter(array_map('intval', explode(',', $raw)));
+        return array_values(array_unique($ids));
+    }
+
     /** Datos de la empresa (con logo del establecimiento) para el PDF. */
     private function cargarEmpresaParaPdf(int $idEmpresa): array
     {

@@ -116,7 +116,7 @@ class ActivosFijosController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-building fs-3 d-block mb-2"></i>No se encontraron activos fijos.</td></tr>';
+            echo '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-building fs-3 d-block mb-2"></i>No se encontraron activos fijos.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 $fecha = !empty($r['fecha_adquisicion']) ? date('d-m-Y', strtotime($r['fecha_adquisicion'])) : '—';
@@ -127,6 +127,9 @@ class ActivosFijosController extends BaseModuloController
                     ? '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25"><i class="bi bi-receipt"></i> Compra</span>'
                     : '<span class="badge bg-light text-dark border"><i class="bi bi-pencil"></i> Manual</span>';
 
+                $cuenta = static fn(?string $codigo, ?string $nombre): string
+                    => htmlspecialchars(trim(($codigo ?? '') . ' - ' . ($nombre ?? ''), ' -'));
+
                 echo '<tr role="button" onclick="AF_abrirModal(' . (int) $r['id'] . ')">
                         <td class="ps-3" data-col="codigo"><code>' . htmlspecialchars((string) ($r['codigo'] ?? '')) . '</code></td>
                         <td data-col="nombre">' . htmlspecialchars($r['nombre']) . '</td>
@@ -135,7 +138,10 @@ class ActivosFijosController extends BaseModuloController
                         <td data-col="fecha_adquisicion">' . $fecha . '</td>
                         <td class="text-end" data-col="valor_adquisicion">$' . number_format((float) $r['valor_adquisicion'], 2) . '</td>
                         <td class="text-end" data-col="valor_en_libros">$' . number_format((float) $r['valor_en_libros'], 2) . '</td>
-                        <td class="text-center pe-3" data-col="estado"><span class="badge ' . $estCls . ' border border-opacity-25">' . $estTxt . '</span></td>
+                        <td class="text-center" data-col="estado"><span class="badge ' . $estCls . ' border border-opacity-25">' . $estTxt . '</span></td>
+                        <td data-col="cuenta_activo">' . $cuenta($r['cuenta_activo_codigo'] ?? null, $r['cuenta_activo_nombre'] ?? null) . '</td>
+                        <td data-col="cuenta_dep_acum">' . $cuenta($r['cuenta_dep_acum_codigo'] ?? null, $r['cuenta_dep_acum_nombre'] ?? null) . '</td>
+                        <td class="pe-3" data-col="cuenta_gasto">' . $cuenta($r['cuenta_gasto_codigo'] ?? null, $r['cuenta_gasto_nombre'] ?? null) . '</td>
                       </tr>';
             }
         }
@@ -261,7 +267,11 @@ class ActivosFijosController extends BaseModuloController
 
             $headers = ['Código', 'Nombre', 'Categoría', 'Origen', 'Fecha Adquisición',
                         'Valor Adquisición', 'Valor Residual', 'Depreciación Acumulada',
-                        'Valor en Libros', 'Estado'];
+                        'Valor en Libros', 'Estado',
+                        'Cuenta Activo', 'Cuenta Dep. Acumulada', 'Cuenta Gasto Depreciación'];
+
+            $cuenta = static fn(?string $codigo, ?string $nombre): string
+                => trim(($codigo ?? '') . ' - ' . ($nombre ?? ''), ' -');
 
             $exportData = [];
             foreach ($rows as $r) {
@@ -276,6 +286,9 @@ class ActivosFijosController extends BaseModuloController
                     number_format((float) $r['depreciacion_acumulada'], 2, '.', ''),
                     number_format((float) $r['valor_en_libros'], 2, '.', ''),
                     ($r['estado'] ?? 'activo') === 'depreciado_total' ? 'Depreciado total' : 'Activo',
+                    $cuenta($r['cuenta_activo_codigo'] ?? null, $r['cuenta_activo_nombre'] ?? null),
+                    $cuenta($r['cuenta_dep_acum_codigo'] ?? null, $r['cuenta_dep_acum_nombre'] ?? null),
+                    $cuenta($r['cuenta_gasto_codigo'] ?? null, $r['cuenta_gasto_nombre'] ?? null),
                 ];
             }
 
@@ -307,6 +320,24 @@ class ActivosFijosController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Cuenta contrapartida configurada en Configuración Contable (concepto «Activos Fijos
+     * - Alta»), para precargarla en el modal del activo.
+     */
+    public function getContrapartidaConfigAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $data = $this->service->getContrapartidaConfigurada((int) $_SESSION['id_empresa']);
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function guardarAjax(): void
     {
         if (!empty($_POST['id'])) {
@@ -324,7 +355,12 @@ class ActivosFijosController extends BaseModuloController
             $idExistente = !empty($data['id']) ? (int) $data['id'] : 0;
             $id = $idExistente > 0 ? $this->service->actualizar($idExistente, $data) : $this->service->crear($data);
 
-            echo json_encode(['ok' => true, 'mensaje' => 'Activo fijo guardado correctamente.', 'id' => $id]);
+            $mensaje = 'Activo fijo guardado correctamente.';
+            if ($aviso = $this->service->getAvisoContrapartida()) {
+                $mensaje .= ' ' . $aviso;
+            }
+
+            echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }

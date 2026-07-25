@@ -62,6 +62,33 @@ class PlantillasPdfService
                 '{texto_libre}'          => 'Texto fijo',
             ],
         ],
+        'cheque' => [
+            'Cheque'    => [
+                '{beneficiario}'          => 'Beneficiario (Páguese a la orden de)',
+                '{beneficiario_ident}'    => 'Identificación del beneficiario',
+                '{monto_numero}'          => 'Monto en números (1,234.56)',
+                '{monto_numero_protegido}'=> 'Monto números protegido (***1,234.56***)',
+                '{monto_letras}'          => 'Monto en letras',
+                '{fecha_cheque}'          => 'Fecha (dd/mm/aaaa)',
+                '{fecha_larga}'           => 'Fecha en texto (25 de julio de 2026)',
+                '{ciudad}'                => 'Ciudad',
+                '{dia}'                   => 'Día (dd)',
+                '{mes}'                   => 'Mes (mm)',
+                '{anio}'                  => 'Año (aaaa)',
+                '{numero_cheque}'         => 'N.° de cheque',
+                '{concepto}'              => 'Concepto / Observaciones',
+                '{numero_egreso}'         => 'N.° de egreso',
+            ],
+            'Banco / Empresa' => [
+                '{banco_nombre}'          => 'Banco',
+                '{cuenta_numero}'         => 'N.° de cuenta',
+                '{empresa_nombre}'        => 'Empresa (girador)',
+                '{empresa_ruc}'           => 'RUC de la empresa',
+            ],
+            'Especiales'=> [
+                '{texto_libre}'          => 'Texto fijo',
+            ],
+        ],
     ];
 
     // Columnas disponibles para cada tabla
@@ -177,6 +204,7 @@ class PlantillasPdfService
             'nota_debito'         => 'Nota de Débito',
             'liquidacion_compra'  => 'Liquidación de Compra',
             'guia_remision'       => 'Guía de Remisión',
+            'cheque'              => 'Cheque',
         ];
     }
 

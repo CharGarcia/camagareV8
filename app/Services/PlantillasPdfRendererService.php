@@ -104,6 +104,59 @@ class PlantillasPdfRendererService
         $this->pdf->Output('Factura_' . $num . '.pdf', $outputDest);
     }
 
+    /**
+     * Genera el PDF de uno o varios CHEQUES (una página por cheque) usando la
+     * plantilla de tipo 'cheque'. Cada elemento se posiciona en mm sobre el
+     * formato preimpreso. `$cheques` es una lista de arrays con los datos de
+     * cada cheque (ver construirDatosCheque).
+     */
+    public function generarCheques(array $plantilla, array $cheques, array $empresa, string $outputDest = 'I')
+    {
+        $config    = json_decode($plantilla['configuracion'] ?? '{}', true) ?? [];
+        $pagCfg    = $config['pagina'] ?? [];
+        $elementos = $config['elementos'] ?? [];
+
+        $formato = strtoupper($pagCfg['formato']     ?? 'A4');
+        $orient  = strtoupper($pagCfg['orientacion'] ?? 'P');
+        $mL = (float)($pagCfg['margenLeft']   ?? 10);
+        $mR = (float)($pagCfg['margenRight']  ?? 10);
+        $mT = (float)($pagCfg['margenTop']    ?? 10);
+        $mB = (float)($pagCfg['margenBottom'] ?? 10);
+
+        $formatoTcpdf = match($formato) {
+            'LETTER' => 'LETTER',
+            'LEGAL'  => 'LEGAL',
+            'A5'     => 'A5',
+            default  => 'A4',
+        };
+
+        // Ordenar elementos por z-index una sola vez.
+        usort($elementos, fn($a, $b) => (int)($a['z'] ?? 0) <=> (int)($b['z'] ?? 0));
+
+        $this->pdf = new TCPDF($orient, 'mm', $formatoTcpdf, true, 'UTF-8', false);
+        $this->pdf->SetCreator('Sistema');
+        $this->pdf->SetAuthor($empresa['nombre'] ?? '');
+        $this->pdf->SetTitle('Cheques');
+        $this->pdf->SetMargins($mL, $mT, $mR);
+        $this->pdf->SetAutoPageBreak(false, $mB);
+        $this->pdf->setPrintHeader(false);
+        $this->pdf->setPrintFooter(false);
+        $this->pdf->SetFont('helvetica', '', 9);
+
+        foreach ($cheques as $chq) {
+            $this->pdf->AddPage();
+            $this->datos = $this->construirDatosCheque($chq, $empresa);
+            foreach ($elementos as $el) {
+                $this->renderizarElemento($el, [], [], []);
+            }
+        }
+
+        if ($outputDest === 'S') {
+            return $this->pdf->Output('Cheques.pdf', 'S');
+        }
+        $this->pdf->Output('Cheques.pdf', $outputDest);
+    }
+
     // ── Dispatcher de elementos ───────────────────────────────────────────────
 
     private function renderizarElemento(array $el, array $detalles, array $pagos, array $infoAdicional): void
@@ -521,6 +574,58 @@ class PlantillasPdfRendererService
             '{propina}'               => number_format($totales['propina'], 2),
             '{valor_total}'           => number_format($totales['valor_total'], 2),
         ];
+    }
+
+    /**
+     * Mapa placeholder→valor para un cheque. Recibe una fila con:
+     *  monto, numero_cheque, fecha_cheque, beneficiario, beneficiario_ident,
+     *  banco_nombre, cuenta_numero, numero_egreso, observaciones, ciudad.
+     */
+    private function construirDatosCheque(array $c, array $empresa): array
+    {
+        $monto  = (float)($c['monto'] ?? 0);
+        $letras = $this->montoEnLetrasCheque($monto);
+        $montoFmt = number_format($monto, 2);
+
+        $fechaTs = !empty($c['fecha_cheque']) ? strtotime((string) $c['fecha_cheque']) : false;
+        $meses = [1=>'enero',2=>'febrero',3=>'marzo',4=>'abril',5=>'mayo',6=>'junio',
+                  7=>'julio',8=>'agosto',9=>'septiembre',10=>'octubre',11=>'noviembre',12=>'diciembre'];
+        $fechaCorta = $fechaTs ? date('d/m/Y', $fechaTs) : '';
+        $fechaLarga = $fechaTs ? (date('j', $fechaTs) . ' de ' . $meses[(int)date('n', $fechaTs)] . ' de ' . date('Y', $fechaTs)) : '';
+
+        $ciudad = trim((string)($c['ciudad'] ?? $empresa['ciudad'] ?? ''));
+
+        return [
+            '{beneficiario}'           => (string)($c['beneficiario'] ?? ''),
+            '{beneficiario_ident}'     => (string)($c['beneficiario_ident'] ?? ''),
+            '{monto_numero}'           => $montoFmt,
+            '{monto_numero_protegido}' => '***' . $montoFmt . '***',
+            '{monto_letras}'           => $letras,
+            '{fecha_cheque}'           => $fechaCorta,
+            '{fecha_larga}'            => $fechaLarga,
+            '{ciudad}'                 => $ciudad,
+            '{dia}'                    => $fechaTs ? date('d', $fechaTs) : '',
+            '{mes}'                    => $fechaTs ? date('m', $fechaTs) : '',
+            '{anio}'                   => $fechaTs ? date('Y', $fechaTs) : '',
+            '{numero_cheque}'          => (string)($c['numero_cheque'] ?? ''),
+            '{concepto}'               => (string)($c['observaciones'] ?? ''),
+            '{numero_egreso}'          => (string)($c['numero_egreso'] ?? ''),
+            '{banco_nombre}'           => (string)($c['banco_nombre'] ?? ''),
+            '{cuenta_numero}'          => (string)($c['cuenta_numero'] ?? ''),
+            '{empresa_nombre}'         => (string)($empresa['nombre'] ?? ''),
+            '{empresa_ruc}'            => (string)($empresa['ruc'] ?? ''),
+            '{empresa_logo}'           => (string)($empresa['logo'] ?? $empresa['logo_ruta'] ?? ''),
+        ];
+    }
+
+    /** Monto en letras para cheques (mayúsculas, reutiliza el validador global). */
+    private function montoEnLetrasCheque(float $monto): string
+    {
+        require_once \MVC_ROOT . '/app/validadores/numero_letras.php';
+        if (function_exists('num_letras')) {
+            return strtoupper(trim(preg_replace('/\s+/', ' ', (string) num_letras(number_format($monto, 2, '.', '')))));
+        }
+        return number_format($monto, 2);
     }
 
     private function resolverCampo(string $campo): string

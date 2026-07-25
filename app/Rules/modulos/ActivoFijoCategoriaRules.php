@@ -23,16 +23,6 @@ class ActivoFijoCategoriaRules
             throw new \Exception('El porcentaje de depreciación anual debe estar entre 0 y 100.');
         }
 
-        if (empty($data['id_cuenta_activo'])) {
-            throw new \Exception('Debe seleccionar la cuenta contable del Activo.');
-        }
-        if (empty($data['id_cuenta_depreciacion_acumulada'])) {
-            throw new \Exception('Debe seleccionar la cuenta contable de Depreciación Acumulada.');
-        }
-        if (empty($data['id_cuenta_gasto_depreciacion'])) {
-            throw new \Exception('Debe seleccionar la cuenta contable de Gasto por Depreciación.');
-        }
-
         if ($this->repository->nombreExiste((int) $data['id_empresa'], (string) $data['nombre'], $idExcluir)) {
             throw new \Exception('Ya existe una categoría de activos fijos con ese nombre.');
         }

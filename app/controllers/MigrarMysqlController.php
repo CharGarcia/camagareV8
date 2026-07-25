@@ -177,6 +177,24 @@ class MigrarMysqlController extends Controller
         exit;
     }
 
+    /**
+     * POST: registros YA existentes en el módulo destino que NO vienen de la migración (por entidad).
+     * Sirve para avisar al usuario, antes de migrar, que esos documentos podrían duplicarse.
+     */
+    public function verificarExistentesAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            [$idEmpresa] = $this->resolverEmpresa();
+            $entidades = $this->entidadesPost();
+            $data = $this->service->contarDestinoNoMigrado($entidades, $idEmpresa);
+            echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     /** POST: cuántos registros ELIMINARÍA por entidad (para la confirmación previa). No borra nada. */
     public function eliminarPreviewAjax(): void
     {
