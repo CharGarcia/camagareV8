@@ -177,6 +177,41 @@ class MigrarMysqlController extends Controller
         exit;
     }
 
+    /** POST: cuántos registros ELIMINARÍA por entidad (para la confirmación previa). No borra nada. */
+    public function eliminarPreviewAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            [$idEmpresa] = $this->resolverEmpresa();
+            $entidades = $this->entidadesPost();
+            $data = $this->service->contarMigrados($entidades, $idEmpresa);
+            echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
+    /** POST: elimina lo que la migración insertó para UNA entidad, para poder re-migrar y corregir. */
+    public function eliminarAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            [$idEmpresa] = $this->resolverEmpresa();
+            $entidad = (string) ($_POST['entidad'] ?? '');
+            if (!array_key_exists($entidad, MigracionMysqlService::ENTIDADES)) {
+                throw new \RuntimeException('Entidad no válida.');
+            }
+            $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+            if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
+            $data = $this->service->eliminarMigrados($entidad, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     /** Devuelve [idEmpresa, ruc] de la empresa seleccionada. */
     private function resolverEmpresa(): array
     {

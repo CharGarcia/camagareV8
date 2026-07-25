@@ -630,6 +630,8 @@ class ConfigController extends Controller
             'verificar-anuladas' => 'verificarAnuladasAjax',
             'config-preview'     => 'configPreviewAjax',
             'config-aplicar'     => 'configAplicarAjax',
+            'eliminar-preview'   => 'eliminarPreviewAjax',
+            'eliminar'           => 'eliminarAjax',
             default              => 'index',
         };
         if (method_exists($c, $method)) {

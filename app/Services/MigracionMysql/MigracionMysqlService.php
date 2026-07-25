@@ -154,6 +154,210 @@ class MigracionMysqlService
         }
     }
 
+    /**
+     * Mapa de borrado por entidad de DOCUMENTO (no catálogos): cabecera destino + hijos y nietos.
+     * 'nietos' = tablas de impuestos que cuelgan del detalle: [tabla, fk, tablaDetalle, fkDetalle].
+     * 'hijos'  = tablas que cuelgan de la cabecera: [tabla, fk].
+     * Se borran nietos → hijos → cabecera. Las FK cruzadas SET NULL (retenciones ↔ factura/compra)
+     * se resuelven solas; las NO ACTION (activos fijos, importaciones, conciliación, transferencias,
+     * entregas de consignación) que referencien un doc migrado harían fallar la transacción (rollback
+     * limpio con mensaje). Contabilidad e inventario tienen su propio manejador.
+     */
+    private const REVERT_DOC = [
+        'facturas' => ['cab' => 'ventas_cabecera',
+            'nietos' => [['ventas_detalle_impuestos', 'id_venta_detalle', 'ventas_detalle', 'id_venta']],
+            'hijos'  => [['ventas_detalle', 'id_venta'], ['ventas_pagos', 'id_venta'], ['ventas_adicional', 'id_venta']]],
+        'notas_credito' => ['cab' => 'notas_credito_cabecera',
+            'nietos' => [['notas_credito_detalle_impuestos', 'id_nota_credito_detalle', 'notas_credito_detalle', 'id_nota_credito']],
+            'hijos'  => [['notas_credito_detalle', 'id_nota_credito'], ['notas_credito_adicional', 'id_nota_credito']]],
+        'retenciones_venta' => ['cab' => 'retencion_venta_cabecera',
+            'nietos' => [], 'hijos' => [['retencion_venta_detalle', 'id_retencion']]],
+        'retenciones_compra' => ['cab' => 'retencion_compra_cabecera',
+            'nietos' => [], 'hijos' => [['retencion_compra_detalle', 'id_retencion']]],
+        'recibos' => ['cab' => 'recibos_venta_cabecera',
+            'nietos' => [['recibos_venta_detalle_impuestos', 'id_recibo_detalle', 'recibos_venta_detalle', 'id_recibo']],
+            'hijos'  => [['recibos_venta_detalle', 'id_recibo'], ['recibos_venta_pagos', 'id_recibo'], ['recibos_venta_adicional', 'id_recibo']]],
+        'liquidaciones' => ['cab' => 'liquidaciones_cabecera',
+            'nietos' => [['liquidaciones_detalle_impuestos', 'id_detalle', 'liquidaciones_detalle', 'id_cabecera']],
+            'hijos'  => [['liquidaciones_detalle', 'id_cabecera'], ['liquidaciones_adicional', 'id_cabecera'], ['liquidaciones_pagos', 'id_cabecera']]],
+        'guias' => ['cab' => 'guias_remision_cabecera',
+            'nietos' => [], 'hijos' => [['guias_remision_detalle', 'id_guia_remision'], ['guias_remision_adicional', 'id_guia_remision']]],
+        'compras' => ['cab' => 'compras_cabecera',
+            'nietos' => [['compras_detalle_impuestos', 'id_compra_detalle', 'compras_detalle', 'id_compra']],
+            'hijos'  => [['compras_detalle', 'id_compra'], ['compras_pagos', 'id_compra'], ['compras_adicional', 'id_compra']]],
+        'ingresos' => ['cab' => 'ingresos_cabecera',
+            'nietos' => [], 'hijos' => [['ingresos_detalle', 'id_ingreso'], ['ingresos_pagos', 'id_ingreso']]],
+        'egresos' => ['cab' => 'egresos_cabecera',
+            'nietos' => [], 'hijos' => [['egresos_detalle', 'id_egreso'], ['egresos_pagos', 'id_egreso']]],
+        'proformas' => ['cab' => 'proformas_cabecera',
+            'nietos' => [['proformas_detalle_impuestos', 'id_proforma_detalle', 'proformas_detalle', 'id_proforma']],
+            'hijos'  => [['proformas_detalle', 'id_proforma'], ['proformas_adicional', 'id_proforma']]],
+        'consignaciones' => ['cab' => 'consignaciones_ventas',
+            'nietos' => [], 'hijos' => [['consignaciones_ventas_detalles', 'id_consignacion']]],
+        'consignaciones_fact' => ['cab' => 'consignaciones_facturas',
+            'nietos' => [], 'hijos' => [['consignaciones_facturas_detalles', 'id_consignacion_factura']]],
+        'consignaciones_ret' => ['cab' => 'retornos_cv',
+            'nietos' => [], 'hijos' => [['retornos_cv_detalles', 'id_retorno']]],
+        'cambios_producto' => ['cab' => 'cambios_producto_cv',
+            'nietos' => [], 'hijos' => [['cambios_producto_cv_detalles', 'id_cambio']]],
+    ];
+
+    /** Catálogos: NO se eliminan con esta herramienta (se auto-corrigen al re-migrar por reconciliación). */
+    private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'proveedores', 'vendedores', 'bodegas'];
+
+    /**
+     * Cuántos registros ELIMINARÍA por entidad (para la confirmación previa). Solo cuenta lo que la
+     * migración INSERTÓ (vinculado IS NOT TRUE); los vinculados son nativos y no se borran (aunque su
+     * fila del mapa sí se limpia al eliminar). Para contabilidad cuenta los asientos 'migracion'
+     * (incluye los cierres autogenerados, que no viven en el mapa).
+     *
+     * @param string[] $entidades
+     * @return array<string,array{insertados:int,vinculados:int,label:string}>
+     */
+    public function contarMigrados(array $entidades, int $idEmpresa): array
+    {
+        $pg = Database::getConnection();
+        $out = [];
+        foreach ($entidades as $ent) {
+            if (in_array($ent, self::ELIMINAR_VEDADAS, true) || !isset(self::ENTIDADES[$ent])) { continue; }
+            $label = self::ENTIDADES[$ent]['label'] ?? $ent;
+            if ($ent === 'contabilidad') {
+                $ins = (int) $pg->query("SELECT COUNT(*) FROM asientos_contables_cabecera WHERE id_empresa = " . (int) $idEmpresa . " AND modulo_origen = 'migracion' AND eliminado = false")->fetchColumn();
+                $vin = 0;
+            } else {
+                $q = $pg->prepare("SELECT COUNT(*) FILTER (WHERE vinculado IS NOT TRUE) AS ins, COUNT(*) FILTER (WHERE vinculado) AS vin FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = ?");
+                $q->execute([$idEmpresa, $ent]);
+                $r = $q->fetch(PDO::FETCH_ASSOC);
+                $ins = (int) ($r['ins'] ?? 0);
+                $vin = (int) ($r['vin'] ?? 0);
+            }
+            $out[$ent] = ['insertados' => $ins, 'vinculados' => $vin, 'label' => $label];
+        }
+        return $out;
+    }
+
+    /**
+     * Elimina lo que la migración INSERTÓ para una entidad de documento/contabilidad/inventario, para
+     * poder re-migrar y corregir. Borra hijos→cabecera SOLO de los registros insertados por la
+     * migración (vinculado IS NOT TRUE); nunca toca registros nativos. Luego limpia TODO el mapa de la
+     * entidad (los vinculados se vuelven a detectar por número al re-migrar). Transaccional.
+     */
+    public function eliminarMigrados(string $entidad, int $idEmpresa, int $idUsuario): array
+    {
+        if (in_array($entidad, self::ELIMINAR_VEDADAS, true)) {
+            throw new \RuntimeException('Los catálogos no se eliminan aquí: se auto-corrigen al re-migrar.');
+        }
+        $pg = Database::getConnection();
+        if ($entidad === 'contabilidad') { return $this->eliminarContabilidadMigrada($idEmpresa, $idUsuario, $pg); }
+        if ($entidad === 'inventario')   { return $this->eliminarInventarioMigrado($idEmpresa, $pg); }
+        if (!isset(self::REVERT_DOC[$entidad])) {
+            throw new \RuntimeException("Entidad no válida para eliminar: $entidad");
+        }
+        $map = self::REVERT_DOC[$entidad];
+        $res = ['entidad' => $entidad, 'cabeceras' => 0, 'hijos' => 0, 'mapa' => 0, 'vinculados_intactos' => 0];
+
+        // ids INSERTADOS por la migración (enteros; no entran del usuario). Los vinculados NO se tocan.
+        $q = $pg->prepare("SELECT id_destino FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = ? AND vinculado IS NOT TRUE");
+        $q->execute([$idEmpresa, $entidad]);
+        $ids = array_values(array_filter(array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN))));
+        $res['vinculados_intactos'] = (int) $pg->query("SELECT COUNT(*) FROM migracion_mysql_map WHERE id_empresa = " . (int) $idEmpresa . " AND entidad = " . $pg->quote($entidad) . " AND vinculado")->fetchColumn();
+
+        $pg->beginTransaction();
+        try {
+            if ($ids) {
+                $in = implode(',', $ids); // ya casteados a int → seguro para interpolar
+                foreach ($map['nietos'] as [$tabla, $fk, $det, $detFk]) {
+                    $pg->exec("DELETE FROM $tabla WHERE $fk IN (SELECT id FROM $det WHERE $detFk IN ($in))");
+                }
+                foreach ($map['hijos'] as [$tabla, $fk]) {
+                    $res['hijos'] += (int) $pg->exec("DELETE FROM $tabla WHERE $fk IN ($in)");
+                }
+                $res['cabeceras'] = (int) $pg->exec("DELETE FROM {$map['cab']} WHERE id IN ($in)");
+            }
+            // Limpiar TODO el mapa de la entidad (incluye vinculados: se re-detectan por número al re-migrar).
+            $qd = $pg->prepare("DELETE FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = ?");
+            $qd->execute([$idEmpresa, $entidad]);
+            $res['mapa'] = $qd->rowCount();
+            $pg->commit();
+        } catch (Throwable $e) {
+            if ($pg->inTransaction()) { $pg->rollBack(); }
+            throw new \RuntimeException("No se pudo eliminar '{$entidad}': " . $e->getMessage(), 0, $e);
+        }
+        return $res;
+    }
+
+    /**
+     * Borra los asientos migrados (modulo_origen='migracion' → incluye el histórico y los cierres
+     * autogenerados) + su detalle, desengancha id_asiento_contable de los documentos y limpia el mapa.
+     * NO toca el plan de cuentas (es catálogo) ni los asientos nativos. Réplica de reset_contabilidad_migrada.sql.
+     */
+    private function eliminarContabilidadMigrada(int $idEmpresa, int $idUsuario, PDO $pg): array
+    {
+        $res = ['entidad' => 'contabilidad', 'cabeceras' => 0, 'hijos' => 0, 'mapa' => 0, 'vinculados_intactos' => 0];
+        // Tablas que guardan un id de asiento; se desenganchan por el id del asiento migrado.
+        $docs = [
+            ['compras_cabecera', 'id_asiento_contable'], ['ventas_cabecera', 'id_asiento_contable'],
+            ['ingresos_cabecera', 'id_asiento_contable'], ['egresos_cabecera', 'id_asiento_contable'],
+            ['retencion_venta_cabecera', 'id_asiento_contable'], ['retencion_compra_cabecera', 'id_asiento_contable'],
+            ['notas_credito_cabecera', 'id_asiento_contable'], ['recibos_venta_cabecera', 'id_asiento_contable'],
+            ['liquidaciones_cabecera', 'id_asiento_contable'], ['consignaciones_ventas', 'id_asiento_contable'],
+            ['cambios_producto_cv', 'id_asiento_contable'], ['retornos_cv', 'id_asiento_contable'],
+        ];
+        $q = $pg->query("SELECT id FROM asientos_contables_cabecera WHERE id_empresa = " . (int) $idEmpresa . " AND modulo_origen = 'migracion'");
+        $ids = array_values(array_filter(array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN))));
+
+        $pg->beginTransaction();
+        try {
+            if ($ids) {
+                $in = implode(',', $ids);
+                foreach ($docs as [$tabla, $col]) {
+                    // Solo tablas existentes con esa columna (defensivo).
+                    $ok = $pg->query("SELECT to_regclass('public.$tabla')")->fetchColumn();
+                    if (!$ok) { continue; }
+                    $pg->exec("UPDATE $tabla SET $col = NULL WHERE $col IN ($in)");
+                }
+                $res['hijos'] = (int) $pg->exec("DELETE FROM asientos_contables_detalle WHERE id_asiento IN ($in)");
+                $res['cabeceras'] = (int) $pg->exec("DELETE FROM asientos_contables_cabecera WHERE id IN ($in)");
+            }
+            $qd = $pg->prepare("DELETE FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'contabilidad'");
+            $qd->execute([$idEmpresa]);
+            $res['mapa'] = $qd->rowCount();
+            $pg->commit();
+        } catch (Throwable $e) {
+            if ($pg->inTransaction()) { $pg->rollBack(); }
+            throw new \RuntimeException('No se pudo eliminar la contabilidad migrada: ' . $e->getMessage(), 0, $e);
+        }
+        return $res;
+    }
+
+    /**
+     * Borra el kardex migrado (inventario_kardex insertado por la migración) y su mapa. AVISO: no
+     * recalcula saldos corridos; re-migrar inventario los regenera con el saldo sembrado del stock.
+     */
+    private function eliminarInventarioMigrado(int $idEmpresa, PDO $pg): array
+    {
+        $res = ['entidad' => 'inventario', 'cabeceras' => 0, 'hijos' => 0, 'mapa' => 0, 'vinculados_intactos' => 0,
+                'aviso' => 'Los saldos del kardex no se recalculan al borrar; vuelve a migrar Inventario para regenerarlos.'];
+        $q = $pg->prepare("SELECT id_destino FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'inventario' AND vinculado IS NOT TRUE");
+        $q->execute([$idEmpresa]);
+        $ids = array_values(array_filter(array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN))));
+
+        $pg->beginTransaction();
+        try {
+            if ($ids) {
+                $res['cabeceras'] = (int) $pg->exec("DELETE FROM inventario_kardex WHERE id IN (" . implode(',', $ids) . ")");
+            }
+            $qd = $pg->prepare("DELETE FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'inventario'");
+            $qd->execute([$idEmpresa]);
+            $res['mapa'] = $qd->rowCount();
+            $pg->commit();
+        } catch (Throwable $e) {
+            if ($pg->inTransaction()) { $pg->rollBack(); }
+            throw new \RuntimeException('No se pudo eliminar el inventario migrado: ' . $e->getMessage(), 0, $e);
+        }
+        return $res;
+    }
+
     /** Migra los clientes del contribuyente (todos los establecimientos). */
     private function migrarClientes(int $idEmpresa, string $ruc, int $idUsuario): array
     {
@@ -564,7 +768,7 @@ class MigracionMysqlService
         $insMap      = $this->stmtMap($pg,'consignaciones');
         $respCache   = [];
 
-        $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, descuento, id_bodega, lote, nup FROM detalle_consignacion WHERE codigo_unico = :cu");
+        $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, descuento, id_bodega, lote, nup FROM detalle_consignacion WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
         $insCab  = $pg->prepare(
             "INSERT INTO consignaciones_ventas (id_empresa, fecha_emision, serie, secuencial, id_cliente, id_vendedor, id_responsable_traslado, punto_partida, punto_llegada, observaciones, estado, subtotal, impuesto, total, establecimiento, punto_emision, created_by)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) RETURNING id"
@@ -600,7 +804,7 @@ class MigracionMysqlService
                 $idVend = $mapVend[(string) (int) $ec['responsable']] ?? null;
                 $idResp = $this->getOrCreateResponsableTraslado($idEmpresa, $idUsuario, (int) $ec['traslado_por'], $mysql, $pg, $respCache);
 
-                $detStmt->execute([':cu' => (string) $ec['codigo_unico']]);
+                $detStmt->execute([':cu' => (string) $ec['codigo_unico'], ':base' => $base]);
                 $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
                 $sub = 0.0;
                 foreach ($dets as $d) { $sub += (float) $d['cant_consignacion'] * (float) $d['precio']; }
@@ -665,7 +869,7 @@ class MigracionMysqlService
         $lineLookup = $pg->prepare("SELECT id FROM consignaciones_ventas_detalles WHERE id_consignacion = ? AND id_producto = ? AND eliminado = false LIMIT 1");
         $lineCache = [];
 
-        $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, numero_orden_entrada, id_bodega, lote, nup FROM detalle_consignacion WHERE codigo_unico = :cu");
+        $detStmt = $mysql->prepare("SELECT id_producto, codigo_producto, nombre_producto, cant_consignacion, precio, numero_orden_entrada, id_bodega, lote, nup FROM detalle_consignacion WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
         $opFilter = $esFactura ? "operacion = 'FACTURA'" : "operacion LIKE 'DEVOL%'";
 
         if ($esFactura) {
@@ -690,7 +894,7 @@ class MigracionMysqlService
             if (!$idCliente) { $res['omitidos']++; continue; }
 
             // Resolver todas las líneas contra su ENTRADA origen ANTES de insertar (id_consignacion_detalle es NOT NULL)
-            $detStmt->execute([':cu' => (string) $ec['codigo_unico']]);
+            $detStmt->execute([':cu' => (string) $ec['codigo_unico'], ':base' => $base]);
             $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
             $lineas = [];
             $sub = 0.0;
@@ -844,7 +1048,7 @@ class MigracionMysqlService
             "INSERT INTO proformas_detalle_impuestos (id_proforma_detalle, codigo_impuesto, codigo_porcentaje, tarifa, base_imponible, valor)
              VALUES (?, '2', ?, ?, ?, ?)"
         );
-        $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad, valor_unitario, subtotal, descuento, tarifa_iva, codigo_producto, nombre_producto FROM cuerpo_proforma WHERE codigo_unico = :cu");
+        $cuerpoStmt = $mysql->prepare("SELECT id_producto, cantidad, valor_unitario, subtotal, descuento, tarifa_iva, codigo_producto, nombre_producto FROM cuerpo_proforma WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
 
         $sql = "SELECT id_encabezado_proforma, fecha_proforma, serie_proforma, secuencial_proforma, id_cliente, total_proforma, estado_proforma, codigo_unico
                   FROM encabezado_proforma WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_proforma', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_proforma";
@@ -872,7 +1076,7 @@ class MigracionMysqlService
                 $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
                 $idPto = $this->getPuntoEmisionId($idEmpresa, $estab, $pto, $idUsuario);
 
-                $cuerpoStmt->execute([':cu' => (string) $ep['codigo_unico']]);
+                $cuerpoStmt->execute([':cu' => (string) $ep['codigo_unico'], ':base' => $base]);
                 $lineas = $cuerpoStmt->fetchAll(PDO::FETCH_ASSOC);
                 $totalSinImp = 0.0; $totalDesc = 0.0;
                 foreach ($lineas as $l) {
@@ -1130,7 +1334,10 @@ class MigracionMysqlService
         // deja $mapCuenta y $cuentaPorCod listos (por código de la casa).
         $this->migrarPlanCuentas($idEmpresa, $idUsuario, $pg, $oldCuentas, $mapCuenta, $cuentaPorCod);
 
-        $detStmt = $mysql->prepare("SELECT id_cuenta, debe, haber, detalle_item FROM detalle_diario_contable WHERE codigo_unico = :cu");
+        // CRÍTICO: filtrar TAMBIÉN por ruc_empresa. El codigo_unico SÍ se repite entre empresas en la
+        // base vieja (p.ej. 'FAC204315' existe en 2 contribuyentes), así que sin este filtro el detalle
+        // de un asiento traería líneas de OTRA empresa y lo corrompería (líneas extra, descuadre, cuentas ajenas).
+        $detStmt = $mysql->prepare("SELECT id_cuenta, debe, haber, detalle_item FROM detalle_diario_contable WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
         $insCab  = $pg->prepare("INSERT INTO asientos_contables_cabecera (id_empresa, fecha_asiento, tipo_comprobante, numero_comprobante, concepto, estado, modulo_origen, total_debe, total_haber, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, 'migracion', ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO asientos_contables_detalle (id_empresa, id_asiento, id_cuenta_contable, debe, haber, referencia_detalle, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
 
@@ -1176,7 +1383,7 @@ class MigracionMysqlService
                 continue;
             }
 
-            $detStmt->execute([':cu' => (string) $e['codigo_unico']]);
+            $detStmt->execute([':cu' => (string) $e['codigo_unico'], ':base' => $base]);
             $dets = $detStmt->fetchAll(PDO::FETCH_ASSOC);
             if (!$dets) { $res['omitidos']++; continue; } // encabezado sin detalle (huérfano)
 
@@ -1265,7 +1472,33 @@ class MigracionMysqlService
             return;
         }
 
-        // Saldo de clase 7 (nivel 5) por año y cuenta, sobre todos los asientos vivos de la empresa.
+        // AÑOS QUE YA TRAEN SU CIERRE DEL SISTEMA VIEJO.
+        // Si un asiento migrado (que no sea de este mismo generador) mueve la cuenta PIVOT,
+        // significa que el sistema viejo YA cerró ese ejercicio: típicamente debita el
+        // «Resumen de Resultados» y acredita el impuesto a la renta y la utilidad del
+        // ejercicio en patrimonio. En esos años NO hay nada que cerrar: el saldo que queda
+        // en la PIVOT es el contrapeso de las cuentas 4/5/6 —que siguen abiertas— y el
+        // Balance ya lo usa en su cierre virtual (EstadosFinancierosService::getBalanceGeneral).
+        // Generar un cierre encima interpretaba ese saldo deudor como pérdida e inventaba una
+        // «Pérdida del ejercicio» inexistente, subvaluando el patrimonio en ese importe.
+        $yaCerrados = [];
+        $qc = $pg->prepare(
+            "SELECT DISTINCT EXTRACT(YEAR FROM a.fecha_asiento)::int AS anio
+               FROM asientos_contables_cabecera a
+               JOIN asientos_contables_detalle d ON d.id_asiento = a.id AND d.eliminado = false
+               JOIN plan_cuentas pc ON pc.id = d.id_cuenta_contable
+              WHERE a.id_empresa = ? AND a.eliminado = false
+                AND a.modulo_origen = 'migracion' AND a.tipo_comprobante <> 'cierre'
+                AND pc.id_empresa = ? AND pc.codigo LIKE '7%' AND pc.nivel = '5'"
+        );
+        $qc->execute([$idEmpresa, $idEmpresa]);
+        foreach ($qc->fetchAll(PDO::FETCH_COLUMN) as $a) { $yaCerrados[(int) $a] = true; }
+
+        // Saldo de clase 7 (nivel 5) por año y cuenta. Se aplican los MISMOS filtros que usa
+        // el Balance (EstadosFinancierosRepository::getSaldos): solo asientos 'contabilizado',
+        // del ambiente activo y sobre cuentas vivas del plan. Sin esto el cierre sumaba
+        // asientos que el Balance no ve —anular desde el módulo de Asientos deja
+        // estado='anulado' pero eliminado=false— y trasladaba a patrimonio un importe distinto.
         $q = $pg->prepare(
             "SELECT EXTRACT(YEAR FROM a.fecha_asiento)::int AS anio, d.id_cuenta_contable AS idc,
                     ROUND(SUM(d.haber) - SUM(d.debe), 2) AS saldo
@@ -1273,10 +1506,13 @@ class MigracionMysqlService
                JOIN asientos_contables_detalle d ON d.id_asiento = a.id AND d.eliminado = false
                JOIN plan_cuentas pc ON pc.id = d.id_cuenta_contable
               WHERE a.id_empresa = ? AND a.eliminado = false
-                AND pc.id_empresa = ? AND pc.codigo LIKE '7%' AND pc.nivel = '5'
+                AND a.estado = 'contabilizado'
+                AND CAST(a.tipo_ambiente AS VARCHAR(1)) = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = ?)
+                AND pc.id_empresa = ? AND pc.eliminado = false
+                AND pc.codigo LIKE '7%' AND pc.nivel = '5'
               GROUP BY anio, d.id_cuenta_contable"
         );
-        $q->execute([$idEmpresa, $idEmpresa]);
+        $q->execute([$idEmpresa, $idEmpresa, $idEmpresa]);
         $porAnio = [];
         foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $x) {
             $s = (float) $x['saldo'];
@@ -1284,12 +1520,23 @@ class MigracionMysqlService
         }
         if (!$porAnio) { return; }
 
+        // El ejercicio en curso no se cierra: todavía está vivo.
+        $anioActual = (int) date('Y');
+
         $amb    = $this->ambienteEmpresa($pg, $idEmpresa);
         $insCab = $pg->prepare("INSERT INTO asientos_contables_cabecera (id_empresa, fecha_asiento, tipo_comprobante, numero_comprobante, concepto, estado, modulo_origen, total_debe, total_haber, tipo_ambiente, created_by) VALUES (?, ?, 'cierre', ?, ?, 'contabilizado', 'migracion', ?, ?, ?, ?) RETURNING id");
         $insDet = $pg->prepare("INSERT INTO asientos_contables_detalle (id_empresa, id_asiento, id_cuenta_contable, debe, haber, referencia_detalle, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
 
         ksort($porAnio);
         foreach ($porAnio as $anio => $cuentas) {
+            if (isset($yaCerrados[$anio])) {
+                $res['cierre_ya_migrado'] = ($res['cierre_ya_migrado'] ?? 0) + 1;
+                continue;
+            }
+            if ($anio >= $anioActual) {
+                $res['cierre_anio_en_curso'] = ($res['cierre_anio_en_curso'] ?? 0) + 1;
+                continue;
+            }
             $neto = round(array_sum($cuentas), 2);
             if ($neto == 0.0) { continue; }
             $ctaResultado = $neto > 0 ? $ctas['utilidad'] : $ctas['perdida'];
@@ -2580,7 +2827,7 @@ class MigracionMysqlService
             "INSERT INTO retencion_venta_detalle (id_retencion, cod_doc_sustento, fecha_emision_doc_sustento, codigo_impuesto, codigo_retencion, base_imponible, porcentaje_retencion, valor_retenido, num_doc_sustento)
              VALUES (:r, :cds, :fds, :ci, :cr, :bi, :pct, :val, :nds)"
         );
-        $cuerpoStmt = $mysql->prepare("SELECT ejercicio_fiscal, base_imponible, codigo_impuesto, impuesto, porcentaje_retencion, valor_retenido, tipo_documento, numero_documento FROM cuerpo_retencion_venta WHERE codigo_unico = :cu");
+        $cuerpoStmt = $mysql->prepare("SELECT ejercicio_fiscal, base_imponible, codigo_impuesto, impuesto, porcentaje_retencion, valor_retenido, tipo_documento, numero_documento FROM cuerpo_retencion_venta WHERE codigo_unico = :cu AND LEFT(ruc_empresa, 10) = :base");
         $mapRet = $this->mapaDe($pg, $idEmpresa, 'retenciones_venta'); // para reconciliar al re-correr
         $updCab = $pg->prepare("UPDATE retencion_venta_cabecera SET id_cliente = ?, fecha_emision = ?, periodo_fiscal = ?, total_isd = ?, total_iva = ?, total_renta = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet = $pg->prepare("DELETE FROM retencion_venta_detalle WHERE id_retencion = ?");
@@ -2611,7 +2858,7 @@ class MigracionMysqlService
 
             try {
                 $pg->beginTransaction();
-                $cuerpoStmt->execute([':cu' => $ec['codigo_unico']]);
+                $cuerpoStmt->execute([':cu' => $ec['codigo_unico'], ':base' => $base]);
                 $lineas = $cuerpoStmt->fetchAll(PDO::FETCH_ASSOC);
                 $tRenta = 0.0; $tIva = 0.0; $tIsd = 0.0;
                 foreach ($lineas as $l) {

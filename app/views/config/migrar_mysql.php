@@ -97,10 +97,12 @@ $base = BASE_URL;
                             <input type="date" class="form-control form-control-sm" id="fHasta">
                         </div>
                         <div class="col text-end">
+                            <button class="btn btn-outline-danger btn-sm me-1" id="btnEliminar"><i class="bi bi-trash3 me-1"></i> Eliminar migrados</button>
                             <button class="btn btn-success btn-sm" id="btnMigrar"><i class="bi bi-database-down me-1"></i> Migrar seleccionados</button>
                         </div>
                     </div>
                     <div class="small text-muted mb-2"><i class="bi bi-info-circle me-1"></i>El rango de fechas aplica a los <b>documentos</b> (facturas, compras, NC, retenciones, recibos). Los catálogos se migran completos. Vacío = todo el histórico.</div>
+                    <div class="small text-muted mb-2"><i class="bi bi-trash3 me-1"></i><b>Eliminar migrados</b> borra lo que la migración insertó en las entidades seleccionadas (documentos, contabilidad, inventario) para volver a migrarlas y corregir errores. <b>No toca</b> registros nativos del sistema ni los catálogos (clientes/productos/proveedores…), que se auto-corrigen al re-migrar.</div>
                     <div id="zonaMigrarResultado" class="small"></div>
                     <hr class="my-2">
                     <div class="mb-1">
@@ -437,6 +439,102 @@ $base = BASE_URL;
         if (!el) { el = document.createElement('div'); el.id = id; el.className = 'mb-1'; $('zonaMigrarResultado').appendChild(el); }
         el.innerHTML = '<b>' + label + ':</b> ' + html;
     }
+
+    // ── Eliminar migrados (para re-migrar y corregir) ──
+    // Catálogos vedados: se auto-corrigen al re-migrar (reconciliación), no se borran.
+    const NO_ELIMINABLES = ['plan_cuentas', 'clientes', 'productos', 'proveedores', 'vendedores', 'bodegas'];
+
+    $('btnEliminar').addEventListener('click', async () => {
+        const idEmpresa = $('selEmpresa').value;
+        if (!idEmpresa) { alert('Seleccione una empresa.'); return; }
+        const seleccion = entsSeleccionadas();
+        const entidades = seleccion.filter(e => !NO_ELIMINABLES.includes(e));
+        if (!entidades.length) {
+            await Swal.fire({ icon: 'info', title: 'Nada que eliminar',
+                html: 'Marque al menos una entidad de <b>documento, contabilidad o inventario</b>.<br><span class="text-muted small">Los catálogos (clientes, productos, proveedores, vendedores, bodegas, plan de cuentas) no se eliminan: se auto-corrigen al re-migrar.</span>' });
+            return;
+        }
+
+        // Preview: cuántos se borrarían por entidad
+        let data;
+        try {
+            const b = new URLSearchParams();
+            b.append('id_empresa', idEmpresa);
+            entidades.forEach(v => b.append('entidades[]', v));
+            const pr = await fetch(base + '/config/migrarMysql?action=eliminar-preview', { method: 'POST', body: b }).then(r => r.json());
+            if (!pr.ok) throw new Error(pr.mensaje || 'Error');
+            data = pr.data;
+        } catch (e) { await Swal.fire({ icon: 'error', title: 'Error', text: e.message }); return; }
+
+        const filas = entidades.map(e => {
+            const d = data[e];
+            if (!d) return '';
+            const vin = d.vinculados ? ` <span class="text-muted">(+${fmt(d.vinculados)} vinculados intactos)</span>` : '';
+            return `<tr><td class="text-start">${d.label}</td><td class="text-end fw-bold ${d.insertados ? 'text-danger' : 'text-muted'}">${fmt(d.insertados)}</td><td>${vin}</td></tr>`;
+        }).join('');
+        const totalIns = entidades.reduce((a, e) => a + (data[e]?.insertados || 0), 0);
+        if (!totalIns) {
+            await Swal.fire({ icon: 'info', title: 'No hay registros migrados', text: 'Las entidades seleccionadas no tienen registros insertados por la migración.' });
+            return;
+        }
+
+        const conf = await Swal.fire({
+            title: '¿Eliminar los registros migrados?',
+            html: `<div class="small text-start">Se borrarán <b class="text-danger">${fmt(totalIns)}</b> registro(s) insertados por la migración:
+                   <table class="table table-sm mt-2 mb-2"><tbody>${filas}</tbody></table>
+                   <div class="text-muted">Solo se borra lo que la migración insertó. Los registros nativos y los ya existentes (vinculados) <b>no se tocan</b>. Escriba <b>ELIMINAR</b> para confirmar.</div></div>`,
+            input: 'text', inputPlaceholder: 'ELIMINAR',
+            icon: 'warning', showCancelButton: true, confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545',
+            preConfirm: (v) => { if ((v || '').trim().toUpperCase() !== 'ELIMINAR') { Swal.showValidationMessage('Escriba ELIMINAR para confirmar.'); return false; } return true; }
+        });
+        if (!conf.isConfirmed) return;
+
+        const btn = $('btnEliminar');
+        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Eliminando...';
+        $('zonaMigrarResultado').innerHTML = '';
+        const totals = { cabeceras: 0, hijos: 0, mapa: 0, errores: 0 };
+
+        Swal.fire({
+            title: 'Eliminando registros migrados…',
+            html: '<div id="delSwalBody"></div>',
+            allowOutsideClick: false, allowEscapeKey: false, showConfirmButton: false,
+            didOpen: async () => {
+                const body = document.getElementById('delSwalBody');
+                for (let i = 0; i < entidades.length; i++) {
+                    const ent = entidades[i];
+                    if (body) body.innerHTML = `<div class="mb-2">Eliminando: <b>${(data[ent]?.label) || ent}</b> (${i + 1}/${entidades.length})</div>
+                        <div class="progress" style="height:18px;"><div class="progress-bar bg-danger" style="width:${Math.round(((i) / entidades.length) * 100)}%"></div></div>`;
+                    logMig(ent, '<span class="text-muted">eliminando…</span>');
+                    try {
+                        const b = new URLSearchParams();
+                        b.append('id_empresa', idEmpresa);
+                        b.append('entidad', ent);
+                        const res = await fetch(base + '/config/migrarMysql?action=eliminar', { method: 'POST', body: b }).then(r => r.json());
+                        if (!res.ok) { logMig(ent, '<span class="text-danger">' + res.mensaje + '</span>'); totals.errores++; continue; }
+                        const d = res.data;
+                        totals.cabeceras += d.cabeceras || 0; totals.hijos += d.hijos || 0; totals.mapa += d.mapa || 0;
+                        let html = `<span class="text-danger fw-bold">${fmt(d.cabeceras)} eliminado(s)</span> · ${fmt(d.hijos)} línea(s) · mapa ${fmt(d.mapa)}`;
+                        if (d.vinculados_intactos) html += ` · <span class="text-muted">${fmt(d.vinculados_intactos)} vinculados intactos</span>`;
+                        if (d.aviso) html += `<br><span class="text-warning small">⚠ ${d.aviso}</span>`;
+                        logMig(ent, html);
+                    } catch (e) { logMig(ent, '<span class="text-danger">' + e.message + '</span>'); totals.errores++; }
+                }
+                btn.disabled = false; btn.innerHTML = '<i class="bi bi-trash3 me-1"></i> Eliminar migrados';
+                await Swal.fire({
+                    icon: totals.errores ? 'warning' : 'success',
+                    title: 'Eliminación finalizada',
+                    html: `<div class="text-start small" style="max-width:280px;margin:0 auto;">
+                            <div><b>${fmt(totals.cabeceras)}</b> registros eliminados</div>
+                            <div><b>${fmt(totals.hijos)}</b> líneas hijas</div>
+                            <div><b>${fmt(totals.mapa)}</b> filas de mapa limpiadas</div>
+                            <div><b class="${totals.errores ? 'text-danger' : ''}">${fmt(totals.errores)}</b> errores</div>
+                           </div><div class="text-muted small mt-2">Ya puede volver a migrar las entidades corregidas.</div>`,
+                    confirmButtonColor: '#198754'
+                });
+            }
+        });
+    });
 
     // ── Paso 3: configuración contable (revisión previa + aplicar lo elegido) ──
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
