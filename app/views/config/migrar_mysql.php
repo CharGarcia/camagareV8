@@ -455,12 +455,19 @@ $base = BASE_URL;
             return;
         }
 
-        // Preview: cuántos se borrarían por entidad
+        const desde = $('fDesde').value, hasta = $('fHasta').value;
+        const rangoTxt = (desde || hasta)
+            ? `<span class="text-primary">rango ${desde || '…'} a ${hasta || '…'}</span> (por fecha del documento)`
+            : `<span class="text-danger">TODO el histórico migrado</span> (sin filtro de fechas)`;
+
+        // Preview: cuántos se borrarían por entidad (respeta Desde/Hasta)
         let data;
         try {
             const b = new URLSearchParams();
             b.append('id_empresa', idEmpresa);
             entidades.forEach(v => b.append('entidades[]', v));
+            if (desde) b.append('desde', desde);
+            if (hasta) b.append('hasta', hasta);
             const pr = await fetch(base + '/config/migrarMysql?action=eliminar-preview', { method: 'POST', body: b }).then(r => r.json());
             if (!pr.ok) throw new Error(pr.mensaje || 'Error');
             data = pr.data;
@@ -480,7 +487,7 @@ $base = BASE_URL;
 
         const conf = await Swal.fire({
             title: '¿Eliminar los registros migrados?',
-            html: `<div class="small text-start">Se borrarán <b class="text-danger">${fmt(totalIns)}</b> registro(s) insertados por la migración:
+            html: `<div class="small text-start">Alcance: ${rangoTxt}.<br>Se borrarán <b class="text-danger">${fmt(totalIns)}</b> registro(s) insertados por la migración:
                    <table class="table table-sm mt-2 mb-2"><tbody>${filas}</tbody></table>
                    <div class="text-muted">Solo se borra lo que la migración insertó. Los registros nativos y los ya existentes (vinculados) <b>no se tocan</b>. Escriba <b>ELIMINAR</b> para confirmar.</div></div>`,
             input: 'text', inputPlaceholder: 'ELIMINAR',
@@ -510,6 +517,8 @@ $base = BASE_URL;
                         const b = new URLSearchParams();
                         b.append('id_empresa', idEmpresa);
                         b.append('entidad', ent);
+                        if (desde) b.append('desde', desde);
+                        if (hasta) b.append('hasta', hasta);
                         const res = await fetch(base + '/config/migrarMysql?action=eliminar', { method: 'POST', body: b }).then(r => r.json());
                         if (!res.ok) { logMig(ent, '<span class="text-danger">' + res.mensaje + '</span>'); totals.errores++; continue; }
                         const d = res.data;

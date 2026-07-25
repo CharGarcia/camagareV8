@@ -184,7 +184,9 @@ class MigrarMysqlController extends Controller
         try {
             [$idEmpresa] = $this->resolverEmpresa();
             $entidades = $this->entidadesPost();
-            $data = $this->service->contarMigrados($entidades, $idEmpresa);
+            $desde = !empty($_POST['desde']) ? (string) $_POST['desde'] : null;
+            $hasta = !empty($_POST['hasta']) ? (string) $_POST['hasta'] : null;
+            $data = $this->service->contarMigrados($entidades, $idEmpresa, $desde, $hasta);
             echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
@@ -203,8 +205,10 @@ class MigrarMysqlController extends Controller
                 throw new \RuntimeException('Entidad no válida.');
             }
             $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+            $desde = !empty($_POST['desde']) ? (string) $_POST['desde'] : null;
+            $hasta = !empty($_POST['hasta']) ? (string) $_POST['hasta'] : null;
             if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
-            $data = $this->service->eliminarMigrados($entidad, $idEmpresa, $idUsuario);
+            $data = $this->service->eliminarMigrados($entidad, $idEmpresa, $idUsuario, $desde, $hasta);
             echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);

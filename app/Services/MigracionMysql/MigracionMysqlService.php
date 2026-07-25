@@ -164,42 +164,48 @@ class MigracionMysqlService
      * limpio con mensaje). Contabilidad e inventario tienen su propio manejador.
      */
     private const REVERT_DOC = [
-        'facturas' => ['cab' => 'ventas_cabecera',
+        'facturas' => ['cab' => 'ventas_cabecera', 'fecha' => 'fecha_emision',
             'nietos' => [['ventas_detalle_impuestos', 'id_venta_detalle', 'ventas_detalle', 'id_venta']],
             'hijos'  => [['ventas_detalle', 'id_venta'], ['ventas_pagos', 'id_venta'], ['ventas_adicional', 'id_venta']]],
-        'notas_credito' => ['cab' => 'notas_credito_cabecera',
+        'notas_credito' => ['cab' => 'notas_credito_cabecera', 'fecha' => 'fecha_emision',
             'nietos' => [['notas_credito_detalle_impuestos', 'id_nota_credito_detalle', 'notas_credito_detalle', 'id_nota_credito']],
             'hijos'  => [['notas_credito_detalle', 'id_nota_credito'], ['notas_credito_adicional', 'id_nota_credito']]],
-        'retenciones_venta' => ['cab' => 'retencion_venta_cabecera',
+        'retenciones_venta' => ['cab' => 'retencion_venta_cabecera', 'fecha' => 'fecha_emision',
             'nietos' => [], 'hijos' => [['retencion_venta_detalle', 'id_retencion']]],
-        'retenciones_compra' => ['cab' => 'retencion_compra_cabecera',
+        'retenciones_compra' => ['cab' => 'retencion_compra_cabecera', 'fecha' => 'fecha_emision',
             'nietos' => [], 'hijos' => [['retencion_compra_detalle', 'id_retencion']]],
-        'recibos' => ['cab' => 'recibos_venta_cabecera',
+        'recibos' => ['cab' => 'recibos_venta_cabecera', 'fecha' => 'fecha_emision',
             'nietos' => [['recibos_venta_detalle_impuestos', 'id_recibo_detalle', 'recibos_venta_detalle', 'id_recibo']],
             'hijos'  => [['recibos_venta_detalle', 'id_recibo'], ['recibos_venta_pagos', 'id_recibo'], ['recibos_venta_adicional', 'id_recibo']]],
-        'liquidaciones' => ['cab' => 'liquidaciones_cabecera',
+        'liquidaciones' => ['cab' => 'liquidaciones_cabecera', 'fecha' => 'fecha_emision',
             'nietos' => [['liquidaciones_detalle_impuestos', 'id_detalle', 'liquidaciones_detalle', 'id_cabecera']],
             'hijos'  => [['liquidaciones_detalle', 'id_cabecera'], ['liquidaciones_adicional', 'id_cabecera'], ['liquidaciones_pagos', 'id_cabecera']]],
-        'guias' => ['cab' => 'guias_remision_cabecera',
+        'guias' => ['cab' => 'guias_remision_cabecera', 'fecha' => 'fecha_emision',
             'nietos' => [], 'hijos' => [['guias_remision_detalle', 'id_guia_remision'], ['guias_remision_adicional', 'id_guia_remision']]],
-        'compras' => ['cab' => 'compras_cabecera',
+        'compras' => ['cab' => 'compras_cabecera', 'fecha' => 'fecha_emision',
             'nietos' => [['compras_detalle_impuestos', 'id_compra_detalle', 'compras_detalle', 'id_compra']],
             'hijos'  => [['compras_detalle', 'id_compra'], ['compras_pagos', 'id_compra'], ['compras_adicional', 'id_compra']]],
-        'ingresos' => ['cab' => 'ingresos_cabecera',
+        'ingresos' => ['cab' => 'ingresos_cabecera', 'fecha' => 'fecha_emision',
             'nietos' => [], 'hijos' => [['ingresos_detalle', 'id_ingreso'], ['ingresos_pagos', 'id_ingreso']]],
-        'egresos' => ['cab' => 'egresos_cabecera',
+        'egresos' => ['cab' => 'egresos_cabecera', 'fecha' => 'fecha_emision',
             'nietos' => [], 'hijos' => [['egresos_detalle', 'id_egreso'], ['egresos_pagos', 'id_egreso']]],
-        'proformas' => ['cab' => 'proformas_cabecera',
+        'proformas' => ['cab' => 'proformas_cabecera', 'fecha' => 'fecha_emision',
             'nietos' => [['proformas_detalle_impuestos', 'id_proforma_detalle', 'proformas_detalle', 'id_proforma']],
             'hijos'  => [['proformas_detalle', 'id_proforma'], ['proformas_adicional', 'id_proforma']]],
-        'consignaciones' => ['cab' => 'consignaciones_ventas',
+        'consignaciones' => ['cab' => 'consignaciones_ventas', 'fecha' => 'fecha_emision',
             'nietos' => [], 'hijos' => [['consignaciones_ventas_detalles', 'id_consignacion']]],
-        'consignaciones_fact' => ['cab' => 'consignaciones_facturas',
+        'consignaciones_fact' => ['cab' => 'consignaciones_facturas', 'fecha' => 'fecha_emision',
             'nietos' => [], 'hijos' => [['consignaciones_facturas_detalles', 'id_consignacion_factura']]],
-        'consignaciones_ret' => ['cab' => 'retornos_cv',
+        'consignaciones_ret' => ['cab' => 'retornos_cv', 'fecha' => 'fecha_retorno',
             'nietos' => [], 'hijos' => [['retornos_cv_detalles', 'id_retorno']]],
-        'cambios_producto' => ['cab' => 'cambios_producto_cv',
+        'cambios_producto' => ['cab' => 'cambios_producto_cv', 'fecha' => 'fecha_cambio',
             'nietos' => [], 'hijos' => [['cambios_producto_cv_detalles', 'id_cambio']]],
+    ];
+
+    /** Cabecera + columna de fecha de las entidades con manejador especial (para acotar por rango). */
+    private const REVERT_ESPECIAL = [
+        'contabilidad' => ['cab' => 'asientos_contables_cabecera', 'fecha' => 'fecha_asiento'],
+        'inventario'   => ['cab' => 'inventario_kardex',           'fecha' => 'fecha_movimiento'],
     ];
 
     /** Catálogos: NO se eliminan con esta herramienta (se auto-corrigen al re-migrar por reconciliación). */
@@ -214,16 +220,35 @@ class MigracionMysqlService
      * @param string[] $entidades
      * @return array<string,array{insertados:int,vinculados:int,label:string}>
      */
-    public function contarMigrados(array $entidades, int $idEmpresa): array
+    public function contarMigrados(array $entidades, int $idEmpresa, ?string $desde = null, ?string $hasta = null): array
     {
         $pg = Database::getConnection();
+        [$desde, $hasta] = [self::fechaNz($desde), self::fechaNz($hasta)];
+        $rango = ($desde !== null || $hasta !== null);
         $out = [];
         foreach ($entidades as $ent) {
             if (in_array($ent, self::ELIMINAR_VEDADAS, true) || !isset(self::ENTIDADES[$ent])) { continue; }
             $label = self::ENTIDADES[$ent]['label'] ?? $ent;
+            [$cab, $fcol] = $this->cabFecha($ent);
+
             if ($ent === 'contabilidad') {
-                $ins = (int) $pg->query("SELECT COUNT(*) FROM asientos_contables_cabecera WHERE id_empresa = " . (int) $idEmpresa . " AND modulo_origen = 'migracion' AND eliminado = false")->fetchColumn();
+                // Asientos migrados (histórico + cierres autogenerados que no viven en el mapa).
+                [$cond, $params] = $this->condFecha($fcol, $desde, $hasta, false);
+                $sql = "SELECT COUNT(*) FROM asientos_contables_cabecera WHERE id_empresa = ? AND modulo_origen = 'migracion' AND eliminado = false" . $cond;
+                $st = $pg->prepare($sql);
+                $st->execute(array_merge([$idEmpresa], $params));
+                $ins = (int) $st->fetchColumn();
                 $vin = 0;
+            } elseif ($rango && $cab) {
+                // Acotado por fecha: unir el mapa a la cabecera y contar por su fecha.
+                [$cond, $params] = $this->condFecha('c.' . $fcol, $desde, $hasta, $fcol === 'fecha_movimiento');
+                $st = $pg->prepare("SELECT COUNT(*) FILTER (WHERE m.vinculado IS NOT TRUE) AS ins, COUNT(*) FILTER (WHERE m.vinculado) AS vin
+                    FROM migracion_mysql_map m JOIN $cab c ON c.id = m.id_destino
+                    WHERE m.id_empresa = ? AND m.entidad = ?" . $cond);
+                $st->execute(array_merge([$idEmpresa, $ent], $params));
+                $r = $st->fetch(PDO::FETCH_ASSOC);
+                $ins = (int) ($r['ins'] ?? 0);
+                $vin = (int) ($r['vin'] ?? 0);
             } else {
                 $q = $pg->prepare("SELECT COUNT(*) FILTER (WHERE vinculado IS NOT TRUE) AS ins, COUNT(*) FILTER (WHERE vinculado) AS vin FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = ?");
                 $q->execute([$idEmpresa, $ent]);
@@ -236,30 +261,83 @@ class MigracionMysqlService
         return $out;
     }
 
+    /** Normaliza una fecha 'YYYY-MM-DD' de entrada: vacío → null. */
+    private static function fechaNz(?string $f): ?string
+    {
+        $f = trim((string) $f);
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $f) ? $f : null;
+    }
+
+    /** [tabla cabecera, columna de fecha] de una entidad eliminable (documento o especial). */
+    private function cabFecha(string $ent): array
+    {
+        if (isset(self::REVERT_DOC[$ent]))      { return [self::REVERT_DOC[$ent]['cab'], self::REVERT_DOC[$ent]['fecha']]; }
+        if (isset(self::REVERT_ESPECIAL[$ent])) { return [self::REVERT_ESPECIAL[$ent]['cab'], self::REVERT_ESPECIAL[$ent]['fecha']]; }
+        return [null, null];
+    }
+
+    /**
+     * Arma "AND <col> >= ? AND <col> <= ?" con sus parámetros (posicionales). $castDate castea a ::date
+     * (para columnas timestamp como fecha_movimiento). Devuelve ['', []] si no hay rango.
+     * @return array{0:string,1:array<int,string>}
+     */
+    private function condFecha(string $col, ?string $desde, ?string $hasta, bool $castDate): array
+    {
+        $expr = $castDate ? "$col::date" : $col;
+        $cond = ''; $params = [];
+        if ($desde !== null) { $cond .= " AND $expr >= ?"; $params[] = $desde; }
+        if ($hasta !== null) { $cond .= " AND $expr <= ?"; $params[] = $hasta; }
+        return [$cond, $params];
+    }
+
+    /**
+     * Resuelve los ids a borrar (insertados) y los ids cuyo mapa se limpia. Sin rango: [insertados, null]
+     * (null = borrar TODO el mapa de la entidad). Con rango: [insertados en rango, todos en rango].
+     * @return array{0:int[],1:?int[]}
+     */
+    private function idsEliminar(PDO $pg, int $idEmpresa, string $entidad, string $cab, string $fcol, ?string $desde, ?string $hasta): array
+    {
+        if ($desde === null && $hasta === null) {
+            $q = $pg->prepare("SELECT id_destino FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = ? AND vinculado IS NOT TRUE");
+            $q->execute([$idEmpresa, $entidad]);
+            return [array_values(array_filter(array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN)))), null];
+        }
+        [$cond, $params] = $this->condFecha('c.' . $fcol, $desde, $hasta, $fcol === 'fecha_movimiento');
+        $base = "FROM migracion_mysql_map m JOIN $cab c ON c.id = m.id_destino WHERE m.id_empresa = ? AND m.entidad = ?" . $cond;
+        $qi = $pg->prepare("SELECT m.id_destino $base AND m.vinculado IS NOT TRUE");
+        $qi->execute(array_merge([$idEmpresa, $entidad], $params));
+        $ins = array_values(array_filter(array_map('intval', $qi->fetchAll(PDO::FETCH_COLUMN))));
+        $qa = $pg->prepare("SELECT m.id_destino $base");
+        $qa->execute(array_merge([$idEmpresa, $entidad], $params));
+        $all = array_values(array_filter(array_map('intval', $qa->fetchAll(PDO::FETCH_COLUMN))));
+        return [$ins, $all];
+    }
+
     /**
      * Elimina lo que la migración INSERTÓ para una entidad de documento/contabilidad/inventario, para
      * poder re-migrar y corregir. Borra hijos→cabecera SOLO de los registros insertados por la
      * migración (vinculado IS NOT TRUE); nunca toca registros nativos. Luego limpia TODO el mapa de la
      * entidad (los vinculados se vuelven a detectar por número al re-migrar). Transaccional.
      */
-    public function eliminarMigrados(string $entidad, int $idEmpresa, int $idUsuario): array
+    public function eliminarMigrados(string $entidad, int $idEmpresa, int $idUsuario, ?string $desde = null, ?string $hasta = null): array
     {
         if (in_array($entidad, self::ELIMINAR_VEDADAS, true)) {
             throw new \RuntimeException('Los catálogos no se eliminan aquí: se auto-corrigen al re-migrar.');
         }
+        [$desde, $hasta] = [self::fechaNz($desde), self::fechaNz($hasta)];
         $pg = Database::getConnection();
-        if ($entidad === 'contabilidad') { return $this->eliminarContabilidadMigrada($idEmpresa, $idUsuario, $pg); }
-        if ($entidad === 'inventario')   { return $this->eliminarInventarioMigrado($idEmpresa, $pg); }
+        if ($entidad === 'contabilidad') { return $this->eliminarContabilidadMigrada($idEmpresa, $idUsuario, $pg, $desde, $hasta); }
+        if ($entidad === 'inventario')   { return $this->eliminarInventarioMigrado($idEmpresa, $pg, $desde, $hasta); }
         if (!isset(self::REVERT_DOC[$entidad])) {
             throw new \RuntimeException("Entidad no válida para eliminar: $entidad");
         }
         $map = self::REVERT_DOC[$entidad];
-        $res = ['entidad' => $entidad, 'cabeceras' => 0, 'hijos' => 0, 'mapa' => 0, 'vinculados_intactos' => 0];
+        $res = ['entidad' => $entidad, 'cabeceras' => 0, 'hijos' => 0, 'mapa' => 0, 'vinculados_intactos' => 0,
+                'rango' => ($desde !== null || $hasta !== null)];
 
-        // ids INSERTADOS por la migración (enteros; no entran del usuario). Los vinculados NO se tocan.
-        $q = $pg->prepare("SELECT id_destino FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = ? AND vinculado IS NOT TRUE");
-        $q->execute([$idEmpresa, $entidad]);
-        $ids = array_values(array_filter(array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN))));
+        // ids INSERTADOS a borrar (opcionalmente acotados por la fecha de la cabecera) e ids cuyo mapa
+        // se limpia. Los vinculados (nativos) NO se borran; solo se limpia su fila del mapa.
+        [$ids, $idsMapa] = $this->idsEliminar($pg, $idEmpresa, $entidad, $map['cab'], $map['fecha'], $desde, $hasta);
         $res['vinculados_intactos'] = (int) $pg->query("SELECT COUNT(*) FROM migracion_mysql_map WHERE id_empresa = " . (int) $idEmpresa . " AND entidad = " . $pg->quote($entidad) . " AND vinculado")->fetchColumn();
 
         $pg->beginTransaction();
@@ -274,10 +352,7 @@ class MigracionMysqlService
                 }
                 $res['cabeceras'] = (int) $pg->exec("DELETE FROM {$map['cab']} WHERE id IN ($in)");
             }
-            // Limpiar TODO el mapa de la entidad (incluye vinculados: se re-detectan por número al re-migrar).
-            $qd = $pg->prepare("DELETE FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = ?");
-            $qd->execute([$idEmpresa, $entidad]);
-            $res['mapa'] = $qd->rowCount();
+            $res['mapa'] = $this->limpiarMapa($pg, $idEmpresa, $entidad, $idsMapa);
             $pg->commit();
         } catch (Throwable $e) {
             if ($pg->inTransaction()) { $pg->rollBack(); }
@@ -287,13 +362,31 @@ class MigracionMysqlService
     }
 
     /**
+     * Limpia el mapa de una entidad. $ids null = TODO el mapa de la entidad (borrado completo); si es
+     * un arreglo = solo esas filas (borrado acotado por fecha; incluye vinculados en rango para que se
+     * re-detecten al re-migrar). DEBE ir dentro de la misma transacción del borrado.
+     */
+    private function limpiarMapa(PDO $pg, int $idEmpresa, string $entidad, ?array $ids): int
+    {
+        if ($ids === null) {
+            $qd = $pg->prepare("DELETE FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = ?");
+            $qd->execute([$idEmpresa, $entidad]);
+            return $qd->rowCount();
+        }
+        if (!$ids) { return 0; }
+        return (int) $pg->exec("DELETE FROM migracion_mysql_map WHERE id_empresa = " . (int) $idEmpresa
+            . " AND entidad = " . $pg->quote($entidad) . " AND id_destino IN (" . implode(',', $ids) . ")");
+    }
+
+    /**
      * Borra los asientos migrados (modulo_origen='migracion' → incluye el histórico y los cierres
      * autogenerados) + su detalle, desengancha id_asiento_contable de los documentos y limpia el mapa.
      * NO toca el plan de cuentas (es catálogo) ni los asientos nativos. Réplica de reset_contabilidad_migrada.sql.
      */
-    private function eliminarContabilidadMigrada(int $idEmpresa, int $idUsuario, PDO $pg): array
+    private function eliminarContabilidadMigrada(int $idEmpresa, int $idUsuario, PDO $pg, ?string $desde = null, ?string $hasta = null): array
     {
-        $res = ['entidad' => 'contabilidad', 'cabeceras' => 0, 'hijos' => 0, 'mapa' => 0, 'vinculados_intactos' => 0];
+        $res = ['entidad' => 'contabilidad', 'cabeceras' => 0, 'hijos' => 0, 'mapa' => 0, 'vinculados_intactos' => 0,
+                'rango' => ($desde !== null || $hasta !== null)];
         // Tablas que guardan un id de asiento; se desenganchan por el id del asiento migrado.
         $docs = [
             ['compras_cabecera', 'id_asiento_contable'], ['ventas_cabecera', 'id_asiento_contable'],
@@ -303,7 +396,10 @@ class MigracionMysqlService
             ['liquidaciones_cabecera', 'id_asiento_contable'], ['consignaciones_ventas', 'id_asiento_contable'],
             ['cambios_producto_cv', 'id_asiento_contable'], ['retornos_cv', 'id_asiento_contable'],
         ];
-        $q = $pg->query("SELECT id FROM asientos_contables_cabecera WHERE id_empresa = " . (int) $idEmpresa . " AND modulo_origen = 'migracion'");
+        // Asientos migrados (histórico + cierres autogenerados), opcionalmente acotados por fecha.
+        [$cond, $params] = $this->condFecha('fecha_asiento', $desde, $hasta, false);
+        $q = $pg->prepare("SELECT id FROM asientos_contables_cabecera WHERE id_empresa = ? AND modulo_origen = 'migracion'" . $cond);
+        $q->execute(array_merge([$idEmpresa], $params));
         $ids = array_values(array_filter(array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN))));
 
         $pg->beginTransaction();
@@ -319,9 +415,8 @@ class MigracionMysqlService
                 $res['hijos'] = (int) $pg->exec("DELETE FROM asientos_contables_detalle WHERE id_asiento IN ($in)");
                 $res['cabeceras'] = (int) $pg->exec("DELETE FROM asientos_contables_cabecera WHERE id IN ($in)");
             }
-            $qd = $pg->prepare("DELETE FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'contabilidad'");
-            $qd->execute([$idEmpresa]);
-            $res['mapa'] = $qd->rowCount();
+            // Sin rango: limpiar todo el mapa; con rango: solo el de los asientos borrados.
+            $res['mapa'] = $this->limpiarMapa($pg, $idEmpresa, 'contabilidad', ($res['rango'] ? $ids : null));
             $pg->commit();
         } catch (Throwable $e) {
             if ($pg->inTransaction()) { $pg->rollBack(); }
@@ -334,22 +429,19 @@ class MigracionMysqlService
      * Borra el kardex migrado (inventario_kardex insertado por la migración) y su mapa. AVISO: no
      * recalcula saldos corridos; re-migrar inventario los regenera con el saldo sembrado del stock.
      */
-    private function eliminarInventarioMigrado(int $idEmpresa, PDO $pg): array
+    private function eliminarInventarioMigrado(int $idEmpresa, PDO $pg, ?string $desde = null, ?string $hasta = null): array
     {
         $res = ['entidad' => 'inventario', 'cabeceras' => 0, 'hijos' => 0, 'mapa' => 0, 'vinculados_intactos' => 0,
+                'rango' => ($desde !== null || $hasta !== null),
                 'aviso' => 'Los saldos del kardex no se recalculan al borrar; vuelve a migrar Inventario para regenerarlos.'];
-        $q = $pg->prepare("SELECT id_destino FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'inventario' AND vinculado IS NOT TRUE");
-        $q->execute([$idEmpresa]);
-        $ids = array_values(array_filter(array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN))));
+        [$ids, $idsMapa] = $this->idsEliminar($pg, $idEmpresa, 'inventario', 'inventario_kardex', 'fecha_movimiento', $desde, $hasta);
 
         $pg->beginTransaction();
         try {
             if ($ids) {
                 $res['cabeceras'] = (int) $pg->exec("DELETE FROM inventario_kardex WHERE id IN (" . implode(',', $ids) . ")");
             }
-            $qd = $pg->prepare("DELETE FROM migracion_mysql_map WHERE id_empresa = ? AND entidad = 'inventario'");
-            $qd->execute([$idEmpresa]);
-            $res['mapa'] = $qd->rowCount();
+            $res['mapa'] = $this->limpiarMapa($pg, $idEmpresa, 'inventario', $idsMapa);
             $pg->commit();
         } catch (Throwable $e) {
             if ($pg->inTransaction()) { $pg->rollBack(); }
