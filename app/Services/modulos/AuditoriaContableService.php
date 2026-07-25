@@ -206,40 +206,82 @@ class AuditoriaContableService
     //  REGENERACIÓN MASIVA
     // ==================================================================
 
+    /** Documentos que procesa cada lote de regeneración (una petición del navegador). */
+    public const LOTE_REGENERACION = 25;
+
+    /** Tope de vueltas del bucle de regenerarMasivo(); salvaguarda contra un lote que no avance. */
+    private const MAX_LOTES = 2000;
+
     /**
-     * Anula y vuelve a generar todos los asientos de un origen (opcionalmente
-     * acotado por rango de fechas), respetando los períodos contables cerrados.
+     * Dimensiona una corrida de regeneración: por cada origen a procesar informa cuántos
+     * asientos se van a rehacer y cuántos quedan fuera por caer en período cerrado.
+     * Devuelve además el `id_maximo`, la «foto» del último asiento existente: los lotes
+     * solo tocan asientos anteriores a ese id, así lo que la corrida genera no se reprocesa.
      *
-     * Fase 1 (transacción atómica): anula asientos vigentes + desvincula documentos,
-     *   omitiendo los que caen en período cerrado.
-     * Fase 2 (idempotente): regenera vía el servicio del origen, cada documento en
-     *   su propia transacción.
+     * @param string|null $origen Un origen concreto, o null/'' para TODOS los regenerables.
      */
-    public function regenerarMasivo(int $idEmpresa, int $idUsuario, string $origen, ?string $fechaDesde = null, ?string $fechaHasta = null): array
+    public function planRegeneracion(int $idEmpresa, ?string $origen = null, ?string $fechaDesde = null, ?string $fechaHasta = null): array
     {
-        // Solo se ofrecen (y aceptan) orígenes cuyo Service sabe regenerar el asiento.
+        $this->rules->validarRango($fechaDesde, $fechaHasta);
+
+        $regenerables = $this->repo->getOrigenesRegenerables();
+        $origenes = ($origen !== null && $origen !== '') ? [$origen] : $regenerables;
+
+        $plan = [];
+        $total = 0;
+        $cerrados = 0;
+        foreach ($origenes as $o) {
+            $this->rules->validarRegeneracion($o, $regenerables, $fechaDesde, $fechaHasta);
+            $c = $this->repo->contarAsientosDeOrigen($idEmpresa, $o, $fechaDesde, $fechaHasta);
+            $plan[]    = ['origen' => $o, 'pendientes' => $c['pendientes'], 'cerrados' => $c['cerrados']];
+            $total    += $c['pendientes'];
+            $cerrados += $c['cerrados'];
+        }
+
+        return [
+            'origenes'  => $plan,
+            'total'     => $total,
+            'cerrados'  => $cerrados,
+            'lote'      => self::LOTE_REGENERACION,
+            'id_maximo' => $this->repo->getMaxIdAsiento($idEmpresa),
+        ];
+    }
+
+    /**
+     * Procesa UN lote de la regeneración de un origen: anula + desvincula hasta `$limite`
+     * asientos y los vuelve a generar. Está pensado para llamarse en cadena desde la UI,
+     * de modo que una corrida grande no dependa del max_execution_time.
+     *
+     * Fase 1 (transacción atómica): anula los asientos del lote y desvincula sus documentos.
+     * Fase 2 (idempotente): regenera vía el Service del origen, cada documento en su
+     *   propia transacción. Un documento que falla no aborta el lote.
+     *
+     * Los asientos en período cerrado se excluyen en la consulta (no se anulan nunca) y
+     * los cuenta `planRegeneracion()` como omitidos.
+     */
+    public function regenerarLote(int $idEmpresa, int $idUsuario, string $origen, ?string $fechaDesde = null,
+        ?string $fechaHasta = null, int $limite = self::LOTE_REGENERACION, ?int $idMaximo = null): array
+    {
         $this->rules->validarRegeneracion($origen, $this->repo->getOrigenesRegenerables(), $fechaDesde, $fechaHasta);
+        $limite = max(1, min(200, $limite));
 
-        $ambiente = $this->repo->getAmbienteEmpresa($idEmpresa);
-        $asientos = $this->repo->getAsientosDeOrigen($idEmpresa, $origen, $fechaDesde, $fechaHasta);
+        $asientos = $this->repo->getAsientosDeOrigen($idEmpresa, $origen, $fechaDesde, $fechaHasta, $limite, $idMaximo);
+        if (empty($asientos)) {
+            return ['procesados' => 0, 'anulados' => 0, 'regenerados' => 0, 'errores' => 0,
+                    'restantes' => 0, 'mensajes' => []];
+        }
 
+        // Fase 1: anular + desvincular el lote (atómica).
+        $docs     = [];
         $anulados = 0;
-        $omitidos = 0;
-        $docs = [];
-
-        // Fase 1: anular + desvincular (atómica)
         $this->repo->beginTransaction();
         try {
             foreach ($asientos as $a) {
-                $fecha = substr((string) $a['fecha_asiento'], 0, 10);
-                if ($fecha !== '' && $this->repo->fechaEnPeriodoCerrado($idEmpresa, $fecha)) {
-                    $omitidos++;
-                    continue;
-                }
                 $this->repo->anularAsiento((int) $a['id'], $idEmpresa, $idUsuario);
                 if (!empty($a['id_referencia_origen'])) {
+                    // Clave del array: un documento con varios asientos se regenera una sola vez.
+                    $docs[(int) $a['id_referencia_origen']] = true;
                     $this->repo->desvincularDocumento($origen, (int) $a['id_referencia_origen'], $idEmpresa);
-                    $docs[] = (int) $a['id_referencia_origen'];
                 }
                 $anulados++;
             }
@@ -249,23 +291,78 @@ class AuditoriaContableService
             throw $e;
         }
 
-        // Fase 2: regenerar (cada documento en su propia transacción interna del servicio)
+        // Fase 2: regenerar. Los fallos se agrupan por motivo real, como en el Sincronizador.
         $regenerados = 0;
-        $errores = 0;
+        $fallos      = [];
         if (!empty($docs)) {
             $svc = $this->serviceParaOrigen($origen);
-            foreach ($docs as $idDoc) {
+            foreach (array_keys($docs) as $idDoc) {
                 try {
                     $svc->procesarAsientoContablePorSincronizacion($idDoc);
                     $regenerados++;
                 } catch (\Throwable $e) {
-                    $errores++;
+                    $motivo = trim($e->getMessage()) ?: 'Error no especificado (' . get_class($e) . ')';
+                    $fallos[$motivo][] = $idDoc;
                 }
             }
         }
 
-        $estado = $errores > 0 ? 'parcial' : 'ok';
-        $mensaje = "Anulados: {$anulados}, Regenerados: {$regenerados}, Omitidos (período cerrado): {$omitidos}";
+        $mensajes = [];
+        $errores  = 0;
+        foreach ($fallos as $motivo => $ids) {
+            $errores += count($ids);
+            $mensajes[] = count($ids) . " documento(s) con error — «{$motivo}» — #" . implode(', #', array_slice($ids, 0, 5));
+        }
+
+        return [
+            'procesados'  => count($docs),
+            'anulados'    => $anulados,
+            'regenerados' => $regenerados,
+            'errores'     => $errores,
+            'restantes'   => $this->repo->contarAsientosDeOrigen($idEmpresa, $origen, $fechaDesde, $fechaHasta, $idMaximo)['pendientes'],
+            'mensajes'    => $mensajes,
+        ];
+    }
+
+    /**
+     * Anula y vuelve a generar todos los asientos de un origen (opcionalmente
+     * acotado por rango de fechas), respetando los períodos contables cerrados.
+     * Corre los lotes en cadena dentro de la misma petición: sirve para volúmenes
+     * chicos o para invocarlo por CLI; desde la UI se prefiere lote a lote.
+     */
+    public function regenerarMasivo(int $idEmpresa, int $idUsuario, string $origen, ?string $fechaDesde = null, ?string $fechaHasta = null): array
+    {
+        // Solo se ofrecen (y aceptan) orígenes cuyo Service sabe regenerar el asiento.
+        $this->rules->validarRegeneracion($origen, $this->repo->getOrigenesRegenerables(), $fechaDesde, $fechaHasta);
+
+        $ambiente = $this->repo->getAmbienteEmpresa($idEmpresa);
+        $conteo   = $this->repo->contarAsientosDeOrigen($idEmpresa, $origen, $fechaDesde, $fechaHasta);
+        $idMaximo = $this->repo->getMaxIdAsiento($idEmpresa);
+
+        $anulados = 0;
+        $regenerados = 0;
+        $errores = 0;
+        $mensajes = [];
+        $vueltas = 0;
+
+        while ($vueltas++ < self::MAX_LOTES) {
+            $r = $this->regenerarLote($idEmpresa, $idUsuario, $origen, $fechaDesde, $fechaHasta,
+                self::LOTE_REGENERACION, $idMaximo);
+            if ($r['procesados'] === 0 && $r['anulados'] === 0) {
+                break;
+            }
+            $anulados    += $r['anulados'];
+            $regenerados += $r['regenerados'];
+            $errores     += $r['errores'];
+            $mensajes     = array_merge($mensajes, $r['mensajes']);
+            if ($r['restantes'] === 0) {
+                break;
+            }
+        }
+
+        $omitidos = $conteo['cerrados'];
+        $estado   = $errores > 0 ? 'parcial' : 'ok';
+        $mensaje  = "Anulados: {$anulados}, Regenerados: {$regenerados}, Omitidos (período cerrado): {$omitidos}";
         if ($errores > 0) {
             $mensaje .= ", Errores al regenerar: {$errores} (revise la configuración de cuentas).";
         }
@@ -277,7 +374,7 @@ class AuditoriaContableService
             'modulo_origen'     => $origen,
             'fecha_desde'       => $fechaDesde,
             'fecha_hasta'       => $fechaHasta,
-            'total_documentos'  => count($asientos),
+            'total_documentos'  => $conteo['pendientes'] + $omitidos,
             'total_anulados'    => $anulados,
             'total_regenerados' => $regenerados,
             'total_omitidos'    => $omitidos,
@@ -300,7 +397,69 @@ class AuditoriaContableService
             'errores'     => $errores,
             'estado'      => $estado,
             'mensaje'     => $mensaje,
+            'mensajes'    => $mensajes,
         ];
+    }
+
+    /**
+     * Genera los asientos de los documentos vigentes que NUNCA tuvieron uno (no se
+     * regeneran los existentes). Es el mismo motor que corre al abrir Estados Financieros.
+     * Se usa como paso final de la regeneración total, para que no queden documentos sin
+     * contabilizar. Nunca toca asientos de tipo Diario: solo crea los que faltan.
+     */
+    public function generarFaltantes(int $idEmpresa, int $idUsuario): array
+    {
+        $svc = new SincronizadorAsientosService();
+        $svc->sincronizar($idEmpresa, $idUsuario);
+
+        return [
+            'generados' => $svc->getGenerados(),
+            'avisos'    => $svc->getWarnings(),
+        ];
+    }
+
+    /**
+     * Deja constancia de una corrida de regeneración ejecutada por lotes desde la UI
+     * (los totales los acumula el controlador a lo largo de la cadena de lotes) y la
+     * registra en log_sistema.
+     */
+    public function registrarCorridaRegeneracion(int $idEmpresa, int $idUsuario, array $totales,
+        ?string $origen = null, ?string $fechaDesde = null, ?string $fechaHasta = null): int
+    {
+        $errores  = (int) ($totales['errores'] ?? 0);
+        $estado   = $errores > 0 ? 'parcial' : 'ok';
+        $mensaje  = "Anulados: " . (int) ($totales['anulados'] ?? 0)
+                  . ", Regenerados: " . (int) ($totales['regenerados'] ?? 0)
+                  . ", Omitidos (período cerrado): " . (int) ($totales['omitidos'] ?? 0);
+        if (isset($totales['faltantes'])) {
+            $mensaje .= ", Faltantes generados: " . (int) $totales['faltantes'];
+        }
+        if ($errores > 0) {
+            $mensaje .= ", Errores: {$errores} (revise la configuración de cuentas).";
+        }
+        if (!empty($totales['mensaje_extra'])) {
+            $mensaje .= ' ' . $totales['mensaje_extra'];
+        }
+
+        $corridaId = $this->repo->registrarCorrida([
+            'id_empresa'        => $idEmpresa,
+            'tipo_ambiente'     => $this->repo->getAmbienteEmpresa($idEmpresa),
+            'tipo_corrida'      => 'regeneracion',
+            'modulo_origen'     => $origen,   // NULL = todos los orígenes
+            'fecha_desde'       => $fechaDesde,
+            'fecha_hasta'       => $fechaHasta,
+            'total_documentos'  => (int) ($totales['total'] ?? 0),
+            'total_anulados'    => (int) ($totales['anulados'] ?? 0),
+            'total_regenerados' => (int) ($totales['regenerados'] ?? 0),
+            'total_omitidos'    => (int) ($totales['omitidos'] ?? 0),
+            'estado'            => $estado,
+            'mensaje'           => $mensaje,
+        ], $idUsuario);
+
+        $this->log->registrar($idUsuario, $idEmpresa, 'auditoria_regeneracion_total',
+            $origen ?? 'todos_los_origenes', $corridaId, null, $totales);
+
+        return $corridaId;
     }
 
     /**

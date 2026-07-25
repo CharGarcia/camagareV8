@@ -465,4 +465,181 @@ class AuditoriaContableController extends BaseModuloController
         }
         exit;
     }
+
+    // ==================================================================
+    //  REGENERACIÓN TOTAL POR LOTES
+    // ==================================================================
+    //  Una corrida grande no cabe en una sola petición (max_execution_time), así que
+    //  se parte en lotes que el navegador va encadenando mostrando el progreso:
+    //
+    //    planRegeneracionAjax  → dimensiona y abre la corrida (queda en sesión)
+    //    regenerarLoteAjax     → se llama N veces por origen hasta restantes = 0
+    //    generarFaltantesAjax  → crea los asientos de documentos que nunca tuvieron
+    //    finalizarRegeneracionAjax → registra la corrida y re-audita UNA sola vez
+    //
+    //  El estado (cursor de ids, rango y acumulados) vive en sesión, no en el cliente.
+
+    /** Valor que manda la UI para «todos los orígenes». */
+    private const ORIGEN_TODOS = '__todos__';
+
+    /** Clave de sesión donde vive la corrida en curso. */
+    private const SESION_REGEN = 'aud_regen_corrida';
+
+    /** Dimensiona la corrida y la deja abierta en sesión. */
+    public function planRegeneracionAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idEmpresa  = (int) $_SESSION['id_empresa'];
+        $origen     = trim($_POST['origen'] ?? '');
+        $origen     = ($origen === '' || $origen === self::ORIGEN_TODOS) ? null : $origen;
+        $fechaDesde = $this->normalizarFecha($_POST['fecha_desde'] ?? null);
+        $fechaHasta = $this->normalizarFecha($_POST['fecha_hasta'] ?? null);
+
+        try {
+            $plan = $this->service->planRegeneracion($idEmpresa, $origen, $fechaDesde, $fechaHasta);
+
+            $_SESSION[self::SESION_REGEN] = [
+                'id_empresa'  => $idEmpresa,
+                'origen'      => $origen,
+                'origenes'    => array_column($plan['origenes'], 'origen'),
+                'fecha_desde' => $fechaDesde,
+                'fecha_hasta' => $fechaHasta,
+                'id_maximo'   => $plan['id_maximo'],
+                'total'       => $plan['total'],
+                'omitidos'    => $plan['cerrados'],
+                'anulados'    => 0,
+                'regenerados' => 0,
+                'errores'     => 0,
+                'faltantes'   => 0,
+                'mensajes'    => [],
+            ];
+
+            foreach ($plan['origenes'] as &$o) {
+                $o['label'] = self::ORIGEN_LABEL[$o['origen']] ?? $o['origen'];
+            }
+            unset($o);
+
+            echo json_encode(['ok' => true, 'data' => $plan]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Procesa un lote del origen indicado. Devuelve cuántos quedan por procesar. */
+    public function regenerarLoteAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $origen    = trim($_POST['origen'] ?? '');
+
+        $c = $_SESSION[self::SESION_REGEN] ?? null;
+        if (!is_array($c) || (int) ($c['id_empresa'] ?? 0) !== $idEmpresa) {
+            echo json_encode(['ok' => false, 'error' => 'La regeneración no está abierta (o cambió la empresa activa). Vuelva a iniciarla.']);
+            exit;
+        }
+        if (!in_array($origen, $c['origenes'] ?? [], true)) {
+            echo json_encode(['ok' => false, 'error' => 'Ese origen no forma parte de la regeneración en curso.']);
+            exit;
+        }
+
+        try {
+            $r = $this->service->regenerarLote($idEmpresa, $idUsuario, $origen,
+                $c['fecha_desde'], $c['fecha_hasta'],
+                AuditoriaContableService::LOTE_REGENERACION, (int) $c['id_maximo']);
+
+            $c['anulados']    += $r['anulados'];
+            $c['regenerados'] += $r['regenerados'];
+            $c['errores']     += $r['errores'];
+            foreach ($r['mensajes'] as $m) {
+                $c['mensajes'][] = (self::ORIGEN_LABEL[$origen] ?? $origen) . ' — ' . $m;
+            }
+            $_SESSION[self::SESION_REGEN] = $c;
+
+            echo json_encode(['ok' => true, 'data' => $r]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Paso final opcional: genera los asientos de los documentos que nunca tuvieron uno. */
+    public function generarFaltantesAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $r = $this->service->generarFaltantes($idEmpresa, $idUsuario);
+
+            $c = $_SESSION[self::SESION_REGEN] ?? null;
+            if (is_array($c) && (int) ($c['id_empresa'] ?? 0) === $idEmpresa) {
+                $c['faltantes'] = (int) $r['generados'];
+                $c['mensajes']  = array_merge($c['mensajes'] ?? [], $r['avisos']);
+                $_SESSION[self::SESION_REGEN] = $c;
+            }
+
+            echo json_encode(['ok' => true, 'data' => $r]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Cierra la corrida: deja el registro en el historial y vuelve a auditar una sola vez. */
+    public function finalizarRegeneracionAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        $c = $_SESSION[self::SESION_REGEN] ?? null;
+        if (!is_array($c) || (int) ($c['id_empresa'] ?? 0) !== $idEmpresa) {
+            echo json_encode(['ok' => false, 'error' => 'No hay una regeneración en curso que cerrar.']);
+            exit;
+        }
+
+        try {
+            $corridaId = $this->service->registrarCorridaRegeneracion($idEmpresa, $idUsuario, [
+                'total'       => (int) $c['total'],
+                'anulados'    => (int) $c['anulados'],
+                'regenerados' => (int) $c['regenerados'],
+                'omitidos'    => (int) $c['omitidos'],
+                'errores'     => (int) $c['errores'],
+                'faltantes'   => (int) $c['faltantes'],
+            ], $c['origen'], $c['fecha_desde'], $c['fecha_hasta']);
+
+            unset($_SESSION[self::SESION_REGEN]);
+
+            // Una única auditoría al final (regenerar origen por origen la dispararía N veces).
+            $aud = $this->service->ejecutarAuditoria($idEmpresa, $idUsuario, $c['origen'],
+                $c['fecha_desde'], $c['fecha_hasta']);
+
+            echo json_encode(['ok' => true, 'data' => [
+                'corrida_id'  => $corridaId,
+                'anulados'    => (int) $c['anulados'],
+                'regenerados' => (int) $c['regenerados'],
+                'omitidos'    => (int) $c['omitidos'],
+                'errores'     => (int) $c['errores'],
+                'faltantes'   => (int) $c['faltantes'],
+                'mensajes'    => array_values(array_unique($c['mensajes'] ?? [])),
+                'detectadas'  => $aud['detectadas'] ?? 0,
+                'resumen'     => $aud['resumen'] ?? [],
+                'contadores'  => $this->service->getContadores($idEmpresa, $c['fecha_desde'], $c['fecha_hasta']),
+            ]]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
 }

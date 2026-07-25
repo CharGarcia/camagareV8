@@ -252,33 +252,160 @@
         });
     }
 
-    // ---- Regeneración masiva ----
-    function confirmarRegenerar() {
+    // ---- Regeneración masiva (por lotes) ----
+    //  Una corrida grande no cabe en una sola petición, así que el navegador encadena
+    //  lotes contra el servidor y va mostrando el avance. El servidor lleva el estado
+    //  de la corrida en sesión; aquí solo se pide «el siguiente lote de este origen».
+
+    /** Pinta el progreso: paso actual, porcentaje y bitácora. */
+    const regProgreso = {
+        mostrar() { document.getElementById('regProgresoBox')?.classList.remove('d-none'); },
+        paso(txt) {
+            const el = document.getElementById('regProgresoPaso');
+            if (el) el.textContent = txt;
+        },
+        porcentaje(hechos, total) {
+            const pct = total > 0 ? Math.min(100, Math.round((hechos / total) * 100)) : 100;
+            const barra = document.getElementById('regProgresoBarra');
+            const txt = document.getElementById('regProgresoPct');
+            if (barra) barra.style.width = pct + '%';
+            if (txt) txt.textContent = pct + '%';
+        },
+        log(linea, clase) {
+            const caja = document.getElementById('regProgresoLog');
+            if (!caja) return;
+            const div = document.createElement('div');
+            if (clase) div.className = clase;
+            div.textContent = linea;
+            caja.appendChild(div);
+            caja.scrollTop = caja.scrollHeight;
+        },
+        limpiar() {
+            const caja = document.getElementById('regProgresoLog');
+            if (caja) caja.innerHTML = '';
+            this.porcentaje(0, 1);
+        },
+    };
+
+    /** Encadena los lotes de un origen hasta que no queden asientos por rehacer. */
+    async function regenerarOrigen(item, avance) {
+        let restantes = item.pendientes;
+        let anulados = 0;
+        let fallidos = 0;
+        // Tope de vueltas: si un lote dejara de avanzar, se corta en vez de girar sin fin.
+        const maxVueltas = Math.ceil(item.pendientes / (avance.lote || 25)) + 5;
+
+        for (let i = 0; i < maxVueltas && restantes > 0; i++) {
+            const res = await postForm('regenerarLoteAjax', { origen: item.origen });
+            if (!res.ok) {
+                regProgreso.log('✗ ' + item.label + ': ' + res.error, 'text-danger');
+                return;
+            }
+            const d = res.data;
+            anulados += d.anulados;
+            fallidos += d.errores;
+            avance.hechos += d.anulados;
+            regProgreso.porcentaje(avance.hechos, avance.total);
+            (d.mensajes || []).forEach((m) => regProgreso.log('  ⚠ ' + m, 'text-warning'));
+
+            if (d.procesados === 0 && d.anulados === 0) break;
+            restantes = d.restantes;
+        }
+        regProgreso.log('✓ ' + item.label + ': ' + anulados + ' asiento(s) rehecho(s)'
+            + (fallidos ? ' — ' + fallidos + ' con error' : '')
+            + (item.cerrados ? ' — ' + item.cerrados + ' omitido(s) por período cerrado' : ''));
+    }
+
+    async function correrRegeneracion() {
         const origen = document.getElementById('regOrigen').value;
         const desde = document.getElementById('regDesde').value;
         const hasta = document.getElementById('regHasta').value;
+        const conFaltantes = document.getElementById('regFaltantes')?.checked;
         const btn = document.getElementById('btnConfirmarRegenerar');
+        const btnCerrar = document.getElementById('btnCerrarRegenerar');
+
+        btn.disabled = true;
+        btnCerrar.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Procesando…';
+        regProgreso.mostrar();
+        regProgreso.limpiar();
+        regProgreso.paso('Calculando el alcance…');
+
+        try {
+            const plan = await postForm('planRegeneracionAjax', {
+                origen,
+                fecha_desde: fechaCompleta(desde) ? desde : '',
+                fecha_hasta: fechaCompleta(hasta) ? hasta : '',
+            });
+            if (!plan.ok) { err(plan.error); return; }
+
+            const d = plan.data;
+            const avance = { hechos: 0, total: Math.max(1, d.total), lote: d.lote };
+            regProgreso.log('Alcance: ' + d.total + ' asiento(s) a rehacer'
+                + (d.cerrados ? ', ' + d.cerrados + ' omitido(s) por período cerrado' : ''));
+
+            const pendientes = d.origenes.filter((o) => o.pendientes > 0);
+            for (let i = 0; i < pendientes.length; i++) {
+                const item = pendientes[i];
+                regProgreso.paso(`(${i + 1}/${pendientes.length}) ${item.label} — ${item.pendientes} asiento(s)`);
+                await regenerarOrigen(item, avance);
+            }
+
+            if (conFaltantes) {
+                regProgreso.paso('Generando los asientos faltantes…');
+                const f = await postForm('generarFaltantesAjax', {});
+                if (f.ok) {
+                    regProgreso.log('✓ Faltantes generados: ' + f.data.generados);
+                    (f.data.avisos || []).forEach((a) => regProgreso.log('  ⚠ ' + a, 'text-warning'));
+                } else {
+                    regProgreso.log('✗ Faltantes: ' + f.error, 'text-danger');
+                }
+            }
+
+            regProgreso.paso('Verificando con la auditoría…');
+            const fin = await postForm('finalizarRegeneracionAjax', {});
+            if (!fin.ok) { err(fin.error); return; }
+
+            const t = fin.data;
+            regProgreso.porcentaje(1, 1);
+            regProgreso.paso('Terminado');
+            actualizarResumen(t.resumen);
+            actualizarContadores(t.contadores);
+            fetchSearch(1);
+
+            Swal.fire({
+                icon: t.errores > 0 ? 'warning' : 'success',
+                title: t.errores > 0 ? 'Regeneración con avisos' : 'Regeneración terminada',
+                html: `Asientos anulados: <strong>${t.anulados}</strong><br>`
+                    + `Asientos regenerados: <strong>${t.regenerados}</strong><br>`
+                    + `Faltantes generados: <strong>${t.faltantes}</strong><br>`
+                    + `Omitidos por período cerrado: <strong>${t.omitidos}</strong><br>`
+                    + (t.errores > 0 ? `Con error: <strong class="text-danger">${t.errores}</strong><br>` : '')
+                    + `<hr class="my-2">Incidencias detectadas ahora: <strong>${t.detectadas}</strong>`,
+            });
+        } catch (e) {
+            err(e.message);
+        } finally {
+            btn.disabled = false;
+            btnCerrar.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Regenerar';
+        }
+    }
+
+    function confirmarRegenerar() {
+        const sel = document.getElementById('regOrigen');
+        const todos = sel.value === '__todos__';
         Swal.fire({
-            title: '¿Regenerar asientos?',
-            html: 'Se <strong>anularán</strong> los asientos del origen y se <strong>volverán a generar</strong>.<br>Los de períodos cerrados se omiten.',
+            title: todos ? '¿Regenerar toda la contabilidad?' : '¿Regenerar asientos?',
+            html: (todos
+                    ? 'Se <strong>anularán y volverán a generar</strong> los asientos de <strong>todos los módulos</strong> con la configuración contable actual.'
+                    : 'Se <strong>anularán</strong> los asientos de «' + sel.options[sel.selectedIndex].text + '» y se <strong>volverán a generar</strong>.')
+                + '<br><br><span class="small text-muted">No se tocan los asientos de <strong>tipo Diario</strong> '
+                + '(manuales y de activos fijos), los de la migración ni los de períodos cerrados. '
+                + 'Los comprobantes se renumeran.</span>',
             icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Sí, regenerar',
         }).then((r) => {
-            if (!r.isConfirmed) return;
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Procesando…';
-            postForm('regenerarMasivoAjax', { origen, fecha_desde: desde, fecha_hasta: hasta })
-                .then((res) => {
-                    if (res.ok) {
-                        bootstrap.Modal.getInstance(document.getElementById('modalRegenerar')).hide();
-                        Swal.fire('Listo', res.mensaje, 'success');
-                        fetchSearch(1);
-                    } else err(res.error);
-                })
-                .catch((e) => err(e.message))
-                .finally(() => {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Regenerar';
-                });
+            if (r.isConfirmed) correrRegeneracion();
         });
     }
 
@@ -287,6 +414,13 @@
         document.getElementById('btnEjecutarAuditoria')?.addEventListener('click', ejecutarAuditoria);
         document.getElementById('btnGuardarRevision')?.addEventListener('click', guardarRevision);
         document.getElementById('btnConfirmarRegenerar')?.addEventListener('click', confirmarRegenerar);
+
+        // Al reabrir el modal, el progreso de la corrida anterior no debe seguir a la vista.
+        document.getElementById('modalRegenerar')?.addEventListener('show.bs.modal', () => {
+            document.getElementById('regProgresoBox')?.classList.add('d-none');
+            regProgreso.limpiar();
+            regProgreso.paso('Preparando…');
+        });
 
         document.getElementById('audPrev')?.addEventListener('click', () => fetchSearch(state.page - 1));
         document.getElementById('audNext')?.addEventListener('click', () => fetchSearch(state.page + 1));

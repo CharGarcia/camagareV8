@@ -27,6 +27,24 @@ class AuditoriaContableRepository extends BaseRepository
     private const AMB = "(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
     /**
+     * Candado de la regeneración: NUNCA se tocan los asientos de tipo Diario.
+     * Ahí viven los asientos manuales del usuario (modulo_origen='manual') y los de
+     * activos fijos/depreciación, que no se rehacen desde un documento de origen.
+     * Los orígenes regenerables usan tipo_comprobante 'ventas','compras','ingresos',
+     * 'egresos','consignacion','retorno_consignacion', nunca 'diario'.
+     * Requiere que la tabla de asientos venga con el alias `a`.
+     */
+    private const SQL_NO_DIARIO = "LOWER(COALESCE(a.tipo_comprobante, '')) <> 'diario'";
+
+    /**
+     * ¿El asiento cae dentro de un período contable cerrado (status = 0)? Salvaguarda
+     * usada al anular/regenerar. Usa el placeholder :id_empresa y el alias `a`.
+     */
+    private const SQL_EN_PERIODO_CERRADO = "EXISTS (SELECT 1 FROM periodos_contables pc
+                    WHERE pc.id_empresa = :id_empresa AND pc.eliminado = false AND pc.status = 0
+                      AND a.fecha_asiento BETWEEN pc.fecha_inicial AND pc.fecha_final)";
+
+    /**
      * Configuración de los orígenes auditables. La clave es el `modulo_origen`
      * tal como lo graban los Services al crear el asiento.
      *
@@ -1166,26 +1184,89 @@ class AuditoriaContableRepository extends BaseRepository
     /**
      * Asientos vivos de un origen en el ambiente activo, opcionalmente acotados
      * por rango de fecha_asiento. Devuelve id, id_referencia_origen y fecha.
+     *
+     * @param int|null $limite Si se indica, devuelve como mucho esa cantidad y EXCLUYE en SQL
+     *                         los asientos de períodos cerrados. Es el modo «por lotes»: como
+     *                         cada lote anula lo que procesa, la siguiente llamada trae los
+     *                         siguientes; excluir los cerrados evita que queden dando vueltas
+     *                         para siempre (bucle infinito) al no poder anularse nunca.
+     * @param int|null $idMaximo Tope de id (cursor de la corrida). Los asientos REGENERADOS
+     *                         reciben ids nuevos (mayores); sin este tope volverían a entrar
+     *                         en el siguiente lote y la corrida no terminaría nunca.
      */
-    public function getAsientosDeOrigen(int $idEmpresa, string $origen, ?string $fechaDesde, ?string $fechaHasta): array
+    public function getAsientosDeOrigen(int $idEmpresa, string $origen, ?string $fechaDesde, ?string $fechaHasta, ?int $limite = null, ?int $idMaximo = null): array
     {
         $amb = self::AMB;
         $params = [':id_empresa' => $idEmpresa];
         $rango = '';
-        if ($fechaDesde !== null) { $rango .= " AND fecha_asiento >= :fd"; $params[':fd'] = $fechaDesde; }
-        if ($fechaHasta !== null) { $rango .= " AND fecha_asiento <= :fh"; $params[':fh'] = $fechaHasta; }
+        if ($fechaDesde !== null) { $rango .= " AND a.fecha_asiento >= :fd"; $params[':fd'] = $fechaDesde; }
+        if ($fechaHasta !== null) { $rango .= " AND a.fecha_asiento <= :fh"; $params[':fh'] = $fechaHasta; }
+        if ($idMaximo !== null)   { $rango .= " AND a.id <= :idmax";        $params[':idmax'] = $idMaximo; }
+
+        $extra = '';
+        if ($limite !== null) {
+            $extra = ' AND NOT ' . self::SQL_EN_PERIODO_CERRADO
+                   . ' ORDER BY a.id LIMIT ' . max(1, $limite);
+        }
 
         // Los documentos migrados desde MySQL nunca se regeneran: su contabilidad
         // viene del histórico migrado (mismo criterio que SincronizadorAsientosService).
-        $sql = "SELECT id, id_referencia_origen, fecha_asiento
-                FROM asientos_contables_cabecera
-                WHERE id_empresa = :id_empresa
-                  AND eliminado = false
-                  AND modulo_origen = '{$origen}'
-                  AND CAST(tipo_ambiente AS VARCHAR(1)) = {$amb}
+        $sql = "SELECT a.id, a.id_referencia_origen, a.fecha_asiento
+                FROM asientos_contables_cabecera a
+                WHERE a.id_empresa = :id_empresa
+                  AND a.eliminado = false
+                  AND a.modulo_origen = '{$origen}'
+                  AND " . self::SQL_NO_DIARIO . "
+                  AND CAST(a.tipo_ambiente AS VARCHAR(1)) = {$amb}
                   {$rango}"
-             . $this->sqlExcluirMigrados($origen, 'id_referencia_origen');
+             . $this->sqlExcluirMigrados($origen, 'a.id_referencia_origen')
+             . $extra;
         return $this->ejecutar($sql, $params);
+    }
+
+    /**
+     * Cuenta los asientos que una regeneración de este origen tocaría, separando los que
+     * quedarán fuera por caer en un período contable cerrado. Sirve para dimensionar la
+     * corrida (barra de progreso) sin traer todas las filas.
+     *
+     * @return array{pendientes:int, cerrados:int}
+     */
+    public function contarAsientosDeOrigen(int $idEmpresa, string $origen, ?string $fechaDesde, ?string $fechaHasta, ?int $idMaximo = null): array
+    {
+        $amb = self::AMB;
+        $params = [':id_empresa' => $idEmpresa];
+        $rango = '';
+        if ($fechaDesde !== null) { $rango .= " AND a.fecha_asiento >= :fd"; $params[':fd'] = $fechaDesde; }
+        if ($fechaHasta !== null) { $rango .= " AND a.fecha_asiento <= :fh"; $params[':fh'] = $fechaHasta; }
+        if ($idMaximo !== null)   { $rango .= " AND a.id <= :idmax";        $params[':idmax'] = $idMaximo; }
+
+        $sql = "SELECT COUNT(*) AS total,
+                       COUNT(*) FILTER (WHERE " . self::SQL_EN_PERIODO_CERRADO . ") AS cerrados
+                FROM asientos_contables_cabecera a
+                WHERE a.id_empresa = :id_empresa
+                  AND a.eliminado = false
+                  AND a.modulo_origen = '{$origen}'
+                  AND " . self::SQL_NO_DIARIO . "
+                  AND CAST(a.tipo_ambiente AS VARCHAR(1)) = {$amb}
+                  {$rango}"
+             . $this->sqlExcluirMigrados($origen, 'a.id_referencia_origen');
+
+        $row = $this->ejecutar($sql, $params)[0] ?? ['total' => 0, 'cerrados' => 0];
+        $cerrados = (int) $row['cerrados'];
+
+        return ['pendientes' => (int) $row['total'] - $cerrados, 'cerrados' => $cerrados];
+    }
+
+    /**
+     * Mayor id de asiento existente en la empresa. Se toma como «foto» al arrancar una
+     * regeneración: solo se rehacen los asientos anteriores a ese id, de modo que los que
+     * la propia corrida genera (ids nuevos) no vuelvan a entrar en los lotes siguientes.
+     */
+    public function getMaxIdAsiento(int $idEmpresa): int
+    {
+        $st = $this->db->prepare("SELECT COALESCE(MAX(id), 0) FROM asientos_contables_cabecera WHERE id_empresa = ?");
+        $st->execute([$idEmpresa]);
+        return (int) $st->fetchColumn();
     }
 
     /**

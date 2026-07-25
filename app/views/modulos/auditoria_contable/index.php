@@ -314,11 +314,13 @@ $totalIncidencias = array_sum($resumen);
                 <div class="alert alert-warning small">
                     <i class="bi bi-exclamation-triangle me-1"></i>
                     Esta acción <strong>anula</strong> los asientos del origen elegido y los <strong>vuelve a generar</strong> con la configuración actual.
-                    No se tocan los asientos de períodos contables cerrados.
+                    No se tocan los asientos de períodos contables cerrados, los de la migración,
+                    ni los de <strong>tipo Diario</strong> (asientos manuales y de activos fijos).
                 </div>
                 <div class="mb-2">
                     <label class="form-label small fw-semibold">Origen</label>
                     <select id="regOrigen" class="form-select form-select-sm">
+                        <option value="__todos__">Toda la contabilidad (todos los orígenes, excepto Diario)</option>
                         <?php foreach (($origenesRegenerables ?? $origenes) as $o): ?>
                             <option value="<?= htmlspecialchars($o) ?>"><?= htmlspecialchars($origenLabels[$o] ?? $o) ?></option>
                         <?php endforeach; ?>
@@ -335,9 +337,30 @@ $totalIncidencias = array_sum($resumen);
                         <input type="date" id="regHasta" class="form-control form-control-sm">
                     </div>
                 </div>
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" id="regFaltantes" checked>
+                    <label class="form-check-label small" for="regFaltantes">
+                        Al terminar, generar también los asientos <strong>faltantes</strong>
+                        (documentos vigentes que nunca tuvieron asiento)
+                    </label>
+                </div>
+
+                <!-- Progreso de la corrida (se muestra al ejecutar) -->
+                <div id="regProgresoBox" class="mt-3 d-none">
+                    <div class="d-flex justify-content-between align-items-center small fw-semibold mb-1">
+                        <span id="regProgresoPaso" class="text-muted">Preparando…</span>
+                        <span id="regProgresoPct" class="text-muted">0%</span>
+                    </div>
+                    <div class="progress" style="height:8px">
+                        <div id="regProgresoBarra" class="progress-bar progress-bar-striped progress-bar-animated bg-danger"
+                             role="progressbar" style="width:0%"></div>
+                    </div>
+                    <div id="regProgresoLog" class="border rounded-3 bg-light mt-2 p-2 small text-muted"
+                         style="max-height:180px;overflow:auto;font-family:monospace;font-size:.72rem"></div>
+                </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnCerrarRegenerar" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" id="btnConfirmarRegenerar" class="btn btn-danger btn-sm"><i class="bi bi-arrow-repeat me-1"></i>Regenerar</button>
             </div>
         </div>
