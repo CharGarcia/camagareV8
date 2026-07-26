@@ -187,7 +187,9 @@ class MigrarMysqlController extends Controller
         try {
             [$idEmpresa] = $this->resolverEmpresa();
             $entidades = $this->entidadesPost();
-            $data = $this->service->contarDestinoNoMigrado($entidades, $idEmpresa);
+            $desde = !empty($_POST['desde']) ? (string) $_POST['desde'] : null;
+            $hasta = !empty($_POST['hasta']) ? (string) $_POST['hasta'] : null;
+            $data = $this->service->contarDestinoNoMigrado($entidades, $idEmpresa, $desde, $hasta);
             echo json_encode(['ok' => true, 'data' => $data], JSON_UNESCAPED_UNICODE);
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_UNESCAPED_UNICODE);

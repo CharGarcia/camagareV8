@@ -82,4 +82,25 @@ class ContadoresController extends Controller
             $this->json(['ok' => true]);
         }
     }
+
+    /**
+     * POST /contadores/marcarTodosSubmodulosVistosAjax — botón "Marcar todos como
+     * vistos" del modal de avisos. Nunca debe romper la página.
+     */
+    public function marcarTodosSubmodulosVistosAjax(): void
+    {
+        $this->requireAuth();
+
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+
+        try {
+            if ($idUsuario > 0 && $idEmpresa > 0) {
+                (new PermisoSubmodulo())->marcarTodosSubmodulosVistos($idUsuario, $idEmpresa);
+            }
+            $this->json(['ok' => true]);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => true]);
+        }
+    }
 }

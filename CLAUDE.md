@@ -111,6 +111,11 @@ eliminado (boolean), deleted_at, deleted_by
   - Nivel 3 (super admin) siempre ve todo.
 - Seguridad técnica obligatoria: contraseñas con `password_hash`, **consultas preparadas (PDO)**, **CSRF**, validación de sesiones, control de acceso por middleware.
 
+**CSRF (ya implementado, no reinventar)**
+- Validación **centralizada** en `Application::run()`; el token lo inyecta `app/views/partials/csrf.php` (incluido en `partials/head.php`) y lo adjunta solo `public/js/csrf.js`, que envuelve `fetch`, `XMLHttpRequest` y los formularios. **Un módulo con layout estándar no debe hacer nada.**
+- **Única regla a recordar**: si la vista es *standalone* (arma su propio `<head>` sin `partials/head.php`, como POS, KDS, mesas o comandas), añadir dentro de su `<head>`: `<?php require MVC_APP . "/views/partials/csrf.php"; ?>`. Sin eso, sus peticiones se rechazan con HTTP 419.
+- Modo en `config/app.php` → `security.csrf` (`log` | `enforce` | `off`). Detalle en `SEGURIDAD_FASE3.md`.
+
 **Piezas reutilizables (usarlas, no reinventar)**
 - `app/controllers/modulos/BaseModuloController.php`: clase base de todo controlador de módulo. Implementar `getRutaModulo()` y usar `requireLeer()` / `requireCrear()` / `requireActualizar()` / `requireEliminar()`.
 - `app/Traits/PermisoModuloTrait.php`: resuelve permisos por ruta y empresa.

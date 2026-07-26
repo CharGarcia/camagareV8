@@ -64,6 +64,7 @@ $fmtFecha = static function ($v): string {
 <html lang="es">
 <head>
     <meta charset="utf-8">
+    <?php require MVC_APP . "/views/partials/csrf.php"; ?>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= htmlspecialchars($titulo) ?> | CaMaGaRe</title>
     <link rel="shortcut icon" type="image/png" href="<?= $base ?>/image/logofinal.png">

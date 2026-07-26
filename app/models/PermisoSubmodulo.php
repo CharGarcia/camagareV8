@@ -516,4 +516,42 @@ class PermisoSubmodulo extends BaseModel
         $this->invalidarAvisoNuevo($idU, $idE);
         return $ok;
     }
+
+    /**
+     * Marca TODOS los submódulos "nuevos" pendientes de un usuario+empresa como
+     * vistos de una sola vez (botón "Marcar todos como vistos" del navbar). Idempotente.
+     */
+    public function marcarTodosSubmodulosVistos(int $idUsuario, int $idEmpresa): bool
+    {
+        $idU = (int) $idUsuario;
+        $idE = (int) $idEmpresa;
+        if ($idU <= 0 || $idE <= 0) return false;
+
+        $queries = [
+            "INSERT INTO submodulos_vistos (id_usuario, id_empresa, id_submodulo)
+                SELECT ma.id_usuario, ma.id_empresa, ma.id_submodulo
+                FROM modulos_asignados ma
+                INNER JOIN submodulos_menu sm ON sm.id_submodulo = ma.id_submodulo AND COALESCE(sm.status, 1) = 1
+                LEFT JOIN submodulos_vistos sv ON sv.id_usuario = ma.id_usuario AND sv.id_empresa = ma.id_empresa AND sv.id_submodulo = ma.id_submodulo
+                WHERE ma.id_usuario = {$idU} AND ma.id_empresa = {$idE} AND COALESCE(ma.r, 0) = 1 AND sv.id_submodulo IS NULL
+                ON CONFLICT (id_usuario, id_empresa, id_submodulo) DO NOTHING",
+            "INSERT INTO submodulos_vistos (id_usuario, id_empresa, id_submodulo)
+                SELECT ma.id_usuario, ma.id_empresa, ma.id_submodulo
+                FROM modulos_asignados ma
+                INNER JOIN submodulos_menu sm ON sm.id = ma.id_submodulo AND COALESCE(sm.status, 1) = 1
+                LEFT JOIN submodulos_vistos sv ON sv.id_usuario = ma.id_usuario AND sv.id_empresa = ma.id_empresa AND sv.id_submodulo = ma.id_submodulo
+                WHERE ma.id_usuario = {$idU} AND ma.id_empresa = {$idE} AND COALESCE(ma.r, 0) = 1 AND sv.id_submodulo IS NULL
+                ON CONFLICT (id_usuario, id_empresa, id_submodulo) DO NOTHING",
+        ];
+        foreach ($queries as $sql) {
+            try {
+                $this->execute($sql);
+                $this->invalidarAvisoNuevo($idU, $idE);
+                return true;
+            } catch (\Throwable $e) {
+                continue;
+            }
+        }
+        return false;
+    }
 }

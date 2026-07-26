@@ -87,6 +87,32 @@ Factura.xml
 public/migrar_*.php
 public/check.php
 
+# SEGURIDAD: todo .php suelto en public/ es una URL pública en producción
+# (el docroot es /var/www/sistema/public). Los scripts de diagnóstico que se
+# dejen ahí quedan expuestos a internet sin autenticación: no se versionan y
+# se borran del servidor apenas se usan.
+public/get_*.php
+public/schema*.php
+public/kill_*.php
+public/update_db*.php
+public/migracion.php
+public/log_*.php
+public/test-*.php
+public/tmp_*.php
+public/probar_*.php
+public/ver_*.php
+# Mismos patrones en la raíz del proyecto (por si el docroot se apunta mal).
+# Anclados con "/" para que NO afecten a app/, config/ ni otras carpetas.
+/get_*.php
+/schema*.php
+/kill_*.php
+/run_sql*.php
+/scratch*.php
+/explore_*.php
+/zmod*.php
+/test.php
+/composer-setup.php
+
 # Paquete generado de la extensión para la Chrome Web Store (artefacto, no se versiona)
 extension-store.zip
 _pkg/

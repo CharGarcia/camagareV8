@@ -128,7 +128,19 @@ class EmpresaService
         // Manejar subida de logo
         if (!empty($files['logo_establecimiento']) && $files['logo_establecimiento']['error'] === UPLOAD_ERR_OK) {
             $file = $files['logo_establecimiento'];
-            $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+
+            // El destino está dentro de public/: sin lista blanca, un archivo
+            // .php subido aquí quedaría accesible por URL y el servidor lo
+            // ejecutaría. Mismo criterio que productos y menú.
+            $permitidas = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+            if (!in_array($ext, $permitidas, true)) {
+                throw new \Exception('Formato de logo no permitido. Use JPG, PNG, GIF o WEBP.');
+            }
+            if ($file['size'] > 2 * 1024 * 1024) {
+                throw new \Exception('El logo excede los 2MB.');
+            }
+
             $dir = MVC_ROOT . "/public/uploads/logos/empresa_{$idEmpresa}";
             if (!is_dir($dir)) mkdir($dir, 0755, true);
             

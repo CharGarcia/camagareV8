@@ -99,6 +99,13 @@ class MigracionMysqlService
      */
     public function migrar(string $entidad, int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
+        // ANTES de cualquier reconciliación/salto por mapa: sana las entradas COLGADAS del mapa
+        // (documentos que el mapa dice migrados pero cuya fila destino ya no existe, borrada por
+        // fuera). Sin esto, la re-corrida los da por "ya migrados" y NUNCA los re-inserta → el
+        // módulo queda vacío aunque el resumen diga que sí los trae. Cubre TODAS las entidades
+        // (documentos y catálogos) porque el bug aplica a cualquier reconcile/yaMigradoDoc/$done.
+        $this->purgarMapaColgado(Database::getConnection(), $idEmpresa, $entidad);
+
         switch ($entidad) {
             case 'plan_cuentas':
                 return $this->migrarPlanCuentasEntidad($idEmpresa, $ruc, $idUsuario);
@@ -234,21 +241,28 @@ class MigracionMysqlService
      * @param string[] $entidades
      * @return array<string,array{label:string,nativos:int}>
      */
-    public function contarDestinoNoMigrado(array $entidades, int $idEmpresa): array
+    public function contarDestinoNoMigrado(array $entidades, int $idEmpresa, ?string $desde = null, ?string $hasta = null): array
     {
         $pg = Database::getConnection();
+        [$desde, $hasta] = [self::fechaNz($desde), self::fechaNz($hasta)];
         $out = [];
         foreach ($entidades as $ent) {
             if (!isset(self::DESTINO_TABLA[$ent]) || !isset(self::ENTIDADES[$ent])) { continue; }
             $tabla = self::DESTINO_TABLA[$ent];
             $label = self::ENTIDADES[$ent]['label'] ?? $ent;
+            // El rango de fechas solo aplica a documentos (tienen columna de fecha); los catálogos se
+            // migran completos, así que su aviso ignora el rango.
+            [, $fcol] = $this->cabFecha($ent);
+            $castDate = ($fcol === 'fecha_movimiento');
             if ($ent === 'contabilidad') {
-                $st = $pg->prepare("SELECT COUNT(*) FROM asientos_contables_cabecera WHERE id_empresa = ? AND eliminado = false AND modulo_origen <> 'migracion'");
-                $st->execute([$idEmpresa]);
+                [$cond, $params] = $this->condFecha('fecha_asiento', $desde, $hasta, false);
+                $st = $pg->prepare("SELECT COUNT(*) FROM asientos_contables_cabecera WHERE id_empresa = ? AND eliminado = false AND modulo_origen <> 'migracion'" . $cond);
+                $st->execute(array_merge([$idEmpresa], $params));
             } else {
+                [$cond, $params] = $fcol ? $this->condFecha('t.' . $fcol, $desde, $hasta, $castDate) : ['', []];
                 $st = $pg->prepare("SELECT COUNT(*) FROM $tabla t WHERE t.id_empresa = ? AND t.eliminado = false
-                    AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map m WHERE m.id_empresa = t.id_empresa AND m.entidad = ? AND m.id_destino = t.id)");
-                $st->execute([$idEmpresa, $ent]);
+                    AND NOT EXISTS (SELECT 1 FROM migracion_mysql_map m WHERE m.id_empresa = t.id_empresa AND m.entidad = ? AND m.id_destino = t.id)" . $cond);
+                $st->execute(array_merge([$idEmpresa, $ent], $params));
             }
             $n = (int) $st->fetchColumn();
             if ($n > 0) { $out[$ent] = ['label' => $label, 'nativos' => $n]; }
@@ -3523,6 +3537,25 @@ class MigracionMysqlService
             $m[(string) $r['id_origen']] = (int) $r['id_destino'];
         }
         return $m;
+    }
+
+    /**
+     * Purga del mapa las entradas COLGADAS: aquellas cuyo documento destino ya NO existe físicamente
+     * (fue borrado por fuera de esta herramienta, dejando el mapa apuntando a la nada). Sin esto, la
+     * reconciliación de la re-corrida cree que el documento "ya está migrado" (lo cuenta en
+     * ya_migrados) y NUNCA lo vuelve a insertar → el usuario ve "sí las trae" pero el módulo queda
+     * vacío. Al purgar, esos documentos caen en la rama de inserción y se recrean. Devuelve cuántas
+     * entradas colgadas se limpiaron. Debe llamarse ANTES de armar el mapa de reconciliación.
+     */
+    private function purgarMapaColgado(PDO $pg, int $idEmpresa, string $entidad): int
+    {
+        $tabla = self::DESTINO_TABLA[$entidad] ?? null;
+        if ($tabla === null) { return 0; }
+        $st = $pg->prepare("DELETE FROM migracion_mysql_map m
+             WHERE m.id_empresa = ? AND m.entidad = ?
+               AND NOT EXISTS (SELECT 1 FROM $tabla t WHERE t.id = m.id_destino)");
+        $st->execute([$idEmpresa, $entidad]);
+        return $st->rowCount();
     }
 
     private function estadoFacturaSri(string $e): string

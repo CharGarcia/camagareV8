@@ -26,6 +26,11 @@ class Application
         $controller = $dispatch['controller'];
         $action = $dispatch['action'];
 
+        // Cabeceras de seguridad (clickjacking, sniffing, CSP, HSTS). Antes de
+        // cualquier salida y con el controlador ya resuelto, porque el portal de
+        // reservas es la única ruta que sí debe poder incrustarse en otra web.
+        \App\Helpers\CabecerasSeguridad::aplicar($controller, $this->config);
+
         // La API móvil (/api/v1/*) es stateless: no usa cookie de sesión de navegador.
         // $_SESSION se rellena por request a partir del JWT (ver ApiAuthMiddleware) y
         // no se persiste entre requests.
@@ -61,7 +66,9 @@ class Application
                 'lifetime' => $lifetime,
                 'path' => '/',
                 'domain' => '',
-                'secure' => false,
+                // Bajo HTTPS la cookie se marca Secure para que nunca viaje en
+                // claro; en desarrollo (HTTP) queda en false o no habría sesión.
+                'secure' => \App\Helpers\CabecerasSeguridad::esHttps(),
                 'httponly' => true,
                 'samesite' => 'Lax',
             ]);
@@ -102,6 +109,36 @@ class Application
             $loginUrl = $base === '' ? '/' : $base . '/';
             header('Location: ' . $loginUrl);
             exit;
+        }
+
+        // ── Protección CSRF ──────────────────────────────────────────────────
+        // Punto único de validación para todo el sistema: los módulos no hacen
+        // nada, el token lo inyecta public/js/csrf.js en fetch, XHR y formularios.
+        // Quedan fuera los controladores públicos (sus vistas no cargan el layout
+        // que inyecta el token) y /api/v1/*, que es stateless con Bearer JWT.
+        //
+        // Modo en config/app.php → security.csrf:
+        //   'log'      registra en storage/logs/csrf.log lo que se habría rechazado
+        //   'enforce'  rechaza de verdad
+        //   'off'      desactivado
+        //
+        // 'Auth' es público para la AUTENTICACIÓN (hay que poder llegar al login
+        // sin sesión), pero NO está exento de CSRF: sus tres vistas —login,
+        // confirmación de usuario y cambio de contraseña— sí cargan el token.
+        // Proteger el login evita que una web maliciosa fuerce a la víctima a
+        // iniciar sesión con la cuenta del atacante.
+        $csrfExentos = array_values(array_diff($publicControllers, ['Auth']));
+
+        $modoCsrf = (string) ($this->config['security']['csrf'] ?? 'log');
+        if ($modoCsrf !== 'off'
+            && !$esAccionPublica
+            && \App\Helpers\Csrf::requiereValidacion($controller, $csrfExentos)
+            && !\App\Helpers\Csrf::validar(\App\Helpers\Csrf::tokenDePeticion())
+        ) {
+            \App\Helpers\Csrf::registrarFallo($controller, $action);
+            if ($modoCsrf === 'enforce') {
+                \App\Helpers\Csrf::rechazar();
+            }
         }
 
         $controllerName = 'App\\controllers\\' . $controller . 'Controller';

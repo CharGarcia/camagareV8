@@ -6,6 +6,7 @@ $base = BASE_URL;
 <html lang="es">
 <head>
     <meta charset="utf-8">
+    <?php require MVC_APP . "/views/partials/csrf.php"; ?>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Iniciar sesión | CaMaGaRe ERP</title>
     <link rel="shortcut icon" type="image/png" href="<?= rtrim(BASE_URL ?? '', '/') ?>/image/logofinal.png">
@@ -30,6 +31,12 @@ $base = BASE_URL;
             <?php if ($error === '2'): ?>
             <div class="alert alert-warning py-2" role="alert">
                 El usuario no tiene empresas asignadas.
+            </div>
+            <?php endif; ?>
+            <?php if ($error === '3'): ?>
+            <div class="alert alert-warning py-2 d-flex align-items-center gap-2" role="alert">
+                <i class="bi bi-shield-lock-fill"></i>
+                <?= htmlspecialchars(urldecode($_GET['msg'] ?? 'Demasiados intentos fallidos. Espere unos minutos.')) ?>
             </div>
             <?php endif; ?>
             <?php if (!empty($_GET['sesion_cerrada'])): ?>

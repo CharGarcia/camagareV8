@@ -1,21 +1,59 @@
 <?php
 /**
- * Copiar a local.php en el servidor (no commitear local.php).
- * Sitio en la raíz del dominio / IP (ej. http://143.110.158.101/):
+ * Configuración PROPIA DE ESTE SERVIDOR — copiar a config/local.php.
+ *
+ * config/local.php NO se versiona (está en .gitignore): es el único lugar
+ * donde deben vivir los secretos y los valores que cambian entre entornos.
+ * Lo que se ponga aquí sobrescribe a config/app.php.
+ *
+ * Prioridad: variable de entorno > config/local.php > config/app.php
+ *
+ * Incluir SOLO las claves que se quieran cambiar; el resto toma el valor por
+ * defecto (seguro) de config/app.php.
  */
+
 declare(strict_types=1);
 
 return [
+    // ── Rutas públicas ───────────────────────────────────────────────────────
+    // Sitio en la raíz del dominio (producción): ''.
+    // XAMPP en subcarpeta (desarrollo): '/sistema/public'.
     'base_url' => '',
 
-    // URL pública completa de la aplicación (con https:// y sin barra final).
-    // Se usa para construir URLs absolutas como el webhook de WhatsApp.
-    // Ej: 'https://www.camagare.com.ec'
+    // URL pública completa, con https:// y sin barra final. Se usa para armar
+    // URLs absolutas (webhook de WhatsApp, correos, enlaces de aceptación).
     'app_url'  => 'https://www.camagare.com.ec',
 
-    // Secreto de firma HS256 para el access token (JWT) de la API móvil.
-    // Obligatorio para que /api/v1/* funcione. Mínimo 32 caracteres aleatorios.
-    // Generar uno nuevo por entorno (no reutilizar entre dev/producción) con:
+    // ── Base de datos ────────────────────────────────────────────────────────
+    // Alternativa a config/parametros.xml. Si ya usa parametros.xml, omita este
+    // bloque. Nunca escribir credenciales en config/database.php (va a Git).
+    // 'database' => [
+    //     'host' => '127.0.0.1',
+    //     'port' => 5432,
+    //     'user' => 'camagare',
+    //     'pass' => 'CAMBIAR_POR_LA_CONTRASENA_REAL',
+    //     'name' => 'camagare_v8',
+    // ],
+
+    // ── Secretos ─────────────────────────────────────────────────────────────
+    // Firma HS256 del access token (JWT) de la API móvil. Obligatorio para que
+    // /api/v1/* funcione. Mínimo 32 caracteres aleatorios, distinto por entorno:
     //   php -r "echo bin2hex(random_bytes(32));"
     'api_jwt_secret' => '',
+
+    // API key de 2captcha (reCAPTCHA del portal SRI). Vacío = función desactivada.
+    '2captcha_api_key' => '',
+
+    // ── Depuración (SOLO en entornos sin clientes) ───────────────────────────
+    // En producción deben quedar en false — muestran rutas, SQL y versiones.
+    // 'env'   => 'development',
+    // 'debug' => true,
+    // 'show_login_errors' => true,
+
+    // ── Correo ───────────────────────────────────────────────────────────────
+    // Solo si el SMTP local tiene un certificado que PHP no puede verificar
+    // (típico en XAMPP). En producción NO usar: desactiva la validación TLS.
+    // 'mail_smtp_options' => [
+    //     'ssl' => ['verify_peer' => false, 'verify_peer_name' => false],
+    // ],
 ];

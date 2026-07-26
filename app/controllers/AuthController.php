@@ -9,6 +9,7 @@ namespace App\controllers;
 
 use App\core\Controller;
 use App\models\Usuario;
+use App\Services\LoginRateLimitService;
 use App\Services\SesionActivaService;
 
 class AuthController extends Controller
@@ -43,13 +44,31 @@ class AuthController extends Controller
             $this->redirect(BASE_URL . '/?error=1');
         }
 
+        // Freno de fuerza bruta: se comprueba ANTES de tocar la contraseña, así un
+        // atacante bloqueado no consume ni una comparación de hash.
+        $rateLimit = new LoginRateLimitService();
+        $bloqueo   = $rateLimit->bloqueo($cedula);
+        if ($bloqueo !== null) {
+            $msg = $rateLimit->mensajeBloqueo($bloqueo);
+            if ($isAjax) {
+                header('Content-Type: application/json');
+                echo json_encode(['error' => 'bloqueado', 'msg' => $msg], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            $this->redirect(BASE_URL . '/?error=3&msg=' . urlencode($msg));
+        }
+
         $model = new Usuario();
         $user  = $model->validaLogin($cedula, $password);
 
         if (!$user) {
+            $rateLimit->registrarFallo($cedula);
             if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['error' => 'credenciales', 'msg' => 'Usuario o contraseña incorrectos.']); exit; }
             $this->redirect(BASE_URL . '/?error=1');
         }
+
+        // Credenciales correctas: pone el contador de fallos a cero y deja auditoría.
+        $rateLimit->registrarExito($cedula);
 
         // --- Control de sesiones concurrentes ---
         $sesionSvc = new SesionActivaService();

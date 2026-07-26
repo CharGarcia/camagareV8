@@ -613,6 +613,11 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <li class="list-group-item text-muted small text-center py-4">Sin novedades.</li>
                 </ul>
             </div>
+            <div class="modal-footer py-2 d-none" id="cmg-submod-nuevos-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="cmg-submod-nuevos-marcar-todos">
+                    <i class="bi bi-check2-all"></i> Marcar todos como vistos
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -846,11 +851,14 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
             }
 
             var lista_el = document.getElementById('cmg-submod-nuevos-list');
+            var footer_el = document.getElementById('cmg-submod-nuevos-footer');
             if (!lista_el) return;
             if (pendientes.length === 0) {
                 lista_el.innerHTML = '<li class="list-group-item text-muted small text-center py-4">Sin novedades.</li>';
+                if (footer_el) footer_el.classList.add('d-none');
                 return;
             }
+            if (footer_el) footer_el.classList.remove('d-none');
             var base = '<?= $base ?>';
             lista_el.innerHTML = pendientes.map(function(item) {
                 var href = String(item.ruta || '#');
@@ -870,6 +878,20 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
             var d = document.createElement('div');
             d.textContent = s == null ? '' : String(s);
             return d.innerHTML;
+        }
+
+        var btnMarcarTodosSubmod = document.getElementById('cmg-submod-nuevos-marcar-todos');
+        if (btnMarcarTodosSubmod) {
+            btnMarcarTodosSubmod.addEventListener('click', function() {
+                btnMarcarTodosSubmod.disabled = true;
+                fetch('<?= $base ?>/contadores/marcarTodosSubmodulosVistosAjax', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function() { window.CMG_refreshContadores(); })
+                .catch(function() {})
+                .finally(function() { btnMarcarTodosSubmod.disabled = false; });
+            });
         }
 
         // Compatibilidad: las funciones antiguas ahora refrescan TODO vía el endpoint unificado.

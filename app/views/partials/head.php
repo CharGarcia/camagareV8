@@ -12,6 +12,10 @@
     window.BASE_URL = '<?= rtrim(BASE_URL ?? '', '/') ?>';
     const BASE_URL = window.BASE_URL;
 </script>
+<!-- Token CSRF + interceptor. Va ANTES que cualquier otro script: envuelve
+     fetch/XHR y los formularios para que el token viaje solo. Si se cargara
+     después, las peticiones disparadas mientras tanto saldrían sin token. -->
+<?php require MVC_APP . '/views/partials/csrf.php'; ?>
 <link href="<?= rtrim(BASE_URL ?? '', '/') ?>/css/app.css?v=<?= time() ?>" rel="stylesheet">
 <link href="<?= rtrim(BASE_URL ?? '', '/') ?>/css/theme.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">

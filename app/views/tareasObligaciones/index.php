@@ -67,52 +67,58 @@ $tabActiva = in_array($tab, ['tareas', 'obligaciones', 'clientes'], true) ? $tab
 
     /* ── App-shell: propagar el alto por pestañas + marco hasta la tarjeta, para que
        la tabla ocupe TODO el ancho/alto disponible y SOLO ella tenga scroll vertical.
-       (Estos overrides solo aplican cuando el app-shell está activo.) ── */
-    body.cmg-has-table .tab-panel {
-        flex: 1 1 auto;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-    }
+       (Estos overrides solo aplican cuando el app-shell está activo.)
+       Solo desktop/tablet (≥768px): en móvil app.css resetea el contenedor padre a
+       flujo de bloque normal (ver app.css @media max-width:767.98px), y esta cascada
+       de flex + min-height:0 anidada, sin un alto de referencia que llenar, colapsaba
+       la caja de scroll de la tabla y el touch-scroll dejaba de funcionar por completo. ── */
+    @media (min-width: 768px) {
+        body.cmg-has-table .tab-panel {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
 
-    body.cmg-has-table .cmg-dashboard-frame {
-        flex: 1 1 auto;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-        /* borde a borde: el marco no debe insertar ni recuadrar la tabla */
-        border: 0;
-        border-radius: 0;
-        box-shadow: none;
-        background: transparent;
-        margin: 0;
-        padding: 0;
-    }
+        body.cmg-has-table .cmg-dashboard-frame {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            /* borde a borde: el marco no debe insertar ni recuadrar la tabla */
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+            background: transparent;
+            margin: 0;
+            padding: 0;
+        }
 
-    /* Los filtros quedan fijos (no se estiran ni scrollean) */
-    body.cmg-has-table .tareas-filtros {
-        flex-shrink: 0;
-    }
+        /* Los filtros quedan fijos (no se estiran ni scrollean) */
+        body.cmg-has-table .tareas-filtros {
+            flex-shrink: 0;
+        }
 
-    /* La tabla ocupa el alto restante de la tarjeta y es lo único que scrollea */
-    body.cmg-has-table .cmg-table-card > .table-scroll {
-        flex: 1 1 auto;
-        min-height: 0;
-    }
+        /* La tabla ocupa el alto restante de la tarjeta y es lo único que scrollea */
+        body.cmg-has-table .cmg-table-card > .table-scroll {
+            flex: 1 1 auto;
+            min-height: 0;
+        }
 
-    /* Pequeña sangría a los títulos de cada pestaña (la tabla sigue borde a borde) */
-    body.cmg-has-table .cmg-dashboard-frame > .d-flex,
-    body.cmg-has-table .cmg-dashboard-frame > p {
-        padding-left: 0.75rem;
-        padding-right: 0.75rem;
-    }
+        /* Pequeña sangría a los títulos de cada pestaña (la tabla sigue borde a borde) */
+        body.cmg-has-table .cmg-dashboard-frame > .d-flex,
+        body.cmg-has-table .cmg-dashboard-frame > p {
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
+        }
 
-    /* Sangría del encabezado (título + botón) y de las pestañas — igual que proveedores.
-       Con el app-shell el contenedor va sin padding lateral, por eso lo damos aquí. */
-    body.cmg-has-table .tareas-page-header,
-    body.cmg-has-table #tabsTareas {
-        padding-left: 0.75rem;
-        padding-right: 0.75rem;
+        /* Sangría del encabezado (título + botón) y de las pestañas — igual que proveedores.
+           Con el app-shell el contenedor va sin padding lateral, por eso lo damos aquí. */
+        body.cmg-has-table .tareas-page-header,
+        body.cmg-has-table #tabsTareas {
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
+        }
     }
 
     .cmg-table-card .table thead th {

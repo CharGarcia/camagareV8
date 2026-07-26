@@ -11,6 +11,7 @@ $exito = $exito ?? false;
 <html lang="es">
 <head>
     <meta charset="utf-8">
+    <?php require MVC_APP . "/views/partials/csrf.php"; ?>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= $exito ? 'Contraseña actualizada' : 'Restablecer contraseña' ?> | CaMaGaRe ERP</title>
     <link rel="shortcut icon" type="image/png" href="<?= rtrim(BASE_URL ?? '', '/') ?>/image/logofinal.png">

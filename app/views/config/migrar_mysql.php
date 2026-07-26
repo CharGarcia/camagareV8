@@ -283,12 +283,15 @@ $base = BASE_URL;
         } catch (e) { /* sin estimación: se usa un aproximado */ }
 
         // Aviso: registros que YA existen en el módulo destino y NO vienen de la migración
-        // (capturados en el nuevo sistema o por otra vía). Podrían duplicarse.
+        // (capturados en el nuevo sistema o por otra vía). Podrían duplicarse. Respeta Desde/Hasta.
+        const fDesde = $('fDesde').value, fHasta = $('fHasta').value;
         let existentes = {};
         try {
             const b = new URLSearchParams();
             b.append('id_empresa', idEmpresa);
             entidades.forEach(v => b.append('entidades[]', v));
+            if (fDesde) b.append('desde', fDesde);
+            if (fHasta) b.append('hasta', fHasta);
             const ex = await fetch(base + '/config/migrarMysql?action=verificar-existentes', { method: 'POST', body: b }).then(r => r.json());
             if (ex.ok) existentes = ex.data || {};
         } catch (e) { /* sin verificación: se continúa igual */ }
