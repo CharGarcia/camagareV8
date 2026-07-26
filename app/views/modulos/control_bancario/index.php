@@ -276,11 +276,12 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                     </div>
                     <div class="col-12 d-none row g-2" id="cbm-div-cheque">
                         <div class="col-6">
-                            <label class="form-label small fw-bold mb-1">Dirección del Cheque <span class="text-danger">*</span></label>
-                            <select id="cbm-direccion" class="form-select form-select-sm shadow-none">
+                            <label class="form-label small fw-bold mb-1">Dirección del Cheque</label>
+                            <select id="cbm-direccion" class="form-select form-select-sm shadow-none bg-light" disabled>
                                 <option value="RECIBIDO">Recibido (cobro cliente)</option>
                                 <option value="EMITIDO">Emitido (pago proveedor)</option>
                             </select>
+                            <div class="form-text">Automática: ingreso = recibido, egreso = emitido.</div>
                         </div>
                         <div class="col-6">
                             <label class="form-label small fw-bold mb-1">Nº Cheque <span class="text-danger">*</span></label>

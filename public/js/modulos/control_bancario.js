@@ -327,7 +327,10 @@
         const tipo = row.tipo_transaccion || 'OTRO';
         document.getElementById('cbm-tipo').value = tipo;
         window.CB_toggleCampoCheque(tipo);
-        document.getElementById('cbm-direccion').value = row.cheque_direccion || 'RECIBIDO';
+        // Dirección automática (no editable): ingreso/debe = recibido, egreso/haber = emitido.
+        const selDir = document.getElementById('cbm-direccion');
+        selDir.value = row.cheque_direccion || (parseFloat(row.debe) > 0 ? 'RECIBIDO' : 'EMITIDO');
+        selDir.disabled = true;
         document.getElementById('cbm-numero-cheque').value = row.numero_cheque || '';
         document.getElementById('cbm-fecha-cheque').value = fmtDateInput(row.fecha_cheque);
         document.getElementById('cbm-fecha-banco').value = fmtDateInput(row.fecha_banco);
