@@ -794,6 +794,86 @@ class AuditoriaContableRepository extends BaseRepository
                 null, null, null,
                 "Existen {$r['n']} asientos para el mismo documento.", $r['fecha_documento']);
         }
+
+        // Segundo caso, invisible para la consulta de arriba: el MISMO documento contabilizado
+        // por dos vías distintas — su módulo operativo (modulo_origen='compra', 'factura_venta'…)
+        // Y la migración (modulo_origen='migracion'). Como el GROUP BY incluye modulo_origen,
+        // esos dos asientos caen en grupos separados y nunca se comparan entre sí.
+        // Aquí se cruzan explícitamente por (documento real, tipo de comprobante), que es lo
+        // único que ambos comparten; el tipo_comprobante evita el falso positivo de ids que
+        // coinciden por casualidad entre tablas distintas (ver comentario del bloque anterior).
+        $out = array_merge($out, $this->detectarDuplicadosCruzadosConMigracion($idEmpresa, $soloOrigen, $fechaDesde, $fechaHasta));
+
+        return $out;
+    }
+
+    /**
+     * Documentos con asiento nativo Y asiento de migración vivos a la vez (doble contabilización
+     * del mismo documento por dos rutas distintas). Se reporta contra el asiento NATIVO, que es
+     * el que sobra cuando la migración ya trajo la contabilidad histórica del documento.
+     */
+    private function detectarDuplicadosCruzadosConMigracion(int $idEmpresa, ?string $soloOrigen,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
+    {
+        $amb = self::AMB;
+        $origenes = ($soloOrigen !== null && $this->esOrigenValido($soloOrigen))
+            ? [$soloOrigen]
+            : $this->getOrigenes();
+
+        // tipo_comprobante que graba la migración para cada origen operativo.
+        $tipoMigracion = [
+            'compra'             => 'compras',
+            'liquidacion_compra' => 'compras',
+            'retencion_compra'   => 'retenciones_compras',
+            'factura_venta'      => 'ventas',
+            'nota_credito'       => 'ventas',
+            'recibo_venta'       => 'ventas',
+            'retencion_venta'    => 'retenciones_ventas',
+            'ingreso'            => 'ingresos',
+            'egreso'             => 'egresos',
+        ];
+
+        $out = [];
+        foreach ($origenes as $o) {
+            if (!isset($tipoMigracion[$o])) { continue; }
+            $tipoMig = $tipoMigracion[$o];
+
+            $params = [':id_empresa' => $idEmpresa];
+            $rango  = $this->sqlRangoFecha('a_nat.fecha_asiento', $fechaDesde, $fechaHasta, $params);
+
+            $sql = "SELECT a_nat.id_referencia_origen AS id_documento,
+                           a_nat.id                   AS id_asiento,
+                           a_nat.total_debe           AS monto_asiento,
+                           a_nat.fecha_asiento        AS fecha_documento,
+                           a_mig.numero_comprobante   AS comprobante_migracion
+                    FROM asientos_contables_cabecera a_nat
+                    JOIN asientos_contables_cabecera a_mig
+                         ON a_mig.id_empresa           = a_nat.id_empresa
+                        AND a_mig.modulo_origen        = 'migracion'
+                        AND a_mig.tipo_comprobante     = '{$tipoMig}'
+                        AND a_mig.id_referencia_origen = a_nat.id_referencia_origen
+                        AND a_mig.eliminado = false AND a_mig.estado <> 'anulado'
+                        AND CAST(a_mig.tipo_ambiente AS VARCHAR(1)) = {$amb}
+                    WHERE a_nat.id_empresa = :id_empresa
+                      AND a_nat.modulo_origen = '{$o}'
+                      AND a_nat.eliminado = false AND a_nat.estado <> 'anulado'
+                      AND CAST(a_nat.tipo_ambiente AS VARCHAR(1)) = {$amb}
+                      AND a_nat.id_referencia_origen IS NOT NULL
+                      {$rango}";
+
+            try {
+                foreach ($this->ejecutar($sql, $params) as $r) {
+                    $out[] = $this->normalizar('duplicado', $o,
+                        (int) $r['id_documento'], (int) $r['id_asiento'],
+                        null, (float) $r['monto_asiento'], null,
+                        'El documento ya tiene la contabilidad de la migración ('
+                            . $r['comprobante_migracion'] . '): este asiento la duplica.',
+                        $r['fecha_documento']);
+                }
+            } catch (\Throwable $e) {
+                // Origen sin tabla/columna esperada: se omite sin romper la corrida.
+            }
+        }
         return $out;
     }
 
