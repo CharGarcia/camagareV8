@@ -242,10 +242,15 @@
 
     /** Elimina (anula) un asiento huérfano: su documento de origen ya no existe. */
     function eliminarHuerfano(tr) {
+        // Sirve a dos hallazgos con el mismo remedio: documento inexistente (huérfano) o
+        // documento anulado con su asiento aún vivo (estado incoherente).
+        const esAnulado = tr.dataset.tipo === 'estado_incoherente';
         Swal.fire({
-            title: '¿Eliminar este asiento huérfano?',
-            html: 'El documento que originó este asiento <strong>ya no existe</strong> (fue eliminado), '
-                + 'así que el asiento no debería seguir sumando en Balance, Estado de Resultados ni Mayores.'
+            title: esAnulado ? '¿Anular este asiento?' : '¿Eliminar este asiento huérfano?',
+            html: (esAnulado
+                    ? 'El documento que originó este asiento está <strong>anulado</strong>, pero su asiento sigue activo.'
+                    : 'El documento que originó este asiento <strong>ya no existe</strong> (fue eliminado).')
+                + ' Mientras siga vivo, sigue sumando en Balance, Estado de Resultados y Mayores.'
                 + '<br><br><span class="small text-muted">Se marca como anulado (no se borra), así que es reversible.</span>',
             icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Sí, eliminar',
         }).then((r) => {

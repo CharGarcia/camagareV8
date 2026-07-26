@@ -189,8 +189,10 @@ class AuditoriaContableService
         if (!$inc) {
             throw new \Exception('Incidencia no encontrada.');
         }
-        if (($inc['tipo_hallazgo'] ?? '') !== 'huerfano') {
-            throw new \Exception('Esta acción solo aplica a incidencias de tipo «huérfano».');
+        // Mismo remedio para dos hallazgos distintos: el asiento sobra porque su documento
+        // ya no existe (huérfano) o porque el documento fue anulado (estado incoherente).
+        if (!in_array($inc['tipo_hallazgo'] ?? '', ['huerfano', 'estado_incoherente'], true)) {
+            throw new \Exception('Esta acción solo aplica a incidencias de tipo «huérfano» o «estado incoherente».');
         }
         $idAsiento = (int) ($inc['id_asiento'] ?? 0);
         if ($idAsiento <= 0) {

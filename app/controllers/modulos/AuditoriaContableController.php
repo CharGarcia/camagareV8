@@ -320,6 +320,10 @@ class AuditoriaContableController extends BaseModuloController
         if ($tipo === 'huerfano' && !empty($perm['eliminar'])) {
             $btns[] = '<button class="btn btn-sm btn-outline-danger js-aud-huerfano" title="Eliminar este asiento huérfano (su documento ya no existe)"><i class="bi bi-trash"></i></button>';
         }
+        // Estado incoherente: el documento fue anulado, su asiento debe anularse también.
+        if ($tipo === 'estado_incoherente' && !empty($perm['eliminar'])) {
+            $btns[] = '<button class="btn btn-sm btn-outline-danger js-aud-huerfano" title="Anular este asiento (su documento está anulado)"><i class="bi bi-slash-circle"></i></button>';
+        }
         // Regenerar solo donde el módulo de origen sabe rehacer su asiento.
         if (in_array($tipo, ['monto_no_coincide', 'descuadrado', 'cab_vs_detalle'], true)
             && !empty($perm['eliminar'])
