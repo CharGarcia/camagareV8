@@ -568,6 +568,62 @@ class AuditoriaContableRepository extends BaseRepository
         return $out;
     }
 
+    /**
+     * Asientos huérfanos listos para eliminar (anular): su documento de origen ya no existe
+     * o fue eliminado. Reutiliza el mismo criterio que detectarHuerfanos(), pero recorriendo
+     * todos los orígenes de una vez y aplicando las salvaguardas de escritura: nunca toca
+     * asientos de tipo Diario ni de períodos contables cerrados.
+     *
+     * @param string|null $origen Un origen concreto, o null/'' para todos.
+     */
+    public function getHuerfanosParaEliminar(int $idEmpresa, ?string $origen = null,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
+    {
+        $origenes = ($origen !== null && $origen !== '' && $this->esOrigenValido($origen))
+            ? [$origen]
+            : $this->getOrigenes();
+
+        $amb        = self::AMB;
+        $noDiario   = self::SQL_NO_DIARIO;
+        $noCerrado  = self::SQL_EN_PERIODO_CERRADO;
+
+        $out = [];
+        foreach ($origenes as $o) {
+            $tabla = $this->origenes[$o]['tabla'] ?? null;
+            if ($tabla === null) { continue; }
+
+            $params = [':id_empresa' => $idEmpresa];
+            $rango  = $this->sqlRangoFecha('a.fecha_asiento', $fechaDesde, $fechaHasta, $params);
+
+            $sql = "SELECT a.id AS id_asiento, a.id_referencia_origen AS id_documento,
+                           a.numero_comprobante, a.total_debe, a.fecha_asiento,
+                           '{$o}' AS modulo_origen
+                    FROM asientos_contables_cabecera a
+                    WHERE a.id_empresa = :id_empresa
+                      AND a.eliminado = false
+                      AND a.estado <> 'anulado'
+                      AND CAST(a.tipo_ambiente AS VARCHAR(1)) = {$amb}
+                      AND a.modulo_origen = '{$o}'
+                      AND a.id_referencia_origen IS NOT NULL
+                      AND NOT EXISTS (SELECT 1 FROM {$tabla} d
+                                      WHERE d.id = a.id_referencia_origen
+                                        AND d.eliminado = false)
+                      AND {$noDiario}
+                      AND NOT {$noCerrado}
+                      {$rango}
+                    ORDER BY a.id";
+
+            try {
+                foreach ($this->ejecutar($sql, $params) as $r) {
+                    $out[] = $r;
+                }
+            } catch (\Throwable $e) {
+                // Tabla inexistente (migración pendiente): se omite ese origen sin romper.
+            }
+        }
+        return $out;
+    }
+
     /** Asiento huérfano: referencia a un documento inexistente o eliminado. */
     private function detectarHuerfanos(int $idEmpresa, string $origen,
         ?string $fechaDesde = null, ?string $fechaHasta = null): array

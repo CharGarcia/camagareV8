@@ -240,6 +240,58 @@
             .catch((e) => err(e.message));
     }
 
+    /** Elimina (anula) un asiento huérfano: su documento de origen ya no existe. */
+    function eliminarHuerfano(tr) {
+        Swal.fire({
+            title: '¿Eliminar este asiento huérfano?',
+            html: 'El documento que originó este asiento <strong>ya no existe</strong> (fue eliminado), '
+                + 'así que el asiento no debería seguir sumando en Balance, Estado de Resultados ni Mayores.'
+                + '<br><br><span class="small text-muted">Se marca como anulado (no se borra), así que es reversible.</span>',
+            icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Sí, eliminar',
+        }).then((r) => {
+            if (!r.isConfirmed) return;
+            postForm('eliminarHuerfanoAjax', { id: tr.dataset.id })
+                .then((res) => { if (res.ok) { toast('success', res.msg); fetchSearch(); } else err(res.error); })
+                .catch((e) => err(e.message));
+        });
+    }
+
+    /** Elimina TODOS los asientos huérfanos del filtro actual. */
+    function eliminarHuerfanosMasivo() {
+        const f = rangoFechas();
+        Swal.fire({
+            title: '¿Eliminar todos los asientos huérfanos?',
+            html: 'Se anularán <strong>todos</strong> los asientos cuyo documento de origen ya no existe, '
+                + 'dentro del período y orígenes seleccionados en el filtro.'
+                + '<br><br><span class="small text-muted">Reversible (quedan anulados, no se borran). '
+                + 'No se tocan los de tipo Diario ni los de períodos cerrados.</span>',
+            icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Sí, eliminar',
+        }).then((r) => {
+            if (!r.isConfirmed) return;
+            const btn = document.getElementById('btnEliminarHuerfanos');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Eliminando…'; }
+            postForm('eliminarHuerfanosMasivoAjax', Object.assign({ origen: origenParaAccion() }, f))
+                .then((res) => {
+                    if (!res.ok) { err(res.error); return; }
+                    const d = res.data || {};
+                    Swal.fire({
+                        title: 'Huérfanos eliminados',
+                        html: '<div class="text-start small">'
+                            + '<div>Asientos eliminados: <strong>' + (d.eliminados || 0) + '</strong></div>'
+                            + (d.errores ? '<div class="text-danger">Con error: <strong>' + d.errores + '</strong></div>' : '')
+                            + ((d.mensajes || []).length ? '<div class="mt-2 text-muted">' + d.mensajes.join('<br>') + '</div>' : '')
+                            + '</div>',
+                        icon: d.errores ? 'warning' : 'success',
+                    });
+                    fetchSearch(1);
+                })
+                .catch((e) => err(e.message))
+                .finally(() => {
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-trash me-1"></i> Eliminar huérfanos'; }
+                });
+        });
+    }
+
     function regenerarDocumento(tr) {
         Swal.fire({
             title: 'Regenerar este asiento',
@@ -624,6 +676,7 @@
         document.getElementById('btnGuardarRevision')?.addEventListener('click', guardarRevision);
         document.getElementById('btnConfirmarRegenerar')?.addEventListener('click', confirmarRegenerar);
         document.getElementById('btnConfirmarAnular')?.addEventListener('click', confirmarAnular);
+        document.getElementById('btnEliminarHuerfanos')?.addEventListener('click', eliminarHuerfanosMasivo);
 
         // Al reabrir el modal, el progreso de la corrida anterior no debe seguir a la vista.
         // Además se precargan origen y fechas desde la barra de filtros, para que las acciones
@@ -757,6 +810,7 @@
             const tr = getFila(btn);
             if (btn.classList.contains('js-aud-generar')) generarFaltante(tr);
             else if (btn.classList.contains('js-aud-ambiente')) corregirAmbiente(tr);
+            else if (btn.classList.contains('js-aud-huerfano')) eliminarHuerfano(tr);
             else if (btn.classList.contains('js-aud-regen-doc')) regenerarDocumento(tr);
             else if (btn.classList.contains('js-aud-revisar')) abrirRevision(tr);
             else if (btn.classList.contains('js-aud-duplicado')) abrirDuplicados(tr);

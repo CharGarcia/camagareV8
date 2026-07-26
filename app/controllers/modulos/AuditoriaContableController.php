@@ -315,6 +315,11 @@ class AuditoriaContableController extends BaseModuloController
         if ($tipo === 'ambiente_incoherente' && !empty($perm['actualizar'])) {
             $btns[] = '<button class="btn btn-sm btn-outline-info js-aud-ambiente" title="Corregir ambiente"><i class="bi bi-arrow-repeat"></i></button>';
         }
+        // Huérfano: el documento que lo originó ya no existe (o fue eliminado), así que el
+        // asiento no debe seguir sumando en los reportes. Solo se puede eliminar (anular).
+        if ($tipo === 'huerfano' && !empty($perm['eliminar'])) {
+            $btns[] = '<button class="btn btn-sm btn-outline-danger js-aud-huerfano" title="Eliminar este asiento huérfano (su documento ya no existe)"><i class="bi bi-trash"></i></button>';
+        }
         // Regenerar solo donde el módulo de origen sabe rehacer su asiento.
         if (in_array($tipo, ['monto_no_coincide', 'descuadrado', 'cab_vs_detalle'], true)
             && !empty($perm['eliminar'])
@@ -583,6 +588,46 @@ class AuditoriaContableController extends BaseModuloController
             }
             $_SESSION[self::SESION_REGEN] = $c;
 
+            echo json_encode(['ok' => true, 'data' => $r]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Elimina (anula) el asiento huérfano de UNA incidencia. */
+    public function eliminarHuerfanoAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $id = (int) ($_POST['id'] ?? 0);
+        try {
+            if ($id <= 0) throw new \Exception('Incidencia no válida.');
+            $this->service->eliminarHuerfano($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            echo json_encode(['ok' => true, 'msg' => 'Asiento huérfano eliminado.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Elimina (anula) TODOS los asientos huérfanos del filtro actual. */
+    public function eliminarHuerfanosMasivoAjax(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $origen     = trim($_POST['origen'] ?? '');
+        $origen     = ($origen === '' || $origen === self::ORIGEN_TODOS) ? null : $origen;
+        $fechaDesde = $this->normalizarFecha($_POST['fecha_desde'] ?? null);
+        $fechaHasta = $this->normalizarFecha($_POST['fecha_hasta'] ?? null);
+
+        try {
+            $r = $this->service->eliminarHuerfanosMasivo(
+                (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'],
+                $origen, $fechaDesde, $fechaHasta
+            );
             echo json_encode(['ok' => true, 'data' => $r]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

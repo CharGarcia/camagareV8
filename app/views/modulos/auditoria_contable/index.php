@@ -158,6 +158,10 @@ $totalIncidencias = array_sum($resumen);
                         title="Anula los asientos del filtro y deja los documentos SIN contabilidad. Reversible.">
                     <i class="bi bi-slash-circle me-1"></i> Eliminar asientos
                 </button>
+                <button type="button" id="btnEliminarHuerfanos" class="btn btn-outline-secondary btn-sm px-3 shadow-sm"
+                        title="Elimina los asientos cuyo documento de origen ya no existe (fue eliminado). Reversible.">
+                    <i class="bi bi-trash me-1"></i> Eliminar huérfanos
+                </button>
             <?php endif; ?>
             <span class="small text-muted align-self-center ms-1">
                 <i class="bi bi-info-circle me-1"></i>Las tres acciones usan el período y los orígenes seleccionados arriba.

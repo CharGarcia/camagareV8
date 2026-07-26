@@ -179,6 +179,84 @@ class AuditoriaContableService
         $this->ejecutarAuditoria($idEmpresa, $idUsuario);
     }
 
+    /**
+     * Elimina (anula) el asiento de UNA incidencia de tipo «huérfano»: su documento de origen
+     * ya no existe o fue eliminado, así que el asiento no debe seguir sumando en los reportes.
+     */
+    public function eliminarHuerfano(int $idIncidencia, int $idEmpresa, int $idUsuario): void
+    {
+        $inc = $this->repo->getIncidenciaPorId($idIncidencia, $idEmpresa);
+        if (!$inc) {
+            throw new \Exception('Incidencia no encontrada.');
+        }
+        if (($inc['tipo_hallazgo'] ?? '') !== 'huerfano') {
+            throw new \Exception('Esta acción solo aplica a incidencias de tipo «huérfano».');
+        }
+        $idAsiento = (int) ($inc['id_asiento'] ?? 0);
+        if ($idAsiento <= 0) {
+            throw new \Exception('La incidencia no tiene un asiento asociado.');
+        }
+
+        $this->repo->beginTransaction();
+        try {
+            $this->repo->anularAsiento($idAsiento, $idEmpresa, $idUsuario);
+            $this->repo->commit();
+        } catch (\Throwable $e) {
+            $this->repo->rollBack();
+            throw $e;
+        }
+
+        $this->log->registrar($idUsuario, $idEmpresa, 'auditoria_eliminar_huerfano',
+            'asientos_contables_cabecera', $idAsiento, null, null);
+
+        $this->ejecutarAuditoria($idEmpresa, $idUsuario);
+    }
+
+    /**
+     * Elimina (anula) TODOS los asientos huérfanos detectados, opcionalmente acotados por
+     * origen y rango de fechas. Devuelve cuántos se eliminaron y cuántos fallaron.
+     */
+    public function eliminarHuerfanosMasivo(int $idEmpresa, int $idUsuario, ?string $origen = null,
+        ?string $fechaDesde = null, ?string $fechaHasta = null): array
+    {
+        $this->rules->validarRango($fechaDesde, $fechaHasta);
+
+        $huerfanos = $this->repo->getHuerfanosParaEliminar($idEmpresa, $origen, $fechaDesde, $fechaHasta);
+        if (empty($huerfanos)) {
+            return ['eliminados' => 0, 'errores' => 0, 'mensajes' => []];
+        }
+
+        $ok = 0;
+        $fallos = [];
+        foreach ($huerfanos as $h) {
+            $idAsiento = (int) $h['id_asiento'];
+            try {
+                $this->repo->beginTransaction();
+                $this->repo->anularAsiento($idAsiento, $idEmpresa, $idUsuario);
+                $this->repo->commit();
+                $ok++;
+            } catch (\Throwable $e) {
+                $this->repo->rollBack();
+                $motivo = trim($e->getMessage()) ?: 'Error no especificado';
+                $fallos[$motivo][] = $idAsiento;
+            }
+        }
+
+        $mensajes = [];
+        $errores = 0;
+        foreach ($fallos as $motivo => $ids) {
+            $errores += count($ids);
+            $mensajes[] = count($ids) . " asiento(s) — «{$motivo}» — #" . implode(', #', array_slice($ids, 0, 5));
+        }
+
+        $this->log->registrar($idUsuario, $idEmpresa, 'auditoria_eliminar_huerfanos_masivo',
+            'asientos_contables_cabecera', null, null, ['eliminados' => $ok, 'errores' => $errores]);
+
+        $this->ejecutarAuditoria($idEmpresa, $idUsuario, $origen, $fechaDesde, $fechaHasta);
+
+        return ['eliminados' => $ok, 'errores' => $errores, 'mensajes' => $mensajes];
+    }
+
     /** Corrige el ambiente de un asiento heredándolo del documento y re-audita. */
     public function corregirAmbiente(int $idIncidencia, int $idEmpresa, int $idUsuario): void
     {
