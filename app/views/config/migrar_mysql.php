@@ -412,6 +412,9 @@ $base = BASE_URL;
                         : '';
                     html += `<br><span class="text-info small">ℹ ${fmt(d.vinculados)} ya existía(n) en el sistema (mismo nombre/identificación o número) → se vincularon, NO se duplicaron${muestra}</span>`;
                 }
+                if (d.revividos > 0) {
+                    html += `<br><span class="text-success small">♻ ${fmt(d.revividos)} estaban eliminado(s) y se restauraron (volvieron a mostrarse).</span>`;
+                }
                 logMig(ent, html);
             } catch (e) { logMig(ent, '<span class="text-danger">' + e.message + '</span>'); }
               finally { clearInterval(sondeo); hecho++; if (curTotal) curDone = curTotal; recalcRestante(); pintarSwal(); }

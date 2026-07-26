@@ -99,13 +99,26 @@ class MigracionMysqlService
      */
     public function migrar(string $entidad, int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
+        $pg = Database::getConnection();
         // ANTES de cualquier reconciliación/salto por mapa: sana las entradas COLGADAS del mapa
         // (documentos que el mapa dice migrados pero cuya fila destino ya no existe, borrada por
         // fuera). Sin esto, la re-corrida los da por "ya migrados" y NUNCA los re-inserta → el
         // módulo queda vacío aunque el resumen diga que sí los trae. Cubre TODAS las entidades
         // (documentos y catálogos) porque el bug aplica a cualquier reconcile/yaMigradoDoc/$done.
-        $this->purgarMapaColgado(Database::getConnection(), $idEmpresa, $entidad);
+        $this->purgarMapaColgado($pg, $idEmpresa, $entidad);
+        // Y REVIVE los documentos que la migración insertó y quedaron ELIMINADOS (soft-delete): al
+        // re-migrar deben reaparecer. Sin esto, la reconciliación refresca el ambiente pero deja
+        // eliminado=true → el listado (filtra eliminado=false) no los muestra aunque diga "ya estaban".
+        $revividos = $this->revivirMigrados($pg, $idEmpresa, $entidad);
 
+        $res = $this->ejecutarMigracion($entidad, $idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
+        if ($revividos > 0) { $res['revividos'] = $revividos; }
+        return $res;
+    }
+
+    /** Despacha la migración de la entidad a su método específico. */
+    private function ejecutarMigracion(string $entidad, int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
+    {
         switch ($entidad) {
             case 'plan_cuentas':
                 return $this->migrarPlanCuentasEntidad($idEmpresa, $ruc, $idUsuario);
@@ -3554,6 +3567,26 @@ class MigracionMysqlService
         $st = $pg->prepare("DELETE FROM migracion_mysql_map m
              WHERE m.id_empresa = ? AND m.entidad = ?
                AND NOT EXISTS (SELECT 1 FROM $tabla t WHERE t.id = m.id_destino)");
+        $st->execute([$idEmpresa, $entidad]);
+        return $st->rowCount();
+    }
+
+    /**
+     * REVIVE (quita el soft-delete) los documentos que la migración INSERTÓ (vinculado IS NOT TRUE) y
+     * que quedaron eliminado=true. Al re-migrar, el histórico debe volver a estar presente/visible.
+     * Solo toca lo insertado por la migración: NUNCA revive registros nativos (vinculados) que el
+     * usuario haya borrado a propósito. Devuelve cuántos revivió.
+     */
+    private function revivirMigrados(PDO $pg, int $idEmpresa, string $entidad): int
+    {
+        $tabla = self::DESTINO_TABLA[$entidad] ?? null;
+        if ($tabla === null) { return 0; }
+        $st = $pg->prepare("UPDATE $tabla t
+                SET eliminado = false, deleted_at = NULL, deleted_by = NULL
+              WHERE t.id_empresa = ? AND t.eliminado = true
+                AND EXISTS (SELECT 1 FROM migracion_mysql_map m
+                             WHERE m.id_empresa = t.id_empresa AND m.entidad = ?
+                               AND m.id_destino = t.id AND m.vinculado IS NOT TRUE)");
         $st->execute([$idEmpresa, $entidad]);
         return $st->rowCount();
     }
