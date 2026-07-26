@@ -27,6 +27,23 @@ class AuditoriaContableRepository extends BaseRepository
     private const AMB = "(SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
     /**
+     * tipo_comprobante que graba la migración para cada origen operativo. Los asientos
+     * migrados NO llevan el modulo_origen del módulo (todos usan 'migracion'), así que el
+     * tipo_comprobante es lo único que permite emparejarlos con su documento.
+     */
+    private const TIPO_COMPROBANTE_MIGRACION = [
+        'compra'             => 'compras',
+        'liquidacion_compra' => 'compras',
+        'retencion_compra'   => 'retenciones_compras',
+        'factura_venta'      => 'ventas',
+        'nota_credito'       => 'ventas',
+        'recibo_venta'       => 'ventas',
+        'retencion_venta'    => 'retenciones_ventas',
+        'ingreso'            => 'ingresos',
+        'egreso'             => 'egresos',
+    ];
+
+    /**
      * Candado de la regeneración: NUNCA se tocan los asientos de tipo Diario.
      * Ahí viven los asientos manuales del usuario (modulo_origen='manual') y los de
      * activos fijos/depreciación, que no se rehacen desde un documento de origen.
@@ -509,6 +526,15 @@ class AuditoriaContableRepository extends BaseRepository
         $params = [':id_empresa' => $idEmpresa];
         $rango  = $this->sqlRangoFecha("d.{$colFecha}", $fechaDesde, $fechaHasta, $params);
 
+        // Un documento puede estar contabilizado por su módulo (modulo_origen='compra', …) O
+        // por la migración (modulo_origen='migracion' + tipo_comprobante del origen). Si solo
+        // se mirara el primero, un documento cuya contabilidad la trajo la migración se
+        // reportaría como «faltante» aunque sí tenga asiento.
+        $tipoMig = self::TIPO_COMPROBANTE_MIGRACION[$origen] ?? null;
+        $condMigracion = $tipoMig !== null
+            ? " OR (a.modulo_origen = 'migracion' AND a.tipo_comprobante = '{$tipoMig}')"
+            : '';
+
         $sql = "SELECT d.id AS id_documento,
                        {$total} AS monto_documento,
                        a.id AS id_asiento,
@@ -516,7 +542,7 @@ class AuditoriaContableRepository extends BaseRepository
                        d.{$colFecha} AS fecha_documento
                 FROM {$tabla} d
                 LEFT JOIN asientos_contables_cabecera a
-                       ON a.modulo_origen = '{$origen}'
+                       ON (a.modulo_origen = '{$origen}'{$condMigracion})
                       AND a.id_referencia_origen = d.id
                       AND a.eliminado = false
                       AND a.estado <> 'anulado'
@@ -820,18 +846,7 @@ class AuditoriaContableRepository extends BaseRepository
             ? [$soloOrigen]
             : $this->getOrigenes();
 
-        // tipo_comprobante que graba la migración para cada origen operativo.
-        $tipoMigracion = [
-            'compra'             => 'compras',
-            'liquidacion_compra' => 'compras',
-            'retencion_compra'   => 'retenciones_compras',
-            'factura_venta'      => 'ventas',
-            'nota_credito'       => 'ventas',
-            'recibo_venta'       => 'ventas',
-            'retencion_venta'    => 'retenciones_ventas',
-            'ingreso'            => 'ingresos',
-            'egreso'             => 'egresos',
-        ];
+        $tipoMigracion = self::TIPO_COMPROBANTE_MIGRACION;
 
         $out = [];
         foreach ($origenes as $o) {
