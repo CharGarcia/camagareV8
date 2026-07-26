@@ -76,6 +76,31 @@ class EgresoService
         );
     }
 
+    /**
+     * Cambia el nombre a imprimir en el cheque SIN alterar el beneficiario del
+     * egreso. Cadena vacía = vuelve a usar el beneficiario del egreso.
+     */
+    public function actualizarBeneficiarioCheque(int $idEmpresa, int $idPago, string $nombre, int $idUsuario): void
+    {
+        $pago = $this->repository->getPagoChequeParaEdicion($idEmpresa, $idPago);
+        if (!$pago) {
+            throw new \RuntimeException('Pago no encontrado.');
+        }
+        if (strtoupper((string) $pago['tipo_operacion_bancaria']) !== 'CHEQUE') {
+            throw new \RuntimeException('El pago no es un cheque.');
+        }
+        if (strtoupper((string) $pago['egreso_estado']) === 'ANULADO') {
+            throw new \RuntimeException('El egreso está anulado.');
+        }
+
+        $nombre = trim($nombre);
+        $this->repository->actualizarBeneficiarioCheque($idPago, $nombre);
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa, 'ACTUALIZAR_NOMBRE_CHEQUE', 'egresos_pagos', $idPago,
+            null, ['beneficiario_cheque' => ($nombre !== '' ? $nombre : null)]
+        );
+    }
+
     public function getPorId(int $id, int $idEmpresa): ?array
     {
         $egreso = $this->repository->getPorId($id, $idEmpresa);

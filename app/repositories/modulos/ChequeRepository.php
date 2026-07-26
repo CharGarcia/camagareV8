@@ -81,13 +81,13 @@ class ChequeRepository extends BaseRepository
                    e.fecha_emision,
                    e.observaciones,
                    e.tipo_ambiente,
-                   COALESCE(p.razon_social, emp.nombres_apellidos, 'N/A') AS beneficiario,
+                   COALESCE(NULLIF(ep.beneficiario_cheque, ''), p.razon_social, emp.nombres_apellidos, 'N/A') AS beneficiario,
                    COALESCE(p.identificacion, emp.identificacion, '')     AS beneficiario_ident,
                    fp.nombre                     AS forma_nombre,
                    fp.numero_cuenta              AS cuenta_numero,
                    b.nombre_banco                AS banco_nombre,
                    ci.id                         AS impreso_id,
-                   ci.fecha_impresion            AS impreso_fecha,
+                   to_char(ci.fecha_impresion, 'DD-MM-YYYY HH24:MI') AS impreso_fecha,
                    ci.impreso_por,
                    u.nombre                      AS impreso_usuario,
                    (ci.id IS NOT NULL)           AS impreso
@@ -218,7 +218,7 @@ class ChequeRepository extends BaseRepository
         }
         $sql = "SELECT id_egreso_pago,
                        COUNT(*)                    AS veces,
-                       MAX(fecha_impresion)        AS ultima_fecha
+                       to_char(MAX(fecha_impresion), 'DD-MM-YYYY HH24:MI') AS ultima_fecha
                 FROM cheques_impresos
                 WHERE id_empresa = :id_empresa
                   AND anulado = FALSE

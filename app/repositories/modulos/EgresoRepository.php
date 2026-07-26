@@ -20,6 +20,8 @@ class EgresoRepository extends BaseRepository
                 $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN numero_cheque VARCHAR(50) NULL");
                 $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN fecha_cobro DATE NULL");
             }
+            // Nombre a imprimir en el cheque (override del beneficiario del egreso).
+            $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN IF NOT EXISTS beneficiario_cheque VARCHAR(255) NULL");
         } catch (\Exception $e) {
             // Silenciar en caso de no poseer permisos DDL
         }
@@ -129,7 +131,7 @@ class EgresoRepository extends BaseRepository
     public function getPagos(int $idEgreso): array
     {
         $sql = "SELECT ep.id, ep.id_egreso, ep.id_forma_pago, ep.monto, ep.referencia,
-                       ep.tipo_operacion_bancaria, ep.numero_cheque, ep.fecha_cobro,
+                       ep.tipo_operacion_bancaria, ep.numero_cheque, ep.fecha_cobro, ep.beneficiario_cheque,
                        efc.nombre AS forma_pago_nombre, efc.tipo AS forma_pago_tipo,
                        " . $this->sqlChequeConciliado('ep', 'efc') . " AS cheque_conciliado
                 FROM egresos_pagos ep
@@ -179,6 +181,14 @@ class EgresoRepository extends BaseRepository
     {
         $this->query("UPDATE egresos_pagos SET fecha_cobro = :f WHERE id = :id",
             [':f' => $fecha, ':id' => $idPago]);
+    }
+
+    /** Actualiza el nombre a imprimir en el cheque (override; null = usa el beneficiario del egreso). */
+    public function actualizarBeneficiarioCheque(int $idPago, ?string $nombre): void
+    {
+        $nombre = $nombre !== null ? mb_strtoupper(trim($nombre), 'UTF-8') : null;
+        $this->query("UPDATE egresos_pagos SET beneficiario_cheque = :b WHERE id = :id",
+            [':b' => ($nombre !== null && $nombre !== '') ? $nombre : null, ':id' => $idPago]);
     }
 
     public function getConceptosEgreso(int $idEmpresa): array
@@ -428,12 +438,13 @@ class EgresoRepository extends BaseRepository
 
     public function insertPago(array $data): void
     {
+        $benef = mb_strtoupper(trim((string) ($data['beneficiario_cheque'] ?? '')), 'UTF-8');
         $sql = "INSERT INTO egresos_pagos (
                     id_egreso, id_forma_pago, monto, referencia,
-                    tipo_operacion_bancaria, numero_cheque, fecha_cobro
+                    tipo_operacion_bancaria, numero_cheque, fecha_cobro, beneficiario_cheque
                 ) VALUES (
                     :id_egreso, :id_forma, :monto, :ref,
-                    :tipo_op, :num_chq, :fec_cob
+                    :tipo_op, :num_chq, :fec_cob, :benef
                 )";
         $this->query($sql, [
             ':id_egreso'  => (int) $data['id_egreso'],
@@ -442,7 +453,8 @@ class EgresoRepository extends BaseRepository
             ':ref'        => $data['referencia'] ?? null,
             ':tipo_op'    => $data['tipo_operacion_bancaria'] ?? null,
             ':num_chq'    => $data['numero_cheque'] ?? null,
-            ':fec_cob'    => !empty($data['fecha_cobro']) ? $data['fecha_cobro'] : null
+            ':fec_cob'    => !empty($data['fecha_cobro']) ? $data['fecha_cobro'] : null,
+            ':benef'      => $benef !== '' ? $benef : null
         ]);
     }
 

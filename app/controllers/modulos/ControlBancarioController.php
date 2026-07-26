@@ -38,6 +38,8 @@ class ControlBancarioController extends BaseModuloController
             'fecha_inicio' => trim($_GET['fecha_inicio'] ?? $_POST['fecha_inicio'] ?? date('Y-01-01')),
             'fecha_fin' => trim($_GET['fecha_fin'] ?? $_POST['fecha_fin'] ?? date('Y-12-31')),
             'buscar' => trim($_GET['b'] ?? $_POST['b'] ?? $_GET['buscar'] ?? $_POST['buscar'] ?? ''),
+            'flujo' => strtoupper(trim($_GET['flujo'] ?? $_POST['flujo'] ?? 'TODOS')),
+            'tipo' => strtoupper(trim($_GET['tipo'] ?? $_POST['tipo'] ?? '')),
         ];
     }
 
@@ -121,7 +123,7 @@ class ControlBancarioController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-bank fs-3 d-block mb-2"></i>No se encontraron movimientos.</td></tr>';
+            echo '<tr><td colspan="13" class="text-center py-5 text-muted"><i class="bi bi-bank fs-3 d-block mb-2"></i>No se encontraron movimientos.</td></tr>';
         } else {
             // Fila completa clickeable (mismo patrón que Proveedores): data-row + onclick abre el modal de clasificación.
             foreach ($rows as $r) {
@@ -130,6 +132,9 @@ class ControlBancarioController extends BaseModuloController
                 $fechaBanco = !empty($r['fecha_banco']) ? date('d-m-Y', strtotime($r['fecha_banco'])) : '—';
                 $tipoLabel = $tipoLabels[$r['tipo_transaccion']] ?? $r['tipo_transaccion'];
                 $glosa = $r['referencia_detalle'] ?: $r['concepto'] ?: '';
+                $esCheque = ($r['tipo_transaccion'] === 'CHEQUE');
+                $fechaCheque = ($esCheque && !empty($r['fecha_cheque'])) ? date('d-m-Y', strtotime($r['fecha_cheque'])) : '';
+                $beneficiarioCheque = $esCheque ? (string) ($r['beneficiario_cheque'] ?? '') : '';
 
                 $badgeDireccion = '';
                 if ($r['tipo_transaccion'] === 'CHEQUE' && !empty($r['cheque_direccion'])) {
@@ -145,7 +150,9 @@ class ControlBancarioController extends BaseModuloController
                         <td data-col="fecha_banco">' . $fechaBanco . '</td>
                         <td data-col="comprobante"><a href="#" onclick="event.stopPropagation(); event.preventDefault(); ASIENTO_abrirModal(' . (int) $r['id_asiento'] . ');" class="text-decoration-none fw-bold" title="Ver asiento contable">' . htmlspecialchars((string) ($r['numero_comprobante'] ?: 'S/N')) . '</a></td>
                         <td data-col="tipo"><span class="badge bg-light text-dark border">' . htmlspecialchars($tipoLabel) . '</span></td>
-                        <td data-col="cheque">' . htmlspecialchars((string) ($r['numero_cheque'] ?? '')) . $badgeDireccion . '</td>
+                        <td data-col="cheque">' . ($esCheque ? htmlspecialchars((string) ($r['numero_cheque'] ?? '')) : '') . $badgeDireccion . '</td>
+                        <td data-col="fecha_cheque">' . $fechaCheque . '</td>
+                        <td data-col="beneficiario_cheque" class="text-truncate" style="max-width:160px">' . htmlspecialchars($beneficiarioCheque) . '</td>
                         <td data-col="documento" class="text-truncate" style="max-width:140px">' . htmlspecialchars((string) ($r['documento_referencia'] ?? '')) . '</td>
                         <td data-col="tercero" class="text-truncate" style="max-width:160px">' . htmlspecialchars((string) ($r['nombre_entidad'] ?? '')) . '</td>
                         <td data-col="glosa" class="text-truncate text-muted" style="max-width:220px">' . htmlspecialchars((string) $glosa) . '</td>

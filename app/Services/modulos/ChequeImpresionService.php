@@ -23,17 +23,22 @@ class ChequeImpresionService
     private LogSistemaService $log;
 
     /**
-     * Plantilla por defecto de cheque (fallback). Posiciones aproximadas en mm
-     * sobre una hoja A4 con el cheque en la parte superior. El usuario puede
-     * crear su propia plantilla calibrada en Plantillas de Documentos.
+     * Plantilla por defecto de cheque (fallback), según el ESTÁNDAR de cheque en
+     * Ecuador: 15.5 cm × 7.5 cm, todo el texto en MAYÚSCULAS. Coordenadas en mm
+     * medidas desde la esquina superior izquierda del cheque:
+     *  - Beneficiario ("Páguese a la orden de"): arriba 24, izq. 20 → 100 (w=80).
+     *  - Valor en número: izq. 120, misma fila (y=24).
+     *  - Valor en letras: arriba 30, izq. 20 (puede envolver a la fila siguiente).
+     *  - Ciudad, fecha (aaaa-mm-dd): arriba 43, izq. 10.
+     * El usuario puede afinarla en Plantillas de Documentos.
      */
     private const PLANTILLA_DEFAULT = '{
-        "pagina": {"formato":"A4","orientacion":"P","margenTop":10,"margenLeft":10,"margenRight":10,"margenBottom":10},
+        "pagina": {"formato":"CUSTOM","ancho":155,"alto":75,"orientacion":"L","margenTop":0,"margenLeft":0,"margenRight":0,"margenBottom":0},
         "elementos": [
-            {"tipo":"campo","campo":"{fecha_larga}","x":110,"y":20,"w":85,"h":6,"alineacion":"R","fuente":"helvetica","tamano":10},
-            {"tipo":"campo","campo":"{monto_numero_protegido}","x":150,"y":30,"w":45,"h":7,"alineacion":"R","fuente":"helvetica","tamano":11,"estilo":"B"},
-            {"tipo":"campo","campo":"{beneficiario}","x":28,"y":32,"w":118,"h":6,"alineacion":"L","fuente":"helvetica","tamano":11},
-            {"tipo":"campo","campo":"{monto_letras}","x":15,"y":42,"w":180,"h":6,"alineacion":"L","fuente":"helvetica","tamano":10}
+            {"tipo":"campo","campo":"{beneficiario}","x":20,"y":24,"w":80,"h":6,"alineacion":"L","fuente":"helvetica","tamano":10},
+            {"tipo":"campo","campo":"{monto_numero_protegido}","x":120,"y":24,"w":33,"h":6,"alineacion":"L","fuente":"helvetica","tamano":11,"estilo":"B"},
+            {"tipo":"campo","campo":"{monto_letras}","x":20,"y":30,"w":133,"h":10,"alineacion":"L","fuente":"helvetica","tamano":9},
+            {"tipo":"campo","campo":"{ciudad_fecha}","x":10,"y":43,"w":120,"h":6,"alineacion":"L","fuente":"helvetica","tamano":10}
         ]
     }';
 
@@ -158,7 +163,7 @@ class ChequeImpresionService
         ];
     }
 
-    /** Datos de la empresa para el PDF (con logo del establecimiento). */
+    /** Datos de la empresa para el PDF (con logo del establecimiento y ciudad). */
     private function cargarEmpresa(int $idEmpresa): array
     {
         $empresaModel = new Empresa();
@@ -167,6 +172,23 @@ class ChequeImpresionService
         if (!empty($establecimientos[0]['logo_ruta'])) {
             $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
         }
+        // Nombre de la ciudad para el cheque (empresa.cod_ciudad → ciudad.nombre).
+        $empresa['ciudad'] = $this->resolverCiudad($empresa);
         return $empresa;
+    }
+
+    /** Resuelve el nombre de la ciudad desde el catálogo por el código de la empresa. */
+    private function resolverCiudad(array $empresa): string
+    {
+        $cod = trim((string)($empresa['cod_ciudad'] ?? ''));
+        if ($cod === '') return '';
+        try {
+            $db = \App\core\Database::getConnection();
+            $st = $db->prepare("SELECT nombre FROM ciudad WHERE codigo = :c LIMIT 1");
+            $st->execute([':c' => $cod]);
+            return (string) ($st->fetchColumn() ?: '');
+        } catch (\Throwable $e) {
+            return '';
+        }
     }
 }

@@ -62,8 +62,8 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
     <!-- ── Selector de cuenta + filtros de fecha ── -->
     <div class="card border-0 shadow-sm rounded-3 mb-3">
         <div class="card-body p-3">
-            <form id="cb-form-filtros" class="row g-2 align-items-end" onsubmit="event.preventDefault(); window.CB_fetchSearch(1);">
-                <div class="col-md-3">
+            <form id="cb-form-filtros" class="d-flex flex-nowrap align-items-end gap-2" onsubmit="event.preventDefault(); window.CB_fetchSearch(1);">
+                <div style="flex:2.2 1 0;min-width:0">
                     <label class="form-label small fw-bold text-muted mb-1">Cuenta Bancaria</label>
                     <select id="cb-forma" class="form-select form-select-sm shadow-none" onchange="window.CB_cambiarCuenta(this.value)">
                         <option value="">— Seleccione —</option>
@@ -74,7 +74,28 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-2">
+                <div style="flex:1.1 1 0;min-width:0">
+                    <label class="form-label small fw-bold text-muted mb-1">Flujo</label>
+                    <select class="form-select form-select-sm shadow-none" id="cb-flujo" onchange="window.CB_fetchSearch(1)">
+                        <option value="TODOS" selected>Todos</option>
+                        <option value="INGRESO">Ingresos</option>
+                        <option value="EGRESO">Egresos</option>
+                    </select>
+                </div>
+                <div style="flex:1.2 1 0;min-width:0">
+                    <label class="form-label small fw-bold text-muted mb-1">Tipo</label>
+                    <select class="form-select form-select-sm shadow-none" id="cb-tipo" onchange="window.CB_fetchSearch(1)">
+                        <option value="" selected>Todos</option>
+                        <option value="TRANSFERENCIA">Transferencia</option>
+                        <option value="DEPOSITO">Depósito</option>
+                        <option value="DEBITO">Débito</option>
+                        <option value="CHEQUE">Cheque</option>
+                        <option value="TARJETA">Tarjeta</option>
+                        <option value="PAYPHONE">Payphone</option>
+                        <option value="OTRO">Otro</option>
+                    </select>
+                </div>
+                <div style="flex:0.8 1 0;min-width:0">
                     <label class="form-label small fw-bold text-muted mb-1">Año</label>
                     <select class="form-select form-select-sm shadow-none" id="cb-anio" onchange="window.CB_actualizarFechas()">
                         <?php foreach ($aniosDisponibles as $anio): ?>
@@ -82,7 +103,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-2">
+                <div style="flex:1.1 1 0;min-width:0">
                     <label class="form-label small fw-bold text-muted mb-1">Mes</label>
                     <select class="form-select form-select-sm shadow-none" id="cb-mes" onchange="window.CB_actualizarFechas()">
                         <option value="0" selected>Todos</option>
@@ -93,16 +114,16 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-2">
+                <div style="flex:1.3 1 0;min-width:0">
                     <label class="form-label small fw-bold text-muted mb-1">Fecha Inicio</label>
                     <input type="date" class="form-control form-control-sm shadow-none" id="cb-fecha-inicio" value="<?= htmlspecialchars($fechaInicio) ?>">
                 </div>
-                <div class="col-md-2">
+                <div style="flex:1.3 1 0;min-width:0">
                     <label class="form-label small fw-bold text-muted mb-1">Fecha Fin</label>
                     <input type="date" class="form-control form-control-sm shadow-none" id="cb-fecha-fin" value="<?= htmlspecialchars($fechaFin) ?>">
                 </div>
-                <div class="col-md-1">
-                    <button type="submit" class="btn btn-primary btn-sm w-100 shadow-sm"><i class="bi bi-search"></i></button>
+                <div style="flex:0 0 auto">
+                    <button type="submit" class="btn btn-primary btn-sm shadow-sm"><i class="bi bi-search"></i></button>
                 </div>
             </form>
         </div>
@@ -161,6 +182,8 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         'comprobante' => 'Comprobante',
                         'tipo' => 'Tipo',
                         'cheque' => 'Cheque',
+                        'fecha_cheque' => 'Fecha Cheque',
+                        'beneficiario_cheque' => 'Beneficiario',
                         'documento' => 'Documento Ref.',
                         'tercero' => 'Tercero',
                         'glosa' => 'Glosa',
@@ -194,19 +217,21 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                         <tr>
                             <th class="ps-3 sortable-header" role="button" data-sort="fecha_asiento" data-col="fecha_asiento">Fecha <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="sortable-header" role="button" data-sort="fecha_banco" data-col="fecha_banco">Fecha Banco <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                            <th data-col="comprobante">Comprobante</th>
+                            <th class="sortable-header" role="button" data-sort="numero_comprobante" data-col="comprobante">Comprobante <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="sortable-header" role="button" data-sort="tipo_transaccion" data-col="tipo">Tipo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                            <th data-col="cheque">Cheque</th>
-                            <th data-col="documento">Documento Ref.</th>
+                            <th class="sortable-header" role="button" data-sort="numero_cheque" data-col="cheque">Cheque <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" role="button" data-sort="fecha_cheque" data-col="fecha_cheque">Fecha Cheque <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" role="button" data-sort="beneficiario_cheque" data-col="beneficiario_cheque">Beneficiario <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                            <th class="sortable-header" role="button" data-sort="documento_referencia" data-col="documento">Documento Ref. <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="sortable-header" role="button" data-sort="nombre_entidad" data-col="tercero">Tercero <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                            <th data-col="glosa">Glosa</th>
+                            <th class="sortable-header" role="button" data-sort="referencia_detalle" data-col="glosa">Glosa <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="text-end sortable-header" role="button" data-sort="debe" data-col="debe">Debe <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                             <th class="text-end sortable-header" role="button" data-sort="haber" data-col="haber">Haber <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
-                            <th class="text-end pe-3" data-col="saldo">Saldo</th>
+                            <th class="text-end pe-3 sortable-header" role="button" data-sort="saldo_acumulado" data-col="saldo">Saldo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         </tr>
                     </thead>
                     <tbody id="cb-tbody">
-                        <tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-bank fs-3 d-block mb-2"></i>Seleccione una cuenta bancaria.</td></tr>
+                        <tr><td colspan="13" class="text-center py-5 text-muted"><i class="bi bi-bank fs-3 d-block mb-2"></i>Seleccione una cuenta bancaria.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -300,6 +325,7 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                 <ul class="nav nav-tabs mb-2" id="cb-tabs-posfechados">
                     <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#cb-tab-recibidos" type="button">Recibidos (de clientes)</button></li>
                     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cb-tab-emitidos" type="button">Emitidos (a proveedores)</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cb-tab-emitidos-emp" type="button">Emitidos a Empleados</button></li>
                 </ul>
                 <div class="tab-content">
                     <div class="tab-pane fade show active" id="cb-tab-recibidos">
@@ -315,6 +341,14 @@ $urlBase = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
                             <table class="table table-sm table-hover mb-0">
                                 <thead class="table-light"><tr><th>Fecha Cheque</th><th>Nº Cheque</th><th>Cuenta</th><th>Proveedor</th><th class="text-end">Monto</th></tr></thead>
                                 <tbody id="cb-tbody-posf-emitidos"><tr><td colspan="5" class="text-center text-muted py-4">Cargando…</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="cb-tab-emitidos-emp">
+                        <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light"><tr><th>Fecha Cheque</th><th>Nº Cheque</th><th>Cuenta</th><th>Empleado</th><th class="text-end">Monto</th></tr></thead>
+                                <tbody id="cb-tbody-posf-emitidos-emp"><tr><td colspan="5" class="text-center text-muted py-4">Cargando…</td></tr></tbody>
                             </table>
                         </div>
                     </div>

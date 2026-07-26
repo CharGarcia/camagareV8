@@ -57,7 +57,7 @@
     window.CB_cambiarCuenta = function (idForma) {
         state.forma = parseInt(idForma, 10) || 0;
         if (!state.forma) {
-            document.getElementById('cb-tbody').innerHTML = '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-bank fs-3 d-block mb-2"></i>Seleccione una cuenta bancaria.</td></tr>';
+            document.getElementById('cb-tbody').innerHTML = '<tr><td colspan="13" class="text-center py-5 text-muted"><i class="bi bi-bank fs-3 d-block mb-2"></i>Seleccione una cuenta bancaria.</td></tr>';
             return;
         }
         window.CB_fetchSearch(1);
@@ -263,7 +263,10 @@
 
         const miSeq = ++searchRequestSeq;
         const tbody = document.getElementById('cb-tbody');
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-5"><span class="spinner-border spinner-border-sm text-primary"></span></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" class="text-center py-5"><span class="spinner-border spinner-border-sm text-primary"></span></td></tr>';
+
+        const flujo = (document.getElementById('cb-flujo') || {}).value || 'TODOS';
+        const tipo = (document.getElementById('cb-tipo') || {}).value || '';
 
         const params = new URLSearchParams({
             forma: state.forma,
@@ -273,13 +276,15 @@
             b: buscar,
             fecha_inicio: fechaInicio,
             fecha_fin: fechaFin,
+            flujo: flujo,
+            tipo: tipo,
         });
 
         try {
             const json = await fetchJson(`${CB_URL_BASE}/searchAjax?${params.toString()}`);
             if (miSeq !== searchRequestSeq) return; // llegó una respuesta más nueva antes: descartar esta
             if (!json.ok) {
-                tbody.innerHTML = `<tr><td colspan="11" class="text-center py-5 text-danger">${json.error || 'Error al cargar movimientos.'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="13" class="text-center py-5 text-danger">${json.error || 'Error al cargar movimientos.'}</td></tr>`;
                 return;
             }
             tbody.innerHTML = json.rows;
@@ -290,7 +295,7 @@
         } catch (e) {
             console.error(e);
             if (miSeq === searchRequestSeq) {
-                tbody.innerHTML = '<tr><td colspan="11" class="text-center py-5 text-danger">Error de red o servidor.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="13" class="text-center py-5 text-danger">Error de red o servidor.</td></tr>';
             }
         }
     };
@@ -416,12 +421,14 @@
     window.CB_abrirModalPosfechados = async function () {
         new bootstrap.Modal(document.getElementById('modalPosfechadosCB')).show();
         try {
-            const [recibidos, emitidos] = await Promise.all([
+            const [recibidos, emitidos, emitidosEmp] = await Promise.all([
                 fetchJson(`${CB_URL_BASE}/chequesPosfechadosAjax?direccion=RECIBIDO`),
                 fetchJson(`${CB_URL_BASE}/chequesPosfechadosAjax?direccion=EMITIDO`),
+                fetchJson(`${CB_URL_BASE}/chequesPosfechadosAjax?direccion=EMITIDO_EMPLEADO`),
             ]);
             renderPosfechados('cb-tbody-posf-recibidos', recibidos.ok ? recibidos.data : []);
             renderPosfechados('cb-tbody-posf-emitidos', emitidos.ok ? emitidos.data : []);
+            renderPosfechados('cb-tbody-posf-emitidos-emp', emitidosEmp.ok ? emitidosEmp.data : []);
         } catch (e) {
             console.error(e);
         }

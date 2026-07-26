@@ -544,6 +544,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                         <label class="form-label small fw-bold text-primary"><i class="bi bi-calendar-date me-1"></i>Fecha Cobro</label>
                                                         <input type="date" id="eg-add-pago-fecha-cheque" class="form-control form-control-sm border-primary">
                                                     </div>
+                                                    <div class="col-12 eg-div-cheque-fields d-none">
+                                                        <label class="form-label small fw-bold text-primary"><i class="bi bi-person me-1"></i>Nombre en el cheque <span class="text-muted fw-normal">(opcional, no cambia el beneficiario del egreso)</span></label>
+                                                        <input type="text" id="eg-add-pago-benef-cheque" class="form-control form-control-sm border-primary" placeholder="Por defecto: beneficiario del egreso" style="text-transform:uppercase">
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -1217,6 +1221,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             // Fecha de cobro por defecto = hoy (si está vacía).
             const fch = document.getElementById('eg-add-pago-fecha-cheque');
             if (fch && !fch.value) fch.value = new Date().toISOString().slice(0, 10);
+            // Nombre por defecto = beneficiario del egreso (editable).
+            const benef = document.getElementById('eg-add-pago-benef-cheque');
+            const sujeto = (document.getElementById('eg-search-input')?.value || '').trim();
+            if (benef) { benef.disabled = false; if (!benef.value && sujeto) benef.value = sujeto; }
         } else {
             divs.forEach(d => d.classList.add('d-none'));
         }
@@ -1261,21 +1269,28 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 const btnChq = (p.tipo_operacion_bancaria === 'CHEQUE' && p.id_pago)
                     ? `<button type="button" class="btn btn-link btn-sm text-success p-0 ms-1 align-baseline" title="Imprimir cheque" onclick="imprimirChequeIndividual(${p.id_pago})"><i class="bi bi-printer"></i></button>`
                     : '';
+                const btnChqDl = (p.tipo_operacion_bancaria === 'CHEQUE' && p.id_pago)
+                    ? `<button type="button" class="btn btn-link btn-sm text-danger p-0 ms-1 align-baseline" title="Descargar PDF del cheque" onclick="descargarChequesPdf(${p.id_pago})"><i class="bi bi-file-earmark-pdf"></i></button>`
+                    : '';
 
                 // Cheque: permitir editar la fecha de cobro solo si NO está reportado como cobrado (conciliado).
-                let btnEditFecha = '', badgeCobrado = '';
+                let btnEditFecha = '', badgeCobrado = '', btnEditNombre = '', infoNombre = '';
                 if (p.tipo_operacion_bancaria === 'CHEQUE' && p.id_pago) {
+                    if (p.beneficiario_cheque) {
+                        infoNombre = ` <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" title="Nombre a imprimir en el cheque"><i class="bi bi-person"></i> ${p.beneficiario_cheque}</span>`;
+                    }
                     if (p.conciliado) {
                         badgeCobrado = ` <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" title="Cheque conciliado en Control Bancario"><i class="bi bi-lock-fill"></i> cobrado</span>`;
                     } else if (!esEgresoAnulado) {
-                        btnEditFecha = `<button type="button" class="btn btn-link btn-sm text-primary p-0 ms-1 align-baseline" title="Editar fecha de cobro" onclick="editarFechaCobroCheque(${p.id_pago}, '${p.fecha_cobro || ''}', ${i})"><i class="bi bi-pencil"></i></button>`;
+                        btnEditFecha  = `<button type="button" class="btn btn-link btn-sm text-primary p-0 ms-1 align-baseline" title="Editar fecha de cobro" onclick="editarFechaCobroCheque(${p.id_pago}, '${p.fecha_cobro || ''}', ${i})"><i class="bi bi-calendar-event"></i></button>`;
+                        btnEditNombre = `<button type="button" class="btn btn-link btn-sm text-secondary p-0 ms-1 align-baseline" title="Nombre a imprimir en el cheque" onclick="editarNombreCheque(${p.id_pago}, ${i})"><i class="bi bi-person-gear"></i></button>`;
                     }
                 }
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td><span class="badge bg-secondary bg-opacity-10 text-secondary border border-opacity-25">${p.nombre}</span></td>
-                    <td class="small">${txtRef} ${btnChq}${btnEditFecha}${badgeCobrado}</td>
+                    <td class="small">${txtRef} ${btnChq}${btnChqDl}${btnEditFecha}${btnEditNombre}${infoNombre}${badgeCobrado}</td>
                     <td class="text-end fw-bold text-primary">$${p.monto.toFixed(2)}</td>
                     <td class="text-center">${btnTrash}</td>
                 `;
@@ -1291,9 +1306,32 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     }
 
     // ── Impresión de cheques ──────────────────────────────────────────────────
+    // Imprime directo (abre el diálogo de impresión) usando un iframe oculto,
+    // sin descargar el PDF. Si el navegador no lo permite, abre en pestaña.
+    function imprimirChequesDirecto(ids) {
+        const url = `${EGR_URL}/imprimirCheque?ids=${ids}`;
+        let ifr = document.getElementById('cmg-print-frame');
+        if (!ifr) {
+            ifr = document.createElement('iframe');
+            ifr.id = 'cmg-print-frame';
+            ifr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+            document.body.appendChild(ifr);
+        }
+        ifr.onload = () => {
+            try {
+                ifr.contentWindow.focus();
+                ifr.contentWindow.print();
+            } catch (e) {
+                window.open(url, '_blank');
+            }
+        };
+        ifr.src = url;
+    }
+
+    // Descarga el PDF del/los cheque(s) (para imprimir desde el visor de PDF).
     function descargarChequesPdf(ids) {
         const a = document.createElement('a');
-        a.href = `${EGR_URL}/imprimirCheque?ids=${ids}`;
+        a.href = `${EGR_URL}/imprimirCheque?ids=${ids}&dl=1`;
         a.download = '';
         document.body.appendChild(a);
         a.click();
@@ -1314,7 +1352,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 if (!c.isConfirmed) return;
             }
         } catch (e) { /* si falla el estado, seguimos igual */ }
-        descargarChequesPdf(idPago);
+        imprimirChequesDirecto(idPago);
     }
 
     async function editarFechaCobroCheque(idPago, fechaActual, index) {
@@ -1325,6 +1363,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             showCancelButton: true,
             confirmButtonText: 'Guardar',
             cancelButtonText: 'Cancelar',
+            target: document.getElementById('modalNuevoEgreso') || 'body',
+            heightAuto: false,
             preConfirm: () => {
                 const v = document.getElementById('swal-fecha-cobro').value;
                 if (!v) { Swal.showValidationMessage('Ingrese una fecha'); return false; }
@@ -1343,6 +1383,39 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             Swal.fire({ icon: 'success', title: 'Actualizada', text: res.mensaje, timer: 1400, showConfirmButton: false });
         } catch (e) {
             Swal.fire('Error', 'No se pudo actualizar la fecha.', 'error');
+        }
+    }
+
+    async function editarNombreCheque(idPago, index) {
+        const override = (pagosEgreso[index] && pagosEgreso[index].beneficiario_cheque) ? pagosEgreso[index].beneficiario_cheque : '';
+        const sujeto   = (document.getElementById('eg-search-input')?.value || '').trim();
+        const actual   = override || sujeto; // por defecto, el beneficiario del egreso
+        const { value: nombre, isConfirmed } = await Swal.fire({
+            title: 'Nombre en el cheque',
+            input: 'text',
+            inputValue: (actual || '').toUpperCase(),
+            inputPlaceholder: 'Nombre a imprimir en el cheque',
+            inputAttributes: { style: 'text-transform:uppercase' },
+            footer: 'No cambia el beneficiario del egreso. Deja vacío para usar el del egreso.',
+            showCancelButton: true,
+            confirmButtonText: 'Guardar',
+            cancelButtonText: 'Cancelar',
+            target: document.getElementById('modalNuevoEgreso') || 'body',
+            heightAuto: false
+        });
+        if (!isConfirmed) return;
+        const nombreUp = (nombre || '').trim().toUpperCase();
+        const fd = new FormData();
+        fd.append('id_pago', idPago);
+        fd.append('nombre', nombreUp);
+        try {
+            const res = await (await fetch(`${EGR_URL}/actualizarBeneficiarioChequeAjax`, { method: 'POST', body: fd })).json();
+            if (!res.ok) { Swal.fire('No se pudo', res.mensaje, 'warning'); return; }
+            if (pagosEgreso[index]) pagosEgreso[index].beneficiario_cheque = nombreUp || null;
+            renderPagosEgreso();
+            Swal.fire({ icon: 'success', title: 'Actualizado', text: res.mensaje, timer: 1400, showConfirmButton: false });
+        } catch (e) {
+            Swal.fire('Error', 'No se pudo actualizar el nombre.', 'error');
         }
     }
 
@@ -1394,21 +1467,23 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.querySelectorAll('.chq-check').forEach(c => c.checked = el.checked);
     }
 
-    async function imprimirChequesSeleccionados() {
+    async function imprimirChequesSeleccionados(modo = 'print') {
         const checks = [...document.querySelectorAll('.chq-check:checked')];
         if (!checks.length) { Swal.fire('Sin selección', 'Selecciona al menos un cheque.', 'info'); return; }
         const ids = checks.map(c => c.value);
+        const accion = (modo === 'download') ? 'descargar' : 'imprimir';
         const yaImpresos = checks.filter(c => c.dataset.impreso === '1').length;
         if (yaImpresos > 0) {
             const r = await Swal.fire({
                 icon: 'warning', title: 'Reimpresión',
-                html: `<b>${yaImpresos}</b> de ${ids.length} cheque(s) ya fueron impresos.<br>¿Continuar e imprimir de todas formas?`,
-                showCancelButton: true, confirmButtonText: 'Sí, imprimir', cancelButtonText: 'Cancelar'
+                html: `<b>${yaImpresos}</b> de ${ids.length} cheque(s) ya fueron impresos.<br>¿Continuar y ${accion} de todas formas?`,
+                showCancelButton: true, confirmButtonText: `Sí, ${accion}`, cancelButtonText: 'Cancelar'
             });
             if (!r.isConfirmed) return;
         }
-        descargarChequesPdf(ids.join(','));
-        setTimeout(cargarChequesImprimir, 1500); // refrescar estados tras imprimir
+        if (modo === 'download') descargarChequesPdf(ids.join(','));
+        else imprimirChequesDirecto(ids.join(','));
+        setTimeout(cargarChequesImprimir, 1500); // refrescar estados
     }
 
     function addEgresoPago() {
@@ -1425,31 +1500,35 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         let tipoOp = null;
         let numChq = null;
         let fecChq = null;
+        let benefChq = null;
 
         if (tipoPadre === 'BANCO') {
             tipoOp = document.getElementById('eg-add-pago-tipo-banco').value;
             if (tipoOp === 'CHEQUE') {
                 numChq = document.getElementById('eg-add-pago-num-cheque').value.trim();
                 fecChq = document.getElementById('eg-add-pago-fecha-cheque').value;
+                benefChq = document.getElementById('eg-add-pago-benef-cheque').value.trim().toUpperCase() || null;
                 if (!numChq) { Swal.fire('Campo requerido', 'Ingrese número de cheque', 'warning'); return; }
                 if (!fecChq) { Swal.fire('Campo requerido', 'Ingrese fecha de cobro del cheque', 'warning'); return; }
             }
         }
 
-        pagosEgreso.push({ 
-            id_forma: c.value, 
-            nombre: selOpt.text, 
-            monto: m, 
+        pagosEgreso.push({
+            id_forma: c.value,
+            nombre: selOpt.text,
+            monto: m,
             ref: r,
             tipo_operacion_bancaria: tipoOp,
             numero_cheque: numChq,
-            fecha_cobro: fecChq
+            fecha_cobro: fecChq,
+            beneficiario_cheque: benefChq
         });
 
         // Reset inputs
         document.getElementById('eg-add-pago-ref').value = '';
         document.getElementById('eg-add-pago-num-cheque').value = '';
         document.getElementById('eg-add-pago-fecha-cheque').value = '';
+        document.getElementById('eg-add-pago-benef-cheque').value = '';
 
         renderPagosEgreso();
         // Pre-cargar el monto con lo que aún falta por pagar.
@@ -1531,13 +1610,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             tipo_sujeto: tS,
             observaciones: document.getElementById('eg-input-obs').value,
             detalles: [],
-            pagos: pagosEgreso.map(p=>({ 
-                id_forma_pago: p.id_forma, 
-                monto: p.monto, 
+            pagos: pagosEgreso.map(p=>({
+                id_forma_pago: p.id_forma,
+                monto: p.monto,
                 referencia: p.ref,
                 tipo_operacion_bancaria: p.tipo_operacion_bancaria,
                 numero_cheque: p.numero_cheque,
-                fecha_cobro: p.fecha_cobro
+                fecha_cobro: p.fecha_cobro,
+                beneficiario_cheque: p.beneficiario_cheque
             }))
         };
 
@@ -1792,6 +1872,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 tipo_operacion_bancaria: p.tipo_operacion_bancaria,
                 numero_cheque: p.numero_cheque,
                 fecha_cobro: p.fecha_cobro,
+                beneficiario_cheque: p.beneficiario_cheque,
                 conciliado: (p.cheque_conciliado === true || p.cheque_conciliado === 't' || p.cheque_conciliado === 1 || p.cheque_conciliado === '1')
             }));
 
@@ -1895,7 +1976,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     function setPagosControlesHabilitados(hab) {
         const els = [
             'eg-add-pago-forma', 'eg-add-pago-monto', 'eg-add-pago-ref',
-            'eg-add-pago-tipo-banco', 'eg-add-pago-num-cheque', 'eg-add-pago-fecha-cheque'
+            'eg-add-pago-tipo-banco', 'eg-add-pago-num-cheque', 'eg-add-pago-fecha-cheque',
+            'eg-add-pago-benef-cheque'
         ];
         els.forEach(id => {
             const el = document.getElementById(id);
@@ -1935,7 +2017,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 referencia: p.ref,
                 tipo_operacion_bancaria: p.tipo_operacion_bancaria,
                 numero_cheque: p.numero_cheque,
-                fecha_cobro: p.fecha_cobro
+                fecha_cobro: p.fecha_cobro,
+                beneficiario_cheque: p.beneficiario_cheque
             }))
         };
 
@@ -2944,7 +3027,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         <span class="small text-muted"><i class="bi bi-info-circle me-1"></i>Los cheques ya impresos se marcan; puedes reimprimir confirmando.</span>
         <div class="d-flex gap-2">
           <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
-          <button type="button" class="btn btn-primary btn-sm" onclick="imprimirChequesSeleccionados()">
+          <button type="button" class="btn btn-outline-danger btn-sm" onclick="imprimirChequesSeleccionados('download')">
+            <i class="bi bi-file-earmark-pdf me-1"></i> Descargar PDF
+          </button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="imprimirChequesSeleccionados('print')">
             <i class="bi bi-printer me-1"></i> Imprimir seleccionados
           </button>
         </div>

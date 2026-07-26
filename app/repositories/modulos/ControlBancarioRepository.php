@@ -26,6 +26,8 @@ class ControlBancarioRepository extends BaseRepository
     private const COLUMNAS_ORDEN = [
         'fecha_asiento', 'fecha_banco', 'fecha_cheque', 'tipo_transaccion',
         'nombre_entidad', 'numero_comprobante', 'debe', 'haber',
+        'numero_cheque', 'beneficiario_cheque', 'documento_referencia',
+        'referencia_detalle', 'saldo_acumulado',
     ];
 
     public function __construct()
@@ -135,6 +137,8 @@ class ControlBancarioRepository extends BaseRepository
                      CASE
                          WHEN ip.id IS NOT NULL AND NULLIF(ip.tipo_operacion_bancaria, '') IS NOT NULL
                              THEN UPPER(ip.tipo_operacion_bancaria)
+                         WHEN ep.id IS NOT NULL AND NULLIF(ep.tipo_operacion_bancaria, '') IS NOT NULL
+                             THEN UPPER(ep.tipo_operacion_bancaria)
                          WHEN ac.modulo_origen NOT IN ('migracion', 'manual') THEN
                              CASE fp.tipo
                                  WHEN 'CHEQUE' THEN 'CHEQUE'
@@ -151,8 +155,8 @@ class ControlBancarioRepository extends BaseRepository
                              CASE WHEN ad.debe > 0 THEN 'RECIBIDO' WHEN ad.haber > 0 THEN 'EMITIDO' ELSE NULL END
                          ELSE NULL
                      END) AS cheque_direccion,
-            COALESCE(cbm.numero_cheque, ip.numero_cheque, ep.referencia) AS numero_cheque,
-            COALESCE(cbm.fecha_cheque, ip.fecha_cobro) AS fecha_cheque,
+            COALESCE(cbm.numero_cheque, ip.numero_cheque, NULLIF(ep.numero_cheque, '')) AS numero_cheque,
+            COALESCE(cbm.fecha_cheque, ip.fecha_cobro, ep.fecha_cobro) AS fecha_cheque,
             COALESCE(cbm.fecha_banco, ac.fecha_asiento) AS fecha_banco,
             cbm.fecha_banco AS fecha_banco_manual,
             cbm.id AS id_clasificacion,
@@ -204,6 +208,7 @@ class ControlBancarioRepository extends BaseRepository
                         ad.tipo_entidad,
                         ad.id_entidad,
                         COALESCE(cli.nombre, prov.razon_social, emp.nombres_apellidos) AS nombre_entidad,
+                        COALESCE(NULLIF(ep.beneficiario_cheque, ''), cli.nombre, prov.razon_social, emp.nombres_apellidos) AS beneficiario_cheque,
                         {$this->selectDerivado()},
                         (:saldo_inicial + SUM(ad.debe - ad.haber) OVER (
                             ORDER BY ac.fecha_asiento, ac.id, ad.id
@@ -239,6 +244,23 @@ class ControlBancarioRepository extends BaseRepository
         if (!empty($filtros['fecha_fin'])) {
             $whereSql .= " AND fecha_asiento <= :f_fin";
             $params[':f_fin'] = $filtros['fecha_fin'];
+        }
+
+        // Flujo: INGRESO = entra al banco (debe); EGRESO = sale (haber). El saldo
+        // acumulado se calcula sobre todo el histórico (dentro del CTE), así que
+        // este filtro solo recorta las filas mostradas, sin alterar el saldo.
+        $flujo = strtoupper((string) ($filtros['flujo'] ?? 'TODOS'));
+        if ($flujo === 'INGRESO') {
+            $whereSql .= " AND debe > 0";
+        } elseif ($flujo === 'EGRESO') {
+            $whereSql .= " AND haber > 0";
+        }
+
+        // Filtro por tipo de transacción (columna calculada tipo_transaccion, en mayúsculas).
+        $tipo = strtoupper((string) ($filtros['tipo'] ?? ''));
+        if ($tipo !== '') {
+            $whereSql .= " AND tipo_transaccion = :tipo_tx";
+            $params[':tipo_tx'] = $tipo;
         }
 
         if (!empty($filtros['buscar'])) {
@@ -314,7 +336,8 @@ class ControlBancarioRepository extends BaseRepository
                     ad.documento_referencia,
                     ad.debe,
                     ad.haber,
-                    COALESCE(cli.nombre, prov.razon_social) AS nombre_entidad,
+                    COALESCE(NULLIF(ep.beneficiario_cheque, ''), cli.nombre, prov.razon_social, empb.nombres_apellidos) AS nombre_entidad,
+                    (egc.id_empleado IS NOT NULL) AS es_empleado,
                     fp.id AS id_forma_pago,
                     fp.nombre AS forma_pago_nombre,
                     {$this->selectDerivado()}
@@ -325,6 +348,8 @@ class ControlBancarioRepository extends BaseRepository
                 LEFT JOIN clientes cli ON ad.tipo_entidad = 'cliente' AND ad.id_entidad = cli.id
                 LEFT JOIN proveedores prov ON ad.tipo_entidad = 'proveedor' AND ad.id_entidad = prov.id
                 {$this->joinsDerivado()}
+                LEFT JOIN egresos_cabecera egc ON ep.id_egreso = egc.id AND egc.eliminado = FALSE
+                LEFT JOIN empleados empb ON egc.id_empleado = empb.id
                 WHERE ac.id_empresa = :id_empresa
                   AND ac.estado = 'contabilizado'
                   AND ac.eliminado = FALSE
@@ -338,15 +363,27 @@ class ControlBancarioRepository extends BaseRepository
             $params[':id_forma_pago'] = $idFormaPago;
         }
 
+        // Dirección del cheque en el banco. EMITIDO_EMPLEADO es EMITIDO + beneficiario empleado.
         $direccion = strtoupper($direccion);
-        if (in_array($direccion, ['EMITIDO', 'RECIBIDO'], true)) {
+        $dirBanco = in_array($direccion, ['EMITIDO', 'EMITIDO_EMPLEADO'], true) ? 'EMITIDO'
+                  : ($direccion === 'RECIBIDO' ? 'RECIBIDO' : '');
+        if ($dirBanco !== '') {
             $sql .= " AND COALESCE(cbm.cheque_direccion,
                         CASE WHEN ip.id IS NOT NULL THEN 'RECIBIDO' WHEN ep.id IS NOT NULL THEN 'EMITIDO' ELSE NULL END) = :direccion";
-            $params[':direccion'] = $direccion;
+            $params[':direccion'] = $dirBanco;
+        }
+
+        // Separar emitidos a empleados vs a proveedores/otros.
+        $filtroEmpleado = '';
+        if ($direccion === 'EMITIDO_EMPLEADO') {
+            $filtroEmpleado = ' AND x.es_empleado = TRUE';
+        } elseif ($direccion === 'EMITIDO') {
+            $filtroEmpleado = ' AND (x.es_empleado = FALSE OR x.es_empleado IS NULL)';
         }
 
         $sqlFull = "SELECT * FROM ({$sql}) x
                      WHERE x.tipo_transaccion = 'CHEQUE' AND x.fecha_cheque > CURRENT_DATE
+                     {$filtroEmpleado}
                      ORDER BY x.fecha_cheque ASC";
 
         $st = $this->db->prepare($sqlFull);

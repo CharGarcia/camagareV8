@@ -123,12 +123,20 @@ class PlantillasPdfRendererService
         $mT = (float)($pagCfg['margenTop']    ?? 10);
         $mB = (float)($pagCfg['margenBottom'] ?? 10);
 
-        $formatoTcpdf = match($formato) {
-            'LETTER' => 'LETTER',
-            'LEGAL'  => 'LEGAL',
-            'A5'     => 'A5',
-            default  => 'A4',
-        };
+        // Tamaño personalizado (p. ej. el cheque estándar 155×75 mm): se define con
+        // formato CUSTOM + ancho/alto en mm.
+        $ancho = (float)($pagCfg['ancho'] ?? 0);
+        $alto  = (float)($pagCfg['alto']  ?? 0);
+        if ($formato === 'CUSTOM' && $ancho > 0 && $alto > 0) {
+            $formatoTcpdf = [$ancho, $alto];
+        } else {
+            $formatoTcpdf = match($formato) {
+                'LETTER' => 'LETTER',
+                'LEGAL'  => 'LEGAL',
+                'A5'     => 'A5',
+                default  => 'A4',
+            };
+        }
 
         // Ordenar elementos por z-index una sola vez.
         usort($elementos, fn($a, $b) => (int)($a['z'] ?? 0) <=> (int)($b['z'] ?? 0));
@@ -591,28 +599,36 @@ class PlantillasPdfRendererService
         $meses = [1=>'enero',2=>'febrero',3=>'marzo',4=>'abril',5=>'mayo',6=>'junio',
                   7=>'julio',8=>'agosto',9=>'septiembre',10=>'octubre',11=>'noviembre',12=>'diciembre'];
         $fechaCorta = $fechaTs ? date('d/m/Y', $fechaTs) : '';
+        $fechaIso   = $fechaTs ? date('Y-m-d', $fechaTs) : '';
         $fechaLarga = $fechaTs ? (date('j', $fechaTs) . ' de ' . $meses[(int)date('n', $fechaTs)] . ' de ' . date('Y', $fechaTs)) : '';
 
         $ciudad = trim((string)($c['ciudad'] ?? $empresa['ciudad'] ?? ''));
+        // Línea "CIUDAD, 2026-07-30" (estándar del cheque en Ecuador).
+        $ciudadFecha = trim($ciudad . ($ciudad !== '' && $fechaIso !== '' ? ', ' : '') . $fechaIso);
+
+        // En el cheque todo el texto va en MAYÚSCULAS.
+        $up = fn($s) => mb_strtoupper((string) $s, 'UTF-8');
 
         return [
-            '{beneficiario}'           => (string)($c['beneficiario'] ?? ''),
+            '{beneficiario}'           => $up($c['beneficiario'] ?? ''),
             '{beneficiario_ident}'     => (string)($c['beneficiario_ident'] ?? ''),
             '{monto_numero}'           => $montoFmt,
             '{monto_numero_protegido}' => '***' . $montoFmt . '***',
             '{monto_letras}'           => $letras,
             '{fecha_cheque}'           => $fechaCorta,
-            '{fecha_larga}'            => $fechaLarga,
-            '{ciudad}'                 => $ciudad,
+            '{fecha_iso}'              => $fechaIso,
+            '{fecha_larga}'            => $up($fechaLarga),
+            '{ciudad}'                 => $up($ciudad),
+            '{ciudad_fecha}'           => $up($ciudadFecha),
             '{dia}'                    => $fechaTs ? date('d', $fechaTs) : '',
             '{mes}'                    => $fechaTs ? date('m', $fechaTs) : '',
             '{anio}'                   => $fechaTs ? date('Y', $fechaTs) : '',
             '{numero_cheque}'          => (string)($c['numero_cheque'] ?? ''),
-            '{concepto}'               => (string)($c['observaciones'] ?? ''),
+            '{concepto}'               => $up($c['observaciones'] ?? ''),
             '{numero_egreso}'          => (string)($c['numero_egreso'] ?? ''),
-            '{banco_nombre}'           => (string)($c['banco_nombre'] ?? ''),
+            '{banco_nombre}'           => $up($c['banco_nombre'] ?? ''),
             '{cuenta_numero}'          => (string)($c['cuenta_numero'] ?? ''),
-            '{empresa_nombre}'         => (string)($empresa['nombre'] ?? ''),
+            '{empresa_nombre}'         => $up($empresa['nombre'] ?? ''),
             '{empresa_ruc}'            => (string)($empresa['ruc'] ?? ''),
             '{empresa_logo}'           => (string)($empresa['logo'] ?? $empresa['logo_ruta'] ?? ''),
         ];

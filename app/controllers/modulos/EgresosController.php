@@ -546,8 +546,10 @@ class EgresosController extends BaseModuloController
                 ->imprimirLote($idEmpresa, $ids, $idUsuario);
 
             $nombre = (count($ids) === 1) ? ('Cheque_' . $ids[0] . '.pdf') : 'Cheques.pdf';
+            // dl=1 → descarga (attachment); por defecto inline para imprimir directo.
+            $dispo = (($_GET['dl'] ?? '') === '1') ? 'attachment' : 'inline';
             header('Content-Type: application/pdf');
-            header('Content-Disposition: attachment; filename="' . $nombre . '"');
+            header('Content-Disposition: ' . $dispo . '; filename="' . $nombre . '"');
             header('Content-Length: ' . strlen($pdf));
             echo $pdf;
         } catch (\Throwable $e) {
@@ -572,6 +574,25 @@ class EgresosController extends BaseModuloController
             }
             $this->service->actualizarFechaCobroCheque($idEmpresa, $idPago, $fecha, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Fecha de cobro actualizada.', 'fecha_cobro' => $fecha]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Cambia el nombre a imprimir en el cheque (sin cambiar el beneficiario del egreso). */
+    public function actualizarBeneficiarioChequeAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+            $idPago    = (int) ($_POST['id_pago'] ?? 0);
+            $nombre    = trim($_POST['nombre'] ?? '');
+            if (!$idPago) { echo json_encode(['ok' => false, 'mensaje' => 'Pago no indicado.']); exit; }
+            $this->service->actualizarBeneficiarioCheque($idEmpresa, $idPago, $nombre, $idUsuario);
+            echo json_encode(['ok' => true, 'mensaje' => 'Nombre del cheque actualizado.', 'nombre' => $nombre]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
