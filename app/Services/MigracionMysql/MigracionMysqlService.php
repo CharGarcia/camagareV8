@@ -3572,10 +3572,13 @@ class MigracionMysqlService
     }
 
     /**
-     * REVIVE (quita el soft-delete) los documentos que la migración INSERTÓ (vinculado IS NOT TRUE) y
-     * que quedaron eliminado=true. Al re-migrar, el histórico debe volver a estar presente/visible.
-     * Solo toca lo insertado por la migración: NUNCA revive registros nativos (vinculados) que el
-     * usuario haya borrado a propósito. Devuelve cuántos revivió.
+     * REVIVE (quita el soft-delete) los documentos que la migración MAPEÓ (insertados O vinculados) y
+     * que quedaron eliminado=true. Al re-migrar, el histórico del sistema viejo debe estar presente y
+     * visible; un documento que el mapa asocia a esa migración pero está borrado deja el módulo
+     * incompleto (caso real: 39 facturas vinculadas + eliminadas que no se mostraban). Se incluyen los
+     * VINCULADOS porque un vínculo a una fila borrada no cumple su función (representar el doc viejo):
+     * reactivarlo la restaura sin duplicar. Solo toca filas en el mapa de ESTA entidad y solo las
+     * eliminado=true. Devuelve cuántos revivió.
      */
     private function revivirMigrados(PDO $pg, int $idEmpresa, string $entidad): int
     {
@@ -3586,7 +3589,7 @@ class MigracionMysqlService
               WHERE t.id_empresa = ? AND t.eliminado = true
                 AND EXISTS (SELECT 1 FROM migracion_mysql_map m
                              WHERE m.id_empresa = t.id_empresa AND m.entidad = ?
-                               AND m.id_destino = t.id AND m.vinculado IS NOT TRUE)");
+                               AND m.id_destino = t.id)");
         $st->execute([$idEmpresa, $entidad]);
         return $st->rowCount();
     }
