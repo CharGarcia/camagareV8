@@ -420,6 +420,93 @@ class ProveedoresController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Previsualiza cuántos pagos (egresos) se generarían para las compras del
+     * proveedor emitidas hasta hoy que aún no tienen pago. No genera nada.
+     */
+    public function previsualizarPagosPendientesAjax(): void
+    {
+        $this->requireLeer();
+        $this->requirePermisoModulo('modulos/egresos', 'w');
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            if ($id <= 0) throw new \Exception('Proveedor no válido.');
+
+            $svc  = new \App\Services\modulos\PagoAutomaticoProveedorService();
+            $prev = $svc->previsualizarPendientes($id, $idEmpresa, date('Y-m-d'));
+
+            if (!$prev['ok']) {
+                echo json_encode(['ok' => false, 'error' => $prev['motivo']]);
+                exit;
+            }
+
+            $detalle = array_map(fn($c) => [
+                'numero_documento' => $c['numero_documento'],
+                'fecha_emision'    => date('d-m-Y', strtotime((string) $c['fecha_emision'])),
+                'monto'            => (float) $c['monto_a_pagar'],
+            ], array_slice($prev['elegibles'], 0, 10));
+
+            $excluidas = array_map(fn($c) => [
+                'numero_documento' => $c['numero_documento'],
+                'motivo'           => $c['motivo'],
+            ], array_slice($prev['excluidas'], 0, 10));
+
+            echo json_encode([
+                'ok'              => true,
+                'cantidad'        => count($prev['elegibles']),
+                'total'           => $prev['total'],
+                'detalle'         => $detalle,
+                'cantidad_omitidas' => count($prev['excluidas']),
+                'omitidas'        => $excluidas,
+            ]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Genera los egresos pendientes del proveedor (compras emitidas hasta hoy
+     * sin pago registrado) usando su configuración de la pestaña Pagos.
+     */
+    public function generarPagosPendientesAjax(): void
+    {
+        $this->requireLeer();
+        $this->requirePermisoModulo('modulos/egresos', 'w');
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            if ($id <= 0) throw new \Exception('Proveedor no válido.');
+
+            $svc = new \App\Services\modulos\PagoAutomaticoProveedorService();
+            $res = $svc->generarPendientes($id, $idEmpresa, $idUsuario, date('Y-m-d'));
+
+            if (!$res['ok']) {
+                echo json_encode(['ok' => false, 'error' => $res['motivo']]);
+                exit;
+            }
+
+            echo json_encode([
+                'ok'        => true,
+                'generados' => $res['generados'],
+                'total'     => $res['total'],
+                'omitidas'  => $res['omitidas'],
+                'fallidos'  => $res['fallidos'],
+            ]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function store(): void
     {
         $this->requireCrear();
@@ -431,8 +518,19 @@ class ProveedoresController extends BaseModuloController
 
         try {
             $id = $this->service->crear($data);
-            $data['id'] = $id; 
-            echo json_encode(['ok' => true, 'msg' => 'Proveedor creado correctamente.', 'id' => $id, 'data' => $data]);
+            $data['id'] = $id;
+
+            // Devolver la ficha ya persistida (normalizada) para repoblar el modal
+            // sin cerrarlo. Si por algo no se pudiera leer, se responde con los
+            // datos del formulario para no romper a quien consuma la respuesta.
+            $guardado = (new ProveedorRepository())->getDetalleCompleto($id, $data['id_empresa']);
+
+            echo json_encode([
+                'ok'   => true,
+                'msg'  => 'Proveedor creado correctamente.',
+                'id'   => $id,
+                'data' => $guardado ?: $data,
+            ]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -454,7 +552,16 @@ class ProveedoresController extends BaseModuloController
         try {
             if ($id <= 0) throw new \Exception('ID del proveedor no es válido.');
             $this->service->actualizar($id, $idEmpresa, $data);
-            echo json_encode(['ok' => true, 'msg' => 'Proveedor actualizado correctamente.']);
+
+            $data['id'] = $id;
+            $guardado = (new ProveedorRepository())->getDetalleCompleto($id, $idEmpresa);
+
+            echo json_encode([
+                'ok'   => true,
+                'msg'  => 'Proveedor actualizado correctamente.',
+                'id'   => $id,
+                'data' => $guardado ?: $data,
+            ]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

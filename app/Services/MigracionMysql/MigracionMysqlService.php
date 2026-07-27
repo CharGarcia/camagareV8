@@ -2242,10 +2242,30 @@ class MigracionMysqlService
         $oldCliRuc   = $mysql->prepare("SELECT ruc FROM clientes WHERE id = :id LIMIT 1");
 
         $cuerpoStmt = $mysql->prepare(
-            "SELECT id_producto, cantidad_factura, valor_unitario_factura, subtotal_factura, descuento, tarifa_iva, codigo_producto, nombre_producto, id_bodega
+            "SELECT id_producto, cantidad_factura, valor_unitario_factura, subtotal_factura, descuento, tarifa_iva, codigo_producto, nombre_producto, id_bodega, lote, vencimiento
                FROM cuerpo_factura WHERE ruc_empresa = :r AND serie_factura = :s AND secuencial_factura = :sec"
         );
         $prodPorCod = $this->productosPorCodigo($pg, $idEmpresa);
+
+        // Lotes de una factura ya migrada: reaplica numero_lote/fecha_caducidad a las líneas del detalle
+        // emparejando por ORDEN (la migración inserta el detalle en el mismo orden del cuerpo viejo).
+        // Se usa en la reconciliación (la re-corrida NO reconstruye el detalle de facturas).
+        $loteStmt   = $mysql->prepare("SELECT lote, vencimiento FROM cuerpo_factura WHERE ruc_empresa = :r AND serie_factura = :s AND secuencial_factura = :sec ORDER BY id_cuerpo_factura");
+        $detIdsStmt = $pg->prepare("SELECT id FROM ventas_detalle WHERE id_venta = ? ORDER BY id");
+        $reaplicarLotes = function (int $idVenta, array $ef) use ($loteStmt, $detIdsStmt, $repo): void {
+            $loteStmt->execute([':r' => $ef['ruc_empresa'], ':s' => $ef['serie_factura'], ':sec' => $ef['secuencial_factura']]);
+            $lotes = $loteStmt->fetchAll(PDO::FETCH_ASSOC);
+            if (!$lotes) { return; }
+            $detIdsStmt->execute([$idVenta]);
+            $ids = $detIdsStmt->fetchAll(PDO::FETCH_COLUMN);
+            foreach ($ids as $i => $idDet) {
+                $l = $lotes[$i] ?? null;
+                if ($l === null) { break; }
+                $lote = trim((string) $l['lote']);
+                if ($lote === '') { continue; }
+                $repo->updateDetalleLoteNup((int) $idDet, ['numero_lote' => mb_substr($lote, 0, 100), 'fecha_caducidad' => self::fechaCorta($l['vencimiento'])]);
+            }
+        };
 
         // Facturas ya migradas POR ESTA HERRAMIENTA (vinculado IS NOT TRUE): al re-correr se les
         // completan las formas de pago, la info adicional y los días de crédito. Las "vinculadas"
@@ -2353,6 +2373,7 @@ class MigracionMysqlService
                     $dias = $diasDe((int) $qCliDe->fetchColumn());
                     $updCabV->execute([$dias, $vendedorDe($old), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idExist]);
                     $migrarHijos($idExist, $ef, $dias);
+                    $reaplicarLotes($idExist, $ef); // completa el lote en facturas ya migradas
                     $pg->commit();
                     $res['ya_migrados']++;
                 } catch (Throwable $ex) {
@@ -2426,6 +2447,11 @@ class MigracionMysqlService
                         'id_venta_detalle' => $idDet, 'codigo_impuesto' => '2', 'codigo_porcentaje' => $cod,
                         'tarifa' => $pct, 'base_imponible' => round($base_i, 2), 'valor' => round($base_i * $pct / 100, 2),
                     ]);
+                    // Lote / vencimiento por línea (viejo cuerpo_factura.lote/vencimiento → ventas_detalle)
+                    $lote = trim((string) ($l['lote'] ?? ''));
+                    if ($lote !== '') {
+                        $repo->updateDetalleLoteNup((int) $idDet, ['numero_lote' => mb_substr($lote, 0, 100), 'fecha_caducidad' => self::fechaCorta($l['vencimiento'] ?? null)]);
+                    }
                 }
 
                 $migrarHijos($idVenta, $ef, $diasDe($idCliente)); // formas de pago SRI + info adicional

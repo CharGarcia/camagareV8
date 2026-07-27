@@ -1648,209 +1648,55 @@ class DocumentoAutomatedRegisterService
     }
 
     /**
-     * Intenta auto-generar un egreso para liquidar una compra registrada desde el SRI, 
+     * Intenta auto-generar un egreso para liquidar una compra registrada desde el SRI,
      * si el proveedor posee configurada forma de pago y cumple los límites establecidos.
+     *
+     * La lógica vive en PagoAutomaticoProveedorService, compartida con el botón
+     * "Generar pagos pendientes" del modal de proveedores. Aquí solo se traduce
+     * el resultado al texto que se muestra en el historial de descargas del SRI.
      */
     private function generarEgresoAutomatico(int $idCompra, int $idProv, int $idEmpresa, int $idUsuario, float $totalCompra, string $numDocCompleto, string $fechaEmisionDoc): string
     {
         try {
-            $db = Database::getConnection();
-            
-            // 1. Consultar el proveedor y su configuración de pagos y retenciones
-            $stProv = $db->prepare("
-                SELECT id_forma_pago_predeterminada, tipo_operacion_bancaria_predeterminada,
-                       monto_minimo_auto_pago, monto_maximo_auto_pago,
-                       plazo, unidad_tiempo,
-                       id_retencion_renta, id_retencion_iva, id_egreso_concepto_predeterminado
-                FROM proveedores
-                WHERE id = ? AND id_empresa = ? LIMIT 1
-            ");
-            $stProv->execute([$idProv, $idEmpresa]);
-            $prov = $stProv->fetch(PDO::FETCH_ASSOC);
-            
-            if (!$prov || empty($prov['id_forma_pago_predeterminada'])) {
-                return ""; // Sin forma de pago predeterminada, abortamos en silencio
+            $svc = new \App\Services\modulos\PagoAutomaticoProveedorService();
+
+            // En este flujo la retención aún no existe, así que se paga el total del
+            // documento y se omite si el proveedor tiene retenciones configuradas.
+            $cfg = $svc->getConfiguracion($idProv, $idEmpresa, true);
+            if (!$cfg['ok']) {
+                return $cfg['motivo'] === null
+                    ? "" // Sin forma de pago predeterminada: se omite en silencio
+                    : " | Pago automático omitido: " . $cfg['motivo'];
             }
 
-            // Validar que la forma de pago predeterminada siga activa y no eliminada.
-            // El flujo manual solo ofrece formas activas (FormaPagoRepository::getFormasFiltradas),
-            // por lo que el pago automático debe respetar el mismo criterio en lugar de
-            // registrar el egreso sobre una forma de pago inactiva o eliminada.
-            $stFp = $db->prepare("
-                SELECT 1 FROM empresa_formas_pago
-                WHERE id = ? AND id_empresa = ? AND activo = TRUE AND eliminado = FALSE
-                LIMIT 1
-            ");
-            $stFp->execute([(int) $prov['id_forma_pago_predeterminada'], $idEmpresa]);
-            if (!$stFp->fetchColumn()) {
-                return " | Pago automático omitido: La forma de pago predeterminada del proveedor está inactiva o fue eliminada.";
+            $motivoRango = $svc->validarRango($cfg['config'], $totalCompra);
+            if ($motivoRango !== null) {
+                return " | Pago omitido (" . $motivoRango . ").";
             }
 
-            // NUEVA REGLA: Si el proveedor tiene alguna retención asociada, omitimos el egreso automático
-            if (!empty($prov['id_retencion_renta']) || !empty($prov['id_retencion_iva'])) {
-                return " | Pago automático omitido: El proveedor posee retenciones configuradas.";
-            }
+            $res = $svc->generarParaCompra(
+                $cfg['config'],
+                $idCompra,
+                $idProv,
+                $idEmpresa,
+                $idUsuario,
+                $totalCompra,
+                $totalCompra,
+                $numDocCompleto,
+                $fechaEmisionDoc,
+                "Pago generado automáticamente por la descarga de Compra #" . $numDocCompleto . "."
+            );
 
-            // NUEVA REGLA: Resolver concepto de egreso predeterminado o fallback por comportamiento
-            $idEgresoConcepto = !empty($prov['id_egreso_concepto_predeterminado']) ? (int)$prov['id_egreso_concepto_predeterminado'] : null;
-            if (!$idEgresoConcepto) {
-                $stC = $db->prepare("
-                    SELECT id FROM empresa_opciones_ingreso_egreso 
-                    WHERE id_empresa = ? AND aplica_egresos = TRUE AND comportamiento = 'COMPRA' AND eliminado = FALSE 
-                    ORDER BY id ASC LIMIT 1
-                ");
-                $stC->execute([$idEmpresa]);
-                $cRow = $stC->fetch(PDO::FETCH_ASSOC);
-                if ($cRow) {
-                    $idEgresoConcepto = (int)$cRow['id'];
-                }
-            }
-            if (!$idEgresoConcepto) {
-                return " | Pago falló: Se requiere un concepto de egreso para COMPRA.";
-            }
-            
-            $idFormaPago = (int) $prov['id_forma_pago_predeterminada'];
-            $montoMinimo = !empty($prov['monto_minimo_auto_pago']) ? (float)$prov['monto_minimo_auto_pago'] : null;
-            $montoMaximo = !empty($prov['monto_maximo_auto_pago']) ? (float)$prov['monto_maximo_auto_pago'] : null;
-            $tipoOp = !empty($prov['tipo_operacion_bancaria_predeterminada']) ? $prov['tipo_operacion_bancaria_predeterminada'] : null;
+            $sufijoCheque = $res['numero_cheque'] !== null
+                ? " (cheque #{$res['numero_cheque']}, cobro {$res['fecha_cobro']})"
+                : "";
 
-            // 2. Comprobar el rango configurado para auto-generar (cero o nulo = sin restricción)
-            if ($montoMinimo !== null && $montoMinimo > 0.001 && $totalCompra < ($montoMinimo - 0.001)) {
-                return " | Pago omitido ($" . number_format($totalCompra, 2) . " no alcanza el mínimo de $" . number_format($montoMinimo, 2) . ").";
-            }
-            if ($montoMaximo !== null && $montoMaximo > 0.001 && $totalCompra > ($montoMaximo + 0.001)) {
-                return " | Pago omitido ($" . number_format($totalCompra, 2) . " supera límite de $" . number_format($montoMaximo, 2) . ").";
-            }
-
-            // 3. Localizar el primer punto de emisión y establecimiento activo de la empresa
-            $stPto = $db->prepare("
-                SELECT pe.id AS id_punto, pe.codigo_punto AS punto, es.id AS id_estab, es.codigo AS estab
-                FROM empresa_punto_emision pe
-                JOIN empresa_establecimiento es ON pe.id_establecimiento = es.id
-                WHERE es.id_empresa = ? AND pe.eliminado = FALSE AND es.eliminado = FALSE
-                ORDER BY es.codigo ASC, pe.codigo_punto ASC LIMIT 1
-            ");
-            $stPto->execute([$idEmpresa]);
-            $pto = $stPto->fetch(PDO::FETCH_ASSOC);
-            
-            if (!$pto) {
-                return " | Pago falló: No se localizó punto de emisión activo.";
-            }
-            
-            $idPunto = (int)$pto['id_punto'];
-            $idEstab = (int)$pto['id_estab'];
-            $codEstab = (string)$pto['estab'];
-            $codPunto = (string)$pto['punto'];
-            
-            // 4. Obtener el secuencial automático del sistema
-            $secService = new \App\Services\SecuencialService();
-            $resSec = $secService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
-            
-            if (empty($resSec['secuencial'])) {
-                return " | Pago falló: Error al reservar secuencial correlativo.";
-            }
-            
-            $secuencial   = $resSec['formateado'] ?? str_pad((string)$resSec['secuencial'], 9, '0', STR_PAD_LEFT);
-            $numeroEgreso = "{$codEstab}-{$codPunto}-{$secuencial}";
-            
-            // 5. Instanciación segura de la capa oficial de Egresos
-            $egresoRepo   = new \App\repositories\modulos\EgresoRepository();
-            $egresoRules  = new \App\Rules\modulos\EgresoRules();
-            $logService   = new LogSistemaService();
-            $egresoService = new \App\Services\modulos\EgresoService($egresoRepo, $egresoRules, $logService);
-            
-            $fechaHoy = date('Y-m-d');
-
-            // 5.b Cheque: numeración correlativa automática y fecha de cobro diferida
-            //     por los días de crédito del proveedor (fecha de emisión + plazo).
-            $numeroCheque = null;
-            $fechaCobro   = $fechaEmisionDoc;
-
-            if ($tipoOp === 'CHEQUE') {
-                $ultimoCheque = $egresoRepo->getUltimoNumeroCheque($idFormaPago);
-                $numeroCheque = \App\Helpers\NumeroCheque::siguiente($ultimoCheque);
-                if ($numeroCheque === '') {
-                    return " | Pago automático omitido: No hay un número de cheque previo correlativo para la forma de pago; regístrelo manualmente.";
-                }
-                $fechaCobro = $this->calcularFechaCobroCredito(
-                    $fechaEmisionDoc,
-                    (int) ($prov['plazo'] ?? 0),
-                    (string) ($prov['unidad_tiempo'] ?? 'DIAS')
-                );
-            }
-
-            // 6. Ensamblado del payload estandarizado del Egreso
-            $dataEgreso = [
-                'id_empresa'         => $idEmpresa,
-                'usuario_id'         => $idUsuario,
-                'fecha_emision'      => $fechaEmisionDoc,
-                'establecimiento'    => $codEstab,
-                'punto_emision'      => $codPunto,
-                'secuencial'         => $secuencial,
-                'numero_egreso'      => $numeroEgreso,
-                'id_punto_emision'   => $idPunto,
-                'id_establecimiento' => $idEstab,
-                'tipo_egreso'        => 'COMPRA',
-                'tipo_sujeto'        => 'PROVEEDOR',
-                'id_proveedor'       => $idProv,
-                'id_egreso_concepto' => $idEgresoConcepto,
-                'monto_total'        => $totalCompra,
-                'observaciones'      => "Pago generado automáticamente por la descarga de Compra #" . $numDocCompleto . ".",
-                'estado'             => 'registrado',
-                'detalles'           => [
-                    [
-                        'tipo_documento'           => 'COMPRA',
-                        'id_referencia_documento'  => $idCompra,
-                        'numero_documento'         => $numDocCompleto,
-                        'descripcion'              => "Liquidación de Compra #" . $numDocCompleto,
-                        'monto_documento'          => $totalCompra,
-                        'saldo_anterior'           => $totalCompra,
-                        'monto_pagado'             => $totalCompra,
-                        'saldo_actual'             => 0.0
-                    ]
-                ],
-                'pagos' => [
-                    [
-                        'id_forma_pago'           => $idFormaPago,
-                        'monto'                   => $totalCompra,
-                        'tipo_operacion_bancaria' => $tipoOp,
-                        'numero_cheque'           => $numeroCheque,
-                        'fecha_cobro'             => $fechaCobro
-                    ]
-                ]
-            ];
-
-            // 7. Registrar el egreso ejecutando todas las validaciones de negocio
-            $idEgreso = $egresoService->registrar($dataEgreso);
-
-            $sufijoCheque = $numeroCheque !== null ? " (cheque #{$numeroCheque}, cobro {$fechaCobro})" : "";
-            return " | Pago automático generado: " . $numeroEgreso . $sufijoCheque . ".";
+            return " | Pago automático generado: " . $res['numero_egreso'] . $sufijoCheque . ".";
 
         } catch (\Throwable $e) {
             // Interceptamos la excepción para NO detener el registro de la compra si falla el egreso.
             // El error quedará documentado visualmente en el historial del log SRI.
             return " | Fallo al generar Pago automático: " . $e->getMessage();
         }
-    }
-
-    /**
-     * Fecha de cobro del cheque = fecha de emisión del documento + días de crédito
-     * del proveedor. Respeta la unidad de tiempo configurada (días, meses o años).
-     */
-    private function calcularFechaCobroCredito(string $fechaEmision, int $plazo, string $unidadTiempo): string
-    {
-        if ($plazo <= 0) {
-            return $fechaEmision;
-        }
-
-        $unidad = strtoupper(trim($unidadTiempo));
-        $intervalo = match ($unidad) {
-            'MESES', 'MES'          => "+{$plazo} months",
-            'ANOS', 'AÑOS', 'ANIOS' => "+{$plazo} years",
-            default                 => "+{$plazo} days",
-        };
-
-        $ts = strtotime($intervalo, strtotime($fechaEmision));
-        return $ts !== false ? date('Y-m-d', $ts) : $fechaEmision;
     }
 }

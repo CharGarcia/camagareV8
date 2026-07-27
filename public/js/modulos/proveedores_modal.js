@@ -72,6 +72,19 @@
             selOp.value = '';
         }
         toggleChequeProv();
+        toggleBotonPagosPendientes();
+    }
+
+    /**
+     * El botón de generación retroactiva solo aplica a un proveedor ya guardado
+     * y con forma de pago predeterminada configurada.
+     */
+    function toggleBotonPagosPendientes() {
+        const div = document.getElementById('prov_div_pagos_pendientes');
+        if (!div) return; // El usuario no tiene permiso para crear egresos
+        const idProv = document.getElementById('prov_id')?.value || '';
+        const idFp   = document.getElementById('prov_forma_pago')?.value || '';
+        div.classList.toggle('d-none', !(idProv && idFp));
     }
 
     // ─── Cheque: bloque solo informativo ─────────────────────────────────────
@@ -298,6 +311,8 @@
         if (selOp) selOp.value = '';
         const divChq = document.getElementById('prov_div_cheque');
         if (divChq) divChq.classList.add('d-none');
+        const divPP = document.getElementById('prov_div_pagos_pendientes');
+        if (divPP) divPP.classList.add('d-none');
         const brenta = document.getElementById('busqueda_retencion_renta');
         if (brenta) brenta.value = '';
         const biva = document.getElementById('busqueda_retencion_iva');
@@ -368,19 +383,13 @@
         }, 150);
     };
 
-    async function abrirModalEditarInternal(rowOrData) {
-        console.log('Iniciando abrirModalProveedorEditar');
-        const data = (rowOrData instanceof HTMLElement) ? JSON.parse(rowOrData.dataset.row) : rowOrData;
-        const form = document.getElementById('prov_formProveedor');
-        if (!form) return;
-        form.reset();
-        _provResetMapa();
-
-        const modal = getModalProv();
-        if (modal) modal.show();
-
-        await cargarCatalogosInitProv();
-
+    /**
+     * Vuelca los datos de un proveedor en los campos del formulario.
+     * No toca pestañas, mapa ni botones: sirve tanto al abrir la ficha para
+     * editar como para refrescarla en sitio después de guardar.
+     */
+    async function poblarCamposProv(data) {
+        if (!data) return;
         const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
 
         setVal('prov_id', data.id);
@@ -410,8 +419,6 @@
         setVal('prov_tipo_cta', data.tipo_cta);
         setVal('prov_numero_cta', data.numero_cta);
 
-
-
         setVal('prov_id_retencion_renta', data.id_retencion_renta);
         setVal('busqueda_retencion_renta', data.nombre_retencion_renta);
         setVal('prov_id_retencion_iva', data.id_retencion_iva);
@@ -429,6 +436,22 @@
         }
         const statusVal = (data.status === false || data.status === 'false' || data.status === 0) ? '0' : '1';
         setVal('prov_status', statusVal);
+    }
+
+    async function abrirModalEditarInternal(rowOrData) {
+        console.log('Iniciando abrirModalProveedorEditar');
+        const data = (rowOrData instanceof HTMLElement) ? JSON.parse(rowOrData.dataset.row) : rowOrData;
+        const form = document.getElementById('prov_formProveedor');
+        if (!form) return;
+        form.reset();
+        _provResetMapa();
+
+        const modal = getModalProv();
+        if (modal) modal.show();
+
+        await cargarCatalogosInitProv();
+
+        await poblarCamposProv(data);
 
         // Coordenadas
         if (data.latitud && data.longitud) {
@@ -536,6 +559,34 @@
         } catch (e) { selCiudad.innerHTML = '<option value="">-- Error --</option>'; }
     };
 
+    /**
+     * Deja el modal listo para seguir trabajando tras guardar, sin cerrarlo:
+     * repuebla los campos con lo que quedó realmente en la base (razón social en
+     * mayúsculas, etiquetas de retención…), pasa a modo edición si era un alta y
+     * actualiza el resumen comercial.
+     */
+    async function refrescarModalTrasGuardar(json, eraNuevo) {
+        if (json.data) {
+            await poblarCamposProv(json.data);
+        }
+
+        // El id manda siempre: sin él el siguiente guardado crearía un duplicado.
+        const elId = document.getElementById('prov_id');
+        if (elId && json.id) elId.value = json.id;
+
+        const idProv = elId?.value || '';
+
+        if (eraNuevo) {
+            // A partir de aquí el formulario edita la ficha recién creada
+            const elTitle = document.getElementById('prov_tituloModal');
+            if (elTitle) elTitle.textContent = 'Editar Proveedor';
+            document.getElementById('prov_btnEliminar')?.classList.remove('d-none');
+        }
+
+        if (idProv) window.fetchInformacionExtraProv(idProv);
+        toggleBotonPagosPendientes();
+    }
+
     // Inicialización de eventos al cargar el script (si el DOM ya existe)
     function initProvModalEvents() {
         const form = document.getElementById('prov_formProveedor');
@@ -566,27 +617,40 @@
                     const json = await resp.json();
 
                     if (json.ok) {
-                        if (typeof Swal !== 'undefined') {
-                            Swal.fire({ icon: 'success', title: 'Éxito', text: json.msg || 'Guardado correctamente', timer: 1500, showConfirmButton: false });
-                        }
-                        setTimeout(() => {
-                            btnSave.disabled = false;
-                            btnSave.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
-                            getModalProv().hide();
-                            
-                            if (typeof window.fetchSearch === 'function') {
-                                window.fetchSearch(window.currentPage || 1);
-                            } else if (typeof window.LC_fetchSearch === 'function') {
-                                window.LC_fetchSearch(1);
-                            }
+                        btnSave.disabled = false;
+                        btnSave.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
 
-                            document.dispatchEvent(new CustomEvent('proveedorGuardado', { 
-                                detail: {
-                                    ...json,
-                                    nombre: json.data ? (json.data.razon_social || json.data.nombre) : ''
-                                } 
-                            }));
-                        }, 800);
+                        // Refrescar el listado de fondo y avisar a quien escuche
+                        // (compras, liquidaciones y órdenes seleccionan el proveedor).
+                        if (typeof window.fetchSearch === 'function') {
+                            window.fetchSearch(window.currentPage || 1);
+                        } else if (typeof window.LC_fetchSearch === 'function') {
+                            window.LC_fetchSearch(1);
+                        }
+
+                        document.dispatchEvent(new CustomEvent('proveedorGuardado', {
+                            detail: {
+                                ...json,
+                                nombre: json.data ? (json.data.razon_social || json.data.nombre) : ''
+                            }
+                        }));
+
+                        // El modal nunca se cierra al guardar: se refresca en sitio,
+                        // también cuando se abre embebido desde otro módulo (compras,
+                        // liquidaciones, órdenes…). El documento de fondo ya recibió
+                        // el proveedor mediante el evento 'proveedorGuardado'.
+                        await refrescarModalTrasGuardar(json, !id);
+
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire({
+                                toast: true,
+                                position: 'top-end',
+                                icon: 'success',
+                                title: json.msg || 'Guardado correctamente',
+                                timer: 2200,
+                                showConfirmButton: false
+                            });
+                        }
                     } else {
                         btnSave.disabled = false;
                         btnSave.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
@@ -736,6 +800,113 @@
         if (inpId) { inpId.readOnly = false; inpId.title = ''; }
     };
     
+    /**
+     * Genera los egresos de las compras del proveedor emitidas hasta hoy que aún
+     * no tienen pago. Primero previsualiza (cuántos y por cuánto) y pide confirmar.
+     */
+    window.provGenerarPagosPendientes = async function () {
+        const idProv = document.getElementById('prov_id')?.value || '';
+        if (!idProv) return;
+
+        const btn = document.getElementById('prov_btnGenerarPagos');
+        const htmlOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Revisando...';
+
+        let prev;
+        try {
+            const resp = await fetch(`${urlBaseProv}/previsualizarPagosPendientesAjax?id=${encodeURIComponent(idProv)}`);
+            prev = await resp.json();
+        } catch (e) {
+            prev = { ok: false, error: 'No se pudo comunicar con el servidor.' };
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = htmlOriginal;
+        }
+
+        if (!prev.ok) {
+            Swal.fire({ icon: 'warning', title: 'No se puede generar', text: prev.error || 'Revise la configuración de pagos del proveedor.' });
+            return;
+        }
+
+        if (!prev.cantidad) {
+            const extra = prev.cantidad_omitidas
+                ? ` Hay ${prev.cantidad_omitidas} compra(s) sin pago que quedan fuera (sin saldo o fuera del rango de monto configurado).`
+                : '';
+            Swal.fire({ icon: 'info', title: 'Nada por generar', text: 'Este proveedor no tiene compras pendientes de pago hasta hoy.' + extra });
+            return;
+        }
+
+        const filas = (prev.detalle || []).map(d =>
+            `<tr><td class="text-start">${d.numero_documento}</td><td class="text-center">${d.fecha_emision}</td><td class="text-end">$${fmtMoneyProv(d.monto)}</td></tr>`
+        ).join('');
+        const resto = prev.cantidad - (prev.detalle || []).length;
+
+        const html = `
+            <p class="mb-2">Se generarán <b>${prev.cantidad}</b> pago(s) por un total de <b>$${fmtMoneyProv(prev.total)}</b>.</p>
+            <div style="max-height:220px;overflow:auto;">
+              <table class="table table-sm table-bordered mb-1" style="font-size:0.78rem;">
+                <thead class="table-light"><tr><th>Documento</th><th>Fecha</th><th class="text-end">Monto</th></tr></thead>
+                <tbody>${filas}</tbody>
+              </table>
+            </div>
+            ${resto > 0 ? `<div class="small text-muted">…y ${resto} documento(s) más.</div>` : ''}
+            ${prev.cantidad_omitidas ? `<div class="small text-warning mt-2"><i class="bi bi-exclamation-triangle me-1"></i>${prev.cantidad_omitidas} compra(s) quedan fuera (sin saldo o fuera del rango de monto).</div>` : ''}
+            <div class="small text-muted mt-2">Cada pago usa la forma de pago y el concepto configurados en esta pestaña.</div>
+        `;
+
+        const confirmacion = await Swal.fire({
+            icon: 'question',
+            title: '¿Generar los pagos?',
+            html: html,
+            width: 620,
+            showCancelButton: true,
+            confirmButtonText: `Sí, generar ${prev.cantidad}`,
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#0d6efd',
+            cancelButtonColor: '#6c757d'
+        });
+        if (!confirmacion.isConfirmed) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generando...';
+
+        try {
+            const fd = new FormData();
+            fd.append('id', idProv);
+            const resp = await fetch(`${urlBaseProv}/generarPagosPendientesAjax`, { method: 'POST', body: fd });
+            const json = await resp.json();
+
+            if (!json.ok) {
+                Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'No se pudieron generar los pagos.' });
+                return;
+            }
+
+            const fallidos = json.fallidos || [];
+            let detalleFallos = '';
+            if (fallidos.length) {
+                detalleFallos = '<div class="text-start small mt-2"><b>No se pudieron generar:</b><ul class="mb-0 ps-3">'
+                    + fallidos.map(f => `<li>${f.numero_documento}: ${f.error}</li>`).join('')
+                    + '</ul></div>';
+            }
+
+            Swal.fire({
+                icon: fallidos.length ? 'warning' : 'success',
+                title: `${json.generados} pago(s) generado(s)`,
+                html: `<p class="mb-0">Total: <b>$${fmtMoneyProv(json.total)}</b></p>${detalleFallos}`,
+                width: fallidos.length ? 620 : undefined
+            });
+
+            // Refrescar el resumen comercial (el saldo por pagar cambió)
+            window.fetchInformacionExtraProv(idProv);
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se pudo comunicar con el servidor.' });
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = htmlOriginal;
+        }
+    };
+
     window.eliminarProveedor = async function () {
         const id = document.getElementById('prov_id').value;
         if (!id) return;

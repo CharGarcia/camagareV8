@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
-etiquetas: proveedores, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada
-version: 1.0
+etiquetas: proveedores, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar
+version: 1.1
 orden: 10
 estado: activo
 ---
@@ -27,6 +27,11 @@ concepto ya propuestos.
    pero es lo que ahorra tiempo después.
 5. Guarde.
 
+Al guardar, la ficha **no se cierra**: se queda abierta y se refresca con lo que
+quedó realmente grabado, para que siga completando pestañas sin volver a
+buscar el proveedor. Si lo creó desde una compra, liquidación u orden, el
+documento de fondo ya lo tiene seleccionado; cierre la ficha cuando termine.
+
 ## Campos
 
 | Campo | Obligatorio | Qué significa |
@@ -44,9 +49,67 @@ concepto ya propuestos.
 | Campo | Para qué sirve |
 |-------|----------------|
 | Banco, número y tipo de cuenta | Necesarios para pagarle por transferencia y para generar el archivo bancario |
-| Forma de pago predeterminada | Se propone sola al registrar el egreso |
+| Forma de pago predeterminada | Activa el pago automático: sin ella no se genera ningún egreso solo |
+| Operación bancaria predeterminada | Solo si la forma es de tipo banco: transferencia, depósito, débito o cheque |
 | Plazo | Días de crédito que le da el proveedor. Define cuándo vence la factura en Cuentas por Pagar |
 | Monto mínimo / máximo de pago automático | Rango dentro del cual sus documentos entran en los pagos automáticos |
+| Concepto de egreso predeterminado | Concepto contable con el que se registra el egreso |
+
+Deje vacío el mínimo o el máximo para no aplicar ese límite: se puede configurar
+solo "mayor a", solo "menor a", o un rango cerrado.
+
+## Pago automático de las compras
+
+Cuando el proveedor tiene **forma de pago predeterminada**, cada compra suya que
+entra por **Descargas del SRI** genera sola su egreso, por el total del documento
+y con fecha de emisión igual a la de la compra.
+
+Se omite, y queda anotado en el historial de la descarga, si la forma de pago fue
+desactivada, si el proveedor tiene retenciones configuradas (aún no existe la
+retención, así que pagar el total sería incorrecto), si el monto queda fuera del
+rango, o si falta concepto de egreso o punto de emisión activo.
+
+### Pago con cheque
+
+Si la operación bancaria es **Cheque**, el egreso se genera con:
+
+- **Número de cheque**: el consecutivo siguiente al último cheque emitido con esa
+  forma de pago. Si no hay ninguno previo, el pago automático se omite y debe
+  emitir el primero a mano.
+- **Fecha de cobro**: fecha de emisión del documento de compra + los *Días de
+  Crédito* del proveedor.
+
+### Generar pagos pendientes
+
+El botón **Generar pagos pendientes**, al pie de la pestaña *Pagos*, registra de
+una sola vez los egresos de las compras de ese proveedor **emitidas hasta hoy que
+todavía no tienen pago**. Sirve para ponerse al día cuando la forma de pago se
+configuró después de que ya habían entrado facturas.
+
+Antes de hacer nada le muestra **cuántos pagos son y por qué monto total**, con el
+detalle de los documentos, y pide confirmación.
+
+A diferencia del pago automático en caliente, aquí se paga el **saldo real** de
+cada factura (total − retenciones − notas de crédito + notas de débito), el mismo
+que muestra Cuentas por Pagar. Por eso sí funciona con proveedores a los que se
+les retiene. Quedan fuera las facturas sin saldo y las que no entran en el rango
+de monto configurado; el aviso le dice cuántas son.
+
+Cada pago se registra por separado: si uno falla —por ejemplo, porque su período
+contable está cerrado— los demás igual se generan y se le informa cuál falló y por
+qué. El botón solo aparece si el proveedor ya está guardado, tiene forma de pago
+configurada y usted tiene permiso para crear egresos.
+
+## Resumen comercial
+
+En la pestaña *Comercial* se muestran, **solo como lectura**, tres cifras del
+proveedor en la empresa y ambiente activos:
+
+| Dato | Qué suma |
+|------|----------|
+| Documentos recibidos | Compras, notas de crédito/débito y liquidaciones |
+| Total compras | Facturas y liquidaciones − notas de crédito + notas de débito |
+| Por pagar | Saldo pendiente, con el mismo criterio de Cuentas por Pagar, más los saldos iniciales |
 
 ## Retenciones y sustento
 
@@ -81,7 +144,19 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 - **No se puede pagar por transferencia**: le faltan banco, número o tipo de
   cuenta.
 - **La factura vence en la fecha equivocada**: revise el campo *Plazo*.
+- **No se generó el pago automático de una compra**: revise el historial de la
+  descarga del SRI; ahí queda escrito el motivo (forma de pago inactiva,
+  retenciones configuradas, monto fuera de rango, falta de concepto de egreso).
+- **El botón "Generar pagos pendientes" no aparece**: el proveedor aún no está
+  guardado, no tiene forma de pago predeterminada, o usted no tiene permiso para
+  crear egresos.
+- **Se generaron menos pagos de los esperados**: el aviso indica cuántas facturas
+  quedaron fuera por no tener saldo o por caer fuera del rango de monto.
 
 ## Historial de cambios
 
+- **1.1** — Rango de monto (mínimo y máximo) para el pago automático; pago con
+  cheque con número consecutivo y fecha de cobro por días de crédito; botón
+  *Generar pagos pendientes*; resumen comercial de solo lectura; la ficha ya no
+  se cierra al guardar, se refresca en la misma ventana.
 - **1.0** — Versión inicial.

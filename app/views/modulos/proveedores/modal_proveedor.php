@@ -325,6 +325,21 @@ if (!defined('LEAFLET_LOADED')) {
                                     <input type="hidden" name="id_egreso_concepto_predeterminado" id="prov_id_egreso_concepto_hidden">
                                     <div class="form-text text-muted" style="font-size: 10px;">Concepto utilizado para generar el egreso.</div>
                                 </div>
+
+                                <?php if (\App\Helpers\Permisos::puedeCrear('modulos/egresos')): ?>
+                                    <!-- Generación retroactiva de pagos (solo con forma de pago configurada) -->
+                                    <div class="col-12 d-none" id="prov_div_pagos_pendientes">
+                                        <div class="border-top pt-3">
+                                            <button type="button" class="btn btn-outline-primary btn-sm" id="prov_btnGenerarPagos" onclick="provGenerarPagosPendientes()">
+                                                <i class="bi bi-cash-stack me-1"></i> Generar pagos pendientes
+                                            </button>
+                                            <div class="form-text text-muted" style="font-size: 10px;">
+                                                Genera los egresos de las compras de este proveedor emitidas hasta hoy que aún no tienen pago registrado.
+                                                Se te mostrará cuántos son antes de confirmar.
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         </div>
 

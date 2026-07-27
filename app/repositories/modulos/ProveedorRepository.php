@@ -176,16 +176,24 @@ class ProveedorRepository extends BaseRepository
     }
 
     /**
-     * Obtiene el detalle de un proveedor incluyendo nombres de auditoría.
+     * Obtiene el detalle de un proveedor incluyendo nombres de auditoría y las
+     * etiquetas de retenciones/sustento, para poder repoblar el modal tal cual
+     * quedó guardado sin volver a consultar el listado.
      */
     public function getDetalleCompleto(int $id, int $idEmpresa): ?array
     {
-        $sql = "SELECT p.*, 
+        $sql = "SELECT p.*,
                        u_crea.nombre AS creado_por_nombre,
-                       u_act.nombre AS actualizado_por_nombre
+                       u_act.nombre AS actualizado_por_nombre,
+                       rs_renta.codigo_ret || ' - ' || rs_renta.concepto_ret || ' (' || rs_renta.porcentaje_ret || '%)' AS nombre_retencion_renta,
+                       rs_iva.codigo_ret   || ' - ' || rs_iva.concepto_ret   || ' (' || rs_iva.porcentaje_ret   || '%)' AS nombre_retencion_iva,
+                       st.codigo || ' - ' || st.nombre AS nombre_sustento_tributario
                 FROM {$this->table} p
                 LEFT JOIN usuarios u_crea ON u_crea.id = p.created_by
                 LEFT JOIN usuarios u_act ON u_act.id = p.updated_by
+                LEFT JOIN retenciones_sri rs_renta ON rs_renta.id = p.id_retencion_renta
+                LEFT JOIN retenciones_sri rs_iva   ON rs_iva.id   = p.id_retencion_iva
+                LEFT JOIN sustento_tributario st   ON st.id       = p.id_sustento_tributario
                 WHERE p.id = :id AND p.id_empresa = :id_empresa AND p.eliminado = false";
         $st = $this->db->prepare($sql);
         $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
