@@ -179,6 +179,7 @@ class ClientesController extends BaseModuloController
             $filtrados = array_values(array_filter($todos, fn($r) => (int)($r['tipo'] ?? 0) === 1 && (int)($r['status'] ?? 1) === 1));
             echo json_encode(['ok' => true, 'data' => $filtrados]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -195,6 +196,7 @@ class ClientesController extends BaseModuloController
             $data  = $model->getTodas();
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -220,6 +222,7 @@ class ClientesController extends BaseModuloController
                 'can_create_vendedor' => $permVend['crear']
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -237,6 +240,7 @@ class ClientesController extends BaseModuloController
             $data  = array_values(array_filter($data, fn($r) => (int)($r['status'] ?? 1) === 1));
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -299,6 +303,7 @@ class ClientesController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -319,6 +324,7 @@ class ClientesController extends BaseModuloController
             $data  = $model->getPorProvincia($codProv);
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -378,6 +384,7 @@ class ClientesController extends BaseModuloController
                 ]);
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -399,6 +406,7 @@ class ClientesController extends BaseModuloController
             $result = $svc->consultar($identificacion, (int) $_SESSION['id_empresa']);
             echo json_encode($result);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -436,6 +444,7 @@ class ClientesController extends BaseModuloController
                 'data' => $guardado ?: array_merge($data, ['id' => $id]),
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -472,6 +481,7 @@ class ClientesController extends BaseModuloController
                 'data' => $guardado ?: array_merge($data, ['id' => $id]),
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -498,6 +508,7 @@ class ClientesController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Cliente eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -522,6 +533,7 @@ class ClientesController extends BaseModuloController
             $stats = $this->service->getEstadisticas($id, $idEmpresa);
             echo json_encode(['ok' => true, 'data' => $stats]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -566,6 +578,7 @@ class ClientesController extends BaseModuloController
                 'cantidad_omitidas' => count($prev['excluidas']),
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -604,6 +617,7 @@ class ClientesController extends BaseModuloController
                 'fallidos'  => $res['fallidos'],
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

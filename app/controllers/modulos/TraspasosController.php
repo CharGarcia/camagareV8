@@ -234,6 +234,7 @@ class TraspasosController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => 'Traspaso registrado satisfactoriamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -249,6 +250,7 @@ class TraspasosController extends BaseModuloController
             $asiento   = $this->service->getAsientoContable($id, $idEmpresa);
             echo json_encode(['ok' => true, 'asiento' => $asiento]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -267,6 +269,7 @@ class TraspasosController extends BaseModuloController
             $this->service->anular($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Traspaso anulado con éxito.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -286,6 +289,7 @@ class TraspasosController extends BaseModuloController
             $this->service->verificarPeriodo($fecha, $idEmpresa);
             echo json_encode(['ok' => true]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

@@ -72,6 +72,7 @@ class ConfiguracionKushkiController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => 'Configuración guardada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -88,6 +89,7 @@ class ConfiguracionKushkiController extends BaseModuloController
             $resultado = $kushki->testConexion();
             echo json_encode($resultado);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

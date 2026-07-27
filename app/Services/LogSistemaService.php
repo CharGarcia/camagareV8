@@ -4,11 +4,15 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\core\Database;
+use App\Helpers\AuditoriaCampos;
 use PDO;
 
 class LogSistemaService
 {
     private PDO $db;
+
+    /** Caché de resoluciones id → nombre dentro de la misma petición. */
+    private array $cacheValores = [];
 
     public function __construct()
     {
@@ -97,11 +101,16 @@ class LogSistemaService
 
     /**
      * Compara dos arreglos de datos y retorna una lista de cambios legibles.
+     *
+     * La comparación es semántica (App\Helpers\AuditoriaCampos::iguales): un mismo
+     * valor guardado con distinta forma — booleano 't' de PostgreSQL frente a true
+     * de PHP, JSON con las claves en otro orden, '12.00' frente a '12' — no se
+     * reporta como cambio, porque el usuario no cambió nada.
      */
     private function generarDetalleCambios(?array $antes, ?array $despues): array
     {
-        if (!$antes && $despues) return [['campo' => 'Registro completo', 'antes' => null, 'despues' => 'Creación']];
-        if (!$despues) return [['campo' => 'Registro', 'antes' => null, 'despues' => 'Eliminación']];
+        if (!$antes && $despues) return [['campo' => 'Registro', 'antes' => 'No existía', 'despues' => 'Creado']];
+        if (!$despues) return [['campo' => 'Registro', 'antes' => 'Existía', 'despues' => 'Eliminado']];
 
         $cambios = [];
         $omitir = ['id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'eliminado', 'deleted_at', 'deleted_by', 'id_empresa', 'id_usuario'];
@@ -111,37 +120,68 @@ class LogSistemaService
 
             $valAnterior = $antes[$key] ?? null;
 
-            // Comparación segura para tipos simples y complejos (arreglos/JSON)
-            if (is_array($valNuevo) || is_array($valAnterior)) {
-                if (json_encode($valNuevo) === json_encode($valAnterior)) continue;
-            } else {
-                if ($valNuevo == $valAnterior) continue;
+            if (AuditoriaCampos::iguales($valAnterior, $valNuevo)) continue;
+
+            $antesTexto   = $this->presentarValor($key, $valAnterior);
+            $despuesTexto = $this->presentarValor($key, $valNuevo);
+
+            // Campos cuyo texto resume el contenido (listas, archivos): si el resumen
+            // no cambia, decirlo, en vez de mostrar "1 registro → 1 registro".
+            if ($antesTexto === $despuesTexto) {
+                $despuesTexto .= ' (con cambios)';
             }
 
-            // Formatear booleanos
-            if (is_bool($valNuevo)) {
-                $valNuevo = $valNuevo ? 'Sí' : 'No';
-                $valAnterior = $valAnterior ? 'Sí' : 'No';
-            } else {
-                $valNuevo = $this->resolverValor($key, $valNuevo);
-                $valAnterior = $this->resolverValor($key, $valAnterior);
-            }
-            
             $cambios[] = [
-                'campo'   => $this->formatearCampo($key),
-                'antes'   => $valAnterior,
-                'despues' => $valNuevo
+                'campo'   => AuditoriaCampos::etiqueta($key),
+                'antes'   => $antesTexto,
+                'despues' => $despuesTexto
             ];
         }
 
         return $cambios;
     }
 
-    private function formatearCampo(string $key): string
+    /**
+     * Valor tal como debe verlo el usuario: primero la traducción del campo
+     * (enumeraciones, booleanos con etiqueta propia, JSON de opciones) y, si no
+     * aplica, la resolución del id contra su catálogo.
+     */
+    private function presentarValor(string $key, $valor): string
     {
-        $label = str_replace('id_', '', $key);
-        $label = str_replace('_id', ' ID', $label);
-        return ucfirst(str_replace('_', ' ', $label));
+        $legible = AuditoriaCampos::valorLegible($key, $valor);
+        if ($legible !== null) {
+            return $legible;
+        }
+
+        // Un guion no dice si el dato se borró o nunca existió.
+        if ($valor === null || $valor === '') {
+            return '(vacío)';
+        }
+
+        if (is_bool($valor)) {
+            return $valor ? 'Sí' : 'No';
+        }
+
+        // El mismo dato llega como arreglo o como texto JSON según de dónde venga el
+        // log; se normaliza para que ambas formas se lean igual.
+        if (is_string($valor) && preg_match('/^\s*[\[{]/', $valor)) {
+            $decodificado = json_decode($valor, true);
+            if (is_array($decodificado)) {
+                $valor = $decodificado;
+            }
+        }
+
+        // Listas anexas (componentes, variantes…): el JSON completo no le sirve a nadie.
+        if (is_array($valor) && in_array($key, ['componentes', 'variantes', 'inventarios', 'precios'], true)) {
+            $n = count($valor);
+            return $n === 0 ? 'Ninguno' : $n . ($n === 1 ? ' registro' : ' registros');
+        }
+
+        if (is_array($valor) && empty($valor)) {
+            return '(vacío)';
+        }
+
+        return $this->resolverValor($key, $valor);
     }
 
     private function resolverValor(string $key, $value): string
@@ -172,6 +212,17 @@ class LogSistemaService
         $map = [
             'id_forma_pago_sri' => ['table' => 'formas_pago_sri', 'field' => "codigo || ' - ' || nombre"],
             'id_vendedor'       => ['table' => 'vendedores', 'field' => 'nombre'],
+            // Catálogos de producto: sin esto el historial mostraba "Medida: 12 → 13"
+            'id_medida'         => ['table' => 'unidades_medida', 'field' => 'nombre'],
+            'id_tipo_medida'    => ['table' => 'tipo_medida', 'field' => 'nombre'],
+            'id_categoria'      => ['table' => 'categorias', 'field' => 'nombre'],
+            'id_marca'          => ['table' => 'marcas', 'field' => 'nombre'],
+            'tarifa_iva'        => ['table' => 'tarifa_iva', 'field' => 'tarifa'],
+            'id_ice'            => ['table' => 'empresa_ice', 'field' => 'nombre_ice'],
+            'id_bodega'         => ['table' => 'bodegas', 'field' => 'nombre'],
+            'id_producto'       => ['table' => 'productos', 'field' => "codigo || ' - ' || nombre"],
+            'id_cliente'        => ['table' => 'clientes', 'field' => 'nombre'],
+            'id_proveedor'      => ['table' => 'proveedores', 'field' => 'razon_social'],
             'id_cuenta_cobrar'  => ['table' => 'plan_cuentas', 'field' => "codigo || ' - ' || nombre"],
             'id_cuenta_ingreso' => ['table' => 'plan_cuentas', 'field' => "codigo || ' - ' || nombre"],
             'id_cuenta_pagar'   => ['table' => 'plan_cuentas', 'field' => "codigo || ' - ' || nombre"],
@@ -191,15 +242,23 @@ class LogSistemaService
             $f = $map[$key]['field'];
             $k = $map[$key]['key'] ?? 'id';
 
+            $cacheKey = $t . '|' . $k . '|' . (string) $value;
+            if (array_key_exists($cacheKey, $this->cacheValores)) {
+                return $this->cacheValores[$cacheKey] ?? (string) $value;
+            }
+
             try {
                 $sql = "SELECT {$f} FROM {$t} WHERE {$k} = :val LIMIT 1";
                 $st = $this->db->prepare($sql);
                 $st->execute([':val' => $value]);
                 $res = $st->fetchColumn();
-                if ($res !== false && $res !== null) {
-                    return (string) $res;
+                $this->cacheValores[$cacheKey] = ($res !== false && $res !== null) ? (string) $res : null;
+                if ($this->cacheValores[$cacheKey] !== null) {
+                    return $this->cacheValores[$cacheKey];
                 }
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+                $this->cacheValores[$cacheKey] = null;
+            }
         }
 
         return (string) $value;

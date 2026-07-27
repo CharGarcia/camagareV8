@@ -210,6 +210,7 @@ class ConfiguracionContableController extends BaseModuloController
             $id = $this->service->registrar($data, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Configuración contable registrada correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -238,6 +239,7 @@ class ConfiguracionContableController extends BaseModuloController
             $this->service->actualizar($id, $data, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Configuración contable actualizada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -259,6 +261,7 @@ class ConfiguracionContableController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Configuración contable eliminada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -338,6 +341,7 @@ class ConfiguracionContableController extends BaseModuloController
             $metodo = $this->repository->getMetodoPreferencia($idEmpresa, $tipoAsiento);
             echo json_encode(['ok' => true, 'data' => $reglas, 'metodo' => $metodo]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -467,6 +471,7 @@ class ConfiguracionContableController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'msg' => $msg, 'id_programado' => $idProgramado]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -514,6 +519,7 @@ class ConfiguracionContableController extends BaseModuloController
                 echo json_encode(['ok' => true, 'msg' => 'No había ninguna cuenta configurada para esta regla.']);
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -574,6 +580,7 @@ class ConfiguracionContableController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'msg' => $msg]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -659,6 +666,7 @@ class ConfiguracionContableController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'msg' => 'Cuenta contable desvinculada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -712,6 +720,7 @@ class ConfiguracionContableController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'msg' => $msg]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -751,6 +760,7 @@ class ConfiguracionContableController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'msg' => 'Cuenta contable desvinculada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -903,6 +913,7 @@ class ConfiguracionContableController extends BaseModuloController
             $st->execute($params);
             echo json_encode(['ok' => true, 'data' => $st->fetchAll(PDO::FETCH_ASSOC)]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -948,6 +959,7 @@ class ConfiguracionContableController extends BaseModuloController
             $st->execute($params);
             echo json_encode(['ok' => true, 'data' => array_column($st->fetchAll(PDO::FETCH_ASSOC), 'descripcion')]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -998,6 +1010,7 @@ class ConfiguracionContableController extends BaseModuloController
             $st->execute($params);
             echo json_encode(['ok' => true, 'data' => $st->fetchAll(PDO::FETCH_ASSOC)]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -1025,6 +1038,7 @@ class ConfiguracionContableController extends BaseModuloController
             $st->execute([$idEmpresa]);
             echo json_encode(['ok' => true, 'anios' => array_map('intval', array_column($st->fetchAll(PDO::FETCH_ASSOC), 'anio'))]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -1053,6 +1067,7 @@ class ConfiguracionContableController extends BaseModuloController
             $this->service->guardarMetodoPreferencia($idEmpresa, $tipoAsiento, $metodo, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Método de contabilización preferido actualizado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -1141,6 +1156,7 @@ class ConfiguracionContableController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'msg' => 'Regla de dimensión guardada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -1171,6 +1187,7 @@ class ConfiguracionContableController extends BaseModuloController
             $st->execute([$idUsuario, $idRule, $idEmpresa]);
             echo json_encode(['ok' => true, 'msg' => 'Asociación eliminada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -1334,6 +1351,7 @@ class ConfiguracionContableController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -1356,6 +1374,7 @@ class ConfiguracionContableController extends BaseModuloController
             $metodo = $this->service->getMetodoPreferencia($idEmpresa, $tipoAsiento);
             echo json_encode(['ok' => true, 'metodo' => $metodo]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

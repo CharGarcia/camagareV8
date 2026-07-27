@@ -171,6 +171,7 @@ class BodegasController extends BaseModuloController
                 ]
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -338,6 +339,7 @@ class BodegasController extends BaseModuloController
             $id = $this->service->crear($data);
             echo json_encode(['ok' => true, 'msg' => 'Bodega creada correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -360,6 +362,7 @@ class BodegasController extends BaseModuloController
             $this->service->actualizar($id, $idEmpresa, $data);
             echo json_encode(['ok' => true, 'msg' => 'Bodega actualizada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -379,6 +382,7 @@ class BodegasController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Bodega eliminada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -400,6 +404,7 @@ class BodegasController extends BaseModuloController
             $usuarios = $this->service->getUsuariosAcceso($idBodega, $idEmpresa);
             echo json_encode(['ok' => true, 'data' => $usuarios]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -426,6 +431,7 @@ class BodegasController extends BaseModuloController
             $this->service->guardarAccesos($idBodega, $idEmpresa, $accesos, $idUsuarioLogueado);
             echo json_encode(['ok' => true, 'msg' => 'Accesos actualizados correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -448,6 +454,7 @@ class BodegasController extends BaseModuloController
             $bodegas = $this->service->getBodegasPermitidas($idUsuario, $idEmpresa, $nivel);
             echo json_encode(['ok' => true, 'data' => $bodegas]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

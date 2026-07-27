@@ -139,6 +139,7 @@ class RolesPagoController extends BaseModuloController
             $id = $this->service->crear($data);
             echo json_encode(['ok' => true, 'msg' => 'Corrida creada. Ahora puede generarla.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -156,6 +157,7 @@ class RolesPagoController extends BaseModuloController
             $this->service->actualizar($id, (int) $_SESSION['id_empresa'], $data);
             echo json_encode(['ok' => true, 'msg' => 'Corrida actualizada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -171,6 +173,7 @@ class RolesPagoController extends BaseModuloController
             $data = $this->service->generar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Rol generado correctamente.', 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -262,6 +265,7 @@ class RolesPagoController extends BaseModuloController
             $res = $svc->generar($idRol, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $opts);
             echo json_encode(array_merge(['ok' => true], $res));
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -275,6 +279,7 @@ class RolesPagoController extends BaseModuloController
             $res = $this->service->contabilizar((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Rol contabilizado. Asiento generado.', 'data' => $res]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -290,6 +295,7 @@ class RolesPagoController extends BaseModuloController
             $this->service->cambiarEstado($id, (int) $_SESSION['id_empresa'], $estado, (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Estado actualizado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -305,6 +311,7 @@ class RolesPagoController extends BaseModuloController
             $this->service->eliminar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Corrida eliminada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -420,6 +427,7 @@ class RolesPagoController extends BaseModuloController
                 echo json_encode(['ok' => false, 'error' => 'No se pudo enviar el correo. Verifique la configuración de correo de la empresa.']);
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

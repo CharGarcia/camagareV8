@@ -100,6 +100,7 @@ class ReporteRestauranteController extends BaseModuloController
                 'pdf_url'   => $urlBase . '/exportPdf?' . $qs,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             error_log('[ReporteRestaurante] ' . $e->getMessage());
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

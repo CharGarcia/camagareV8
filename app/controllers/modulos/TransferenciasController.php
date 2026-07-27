@@ -138,6 +138,7 @@ class TransferenciasController extends BaseModuloController
             ]);
             echo json_encode(['ok' => true, 'data' => ['id' => $idLote]]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -161,6 +162,7 @@ class TransferenciasController extends BaseModuloController
             ]);
             echo json_encode(['ok' => true, 'mensaje' => 'Lote actualizado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -179,6 +181,7 @@ class TransferenciasController extends BaseModuloController
             $data = $this->service->agregarLineas($idLote, $idEmpresa, $idUsuario, $ids);
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -197,6 +200,7 @@ class TransferenciasController extends BaseModuloController
             $data = $this->service->quitarLinea($idLote, $idDetalle, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -230,6 +234,7 @@ class TransferenciasController extends BaseModuloController
             $msg = $res['estado'] === 'APROBADO' ? 'Lote auto-aprobado (la empresa no exige aprobación).' : 'Lote enviado a aprobación.';
             echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => $msg]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -253,6 +258,7 @@ class TransferenciasController extends BaseModuloController
             $res = $this->service->aprobar($id, $idEmpresa, $idUsuario, false, $nivel);
             echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => 'Lote aprobado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -281,6 +287,7 @@ class TransferenciasController extends BaseModuloController
             $res = $this->service->rechazar($id, $idEmpresa, $idUsuario, $motivo, $nivel);
             echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => 'Lote rechazado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -298,6 +305,7 @@ class TransferenciasController extends BaseModuloController
             $res = $this->service->generarArchivo($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => 'Archivo generado. Ya puede descargarlo.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -337,6 +345,7 @@ class TransferenciasController extends BaseModuloController
             $res = $this->service->confirmarEnvio($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => 'Envío confirmado. Los pagos incluidos ya no se podrán volver a transferir.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -359,6 +368,7 @@ class TransferenciasController extends BaseModuloController
             $res = $this->service->anular($id, $idEmpresa, $idUsuario, $motivo);
             echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => 'Lote anulado. Los pagos quedaron disponibles nuevamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -376,6 +386,7 @@ class TransferenciasController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Lote eliminado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }

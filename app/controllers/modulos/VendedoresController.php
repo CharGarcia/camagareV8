@@ -183,6 +183,7 @@ class VendedoresController extends BaseModuloController
                 ]
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -361,6 +362,7 @@ class VendedoresController extends BaseModuloController
             $id = $this->service->crear($data);
             echo json_encode(['ok' => true, 'msg' => 'Vendedor creado correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -382,6 +384,7 @@ class VendedoresController extends BaseModuloController
             $this->service->actualizar($id, $idEmpresa, $data);
             echo json_encode(['ok' => true, 'msg' => 'Vendedor actualizado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -401,6 +404,7 @@ class VendedoresController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Vendedor eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

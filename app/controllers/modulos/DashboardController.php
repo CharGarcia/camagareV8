@@ -66,6 +66,7 @@ class DashboardController extends BaseModuloController
             $data['tipo_ambiente_label'] = $tipoAmbiente === '2' ? 'Producción' : 'Pruebas';
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

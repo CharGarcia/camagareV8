@@ -256,6 +256,7 @@ class RetencionesComprasController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -278,6 +279,7 @@ class RetencionesComprasController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Retención eliminada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -300,6 +302,7 @@ class RetencionesComprasController extends BaseModuloController
             $this->service->anular($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Retención anulada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -331,6 +334,7 @@ class RetencionesComprasController extends BaseModuloController
                 'errores'             => $resultado['errores'] ?? [],
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -518,6 +522,7 @@ class RetencionesComprasController extends BaseModuloController
                 echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración o el correo del destinatario.']);
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             while (ob_get_level() > 0) ob_end_clean();
             echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
         }
@@ -589,6 +594,7 @@ class RetencionesComprasController extends BaseModuloController
             $detalles = $this->service->obtenerAsientoSugerido($idEmpresa, $id);
             echo json_encode(['ok' => true, 'registrado' => false, 'detalles' => $detalles]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -643,6 +649,7 @@ class RetencionesComprasController extends BaseModuloController
             $result     = $secService->obtenerSiguienteSecuencial($idPunto, 'Retenciones de compras');
             echo json_encode(array_merge(['ok' => true], $result));
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

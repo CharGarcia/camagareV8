@@ -237,6 +237,7 @@ class ProveedoresController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -253,6 +254,7 @@ class ProveedoresController extends BaseModuloController
             $filtrados = $st->fetchAll(\PDO::FETCH_ASSOC);
             echo json_encode(['ok' => true, 'data' => $filtrados ?: []]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -270,6 +272,7 @@ class ProveedoresController extends BaseModuloController
             $bancos = $st->fetchAll(\PDO::FETCH_ASSOC);
             echo json_encode(['ok' => true, 'data' => $bancos ?: []]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -287,6 +290,7 @@ class ProveedoresController extends BaseModuloController
             $tipos = $st->fetchAll(\PDO::FETCH_ASSOC);
             echo json_encode(['ok' => true, 'data' => $tipos ?: []]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -302,6 +306,7 @@ class ProveedoresController extends BaseModuloController
             $data  = $model->getTodas();
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -322,6 +327,7 @@ class ProveedoresController extends BaseModuloController
             $data  = $model->getPorProvincia($codProv);
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -342,6 +348,7 @@ class ProveedoresController extends BaseModuloController
             $result = $svc->consultar($identificacion, (int) $_SESSION['id_empresa']);
             echo json_encode($result);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -415,6 +422,7 @@ class ProveedoresController extends BaseModuloController
                 ]
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -464,6 +472,7 @@ class ProveedoresController extends BaseModuloController
                 'omitidas'        => $excluidas,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -502,6 +511,7 @@ class ProveedoresController extends BaseModuloController
                 'fallidos'  => $res['fallidos'],
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -532,6 +542,7 @@ class ProveedoresController extends BaseModuloController
                 'data' => $guardado ?: $data,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -563,6 +574,7 @@ class ProveedoresController extends BaseModuloController
                 'data' => $guardado ?: $data,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -582,6 +594,7 @@ class ProveedoresController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Proveedor eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -618,6 +631,7 @@ class ProveedoresController extends BaseModuloController
                 'msg'  => $msg,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => 'Error al geocodificar: ' . $e->getMessage()]);
         }
         exit;

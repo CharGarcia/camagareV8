@@ -63,6 +63,7 @@ class ReporteTrazabilidadProductosController extends BaseModuloController
         try {
             $data = $this->service->getLineaTiempo($idProducto, $idEmpresa, $this->leerFiltros());
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'mensaje' => 'Error al obtener la trazabilidad: ' . $e->getMessage()]);
         }
 
@@ -136,19 +137,26 @@ class ReporteTrazabilidadProductosController extends BaseModuloController
         echo '<table><thead><tr>'
             . '<th>Fecha</th><th>Evento</th><th>Documento</th><th>Contraparte</th>'
             . '<th>Movimiento</th><th>Cantidad</th><th>Saldo</th><th>Lote</th><th>Bodega</th><th>Usuario</th>'
+            . '<th>Detalle</th>'
             . '</tr></thead><tbody>';
         foreach ($data['eventos'] as $e) {
+            $movimiento = isset($e['tipo_movimiento'])
+                ? (\App\Helpers\AuditoriaCampos::valorLegible('tipo_movimiento', $e['tipo_movimiento']) ?? $e['tipo_movimiento'])
+                : '-';
+            $detalle = $e['detalle'] ?? $e['observaciones'] ?? '';
+
             echo '<tr>'
                 . '<td>' . htmlspecialchars((string) $e['fecha']) . '</td>'
                 . '<td>' . htmlspecialchars((string) $e['titulo']) . '</td>'
                 . '<td>' . htmlspecialchars((string) ($e['doc_numero'] ?? '-')) . '</td>'
                 . '<td>' . htmlspecialchars((string) ($e['doc_contraparte'] ?? '-')) . '</td>'
-                . '<td>' . htmlspecialchars((string) ($e['tipo_movimiento'] ?? '-')) . '</td>'
+                . '<td>' . htmlspecialchars((string) $movimiento) . '</td>'
                 . '<td>' . htmlspecialchars(isset($e['cantidad']) ? (string) $e['cantidad'] : '-') . '</td>'
                 . '<td>' . htmlspecialchars(isset($e['stock_posterior']) ? (string) $e['stock_posterior'] : '-') . '</td>'
                 . '<td>' . htmlspecialchars((string) ($e['numero_lote'] ?? '-')) . '</td>'
                 . '<td>' . htmlspecialchars((string) ($e['bodega'] ?? '-')) . '</td>'
                 . '<td>' . htmlspecialchars((string) ($e['usuario'] ?? '-')) . '</td>'
+                . '<td>' . htmlspecialchars((string) $detalle) . '</td>'
                 . '</tr>';
         }
         echo '</tbody></table>';

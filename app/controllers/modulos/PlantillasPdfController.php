@@ -113,6 +113,7 @@ class PlantillasPdfController extends BaseModuloController
             $id = $this->service->crear($data);
             echo json_encode(['ok' => true, 'mensaje' => 'Plantilla creada.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -138,6 +139,7 @@ class PlantillasPdfController extends BaseModuloController
             $this->service->actualizar($id, $idEmpresa, $data);
             echo json_encode(['ok' => true, 'mensaje' => 'Plantilla actualizada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -156,6 +158,7 @@ class PlantillasPdfController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Plantilla eliminada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -173,6 +176,7 @@ class PlantillasPdfController extends BaseModuloController
             $this->service->activar($id, $idEmpresa);
             echo json_encode(['ok' => true, 'mensaje' => 'Plantilla activada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -190,6 +194,7 @@ class PlantillasPdfController extends BaseModuloController
             $this->service->desactivar($id, $idEmpresa);
             echo json_encode(['ok' => true, 'mensaje' => 'Plantilla desactivada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -209,6 +214,7 @@ class PlantillasPdfController extends BaseModuloController
             $this->service->guardarDiseno($id, $idEmpresa, $configuracionJson, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Diseño guardado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

@@ -25,6 +25,9 @@
     let idActual = null;
     let estadoActual = 'borrador';
     let bloquearSecuencial = false;
+    // Evita robar el foco cuando la línea vacía de Información Adicional se
+    // agrega sola al abrir el modal (y no por un clic del usuario).
+    let suprimirFocoAdic = false;
     let timerFactura = null;
     let timerTransp = null;
     let timerCliente = null;
@@ -83,7 +86,8 @@
         if (btnEl) btnEl.classList.add('d-none');
 
         ['gr-motivo','gr-partida','gr-destino','gr-ruta',
-         'gr-num-doc-sustento','gr-doc-aduanero','gr-cod-est-destino'].forEach(id => {
+         'gr-num-doc-sustento','gr-fecha-doc-sustento','gr-num-aut-doc-sustento',
+         'gr-doc-aduanero','gr-cod-est-destino'].forEach(id => {
             const el = document.getElementById(id); if (el) el.value = '';
         });
         document.getElementById('gr-secuencial').value = '';
@@ -93,6 +97,7 @@
         document.getElementById('gr-fecha-emision').value = hoy;
         document.getElementById('gr-fecha-inicio').value  = hoy;
         document.getElementById('gr-fecha-fin').value     = hoy;
+        window.GR_ajustarFechas('carga');
         
         document.getElementById('gr-id-transportista').value   = '';
         document.getElementById('gr-search-transportista').value = '';
@@ -135,6 +140,7 @@
 
         document.getElementById('gr-tbody-detalle').innerHTML = '';
         document.getElementById('gr-tbody-adicional').innerHTML = '';
+        window.GR_asegurarLineaAdicional();
         const cntEl = document.getElementById('gr-count-items');
         if (cntEl) cntEl.textContent = '0';
 
@@ -166,6 +172,7 @@
         document.getElementById('gr-fecha-emision').value    = cab.fecha_emision || '';
         document.getElementById('gr-fecha-inicio').value     = cab.fecha_inicio_transporte || '';
         document.getElementById('gr-fecha-fin').value        = cab.fecha_fin_transporte || '';
+        window.GR_ajustarFechas('carga');
         document.getElementById('gr-motivo').value           = cab.motivo_traslado || '';
         document.getElementById('gr-partida').value          = cab.direccion_partida || '';
         document.getElementById('gr-destino').value          = cab.direccion_destino || '';
@@ -173,6 +180,8 @@
         document.getElementById('gr-placa').value            = cab.placa || '';
         document.getElementById('gr-cod-doc-sustento').value = cab.cod_doc_sustento || '';
         document.getElementById('gr-num-doc-sustento').value  = cab.num_doc_sustento || '';
+        document.getElementById('gr-fecha-doc-sustento').value = (cab.fecha_emision_doc_sustento || '').substring(0, 10);
+        document.getElementById('gr-num-aut-doc-sustento').value = cab.num_autorizacion_doc_sustento || '';
         document.getElementById('gr-doc-aduanero').value      = cab.doc_aduanero_unico || '';
         document.getElementById('gr-cod-est-destino').value   = cab.cod_establecimiento_destino || '';
 
@@ -254,8 +263,9 @@
         const btnEnviar = document.getElementById('btn-gr-enviar-sri');
         if (btnEnviar) btnEnviar.style.display = ['borrador','no_autorizado','devuelta'].includes(estadoActual) ? 'inline-block' : 'none';
 
+        // Anular solo aplica a guías autorizadas por el SRI: un borrador se elimina.
         const btnAnular = document.getElementById('btn-gr-anular');
-        if (btnAnular) btnAnular.style.display = ['borrador','autorizado'].includes(estadoActual) ? 'inline-block' : 'none';
+        if (btnAnular) btnAnular.style.display = estadoActual === 'autorizado' ? 'inline-block' : 'none';
 
         // Ocultar botones de agregar cuando no es borrador
         const btnAgrLin = document.getElementById('btn-gr-agregar-linea');
@@ -271,9 +281,39 @@
         // Cargar adicionales existentes como filas DOM
         document.getElementById('gr-tbody-adicional').innerHTML = '';
         (adicional || []).forEach(a => window.GR_agregarAdicionalLinea(a));
+        window.GR_asegurarLineaAdicional();
         window.GR_cargarHistorialSri(cab.id);
 
         window.GR_ID_ACTIVO = cab.id;
+    };
+
+    /**
+     * Mantiene el orden lógico del traslado: emisión → salida → llegada.
+     * Fija el mínimo de cada fecha según la anterior y, cuando el usuario cambia
+     * una, empuja la siguiente si quedó por debajo. Con origen 'carga' solo pone
+     * los mínimos: no toca los valores de una guía ya guardada.
+     * Las mismas reglas se validan en el servidor (GuiaRemisionRules).
+     */
+    window.GR_ajustarFechas = function (origen) {
+        const emision = document.getElementById('gr-fecha-emision');
+        const salida  = document.getElementById('gr-fecha-inicio');
+        const llegada = document.getElementById('gr-fecha-fin');
+        if (!emision || !salida || !llegada) return;
+
+        const soloMinimos = origen === 'carga';
+
+        if (emision.value) {
+            salida.min = emision.value;
+            if (!soloMinimos && salida.value && salida.value < emision.value) {
+                salida.value = emision.value;
+            }
+        }
+        if (salida.value) {
+            llegada.min = salida.value;
+            if (!soloMinimos && llegada.value && llegada.value < salida.value) {
+                llegada.value = salida.value;
+            }
+        }
     };
 
     window.GR_actualizarSecuencial = function () {
@@ -338,7 +378,15 @@
             .then(d => {
                 if (!d.ok) return;
                 const cab = d.cabecera;
-                
+
+                // 0. Datos del documento de sustento (van al XML y al RIDE)
+                const selCod = document.getElementById('gr-cod-doc-sustento');
+                if (selCod) selCod.value = '01'; // factura
+                const inpFechaSust = document.getElementById('gr-fecha-doc-sustento');
+                if (inpFechaSust) inpFechaSust.value = (cab.fecha_emision || '').substring(0, 10);
+                const inpAutSust = document.getElementById('gr-num-aut-doc-sustento');
+                if (inpAutSust) inpAutSust.value = cab.numero_autorizacion || cab.clave_acceso || '';
+
                 // 1. Autocompletar Cliente
                 window.GR_seleccionarCliente(cab.id_cliente, cab.cliente_nombre, cab.cliente_ruc, cab.cliente_direccion || '');
 
@@ -547,7 +595,21 @@
                     <i class="bi bi-x-circle-fill"></i></button>` : ''}
             </td>`;
         tbody.appendChild(tr);
-        if (!n && esBorrador) tr.querySelector('.input-adic-nombre').focus();
+        if (!n && esBorrador && !suprimirFocoAdic) tr.querySelector('.input-adic-nombre').focus();
+    };
+
+    /**
+     * Deja siempre una línea vacía lista para escribir en Información Adicional.
+     * No hace nada si ya hay filas o si la guía no se puede editar.
+     */
+    window.GR_asegurarLineaAdicional = function () {
+        if (estadoActual !== 'borrador') return;
+        const tbody = document.getElementById('gr-tbody-adicional');
+        if (!tbody || tbody.querySelector('tr.row-adicional')) return;
+
+        suprimirFocoAdic = true;
+        window.GR_agregarAdicionalLinea();
+        suprimirFocoAdic = false;
     };
 
     window.GR_copiarCampoSri = function (inputId) {
@@ -616,12 +678,12 @@
             ruta:                            document.getElementById('gr-ruta').value,
             cod_doc_sustento:                document.getElementById('gr-cod-doc-sustento').value,
             num_doc_sustento:                document.getElementById('gr-num-doc-sustento').value,
-            num_autorizacion_doc_sustento:   '',
-            fecha_emision_doc_sustento:      '',
+            num_autorizacion_doc_sustento:   document.getElementById('gr-num-aut-doc-sustento').value,
+            fecha_emision_doc_sustento:      document.getElementById('gr-fecha-doc-sustento').value,
             doc_aduanero_unico:              document.getElementById('gr-doc-aduanero').value,
             cod_establecimiento_destino:     document.getElementById('gr-cod-est-destino').value,
-            tipo_ambiente:                   '1',
-            tipo_emision:                    '1',
+            // tipo_ambiente y tipo_emision los pone el backend desde la empresa:
+            // van dentro de la clave de acceso y no puede fijarlos el formulario.
             estado:                          'borrador',
             detalles:                        window.GR_recolectarDetalles(),
             adicionales:                     window.GR_recolectarAdicionales(),
@@ -779,6 +841,18 @@
         if (!conf.isConfirmed) return;
         const btn = document.getElementById('btn-gr-enviar-sri');
         if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Enviando...'; }
+
+        // El envío firma el XML, lo entrega al SRI y espera la autorización: son
+        // varios segundos, así que se avisa que el proceso está en curso.
+        Swal.fire({
+            title: 'Enviando al SRI...',
+            html: 'Firmando el comprobante y esperando la autorización.<br><small class="text-muted">No cierre esta ventana.</small>',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading(),
+        });
+
         fetch(urlBaseGR + '/enviar-sri-ajax', {
             method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: 'id=' + idActual,
@@ -809,7 +883,17 @@
         });
     };
 
-    window.GR_exportarPdf = function () { if (idActual) window.open(urlBaseGR + '/exportar-pdf-ajax?id=' + idActual, '_blank'); };
+    // Descarga el PDF (mismo patrón que compras: enlace temporal, sin pestaña en blanco).
+    window.GR_exportarPdf = function () {
+        if (!idActual) return;
+        const a = document.createElement('a');
+        a.href = urlBaseGR + '/exportar-pdf-ajax?id=' + idActual;
+        a.download = '';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    };
     window.GR_exportarXml = function () { if (idActual) window.open(urlBaseGR + '/exportar-xml-ajax?id=' + idActual, '_blank'); };
 
     window.GR_cargarHistorialSri = function (id) {
@@ -881,6 +965,8 @@
             ruta:                          document.getElementById('gr-ruta').value,
             cod_doc_sustento:              document.getElementById('gr-cod-doc-sustento').value,
             num_doc_sustento:              document.getElementById('gr-num-doc-sustento').value,
+            fecha_emision_doc_sustento:    document.getElementById('gr-fecha-doc-sustento').value,
+            num_autorizacion_doc_sustento: document.getElementById('gr-num-aut-doc-sustento').value,
             doc_aduanero_unico:            document.getElementById('gr-doc-aduanero').value,
             cod_establecimiento_destino:   document.getElementById('gr-cod-est-destino').value,
             detalles:                      window.GR_recolectarDetalles(),
@@ -931,18 +1017,22 @@
         document.getElementById('gr-placa').value = data.placa || '';
         document.getElementById('gr-fecha-inicio').value = data.fecha_inicio_transporte || '';
         document.getElementById('gr-fecha-fin').value = data.fecha_fin_transporte || '';
+        window.GR_ajustarFechas('carga');
         document.getElementById('gr-motivo').value = data.motivo_traslado || '';
         document.getElementById('gr-partida').value = data.direccion_partida || '';
         document.getElementById('gr-destino').value = data.direccion_destino || '';
         document.getElementById('gr-ruta').value = data.ruta || '';
         document.getElementById('gr-cod-doc-sustento').value = data.cod_doc_sustento || '01';
         document.getElementById('gr-num-doc-sustento').value = data.num_doc_sustento || '';
+        document.getElementById('gr-fecha-doc-sustento').value = data.fecha_emision_doc_sustento || '';
+        document.getElementById('gr-num-aut-doc-sustento').value = data.num_autorizacion_doc_sustento || '';
         document.getElementById('gr-doc-aduanero').value = data.doc_aduanero_unico || '';
         document.getElementById('gr-cod-est-destino').value = data.cod_establecimiento_destino || '';
         document.getElementById('gr-tbody-detalle').innerHTML = '';
         (data.detalles || []).forEach(det => window.GR_agregarLinea(det));
         document.getElementById('gr-tbody-adicional').innerHTML = '';
         (data.adicionales || []).forEach(ad => window.GR_agregarAdicionalLinea(ad));
+        window.GR_asegurarLineaAdicional();
         window.GR_actualizarNumeracion();
     };
 

@@ -217,6 +217,7 @@ class FirmasElectronicasController extends BaseModuloController
                 ]
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -238,6 +239,7 @@ class FirmasElectronicasController extends BaseModuloController
             $result = $svc->consultar($identificacion);
             echo json_encode($result);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -277,6 +279,7 @@ class FirmasElectronicasController extends BaseModuloController
             $id = $this->service->crear($data);
             echo json_encode(['ok' => true, 'msg' => 'Firma electrónica registrada correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -302,6 +305,7 @@ class FirmasElectronicasController extends BaseModuloController
             $this->service->actualizar($id, $idEmpresa, $data);
             echo json_encode(['ok' => true, 'msg' => 'Firma electrónica actualizada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -323,6 +327,7 @@ class FirmasElectronicasController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Firma electrónica eliminada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -403,6 +408,7 @@ class FirmasElectronicasController extends BaseModuloController
                 'url_ver'        => BASE_URL . '/modulos/firmas_electronicas/verAdjunto?id=' . $adjId,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -428,6 +434,7 @@ class FirmasElectronicasController extends BaseModuloController
             $this->repo->deleteAdjunto($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Archivo eliminado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -773,6 +780,7 @@ class FirmasElectronicasController extends BaseModuloController
                 'url'                     => BASE_URL . '/modulos/factura-venta',
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -990,6 +998,7 @@ class FirmasElectronicasController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'msg' => 'Formulario enviado a ' . $correo, 'id' => $idSol]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'msg' => 'Error: ' . $e->getMessage()]);
         }
     }

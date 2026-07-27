@@ -177,6 +177,7 @@ class FacturaExpressSolicitudesController extends BaseModuloController
                 'excel_url'  => $excelUrl,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -210,6 +211,7 @@ class FacturaExpressSolicitudesController extends BaseModuloController
                 'pages' => $perPage > 0 ? (int) ceil($total / $perPage) : 1,
             ], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -233,6 +235,7 @@ class FacturaExpressSolicitudesController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $result['rows']]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
         }
         exit;
@@ -258,6 +261,7 @@ class FacturaExpressSolicitudesController extends BaseModuloController
             $this->service->aprobarYFacturar($id, $idEmpresa, $idUsuario, ['items' => $items]);
             echo json_encode(['ok' => true, 'mensaje' => 'Solicitud aprobada y factura generada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -301,6 +305,7 @@ class FacturaExpressSolicitudesController extends BaseModuloController
             $this->service->rechazarSolicitud($id, $idEmpresa, $idUsuario, $nota);
             echo json_encode(['ok' => true, 'mensaje' => 'Solicitud rechazada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

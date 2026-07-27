@@ -200,6 +200,7 @@ class GuiasRemisionController extends BaseModuloController
                 echo json_encode(['ok' => true, 'mensaje' => 'Guía de remisión guardada correctamente.', 'id' => $newId]);
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -224,6 +225,7 @@ class GuiasRemisionController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Guía de remisión eliminada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -243,6 +245,7 @@ class GuiasRemisionController extends BaseModuloController
             $this->service->anular($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Guía anulada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -271,6 +274,7 @@ class GuiasRemisionController extends BaseModuloController
                 'errores'             => $resultado['errores'] ?? [],
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -293,7 +297,13 @@ class GuiasRemisionController extends BaseModuloController
 
             $detalles      = $this->repo->getDetalles($id);
             $infoAdicional = $this->repo->getInfoAdicional($id);
-            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+
+            // El logo, la leyenda y la dirección viven en el establecimiento,
+            // no en la empresa (igual que el RIDE de factura de venta).
+            [$empresa, $dirEst] = $this->construirEmpresaComprobante($idEmpresa, $cabecera);
+            if ($dirEst !== null) {
+                $cabecera['direccion_establecimiento'] = $dirEst;
+            }
 
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'guia_remision');
@@ -339,18 +349,8 @@ class GuiasRemisionController extends BaseModuloController
             // Fallback: regenerar y persistir
             $detalles      = $this->repo->getDetalles($id);
             $infoAdicional = $this->repo->getInfoAdicional($id);
-            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
 
-            $dirEstablecimiento = null;
-            if (!empty($cabecera['id_establecimiento'])) {
-                $estRepo = new \App\repositories\modulos\EmpresaRepository();
-                foreach ($estRepo->getEstablecimientos($idEmpresa) as $est) {
-                    if ((int)$est['id'] === (int)$cabecera['id_establecimiento']) {
-                        $dirEstablecimiento = $est['direccion'] ?? null;
-                        break;
-                    }
-                }
-            }
+            [$empresa, $dirEstablecimiento] = $this->construirEmpresaComprobante($idEmpresa, $cabecera);
 
             $xmlString = (new \App\Services\Xml\XmlGuiaRemisionService())
                 ->generar($cabecera, $detalles, $infoAdicional, $empresa, $dirEstablecimiento);
@@ -536,6 +536,55 @@ class GuiasRemisionController extends BaseModuloController
         header('Content-Disposition: attachment; filename="' . $filename . '"');
         echo $xmlContent;
         exit;
+    }
+
+    /**
+     * Datos del emisor para el RIDE: el logo, la leyenda del PDF y la dirección
+     * de sucursal se guardan en el establecimiento (`empresa_establecimiento`),
+     * no en la empresa. Mismo criterio que el RIDE de factura de venta y de nota
+     * de crédito. Devuelve también la dirección del establecimiento para el XML.
+     *
+     * @return array{0: array, 1: ?string} [empresa, dirEstablecimiento]
+     */
+    private function construirEmpresaComprobante(int $idEmpresa, array $guia): array
+    {
+        $empresaModel = new Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+        $dirEstablecimiento = null;
+
+        $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+
+        // Preferir el establecimiento de la guía; si no, el primero disponible.
+        $est = null;
+        if (!empty($guia['id_establecimiento'])) {
+            foreach ($establecimientos as $e) {
+                if ((int)$e['id'] === (int)$guia['id_establecimiento']) { $est = $e; break; }
+            }
+        }
+        if (!$est && !empty($establecimientos)) $est = $establecimientos[0];
+
+        if ($est) {
+            $dirEstablecimiento = $est['direccion'] ?? null;
+            if (!empty($est['logo_ruta']))           $empresa['logo_ruta'] = $est['logo_ruta'];
+            if (!empty($est['direccion']))           $empresa['direccion_establecimiento'] = $est['direccion'];
+            if (!empty($est['leyenda_pdf_titulo']))  $empresa['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+            if (!empty($est['leyenda_pdf_mensaje'])) $empresa['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+
+            try {
+                $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                $estConfig = $estRepo->getEstablecimientoConfig((int)$est['id']);
+                if ($estConfig) {
+                    $estConfig['direccion_matriz']          = $empresa['direccion'] ?? '';
+                    $estConfig['direccion_establecimiento'] = $est['direccion'] ?? '';
+                    if (!empty($est['logo_ruta']))           $estConfig['logo_ruta'] = $est['logo_ruta'];
+                    if (!empty($est['leyenda_pdf_titulo']))  $estConfig['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+                    if (!empty($est['leyenda_pdf_mensaje'])) $estConfig['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+                    $empresa = array_merge($empresa, $estConfig);
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        return [$empresa, $dirEstablecimiento];
     }
 
     public function countBorradoresAjax(): void

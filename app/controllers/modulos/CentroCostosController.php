@@ -170,6 +170,7 @@ class CentroCostosController extends BaseModuloController
                 ]
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -188,6 +189,7 @@ class CentroCostosController extends BaseModuloController
             $id = $this->service->crear($data);
             echo json_encode(['ok' => true, 'msg' => 'Centro de costos creado correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -210,6 +212,7 @@ class CentroCostosController extends BaseModuloController
             $this->service->actualizar($id, $idEmpresa, $data);
             echo json_encode(['ok' => true, 'msg' => 'Centro de costos actualizado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -229,6 +232,7 @@ class CentroCostosController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Centro de costos eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

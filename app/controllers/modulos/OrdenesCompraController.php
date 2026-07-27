@@ -179,6 +179,7 @@ class OrdenesCompraController extends BaseModuloController
                 'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -197,6 +198,7 @@ class OrdenesCompraController extends BaseModuloController
             $result = $this->service->getSiguienteSecuencial($idPuntoEmision);
             echo json_encode(['ok' => true, 'secuencial' => $result['formateado']]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -221,6 +223,7 @@ class OrdenesCompraController extends BaseModuloController
             $rows = $st->fetchAll(\PDO::FETCH_ASSOC);
             echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -245,6 +248,7 @@ class OrdenesCompraController extends BaseModuloController
             $rows = $st->fetchAll(\PDO::FETCH_ASSOC);
             echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -262,6 +266,7 @@ class OrdenesCompraController extends BaseModuloController
             if (!$orden) throw new \Exception('Orden no encontrada.');
             echo json_encode(['ok' => true, 'detalle' => $orden['detalle']]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -282,6 +287,7 @@ class OrdenesCompraController extends BaseModuloController
             $id = $this->service->crear($data, $items);
             echo json_encode(['ok' => true, 'msg' => 'Orden de compra creada correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -305,6 +311,7 @@ class OrdenesCompraController extends BaseModuloController
             $this->service->actualizar($id, $idEmpresa, $data, $items);
             echo json_encode(['ok' => true, 'msg' => 'Orden de compra actualizada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -324,6 +331,7 @@ class OrdenesCompraController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Orden de compra eliminada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

@@ -22,6 +22,11 @@ class Application
 
     public function run(): void
     {
+        // Manejador global de errores: registra en `errores_sistema` los fatales y las
+        // excepciones NO capturadas (que PHP convierte en fatal al morir). Es post-mortem
+        // vía register_shutdown_function: NO cambia cómo se muestran los errores.
+        \App\Services\ErrorLogService::registrarHandlersGlobales();
+
         $dispatch = $this->router->dispatch();
         $controller = $dispatch['controller'];
         $action = $dispatch['action'];

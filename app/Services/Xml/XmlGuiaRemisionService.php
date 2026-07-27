@@ -51,6 +51,18 @@ class XmlGuiaRemisionService
         $this->txt($dom, $el, 'ptoEmi',          $cab['punto_emision']  ?? '001');
         $this->txt($dom, $el, 'secuencial',      str_pad((string)($cab['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT));
         $this->txt($dom, $el, 'dirMatriz',       $emp['direccion'] ?? '');
+
+        // Agente de retención (nº resolución, solo dígitos) y régimen RIMPE.
+        // Van al final de infoTributaria (después de dirMatriz), según el XSD.
+        $agente = \App\Helpers\SriEmisorHelper::agenteRetencionNumero($emp);
+        if ($agente !== '') {
+            $this->txt($dom, $el, 'agenteRetencion', $agente);
+        }
+        $regimen = \App\Helpers\SriEmisorHelper::regimenRimpeLeyenda($emp);
+        if ($regimen !== '') {
+            $this->txt($dom, $el, 'contribuyenteRimpe', $regimen);
+        }
+
         return $el;
     }
 
@@ -70,6 +82,19 @@ class XmlGuiaRemisionService
 
         $obligado = !empty($emp['obligado_contabilidad']) ? strtoupper((string)$emp['obligado_contabilidad']) : 'NO';
         $this->txt($dom, $el, 'obligadoContabilidad', $obligado);
+
+        // Contribuyente especial: va después de obligadoContabilidad (orden del
+        // XSD). El esquema solo admite el NÚMERO de resolución: alfanumérico sin
+        // guiones ni espacios, de 3 a 13 caracteres, así que se sanea el valor
+        // guardado (que suele venir como "NAC-DNCRASC20-00000001").
+        $especial = preg_replace(
+            '/[^A-Za-z0-9]/',
+            '',
+            (string)($emp['contribuyente_especial'] ?? $emp['resolucion_contribuyente'] ?? '')
+        ) ?? '';
+        if (strlen($especial) >= 3) {
+            $this->txt($dom, $el, 'contribuyenteEspecial', substr($especial, 0, 13));
+        }
 
         $fechaIni = !empty($cab['fecha_inicio_transporte']) ? date('d/m/Y', strtotime($cab['fecha_inicio_transporte'])) : '';
         $fechaFin = !empty($cab['fecha_fin_transporte'])    ? date('d/m/Y', strtotime($cab['fecha_fin_transporte']))    : '';

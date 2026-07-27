@@ -189,6 +189,7 @@ class CarWashController extends BaseModuloController
                 echo json_encode(['ok' => true, 'msg' => 'Orden registrada correctamente.', 'id' => $id]);
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -207,6 +208,7 @@ class CarWashController extends BaseModuloController
             $this->service->cambiarEstado($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $estado);
             echo json_encode(['ok' => true, 'msg' => 'Estado actualizado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -224,6 +226,7 @@ class CarWashController extends BaseModuloController
             $this->service->eliminar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Orden eliminada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -240,6 +243,7 @@ class CarWashController extends BaseModuloController
             if (!$data) throw new Exception("Orden no encontrada.");
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -319,6 +323,7 @@ class CarWashController extends BaseModuloController
                 ? ['ok' => true, 'mensaje' => 'Correo enviado correctamente.']
                 : ['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración de correo o el destinatario.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             if (ob_get_level() > 0) ob_end_clean();
             echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
         }
@@ -390,6 +395,7 @@ class CarWashController extends BaseModuloController
                 'numero_documento' => $res['numero_documento'],
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -430,6 +436,7 @@ class CarWashController extends BaseModuloController
             $st->execute([':q' => "%$q%", ':e' => (int) $_SESSION['id_empresa']]);
             echo json_encode(['ok' => true, 'data' => $st->fetchAll(\PDO::FETCH_ASSOC)]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
         }
         exit;
@@ -476,6 +483,7 @@ class CarWashController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
         }
         exit;
@@ -509,6 +517,7 @@ class CarWashController extends BaseModuloController
             );
             echo json_encode(['ok' => true, 'stock' => $stock]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'stock' => 0, 'error' => $e->getMessage()]);
         }
         exit;

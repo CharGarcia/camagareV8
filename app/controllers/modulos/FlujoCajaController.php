@@ -65,6 +65,7 @@ class FlujoCajaController extends BaseModuloController
             $data = $this->service->getLineaTiempo($idEmpresa, $f['desde'], $f['hasta'], $f['agrupacion']);
             $this->json(['ok' => true] + $data);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }

@@ -97,6 +97,7 @@ class ReportePosController extends BaseModuloController
                 'pdf_url'   => $urlBase . '/exportPdf?' . $qs,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             error_log('[ReportePos] ' . $e->getMessage());
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

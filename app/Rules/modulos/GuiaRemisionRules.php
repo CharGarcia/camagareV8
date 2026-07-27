@@ -35,6 +35,10 @@ class GuiaRemisionRules
         if (empty($data['fecha_fin_transporte'])) {
             throw new \InvalidArgumentException('La fecha de fin de transporte es requerida.');
         }
+        // Orden lógico del traslado: emisión → salida → llegada.
+        if (strtotime($data['fecha_inicio_transporte']) < strtotime($data['fecha_emision'])) {
+            throw new \InvalidArgumentException('La fecha de inicio de transporte no puede ser anterior a la fecha de emisión.');
+        }
         if (strtotime($data['fecha_fin_transporte']) < strtotime($data['fecha_inicio_transporte'])) {
             throw new \InvalidArgumentException('La fecha de fin de transporte no puede ser anterior a la fecha de inicio.');
         }

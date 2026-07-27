@@ -62,6 +62,7 @@ class AprobacionesConfigController extends BaseModuloController
             ], $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Configuración guardada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }

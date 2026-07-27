@@ -71,6 +71,7 @@ class MayoresController extends BaseModuloController
             $datos = $this->service->generarMayor($idEmpresa, $this->getFiltrosDesdeRequest());
             $this->json(['success' => true, 'data' => $datos]);
         } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['success' => false, 'error' => $th->getMessage()]);
         }
     }
@@ -94,6 +95,7 @@ class MayoresController extends BaseModuloController
             $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
             echo json_encode(['ok' => true, 'pendientes' => $sincronizador->contarPendientes($idEmpresa)]);
         } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $th->getMessage()]);
         }
     }
@@ -125,6 +127,7 @@ class MayoresController extends BaseModuloController
                 'generados' => $sincronizador->getGenerados(),
             ]);
         } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['success' => false, 'error' => $th->getMessage()]);
         }
     }
@@ -146,6 +149,7 @@ class MayoresController extends BaseModuloController
             );
             $this->json(['success' => true, 'data' => $datos]);
         } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['success' => false, 'error' => $th->getMessage()]);
         }
     }

@@ -79,6 +79,7 @@ class AnexoAtsController extends BaseModuloController
         try {
             $res = $this->service->generar($idEmpresa, $idUsuario, $mes, $anio, $semestral);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'mensaje' => 'Error al generar el anexo: ' . $e->getMessage()], 500);
         }
 

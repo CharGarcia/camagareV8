@@ -1604,6 +1604,19 @@ $totalPages = $totalPagesOriginal;
 
             if (!idProd && !(esLibre && desc)) return; // fila vacía
 
+            // Cantidad obligatoria y > 0: evita mandar '' a una columna numérica (error
+            // "invalid input syntax for type numeric") y guardar líneas sin cantidad.
+            const _cant = parseFloat(tr.querySelector('.input-cantidad')?.value);
+            if (isNaN(_cant) || _cant <= 0) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Atención',
+                    text: `"${desc || 'Ítem'}": la cantidad debe ser un número mayor a cero.`
+                });
+                hayError = true;
+                return;
+            }
+
             // Campos obligatorios por configuración (solo para productos inventariables, NO servicios Tipo 02)
             if (!esLibre && idProd) {
                 const tipoProd = (tr.dataset.tipoProduccion || '01').trim();

@@ -160,6 +160,7 @@ class PuntosServicioController extends BaseModuloController
             $id = $this->puntoService->crear($data);
             echo json_encode(['ok' => true, 'msg' => 'Punto de servicio creado.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -180,6 +181,7 @@ class PuntosServicioController extends BaseModuloController
             $this->puntoService->actualizar($id, $idEmpresa, $data);
             echo json_encode(['ok' => true, 'msg' => 'Punto de servicio actualizado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -199,6 +201,7 @@ class PuntosServicioController extends BaseModuloController
             $this->puntoService->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Punto de servicio eliminado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -232,6 +235,7 @@ class PuntosServicioController extends BaseModuloController
             $token = $this->puntoService->regenerarQr($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'qr_token' => $token, 'msg' => 'QR regenerado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

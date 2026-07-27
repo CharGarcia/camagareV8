@@ -93,6 +93,7 @@ class EstadosFinancierosController extends BaseModuloController
                 'generados' => $sincronizador->getGenerados(),
             ]);
         } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['success' => false, 'error' => $th->getMessage()]);
         }
     }
@@ -116,6 +117,7 @@ class EstadosFinancierosController extends BaseModuloController
             $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
             echo json_encode(['ok' => true, 'pendientes' => $sincronizador->contarPendientes($idEmpresa)]);
         } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $th->getMessage()]);
         }
     }
@@ -137,6 +139,7 @@ class EstadosFinancierosController extends BaseModuloController
 
             $this->json(['success' => true, 'data' => $datos]);
         } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['success' => false, 'error' => $th->getMessage() . ' en ' . $th->getFile() . ':' . $th->getLine()]);
         }
     }
@@ -158,6 +161,7 @@ class EstadosFinancierosController extends BaseModuloController
 
             $this->json(['success' => true, 'data' => $datos]);
         } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['success' => false, 'error' => $th->getMessage() . ' en ' . $th->getFile() . ':' . $th->getLine()]);
         }
     }
@@ -260,6 +264,7 @@ class EstadosFinancierosController extends BaseModuloController
 
             echo json_encode(['success' => true, 'data' => $datos]);
         } catch (Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['success' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -282,6 +287,7 @@ class EstadosFinancierosController extends BaseModuloController
             );
             echo json_encode(['success' => true, 'data' => $datos]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['success' => false, 'error' => $e->getMessage()]);
         }
     }

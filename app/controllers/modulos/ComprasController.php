@@ -203,6 +203,7 @@ class ComprasController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $compra]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
         }
         exit;
@@ -266,6 +267,7 @@ class ComprasController extends BaseModuloController
             ]);
             echo json_encode(['ok' => true, 'detalles' => $detalles, 'es_guardado' => false]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -425,6 +427,7 @@ class ComprasController extends BaseModuloController
                 ]
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -541,6 +544,7 @@ class ComprasController extends BaseModuloController
             ]);
             
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -577,6 +581,7 @@ class ComprasController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $db = \App\core\Database::getConnection();
             if ($db->inTransaction()) $db->rollBack();
             error_log("ComprasController::guardarAjax: " . $e->getMessage());
@@ -626,6 +631,7 @@ class ComprasController extends BaseModuloController
             $db->commit();
             echo json_encode(['ok' => true, 'mensaje' => 'Compra eliminada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             if ($db->inTransaction()) $db->rollBack();
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
@@ -753,6 +759,7 @@ class ComprasController extends BaseModuloController
             $asiento = $this->service->generarAsientoAutomatico(0, $data);
             echo json_encode(['ok' => true, 'asiento' => $asiento]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -1013,6 +1020,7 @@ class ComprasController extends BaseModuloController
                 'mensaje' => "Inventario procesado con éxito. Se han registrado {$processedCount} movimientos."
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             if (isset($db) && $db->inTransaction()) $db->rollBack();
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
@@ -1038,6 +1046,7 @@ class ComprasController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => 'Movimiento eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -1072,6 +1081,7 @@ class ComprasController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $movs]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -1110,6 +1120,7 @@ class ComprasController extends BaseModuloController
                 echo json_encode(['ok' => true, 'data' => null]);
             }
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -1135,6 +1146,7 @@ class ComprasController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => 'Vinculación guardada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

@@ -90,8 +90,11 @@ SOAP;
                 $result['estado'] = trim($estadoNodes->item(0)->textContent);
             }
 
-            // Extraer mensajes de error si fue DEVUELTA
-            $mensajes = $xpath->query('//mensaje');
+            // Extraer mensajes de error si fue DEVUELTA.
+            // Ojo: debe ser 'mensajes/mensaje'. Con '//mensaje' también entra el
+            // <mensaje> de texto que va DENTRO de cada mensaje y se cuela una
+            // entrada vacía en la lista de errores.
+            $mensajes = $xpath->query('//mensajes/mensaje');
             foreach ($mensajes as $m) {
                 $result['errores'][] = [
                     'id'      => trim($xpath->query('identificador', $m)->item(0)?->textContent ?? ''),

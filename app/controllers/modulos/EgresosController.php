@@ -318,6 +318,7 @@ class EgresosController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => 'Egreso registrado satisfactoriamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -333,6 +334,7 @@ class EgresosController extends BaseModuloController
             $asiento   = $this->service->getAsientoContable($id, $idEmpresa);
             echo json_encode(['ok' => true, 'asiento' => $asiento]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -363,6 +365,7 @@ class EgresosController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => 'Formas de pago actualizadas con éxito.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -381,6 +384,7 @@ class EgresosController extends BaseModuloController
             $this->service->anular($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Egreso anulado con éxito.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -405,6 +409,7 @@ class EgresosController extends BaseModuloController
             $result = $this->repository->buscarDocumentosPendientesEgreso($idEmpresa, $q, $tipo, $excluirId);
             echo json_encode(['ok' => true, 'data' => $result['data'], 'has_more' => $result['has_more']]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -424,6 +429,7 @@ class EgresosController extends BaseModuloController
             $this->service->verificarPeriodo($fecha, $idEmpresa);
             echo json_encode(['ok' => true]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -505,6 +511,7 @@ class EgresosController extends BaseModuloController
             $estados = (new \App\Services\modulos\ChequeImpresionService())->estado($idEmpresa, $ids);
             echo json_encode(['ok' => true, 'estados' => $estados]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage(), 'estados' => []]);
         }
         exit;
@@ -527,6 +534,7 @@ class EgresosController extends BaseModuloController
             $rows = (new \App\Services\modulos\ChequeImpresionService())->listarPorImprimir($idEmpresa, $filtros);
             echo json_encode(['ok' => true, 'cheques' => $rows]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage(), 'cheques' => []]);
         }
         exit;
@@ -575,6 +583,7 @@ class EgresosController extends BaseModuloController
             $this->service->actualizarFechaCobroCheque($idEmpresa, $idPago, $fecha, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Fecha de cobro actualizada.', 'fecha_cobro' => $fecha]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -594,6 +603,7 @@ class EgresosController extends BaseModuloController
             $this->service->actualizarBeneficiarioCheque($idEmpresa, $idPago, $nombre, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Nombre del cheque actualizado.', 'nombre' => $nombre]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -668,6 +678,7 @@ class EgresosController extends BaseModuloController
                 ? ['ok' => true, 'mensaje' => 'Comprobante enviado a ' . $correo]
                 : ['ok' => false, 'mensaje' => 'No se pudo enviar. Verifica la configuración de correo de la empresa.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
         }
         exit;

@@ -96,6 +96,15 @@ class ImportadorExcelController extends Controller
             $idEmpresaPlantilla = (int)($_SESSION['id_empresa'] ?? 0);
         }
 
+        // Entidades con plantilla propia de varias hojas
+        if ($entidad === 'unidades_medida') {
+            $this->enviarXlsx(
+                $this->generarPlantillaUnidadesMedida($idEmpresaPlantilla),
+                "plantilla_{$entidad}.xlsx"
+            );
+            return;
+        }
+
         $columnas     = $entidades[$entidad]['columnas'];
         $colNumericas = $entidades[$entidad]['col_numericas'] ?? []; // índices base 0
 
@@ -366,8 +375,14 @@ class ImportadorExcelController extends Controller
         }
 
         $spreadsheet->setActiveSheetIndex(0);
-        $fileName = "plantilla_{$entidad}.xlsx";
+        $this->enviarXlsx($spreadsheet, "plantilla_{$entidad}.xlsx");
+    }
 
+    /**
+     * Descarga el libro como .xlsx y termina la ejecución.
+     */
+    private function enviarXlsx(Spreadsheet $spreadsheet, string $fileName): void
+    {
         ob_clean();
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment;filename="' . $fileName . '"');
@@ -381,6 +396,271 @@ class ImportadorExcelController extends Controller
         $writer = new Xlsx($spreadsheet);
         $writer->save('php://output');
         exit;
+    }
+
+    /**
+     * Plantilla de "Unidades y tipos de medida": un solo archivo con las dos
+     * tablas del catálogo, sus instrucciones, el catálogo sugerido listo para
+     * copiar y lo que la empresa ya tiene registrado.
+     *
+     * Hojas: Instrucciones · Tipos_Medida · Unidades · Catalogo_Sugerido ·
+     *        Ya_Registrado · _Config (oculta)
+     */
+    private function generarPlantillaUnidadesMedida(int $idEmpresaPlantilla): Spreadsheet
+    {
+        $db = Database::getConnection();
+
+        $stEmp = $db->prepare(
+            "SELECT establecimiento, COALESCE(NULLIF(nombre_comercial,''), nombre) AS nombre_emp, ruc
+               FROM empresas WHERE id = ? AND eliminado = false LIMIT 1"
+        );
+        $stEmp->execute([$idEmpresaPlantilla]);
+        $empRow = $stEmp->fetch(PDO::FETCH_ASSOC);
+        $labelEstablecimiento = $empRow
+            ? 'Est. ' . ($empRow['establecimiento'] ?? '001') . ' - ' . $empRow['nombre_emp'] . ' (RUC: ' . $empRow['ruc'] . ')'
+            : 'ID Empresa: ' . $idEmpresaPlantilla;
+
+        $spreadsheet = new Spreadsheet();
+
+        // ── Hoja 1: Instrucciones ────────────────────────────────────────
+        $hojaInstr = $spreadsheet->getActiveSheet();
+        $hojaInstr->setTitle('Instrucciones');
+        $hojaInstr->getColumnDimensionByColumn(1)->setWidth(110);
+
+        $lineas = [
+            ['Cómo cargar unidades y tipos de medida', 'titulo'],
+            ['Establecimiento de destino: ' . $labelEstablecimiento, 'aviso'],
+            ['', 'normal'],
+            ['El catálogo tiene dos niveles: el TIPO de medida (la magnitud: peso, volumen, longitud) y la UNIDAD concreta dentro de ese tipo (kilogramo, litro, metro). Por eso este archivo trae dos hojas.', 'normal'],
+            ['', 'normal'],
+            ['1) Hoja "Tipos_Medida": una fila por magnitud.', 'seccion'],
+            ['      CODIGO_TIPO: código corto y sin espacios (PESO, VOL, LONG). Es el que se escribe luego en la hoja Unidades.', 'normal'],
+            ['      NOMBRE_TIPO: nombre visible (PESO, VOLUMEN, LONGITUD).', 'normal'],
+            ['', 'normal'],
+            ['2) Hoja "Unidades": una fila por unidad.', 'seccion'],
+            ['      CODIGO_TIPO: el código del tipo al que pertenece. Puede ser un tipo creado en este mismo archivo o uno que ya exista.', 'normal'],
+            ['      CODIGO_UNIDAD: código corto (KG, LB, LT). No puede repetirse en toda la empresa, ni siquiera en tipos distintos: al importar productos la unidad se busca solo por este código.', 'normal'],
+            ['      NOMBRE_UNIDAD: nombre visible (KILOGRAMO).', 'normal'],
+            ['      ABREVIATURA: lo que se muestra junto a la cantidad (kg). Obligatoria.', 'normal'],
+            ['      FACTOR_BASE: cuántas unidades base equivale 1 de esta unidad. Si la base del tipo es el kilogramo, la libra lleva 0.453592 porque 1 lb = 0.453592 kg. Si se deja vacío se asume 1.', 'normal'],
+            ['      ES_BASE: escriba SI en la unidad de referencia del tipo (kg para peso, litro para volumen, metro para longitud). Solo una por tipo, y su factor siempre es 1. En las demás deje NO o vacío.', 'normal'],
+            ['', 'normal'],
+            ['Reglas importantes', 'seccion'],
+            ['      Puede llenar solo una hoja o las dos. Los tipos se procesan primero, así que una unidad puede apuntar a un tipo creado en este mismo archivo.', 'normal'],
+            ['      Si el código ya existe, el registro se ACTUALIZA con los datos del archivo; no se duplica.', 'normal'],
+            ['      Si una fila tiene un error, se cancela toda la importación y no se guarda nada. El mensaje indica la hoja y la fila.', 'normal'],
+            ['      No cambie los nombres de las hojas ni los títulos de las columnas.', 'normal'],
+            ['      Este archivo solo puede importarse en el establecimiento indicado arriba.', 'normal'],
+            ['', 'normal'],
+            ['Atajos', 'seccion'],
+            ['      Hoja "Catalogo_Sugerido": catálogo completo listo para copiar y pegar en las hojas Tipos_Medida y Unidades.', 'normal'],
+            ['      Hoja "Ya_Registrado": lo que esta empresa ya tiene, para saber qué códigos están ocupados.', 'normal'],
+        ];
+
+        $filaInstr = 1;
+        foreach ($lineas as [$texto, $estilo]) {
+            $hojaInstr->setCellValueExplicit([1, $filaInstr], $texto, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $celda = $hojaInstr->getStyle([1, $filaInstr]);
+
+            if ($estilo === 'titulo') {
+                $celda->getFont()->setBold(true)->setSize(14);
+                $celda->getFont()->getColor()->setARGB('FF1F4E79');
+            } elseif ($estilo === 'aviso') {
+                $celda->getFont()->setBold(true)->getColor()->setARGB('FF7B0000');
+                $celda->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                    ->getStartColor()->setARGB('FFFFF2CC');
+            } elseif ($estilo === 'seccion') {
+                $celda->getFont()->setBold(true)->getColor()->setARGB('FF1F4E79');
+            }
+
+            $celda->getAlignment()->setWrapText(true)->setVertical(
+                \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP
+            );
+            $filaInstr++;
+        }
+
+        // ── Hojas de datos ───────────────────────────────────────────────
+        $crearHojaDatos = function (string $titulo, array $headers, string $colorArgb) use ($spreadsheet) {
+            $hoja = $spreadsheet->createSheet();
+            $hoja->setTitle($titulo);
+
+            foreach ($headers as $i => $header) {
+                $col = $i + 1;
+                $hoja->setCellValueExplicit([$col, 1], $header, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $hoja->getColumnDimensionByColumn($col)->setWidth(24);
+                $hoja->getStyle([$col, 1])->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
+                $hoja->getStyle([$col, 1])->getFill()
+                    ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                    ->getStartColor()->setARGB($colorArgb);
+
+                // Texto en las filas de datos: evita que Excel altere códigos como "M3"
+                $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col);
+                $hoja->getStyle("{$colLetter}2:{$colLetter}1001")->getNumberFormat()
+                    ->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
+            }
+
+            return $hoja;
+        };
+
+        $crearHojaDatos('Tipos_Medida', ['CODIGO_TIPO', 'NOMBRE_TIPO'], 'FF7030A0');
+        $crearHojaDatos(
+            'Unidades',
+            ['CODIGO_TIPO', 'CODIGO_UNIDAD', 'NOMBRE_UNIDAD', 'ABREVIATURA', 'FACTOR_BASE', 'ES_BASE (SI / NO)'],
+            'FFED7D31'
+        );
+
+        // ── Hoja: Catalogo_Sugerido ──────────────────────────────────────
+        $hojaCat = $spreadsheet->createSheet();
+        $hojaCat->setTitle('Catalogo_Sugerido');
+        foreach ([28, 28, 26, 16, 16, 18] as $i => $ancho) {
+            $hojaCat->getColumnDimensionByColumn($i + 1)->setWidth($ancho);
+        }
+        $hojaCat->getStyle('A1:F400')->getNumberFormat()
+            ->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
+
+        $catalogo = \App\Helpers\CatalogoMedidas::getCatalogo();
+        $fila = 1;
+
+        $escribirTitulo = function (string $texto) use ($hojaCat, &$fila): void {
+            $hojaCat->setCellValueExplicit([1, $fila], $texto, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $hojaCat->mergeCells('A' . $fila . ':F' . $fila);
+            $hojaCat->getStyle('A' . $fila)->getFont()->setBold(true)->getColor()->setARGB('FF1F4E79');
+            $fila++;
+        };
+
+        $escribirCabecera = function (array $headers) use ($hojaCat, &$fila): void {
+            foreach ($headers as $i => $header) {
+                $hojaCat->setCellValueExplicit([$i + 1, $fila], $header, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $hojaCat->getStyle([$i + 1, $fila])->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
+                $hojaCat->getStyle([$i + 1, $fila])->getFill()
+                    ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                    ->getStartColor()->setARGB('FF548235');
+            }
+            $fila++;
+        };
+
+        $escribirFila = function (array $valores) use ($hojaCat, &$fila): void {
+            foreach ($valores as $i => $valor) {
+                $hojaCat->setCellValueExplicit([$i + 1, $fila], (string) $valor, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            }
+            $fila++;
+        };
+
+        $escribirTitulo('TIPOS DE MEDIDA — copie estas filas en la hoja "Tipos_Medida"');
+        $escribirCabecera(['CODIGO_TIPO', 'NOMBRE_TIPO']);
+        foreach ($catalogo as $tipo) {
+            $escribirFila([$tipo['codigo'], $tipo['nombre']]);
+        }
+
+        $fila++;
+        $escribirTitulo('UNIDADES — copie estas filas en la hoja "Unidades"');
+        $escribirCabecera(['CODIGO_TIPO', 'CODIGO_UNIDAD', 'NOMBRE_UNIDAD', 'ABREVIATURA', 'FACTOR_BASE', 'ES_BASE (SI / NO)']);
+        foreach ($catalogo as $tipo) {
+            foreach ($tipo['unidades'] as $unidad) {
+                $escribirFila([
+                    $tipo['codigo'],
+                    $unidad['codigo'],
+                    $unidad['nombre'],
+                    $unidad['abreviatura'],
+                    rtrim(rtrim(number_format((float) $unidad['factor_base'], 6, '.', ''), '0'), '.'),
+                    $unidad['es_base'] ? 'SI' : 'NO',
+                ]);
+            }
+        }
+
+        $fila++;
+        $hojaCat->setCellValueExplicit(
+            [1, $fila],
+            'Las unidades de EMPAQUE son presentaciones comerciales y van con factor 1: una caja no equivale a un saco, '
+            . 'no se convierten entre sí. Sirven para indicar cómo se vende el producto.',
+            \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
+        );
+        $hojaCat->mergeCells('A' . $fila . ':F' . $fila);
+        $hojaCat->getStyle('A' . $fila)->getFont()->setItalic(true)->getColor()->setARGB('FF7B0000');
+        $hojaCat->getStyle('A' . $fila)->getAlignment()->setWrapText(true);
+
+        // ── Hoja: Ya_Registrado ──────────────────────────────────────────
+        $hojaActual = $spreadsheet->createSheet();
+        $hojaActual->setTitle('Ya_Registrado');
+        foreach ([28, 28, 26, 16, 16, 18] as $i => $ancho) {
+            $hojaActual->getColumnDimensionByColumn($i + 1)->setWidth($ancho);
+        }
+
+        $stTipos = $db->prepare(
+            "SELECT codigo, nombre FROM tipo_medida
+              WHERE id_empresa = ? AND eliminado = false
+              ORDER BY nombre ASC"
+        );
+        $stTipos->execute([$idEmpresaPlantilla]);
+        $tiposActuales = $stTipos->fetchAll(PDO::FETCH_ASSOC);
+
+        $stUnidades = $db->prepare(
+            "SELECT tm.codigo AS codigo_tipo, um.codigo, um.nombre, um.abreviatura, um.factor_base, um.es_base
+               FROM unidades_medida um
+               LEFT JOIN tipo_medida tm ON tm.id = um.id_tipo
+              WHERE um.id_empresa = ? AND um.eliminado = false
+              ORDER BY tm.nombre ASC, um.codigo ASC"
+        );
+        $stUnidades->execute([$idEmpresaPlantilla]);
+        $unidadesActuales = $stUnidades->fetchAll(PDO::FETCH_ASSOC);
+
+        $filaAct = 1;
+        $escribirEnActual = function (array $valores, bool $negrita = false, ?string $fondo = null) use ($hojaActual, &$filaAct): void {
+            foreach ($valores as $i => $valor) {
+                $hojaActual->setCellValueExplicit([$i + 1, $filaAct], (string) $valor, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                if ($negrita) {
+                    $hojaActual->getStyle([$i + 1, $filaAct])->getFont()->setBold(true);
+                }
+                if ($fondo !== null) {
+                    $hojaActual->getStyle([$i + 1, $filaAct])->getFont()->getColor()->setARGB('FFFFFFFF');
+                    $hojaActual->getStyle([$i + 1, $filaAct])->getFill()
+                        ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                        ->getStartColor()->setARGB($fondo);
+                }
+            }
+            $filaAct++;
+        };
+
+        $escribirEnActual(['TIPOS DE MEDIDA REGISTRADOS'], true);
+        $escribirEnActual(['CODIGO_TIPO', 'NOMBRE_TIPO'], true, 'FF7030A0');
+        if (empty($tiposActuales)) {
+            $escribirEnActual(['(ninguno)', '']);
+        } else {
+            foreach ($tiposActuales as $t) {
+                $escribirEnActual([$t['codigo'], $t['nombre']]);
+            }
+        }
+
+        $filaAct++;
+        $escribirEnActual(['UNIDADES REGISTRADAS'], true);
+        $escribirEnActual(['CODIGO_TIPO', 'CODIGO_UNIDAD', 'NOMBRE_UNIDAD', 'ABREVIATURA', 'FACTOR_BASE', 'ES_BASE'], true, 'FFED7D31');
+        if (empty($unidadesActuales)) {
+            $escribirEnActual(['(ninguna)', '', '', '', '', '']);
+        } else {
+            foreach ($unidadesActuales as $u) {
+                $escribirEnActual([
+                    $u['codigo_tipo'] ?? '',
+                    $u['codigo'],
+                    $u['nombre'],
+                    $u['abreviatura'] ?? '',
+                    rtrim(rtrim((string) $u['factor_base'], '0'), '.'),
+                    \App\Helpers\Booleano::es($u['es_base']) ? 'SI' : 'NO',
+                ]);
+            }
+        }
+
+        // ── Hoja oculta _Config: valida el establecimiento al importar ───
+        $sheetConfig = $spreadsheet->createSheet();
+        $sheetConfig->setTitle('_Config');
+        $sheetConfig->setCellValueExplicit([1, 1], 'id_empresa', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheetConfig->setCellValueExplicit([2, 1], (string) $idEmpresaPlantilla, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheetConfig->setCellValueExplicit([1, 2], 'establecimiento', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheetConfig->setCellValueExplicit([2, 2], $labelEstablecimiento, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheetConfig->setSheetState(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet::SHEETSTATE_VERYHIDDEN);
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        return $spreadsheet;
     }
 
     public function procesarImportacionAjax(): void

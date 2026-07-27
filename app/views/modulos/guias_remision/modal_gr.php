@@ -84,7 +84,8 @@
                             <div class="row g-2 mb-2 align-items-end">
                                 <div class="col-md-2">
                                     <label class="form-label">Fecha emisión <span class="text-danger">*</span></label>
-                                    <input type="date" id="gr-fecha-emision" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>">
+                                    <input type="date" id="gr-fecha-emision" class="form-control form-control-sm"
+                                        value="<?= date('Y-m-d') ?>" onchange="GR_ajustarFechas('emision')">
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label">Serie <span class="text-danger">*</span></label>
@@ -105,10 +106,10 @@
                                 </div>
                                 <!-- </div> -->
 
-                                <!-- Fila 2: Tipo documento | Número documento -->
+                                <!-- Fila 2: Tipo documento | Número documento | Fecha del documento -->
                                 <!-- <div class="row g-2 mb-2 align-items-end"> -->
-                                <div class="col-md-3">
-                                    <label class="form-label">Tipo documento sustento</label>
+                                <div class="col-md-2">
+                                    <label class="form-label">Tipo doc. sustento</label>
                                     <select id="gr-cod-doc-sustento" class="form-select form-select-sm">
                                         <option value="">- Sin documento sustento -</option>
                                         <option value="01" selected>01 - Factura</option>
@@ -119,7 +120,7 @@
                                         <option value="07">07 - Comprobante de retención</option>
                                     </select>
                                 </div>
-                                <div class="col-md-3 position-relative">
+                                <div class="col-md-2 position-relative">
                                     <label class="form-label">Número documento</label>
                                     <input type="text" id="gr-num-doc-sustento" class="form-control form-control-sm"
                                         maxlength="17" placeholder="000-000-000000000" autocomplete="off"
@@ -127,6 +128,13 @@
                                     <div id="gr-dropdown-factura" class="dropdown-gr position-absolute bg-white border rounded shadow-sm"
                                         style="display:none;max-height:200px;overflow-y:auto;top:100%;left:0;right:0;z-index:2000"></div>
                                 </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Fecha doc. sustento</label>
+                                    <input type="date" id="gr-fecha-doc-sustento" class="form-control form-control-sm">
+                                </div>
+                                <!-- Autorización del documento de sustento: se completa sola al
+                                     elegir la factura; va en el XML y en el RIDE. -->
+                                <input type="hidden" id="gr-num-aut-doc-sustento">
                             </div>
 
                             <!-- Fila 3: Destinatario | Fecha salida | Fecha llegada -->
@@ -149,11 +157,15 @@
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label">Fecha salida <span class="text-danger">*</span></label>
-                                    <input type="date" id="gr-fecha-inicio" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>">
+                                    <input type="date" id="gr-fecha-inicio" class="form-control form-control-sm"
+                                        value="<?= date('Y-m-d') ?>" min="<?= date('Y-m-d') ?>"
+                                        onchange="GR_ajustarFechas('inicio')">
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label">Fecha llegada <span class="text-danger">*</span></label>
-                                    <input type="date" id="gr-fecha-fin" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>">
+                                    <input type="date" id="gr-fecha-fin" class="form-control form-control-sm"
+                                        value="<?= date('Y-m-d') ?>" min="<?= date('Y-m-d') ?>"
+                                        onchange="GR_ajustarFechas('fin')">
                                 </div>
                             </div>
 

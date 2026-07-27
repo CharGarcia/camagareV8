@@ -285,6 +285,7 @@ class ImportacionesController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $db = \App\core\Database::getConnection();
             if ($db->inTransaction()) $db->rollBack();
             error_log('ImportacionesController::guardarAjax: ' . $e->getMessage());
@@ -346,6 +347,7 @@ class ImportacionesController extends BaseModuloController
             $lineas = $this->service->resolverLineasExcelProductos($filas, $idEmpresa);
             echo json_encode(['ok' => true, 'data' => $lineas]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => 'No se pudo leer el archivo: ' . $e->getMessage()]);
         }
         exit;
@@ -446,6 +448,7 @@ class ImportacionesController extends BaseModuloController
             $this->service->eliminar($id, $idUsuario, $idEmpresa);
             echo json_encode(['ok' => true, 'mensaje' => 'Importación eliminada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -491,6 +494,7 @@ class ImportacionesController extends BaseModuloController
                 ]),
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -521,6 +525,7 @@ class ImportacionesController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'data' => $resultado]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -552,6 +557,7 @@ class ImportacionesController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'data' => $resultado]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -579,6 +585,7 @@ class ImportacionesController extends BaseModuloController
             $resultado = $this->service->rechazarNacionalizacion($id, $idEmpresa, $idUsuario, $motivo, $nivel);
             echo json_encode(['ok' => true, 'mensaje' => 'Importación rechazada; vuelve a borrador para que la corrijan.', 'data' => $resultado]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -636,6 +643,7 @@ class ImportacionesController extends BaseModuloController
             $detalles = $builder->generarAsientoImportacion($idEmpresa, $idImportacion);
             echo json_encode(['ok' => true, 'detalles' => $detalles, 'es_guardado' => false]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

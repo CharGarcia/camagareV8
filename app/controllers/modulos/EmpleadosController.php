@@ -143,6 +143,7 @@ class EmpleadosController extends BaseModuloController
                 'consentimiento'  => $bio['consentimiento_at'] ?? null,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -162,6 +163,7 @@ class EmpleadosController extends BaseModuloController
             $token = $bio['qr_token'];
             echo json_encode(['ok' => true, 'token' => $token, 'link' => rtrim(BASE_URL, '/') . '/asistencia/app?e=' . urlencode($token)]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -180,6 +182,7 @@ class EmpleadosController extends BaseModuloController
             $token = $this->biometriaService->regenerarToken($idEmpleado, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'token' => $token, 'link' => rtrim(BASE_URL, '/') . '/asistencia/app?e=' . urlencode($token)]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -202,6 +205,7 @@ class EmpleadosController extends BaseModuloController
             $this->biometriaService->enrolarRostro($idEmpleado, $idEmpresa, $descriptor, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Rostro registrado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -351,6 +355,7 @@ class EmpleadosController extends BaseModuloController
             $id = $this->service->crear($data);
             echo json_encode(['ok' => true, 'msg' => 'Empleado creado correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -388,6 +393,7 @@ class EmpleadosController extends BaseModuloController
                     . '. Al guardar se regenerarán con los datos nuevos. ¿Desea continuar?',
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -407,6 +413,7 @@ class EmpleadosController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Empleado eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -520,6 +527,7 @@ class EmpleadosController extends BaseModuloController
             $result = $svc->consultar($identificacion);
             echo json_encode($result);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -640,6 +648,7 @@ class EmpleadosController extends BaseModuloController
             $res = $import->procesar($_FILES['archivo']['tmp_name'], (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true] + $res);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

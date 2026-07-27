@@ -660,6 +660,23 @@ class ConfigController extends Controller
         }
     }
 
+    /** Despachador de la tarjeta "Errores del sistema" (/config/errores-sistema). */
+    public function erroresSistema(): void
+    {
+        $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
+        $c = new ErroresSistemaConsultaController();
+        $method = match ($sub) {
+            'listar'  => 'listarAjax',
+            'detalle' => 'detalleAjax',
+            default   => 'index',
+        };
+        if (method_exists($c, $method)) {
+            $c->$method();
+        } else {
+            $c->index();
+        }
+    }
+
     public function index(): void
     {
         $this->requireAuth();

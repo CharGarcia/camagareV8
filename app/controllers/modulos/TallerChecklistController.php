@@ -101,6 +101,7 @@ class TallerChecklistController extends BaseModuloController
                 echo json_encode(['ok' => true, 'msg' => 'Agregado al checklist.', 'id' => $id]);
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -118,6 +119,7 @@ class TallerChecklistController extends BaseModuloController
             $this->service->eliminar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Punto de revisión eliminado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

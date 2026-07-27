@@ -144,6 +144,7 @@ class RetencionesVentasController extends BaseModuloController
                 'total'      => $total,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => 'Error en el listado: ' . $e->getMessage()]);
         }
         exit;
@@ -176,6 +177,7 @@ class RetencionesVentasController extends BaseModuloController
             $lineas = $this->repository->getDetalle($id);
             echo json_encode(['ok' => true, 'cabecera' => $cabecera, 'lineas' => $lineas]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -246,6 +248,7 @@ class RetencionesVentasController extends BaseModuloController
             $detalles = $this->service->obtenerAsientoSugerido($idEmpresa, $id);
             echo json_encode(['ok' => true, 'registrado' => false, 'detalles' => $detalles]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -534,6 +537,7 @@ class RetencionesVentasController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -556,6 +560,7 @@ class RetencionesVentasController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Retención eliminada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -578,6 +583,7 @@ class RetencionesVentasController extends BaseModuloController
             $data = $this->repository->getRetencionesSri($impuesto, $buscar ?: null, $fecha);
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -595,6 +601,7 @@ class RetencionesVentasController extends BaseModuloController
             $data = $this->repository->buscarVentasDisponibles($idEmpresa, $buscar);
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -651,6 +658,7 @@ class RetencionesVentasController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $result['rows']]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -664,6 +672,7 @@ class RetencionesVentasController extends BaseModuloController
             $data = $this->repository->getComprobantesAutorizados();
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

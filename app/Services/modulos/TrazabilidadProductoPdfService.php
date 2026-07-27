@@ -78,6 +78,18 @@ class TrazabilidadProductoPdfService
             . '</tr></thead><tbody>';
 
         foreach ($data['eventos'] as $e) {
+            // Los eventos de catálogo no tienen documento ni stock: en vez de una fila
+            // con seis guiones, ocupan el ancho con el detalle del cambio.
+            if (($e['tipo'] ?? '') === 'catalogo') {
+                $html .= '<tr>'
+                    . '<td>' . htmlspecialchars((string) $e['fecha']) . '</td>'
+                    . '<td>' . htmlspecialchars((string) $e['titulo']) . '</td>'
+                    . '<td colspan="6">' . htmlspecialchars((string) ($e['detalle'] ?? '')) . '</td>'
+                    . '<td>' . htmlspecialchars((string) ($e['usuario'] ?? '-')) . '</td>'
+                    . '</tr>';
+                continue;
+            }
+
             $cantidad = isset($e['cantidad']) ? number_format((float) $e['cantidad'], 2) : '-';
             $saldo    = isset($e['stock_posterior']) ? number_format((float) $e['stock_posterior'], 2) : '-';
             $html .= '<tr>'

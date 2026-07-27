@@ -133,6 +133,7 @@ class CargaProductosController extends BaseModuloController
                 'informe' => $this->informeParaVista($informe),
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -177,6 +178,7 @@ class CargaProductosController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'resultado' => $resultado]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

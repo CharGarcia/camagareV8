@@ -211,11 +211,13 @@ class SuscripcionesController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'id' => $id, 'mensaje' => 'Suscripción creada correctamente.' . $mensajeExtra]);
         } catch (\InvalidArgumentException $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $parts = explode('|', $e->getMessage());
             $mensaje = $parts[0];
             $focus = $parts[1] ?? '';
             echo json_encode(['ok' => false, 'mensaje' => $mensaje, 'focus' => $focus]);
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => 'Error al crear la suscripción: ' . $e->getMessage()]);
         }
     }
@@ -235,11 +237,13 @@ class SuscripcionesController extends BaseModuloController
             $this->service->actualizar($id, $idEmpresa, $data);
             echo json_encode(['ok' => true, 'mensaje' => 'Suscripción actualizada correctamente.']);
         } catch (\InvalidArgumentException $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $parts = explode('|', $e->getMessage());
             $mensaje = $parts[0];
             $focus = $parts[1] ?? '';
             echo json_encode(['ok' => false, 'mensaje' => $mensaje, 'focus' => $focus]);
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => 'Error al actualizar: ' . $e->getMessage()]);
         }
     }
@@ -258,6 +262,7 @@ class SuscripcionesController extends BaseModuloController
             $this->service->cambiarEstado($id, $idEmpresa, $estado, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Estado actualizado correctamente.']);
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -275,6 +280,7 @@ class SuscripcionesController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Suscripción eliminada correctamente.']);
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -290,6 +296,7 @@ class SuscripcionesController extends BaseModuloController
             $detalle   = $this->service->getDetalle($idSusc, $idEmpresa);
             echo json_encode(['ok' => true, 'detalle' => $detalle]);
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -305,6 +312,7 @@ class SuscripcionesController extends BaseModuloController
             $pagos     = $this->service->getPagosPorSuscripcion($idSusc, $idEmpresa);
             echo json_encode(['ok' => true, 'pagos' => $pagos]);
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -336,6 +344,7 @@ class SuscripcionesController extends BaseModuloController
                 'mensaje' => 'Tarjeta guardada correctamente.',
             ]);
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -363,6 +372,7 @@ class SuscripcionesController extends BaseModuloController
             $resultado = $this->enviarRegistroTarjetaNuvei($id, $idEmpresa, $idUsuario, $correoDestino ?: null);
             echo json_encode($resultado);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -391,6 +401,7 @@ class SuscripcionesController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'tarjetas' => $tarjetas]);
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -425,6 +436,7 @@ class SuscripcionesController extends BaseModuloController
             $repo->updateNuveiTarjeta($idSusc, $idNuveiTarjeta);
             echo json_encode(['ok' => true, 'mensaje' => 'Tarjeta vinculada correctamente.']);
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -685,6 +697,7 @@ class SuscripcionesController extends BaseModuloController
                 'mensaje' => "Se generaron $generadas documento(s) correctamente." . ($errores > 0 ? " (Hubo $errores con error)." : ''),
             ], JSON_INVALID_UTF8_SUBSTITUTE);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
         }
     }

@@ -136,6 +136,7 @@ class IndicesFinancierosController extends BaseModuloController
             $this->service->guardarClasificacion($idEmpresa, $idCuenta, $grupo, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Clasificación guardada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -182,6 +183,7 @@ class IndicesFinancierosController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => 'Grupo guardado correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -197,6 +199,7 @@ class IndicesFinancierosController extends BaseModuloController
             $this->service->eliminarGrupo($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'mensaje' => 'Grupo eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -228,6 +231,7 @@ class IndicesFinancierosController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => 'Índice guardado correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -243,6 +247,7 @@ class IndicesFinancierosController extends BaseModuloController
             $this->service->eliminarIndice($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'mensaje' => 'Índice eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -259,6 +264,7 @@ class IndicesFinancierosController extends BaseModuloController
             $this->service->cambiarActivo($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $activo);
             echo json_encode(['ok' => true, 'mensaje' => 'Estado actualizado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

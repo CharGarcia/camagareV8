@@ -164,6 +164,7 @@ class EmpresaController extends BaseModuloController
                     throw new \Exception('Sección no válida');
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
 
@@ -183,6 +184,7 @@ class EmpresaController extends BaseModuloController
             $res = $this->service->deletePunto($id, $idEmpresa);
             echo json_encode(['ok' => $res]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -199,6 +201,7 @@ class EmpresaController extends BaseModuloController
             $res = $this->service->deleteEstablecimiento($id, $idEmpresa);
             echo json_encode(['ok' => $res]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -212,6 +215,7 @@ class EmpresaController extends BaseModuloController
             $res = $this->service->saveIce($idEmpresa, $_POST);
             echo json_encode(['ok' => $res]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -239,6 +243,7 @@ class EmpresaController extends BaseModuloController
             $data = $this->service->getSecuencialesByPunto($idPunto, $idEmpresa);
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -294,6 +299,7 @@ class EmpresaController extends BaseModuloController
             $res = $this->service->cargarCasilleros104Default($idEmpresa);
             echo json_encode(['ok' => $res]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

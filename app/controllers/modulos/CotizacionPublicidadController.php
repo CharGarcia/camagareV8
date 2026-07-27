@@ -199,6 +199,7 @@ class CotizacionPublicidadController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'id' => $id, 'msg' => $msg, 'rowHtml' => $rowHtml]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -219,6 +220,7 @@ class CotizacionPublicidadController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'id' => $idNueva]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -245,6 +247,7 @@ class CotizacionPublicidadController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'rowHtml' => $rowHtml]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -269,6 +272,7 @@ class CotizacionPublicidadController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'costos' => $this->repository->getCostosPorCotizacion($id)]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -289,6 +293,7 @@ class CotizacionPublicidadController extends BaseModuloController
 
             echo json_encode(['ok' => $ok]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -367,6 +372,7 @@ class CotizacionPublicidadController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'id_factura' => (int) ($res['id_factura'] ?? 0)]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -397,6 +403,7 @@ class CotizacionPublicidadController extends BaseModuloController
             $res = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Facturas de venta');
             echo json_encode(array_merge(['ok' => true], $res));
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -423,6 +430,7 @@ class CotizacionPublicidadController extends BaseModuloController
             $facturas = $facturaRepo->getPorCotizacionPublicidad($id, $idEmpresa);
             echo json_encode(['ok' => true, 'facturas' => $facturas]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -515,6 +523,7 @@ class CotizacionPublicidadController extends BaseModuloController
             $st->execute($params);
             echo json_encode(['ok' => true, 'data' => $st->fetchAll(\PDO::FETCH_ASSOC)]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -543,6 +552,7 @@ class CotizacionPublicidadController extends BaseModuloController
             $id = $this->repository->insertCategoria($idEmpresa, $nombre, $idUsuario);
             echo json_encode(['ok' => true, 'id' => $id, 'nombre' => $nombre]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -564,6 +574,7 @@ class CotizacionPublicidadController extends BaseModuloController
             $ok = $this->repository->actualizarCategoria($id, $idEmpresa, $nombre, $idUsuario);
             echo json_encode(['ok' => $ok, 'id' => $id, 'nombre' => $nombre]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -586,6 +597,7 @@ class CotizacionPublicidadController extends BaseModuloController
             $ok = $this->repository->eliminarCategoria($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => $ok]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -734,6 +746,7 @@ class CotizacionPublicidadController extends BaseModuloController
                 ? ['ok' => true, 'mensaje' => 'Correo enviado correctamente.']
                 : ['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración de correo o el destinatario.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
         }
         exit;

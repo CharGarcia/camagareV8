@@ -347,6 +347,7 @@ class CitasAgendaController extends BaseModuloController
             $data = $this->service->getById($id, (int) $_SESSION['id_empresa']);
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -380,6 +381,7 @@ class CitasAgendaController extends BaseModuloController
             $msg   = $id > 0 ? 'Cita actualizada correctamente.' : 'Cita creada correctamente.';
             echo json_encode(['ok' => true, 'mensaje' => $msg, 'id' => $newId]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -397,6 +399,7 @@ class CitasAgendaController extends BaseModuloController
             $this->service->eliminar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'mensaje' => 'Cita eliminada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -415,6 +418,7 @@ class CitasAgendaController extends BaseModuloController
             $this->service->cambiarEstado($id, $estado, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'mensaje' => 'Estado actualizado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

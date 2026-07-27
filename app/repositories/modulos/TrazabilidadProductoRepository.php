@@ -296,7 +296,7 @@ class TrazabilidadProductoRepository extends BaseRepository
 
         foreach ($movimientos as &$m) {
             $tipoCrudo = (string) $m['referencia_tipo'];
-            $info  = self::TIPOS[$tipoCrudo] ?? ['grupo' => null, 'label' => $tipoCrudo !== '' ? $tipoCrudo : 'Movimiento'];
+            $info  = self::TIPOS[$tipoCrudo] ?? ['grupo' => null, 'label' => self::etiquetaTipoDesconocido($tipoCrudo)];
             $grupo = $info['grupo'];
             $doc   = ($grupo !== null && !empty($m['referencia_id']))
                 ? ($resueltos[$grupo][(int) $m['referencia_id']] ?? null)
@@ -402,6 +402,20 @@ class TrazabilidadProductoRepository extends BaseRepository
             default:
                 return [];
         }
+    }
+
+    /**
+     * Un referencia_tipo que no está en el mapa (módulo nuevo, dato migrado) se
+     * muestra como frase, no como constante: "AJUSTE_STOCK" → "Ajuste stock".
+     */
+    private static function etiquetaTipoDesconocido(string $tipo): string
+    {
+        $t = trim(str_replace('_', ' ', mb_strtolower($tipo, 'UTF-8')));
+        if ($t === '') {
+            return 'Movimiento de inventario';
+        }
+
+        return mb_strtoupper(mb_substr($t, 0, 1, 'UTF-8'), 'UTF-8') . mb_substr($t, 1, null, 'UTF-8');
     }
 
     private function indexarPorId(string $sql, array $params): array

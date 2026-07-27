@@ -153,6 +153,7 @@ class MenuController extends BaseModuloController
             $id = $this->service->crear($data);
             $this->json(['ok' => true, 'msg' => 'Ítem creado correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -170,6 +171,7 @@ class MenuController extends BaseModuloController
             $this->service->actualizar($id, $idEmpresa, $data);
             $this->json(['ok' => true, 'msg' => 'Ítem actualizado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -186,6 +188,7 @@ class MenuController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             $this->json(['ok' => true, 'msg' => 'Ítem eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -232,6 +235,7 @@ class MenuController extends BaseModuloController
                 throw new Exception('Error al mover el archivo al servidor.');
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -248,6 +252,7 @@ class MenuController extends BaseModuloController
             $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, 'venta', true);
             $this->json(['ok' => true, 'data' => $result['rows']]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
         }
     }
@@ -274,6 +279,7 @@ class MenuController extends BaseModuloController
             ]);
             $this->json(['ok' => true, 'msg' => 'Categoría creada.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -292,6 +298,7 @@ class MenuController extends BaseModuloController
             ]);
             $this->json(['ok' => true, 'msg' => 'Categoría actualizada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -305,6 +312,7 @@ class MenuController extends BaseModuloController
             $this->service->eliminarMenuCategoria($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             $this->json(['ok' => true, 'msg' => 'Categoría eliminada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -339,6 +347,7 @@ class MenuController extends BaseModuloController
             ]);
             $this->json(['ok' => true, 'msg' => 'Estación creada.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -357,6 +366,7 @@ class MenuController extends BaseModuloController
             ]);
             $this->json(['ok' => true, 'msg' => 'Estación actualizada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -370,6 +380,7 @@ class MenuController extends BaseModuloController
             $this->service->eliminarEstacion($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             $this->json(['ok' => true, 'msg' => 'Estación eliminada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }

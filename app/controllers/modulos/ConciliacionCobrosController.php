@@ -84,6 +84,7 @@ class ConciliacionCobrosController extends BaseModuloController
             $resultado = $this->service->previsualizarArchivo($_FILES['archivo'] ?? [], $tipoArchivo, $filaInicio, $regexPrueba, $tipoCreditoPrueba);
             echo json_encode(['ok' => true, 'data' => $resultado]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -99,6 +100,7 @@ class ConciliacionCobrosController extends BaseModuloController
             $sugerencia = $this->service->sugerirRegexPdf($_FILES['archivo'] ?? []);
             echo json_encode(['ok' => true, 'data' => $sugerencia]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -117,6 +119,7 @@ class ConciliacionCobrosController extends BaseModuloController
             $perfil = $this->service->guardarPerfil($idEmpresa, $idUsuario, $data);
             echo json_encode(['ok' => true, 'data' => $perfil]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -136,6 +139,7 @@ class ConciliacionCobrosController extends BaseModuloController
             $carga = $this->service->crearCarga($idEmpresa, $idUsuario, $_POST, $_FILES['archivo'] ?? []);
             echo json_encode(['ok' => true, 'data' => $carga]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -162,6 +166,7 @@ class ConciliacionCobrosController extends BaseModuloController
             $lineas = $this->service->listarLineas($idCarga, $idEmpresa);
             echo json_encode(['ok' => true, 'data' => $lineas]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -200,6 +205,7 @@ class ConciliacionCobrosController extends BaseModuloController
             $linea = $this->service->confirmarLinea($idEmpresa, $idUsuario, $idLinea, $data);
             echo json_encode(['ok' => true, 'data' => $linea]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -218,6 +224,7 @@ class ConciliacionCobrosController extends BaseModuloController
             $linea = $this->service->desconfirmarLinea($idEmpresa, $idLinea);
             echo json_encode(['ok' => true, 'data' => $linea]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -236,6 +243,7 @@ class ConciliacionCobrosController extends BaseModuloController
             $linea = $this->service->reactivarLinea($idEmpresa, $idLinea);
             echo json_encode(['ok' => true, 'data' => $linea]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -255,6 +263,7 @@ class ConciliacionCobrosController extends BaseModuloController
             $linea = $this->service->reactivarLineaAplicada($idEmpresa, $idLinea);
             echo json_encode(['ok' => true, 'data' => $linea]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -273,6 +282,7 @@ class ConciliacionCobrosController extends BaseModuloController
             $this->service->ignorarLinea($idEmpresa, $idLinea);
             echo json_encode(['ok' => true]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -292,6 +302,7 @@ class ConciliacionCobrosController extends BaseModuloController
             $resultados = $this->service->generarIngresos($idEmpresa, $idUsuario, $idCarga);
             echo json_encode(['ok' => true, 'data' => $resultados]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

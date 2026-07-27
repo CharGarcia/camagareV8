@@ -358,6 +358,7 @@ class CajaPosController extends BaseModuloController
 
             $this->json(['ok' => true, 'msg' => 'Enlace de pago por $' . number_format($monto, 2) . ' enviado por WhatsApp al ' . $telefono . '.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -446,6 +447,7 @@ class CajaPosController extends BaseModuloController
 
             $this->json(['ok' => true, 'msg' => 'Venta registrada correctamente.', 'data' => $res]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -536,6 +538,7 @@ class CajaPosController extends BaseModuloController
             $sesion = $this->service->abrir($data);
             $this->json(['ok' => true, 'msg' => 'Caja abierta correctamente.', 'sesion' => $sesion]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -561,6 +564,7 @@ class CajaPosController extends BaseModuloController
             unset($_SESSION['pos_id_punto_emision']);
             $this->json(['ok' => true, 'msg' => 'Caja cerrada correctamente.', 'sesion' => $sesion]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }

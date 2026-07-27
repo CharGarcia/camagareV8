@@ -135,6 +135,24 @@
         return 'ajuste';
     }
 
+    // Un cambio de ficha se lee como una frase: "Unidad de medida: LIBRA → KILOGRAMO".
+    // Si no hay campos que listar (alta, baja o guardado sin cambios), el backend
+    // manda un resumen en texto explicando qué pasó.
+    function detalleCatalogo(ev) {
+        const cambios = ev.cambios || [];
+        if (!cambios.length) {
+            return `<span class="text-muted">${escapeHtml(ev.resumen || 'Sin cambios en los datos principales del producto.')}</span>`;
+        }
+
+        return '<div class="d-flex flex-column gap-1">' + cambios.map(c => `
+            <div>
+                <span class="fw-semibold text-dark">${escapeHtml(c.campo)}:</span>
+                <span class="text-muted text-decoration-line-through">${escapeHtml(c.antes ?? '-')}</span>
+                <i class="bi bi-arrow-right text-muted mx-1" style="font-size:.7rem;"></i>
+                <span class="fw-semibold text-primary">${escapeHtml(c.despues ?? '-')}</span>
+            </div>`).join('') + '</div>';
+    }
+
     function renderEventos(eventos) {
         if (!eventos.length) {
             tbody.innerHTML = '<tr><td colspan="9" class="text-center py-5 text-muted">No se encontraron eventos para este producto en el rango seleccionado.</td></tr>';
@@ -143,11 +161,10 @@
 
         tbody.innerHTML = eventos.map(ev => {
             if (ev.tipo === 'catalogo') {
-                const cambios = (ev.cambios || []).map(c => `${escapeHtml(c.campo)}: ${escapeHtml(c.antes ?? '-')} → ${escapeHtml(c.despues ?? '-')}`).join('; ');
                 return `<tr class="tzp-linea ${claseLinea(ev)}">
                     <td class="ps-3 text-nowrap small">${escapeHtml(ev.fecha)}</td>
                     <td><span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">${escapeHtml(ev.titulo)}</span></td>
-                    <td colspan="4" class="small text-muted">${cambios || 'Sin detalle de cambios.'}</td>
+                    <td colspan="4" class="small">${detalleCatalogo(ev)}</td>
                     <td colspan="2"></td>
                     <td class="small">${escapeHtml(ev.usuario || '-')}</td>
                 </tr>`;

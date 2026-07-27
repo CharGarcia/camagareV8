@@ -92,6 +92,7 @@ class ComandasController extends BaseModuloController
             if (!$comanda) throw new Exception('Comanda no encontrada.');
             $this->json(['ok' => true, 'data' => $comanda]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -117,6 +118,7 @@ class ComandasController extends BaseModuloController
             $_SESSION['pos_id_comanda'] = $idComanda;
             $this->json(['ok' => true, 'msg' => 'Comanda abierta.', 'id' => $idComanda]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -134,6 +136,7 @@ class ComandasController extends BaseModuloController
             $_SESSION['pos_id_comanda'] = $id;
             $this->json(['ok' => true]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -150,6 +153,7 @@ class ComandasController extends BaseModuloController
             $this->service->anular($id, $idEmpresa, $idUsuario, trim($_POST['motivo'] ?? ''));
             $this->json(['ok' => true, 'msg' => 'Comanda anulada; la mesa quedó disponible.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -167,6 +171,7 @@ class ComandasController extends BaseModuloController
             $this->service->atenderAsistencia($id, $idEmpresa, $idUsuario);
             $this->json(['ok' => true, 'msg' => 'Marcado como atendido.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -187,6 +192,7 @@ class ComandasController extends BaseModuloController
             ]);
             $this->json(['ok' => true, 'msg' => 'Comanda actualizada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -217,6 +223,7 @@ class ComandasController extends BaseModuloController
             ], $this->getEmpresaConfig($idEmpresa));
             $this->json(['ok' => true, 'msg' => 'Ítem agregado.', 'id' => $idLinea]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -234,6 +241,7 @@ class ComandasController extends BaseModuloController
             $this->service->anularLinea($idLinea, $idComanda, $idEmpresa, $idUsuario);
             $this->json(['ok' => true, 'msg' => 'Ítem anulado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -252,6 +260,7 @@ class ComandasController extends BaseModuloController
             $this->service->restaurarLinea($idLinea, $idComanda, $idEmpresa, $idUsuario);
             $this->json(['ok' => true, 'msg' => 'Ítem restaurado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -271,6 +280,7 @@ class ComandasController extends BaseModuloController
             $this->service->actualizarDescuentoLinea($idLinea, $idComanda, $idEmpresa, $idUsuario, $descuento);
             $this->json(['ok' => true, 'msg' => 'Descuento aplicado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -296,6 +306,7 @@ class ComandasController extends BaseModuloController
             $n = $this->service->enviarACocina($idComanda, $idEmpresa, $idUsuario, $idsLineas);
             $this->json(['ok' => true, 'msg' => $n > 0 ? "Se enviaron {$n} ítem(s) a preparación." : 'No había ítems pendientes por enviar.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -313,6 +324,7 @@ class ComandasController extends BaseModuloController
             $this->service->cambiarEstadoLinea($idLinea, $idEmpresa, $idUsuario, 'entregado');
             $this->json(['ok' => true, 'msg' => 'Ítem entregado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -376,6 +388,7 @@ class ComandasController extends BaseModuloController
 
             $this->json(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
         }
     }
@@ -481,6 +494,7 @@ class ComandasController extends BaseModuloController
             $idGrupo = $this->service->crearGrupoCobro($idComanda, $idEmpresa, $idUsuario, $idsLineas, $etiqueta);
             $this->json(['ok' => true, 'msg' => 'Grupo de cobro creado.', 'id' => $idGrupo]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -501,6 +515,7 @@ class ComandasController extends BaseModuloController
             $idsGrupos = $this->service->crearGruposPartesIguales($idComanda, $idEmpresa, $idUsuario, $idsLineas, $numPartes);
             $this->json(['ok' => true, 'msg' => 'Cuenta dividida en ' . count($idsGrupos) . ' partes.', 'ids' => $idsGrupos]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -518,6 +533,7 @@ class ComandasController extends BaseModuloController
             $this->service->eliminarGrupoCobro($idGrupo, $idComanda, $idEmpresa, $idUsuario);
             $this->json(['ok' => true, 'msg' => 'Grupo deshecho; sus ítems volvieron a quedar disponibles.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }
@@ -558,6 +574,7 @@ class ComandasController extends BaseModuloController
 
             $this->json(['ok' => true, 'msg' => 'Cobro registrado: ' . ($res['numero_documento'] ?? ''), 'data' => $res]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }

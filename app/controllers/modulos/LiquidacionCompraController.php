@@ -282,6 +282,7 @@ class LiquidacionCompraController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             // Loguear error para depuración
             error_log("Error en LiquidacionCompraController::guardarAjax: " . $e->getMessage() . " en " . $e->getFile() . ":" . $e->getLine());
             echo json_encode(['ok' => false, 'mensaje' => 'Error al guardar: ' . $e->getMessage()]);
@@ -353,6 +354,7 @@ class LiquidacionCompraController extends BaseModuloController
             $this->service->anular($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Liquidación anulada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -380,6 +382,7 @@ class LiquidacionCompraController extends BaseModuloController
                 echo json_encode(['ok' => false, 'mensaje' => 'No se pudo eliminar.']);
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -429,6 +432,7 @@ class LiquidacionCompraController extends BaseModuloController
                 'errores'             => $resultado['errores'] ?? [],
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             try {
                 $cab = $this->repository->getPorId($id);
                 if ($cab && (int)$cab['id_empresa'] === $idEmpresa) {
@@ -608,6 +612,7 @@ class LiquidacionCompraController extends BaseModuloController
             $idEgreso = $egresoService->registrar($payload);
             echo json_encode(['ok' => true, 'msg' => 'Pago registrado con éxito.', 'id_egreso' => $idEgreso]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -919,6 +924,7 @@ class LiquidacionCompraController extends BaseModuloController
                 echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración o el correo del destinatario.']);
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             while (ob_get_level() > 0) ob_end_clean();
             echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
         }

@@ -149,6 +149,7 @@ class DescargasSriController extends Controller
             echo json_encode($res);
 
         } catch (Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -281,6 +282,7 @@ class DescargasSriController extends Controller
                         'xml_base64' => base64_encode($xmlContent)
                     ];
                 } catch (Throwable $e) {
+                    \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
                     $resultados[] = ['clave' => $nombre, 'estado' => 'ERROR', 'mensaje' => $e->getMessage()];
                 }
             }
@@ -451,6 +453,7 @@ class DescargasSriController extends Controller
             $svc = new SriDescargaAutomaticaService();
             $svc->ejecutarParaEmpresaStream($idEmpresa, $idUsuario, $ano, $mes, $dia, $tipo);
         } catch (Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['type' => 'error', 'error' => $e->getMessage()]) . "\n";
         }
         exit;
@@ -656,6 +659,7 @@ class DescargasSriController extends Controller
             (new Usuario())->desactivarLoginAuto($idUsuario);
             echo json_encode($res);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => 'Error del servidor: ' . $e->getMessage()]);
         }
         exit;
@@ -718,6 +722,7 @@ class DescargasSriController extends Controller
             $pendientes = (new SriDescargaAutomaticaService())->filtrarPendientes($claves, $idEmpresa);
             echo json_encode(['ok' => true, 'pendientes' => $pendientes]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => 'Error del servidor: ' . $e->getMessage()]);
         }
         exit;
@@ -793,6 +798,7 @@ class DescargasSriController extends Controller
             (new Usuario())->desactivarLoginAuto($idUsuario);
             echo json_encode($res);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => 'Error del servidor: ' . $e->getMessage()]);
         }
         exit;

@@ -235,6 +235,7 @@ class AuditoriaContableController extends BaseModuloController
                 'contadores' => $this->service->getContadores($idEmpresa, $fechaDesde, $fechaHasta),
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             // Nunca devolver HTML a un fetch: el JS espera JSON siempre.
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -356,6 +357,7 @@ class AuditoriaContableController extends BaseModuloController
             $res = $this->service->ejecutarAuditoria($idEmpresa, $idUsuario, $origen, $fechaDesde, $fechaHasta);
             echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => 'Auditoría ejecutada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -380,6 +382,7 @@ class AuditoriaContableController extends BaseModuloController
             $this->service->marcarRevision($id, $idEmpresa, $idUsuario, $estado, $nota);
             echo json_encode(['ok' => true, 'mensaje' => 'Revisión actualizada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -398,6 +401,7 @@ class AuditoriaContableController extends BaseModuloController
             $this->service->generarFaltante($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Asiento generado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -416,6 +420,7 @@ class AuditoriaContableController extends BaseModuloController
             $this->service->corregirAmbiente($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Ambiente corregido.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -435,6 +440,7 @@ class AuditoriaContableController extends BaseModuloController
             $res = $this->service->regenerarDocumento($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => 'Asiento regenerado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -468,6 +474,7 @@ class AuditoriaContableController extends BaseModuloController
             $this->service->anularDuplicado($idAsiento, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Asiento anulado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -492,6 +499,7 @@ class AuditoriaContableController extends BaseModuloController
             $res = $this->service->regenerarMasivo($idEmpresa, $idUsuario, $origen, $fechaDesde, $fechaHasta);
             echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => $res['mensaje']]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -554,6 +562,7 @@ class AuditoriaContableController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $plan]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -594,6 +603,7 @@ class AuditoriaContableController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $r]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -611,6 +621,7 @@ class AuditoriaContableController extends BaseModuloController
             $this->service->eliminarHuerfano($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Asiento huérfano eliminado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -634,6 +645,7 @@ class AuditoriaContableController extends BaseModuloController
             );
             echo json_encode(['ok' => true, 'data' => $r]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -681,6 +693,7 @@ class AuditoriaContableController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $plan]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -717,6 +730,7 @@ class AuditoriaContableController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $r]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -753,6 +767,7 @@ class AuditoriaContableController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => ['anulados' => (int) $c['anulados'], 'documentos' => (int) $c['documentos']]]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -779,6 +794,7 @@ class AuditoriaContableController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $r]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -828,6 +844,7 @@ class AuditoriaContableController extends BaseModuloController
                 'contadores'  => $this->service->getContadores($idEmpresa, $c['fecha_desde'], $c['fecha_hasta']),
             ]]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

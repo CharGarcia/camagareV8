@@ -376,6 +376,7 @@ class InventarioController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => $msg]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -496,6 +497,7 @@ class InventarioController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'medidas' => $medidas, 'id_medida_base' => $idBase]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -514,6 +516,7 @@ class InventarioController extends BaseModuloController
             $this->service->eliminarMovimiento($id, $idEmpresa, $idUsuario, false, (int)$_SESSION['nivel']);
             echo json_encode(['ok' => true, 'mensaje' => 'Movimiento eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -615,6 +618,7 @@ class InventarioController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => $msg, 'procesados' => $procesados]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

@@ -238,6 +238,7 @@ class FacturacionCvController extends BaseModuloController
                 echo json_encode(['ok' => true, 'msg' => 'Documento guardado como borrador.', 'id' => $id]);
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -254,6 +255,7 @@ class FacturacionCvController extends BaseModuloController
             $this->service->eliminar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Documento eliminado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -270,6 +272,7 @@ class FacturacionCvController extends BaseModuloController
             if (!$data) throw new Exception('Documento no encontrado.');
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -289,6 +292,7 @@ class FacturacionCvController extends BaseModuloController
             $res = $this->service->generarFactura($id, $idEmpresa, $idUsuario, $this->getEmpresaConfig($idEmpresa));
             echo json_encode(['ok' => true, 'msg' => 'Factura ' . $res['numero_factura'] . ' generada.', 'data' => $res]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -308,6 +312,7 @@ class FacturacionCvController extends BaseModuloController
             $newId = $this->service->duplicar($id, $idEmpresa, $idUsuario, $this->getEmpresaConfig($idEmpresa));
             echo json_encode(['ok' => true, 'msg' => 'Nueva facturación creada en borrador.', 'id' => $newId]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -333,6 +338,7 @@ class FacturacionCvController extends BaseModuloController
             $facturaService->anular($idFactura, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Factura anulada. El saldo de las consignaciones fue liberado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -361,6 +367,7 @@ class FacturacionCvController extends BaseModuloController
             $data = $this->service->getLineasFacturables((int) $_SESSION['id_empresa'], $idCons);
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -413,6 +420,7 @@ class FacturacionCvController extends BaseModuloController
             $detalles = $this->service->obtenerAsientoReingresoSugerido($idEmpresa, $idDoc);
             echo json_encode(['ok' => true, 'detalles' => $detalles, 'es_guardado' => false]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -438,6 +446,7 @@ class FacturacionCvController extends BaseModuloController
             $st->execute([':e' => $idEmpresa, ':q' => '%' . $q . '%']);
             echo json_encode(['ok' => true, 'data' => $st->fetchAll(\PDO::FETCH_ASSOC)]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -461,6 +470,7 @@ class FacturacionCvController extends BaseModuloController
             $row = $st->fetch(\PDO::FETCH_ASSOC);
             echo json_encode($row ? ['ok' => true, 'data' => $row] : ['ok' => false, 'error' => 'Cliente no encontrado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -569,6 +579,7 @@ class FacturacionCvController extends BaseModuloController
                 ? ['ok' => true, 'mensaje' => 'Correo enviado correctamente.']
                 : ['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración o el destinatario.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             if (ob_get_level() > 0) ob_end_clean();
             echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
         }

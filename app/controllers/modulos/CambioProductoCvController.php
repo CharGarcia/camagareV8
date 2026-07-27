@@ -191,6 +191,7 @@ class CambioProductoCvController extends BaseModuloController
                 echo json_encode(['ok' => true, 'msg' => 'Cambio registrado correctamente. El inventario ha sido actualizado.', 'id' => $id]);
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -211,6 +212,7 @@ class CambioProductoCvController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario, $this->getEmpresaConfig($idEmpresa));
             echo json_encode(['ok' => true, 'msg' => 'Cambio eliminado. El inventario ha sido reversado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -232,6 +234,7 @@ class CambioProductoCvController extends BaseModuloController
             $this->service->cambiarEstado($id, $idEmpresa, $idUsuario, $estado, $this->getEmpresaConfig($idEmpresa));
             echo json_encode(['ok' => true, 'msg' => 'Estado actualizado a ' . $estado . '.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -249,6 +252,7 @@ class CambioProductoCvController extends BaseModuloController
             if (!$data) throw new Exception("Cambio no encontrado.");
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -310,6 +314,7 @@ class CambioProductoCvController extends BaseModuloController
             $detalles = $this->service->obtenerAsientoSugerido($idEmpresa, $idCambio);
             echo json_encode(['ok' => true, 'detalles' => $detalles, 'es_guardado' => false]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -424,6 +429,7 @@ class CambioProductoCvController extends BaseModuloController
                 echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración de correo o el destinatario.']);
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             if (ob_get_level() > 0) ob_end_clean();
             echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
         }
@@ -453,6 +459,7 @@ class CambioProductoCvController extends BaseModuloController
             $st->execute([':e' => $idEmpresa, ':q' => '%' . $q . '%']);
             echo json_encode(['ok' => true, 'data' => $st->fetchAll(\PDO::FETCH_ASSOC)]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -474,6 +481,7 @@ class CambioProductoCvController extends BaseModuloController
             $rows = $this->service->getLineasDisponiblesCliente($idEmpresa, $idCliente, $q, $excluir > 0 ? $excluir : null);
             echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -506,6 +514,7 @@ class CambioProductoCvController extends BaseModuloController
             }
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -524,6 +533,7 @@ class CambioProductoCvController extends BaseModuloController
             $precios = $idProducto > 0 ? $repo->getPrecios($idProducto, $idEmpresa) : [];
             echo json_encode(['ok' => true, 'data' => $precios]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -542,6 +552,7 @@ class CambioProductoCvController extends BaseModuloController
             $st->execute([':e' => $idEmpresa]);
             echo json_encode(['ok' => true, 'data' => $st->fetchAll(\PDO::FETCH_ASSOC)]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

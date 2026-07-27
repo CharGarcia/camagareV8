@@ -171,6 +171,7 @@ class DeclaracionIvaController extends BaseModuloController
                 'detalle_documentos' => $detalleDocumentos
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -193,6 +194,7 @@ class DeclaracionIvaController extends BaseModuloController
             $this->repository->actualizarCasilleroManual($id, $nuevoCasillero);
             echo json_encode(['ok' => true, 'mensaje' => 'Casillero actualizado exitosamente']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -481,6 +483,7 @@ class DeclaracionIvaController extends BaseModuloController
             $declaracion = $this->service->verificarDeclarado($idEmpresa, $tipo, $anio, $periodo);
             echo json_encode(['ok' => true, 'declarado' => $declaracion !== null, 'declaracion' => $declaracion]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -510,6 +513,7 @@ class DeclaracionIvaController extends BaseModuloController
             ]);
             echo json_encode(['ok' => true, 'declaracion' => $declaracion]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -528,6 +532,7 @@ class DeclaracionIvaController extends BaseModuloController
             $resultado = $this->service->generarAsientoDeclaracion($idDeclaracion, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true] + $resultado);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -555,6 +560,7 @@ class DeclaracionIvaController extends BaseModuloController
             ]);
             echo json_encode(['ok' => true, 'id_egreso' => $idEgreso]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -584,6 +590,7 @@ class DeclaracionIvaController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'puntos_emision' => $puntos, 'formas_pago' => $formasPago, 'conceptos' => $conceptos]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -602,6 +609,7 @@ class DeclaracionIvaController extends BaseModuloController
             $result = $repo->getListado($idEmpresa, $q, 1, 15, 'razon_social', 'ASC');
             echo json_encode(['ok' => true, 'data' => $result['rows']]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -620,6 +628,7 @@ class DeclaracionIvaController extends BaseModuloController
             $res = $secService->obtenerSiguienteSecuencial($idPunto, 'Egresos');
             echo json_encode(array_merge(['ok' => true], $res));
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -652,6 +661,7 @@ class DeclaracionIvaController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'ultimo' => $ultimo, 'siguiente' => $siguiente]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

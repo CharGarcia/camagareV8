@@ -120,6 +120,7 @@ class CargasInventarioController extends BaseModuloController
             $res = $this->service->crearDesdeImportacion($idEmpresa, $idUsuario, $tipo, $obs !== '' ? $obs : null, $filas);
             echo json_encode(['ok' => true, 'data' => $res]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => 'No se pudo leer el archivo: ' . $e->getMessage()]);
         }
     }
@@ -243,6 +244,7 @@ class CargasInventarioController extends BaseModuloController
             $res = $this->service->aprobar($id, $idEmpresa, $idUsuario, false, $nivel);
             echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => 'Carga aprobada y aplicada al inventario.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -271,6 +273,7 @@ class CargasInventarioController extends BaseModuloController
             $res = $this->service->rechazar($id, $idEmpresa, $idUsuario, $motivo, $nivel);
             echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => 'Carga rechazada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -389,6 +392,7 @@ class CargasInventarioController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Carga eliminada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }

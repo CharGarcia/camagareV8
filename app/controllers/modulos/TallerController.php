@@ -185,6 +185,7 @@ class TallerController extends BaseModuloController
                 echo json_encode(['ok' => true, 'msg' => 'Orden de trabajo registrada.', 'id' => $id]);
             }
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -202,6 +203,7 @@ class TallerController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -221,6 +223,7 @@ class TallerController extends BaseModuloController
             $this->service->guardarDiagnostico($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $texto, $dep ?: null);
             echo json_encode(['ok' => true, 'msg' => 'Diagnóstico guardado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -241,6 +244,7 @@ class TallerController extends BaseModuloController
             $id = $this->service->agregarLinea($idOrden, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $input);
             echo json_encode(['ok' => true, 'msg' => 'Agregado a la orden.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -259,6 +263,7 @@ class TallerController extends BaseModuloController
             $this->service->actualizarLinea($idLinea, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $input);
             echo json_encode(['ok' => true, 'msg' => 'Línea actualizada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -276,6 +281,7 @@ class TallerController extends BaseModuloController
             $this->service->eliminarLinea($idLinea, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Línea eliminada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -295,6 +301,7 @@ class TallerController extends BaseModuloController
             $this->service->cambiarEstadoLinea($idLinea, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $estado, $motivo ?: null);
             echo json_encode(['ok' => true, 'msg' => 'Línea actualizada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -318,6 +325,7 @@ class TallerController extends BaseModuloController
             ]);
             echo json_encode(['ok' => true, 'msg' => 'Presupuesto aprobado. Los departamentos ya pueden trabajar.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -342,6 +350,7 @@ class TallerController extends BaseModuloController
             ]);
             echo json_encode(['ok' => true, 'msg' => 'Vehículo enviado al departamento.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -364,6 +373,7 @@ class TallerController extends BaseModuloController
             );
             echo json_encode(['ok' => true, 'msg' => 'Trabajo iniciado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -385,6 +395,7 @@ class TallerController extends BaseModuloController
             ]);
             echo json_encode(['ok' => true, 'msg' => 'Avance guardado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -407,6 +418,7 @@ class TallerController extends BaseModuloController
             ]);
             echo json_encode(['ok' => true, 'msg' => 'Trabajo cerrado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -433,6 +445,7 @@ class TallerController extends BaseModuloController
             );
             echo json_encode(['ok' => true, 'msg' => 'Nota agregada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -463,6 +476,7 @@ class TallerController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'msg' => 'Foto agregada.', 'id' => $res['id'], 'url' => $res['url']]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -480,6 +494,7 @@ class TallerController extends BaseModuloController
             $this->service->eliminarFoto($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Foto eliminada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -507,6 +522,7 @@ class TallerController extends BaseModuloController
             ]);
             echo json_encode(['ok' => true, 'msg' => 'Vehículo entregado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -525,6 +541,7 @@ class TallerController extends BaseModuloController
             $this->service->cambiarEstado($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $estado);
             echo json_encode(['ok' => true, 'msg' => 'Estado actualizado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -542,6 +559,7 @@ class TallerController extends BaseModuloController
             $this->service->eliminar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Orden eliminada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -601,6 +619,7 @@ class TallerController extends BaseModuloController
                 'numero_documento' => $res['numero_documento'],
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -743,6 +762,7 @@ class TallerController extends BaseModuloController
                 'id_plantilla_default' => $idDefault,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -822,6 +842,7 @@ class TallerController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => $etiqueta . ' enviado por WhatsApp.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             if ($tmpPdf !== null && is_file($tmpPdf)) @unlink($tmpPdf);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -983,6 +1004,7 @@ class TallerController extends BaseModuloController
                 ? ['ok' => true, 'mensaje' => 'Correo enviado correctamente.']
                 : ['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifique la configuración de correo o el destinatario.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             if (ob_get_level() > 0) ob_end_clean();
             echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
         }
@@ -1147,6 +1169,7 @@ class TallerController extends BaseModuloController
             $st->execute([':q' => "%$q%", ':e' => (int) $_SESSION['id_empresa']]);
             echo json_encode(['ok' => true, 'data' => $st->fetchAll(\PDO::FETCH_ASSOC)]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
         }
         exit;
@@ -1189,6 +1212,7 @@ class TallerController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
         }
         exit;
@@ -1214,6 +1238,7 @@ class TallerController extends BaseModuloController
             );
             echo json_encode(['ok' => true, 'stock' => $stock]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'stock' => 0, 'error' => $e->getMessage()]);
         }
         exit;

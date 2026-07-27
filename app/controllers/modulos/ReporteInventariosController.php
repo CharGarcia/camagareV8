@@ -148,6 +148,7 @@ class ReporteInventariosController extends BaseModuloController
 
             echo json_encode(array_merge(['ok' => true], $resultado));
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             error_log('ReporteInventario Exception: ' . $e->getMessage() . ' on line ' . $e->getLine());
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

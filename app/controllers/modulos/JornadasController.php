@@ -172,6 +172,7 @@ class JornadasController extends BaseModuloController
             $n = $this->service->recalcularRango($idEmpresa, $desde, $hasta, $idUsuario, $idEmpleado);
             echo json_encode(['ok' => true, 'msg' => "Se procesaron {$n} jornada(s).", 'n' => $n]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -198,6 +199,7 @@ class JornadasController extends BaseModuloController
                 . " — {$res['empleados']} empleado(s) con novedades de asistencia.";
             echo json_encode(['ok' => true, 'msg' => $msg] + $res);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

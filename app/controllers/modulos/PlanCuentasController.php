@@ -164,6 +164,7 @@ class PlanCuentasController extends BaseModuloController
             $data = $repo->searchCuentas($idEmpresa, $q, $tipo, 15);
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -197,6 +198,7 @@ class PlanCuentasController extends BaseModuloController
                 ]
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -288,6 +290,7 @@ class PlanCuentasController extends BaseModuloController
             $repo->commit();
             echo json_encode(['ok' => true, 'msg' => 'Plan de cuentas inicial creado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -312,6 +315,7 @@ class PlanCuentasController extends BaseModuloController
             $resp = $this->service->cargarModelo($idEmpresa, $idUsuario, $configurar);
             echo json_encode(['ok' => true, 'msg' => $resp['message']]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -330,6 +334,7 @@ class PlanCuentasController extends BaseModuloController
             $id = $this->service->crear($data);
             echo json_encode(['ok' => true, 'msg' => 'Cuenta creada correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -352,6 +357,7 @@ class PlanCuentasController extends BaseModuloController
             $this->service->actualizar($id, $idEmpresa, $data);
             echo json_encode(['ok' => true, 'msg' => 'Cuenta actualizada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -386,6 +392,7 @@ class PlanCuentasController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Cuenta eliminada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -414,6 +421,7 @@ class PlanCuentasController extends BaseModuloController
             }
             echo json_encode(['ok' => true, 'msg' => $msg, 'creadas' => $r['creadas'], 'restauradas' => $r['restauradas']]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -435,6 +443,7 @@ class PlanCuentasController extends BaseModuloController
             }
             echo json_encode(['ok' => true, 'msg' => $msg]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -644,6 +653,7 @@ class PlanCuentasController extends BaseModuloController
             $repo->commit();
             echo json_encode(['ok' => true, 'msg' => "Se han importado $importados cuentas correctamente."]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             if (isset($repo)) $repo->rollBack();
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

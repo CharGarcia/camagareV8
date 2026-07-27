@@ -488,6 +488,10 @@ class FacturaVentaRepository extends BaseRepository
             'codigo_principal', 'codigo_auxiliar',
             'descripcion', 'cantidad', 'precio_unitario', 'descuento', 'precio_total_sin_impuesto',
         ];
+        // Numéricos: un valor vacío ('') o nulo se convierte a 0 para no romper el INSERT
+        // con "invalid input syntax for type numeric" (columnas NUMERIC no aceptan '').
+        $num = static fn($v) => ($v === '' || $v === null) ? 0 : $v;
+
         $params = [
             (int) $data['id_venta'],
             !empty($data['id_producto']) ? (int)$data['id_producto'] : null,
@@ -496,10 +500,10 @@ class FacturaVentaRepository extends BaseRepository
             $data['codigo_principal'] ?? null,
             !empty($data['codigo_auxiliar'])    ? $data['codigo_auxiliar']         : null,
             $data['descripcion'],
-            $data['cantidad'],
-            $data['precio_unitario'],
-            $data['descuento'],
-            $data['precio_total_sin_impuesto'],
+            $num($data['cantidad'] ?? 0),
+            $num($data['precio_unitario'] ?? 0),
+            $num($data['descuento'] ?? 0),
+            $num($data['precio_total_sin_impuesto'] ?? 0),
         ];
 
         $colsOpcionales = $this->columnasExistentes('ventas_detalle');

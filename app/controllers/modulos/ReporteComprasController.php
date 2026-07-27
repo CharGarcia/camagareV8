@@ -109,6 +109,7 @@ class ReporteComprasController extends BaseModuloController
             }
 
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             error_log('ReporteCompras Exception: ' . $e->getMessage() . ' on line ' . $e->getLine());
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }

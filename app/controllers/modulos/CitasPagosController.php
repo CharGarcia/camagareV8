@@ -128,6 +128,7 @@ class CitasPagosController extends BaseModuloController
             $msg   = $id > 0 ? 'Pago actualizado correctamente.' : 'Pago registrado correctamente.';
             echo json_encode(['ok' => true, 'mensaje' => $msg, 'id' => $newId]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -145,6 +146,7 @@ class CitasPagosController extends BaseModuloController
             $this->service->eliminar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'mensaje' => 'Pago eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -161,6 +163,7 @@ class CitasPagosController extends BaseModuloController
             $data = $this->service->getById($id, (int) $_SESSION['id_empresa']);
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

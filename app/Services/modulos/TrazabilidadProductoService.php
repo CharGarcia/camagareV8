@@ -14,6 +14,16 @@ use App\Services\LogSistemaService;
  */
 class TrazabilidadProductoService
 {
+    /**
+     * Título de los eventos de catálogo dicho en términos del producto, no de la
+     * tabla: el usuario ve "Producto creado", no "Crear".
+     */
+    private const TITULOS_CATALOGO = [
+        'crear'      => 'Producto creado',
+        'actualizar' => 'Ficha del producto modificada',
+        'eliminar'   => 'Producto eliminado',
+    ];
+
     private TrazabilidadProductoRepository $repo;
     private LogSistemaService $logService;
 
@@ -49,13 +59,18 @@ class TrazabilidadProductoService
         $eventos = [];
 
         foreach ($eventosCatalogo as $log) {
+            $accion  = mb_strtolower(trim((string) $log['accion']), 'UTF-8');
+            $cambios = $this->cambiosDeFicha($accion, $log['detalles']);
+
             $eventos[] = [
                 'tipo'       => 'catalogo',
                 'fecha_ts'   => strtotime($log['created_at']) ?: 0,
                 'fecha'      => $log['created_at'],
-                'titulo'     => AuditoriaEtiquetas::accion((string) $log['accion']),
+                'titulo'     => self::TITULOS_CATALOGO[$accion] ?? AuditoriaEtiquetas::accion($accion),
                 'usuario'    => $log['usuario_nombre'] ?? null,
-                'cambios'    => $log['detalles'],
+                'cambios'    => $cambios,
+                'resumen'    => $this->resumenFicha($accion, $cambios),
+                'detalle'    => $this->detalleTexto($accion, $cambios),
             ];
         }
 
@@ -110,6 +125,51 @@ class TrazabilidadProductoService
             'eventos'   => $eventos,
             'truncado'  => $movResult['truncado'],
         ];
+    }
+
+    /**
+     * En un alta o una baja el diff no aporta nada (compara el registro contra la
+     * nada): el título ya lo dice todo. Solo la modificación lista campo por campo.
+     *
+     * @param array<int, array{campo:string,antes:?string,despues:?string}> $detalles
+     */
+    private function cambiosDeFicha(string $accion, array $detalles): array
+    {
+        return $accion === 'actualizar' ? $detalles : [];
+    }
+
+    /**
+     * Frase que explica el evento cuando no hay una lista de cambios que mostrar.
+     * Devuelve null si los cambios hablan por sí solos.
+     */
+    private function resumenFicha(string $accion, array $cambios): ?string
+    {
+        if ($accion === 'crear') {
+            return 'Se dio de alta el producto en el catálogo.';
+        }
+        if ($accion === 'eliminar') {
+            return 'El producto se marcó como eliminado. Su historial se conserva.';
+        }
+        if ($accion === 'actualizar' && empty($cambios)) {
+            return 'Se guardó la ficha sin cambios en sus datos principales. Pueden haberse editado precios, bodegas, componentes o variantes.';
+        }
+
+        return null;
+    }
+
+    /** Mismo detalle que la pantalla, en una sola línea, para el PDF y el Excel. */
+    private function detalleTexto(string $accion, array $cambios): string
+    {
+        if (empty($cambios)) {
+            return (string) $this->resumenFicha($accion, $cambios);
+        }
+
+        $partes = [];
+        foreach ($cambios as $c) {
+            $partes[] = $c['campo'] . ': ' . ($c['antes'] ?? '-') . ' → ' . ($c['despues'] ?? '-');
+        }
+
+        return implode('; ', $partes);
     }
 
     /**

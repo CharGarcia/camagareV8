@@ -272,8 +272,10 @@ class AutomatizacionesController extends BaseModuloController
             $id   = $this->service->crear($data, $idEmpresa, $idUsuario);
             $this->json(['ok' => true, 'id' => $id, 'mensaje' => 'Automatización creada correctamente.']);
         } catch (\InvalidArgumentException $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()], 500);
         }
     }
@@ -295,10 +297,13 @@ class AutomatizacionesController extends BaseModuloController
             $this->service->actualizar($id, $data, $idEmpresa, $idUsuario);
             $this->json(['ok' => true, 'mensaje' => 'Automatización actualizada correctamente.']);
         } catch (\InvalidArgumentException $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()], 422);
         } catch (\RuntimeException $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()], 404);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()], 500);
         }
     }
@@ -319,6 +324,7 @@ class AutomatizacionesController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             $this->json(['ok' => true, 'mensaje' => 'Automatización eliminada correctamente.']);
         } catch (\RuntimeException $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()], 404);
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'error' => 'Error al eliminar la automatización.'], 500);
@@ -407,6 +413,7 @@ class AutomatizacionesController extends BaseModuloController
             unset($r);
             $this->json(['ok' => true, 'rows' => $result['rows'], 'total' => $result['total']]);
         } catch (\RuntimeException $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()], 404);
         }
     }
@@ -423,6 +430,7 @@ class AutomatizacionesController extends BaseModuloController
             $resultado = $this->service->ejecutarManual($id, $idEmpresa, $idUsuario);
             $this->json(['ok' => true, 'resultado' => $resultado]);
         } catch (\RuntimeException $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'error' => 'Error al ejecutar la automatización.'], 500);

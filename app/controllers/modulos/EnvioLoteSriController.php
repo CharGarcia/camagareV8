@@ -121,6 +121,7 @@ class EnvioLoteSriController extends BaseModuloController
                       . 'Ejecute el worker manualmente: php scripts/procesar_lote_sri.php --lote=' . $idLote,
             ], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

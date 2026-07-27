@@ -376,6 +376,10 @@ class FacturaVentaController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id, 'asiento_warning' => $asientoWarning ?? null, 'rowHtml' => $rowHtml]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, [
+                'ruta'   => 'modulos/factura-venta',
+                'accion' => 'guardarAjax',
+            ]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -456,6 +460,7 @@ class FacturaVentaController extends BaseModuloController
             $detallesSugeridos = $this->service->obtenerAsientoSugerido($idEmpresa, $normalizedData);
             echo json_encode(['ok' => true, 'data' => $detallesSugeridos, 'detalles' => $detallesSugeridos, 'es_guardado' => false]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -629,6 +634,7 @@ class FacturaVentaController extends BaseModuloController
                 'saldo_pendiente' => round($saldoPendiente, 2)
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -906,6 +912,7 @@ class FacturaVentaController extends BaseModuloController
             echo json_encode(['ok' => true, 'mensaje' => 'Factura enviada por WhatsApp exitosamente.']);
 
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => 'Error inesperado: ' . $e->getMessage()]);
         }
         exit;
@@ -1038,6 +1045,7 @@ class FacturaVentaController extends BaseModuloController
                 'id_forma_cobro'  => (int) $formaCobro['id'],
             ]);
         } catch (\InvalidArgumentException $ex) {
+            \App\Services\ErrorLogService::registrar($ex, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $ex->getMessage()]);
             return;
         }
@@ -1188,6 +1196,7 @@ class FacturaVentaController extends BaseModuloController
                 'id_usuario'     => $idUsuario,
             ]);
         } catch (\InvalidArgumentException $ex) {
+            \App\Services\ErrorLogService::registrar($ex, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $ex->getMessage()]);
             return;
         }
@@ -1313,6 +1322,7 @@ class FacturaVentaController extends BaseModuloController
                 'factura_eliminada' => (bool) $res['factura_eliminada'],
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => 'No se pudo generar el recibo: ' . $e->getMessage()]);
         }
         exit;
@@ -1582,6 +1592,7 @@ class FacturaVentaController extends BaseModuloController
             $db->commit();
             echo json_encode(['ok' => true, 'mensaje' => 'Factura eliminada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             if ($db->inTransaction()) $db->rollBack();
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
@@ -1650,6 +1661,7 @@ class FacturaVentaController extends BaseModuloController
                 'errores'             => $resultado['errores'] ?? [],
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             // Registrar error en el log SRI antes de responder
             try {
                 $repo = new \App\repositories\modulos\FacturaVentaRepository();
@@ -1809,6 +1821,7 @@ class FacturaVentaController extends BaseModuloController
             $this->service->anular($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Factura anulada correctamente e inventario reintegrado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -2030,6 +2043,7 @@ class FacturaVentaController extends BaseModuloController
                 'pagos_nuvei'       => $pagosNuvei,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -2289,6 +2303,7 @@ class FacturaVentaController extends BaseModuloController
             $idIngreso = $ingresoService->crear($payload);
             echo json_encode(['ok' => true, 'msg' => 'Cobro registrado con éxito.', 'id_ingreso' => $idIngreso]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -2487,6 +2502,7 @@ class FacturaVentaController extends BaseModuloController
                 'correo'  => $correoCliente,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -2543,6 +2559,7 @@ class FacturaVentaController extends BaseModuloController
                     );
                     $ingresoService->anular($idIngreso, $idEmpresa, $idUsuario);
                 } catch (\Throwable $e) {
+                    \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
                     // El reverso ya se hizo; informar pero no revertir el estado Payphone
                     echo json_encode([
                         'ok'      => true,
@@ -2558,6 +2575,7 @@ class FacturaVentaController extends BaseModuloController
                 'mensaje' => 'Pago con tarjeta reversado y cobro anulado. La factura queda pendiente de pago.',
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -2600,6 +2618,7 @@ class FacturaVentaController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => 'Solicitud de pago cancelada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -2799,6 +2818,7 @@ class FacturaVentaController extends BaseModuloController
                 'correo'  => $correoCliente,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -2855,6 +2875,7 @@ class FacturaVentaController extends BaseModuloController
                     );
                     $ingresoService->anular($idIngreso, $idEmpresa, $idUsuario);
                 } catch (\Throwable $e) {
+                    \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
                     // El reembolso ya se hizo; informar pero no revertir el estado Nuvei
                     echo json_encode([
                         'ok'      => true,
@@ -2870,6 +2891,7 @@ class FacturaVentaController extends BaseModuloController
                 'mensaje' => 'Pago con tarjeta reembolsado y cobro anulado. La factura queda pendiente de pago.',
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -2912,6 +2934,7 @@ class FacturaVentaController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'mensaje' => 'Solicitud de pago cancelada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -3046,6 +3069,7 @@ class FacturaVentaController extends BaseModuloController
             }
 
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => 'Error al enviar correo: ' . $e->getMessage()]);
         }
         exit;

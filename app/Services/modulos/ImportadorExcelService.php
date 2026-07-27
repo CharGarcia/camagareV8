@@ -92,17 +92,18 @@ class ImportadorExcelService
                 'col_numericas' => [7], // SUELDO_BASE
                 'columnas' => ['TIPO_IDENTIFICACION', 'IDENTIFICACION', 'NOMBRES_APELLIDOS', 'EMAIL', 'TELEFONO', 'DIRECCION', 'CARGO', 'SUELDO_BASE']
             ],
-            'tipo_medida' => [
-                'nombre' => 'Tipos de Medida',
-                'global' => false,
-                'col_numericas' => [],
-                'columnas' => ['CODIGO', 'NOMBRE']
-            ],
+            // Una sola entidad para las dos tablas: la plantilla trae la hoja
+            // "Tipos_Medida" y la hoja "Unidades" en el mismo archivo.
             'unidades_medida' => [
-                'nombre' => 'Unidades de Medida',
+                'nombre' => 'Unidades y tipos de medida',
                 'global' => false,
                 'col_numericas' => [],
-                'columnas' => ['CODIGO_TIPO_MEDIDA', 'CODIGO_UNIDAD', 'NOMBRE_UNIDAD']
+                'multihoja' => true,
+                'hojas' => [
+                    'Tipos_Medida' => ['CODIGO_TIPO', 'NOMBRE_TIPO'],
+                    'Unidades'     => ['CODIGO_TIPO', 'CODIGO_UNIDAD', 'NOMBRE_UNIDAD', 'ABREVIATURA', 'FACTOR_BASE', 'ES_BASE (SI / NO)'],
+                ],
+                'columnas' => ['CODIGO_TIPO', 'CODIGO_UNIDAD', 'NOMBRE_UNIDAD', 'ABREVIATURA', 'FACTOR_BASE', 'ES_BASE (SI / NO)'],
             ],
             'plan_cuentas' => [
                 'nombre' => 'Plan de Cuentas',
@@ -137,6 +138,11 @@ class ImportadorExcelService
         // Validar que el archivo corresponda al establecimiento destino (solo entidades operativas)
         if (!$esGlobal) {
             $this->validarEmpresaPlantilla($spreadsheet, $idEmpresa, $entidadId);
+        }
+
+        // Entidades cuya plantilla trae varias hojas de datos relacionadas entre sí
+        if (!empty($entidad['multihoja'])) {
+            return $this->procesarMultihoja($spreadsheet, $entidadId, (int) $idEmpresa, $idUsuario);
         }
 
         $hoja = $spreadsheet->getActiveSheet();
@@ -191,7 +197,6 @@ class ImportadorExcelService
             'vehiculos' => 'vehiculos',
             'proveedores' => 'proveedores',
             'empleados' => 'empleados',
-            'tipo_medida' => 'tipo_medida',
             'unidades_medida' => 'unidades_medida',
             'plan_cuentas' => 'plan_cuentas',
             'retenciones_sri' => 'retenciones_sri',
@@ -212,10 +217,6 @@ class ImportadorExcelService
                 return $this->insertarProveedor($fila, $numeroFila, $idEmpresa, $idUsuario);
             case 'empleados':
                 return $this->insertarEmpleado($fila, $numeroFila, $idEmpresa, $idUsuario);
-            case 'tipo_medida':
-                return $this->insertarTipoMedida($fila, $numeroFila, $idEmpresa, $idUsuario);
-            case 'unidades_medida':
-                return $this->insertarUnidadMedida($fila, $numeroFila, $idEmpresa, $idUsuario);
             case 'plan_cuentas':
                 return $this->insertarPlanCuenta($fila, $numeroFila, $idEmpresa, $idUsuario);
             case 'retenciones_sri':
@@ -515,8 +516,8 @@ class ImportadorExcelService
      */
     private function validarEmpresaPlantilla(\PhpOffice\PhpSpreadsheet\Spreadsheet $spreadsheet, int $idEmpresaDestino, string $entidadId): void
     {
-        // Solo validar entidades que generan hoja _Config (actualmente: productos)
-        if ($entidadId !== 'productos') {
+        // Solo validar entidades cuya plantilla incluye la hoja _Config
+        if (!in_array($entidadId, ['productos', 'unidades_medida'], true)) {
             return;
         }
 
@@ -1071,45 +1072,398 @@ class ImportadorExcelService
         return (int) $st->fetchColumn();
     }
 
-    private function insertarTipoMedida(array $fila, int $numeroFila, int $idEmpresa, int $idUsuario): int
-    {
-        $codigo = trim((string)($fila[0] ?? ''));
-        $nombre = trim((string)($fila[1] ?? ''));
-        
-        if (empty($codigo) || empty($nombre)) throw new Exception("Fila {$numeroFila}: Código y Nombre son obligatorios.");
+    // ─────────────────────────────────────────────────────────────────
+    // Unidades y tipos de medida (plantilla de dos hojas)
+    // ─────────────────────────────────────────────────────────────────
 
-        $stCheck = $this->db->prepare("SELECT id FROM tipo_medida WHERE id_empresa = ? AND codigo = ? AND eliminado = false");
-        $stCheck->execute([$idEmpresa, $codigo]);
-        if ($stCheck->fetchColumn()) throw new Exception("Fila {$numeroFila}: El Tipo de Medida con código {$codigo} ya existe.");
+    /**
+     * Despacha las entidades cuya plantilla trae varias hojas relacionadas.
+     */
+    private function procesarMultihoja(
+        \PhpOffice\PhpSpreadsheet\Spreadsheet $spreadsheet,
+        string $entidadId,
+        int $idEmpresa,
+        int $idUsuario
+    ): int {
+        if ($entidadId === 'unidades_medida') {
+            return $this->procesarUnidadesYTipos($spreadsheet, $idEmpresa, $idUsuario);
+        }
 
-        $sql = "INSERT INTO tipo_medida (id_empresa, id_usuario, codigo, nombre, status, created_by, updated_by, eliminado) VALUES (?, ?, ?, ?, 1, ?, ?, false) RETURNING id";
-        $st = $this->db->prepare($sql);
-        $st->execute([$idEmpresa, $idUsuario, $codigo, $nombre, $idUsuario, $idUsuario]);
-        return (int) $st->fetchColumn();
+        throw new Exception("Lógica de importación multihoja no definida para {$entidadId}.");
     }
 
-    private function insertarUnidadMedida(array $fila, int $numeroFila, int $idEmpresa, int $idUsuario): int
+    /**
+     * Importa la hoja "Tipos_Medida" y luego la hoja "Unidades" del mismo archivo,
+     * en ese orden, para que una unidad pueda referirse a un tipo creado en la
+     * misma carga. Ambas hojas son opcionales: se puede subir solo una.
+     *
+     * Los registros existentes se actualizan (upsert por código) en lugar de
+     * abortar la importación. Todo ocurre dentro de una sola transacción.
+     */
+    private function procesarUnidadesYTipos(
+        \PhpOffice\PhpSpreadsheet\Spreadsheet $spreadsheet,
+        int $idEmpresa,
+        int $idUsuario
+    ): int {
+        $filasTipos    = $this->leerHoja($spreadsheet, 'Tipos_Medida');
+        $filasUnidades = $this->leerHoja($spreadsheet, 'Unidades');
+
+        if (empty($filasTipos) && empty($filasUnidades)) {
+            throw new Exception(
+                "El archivo no tiene datos. Llene la hoja 'Tipos_Medida', la hoja 'Unidades' o ambas. " .
+                "La hoja 'Catalogo_Sugerido' trae un catálogo listo para copiar y pegar."
+            );
+        }
+
+        $this->db->beginTransaction();
+        $procesados = 0;
+
+        try {
+            foreach ($filasTipos as $numeroFila => $fila) {
+                $procesados += $this->guardarTipoMedida($fila, $numeroFila, $idEmpresa, $idUsuario);
+            }
+
+            foreach ($filasUnidades as $numeroFila => $fila) {
+                $procesados += $this->guardarUnidadMedida($fila, $numeroFila, $idEmpresa, $idUsuario);
+            }
+
+            $this->db->commit();
+            return $procesados;
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Devuelve las filas con datos de una hoja, indexadas por su número real de
+     * fila en Excel (la 1 es el encabezado, los datos empiezan en la 2), para que
+     * los mensajes de error apunten a la fila que el usuario ve en pantalla.
+     * Si la hoja no existe devuelve un arreglo vacío.
+     *
+     * @return array<int, array<int, mixed>>
+     */
+    private function leerHoja(\PhpOffice\PhpSpreadsheet\Spreadsheet $spreadsheet, string $nombreHoja): array
     {
-        $codigoTipo = trim((string)($fila[0] ?? ''));
-        $codigo = trim((string)($fila[1] ?? ''));
-        $nombre = trim((string)($fila[2] ?? ''));
+        $hoja = $spreadsheet->getSheetByName($nombreHoja);
+        if ($hoja === null) {
+            return [];
+        }
 
-        if (empty($codigoTipo) || empty($codigo) || empty($nombre)) throw new Exception("Fila {$numeroFila}: Código de Tipo, Código y Nombre son obligatorios.");
+        $filas = $hoja->toArray();
+        $resultado = [];
 
-        $stTipo = $this->db->prepare("SELECT id FROM tipo_medida WHERE id_empresa = ? AND codigo = ? AND eliminado = false");
+        for ($i = 1; $i < count($filas); $i++) {
+            $fila = $filas[$i];
+            $tieneDatos = false;
+            foreach ($fila as $celda) {
+                if (trim((string) $celda) !== '') {
+                    $tieneDatos = true;
+                    break;
+                }
+            }
+            if ($tieneDatos) {
+                $resultado[$i + 1] = $fila;
+            }
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * Crea o actualiza un tipo de medida a partir de una fila de la hoja "Tipos_Medida".
+     * Devuelve 1 si se guardó.
+     */
+    private function guardarTipoMedida(array $fila, int $numeroFila, int $idEmpresa, int $idUsuario): int
+    {
+        $codigo = mb_strtoupper($this->sanitizarTexto(trim((string) ($fila[0] ?? '')), 50), 'UTF-8');
+        $nombre = mb_strtoupper($this->sanitizarTexto(trim((string) ($fila[1] ?? '')), 100), 'UTF-8');
+
+        if ($codigo === '' || $nombre === '') {
+            throw new Exception(
+                "Hoja 'Tipos_Medida', fila {$numeroFila}: CODIGO_TIPO y NOMBRE_TIPO son obligatorios."
+            );
+        }
+
+        // Otro tipo con el mismo nombre y distinto código haría ambiguo el catálogo
+        $stNombre = $this->db->prepare(
+            "SELECT codigo FROM tipo_medida
+              WHERE id_empresa = ? AND UPPER(TRIM(nombre)) = ? AND UPPER(TRIM(codigo)) <> ? AND eliminado = false
+              LIMIT 1"
+        );
+        $stNombre->execute([$idEmpresa, $nombre, $codigo]);
+        $codigoOtro = $stNombre->fetchColumn();
+        if ($codigoOtro !== false) {
+            throw new Exception(
+                "Hoja 'Tipos_Medida', fila {$numeroFila}: ya existe un tipo de medida llamado '{$nombre}' " .
+                "con el código '{$codigoOtro}'. Use ese mismo código o cambie el nombre."
+            );
+        }
+
+        $stCheck = $this->db->prepare(
+            "SELECT id FROM tipo_medida
+              WHERE id_empresa = ? AND UPPER(TRIM(codigo)) = ? AND eliminado = false
+              LIMIT 1"
+        );
+        $stCheck->execute([$idEmpresa, $codigo]);
+        $idExistente = $stCheck->fetchColumn();
+
+        if ($idExistente !== false) {
+            $st = $this->db->prepare(
+                "UPDATE tipo_medida
+                    SET nombre = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                  WHERE id = ? AND id_empresa = ?"
+            );
+            $st->execute([$nombre, $idUsuario, (int) $idExistente, $idEmpresa]);
+
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresa,
+                'importar_unidades_medida_excel',
+                'tipo_medida',
+                (int) $idExistente,
+                null,
+                ['origen' => 'excel', 'hoja' => 'Tipos_Medida', 'fila' => $numeroFila, 'accion' => 'actualizar', 'codigo' => $codigo, 'nombre' => $nombre]
+            );
+
+            return 1;
+        }
+
+        $st = $this->db->prepare(
+            "INSERT INTO tipo_medida (
+                id_empresa, id_usuario, codigo, nombre, status,
+                created_by, updated_by, eliminado
+             ) VALUES (?, ?, ?, ?, true, ?, ?, false) RETURNING id"
+        );
+        $st->execute([$idEmpresa, $idUsuario, $codigo, $nombre, $idUsuario, $idUsuario]);
+        $id = (int) $st->fetchColumn();
+
+        $this->logService->registrar(
+            $idUsuario,
+            $idEmpresa,
+            'importar_unidades_medida_excel',
+            'tipo_medida',
+            $id,
+            null,
+            ['origen' => 'excel', 'hoja' => 'Tipos_Medida', 'fila' => $numeroFila, 'accion' => 'crear', 'codigo' => $codigo, 'nombre' => $nombre]
+        );
+
+        return 1;
+    }
+
+    /**
+     * Crea o actualiza una unidad de medida a partir de una fila de la hoja "Unidades".
+     * Devuelve 1 si se guardó.
+     */
+    private function guardarUnidadMedida(array $fila, int $numeroFila, int $idEmpresa, int $idUsuario): int
+    {
+        $codigoTipo  = mb_strtoupper($this->sanitizarTexto(trim((string) ($fila[0] ?? '')), 50), 'UTF-8');
+        $codigo      = mb_strtoupper($this->sanitizarTexto(trim((string) ($fila[1] ?? '')), 50), 'UTF-8');
+        $nombre      = mb_strtoupper($this->sanitizarTexto(trim((string) ($fila[2] ?? '')), 100), 'UTF-8');
+        $abreviatura = $this->sanitizarTexto(trim((string) ($fila[3] ?? '')), 20);
+        $factorRaw   = trim((string) ($fila[4] ?? ''));
+        $esBase      = $this->interpretarSiNo($fila[5] ?? '');
+
+        if ($codigoTipo === '' || $codigo === '' || $nombre === '') {
+            throw new Exception(
+                "Hoja 'Unidades', fila {$numeroFila}: CODIGO_TIPO, CODIGO_UNIDAD y NOMBRE_UNIDAD son obligatorios."
+            );
+        }
+
+        if ($abreviatura === '') {
+            throw new Exception(
+                "Hoja 'Unidades', fila {$numeroFila}: ABREVIATURA es obligatoria (por ejemplo 'kg', 'u', 'm')."
+            );
+        }
+
+        // Tipo al que pertenece la unidad
+        $stTipo = $this->db->prepare(
+            "SELECT id FROM tipo_medida
+              WHERE id_empresa = ? AND UPPER(TRIM(codigo)) = ? AND eliminado = false
+              LIMIT 1"
+        );
         $stTipo->execute([$idEmpresa, $codigoTipo]);
         $idTipo = $stTipo->fetchColumn();
 
-        if (!$idTipo) throw new Exception("Fila {$numeroFila}: No se encontró el Tipo de Medida con código {$codigoTipo}.");
+        if ($idTipo === false) {
+            throw new Exception(
+                "Hoja 'Unidades', fila {$numeroFila}: no existe un tipo de medida con código '{$codigoTipo}'. " .
+                "Créelo en la hoja 'Tipos_Medida' de este mismo archivo o en Configuración → Unidades de Medida."
+            );
+        }
+        $idTipo = (int) $idTipo;
 
-        $stCheck = $this->db->prepare("SELECT id FROM unidades_medida WHERE id_tipo = ? AND codigo = ? AND eliminado = false");
-        $stCheck->execute([$idTipo, $codigo]);
-        if ($stCheck->fetchColumn()) throw new Exception("Fila {$numeroFila}: La Unidad con código {$codigo} ya existe para este Tipo.");
+        $factor = $this->interpretarFactor($factorRaw, $numeroFila);
+        if ($esBase) {
+            // La unidad base es la referencia del tipo: siempre vale 1
+            $factor = 1.0;
+        } elseif ($factor <= 0) {
+            throw new Exception(
+                "Hoja 'Unidades', fila {$numeroFila}: FACTOR_BASE debe ser mayor que cero. " .
+                "Indique cuántas unidades base equivale 1 de esta unidad (por ejemplo, 1 lb = 0.453592 kg)."
+            );
+        }
 
-        $sql = "INSERT INTO unidades_medida (id_tipo, codigo, nombre, status, created_by, updated_by, eliminado) VALUES (?, ?, ?, 1, ?, ?, false) RETURNING id";
-        $st = $this->db->prepare($sql);
-        $st->execute([$idTipo, $codigo, $nombre, $idUsuario, $idUsuario]);
-        return (int) $st->fetchColumn();
+        // El código de unidad debe ser único en toda la empresa: al importar
+        // productos la unidad se resuelve solo por código, sin mirar el tipo.
+        $stCheck = $this->db->prepare(
+            "SELECT id, id_tipo FROM unidades_medida
+              WHERE id_empresa = ? AND UPPER(TRIM(codigo)) = ? AND eliminado = false
+              LIMIT 1"
+        );
+        $stCheck->execute([$idEmpresa, $codigo]);
+        $existente = $stCheck->fetch(\PDO::FETCH_ASSOC);
+
+        if ($existente && (int) $existente['id_tipo'] !== $idTipo) {
+            throw new Exception(
+                "Hoja 'Unidades', fila {$numeroFila}: el código '{$codigo}' ya está usado por otra unidad " .
+                "de un tipo de medida distinto. Los códigos de unidad no pueden repetirse dentro de la empresa."
+            );
+        }
+
+        // Solo puede haber una unidad base por tipo (índice único en la base de datos)
+        if ($esBase) {
+            $sqlBase = "SELECT codigo FROM unidades_medida
+                         WHERE id_empresa = ? AND id_tipo = ? AND es_base = true AND eliminado = false";
+            $params  = [$idEmpresa, $idTipo];
+            if ($existente) {
+                $sqlBase .= " AND id <> ?";
+                $params[] = (int) $existente['id'];
+            }
+            $stBase = $this->db->prepare($sqlBase . " LIMIT 1");
+            $stBase->execute($params);
+            $codigoBase = $stBase->fetchColumn();
+
+            if ($codigoBase !== false) {
+                throw new Exception(
+                    "Hoja 'Unidades', fila {$numeroFila}: el tipo '{$codigoTipo}' ya tiene a '{$codigoBase}' " .
+                    "como unidad base. Solo puede haber una: ponga NO en ES_BASE e indique el factor respecto a ella."
+                );
+            }
+        }
+
+        // Otra unidad con el mismo nombre dentro del tipo (misma regla que el módulo)
+        $sqlNombre = "SELECT codigo FROM unidades_medida
+                       WHERE id_empresa = ? AND id_tipo = ? AND UPPER(TRIM(nombre)) = ? AND eliminado = false";
+        $paramsNombre = [$idEmpresa, $idTipo, $nombre];
+        if ($existente) {
+            $sqlNombre .= " AND id <> ?";
+            $paramsNombre[] = (int) $existente['id'];
+        }
+        $stNombre = $this->db->prepare($sqlNombre . " LIMIT 1");
+        $stNombre->execute($paramsNombre);
+        $codigoMismoNombre = $stNombre->fetchColumn();
+
+        if ($codigoMismoNombre !== false) {
+            throw new Exception(
+                "Hoja 'Unidades', fila {$numeroFila}: ya existe la unidad '{$nombre}' con el código " .
+                "'{$codigoMismoNombre}' en el tipo '{$codigoTipo}'."
+            );
+        }
+
+        $datos = [
+            'origen' => 'excel', 'hoja' => 'Unidades', 'fila' => $numeroFila,
+            'codigo' => $codigo, 'nombre' => $nombre, 'abreviatura' => $abreviatura,
+            'factor_base' => $factor, 'es_base' => $esBase,
+        ];
+
+        if ($existente) {
+            $st = $this->db->prepare(
+                "UPDATE unidades_medida
+                    SET nombre = ?, abreviatura = ?, factor_base = ?, es_base = ?,
+                        updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                  WHERE id = ? AND id_empresa = ?"
+            );
+            $st->execute([
+                $nombre,
+                $abreviatura,
+                number_format($factor, 6, '.', ''),
+                \App\Helpers\Booleano::sql($esBase),
+                $idUsuario,
+                (int) $existente['id'],
+                $idEmpresa,
+            ]);
+
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresa,
+                'importar_unidades_medida_excel',
+                'unidades_medida',
+                (int) $existente['id'],
+                null,
+                $datos + ['accion' => 'actualizar']
+            );
+
+            return 1;
+        }
+
+        $st = $this->db->prepare(
+            "INSERT INTO unidades_medida (
+                id_empresa, id_tipo, codigo, nombre, abreviatura, factor_base,
+                es_base, status, created_by, updated_by, eliminado
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, true, ?, ?, false) RETURNING id"
+        );
+        $st->execute([
+            $idEmpresa,
+            $idTipo,
+            $codigo,
+            $nombre,
+            $abreviatura,
+            number_format($factor, 6, '.', ''),
+            \App\Helpers\Booleano::sql($esBase),
+            $idUsuario,
+            $idUsuario,
+        ]);
+        $id = (int) $st->fetchColumn();
+
+        $this->logService->registrar(
+            $idUsuario,
+            $idEmpresa,
+            'importar_unidades_medida_excel',
+            'unidades_medida',
+            $id,
+            null,
+            $datos + ['accion' => 'crear']
+        );
+
+        return 1;
+    }
+
+    /**
+     * Interpreta una celda SI / NO. Vacío se toma como NO.
+     */
+    private function interpretarSiNo($valor): bool
+    {
+        $texto = mb_strtolower(trim((string) $valor), 'UTF-8');
+
+        return in_array($texto, ['si', 'sí', 's', 'x', '1', 'true', 'yes', 'v', 'verdadero'], true);
+    }
+
+    /**
+     * Convierte el FACTOR_BASE de la plantilla a número. Acepta coma decimal
+     * (0,453592) porque es lo que escribe Excel en configuración regional española.
+     * Vacío equivale a 1.
+     */
+    private function interpretarFactor(string $valor, int $numeroFila): float
+    {
+        if ($valor === '') {
+            return 1.0;
+        }
+
+        // "0,453592" → "0.453592" (solo cuando la coma es el separador decimal)
+        if (strpos($valor, ',') !== false && strpos($valor, '.') === false) {
+            $valor = str_replace(',', '.', $valor);
+        } else {
+            $valor = str_replace(',', '', $valor);
+        }
+
+        if (!is_numeric($valor)) {
+            throw new Exception(
+                "Hoja 'Unidades', fila {$numeroFila}: FACTOR_BASE ('{$valor}') no es un número válido."
+            );
+        }
+
+        return (float) $valor;
     }
 
     private function insertarPlanCuenta(array $fila, int $numeroFila, int $idEmpresa, int $idUsuario): int

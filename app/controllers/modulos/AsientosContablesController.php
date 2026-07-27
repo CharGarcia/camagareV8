@@ -99,6 +99,7 @@ class AsientosContablesController extends BaseModuloController
                 'generados' => $sincronizador->getGenerados(),
             ]);
         } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['success' => false, 'error' => $th->getMessage()]);
         }
     }
@@ -122,6 +123,7 @@ class AsientosContablesController extends BaseModuloController
             $sincronizador = new \App\Services\modulos\SincronizadorAsientosService();
             echo json_encode(['ok' => true, 'pendientes' => $sincronizador->contarPendientes($idEmpresa)]);
         } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $th->getMessage()]);
         }
     }
@@ -250,6 +252,7 @@ class AsientosContablesController extends BaseModuloController
             $id = $this->service->guardarAsiento($data['cabecera'], $data['detalles'], $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Asiento registrado correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -281,6 +284,7 @@ class AsientosContablesController extends BaseModuloController
             $id = $this->service->guardarAsiento($data['cabecera'], $data['detalles'], $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Asiento actualizado correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -299,6 +303,7 @@ class AsientosContablesController extends BaseModuloController
             $this->service->restablecer($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Asiento restablecido a contabilizado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -317,6 +322,7 @@ class AsientosContablesController extends BaseModuloController
             $this->service->anular($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Asiento anulado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

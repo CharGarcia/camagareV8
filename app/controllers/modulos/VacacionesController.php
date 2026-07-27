@@ -141,6 +141,7 @@ class VacacionesController extends BaseModuloController
             $info = $this->service->getInfoEmpleado($idEmp, (int) $_SESSION['id_empresa'], $excl);
             echo json_encode(['ok' => true, 'data' => $info]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -158,6 +159,7 @@ class VacacionesController extends BaseModuloController
             $id = $this->service->crear($data);
             echo json_encode(['ok' => true, 'msg' => 'Vacación registrada.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -175,6 +177,7 @@ class VacacionesController extends BaseModuloController
             $this->service->actualizar($id, (int) $_SESSION['id_empresa'], $data);
             echo json_encode(['ok' => true, 'msg' => 'Vacación actualizada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -197,6 +200,7 @@ class VacacionesController extends BaseModuloController
             $this->service->cambiarEstado((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], trim($_POST['estado'] ?? ''), (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Estado actualizado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -212,6 +216,7 @@ class VacacionesController extends BaseModuloController
             $this->service->eliminar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Vacación eliminada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

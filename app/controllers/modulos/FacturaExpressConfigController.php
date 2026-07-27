@@ -158,6 +158,7 @@ class FacturaExpressConfigController extends BaseModuloController
             $data      = $this->service->getPlantillaConItems($id, $idEmpresa);
             echo json_encode(['ok' => true, 'data' => $data]);
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -175,6 +176,7 @@ class FacturaExpressConfigController extends BaseModuloController
             $qrImageUrl = 'https://api.qrserver.com/v1/create-qr-code/?data=' . urlencode($url) . '&size=280x280&margin=10';
             echo json_encode(['ok' => true, 'url' => $url, 'qr_image_url' => $qrImageUrl]);
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -196,8 +198,10 @@ class FacturaExpressConfigController extends BaseModuloController
             $id = $this->service->crearPlantilla($data);
             echo json_encode(['ok' => true, 'id' => $id, 'mensaje' => 'Plantilla creada correctamente.']);
         } catch (\InvalidArgumentException $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => 'Error al crear: ' . $e->getMessage()]);
         }
     }
@@ -220,8 +224,10 @@ class FacturaExpressConfigController extends BaseModuloController
             $this->service->actualizarPlantilla($id, $idEmpresa, $data);
             echo json_encode(['ok' => true, 'mensaje' => 'Plantilla actualizada correctamente.']);
         } catch (\InvalidArgumentException $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => 'Error al actualizar: ' . $e->getMessage()]);
         }
     }
@@ -239,6 +245,7 @@ class FacturaExpressConfigController extends BaseModuloController
             $this->service->eliminarPlantilla($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'mensaje' => 'Plantilla eliminada correctamente.']);
         } catch (\Exception $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
@@ -275,6 +282,7 @@ class FacturaExpressConfigController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
         }
     }

@@ -226,6 +226,7 @@ class UnidadesMedidaController extends BaseModuloController
             $id = $this->service->crearTipo($data);
             echo json_encode(['ok' => true, 'msg' => 'Tipo de medida creado correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -248,6 +249,7 @@ class UnidadesMedidaController extends BaseModuloController
             $this->service->actualizarTipo($id, $idEmpresa, $data);
             echo json_encode(['ok' => true, 'msg' => 'Tipo de medida actualizado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -267,6 +269,7 @@ class UnidadesMedidaController extends BaseModuloController
             $this->service->eliminarTipo($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Tipo de medida eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -298,6 +301,7 @@ class UnidadesMedidaController extends BaseModuloController
                 ],
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -318,6 +322,7 @@ class UnidadesMedidaController extends BaseModuloController
             $id = $this->service->crearUnidad($data);
             echo json_encode(['ok' => true, 'msg' => 'Unidad de medida creada correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -340,6 +345,7 @@ class UnidadesMedidaController extends BaseModuloController
             $this->service->actualizarUnidad($id, $idEmpresa, $data);
             echo json_encode(['ok' => true, 'msg' => 'Unidad de medida actualizada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -359,6 +365,7 @@ class UnidadesMedidaController extends BaseModuloController
             $this->service->eliminarUnidad($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Unidad de medida eliminada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -390,6 +397,7 @@ class UnidadesMedidaController extends BaseModuloController
                 ],
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -578,6 +586,7 @@ td{border:1px solid #ccc;padding:4px;}
 
             echo json_encode(['ok' => true, 'data' => $unidades]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

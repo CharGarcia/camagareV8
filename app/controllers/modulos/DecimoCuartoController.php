@@ -128,6 +128,7 @@ class DecimoCuartoController extends BaseModuloController
             $id = $this->service->calcular((int) $_SESSION['id_empresa'], $anio, $region, (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Décimo cuarto calculado.', 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -161,6 +162,7 @@ class DecimoCuartoController extends BaseModuloController
             $this->service->actualizarDetalleEmpleado($idDetalle, (int) $_SESSION['id_empresa'], $campos, (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Registro actualizado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -198,6 +200,7 @@ class DecimoCuartoController extends BaseModuloController
             $this->service->anular($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'msg' => 'Declaración anulada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

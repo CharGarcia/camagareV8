@@ -65,8 +65,9 @@ class GuiaRemisionService
                 (int) $data['id_empresa'],
                 'CREAR',
                 'guias_remision_cabecera',
+                $id,
                 null,
-                ['id' => $id, 'secuencial' => $data['secuencial'], 'estado' => $data['estado']]
+                $this->repo->getPorId($id)
             );
 
             $db->commit();
@@ -105,6 +106,10 @@ class GuiaRemisionService
             throw new \Exception('El número de secuencial ya está en uso por otro documento.');
         }
 
+        // La clave se regenera en prepararData(); se le pasa la actual para
+        // conservar su código numérico.
+        $data['clave_acceso'] = $actual['clave_acceso'] ?? null;
+
         $data = $this->prepararData($data);
 
         $db = Database::getConnection();
@@ -125,8 +130,9 @@ class GuiaRemisionService
                 (int) $data['id_empresa'],
                 'ACTUALIZAR',
                 'guias_remision_cabecera',
+                $id,
                 $actual,
-                ['id' => $id, 'secuencial' => $data['secuencial']]
+                $this->repo->getPorId($id)
             );
 
             $db->commit();
@@ -151,7 +157,7 @@ class GuiaRemisionService
         $db->beginTransaction();
         try {
             $this->repo->eliminar($id, $idEmpresa, $idUsuario);
-            $this->log->registrar($idUsuario, $idEmpresa, 'ELIMINAR', 'guias_remision_cabecera', $actual, null);
+            $this->log->registrar($idUsuario, $idEmpresa, 'ELIMINAR', 'guias_remision_cabecera', $id, $actual, null);
             $db->commit();
         } catch (\Throwable $e) {
             $db->rollBack();
@@ -165,15 +171,38 @@ class GuiaRemisionService
         if (!$actual || (int)($actual['id_empresa'] ?? 0) !== $idEmpresa) {
             throw new \RuntimeException('Guía de remisión no encontrada.');
         }
-        if (($actual['estado'] ?? '') === 'anulado') {
+
+        $estadoActual = $actual['estado'] ?? '';
+        if ($estadoActual === 'anulado') {
             throw new \RuntimeException('La guía ya está anulada.');
+        }
+        // Anular es para comprobantes que existen ante el SRI. Una guía que no
+        // llegó a autorizarse se elimina, no se anula.
+        if ($estadoActual !== 'autorizado') {
+            throw new \RuntimeException('Solo se pueden anular guías autorizadas por el SRI. Para descartar una guía en borrador, elimínela.');
+        }
+
+        // Misma regla que en factura de venta: la anulación real se hace en el
+        // portal del SRI. Aquí solo se refleja cuando el SRI ya dejó de
+        // reportarla como AUTORIZADO.
+        $claveAcceso = trim((string)($actual['clave_acceso'] ?? ''));
+        if ($claveAcceso !== '') {
+            $tipoAmbiente = (string)($actual['tipo_ambiente'] ?? '1');
+            $consulta  = (new \App\Services\Sri\SriEnvioService())->verificarAutorizacion($claveAcceso, $tipoAmbiente);
+            $estadoSri = strtoupper($consulta['estado'] ?? '');
+            if ($estadoSri === 'AUTORIZADO') {
+                throw new \RuntimeException(
+                    'No se puede anular: la guía sigue AUTORIZADA en el SRI. ' .
+                    'Primero debe anularla en el portal del SRI; cuando deje de estar autorizada podrá anularla aquí.'
+                );
+            }
         }
 
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
             $this->repo->actualizarEstado($id, 'anulado', $idUsuario);
-            $this->log->registrar($idUsuario, $idEmpresa, 'ANULAR', 'guias_remision_cabecera', $actual, ['estado' => 'anulado']);
+            $this->log->registrar($idUsuario, $idEmpresa, 'ANULAR', 'guias_remision_cabecera', $id, $actual, ['estado' => 'anulado']);
             $db->commit();
         } catch (\Throwable $e) {
             $db->rollBack();
@@ -198,21 +227,40 @@ class GuiaRemisionService
 
         $data['secuencial'] = str_pad((string)((int) ltrim($data['secuencial'], '0') ?: 0), 9, '0', STR_PAD_LEFT);
 
-        // Generar clave de acceso si no existe
-        if (empty($data['clave_acceso'])) {
-            $empresa = (new \App\models\Empresa())->getPorId((int)$data['id_empresa']);
-            if ($empresa) {
-                $data['clave_acceso'] = ClaveAccesoService::generar(
-                    $data['fecha_emision'],
-                    ClaveAccesoService::GUIA_REMISION,
-                    $empresa['ruc'] ?? '',
-                    $data['tipo_ambiente'] ?? '1',
-                    $data['establecimiento'],
-                    $data['punto_emision'],
-                    $data['secuencial']
-                );
-            }
-        }
+        $empresa = (new \App\models\Empresa())->getPorId((int)$data['id_empresa']) ?? [];
+
+        // Ambiente y tipo de emisión los define la empresa, NUNCA el formulario:
+        // la clave de acceso lleva el ambiente en su posición 24 y el SRI rechaza
+        // el comprobante ("error en la estructura de la clave de acceso") si no
+        // coincide con el ambiente al que se envía. Igual que en factura de venta.
+        $data['tipo_ambiente'] = (string) ($empresa['tipo_ambiente'] ?? '1');
+        $data['tipo_emision']  = (string) ($empresa['tipo_emision']  ?? '1');
+
+        // Fecha que va DENTRO de la clave de acceso: para la guía de remisión es
+        // la de inicio de transporte, no la de emisión. El XML de la guía no
+        // tiene <fechaEmision>, así que el SRI toma <fechaIniTransporte> como
+        // fecha del comprobante y la contrasta con la clave; si no coinciden
+        // responde "ERROR EN LA ESTRUCTURA DE LA CLAVE DE ACCESO".
+        $fechaClave = !empty($data['fecha_inicio_transporte'])
+            ? (string) $data['fecha_inicio_transporte']
+            : (string) $data['fecha_emision'];
+
+        // La clave de acceso se regenera SIEMPRE: depende de esa fecha, del
+        // establecimiento, el punto de emisión, el secuencial y el ambiente, y
+        // cualquiera de ellos pudo cambiar al editar el borrador. Se conserva el
+        // código numérico de la clave anterior para no alterarla sin motivo.
+        $codigoNumerico = ClaveAccesoService::extraerCodigoNumerico((string) ($data['clave_acceso'] ?? ''));
+        $data['clave_acceso'] = ClaveAccesoService::generar(
+            $fechaClave,
+            ClaveAccesoService::GUIA_REMISION,
+            (string) ($empresa['ruc'] ?? ''),
+            $data['tipo_ambiente'],
+            (string) $data['establecimiento'],
+            (string) $data['punto_emision'],
+            (string) $data['secuencial'],
+            $data['tipo_emision'],
+            $codigoNumerico
+        );
 
         // Normalizar detalles
         $detalles = [];

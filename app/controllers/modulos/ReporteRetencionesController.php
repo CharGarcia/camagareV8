@@ -115,6 +115,7 @@ class ReporteRetencionesController extends BaseModuloController
                 'pdf_url'   => $urlBase . '/exportPdf?' . $qs,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

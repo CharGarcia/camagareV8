@@ -207,6 +207,7 @@ class GuiaRemisionRepository extends BaseRepository
                     fecha_emision_doc_sustento = :fecha_emision_doc_sustento,
                     doc_aduanero_unico = :doc_aduanero_unico,
                     cod_establecimiento_destino = :cod_establecimiento_destino,
+                    tipo_ambiente = :tipo_ambiente, tipo_emision = :tipo_emision,
                     observaciones = :observaciones,
                     updated_by = :updated_by, updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = FALSE";
@@ -232,6 +233,8 @@ class GuiaRemisionRepository extends BaseRepository
             ':fecha_emision_doc_sustento'    => $data['fecha_emision_doc_sustento'] ?? null,
             ':doc_aduanero_unico'            => $data['doc_aduanero_unico'] ?? null,
             ':cod_establecimiento_destino'   => $data['cod_establecimiento_destino'] ?? null,
+            ':tipo_ambiente'                 => $data['tipo_ambiente'] ?? '1',
+            ':tipo_emision'                  => $data['tipo_emision'] ?? '1',
             ':observaciones'                 => $data['observaciones'] ?? null,
             ':updated_by'                    => $data['id_usuario'],
             ':id'                            => $id,

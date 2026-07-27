@@ -120,6 +120,7 @@ class FormasCobrosPagosController extends BaseModuloController
                 'id' => $id
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -138,6 +139,7 @@ class FormasCobrosPagosController extends BaseModuloController
             $this->service->eliminar($id, $idEmpresa, $usuarioId);
             echo json_encode(['ok' => true, 'mensaje' => 'Registro eliminado exitosamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;

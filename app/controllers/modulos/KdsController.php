@@ -114,6 +114,7 @@ class KdsController extends BaseModuloController
             $this->comandaService->cambiarEstadoLinea($idLinea, $idEmpresa, $idUsuario, $estado);
             $this->json(['ok' => true, 'msg' => 'Estado actualizado.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'error' => $e->getMessage()]);
         }
     }

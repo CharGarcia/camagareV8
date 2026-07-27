@@ -906,6 +906,57 @@ class SriEnvioService
 
     // ── Guía de Remisión ──────────────────────────────────────────────────────
 
+    /**
+     * Deja la clave de acceso (y el ambiente) de la guía en el valor que exige
+     * el SRI antes de firmar y enviar.
+     *
+     * En la guía de remisión la fecha de la clave es la de INICIO DE TRANSPORTE:
+     * su XML no lleva <fechaEmision>, así que el SRI toma <fechaIniTransporte>
+     * como fecha del comprobante. El ambiente lo define la empresa.
+     *
+     * @return array Cabecera con la clave y el ambiente ya sincronizados.
+     */
+    private function sincronizarClaveGuia(array $cabecera, int $idEmpresa, int $idUsuario): array
+    {
+        $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+
+        $ambiente   = (string) ($empresa['tipo_ambiente'] ?? $cabecera['tipo_ambiente'] ?? '1');
+        $emision    = (string) ($cabecera['tipo_emision'] ?? $empresa['tipo_emision'] ?? '1');
+        $fechaClave = !empty($cabecera['fecha_inicio_transporte'])
+            ? (string) $cabecera['fecha_inicio_transporte']
+            : (string) $cabecera['fecha_emision'];
+
+        $claveEsperada = \App\Services\ClaveAccesoService::generar(
+            $fechaClave,
+            \App\Services\ClaveAccesoService::GUIA_REMISION,
+            (string) ($empresa['ruc'] ?? ''),
+            $ambiente,
+            (string) $cabecera['establecimiento'],
+            (string) $cabecera['punto_emision'],
+            (string) $cabecera['secuencial'],
+            $emision,
+            \App\Services\ClaveAccesoService::extraerCodigoNumerico((string) $cabecera['clave_acceso'])
+        );
+
+        if ($claveEsperada === $cabecera['clave_acceso']
+            && (string)($cabecera['tipo_ambiente'] ?? '') === $ambiente) {
+            return $cabecera;
+        }
+
+        Database::getConnection()->prepare(
+            "UPDATE guias_remision_cabecera
+                SET clave_acceso = ?, tipo_ambiente = ?, tipo_emision = ?,
+                    updated_by = ?, updated_at = NOW()
+              WHERE id = ?"
+        )->execute([$claveEsperada, $ambiente, $emision, $idUsuario, (int) $cabecera['id']]);
+
+        $cabecera['clave_acceso']  = $claveEsperada;
+        $cabecera['tipo_ambiente'] = $ambiente;
+        $cabecera['tipo_emision']  = $emision;
+
+        return $cabecera;
+    }
+
     public function enviarGuiaRemision(int $idGuia, int $idEmpresa, int $idUsuario): array
     {
         $repo = new \App\repositories\modulos\GuiaRemisionRepository();
@@ -917,6 +968,13 @@ class SriEnvioService
         if (empty($cabecera['clave_acceso'])) {
             throw new \RuntimeException("La guía de remisión no tiene clave de acceso generada.");
         }
+
+        // La clave de acceso tiene que derivar EXACTAMENTE de los datos con los
+        // que se envía el comprobante; si no, el SRI responde "error en la
+        // estructura de la clave de acceso". Antes de firmar se recalcula y, si
+        // la guardada quedó desfasada (guías creadas con datos que luego se
+        // editaron), se corrige en la guía. Se conserva el código numérico.
+        $cabecera = $this->sincronizarClaveGuia($cabecera, $idEmpresa, $idUsuario);
 
         $tipoAmbiente = $cabecera['tipo_ambiente'] ?? '1';
         $claveAcceso  = $cabecera['clave_acceso'];
@@ -935,12 +993,17 @@ class SriEnvioService
             return $preCheck;
         }
 
-        $fechaEmision = (new \DateTime($cabecera['fecha_emision']))->format('Y-m-d');
-        $hoy          = (new \DateTime())->format('Y-m-d');
-        if ($fechaEmision !== $hoy) {
-            $fechaFmt = (new \DateTime($cabecera['fecha_emision']))->format('d-m-Y');
+        // La fecha del comprobante para el SRI es la de inicio de transporte (es
+        // la que va en la clave de acceso). Puede ser hoy o futura —un traslado
+        // programado—, pero no anterior: el SRI rechaza por extemporáneo.
+        $fechaTransporte = (new \DateTime($cabecera['fecha_inicio_transporte'] ?? $cabecera['fecha_emision']))->format('Y-m-d');
+        $hoy             = (new \DateTime())->format('Y-m-d');
+        if ($fechaTransporte < $hoy) {
+            $fechaFmt = (new \DateTime($fechaTransporte))->format('d-m-Y');
+            $hoyFmt   = (new \DateTime($hoy))->format('d-m-Y');
             throw new \RuntimeException(
-                "No se puede enviar al SRI: la fecha de emisión ({$fechaFmt}) debe ser la fecha actual ({$hoy})."
+                "No se puede enviar al SRI: la fecha de inicio de transporte ({$fechaFmt}) ya pasó. " .
+                "Es la fecha que el SRI toma como fecha del comprobante, así que debe ser hoy ({$hoyFmt}) o posterior."
             );
         }
 
@@ -950,18 +1013,40 @@ class SriEnvioService
         $empresaModel = new \App\models\Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
 
+        // Dirección, logo y leyenda del establecimiento: viven en
+        // empresa_establecimiento y son lo que imprime el RIDE de la guía.
         $dirEstablecimiento = null;
-        if (!empty($cabecera['id_establecimiento'])) {
-            try {
-                $estRepo = new \App\repositories\modulos\EmpresaRepository();
-                foreach ($estRepo->getEstablecimientos($idEmpresa) as $est) {
-                    if ((int)$est['id'] === (int)$cabecera['id_establecimiento']) {
-                        $dirEstablecimiento = $est['direccion'] ?? null;
-                        break;
-                    }
+        try {
+            $estRepo = new \App\repositories\modulos\EmpresaRepository();
+            $establecimientos = $estRepo->getEstablecimientos($idEmpresa);
+
+            $est = null;
+            if (!empty($cabecera['id_establecimiento'])) {
+                foreach ($establecimientos as $e) {
+                    if ((int)$e['id'] === (int)$cabecera['id_establecimiento']) { $est = $e; break; }
                 }
-            } catch (\Throwable) {}
-        }
+            }
+            if (!$est && !empty($establecimientos)) $est = $establecimientos[0];
+
+            if ($est) {
+                $dirEstablecimiento = $est['direccion'] ?? null;
+                $cabecera['direccion_establecimiento'] = $dirEstablecimiento;
+                if (!empty($est['logo_ruta']))           $empresa['logo_ruta'] = $est['logo_ruta'];
+                if (!empty($est['direccion']))           $empresa['direccion_establecimiento'] = $est['direccion'];
+                if (!empty($est['leyenda_pdf_titulo']))  $empresa['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+                if (!empty($est['leyenda_pdf_mensaje'])) $empresa['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+
+                $estConfig = $estRepo->getEstablecimientoConfig((int)$est['id']);
+                if ($estConfig) {
+                    $estConfig['direccion_matriz']          = $empresa['direccion'] ?? '';
+                    $estConfig['direccion_establecimiento'] = $est['direccion'] ?? '';
+                    if (!empty($est['logo_ruta']))           $estConfig['logo_ruta'] = $est['logo_ruta'];
+                    if (!empty($est['leyenda_pdf_titulo']))  $estConfig['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+                    if (!empty($est['leyenda_pdf_mensaje'])) $estConfig['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+                    $empresa = array_merge($empresa, $estConfig);
+                }
+            }
+        } catch (\Throwable) {}
 
         // 1. Generar XML
         $xmlService = new \App\Services\Xml\XmlGuiaRemisionService();

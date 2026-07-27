@@ -95,6 +95,7 @@ class IaSoporteController extends BaseModuloController
             ], $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Configuración guardada correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -111,6 +112,7 @@ class IaSoporteController extends BaseModuloController
         try {
             echo json_encode(['ok' => true, 'data' => $this->service->listarAgentesDisponibles($idEmpresa)], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -170,6 +172,7 @@ class IaSoporteController extends BaseModuloController
                       . 'Ejecute: php scripts/procesar_documento_ia.php --documento=' . $id,
             ]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -211,6 +214,7 @@ class IaSoporteController extends BaseModuloController
             $this->service->eliminarDocumento($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Documento eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -232,6 +236,7 @@ class IaSoporteController extends BaseModuloController
             $this->service->actualizarAgentesDocumento($id, $idEmpresa, $this->idsAgentesDesdePost(), $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Agentes actualizados correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -278,6 +283,7 @@ class IaSoporteController extends BaseModuloController
             $id = $this->service->crearConversacion($idEmpresa, $idAgente, $titulo, $idUsuario);
             echo json_encode(['ok' => true, 'id' => $id]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -300,6 +306,7 @@ class IaSoporteController extends BaseModuloController
             $this->service->renombrarConversacion($id, $idEmpresa, $titulo, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Conversación renombrada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -321,6 +328,7 @@ class IaSoporteController extends BaseModuloController
             $this->service->eliminarConversacion($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Conversación eliminada.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -342,6 +350,7 @@ class IaSoporteController extends BaseModuloController
             $contenido = $this->service->getFragmentoFuente($idEmpresa, $idDocumento, $chunkIndex);
             echo json_encode(['ok' => true, 'contenido' => $contenido], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -365,6 +374,7 @@ class IaSoporteController extends BaseModuloController
             unset($m);
             echo json_encode(['ok' => true, 'data' => $mensajes]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -387,6 +397,7 @@ class IaSoporteController extends BaseModuloController
             $resultado = $this->service->responder($idConversacion, $idEmpresa, $idUsuario, $pregunta);
             echo json_encode(['ok' => true, 'data' => $resultado], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -406,6 +417,7 @@ class IaSoporteController extends BaseModuloController
         try {
             echo json_encode(['ok' => true, 'data' => $this->service->listarPrompts($idEmpresa)], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -424,6 +436,7 @@ class IaSoporteController extends BaseModuloController
             $id = $this->service->crearPrompt($idEmpresa, $this->recogerDatosPrompt(), $idUsuario);
             echo json_encode(['ok' => true, 'id' => $id, 'msg' => 'Prompt creado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -446,6 +459,7 @@ class IaSoporteController extends BaseModuloController
             $this->service->actualizarPrompt($id, $idEmpresa, $this->recogerDatosPrompt(), $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Prompt actualizado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -468,6 +482,7 @@ class IaSoporteController extends BaseModuloController
             $this->service->eliminarPrompt($id, $idEmpresa, $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Prompt eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

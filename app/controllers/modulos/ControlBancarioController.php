@@ -106,6 +106,7 @@ class ControlBancarioController extends BaseModuloController
         try {
             $result = $this->service->getMovimientos($idEmpresa, $idFormaPago, $filtros, $page, $perPage, $ordenCol, $ordenDir);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
             exit;
         }
@@ -197,6 +198,7 @@ class ControlBancarioController extends BaseModuloController
             $resumen = $this->service->getResumenPeriodo($idEmpresa, $idFormaPago, $fechaInicio, $fechaFin);
             echo json_encode(['ok' => true, 'data' => $resumen]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -229,6 +231,7 @@ class ControlBancarioController extends BaseModuloController
             $resultado = $this->service->guardarClasificacion($idEmpresa, $idUsuario, $data);
             echo json_encode(['ok' => true, 'data' => $resultado]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -248,6 +251,7 @@ class ControlBancarioController extends BaseModuloController
             $this->service->quitarClasificacion($idEmpresa, $idUsuario, $idAsientoDetalle);
             echo json_encode(['ok' => true]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -294,6 +298,7 @@ class ControlBancarioController extends BaseModuloController
             $conciliacion = $this->service->conciliarPeriodo($idEmpresa, $idUsuario, $data);
             echo json_encode(['ok' => true, 'data' => $conciliacion]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -313,6 +318,7 @@ class ControlBancarioController extends BaseModuloController
             $this->service->reabrirConciliacion($idEmpresa, $idUsuario, $idConciliacion);
             echo json_encode(['ok' => true]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

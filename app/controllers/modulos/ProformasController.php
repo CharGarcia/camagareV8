@@ -210,6 +210,7 @@ class ProformasController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'id' => $id, 'msg' => $msg, 'rowHtml' => $rowHtml]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -236,6 +237,7 @@ class ProformasController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'rowHtml' => $rowHtml]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -256,6 +258,7 @@ class ProformasController extends BaseModuloController
 
             echo json_encode(['ok' => $ok]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -305,6 +308,7 @@ class ProformasController extends BaseModuloController
             $res = $this->service->getSiguienteSecuencial($idPunto);
             echo json_encode(array_merge(['ok' => true], $res));
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -406,6 +410,7 @@ class ProformasController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'id_factura' => (int) ($res['id_factura'] ?? 0)]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -443,6 +448,7 @@ class ProformasController extends BaseModuloController
 
             echo json_encode(['ok' => true, 'id_recibo' => (int) ($res['id_recibo'] ?? 0)]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -472,6 +478,7 @@ class ProformasController extends BaseModuloController
             $facturas = $facturaRepo->getPorProforma($id, $idEmpresa);
             echo json_encode(['ok' => true, 'facturas' => $facturas]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
@@ -501,6 +508,7 @@ class ProformasController extends BaseModuloController
             $this->repository->marcarConvertida($idProforma, $idFactura, $idUsuario);
             echo json_encode(['ok' => true]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;

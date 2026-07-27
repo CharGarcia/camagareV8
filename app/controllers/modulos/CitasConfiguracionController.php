@@ -98,6 +98,7 @@ class CitasConfiguracionController extends BaseModuloController
             $msg   = $id > 0 ? 'Tipo de cita actualizado correctamente.' : 'Tipo de cita creado correctamente.';
             echo json_encode(['ok' => true, 'mensaje' => $msg, 'id' => $newId]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -114,6 +115,7 @@ class CitasConfiguracionController extends BaseModuloController
             $this->service->eliminarTipo($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'mensaje' => 'Tipo de cita eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -137,6 +139,7 @@ class CitasConfiguracionController extends BaseModuloController
             $msg   = $id > 0 ? 'Recurso actualizado correctamente.' : 'Recurso creado correctamente.';
             echo json_encode(['ok' => true, 'mensaje' => $msg, 'id' => $newId]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -153,6 +156,7 @@ class CitasConfiguracionController extends BaseModuloController
             $this->service->eliminarRecurso($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'mensaje' => 'Recurso eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -176,6 +180,7 @@ class CitasConfiguracionController extends BaseModuloController
             $msg   = $id > 0 ? 'Horario actualizado correctamente.' : 'Horario creado correctamente.';
             echo json_encode(['ok' => true, 'mensaje' => $msg, 'id' => $newId]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -192,6 +197,7 @@ class CitasConfiguracionController extends BaseModuloController
             $this->service->eliminarHorario($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
             echo json_encode(['ok' => true, 'mensaje' => 'Horario eliminado correctamente.']);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
@@ -228,6 +234,7 @@ class CitasConfiguracionController extends BaseModuloController
             $this->service->guardarPortal($data);
             echo json_encode(['ok' => true, 'mensaje' => 'Configuración del portal guardada correctamente.', 'slug' => $data['slug']]);
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
