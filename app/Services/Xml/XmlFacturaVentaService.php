@@ -133,7 +133,7 @@ class XmlFacturaVentaService
         $this->txt($dom, $el, 'totalDescuento',    $this->dec2($cab['total_descuento']    ?? 0));
 
         // totalConImpuestos: agrupa impuestos de todos los detalles
-        $el->appendChild($this->buildTotalConImpuestos($dom, $detalles));
+        $el->appendChild($this->buildTotalConImpuestos($dom, $detalles, $cab));
 
         $this->txt($dom, $el, 'propina',      $this->dec2($cab['propina']      ?? 0));
         $this->txt($dom, $el, 'importeTotal', $this->dec2($cab['importe_total'] ?? 0));
@@ -180,7 +180,7 @@ class XmlFacturaVentaService
         return $guardado;
     }
 
-    private function buildTotalConImpuestos(\DOMDocument $dom, array $detalles): \DOMElement
+    private function buildTotalConImpuestos(\DOMDocument $dom, array $detalles, array $cab = []): \DOMElement
     {
         $el = $dom->createElement('totalConImpuestos');
 
@@ -200,6 +200,35 @@ class XmlFacturaVentaService
                 }
                 $grupos[$key]['baseImponible'] += (float)($imp['base_imponible'] ?? 0);
                 $grupos[$key]['valor']         += (float)($imp['valor']          ?? 0);
+            }
+        }
+
+        // Conciliar el IVA con el importeTotal del comprobante para que el XML cuadre EXACTO:
+        //   importeTotal = totalSinImpuestos + Σ(valor impuestos) + propina.
+        // El IVA se acumuló arriba sumando el valor por línea (cada renglón redondeado); si la
+        // empresa lo calcula sobre el subtotal por tarifa, el total guardado difiere en ±1 centavo.
+        // Se absorbe ese desfase en el grupo de IVA de mayor valor. Así el XML es internamente
+        // consistente (no depende de la tolerancia del SRI) y coincide con el PDF y con el total.
+        if (isset($cab['importe_total'], $cab['total_sin_impuestos'])) {
+            $sumaNoIva = 0.0; // ICE, IRBPNR, etc. (todo lo que no es IVA)
+            foreach ($grupos as $g) {
+                if ((string)$g['codigo'] !== '2') {
+                    $sumaNoIva += (float)$g['valor'];
+                }
+            }
+            $ivaObjetivo = round((float)$cab['importe_total'] - (float)$cab['total_sin_impuestos']
+                                 - (float)($cab['propina'] ?? 0) - $sumaNoIva, 2);
+            $ivaActual = 0.0;
+            $kMax = null; $vMax = -INF;
+            foreach ($grupos as $k => $g) {
+                if ((string)$g['codigo'] === '2') {
+                    $ivaActual += (float)$g['valor'];
+                    if ((float)$g['valor'] > $vMax) { $vMax = (float)$g['valor']; $kMax = $k; }
+                }
+            }
+            $desfase = round($ivaObjetivo - $ivaActual, 2);
+            if ($kMax !== null && abs($desfase) >= 0.01 && abs($desfase) <= 0.05) {
+                $grupos[$kMax]['valor'] = round((float)$grupos[$kMax]['valor'] + $desfase, 2);
             }
         }
 

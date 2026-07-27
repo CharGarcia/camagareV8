@@ -545,6 +545,26 @@ class NotaCreditoPdfService
             ? (float)$cab['importe_total']
             : $subtotalSinImp + $totalIva + $totalIce;
 
+        // Reconciliar el IVA mostrado con el total del comprobante (misma lógica que el XML de la
+        // NC y que el PDF de factura): el importe_total es la fuente de verdad; si el IVA se calculó
+        // sobre el subtotal por tarifa puede diferir ±1 centavo del sumado por línea. Se absorbe el
+        // desfase en el grupo de mayor IVA para que SUBTOTAL + IVA (+ ICE) cuadre con VALOR TOTAL.
+        // La NC no lleva propina.
+        if (isset($cab['importe_total']) && !empty($ivaMap)) {
+            $ivaObjetivo = round($total - $subtotalSinImp - $totalIce, 2);
+            $desfase     = round($ivaObjetivo - array_sum($ivaMap), 2);
+            if (abs($desfase) >= 0.01 && abs($desfase) <= 0.05) {
+                $kMax = null; $vMax = -INF;
+                foreach ($ivaMap as $k => $v) {
+                    if ($v > $vMax) { $vMax = $v; $kMax = $k; }
+                }
+                if ($kMax !== null) {
+                    $ivaMap[$kMax] = round($ivaMap[$kMax] + $desfase, 2);
+                }
+            }
+        }
+        $totalIva = array_sum($ivaMap);
+
         if ($y > 230) { $pdf->AddPage(); $y = 12; }
 
         $totW = 72;

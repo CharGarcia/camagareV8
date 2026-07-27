@@ -751,7 +751,8 @@
     }
 
     function fmtMoneyProv(n) {
-        return (parseFloat(n) || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        // en-US: punto decimal y coma de miles (1,234.56), igual que clientes_modal.js
+        return (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     window.fetchInformacionExtraProv = async function(id) {
@@ -765,7 +766,7 @@
 
                 const setStat = (idEl, val) => { const el = document.getElementById(idEl); if (el) el.value = val; };
                 const s = d.stats || {};
-                setStat('stat_documentos', (parseInt(s.documentos_recibidos, 10) || 0).toLocaleString('es-EC'));
+                setStat('stat_documentos', (parseInt(s.documentos_recibidos, 10) || 0).toLocaleString('en-US'));
                 setStat('stat_total', fmtMoneyProv(s.total_compras));
                 setStat('stat_por_pagar', fmtMoneyProv(s.por_pagar));
 

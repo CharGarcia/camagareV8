@@ -695,6 +695,18 @@ class PlantillasPdfRendererService
             ? (float)$cabecera['importe_total']
             : $subtotal0 + $subtotalIva + $totalIva + $totalIce + $propina;
 
+        // Conciliar el IVA con el total del comprobante para que la plantilla cuadre EXACTO:
+        // {valor_total} sale de importe_total (lo autorizado por el SRI), pero {iva} se sumó por
+        // línea; si la empresa calcula el IVA sobre el subtotal difieren ±1 centavo. Se ajusta el
+        // IVA para que subtotales + IVA = valor_total (misma lógica que el PDF/XML de factura).
+        if (isset($cabecera['importe_total'])) {
+            $ivaObjetivo = round($valorTotal - $subtotal0 - $subtotalIva - $totalIce - $propina, 2);
+            $desfase     = round($ivaObjetivo - $totalIva, 2);
+            if (abs($desfase) >= 0.01 && abs($desfase) <= 0.05) {
+                $totalIva = round($totalIva + $desfase, 2);
+            }
+        }
+
         return [
             'subtotal_0'      => $subtotal0,
             'subtotal_iva'    => $subtotalIva,

@@ -26,6 +26,7 @@ class CargaSuscripcionesValidacionService
     private array $mapaProductos      = [];
     private array $mapaPeriodicidades = [];
     private array $mapaIva            = [];
+    private array $firmasExistentes   = [];
 
     public function __construct(
         CargaSuscripcionesRepository $repository,
@@ -102,6 +103,36 @@ class CargaSuscripcionesValidacionService
                 // Reflejar el error en la fila de cabecera del informe.
                 $this->marcarErrorCabecera($informe, $s['fila'],
                     'La suscripción no tiene ninguna línea en la hoja ' . CargaSuscripcionesEsquema::HOJA_DETALLE . '.');
+            }
+        }
+        unset($s);
+
+        // 3.b. Duplicados: bloquear si el mismo cliente ya tiene una suscripción
+        //      (no eliminada) con exactamente el mismo conjunto de productos, ya sea
+        //      en la base o en otra fila de este mismo archivo.
+        $firmasArchivo = [];
+        foreach ($suscripciones as &$s) {
+            if (!empty($s['errores'])) {
+                continue; // ya bloqueada por otra causa
+            }
+            $firma = $this->firmaSuscripcion($s);
+            if ($firma === null) {
+                continue;
+            }
+
+            $msg = null;
+            if (isset($this->firmasExistentes[$firma])) {
+                $msg = 'Ya existe una suscripción de este cliente con el mismo conjunto de productos.';
+            } elseif (isset($firmasArchivo[$firma])) {
+                $msg = 'Otra fila del archivo (CLAVE ' . $firmasArchivo[$firma]
+                    . ') crea una suscripción idéntica para este cliente.';
+            }
+
+            if ($msg !== null) {
+                $s['errores'][] = $msg;
+                $this->marcarErrorCabecera($informe, $s['fila'], $msg);
+            } else {
+                $firmasArchivo[$firma] = $s['clave'];
             }
         }
         unset($s);
@@ -203,6 +234,7 @@ class CargaSuscripcionesValidacionService
         $this->mapaProductos      = $this->repository->getMapaProductos($idEmpresa);
         $this->mapaPeriodicidades = $this->repository->getMapaPeriodicidades();
         $this->mapaIva            = $this->repository->getMapaTarifasIva();
+        $this->firmasExistentes   = $this->repository->getFirmasSuscripciones($idEmpresa);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -378,6 +410,30 @@ class CargaSuscripcionesValidacionService
                 ];
             }
         }
+    }
+
+    /**
+     * Firma de una suscripción para detectar duplicados: cliente + conjunto de
+     * productos (ids distintos, ordenados). null si faltan cliente o productos.
+     * Debe coincidir con el formato de CargaSuscripcionesRepository::getFirmasSuscripciones().
+     */
+    private function firmaSuscripcion(array $s): ?string
+    {
+        if (empty($s['id_cliente']) || empty($s['detalle'])) {
+            return null;
+        }
+        $ids = [];
+        foreach ($s['detalle'] as $d) {
+            if (!empty($d['id_producto'])) {
+                $ids[(int) $d['id_producto']] = true;
+            }
+        }
+        if (!$ids) {
+            return null;
+        }
+        $ids = array_keys($ids);
+        sort($ids, SORT_NUMERIC);
+        return $s['id_cliente'] . '|' . implode(',', $ids);
     }
 
     /** Agrega un mensaje de error a la fila de cabecera ya registrada en el informe. */

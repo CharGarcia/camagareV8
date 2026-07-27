@@ -80,6 +80,10 @@ existentes.
 
 - La CLAVE debe ser única dentro del archivo; una CLAVE repetida se marca con error.
 - Toda suscripción debe tener al menos una línea de detalle válida.
+- **Anti-duplicados**: una suscripción se **bloquea** (no se crea) si el mismo cliente
+  ya tiene otra suscripción no eliminada con **exactamente el mismo conjunto de
+  productos**, ya sea en la base de datos o en otra fila del mismo archivo. No se
+  consideran cantidad ni precio, solo qué productos la componen.
 - Si una línea de detalle tiene error, **su suscripción completa se bloquea** (no se
   crea), para no perder ningún ítem.
 - Cada suscripción se crea con su propia transacción a través del módulo de
@@ -108,6 +112,8 @@ existentes.
   primero el cliente o el producto, o corrija el valor con uno de la hoja de consulta.
 - *"La suscripción no tiene ninguna línea…"*: agregue al menos una fila en la hoja
   Detalle con la misma CLAVE.
+- *"Ya existe una suscripción de este cliente con el mismo conjunto de productos"*: ese
+  cliente ya tiene esa suscripción; cámbiele los productos o quítela del archivo.
 
 ## Historial de cambios
 

@@ -109,7 +109,7 @@ class XmlNotaCreditoService
         $this->txt($dom, $el, 'valorModificacion', $this->dec2($cab['importe_total']       ?? 0));
         $this->txt($dom, $el, 'moneda',            strtoupper($cab['moneda'] ?? 'DOLAR'));
 
-        $el->appendChild($this->buildTotalConImpuestos($dom, $detalles));
+        $el->appendChild($this->buildTotalConImpuestos($dom, $detalles, $cab));
         $this->txt($dom, $el, 'motivo', $cab['motivo'] ?? 'Devolución');
 
         return $el;
@@ -150,7 +150,7 @@ class XmlNotaCreditoService
         return (string)($imp['codigo_porcentaje'] ?? '');
     }
 
-    private function buildTotalConImpuestos(\DOMDocument $dom, array $detalles): \DOMElement
+    private function buildTotalConImpuestos(\DOMDocument $dom, array $detalles, array $cab = []): \DOMElement
     {
         $el = $dom->createElement('totalConImpuestos');
         $grupos = [];
@@ -168,6 +168,33 @@ class XmlNotaCreditoService
                 }
                 $grupos[$key]['baseImponible'] += (float)($imp['base_imponible'] ?? 0);
                 $grupos[$key]['valor']         += (float)($imp['valor']          ?? 0);
+            }
+        }
+
+        // Conciliar el IVA con el valorModificacion del comprobante para que el XML cuadre EXACTO:
+        //   valorModificacion (= importe_total) = totalSinImpuestos + Σ(valor impuestos).
+        // El IVA se acumuló sumando el valor por línea; si la empresa lo calcula sobre el subtotal
+        // por tarifa, difiere en ±1 centavo. Se absorbe en el grupo de IVA de mayor valor para que
+        // el XML sea internamente consistente y coincida con el PDF. (La NC no lleva propina.)
+        if (isset($cab['importe_total'], $cab['total_sin_impuestos'])) {
+            $sumaNoIva = 0.0;
+            foreach ($grupos as $g) {
+                if ((string)$g['codigo'] !== '2') {
+                    $sumaNoIva += (float)$g['valor'];
+                }
+            }
+            $ivaObjetivo = round((float)$cab['importe_total'] - (float)$cab['total_sin_impuestos'] - $sumaNoIva, 2);
+            $ivaActual = 0.0;
+            $kMax = null; $vMax = -INF;
+            foreach ($grupos as $k => $g) {
+                if ((string)$g['codigo'] === '2') {
+                    $ivaActual += (float)$g['valor'];
+                    if ((float)$g['valor'] > $vMax) { $vMax = (float)$g['valor']; $kMax = $k; }
+                }
+            }
+            $desfase = round($ivaObjetivo - $ivaActual, 2);
+            if ($kMax !== null && abs($desfase) >= 0.01 && abs($desfase) <= 0.05) {
+                $grupos[$kMax]['valor'] = round((float)$grupos[$kMax]['valor'] + $desfase, 2);
             }
         }
 

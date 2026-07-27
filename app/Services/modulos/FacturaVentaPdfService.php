@@ -595,6 +595,27 @@ class FacturaVentaPdfService
             ? (float)$cab['importe_total']
             : $subtotalSinImp + $totalIva + $totalIce + $propina;
 
+        // Reconciliar el IVA mostrado con el total del comprobante.
+        // importe_total es la fuente de verdad (lo firmado y autorizado por el SRI). Si la
+        // empresa calcula el IVA sobre el subtotal por tarifa, ese total puede diferir en
+        // ±1 centavo del IVA sumado por línea que se acumuló arriba (redondeo por renglón).
+        // Se absorbe el desfase en el grupo de mayor IVA para que, en el RIDE,
+        // SUBTOTAL SIN IMPUESTOS + IVA (+ ICE + PROPINA) cuadre EXACTO con VALOR TOTAL.
+        if (isset($cab['importe_total']) && !empty($ivaMap)) {
+            $ivaObjetivo = round($total - $subtotalSinImp - $totalIce - $propina, 2);
+            $desfase     = round($ivaObjetivo - array_sum($ivaMap), 2);
+            if (abs($desfase) >= 0.01 && abs($desfase) <= 0.05) {
+                $kMax = null; $vMax = -INF;
+                foreach ($ivaMap as $k => $v) {
+                    if ($v > $vMax) { $vMax = $v; $kMax = $k; }
+                }
+                if ($kMax !== null) {
+                    $ivaMap[$kMax] = round($ivaMap[$kMax] + $desfase, 2);
+                }
+            }
+        }
+        $totalIva = array_sum($ivaMap);
+
         if ($y > 212) {
             $pdf->AddPage();
             $y = 12;

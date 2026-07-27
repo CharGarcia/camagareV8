@@ -104,6 +104,46 @@ class CargaSuscripcionesRepository extends BaseRepository
         return $mapa;
     }
 
+    /**
+     * "Firmas" de las suscripciones existentes de la empresa para detectar
+     * duplicados: cada firma es cliente + conjunto (sin repetir) de productos.
+     *
+     * Devuelve un conjunto (mapa firma => clave del documento) donde la firma es
+     * "id_cliente|idProd1,idProd2,..." con los ids de producto ordenados. Se
+     * agrega en PHP para no depender del parseo de arrays de Postgres.
+     */
+    public function getFirmasSuscripciones(int $idEmpresa): array
+    {
+        $sql = "SELECT s.id AS id_suscripcion, s.id_cliente, sd.id_producto
+                FROM suscripciones s
+                JOIN suscripciones_detalle sd
+                     ON sd.id_suscripcion = s.id AND sd.eliminado = false
+                WHERE s.id_empresa = :id_empresa
+                  AND s.eliminado = false
+                  AND sd.id_producto IS NOT NULL";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+
+        // Agrupar productos por suscripción.
+        $porSuscripcion = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $idS = (int) $row['id_suscripcion'];
+            if (!isset($porSuscripcion[$idS])) {
+                $porSuscripcion[$idS] = ['id_cliente' => (int) $row['id_cliente'], 'productos' => []];
+            }
+            $porSuscripcion[$idS]['productos'][(int) $row['id_producto']] = true;
+        }
+
+        $firmas = [];
+        foreach ($porSuscripcion as $idS => $info) {
+            $ids = array_keys($info['productos']);
+            sort($ids, SORT_NUMERIC);
+            $firma = $info['id_cliente'] . '|' . implode(',', $ids);
+            $firmas[$firma] = true;
+        }
+        return $firmas;
+    }
+
     /** Tarifas de IVA indexadas por su código (catálogo global). */
     public function getMapaTarifasIva(bool $soloActivas = false): array
     {
