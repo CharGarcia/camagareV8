@@ -865,7 +865,9 @@ class MigracionMysqlService
         $res = ['entidad' => 'bodegas', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'bodega sin nombre', 'errores' => 0];
 
         $done = $this->idsMigrados($pg, $idEmpresa, 'bodegas');
-        $buscar = $pg->prepare("SELECT id FROM bodegas WHERE id_empresa = :e AND nombre = :nom LIMIT 1");
+        // Dedup INSENSIBLE a mayúsculas y espacios: así "Central" no crea un duplicado de "CENTRAL".
+        // Prefiere la bodega viva (eliminado=false ordena primero) con el id más bajo.
+        $buscar = $pg->prepare("SELECT id FROM bodegas WHERE id_empresa = :e AND UPPER(TRIM(nombre)) = UPPER(TRIM(:nom)) ORDER BY eliminado, id LIMIT 1");
         $ins = $pg->prepare("INSERT INTO bodegas (id_empresa, id_usuario, nombre, created_by) VALUES (:e, :u, :nom, :cb) RETURNING id");
         $insMap = $this->stmtMap($pg,'bodegas');
 
@@ -2096,7 +2098,7 @@ class MigracionMysqlService
                 $idTra = $this->getOrCreateTransportista($idEmpresa, $idUsuario, $tIdent, (($t['nombre'] ?? '') ?: $tIdent), (trim((string) $t['tipo_id']) ?: '04'), (string) ($ec['placa'] ?? ''));
                 $insCab->execute([
                     ':e' => $idEmpresa, ':est' => $idEst, ':pto' => $idPto, ':cli' => $idCliente, ':tra' => $idTra, ':u' => $idUsuario,
-                    ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec, ':clave' => self::nz($ec['aut_sri']),
+                    ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec, ':clave' => self::claveAcceso($ec['aut_sri']),
                     ':placa' => (string) ($ec['placa'] ?? ''), ':fini' => $fini, ':ffin' => $ffin,
                     ':dpart' => (string) ($ec['origen'] ?? ''), ':ddest' => (string) ($ec['destino'] ?? ''),
                     ':mot' => (string) ($ec['motivo'] ?: 'Venta'), ':nds' => self::nz($ec['factura_aplica']),
@@ -2186,7 +2188,7 @@ class MigracionMysqlService
                 $insCab->execute([
                     ':e' => $idEmpresa, ':est' => $idEst, ':pto' => $idPto, ':prov' => $idProv, ':u' => $idUsuario,
                     ':fe' => substr((string) $ec['fecha_liquidacion'], 0, 10), ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec,
-                    ':clave' => self::nz($ec['aut_sri']), ':aut' => self::nz($ec['aut_sri']), ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
+                    ':clave' => self::claveAcceso($ec['aut_sri']), ':aut' => self::nz($ec['aut_sri']), ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
                     ':tot' => (float) $ec['total_liquidacion'], ':estado' => $this->estadoFacturaSri((string) $ec['estado_sri']),
                     ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':cb' => $idUsuario,
                 ]);
@@ -2421,7 +2423,7 @@ class MigracionMysqlService
                     'importe_total' => (float) $ef['total_factura'], 'propina' => (float) $ef['propina'],
                     'moneda' => 'DOLAR', 'estado' => $estado,
                     'observaciones' => self::nz($ef['observaciones_factura']),
-                    'clave_acceso' => self::nz($ef['aut_sri']),
+                    'clave_acceso' => self::claveAcceso($ef['aut_sri']),
                     'dias_credito' => $diasDe($idCliente),
                     'id_vendedor' => $vendedorDe($old),
                     'tipo_ambiente' => $this->ambienteEmpresa($pg, $idEmpresa),
@@ -2889,7 +2891,7 @@ class MigracionMysqlService
                     ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec, ':ndm' => (string) $ec['factura_modificada'],
                     ':fds' => $fds, ':mot' => (string) ($ec['motivo'] ?: 'Migración'), ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
                     ':tot' => (float) $ec['total_nc'], ':estado' => $this->estadoFacturaSri((string) $ec['estado_sri']),
-                    ':clave' => self::nz($ec['aut_sri']), ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1', ':cb' => $idUsuario,
+                    ':clave' => self::claveAcceso($ec['aut_sri']), ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1', ':cb' => $idUsuario,
                 ]);
                 $idNc = (int) $insCab->fetchColumn();
 
@@ -2974,7 +2976,7 @@ class MigracionMysqlService
                 $idPto = $this->getPuntoEmisionId($idEmpresa, $estab, $pto, $idUsuario);
                 $insCab->execute([
                     ':e' => $idEmpresa, ':prov' => $idProv, ':u' => $idUsuario, ':est' => $idEst, ':pto' => $idPto,
-                    ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec, ':clave' => self::nz($ec['aut_sri']),
+                    ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec, ':clave' => self::claveAcceso($ec['aut_sri']),
                     ':aut' => self::nz($ec['aut_sri']), ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1',
                     ':tds' => (string) ($ec['tipo_comprobante'] ?: '01'), ':nds' => self::nz($ec['numero_comprobante']),
                     ':fds' => $fds, ':tot' => (float) $ec['total_retencion'], ':cb' => $idUsuario,
@@ -3074,7 +3076,7 @@ class MigracionMysqlService
                 } else {
                     $insCab->execute([
                         ':e' => $idEmpresa, ':cli' => $idCliente, ':fe' => $fe, ':est' => $estab, ':pto' => $pto, ':sec' => $sec,
-                        ':clave' => self::nz($ec['aut_sri']), ':per' => ($per ?: '01/1900'), ':isd' => round($tIsd, 2),
+                        ':clave' => self::claveAcceso($ec['aut_sri']), ':per' => ($per ?: '01/1900'), ':isd' => round($tIsd, 2),
                         ':iva' => round($tIva, 2), ':renta' => round($tRenta, 2), ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':cb' => $idUsuario,
                     ]);
                     $idRet = (int) $insCab->fetchColumn();
@@ -3711,6 +3713,18 @@ class MigracionMysqlService
     {
         $v = trim((string) $v);
         return $v === '' ? null : $v;
+    }
+
+    /**
+     * Normaliza la CLAVE DE ACCESO SRI: solo es válida si tiene exactamente 49 dígitos. Cualquier otra
+     * cosa (vacío, o el placeholder '0' que el sistema viejo usa en docs sin autorización) → NULL, para
+     * no chocar con los índices únicos parciales sobre clave_acceso (que aplican WHERE clave_acceso IS
+     * NOT NULL): varias retenciones con clave '0' reventaban con 23505.
+     */
+    private static function claveAcceso($v): ?string
+    {
+        $s = preg_replace('/\D/', '', (string) $v);
+        return (strlen((string) $s) === 49) ? $s : null;
     }
 
     /** Infiere el tipo de identificación SRI a partir del número. */

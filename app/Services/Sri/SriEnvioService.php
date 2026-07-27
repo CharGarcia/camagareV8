@@ -74,11 +74,12 @@ class SriEnvioService
         $preCheck = $this->preVerificarAutorizacion(
             'ventas_cabecera', $idVenta, $claveAcceso, $tipoAmbiente,
             'factura_venta', $idEmpresa, $idUsuario, 'autorizado',
-            function (string $numAut, ?string $fechaAut, string $xmlDetalle) use ($repo, $idVenta, $idUsuario): void {
+            function (string $numAut, ?string $fechaAut, string $xmlDetalle) use ($repo, $idVenta, $idEmpresa, $idUsuario): void {
                 $db = Database::getConnection();
                 $db->prepare("UPDATE ventas_cabecera SET estado = 'autorizado', updated_by = ?, updated_at = NOW() WHERE id = ?")
                    ->execute([$idUsuario, $idVenta]);
                 try { $repo->updateDetalleXml($idVenta, $xmlDetalle); } catch (\Throwable) {}
+                $this->generarCobroAutomaticoCliente($idVenta, $idEmpresa, $idUsuario);
             }
         );
         if ($preCheck !== null) {
@@ -247,6 +248,8 @@ class SriEnvioService
             } catch (\Throwable $eXml) {
                 error_log('[SRI] Error guardando detalle_xml en factura #' . $idVenta . ': ' . $eXml->getMessage());
             }
+
+            $this->generarCobroAutomaticoCliente($idVenta, $idEmpresa, $idUsuario);
 
             // Reflejar en la cabecera (en memoria) los datos de autorización recién
             // obtenidos: la cabecera se cargó ANTES de autorizar, por lo que sin esto
@@ -1268,5 +1271,25 @@ class SriEnvioService
         ];
     }
 
+    /**
+     * Cobro automático de la factura recién autorizada, según la forma de cobro
+     * predeterminada del cliente (pestaña Cobros de su ficha).
+     *
+     * Es idempotente —solo actúa si la factura conserva saldo pendiente— y nunca
+     * lanza: una factura autorizada no debe fallar porque su cobro no se pudo
+     * registrar.
+     */
+    private function generarCobroAutomaticoCliente(int $idVenta, int $idEmpresa, int $idUsuario): void
+    {
+        try {
+            $svc = new \App\Services\modulos\CobroAutomaticoClienteService();
+            $msg = $svc->generarCobroFacturaAutorizada($idVenta, $idEmpresa, $idUsuario);
+            if ($msg !== '') {
+                error_log('[SRI] Factura #' . $idVenta . ': ' . $msg);
+            }
+        } catch (\Throwable $e) {
+            error_log('[SRI] Cobro automático no generado para factura #' . $idVenta . ': ' . $e->getMessage());
+        }
+    }
 }
 

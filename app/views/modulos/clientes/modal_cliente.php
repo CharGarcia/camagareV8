@@ -237,15 +237,66 @@ if (!defined('LEAFLET_LOADED')) {
                                     <select class="form-select form-select-sm bg-warning bg-opacity-10" name="tipo_operacion_bancaria_predeterminada" id="cliente_tipo_operacion_bancaria">
                                         <option value="DEPOSITO">Depósito</option>
                                         <option value="TRANSFERENCIA" selected>Transferencia</option>
+                                        <option value="CHEQUE">Cheque</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
-                                    <label for="cliente_monto_maximo_auto_cobro" class="form-label small fw-bold">Monto Máx. Auto-Generar</label>
-                                    <div class="input-group input-group-sm">
-                                        <span class="input-group-text bg-light">$</span>
-                                        <input type="number" step="0.01" class="form-control" name="monto_maximo_auto_cobro" id="cliente_monto_maximo_auto_cobro">
+
+                                <!-- Rango de monto para auto generar el cobro -->
+                                <div class="col-12">
+                                    <label class="form-label small fw-bold mb-1"><i class="bi bi-rulers me-1"></i>Rango de monto para auto generar cobro</label>
+                                    <div class="row g-2">
+                                        <div class="col-md-6">
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light" style="min-width:118px;">Mayor o igual a</span>
+                                                <span class="input-group-text bg-light">$</span>
+                                                <input type="number" step="0.01" min="0" class="form-control" name="monto_minimo_auto_cobro" id="cliente_monto_minimo_auto_cobro" placeholder="0.00" autocomplete="off">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light" style="min-width:118px;">Menor o igual a</span>
+                                                <span class="input-group-text bg-light">$</span>
+                                                <input type="number" step="0.01" min="0" class="form-control" name="monto_maximo_auto_cobro" id="cliente_monto_maximo_auto_cobro" placeholder="0.00" autocomplete="off">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="form-text text-muted" style="font-size: 10px;">
+                                        Deje un campo vacío (o en 0) para no aplicar ese límite. El cobro automático solo se genera si el saldo del documento cae dentro del rango.
                                     </div>
                                 </div>
+
+                                <!-- Información del cobro con cheque -->
+                                <div class="col-12 d-none" id="cliente_div_cheque">
+                                    <div class="p-2 bg-white border rounded shadow-sm">
+                                        <div class="small fw-bold text-primary mb-2"><i class="bi bi-card-checklist me-1"></i>Cobro con cheque</div>
+                                        <ul class="small text-muted mb-0 ps-3">
+                                            <li>
+                                                <span class="fw-bold">N° de cheque:</span>
+                                                el cheque lo entrega el cliente, así que el número no se asigna solo. Regístrelo luego en el cobro si lo necesita.
+                                            </li>
+                                            <li>
+                                                <span class="fw-bold">Fecha de cobro:</span>
+                                                fecha de emisión del documento de venta + los <em>Días de Crédito</em> del cliente
+                                                <span id="cliente_cheque_plazo_txt" class="fw-bold text-dark"></span>.
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                <?php if (\App\Helpers\Permisos::puedeCrear('modulos/ingresos')): ?>
+                                    <!-- Generación retroactiva de cobros -->
+                                    <div class="col-12 d-none" id="cliente_div_cobros_pendientes">
+                                        <div class="border-top pt-3">
+                                            <button type="button" class="btn btn-outline-primary btn-sm" id="cliente_btnGenerarCobros" onclick="cliGenerarCobrosPendientes()">
+                                                <i class="bi bi-cash-stack me-1"></i> Generar cobros pendientes
+                                            </button>
+                                            <div class="form-text text-muted" style="font-size: 10px;">
+                                                Genera los ingresos de las facturas y recibos de venta de este cliente emitidos hasta hoy que aún tienen saldo.
+                                                Se le mostrará cuántos son antes de confirmar.
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         </div>
 

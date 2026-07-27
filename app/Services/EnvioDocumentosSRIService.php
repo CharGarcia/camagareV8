@@ -149,7 +149,8 @@ class EnvioDocumentosSRIService
         float  $monto,
         string $descripcion,
         string $urlPago,
-        string $pdfString
+        string $pdfString,
+        string $pasarela = 'Payphone'
     ): bool {
         $empresaRepo  = new EmpresaRepository();
         $correoConfig = $empresaRepo->getCorreoConfig($idEmpresa);
@@ -219,6 +220,7 @@ class EnvioDocumentosSRIService
                 'monto'          => $monto,
                 'descripcion'    => $descripcion,
                 'url_pago'       => $urlPago,
+                'pasarela'       => $pasarela,
             ];
             ob_start();
             require $docMailDir . '/email_pago_tarjeta.php';
@@ -234,6 +236,193 @@ class EnvioDocumentosSRIService
             return $mail->send();
         } catch (Exception $e) {
             error_log('[PagoTarjeta] Mailer Error: ' . ($mail->ErrorInfo ?? $e->getMessage()));
+            return false;
+        }
+    }
+
+    /**
+     * Envía al cliente la confirmación de una transacción de Nuvei ya resuelta
+     * (aprobada o rechazada), con transaction_ID y código de autorización —
+     * requisito explícito de Nuvei para poder salir a producción.
+     */
+    public function enviarConfirmacionPagoNuvei(
+        int    $idEmpresa,
+        string $correoDestino,
+        string $clienteNombre,
+        string $empresaNombre,
+        float  $monto,
+        string $descripcion,
+        bool   $aprobado,
+        string $transactionId,
+        string $authorizationCode
+    ): bool {
+        $empresaRepo  = new EmpresaRepository();
+        $correoConfig = $empresaRepo->getCorreoConfig($idEmpresa);
+
+        $tipoCorreo = $correoConfig['tipo_correo'] ?? 'camagare';
+
+        if ($tipoCorreo === 'camagare') {
+            $smtpData = EmailConfigService::getPhpMailerConfig('envio_documentos_sri');
+            if (!$smtpData) {
+                error_log('[Nuvei] No hay configuración SMTP (envio_documentos_sri).');
+                return false;
+            }
+        } else {
+            $enc = !empty($correoConfig['ssl_habilitado']) ? 'tls' : '';
+            $smtpData = [
+                'host'        => $correoConfig['host']                  ?? '',
+                'port'        => (int)($correoConfig['puerto']          ?? 587),
+                'username'    => $correoConfig['correo_emisor']         ?? '',
+                'password'    => $correoConfig['password_correo_emisor']?? '',
+                'from'        => $correoConfig['correo_emisor']         ?? '',
+                'fromName'    => $empresaNombre,
+                'smtpSecure'  => $enc,
+            ];
+        }
+
+        $docMailDir = MVC_APP . '/lib/mail';
+        require_once $docMailDir . '/phpmailer.php';
+        require_once $docMailDir . '/smtp.php';
+        require_once $docMailDir . '/exception.php';
+
+        $mail = new PHPMailer(true);
+        try {
+            $mail->isSMTP();
+            $mail->Host       = _mail_resolve_ipv4_host($smtpData['host']);
+            $mail->SMTPAuth   = true;
+            $mail->Username   = $smtpData['username'];
+            $mail->Password   = $smtpData['password'];
+            $mail->SMTPSecure = $smtpData['smtpSecure'] ?? 'tls';
+            $mail->Port       = $smtpData['port'];
+            $mail->CharSet    = 'UTF-8';
+
+            $config = require MVC_CONFIG . '/app.php';
+            if (!empty($config['mail_smtp_options'])) {
+                $mail->SMTPOptions = $config['mail_smtp_options'];
+            }
+
+            $mail->setFrom($smtpData['from'], $smtpData['fromName']);
+            $algunDestino = false;
+            foreach (preg_split('/[\s,;]+/', $correoDestino) as $dest) {
+                $dest = trim($dest);
+                if (filter_var($dest, FILTER_VALIDATE_EMAIL)) {
+                    $mail->addAddress($dest, $clienteNombre);
+                    $algunDestino = true;
+                }
+            }
+            if (!$algunDestino) {
+                error_log('[Nuvei] Sin destinatarios válidos: ' . $correoDestino);
+                return false;
+            }
+
+            $mail->Subject = ($aprobado ? 'Pago aprobado' : 'Pago rechazado') . ' — ' . $descripcion;
+
+            $data = [
+                'cliente_nombre'      => $clienteNombre,
+                'empresa_nombre'      => $empresaNombre,
+                'monto'               => $monto,
+                'descripcion'         => $descripcion,
+                'aprobado'            => $aprobado,
+                'transaction_id'      => $transactionId,
+                'authorization_code'  => $authorizationCode,
+            ];
+            ob_start();
+            require $docMailDir . '/email_confirmacion_pago_nuvei.php';
+            $mail->Body = ob_get_clean();
+            $mail->isHTML(true);
+
+            return $mail->send();
+        } catch (Exception $e) {
+            error_log('[Nuvei] Mailer Error: ' . ($mail->ErrorInfo ?? $e->getMessage()));
+            return false;
+        }
+    }
+
+    /**
+     * Envía al cliente el enlace para registrar una tarjeta (Add Card de Nuvei)
+     * y habilitar el cobro automático recurrente — usado por Suscripciones.
+     */
+    public function enviarRegistroTarjeta(
+        int    $idEmpresa,
+        string $correoDestino,
+        string $clienteNombre,
+        string $empresaNombre,
+        string $urlRegistro
+    ): bool {
+        $empresaRepo  = new EmpresaRepository();
+        $correoConfig = $empresaRepo->getCorreoConfig($idEmpresa);
+
+        $tipoCorreo = $correoConfig['tipo_correo'] ?? 'camagare';
+
+        if ($tipoCorreo === 'camagare') {
+            $smtpData = EmailConfigService::getPhpMailerConfig('envio_documentos_sri');
+            if (!$smtpData) {
+                error_log('[NuveiTarjeta] No hay configuración SMTP (envio_documentos_sri).');
+                return false;
+            }
+        } else {
+            $enc = !empty($correoConfig['ssl_habilitado']) ? 'tls' : '';
+            $smtpData = [
+                'host'        => $correoConfig['host']                  ?? '',
+                'port'        => (int)($correoConfig['puerto']          ?? 587),
+                'username'    => $correoConfig['correo_emisor']         ?? '',
+                'password'    => $correoConfig['password_correo_emisor']?? '',
+                'from'        => $correoConfig['correo_emisor']         ?? '',
+                'fromName'    => $empresaNombre,
+                'smtpSecure'  => $enc,
+            ];
+        }
+
+        $docMailDir = MVC_APP . '/lib/mail';
+        require_once $docMailDir . '/phpmailer.php';
+        require_once $docMailDir . '/smtp.php';
+        require_once $docMailDir . '/exception.php';
+
+        $mail = new PHPMailer(true);
+        try {
+            $mail->isSMTP();
+            $mail->Host       = _mail_resolve_ipv4_host($smtpData['host']);
+            $mail->SMTPAuth   = true;
+            $mail->Username   = $smtpData['username'];
+            $mail->Password   = $smtpData['password'];
+            $mail->SMTPSecure = $smtpData['smtpSecure'] ?? 'tls';
+            $mail->Port       = $smtpData['port'];
+            $mail->CharSet    = 'UTF-8';
+
+            $config = require MVC_CONFIG . '/app.php';
+            if (!empty($config['mail_smtp_options'])) {
+                $mail->SMTPOptions = $config['mail_smtp_options'];
+            }
+
+            $mail->setFrom($smtpData['from'], $smtpData['fromName']);
+            $algunDestino = false;
+            foreach (preg_split('/[\s,;]+/', $correoDestino) as $dest) {
+                $dest = trim($dest);
+                if (filter_var($dest, FILTER_VALIDATE_EMAIL)) {
+                    $mail->addAddress($dest, $clienteNombre);
+                    $algunDestino = true;
+                }
+            }
+            if (!$algunDestino) {
+                error_log('[NuveiTarjeta] Sin destinatarios válidos: ' . $correoDestino);
+                return false;
+            }
+
+            $mail->Subject = 'Registra tu tarjeta para el cobro automático — ' . $empresaNombre;
+
+            $data = [
+                'cliente_nombre' => $clienteNombre,
+                'empresa_nombre' => $empresaNombre,
+                'url_registro'   => $urlRegistro,
+            ];
+            ob_start();
+            require $docMailDir . '/email_registro_tarjeta_nuvei.php';
+            $mail->Body = ob_get_clean();
+            $mail->isHTML(true);
+
+            return $mail->send();
+        } catch (Exception $e) {
+            error_log('[NuveiTarjeta] Mailer Error: ' . ($mail->ErrorInfo ?? $e->getMessage()));
             return false;
         }
     }

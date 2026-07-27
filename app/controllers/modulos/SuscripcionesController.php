@@ -193,7 +193,23 @@ class SuscripcionesController extends BaseModuloController
             $data['id_usuario'] = (int) $_SESSION['id_usuario'];
 
             $id = $this->service->crear($data);
-            echo json_encode(['ok' => true, 'id' => $id, 'mensaje' => 'Suscripción creada correctamente.']);
+
+            // Si la suscripción se crea con cobro por tarjeta vía Nuvei y aún no
+            // tiene una tarjeta vinculada, enviar automáticamente el enlace de
+            // registro al cliente para que active el cobro recurrente.
+            $mensajeExtra = '';
+            if (($data['forma_cobro'] ?? '') === 'tarjeta' && ($data['pasarela_tarjeta'] ?? '') === 'nuvei' && empty($data['id_nuvei_tarjeta'])) {
+                try {
+                    $envio = $this->enviarRegistroTarjetaNuvei($id, (int) $data['id_empresa'], (int) $data['id_usuario']);
+                    if ($envio['ok']) {
+                        $mensajeExtra = ' Se envió un enlace al cliente para registrar su tarjeta.';
+                    }
+                } catch (\Throwable $e) {
+                    error_log('[Suscripciones] Error enviando registro de tarjeta automático: ' . $e->getMessage());
+                }
+            }
+
+            echo json_encode(['ok' => true, 'id' => $id, 'mensaje' => 'Suscripción creada correctamente.' . $mensajeExtra]);
         } catch (\InvalidArgumentException $e) {
             $parts = explode('|', $e->getMessage());
             $mensaje = $parts[0];
@@ -322,6 +338,157 @@ class SuscripcionesController extends BaseModuloController
         } catch (\Exception $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * Reenvía manualmente el enlace de registro de tarjeta Nuvei para una
+     * suscripción existente (botón "Enviar enlace" en la pestaña Cobro).
+     */
+    public function enviarRegistroTarjetaNuveiAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            $id        = (int) ($_POST['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+
+            if ($id <= 0) {
+                throw new \InvalidArgumentException('Suscripción inválida.');
+            }
+
+            $resultado = $this->enviarRegistroTarjetaNuvei($id, $idEmpresa, $idUsuario);
+            echo json_encode($resultado);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Lista las tarjetas Nuvei ya guardadas del cliente de una suscripción,
+     * para permitir reutilizar una tarjeta existente sin pedir un registro nuevo.
+     */
+    public function getTarjetasClienteNuveiAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $idSusc    = (int) ($_GET['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+
+            $repo = new SuscripcionesRepository();
+            $susc = $repo->findById($idSusc, $idEmpresa);
+            if (!$susc) {
+                throw new \Exception('Suscripción no encontrada.');
+            }
+
+            $nuvei    = new \App\Services\NuveiService(new \App\repositories\NuveiRepository());
+            $tarjetas = $nuvei->getTarjetasCliente($idEmpresa, (int) $susc['id_cliente']);
+
+            echo json_encode(['ok' => true, 'tarjetas' => $tarjetas]);
+        } catch (\Exception $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Vincula directamente una tarjeta Nuvei ya guardada del cliente a la
+     * suscripción, sin necesidad de un nuevo enlace de registro.
+     */
+    public function vincularTarjetaNuveiAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            $idSusc         = (int) ($_POST['id'] ?? 0);
+            $idNuveiTarjeta = (int) ($_POST['id_nuvei_tarjeta'] ?? 0);
+            $idEmpresa      = (int) $_SESSION['id_empresa'];
+
+            $repo = new SuscripcionesRepository();
+            $susc = $repo->findById($idSusc, $idEmpresa);
+            if (!$susc) {
+                throw new \Exception('Suscripción no encontrada.');
+            }
+
+            $nuvei   = new \App\Services\NuveiService(new \App\repositories\NuveiRepository());
+            $tarjeta = $nuvei->getTarjetasCliente($idEmpresa, (int) $susc['id_cliente']);
+            $existe  = array_filter($tarjeta, fn($t) => (int) $t['id'] === $idNuveiTarjeta);
+            if (empty($existe)) {
+                throw new \Exception('La tarjeta seleccionada no pertenece a este cliente.');
+            }
+
+            $repo->updateNuveiTarjeta($idSusc, $idNuveiTarjeta);
+            echo json_encode(['ok' => true, 'mensaje' => 'Tarjeta vinculada correctamente.']);
+        } catch (\Exception $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Genera la solicitud de registro de tarjeta Nuvei y envía el enlace por
+     * correo al cliente de la suscripción. Reutilizado por store() (envío
+     * automático al crear) y por enviarRegistroTarjetaNuveiAjax() (reenvío manual).
+     */
+    private function enviarRegistroTarjetaNuvei(int $idSuscripcion, int $idEmpresa, int $idUsuario): array
+    {
+        $db = \App\core\Database::getConnection();
+        $st = $db->prepare(
+            "SELECT s.id, s.id_cliente, c.nombre AS cliente_nombre, c.email AS cliente_email
+             FROM suscripciones s
+             LEFT JOIN clientes c ON c.id = s.id_cliente
+             WHERE s.id = ? AND s.id_empresa = ? AND s.eliminado = false"
+        );
+        $st->execute([$idSuscripcion, $idEmpresa]);
+        $susc = $st->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$susc) {
+            return ['ok' => false, 'mensaje' => 'Suscripción no encontrada.'];
+        }
+
+        $correoCliente = trim((string) ($susc['cliente_email'] ?? ''));
+        if (!filter_var($correoCliente, FILTER_VALIDATE_EMAIL)) {
+            return ['ok' => false, 'mensaje' => 'El cliente no tiene un correo válido registrado.'];
+        }
+
+        $nuvei = new \App\Services\NuveiService(new \App\repositories\NuveiRepository());
+        $sol   = $nuvei->prepararSolicitudTarjeta($idEmpresa, [
+            'id_cliente'    => (int) $susc['id_cliente'],
+            'modulo'        => 'suscripcion',
+            'id_referencia' => $idSuscripcion,
+            'email'         => $correoCliente,
+            'id_usuario'    => $idUsuario,
+        ]);
+
+        if (!$sol['ok']) {
+            return $sol;
+        }
+
+        $host       = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $scheme     = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $urlBaseAbs = $scheme . '://' . $host . rtrim(BASE_URL, '/');
+        $urlRegistro = $urlBaseAbs . '/nuvei/tarjeta/' . $sol['token'];
+
+        $empresaModel  = new \App\models\Empresa();
+        $empresaData   = $empresaModel->getPorId($idEmpresa) ?? [];
+        $empresaNombre = $empresaData['nombre_comercial'] ?? $empresaData['razon_social'] ?? '';
+
+        $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+        $enviado  = $emailSvc->enviarRegistroTarjeta(
+            $idEmpresa,
+            $correoCliente,
+            $susc['cliente_nombre'] ?? 'Cliente',
+            $empresaNombre,
+            $urlRegistro
+        );
+
+        if (!$enviado) {
+            return ['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración de correo de la empresa.'];
+        }
+
+        return ['ok' => true, 'mensaje' => 'Enlace de registro enviado a ' . $correoCliente, 'correo' => $correoCliente];
     }
 
     public function getPeriodicidadesAjax(): void
@@ -470,11 +637,18 @@ class SuscripcionesController extends BaseModuloController
                         $idEmpresa, $idUsuario, $susc, $detalle, $estabConfig, $empresaConfig, $extras, $periodo
                     );
 
-                    // Avanzar el próximo cobro SOLO si el documento se creó.
+                    // Avanzar el próximo cobro SOLO si el documento se creó. La generación
+                    // está DESACOPLADA del cobro: si la suscripción usa tarjeta vía Nuvei, el
+                    // cargo real lo hace la automatización "Cobrar suscripciones (Nuvei)" —
+                    // aquí solo se deja el pago en 'pendiente'. Crédito y Kushki no se tocan.
                     $suscRepo->updateProximoCobro(
                         $idSusc,
                         $this->service->calcularProximoCobro($periodo, $meses, $codigo)
                     );
+
+                    $esNuveiTarjeta = ($susc['forma_cobro'] ?? '') === 'tarjeta'
+                        && ($susc['pasarela_tarjeta'] ?? '') === 'nuvei'
+                        && !empty($susc['id_nuvei_tarjeta']);
 
                     $suscRepo->insertPago([
                         'id_suscripcion' => $idSusc,
@@ -483,7 +657,7 @@ class SuscripcionesController extends BaseModuloController
                         'id_recibo'      => $res['id_recibo'],
                         'fecha_cobro'    => date('Y-m-d'),
                         'monto'          => $res['importe'],
-                        'estado'         => 'exitoso',
+                        'estado'         => $esNuveiTarjeta ? 'pendiente' : 'exitoso',
                         'id_usuario'     => $idUsuario,
                     ]);
 
@@ -507,4 +681,5 @@ class SuscripcionesController extends BaseModuloController
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
         }
     }
+
 }

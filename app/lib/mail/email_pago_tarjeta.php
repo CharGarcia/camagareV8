@@ -47,7 +47,7 @@
 
     <div class="security">
       <span>🔒</span>
-      <span>Pago seguro procesado por <strong>Payphone</strong> · PCI DSS 4.0</span>
+      <span>Pago seguro procesado por <strong><?= htmlspecialchars($data['pasarela'] ?? 'Payphone') ?></strong> · PCI DSS 4.0</span>
     </div>
   </div>
   <div class="footer">

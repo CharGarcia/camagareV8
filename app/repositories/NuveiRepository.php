@@ -93,11 +93,11 @@ class NuveiRepository extends BaseRepository
         $st = $this->db->prepare(
             "INSERT INTO nuvei_transacciones
                 (id_empresa, tipo, dev_reference, modulo, id_referencia,
-                 id_forma_cobro, id_cliente, id_nuvei_tarjeta,
+                 id_forma_cobro, id_cliente, id_nuvei_tarjeta, email,
                  descripcion, monto, moneda, url_exito, created_by)
              VALUES
                 (:ie, :tipo, :devref, :mod, :ref,
-                 :ifc, :icl, :itc,
+                 :ifc, :icl, :itc, :email,
                  :desc, :monto, :moneda, :url_ok, :cb)
              RETURNING id"
         );
@@ -110,6 +110,7 @@ class NuveiRepository extends BaseRepository
             ':ifc'    => $d['id_forma_cobro']  ?? null,
             ':icl'    => $d['id_cliente']      ?? null,
             ':itc'    => $d['id_nuvei_tarjeta']?? null,
+            ':email'  => $d['email']           ?? null,
             ':desc'   => $d['descripcion']     ?? null,
             ':monto'  => $d['monto'],
             ':moneda' => $d['moneda']          ?? 'USD',

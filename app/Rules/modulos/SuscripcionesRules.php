@@ -32,6 +32,13 @@ class SuscripcionesRules
             throw new \InvalidArgumentException('La forma de cobro no es válida.|#susc_forma_cobro');
         }
 
+        if (($data['forma_cobro'] ?? 'credito') === 'tarjeta') {
+            $pasarelasValidas = ['kushki', 'nuvei'];
+            if (!in_array($data['pasarela_tarjeta'] ?? '', $pasarelasValidas, true)) {
+                throw new \InvalidArgumentException('Debe seleccionar la pasarela de tarjeta (Kushki o Nuvei).|#susc_pasarela_tarjeta');
+            }
+        }
+
         $estadosValidos = ['activo', 'pausado', 'suspendido', 'cancelado'];
         if (!in_array($data['estado'] ?? 'activo', $estadosValidos, true)) {
             throw new \InvalidArgumentException('El estado no es válido.|#susc_estado');

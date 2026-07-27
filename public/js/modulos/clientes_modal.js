@@ -334,13 +334,16 @@
             selFc.addEventListener('change', function() {
                 const optSel = this.options[this.selectedIndex];
                 const wrp = document.getElementById('wrapper_tipo_operacion_bancaria');
-                if (!wrp) return;
-                if (optSel && optSel.dataset.tipo === 'BANCO') {
-                    wrp.classList.remove('d-none');
-                } else {
-                    wrp.classList.add('d-none');
-                    document.getElementById('cliente_tipo_operacion_bancaria').value = 'TRANSFERENCIA';
+                if (wrp) {
+                    if (optSel && optSel.dataset.tipo === 'BANCO') {
+                        wrp.classList.remove('d-none');
+                    } else {
+                        wrp.classList.add('d-none');
+                        document.getElementById('cliente_tipo_operacion_bancaria').value = 'TRANSFERENCIA';
+                    }
                 }
+                cliToggleCheque();
+                cliToggleBotonCobrosPendientes();
             });
         }
 
@@ -695,8 +698,93 @@
         if (selTipos && (favTipo === undefined || favTipo === '')) selTipos.value = "";
 
         window.aplicarReglasIdentificacion();
+
+        // Cliente nuevo: sin id todavía, así que no aplica el cobro retroactivo
+        document.getElementById('cliente_div_cheque')?.classList.add('d-none');
+        document.getElementById('cliente_div_cobros_pendientes')?.classList.add('d-none');
+
         modal.show();
     };
+
+    /**
+     * Vuelca los datos de un cliente en los campos del formulario.
+     * No toca pestañas, mapa ni botones: sirve tanto al abrir la ficha para
+     * editar como para refrescarla en sitio después de guardar.
+     */
+    async function cliPoblarCampos(data) {
+        if (!data) return;
+        const setV = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+
+        setV('cliente_id', data.id);
+        setV('cliente_tipo_id', data.tipo_id);
+        window.aplicarReglasIdentificacion();
+        setV('cliente_identificacion', data.identificacion);
+        setV('cliente_nombre', data.nombre);
+        setV('cliente_email', data.email);
+        setV('cliente_telefono', data.telefono);
+        setV('cliente_direccion', data.direccion);
+        setV('cliente_plazo', data.plazo || 0);
+        // status es entero: con `data.status || '1'` un cliente inactivo (0) se
+        // mostraba como Activo y al guardar se reactivaba solo.
+        const statusVal = (data.status === 0 || data.status === '0' || data.status === false || data.status === 'false') ? '0' : '1';
+        setV('cliente_status', statusVal);
+
+        if (data.provincia) {
+            const selProv = document.getElementById('cliente_provincia');
+            if (selProv) {
+                selProv.value = data.provincia;
+                await cargarCiudades(data.provincia, data.ciudad || '');
+            }
+        }
+
+        if (data.id_vendedor) setV('cliente_vendedor', data.id_vendedor);
+
+        setV('cliente_id_forma_pago_sri', data.id_forma_pago_sri);
+        setV('cliente_id_forma_cobro_predeterminada', data.id_forma_cobro_predeterminada);
+        setV('cliente_tipo_operacion_bancaria', data.tipo_operacion_bancaria_predeterminada || 'TRANSFERENCIA');
+        setV('cliente_monto_minimo_auto_cobro', data.monto_minimo_auto_cobro);
+        setV('cliente_monto_maximo_auto_cobro', data.monto_maximo_auto_cobro);
+
+        if (data.id_ingreso_concepto_predeterminado) {
+            setV('cliente_id_ingreso_concepto', data.id_ingreso_concepto_predeterminado);
+            setV('cliente_id_ingreso_concepto_hidden', data.id_ingreso_concepto_predeterminado);
+        }
+
+        const selFc = document.getElementById('cliente_id_forma_cobro_predeterminada');
+        if (selFc) {
+            // Dispara el mostrar/ocultar de operación bancaria, cheque y botón de cobros
+            selFc.dispatchEvent(new Event('change'));
+        }
+    }
+
+    /**
+     * Deja el modal listo para seguir trabajando tras guardar, sin cerrarlo:
+     * repuebla los campos con lo que quedó en la base, pasa a modo edición si era
+     * un alta y actualiza el resumen comercial.
+     */
+    async function cliRefrescarModalTrasGuardar(json, eraNuevo) {
+        if (json.data) {
+            await cliPoblarCampos(json.data);
+        }
+
+        // El id manda siempre: sin él el siguiente guardado crearía un duplicado.
+        const elId = document.getElementById('cliente_id');
+        if (elId && json.id) elId.value = json.id;
+
+        const idCli = elId?.value || '';
+
+        if (eraNuevo) {
+            // A partir de aquí el formulario edita la ficha recién creada
+            const form = document.getElementById('formCliente');
+            if (form) form.action = urlBaseClientes + '/update';
+            const t = document.getElementById('tituloModalCliente');
+            if (t) t.textContent = 'Ficha de Cliente';
+            document.getElementById('btnEliminarCliente')?.classList.remove('d-none');
+        }
+
+        if (idCli) fetchEstadisticas(idCli);
+        cliToggleBotonCobrosPendientes();
+    }
 
     // ─── Abrir modal Editar ──────────────────────────────────────────────────
     window.abrirModalClienteEditar = async function(rowOrData) {
@@ -710,47 +798,11 @@
 
         await cargarCatalogos();
 
-        const setV = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
         const setT = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || ''; };
 
-        setV('cliente_id', data.id);
-        setV('cliente_tipo_id', data.tipo_id);
-        window.aplicarReglasIdentificacion();
-        setV('cliente_identificacion', data.identificacion);
-        setV('cliente_nombre', data.nombre);
-        setV('cliente_email', data.email);
-        setV('cliente_telefono', data.telefono);
-        setV('cliente_direccion', data.direccion);
-        setV('cliente_plazo', data.plazo || 0);
-        setV('cliente_status', data.status || '1');
+        await cliPoblarCampos(data);
 
-        if (data.provincia) {
-            const selProv = document.getElementById('cliente_provincia');
-            if (selProv) {
-                selProv.value = data.provincia;
-                await cargarCiudades(data.provincia, data.ciudad || '');
-            }
-        }
-
-        if (data.id_vendedor) setV('cliente_vendedor', data.id_vendedor);
-
-
-
-        setV('cliente_id_forma_pago_sri', data.id_forma_pago_sri);
-        setV('cliente_id_forma_cobro_predeterminada', data.id_forma_cobro_predeterminada);
-        setV('cliente_tipo_operacion_bancaria', data.tipo_operacion_bancaria_predeterminada || 'TRANSFERENCIA');
-        setV('cliente_monto_maximo_auto_cobro', data.monto_maximo_auto_cobro);
-
-        if (data.id_ingreso_concepto_predeterminado) {
-            setV('cliente_id_ingreso_concepto', data.id_ingreso_concepto_predeterminado);
-            setV('cliente_id_ingreso_concepto_hidden', data.id_ingreso_concepto_predeterminado);
-        }
-
-        const selFc = document.getElementById('cliente_id_forma_cobro_predeterminada');
-        if (selFc) {
-            // trigger change to show/hide the wrapper
-            selFc.dispatchEvent(new Event('change'));
-        }
+        const setV = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
 
         // Coordenadas
         if (data.latitud && data.longitud) {
@@ -797,6 +849,147 @@
         } catch (e) {}
     }
 
+
+    // ─── Cobro automático: bloques informativos y generación retroactiva ─────
+
+    function cliFmtMoney(n) {
+        return (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    /** El bloque de cheque solo aplica si la forma de cobro es de banco y se eligió CHEQUE. */
+    function cliToggleCheque() {
+        const wrp    = document.getElementById('wrapper_tipo_operacion_bancaria');
+        const selOp  = document.getElementById('cliente_tipo_operacion_bancaria');
+        const divChq = document.getElementById('cliente_div_cheque');
+        if (!wrp || !selOp || !divChq) return;
+
+        const esCheque = !wrp.classList.contains('d-none') && selOp.value === 'CHEQUE';
+        divChq.classList.toggle('d-none', !esCheque);
+        if (esCheque) cliActualizarReglaFechaCheque();
+    }
+
+    /** Refleja los días de crédito vigentes en la nota de la fecha de cobro. */
+    function cliActualizarReglaFechaCheque() {
+        const el = document.getElementById('cliente_cheque_plazo_txt');
+        if (!el) return;
+        const plazo = parseInt(document.getElementById('cliente_plazo')?.value, 10) || 0;
+        el.textContent = plazo > 0 ? ` (actualmente ${plazo} día(s))` : ' (actualmente sin días de crédito)';
+    }
+
+    /** El botón retroactivo requiere cliente guardado y forma de cobro configurada. */
+    function cliToggleBotonCobrosPendientes() {
+        const div = document.getElementById('cliente_div_cobros_pendientes');
+        if (!div) return; // El usuario no tiene permiso para crear ingresos
+        const idCli = document.getElementById('cliente_id')?.value || '';
+        const idFc  = document.getElementById('cliente_id_forma_cobro_predeterminada')?.value || '';
+        div.classList.toggle('d-none', !(idCli && idFc));
+    }
+
+    /**
+     * Genera los ingresos de las facturas y recibos del cliente emitidos hasta
+     * hoy que aún tienen saldo. Previsualiza y pide confirmación primero.
+     */
+    window.cliGenerarCobrosPendientes = async function () {
+        const idCli = document.getElementById('cliente_id')?.value || '';
+        if (!idCli) return;
+
+        const btn = document.getElementById('cliente_btnGenerarCobros');
+        const htmlOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Revisando...';
+
+        let prev;
+        try {
+            const resp = await fetch(`${urlBaseClientes}/previsualizarCobrosPendientesAjax?id=${encodeURIComponent(idCli)}`);
+            prev = await resp.json();
+        } catch (e) {
+            prev = { ok: false, error: 'No se pudo comunicar con el servidor.' };
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = htmlOriginal;
+        }
+
+        if (!prev.ok) {
+            Swal.fire({ icon: 'warning', title: 'No se puede generar', text: prev.error || 'Revise la configuración de cobros del cliente.' });
+            return;
+        }
+
+        if (!prev.cantidad) {
+            const extra = prev.cantidad_omitidas
+                ? ` Hay ${prev.cantidad_omitidas} documento(s) con saldo que quedan fuera del rango de monto configurado.`
+                : '';
+            Swal.fire({ icon: 'info', title: 'Nada por generar', text: 'Este cliente no tiene documentos con saldo pendiente hasta hoy.' + extra });
+            return;
+        }
+
+        const filas = (prev.detalle || []).map(d =>
+            `<tr><td class="text-start">${d.tipo_documento === 'RECIBO' ? 'Recibo' : 'Factura'}</td><td class="text-start">${d.numero_documento}</td><td class="text-center">${d.fecha_emision}</td><td class="text-end">$${cliFmtMoney(d.monto)}</td></tr>`
+        ).join('');
+        const resto = prev.cantidad - (prev.detalle || []).length;
+
+        const html = `
+            <p class="mb-2">Se generarán <b>${prev.cantidad}</b> cobro(s) por un total de <b>$${cliFmtMoney(prev.total)}</b>.</p>
+            <div style="max-height:220px;overflow:auto;">
+              <table class="table table-sm table-bordered mb-1" style="font-size:0.78rem;">
+                <thead class="table-light"><tr><th>Tipo</th><th>Documento</th><th>Fecha</th><th class="text-end">Monto</th></tr></thead>
+                <tbody>${filas}</tbody>
+              </table>
+            </div>
+            ${resto > 0 ? `<div class="small text-muted">…y ${resto} documento(s) más.</div>` : ''}
+            ${prev.cantidad_omitidas ? `<div class="small text-warning mt-2"><i class="bi bi-exclamation-triangle me-1"></i>${prev.cantidad_omitidas} documento(s) quedan fuera del rango de monto.</div>` : ''}
+            <div class="small text-muted mt-2">Cada cobro usa la forma de cobro configurada en esta pestaña y cobra el saldo real del documento.</div>
+        `;
+
+        const confirmacion = await Swal.fire({
+            icon: 'question',
+            title: '¿Generar los cobros?',
+            html: html,
+            width: 640,
+            showCancelButton: true,
+            confirmButtonText: `Sí, generar ${prev.cantidad}`,
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#0d6efd',
+            cancelButtonColor: '#6c757d'
+        });
+        if (!confirmacion.isConfirmed) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generando...';
+
+        try {
+            const fd = new FormData();
+            fd.append('id', idCli);
+            const resp = await fetch(`${urlBaseClientes}/generarCobrosPendientesAjax`, { method: 'POST', body: fd });
+            const json = await resp.json();
+
+            if (!json.ok) {
+                Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'No se pudieron generar los cobros.' });
+                return;
+            }
+
+            const fallidos = json.fallidos || [];
+            let detalleFallos = '';
+            if (fallidos.length) {
+                detalleFallos = '<div class="text-start small mt-2"><b>No se pudieron generar:</b><ul class="mb-0 ps-3">'
+                    + fallidos.map(f => `<li>${f.numero_documento}: ${f.error}</li>`).join('')
+                    + '</ul></div>';
+            }
+
+            Swal.fire({
+                icon: fallidos.length ? 'warning' : 'success',
+                title: `${json.generados} cobro(s) generado(s)`,
+                html: `<p class="mb-0">Total: <b>$${cliFmtMoney(json.total)}</b></p>${detalleFallos}`,
+                width: fallidos.length ? 640 : undefined
+            });
+
+            fetchEstadisticas(idCli);
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se pudo comunicar con el servidor.' });
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = htmlOriginal;
+        }
+    };
 
     window.eliminarCliente = async function() {
         const id = document.getElementById('cliente_id').value;
@@ -867,25 +1060,31 @@
                     btnSave.disabled = true; 
                     btnSave.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
                     try {
+                        const eraNuevo = !(document.getElementById('cliente_id')?.value);
                         const fd = new FormData(form);
                         const resp = await fetch(form.action, { method: 'POST', body: fd });
                         const json = await resp.json();
 
                         if (json.ok) {
+                        btnSave.disabled = false;
+                        btnSave.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
+
+                        if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
+                        document.dispatchEvent(new CustomEvent('clienteGuardado', { detail: { ...json, nombre: json.data?.nombre || '' } }));
+
+                        // El modal no se cierra: se refresca en sitio para seguir
+                        // completando la ficha. Los módulos que crean el cliente al
+                        // vuelo ya lo recibieron por el evento 'clienteGuardado'.
+                        await cliRefrescarModalTrasGuardar(json, eraNuevo);
+
                         Swal.fire({
+                            toast: true,
+                            position: 'top-end',
                             icon: 'success',
-                            title: 'Éxito',
-                            text: json.msg || 'Guardado correctamente.',
-                            timer: 1500,
+                            title: json.msg || 'Guardado correctamente.',
+                            timer: 2200,
                             showConfirmButton: false
                         });
-                        setTimeout(() => { 
-                            btnSave.disabled = false;
-                            btnSave.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
-                            getModalCliente().hide(); 
-                            if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1); 
-                            document.dispatchEvent(new CustomEvent('clienteGuardado', { detail: { ...json, nombre: json.data?.nombre || '' } }));
-                        }, 1500);
                     } else {
                         Swal.fire({
                             icon: 'error',
@@ -930,6 +1129,12 @@
 
         const campoEmail = document.getElementById('cliente_email');
         if (campoEmail) campoEmail.addEventListener('blur', validarEmails);
+
+        const selOpBanco = document.getElementById('cliente_tipo_operacion_bancaria');
+        if (selOpBanco) selOpBanco.addEventListener('change', cliToggleCheque);
+
+        const inpPlazo = document.getElementById('cliente_plazo');
+        if (inpPlazo) inpPlazo.addEventListener('input', cliActualizarReglaFechaCheque);
 
         // Tab Ubicación: inicializar/actualizar mapa cuando el contenedor ya es visible
         const tabUbicBtn = document.getElementById('tab-ubicacion-btn');

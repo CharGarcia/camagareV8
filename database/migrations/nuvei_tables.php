@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS nuvei_transacciones (
     id_forma_cobro        INTEGER,
     id_cliente            INTEGER,
     id_nuvei_tarjeta      INTEGER,
+    email                 VARCHAR(150),
     descripcion           TEXT,
     monto                 NUMERIC(14,2) NOT NULL,
     moneda                VARCHAR(3)   NOT NULL DEFAULT 'USD',

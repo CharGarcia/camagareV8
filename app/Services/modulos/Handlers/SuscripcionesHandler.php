@@ -22,6 +22,7 @@ class SuscripcionesHandler extends BaseHandler
     {
         return match ($this->accion) {
             'generar_facturacion'               => $this->generarFacturacion($idEmpresa, $idUsuario, $parametros),
+            'cobrar_suscripciones_nuvei'        => $this->cobrarSuscripcionesNuvei($idEmpresa, $idUsuario, $parametros),
             'enviar_aviso_vencimiento'          => $this->enviarAvisoVencimiento($idEmpresa, $parametros),
             'enviar_aviso_vencimiento_whatsapp' => $this->enviarAvisoVencimientoWhatsapp($idEmpresa, $parametros),
             default                             => throw new \RuntimeException("Acción '{$this->accion}' no implementada en SuscripcionesHandler."),
@@ -114,10 +115,17 @@ class SuscripcionesHandler extends BaseHandler
                         $idEmpresa, $idUsuario, $susc, $detalle, $estabConfig, $empresaConfig, $extras, $proximo
                     );
 
-                    // 2. Avanzar el próximo cobro
+                    // 2. Avanzar el próximo cobro. La generación del documento está
+                    //    DESACOPLADA del cobro: si la suscripción usa tarjeta vía Nuvei,
+                    //    el cargo real lo hace la automatización separada "Cobrar
+                    //    suscripciones (Nuvei)" — aquí solo se deja el pago en 'pendiente'.
+                    //    Crédito y Kushki no se tocan: siguen marcando 'exitoso' de inmediato.
                     $suscRepo->updateProximoCobro($idSusc, $nuevoProximo);
 
-                    // 3. Registrar el pago con el documento generado
+                    $esNuveiTarjeta = ($susc['forma_cobro'] ?? '') === 'tarjeta'
+                        && ($susc['pasarela_tarjeta'] ?? '') === 'nuvei'
+                        && !empty($susc['id_nuvei_tarjeta']);
+
                     $suscRepo->insertPago([
                         'id_suscripcion' => $idSusc,
                         'id_empresa'     => $idEmpresa,
@@ -125,7 +133,7 @@ class SuscripcionesHandler extends BaseHandler
                         'id_recibo'      => $res['id_recibo'],
                         'fecha_cobro'    => $hoy,
                         'monto'          => $res['importe'],
-                        'estado'         => 'exitoso',
+                        'estado'         => $esNuveiTarjeta ? 'pendiente' : 'exitoso',
                         'id_usuario'     => $idUsuario,
                     ]);
 
@@ -142,6 +150,110 @@ class SuscripcionesHandler extends BaseHandler
         $msg = "Se generaron {$generadas} documento(s) de suscripciones.";
         if ($errores > 0) $msg .= " ({$errores} suscripción(es) con error)";
         return ['registros' => $generadas, 'mensaje' => $msg];
+    }
+
+    // ── Cobrar suscripciones (Nuvei) — desacoplada de la generación ───────────
+    // Cobra los pagos que quedaron 'pendiente' (o 'fallido' con intentos
+    // restantes) al generarse el documento. Reintenta hasta agotar el tope de
+    // intentos configurado; al agotarlo, el pago queda 'fallido' definitivo.
+    private function cobrarSuscripcionesNuvei(int $idEmpresa, int $idUsuario, array $p): array
+    {
+        $maxIntentos = max(1, (int) ($p['max_intentos'] ?? 3));
+
+        $suscRepo   = new SuscripcionesRepository();
+        $pendientes = $suscRepo->getPagosPendientesNuvei($idEmpresa, $maxIntentos);
+        if (empty($pendientes)) {
+            return ['registros' => 0, 'mensaje' => 'No hay cobros de suscripción pendientes con Nuvei.'];
+        }
+
+        $empresaConfig = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+        $empresaNombre = trim((string) ($empresaConfig['nombre_comercial'] ?? $empresaConfig['nombre'] ?? ''));
+        $nuveiService  = new \App\Services\NuveiService(new \App\repositories\NuveiRepository());
+
+        $cobrados   = 0;
+        $rechazados = 0;
+        $errores    = 0;
+
+        foreach ($pendientes as $pago) {
+            // Forma "suscripción" mínima para reutilizar los helpers de notificación/ingreso.
+            $suscLike = [
+                'id'                  => $pago['id_suscripcion'],
+                'cliente_nombre'      => $pago['cliente_nombre'],
+                'cliente_email'       => $pago['cliente_email'],
+                'periodicidad_nombre' => $pago['periodicidad_nombre'],
+            ];
+
+            try {
+                $descripcion = 'Suscripción #' . $pago['id_suscripcion'] . ' — ' . ($pago['periodicidad_nombre'] ?? 'período');
+                $cargo = $nuveiService->debitarConToken(
+                    $idEmpresa,
+                    (int) $pago['id_nuvei_tarjeta'],
+                    (float) $pago['monto'],
+                    $descripcion,
+                    'suscripcion',
+                    (int) $pago['id_suscripcion'],
+                    $idUsuario
+                );
+
+                $aprobado      = !empty($cargo['ok']) && ($cargo['estado'] ?? '') === 'aprobado';
+                $nuevoIntentos = (int) $pago['intentos'] + 1;
+
+                if ($aprobado) {
+                    $suscRepo->updatePago((int) $pago['id'], [
+                        'estado'               => 'exitoso',
+                        'id_factura'           => $pago['id_factura'],
+                        'nuvei_transaction_id' => $cargo['transaccion']['nuvei_transaction_id'] ?? null,
+                        'nuvei_response'       => $cargo['transaccion']['response_data']        ?? null,
+                        'intentos'             => $nuevoIntentos,
+                    ]);
+                    $suscRepo->resetIntentosFallidos((int) $pago['id_suscripcion']);
+
+                    try {
+                        $this->generarIngresoDesdeSuscripcionNuvei(
+                            $idEmpresa,
+                            ['id_factura' => $pago['id_factura'], 'id_recibo' => $pago['id_recibo'], 'importe' => $pago['monto']],
+                            $suscLike,
+                            (string) ($cargo['transaccion']['dev_reference'] ?? ''),
+                            $cargo['transaccion']['authorization_code'] ?? null,
+                            $idUsuario
+                        );
+                    } catch (\Throwable $e) {
+                        error_log('[Suscripciones] Error generando Ingreso del cobro Nuvei: ' . $e->getMessage());
+                    }
+
+                    $this->notificarCobroNuveiCliente(
+                        $idEmpresa, $suscLike, (float) $pago['monto'],
+                        $cargo['transaccion']['nuvei_transaction_id'] ?? null,
+                        $cargo['transaccion']['authorization_code']   ?? null,
+                        $empresaNombre
+                    );
+
+                    $cobrados++;
+                } else {
+                    $agotado = $nuevoIntentos >= $maxIntentos;
+                    $suscRepo->updatePago((int) $pago['id'], [
+                        'estado'               => $agotado ? 'fallido' : 'pendiente',
+                        'id_factura'           => $pago['id_factura'],
+                        'nuvei_transaction_id' => $cargo['transaccion']['nuvei_transaction_id'] ?? null,
+                        'nuvei_response'       => $cargo['transaccion']['response_data']        ?? null,
+                        'intentos'             => $nuevoIntentos,
+                    ]);
+                    $suscRepo->incrementarIntentosFallidos((int) $pago['id_suscripcion']);
+
+                    $this->notificarCobroNuveiRechazado($idEmpresa, $suscLike, (float) $pago['monto'], $empresaNombre, $agotado, $nuevoIntentos, $maxIntentos);
+
+                    $rechazados++;
+                }
+            } catch (\Throwable $e) {
+                $errores++;
+                error_log('[Suscripciones] Error cobrando pago #' . $pago['id'] . ' con Nuvei: ' . $e->getMessage());
+            }
+        }
+
+        $msg = "Se cobraron {$cobrados} suscripción(es) con Nuvei.";
+        if ($rechazados > 0) $msg .= " ({$rechazados} rechazada(s))";
+        if ($errores > 0)    $msg .= " ({$errores} con error técnico)";
+        return ['registros' => $cobrados, 'mensaje' => $msg];
     }
 
     // ── Enviar aviso de vencimiento ───────────────────────────────────────────
@@ -180,6 +292,10 @@ class SuscripcionesHandler extends BaseHandler
 
             $nombreCliente = trim((string)($susc['cliente_nombre'] ?? 'Cliente'));
             $reemplazos    = $this->construirReemplazosAviso($susc, $empresaNombre, $diasAntes);
+            // {link_tarjeta}: enlace para registrar tarjeta y activar el cobro automático
+            // con Nuvei — solo se genera si la suscripción lo necesita (forma_cobro=tarjeta,
+            // pasarela=nuvei, sin tarjeta registrada aún). El admin decide si lo incluye en el cuerpo.
+            $reemplazos['{link_tarjeta}'] = $this->generarLinkRegistroTarjetaSiAplica($idEmpresa, $susc, $email);
 
             $asunto = strtr($asuntoTpl, $reemplazos);
             // El cuerpo se escribe en texto plano: respetar saltos de línea en HTML.
@@ -264,13 +380,16 @@ class SuscripcionesHandler extends BaseHandler
             $nombreCliente = trim((string)($susc['cliente_nombre'] ?? 'Cliente'));
 
             // Variables del cuerpo: se rellenan solas con el contexto, en orden fijo:
-            // {{1}}=cliente, {{2}}=fecha_vencimiento, {{3}}=días, {{4}}=periodicidad, {{5}}=empresa
+            // {{1}}=cliente, {{2}}=fecha_vencimiento, {{3}}=días, {{4}}=periodicidad, {{5}}=empresa,
+            // {{6}}=link de registro de tarjeta (solo si la plantilla aprobada en Meta define una
+            // sexta variable; si no, simplemente no se usa — numVars se calcula del texto real).
             $ctx = [
                 $nombreCliente,
                 $this->formatearFecha((string)($susc['proximo_cobro'] ?? '')),
                 (string)$diasAntes,
                 (string)($susc['periodicidad_nombre'] ?? ''),
                 $empresaNombre,
+                $this->generarLinkRegistroTarjetaSiAplica($idEmpresa, $susc, ''),
             ];
 
             $valoresFinales = [];
@@ -339,6 +458,262 @@ class SuscripcionesHandler extends BaseHandler
             '{dias}'              => (string)$diasAntes,
             '{periodicidad}'      => (string)($susc['periodicidad_nombre'] ?? ''),
         ];
+    }
+
+    /**
+     * Genera el enlace público de registro de tarjeta (Add Card Nuvei) para una
+     * suscripción, solo si aplica: forma_cobro='tarjeta', pasarela='nuvei' y aún
+     * sin tarjeta vinculada. Retorna cadena vacía si no aplica o si falla —
+     * nunca debe interrumpir el envío del aviso de vencimiento.
+     *
+     * Usa url_absoluta() porque este código corre desde el cron (sin contexto
+     * HTTP): requiere que config/local.php tenga 'app_url' configurado.
+     */
+    private function generarLinkRegistroTarjetaSiAplica(int $idEmpresa, array $susc, string $email): string
+    {
+        if (($susc['forma_cobro'] ?? '') !== 'tarjeta'
+            || ($susc['pasarela_tarjeta'] ?? '') !== 'nuvei'
+            || !empty($susc['id_nuvei_tarjeta'])
+            || empty($susc['id_cliente'])
+            || empty($susc['id'])
+        ) {
+            return '';
+        }
+
+        try {
+            $nuvei = new \App\Services\NuveiService(new \App\repositories\NuveiRepository());
+            $sol   = $nuvei->prepararSolicitudTarjeta($idEmpresa, [
+                'id_cliente'    => (int) $susc['id_cliente'],
+                'modulo'        => 'suscripcion',
+                'id_referencia' => (int) $susc['id'],
+                'email'         => $email,
+            ]);
+            if (!$sol['ok']) {
+                return '';
+            }
+            return function_exists('url_absoluta') ? url_absoluta('/nuvei/tarjeta/' . $sol['token']) : '';
+        } catch (\Throwable $e) {
+            error_log('[Suscripciones] Error generando link de registro de tarjeta: ' . $e->getMessage());
+            return '';
+        }
+    }
+
+    /**
+     * Registra el cobro aprobado de Nuvei como un Ingreso real (con su asiento
+     * contable vía IngresoService::crear()) — mismo patrón que
+     * FacturaVentaService::generarIngresoDesdeNuvei() para el Checkout de
+     * Facturas de Venta, adaptado para que aplique tanto a facturas como a
+     * recibos de venta (según cuál haya generado SuscripcionFacturacionService).
+     * Idempotente: vincula la transacción al ingreso creado.
+     *
+     * @param array $res Resultado de SuscripcionFacturacionService::generarUnPeriodo()
+     *                   (trae id_factura, id_recibo, importe).
+     */
+    private function generarIngresoDesdeSuscripcionNuvei(int $idEmpresa, array $res, array $susc, string $devReference, ?string $authCode, int $idUsuario): ?int
+    {
+        $esFactura = !empty($res['id_factura']);
+        $idDoc     = $esFactura ? (int) $res['id_factura'] : (int) ($res['id_recibo'] ?? 0);
+        if ($idDoc <= 0) {
+            return null;
+        }
+
+        $db    = \App\core\Database::getConnection();
+        $tabla = $esFactura ? 'ventas_cabecera' : 'recibos_venta_cabecera';
+        $stDoc = $db->prepare(
+            "SELECT id, id_cliente, id_punto_emision, establecimiento, punto_emision, secuencial, importe_total
+             FROM {$tabla} WHERE id = ? AND id_empresa = ? AND eliminado = false"
+        );
+        $stDoc->execute([$idDoc, $idEmpresa]);
+        $doc = $stDoc->fetch(\PDO::FETCH_ASSOC);
+        if (!$doc) {
+            return null;
+        }
+
+        // Forma de cobro tipo NUVEI de la empresa (misma que usa Facturas de Venta)
+        $nvRepo       = new \App\repositories\NuveiRepository();
+        $formaTarjeta = $nvRepo->getFormaCobroNuvei($idEmpresa);
+        if (!$formaTarjeta) {
+            return null;
+        }
+
+        // Punto de emisión del documento
+        $stPunto = $db->prepare(
+            "SELECT p.id, e.codigo AS establecimiento, p.codigo_punto AS punto, p.id_establecimiento
+             FROM empresa_punto_emision p
+             JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+             WHERE p.id = ? AND p.id_empresa = ? AND p.eliminado = false"
+        );
+        $stPunto->execute([(int) $doc['id_punto_emision'], $idEmpresa]);
+        $punto = $stPunto->fetch(\PDO::FETCH_ASSOC);
+        if (!$punto) {
+            return null;
+        }
+
+        $tipoDocIngreso = $esFactura ? 'FACTURA' : 'RECIBO';
+
+        // Saldo anterior (por si ya hubiera cobros previos del mismo documento)
+        $stSaldo = $db->prepare(
+            "SELECT COALESCE(SUM(id2.monto_cobrado), 0)
+             FROM ingresos_detalle id2
+             INNER JOIN ingresos_cabecera ic2 ON id2.id_ingreso = ic2.id
+             WHERE id2.tipo_documento = ?
+               AND id2.id_referencia_documento = ?
+               AND ic2.estado != 'anulado'
+               AND ic2.eliminado = false"
+        );
+        $stSaldo->execute([$tipoDocIngreso, $idDoc]);
+        $totalCobrado  = (float) $stSaldo->fetchColumn();
+        $saldoAnterior = round((float) $doc['importe_total'] - $totalCobrado, 2);
+
+        $monto  = round((float) $res['importe'], 2);
+        $numDoc = $doc['establecimiento'] . '-' . $doc['punto_emision'] . '-' . $doc['secuencial'];
+
+        $secuencialService = new SecuencialService();
+        $secRes            = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos');
+        $numeroIngreso      = str_pad((string) $punto['establecimiento'], 3, '0', STR_PAD_LEFT) . '-'
+                            . str_pad((string) $punto['punto'], 3, '0', STR_PAD_LEFT) . '-'
+                            . str_pad((string) $secRes['secuencial'], 9, '0', STR_PAD_LEFT);
+
+        $payload = [
+            'id_empresa'          => $idEmpresa,
+            'id_establecimiento'  => (int) ($punto['id_establecimiento'] ?? 0),
+            'id_punto_emision'    => (int) $punto['id'],
+            'id_cliente'          => (int) $doc['id_cliente'],
+            'id_usuario'          => $idUsuario,
+            'fecha_emision'       => date('Y-m-d'),
+            'establecimiento'     => $punto['establecimiento'],
+            'punto_emision'       => $punto['punto'],
+            'secuencial'          => $secRes['secuencial'],
+            'numero_ingreso'      => $numeroIngreso,
+            'tipo_ingreso'        => $esFactura ? 'FACTURA_VENTA' : 'RECIBO_VENTA',
+            'id_ingreso_concepto' => null,
+            'monto_total'         => $monto,
+            'observaciones'       => 'Cobro automático suscripción #' . $susc['id'] . ' (Nuvei) — autorización ' . ($authCode ?? ''),
+            'recibo_de'           => trim((string) ($susc['cliente_nombre'] ?? '')),
+            'id_recibo_cliente'   => (int) $doc['id_cliente'],
+            'detalles'            => [[
+                'tipo_documento'          => $tipoDocIngreso,
+                'id_referencia_documento' => $idDoc,
+                'numero_documento'        => $numDoc,
+                'descripcion'             => 'Cobro de ' . strtolower($tipoDocIngreso) . ' ' . $numDoc,
+                'monto_documento'         => (float) $doc['importe_total'],
+                'saldo_anterior'          => $saldoAnterior,
+                'monto_cobrado'           => $monto,
+                'saldo_actual'            => max(0.0, $saldoAnterior - $monto),
+            ]],
+            'pagos' => [[
+                'id_forma_cobro'          => (int) $formaTarjeta['id'],
+                'monto'                   => $monto,
+                'referencia'              => $authCode,
+                'tipo_operacion_bancaria' => null,
+                'numero_cheque'           => null,
+            ]],
+        ];
+
+        $ingresoService = new \App\Services\modulos\IngresoService(
+            new \App\repositories\modulos\IngresoRepository(),
+            new \App\Rules\modulos\IngresoRules(),
+            new LogSistemaService()
+        );
+
+        $idIngreso = $ingresoService->crear($payload);
+
+        if ($devReference !== '') {
+            $nvRepo->vincularIngreso($devReference, (int) $idIngreso);
+        }
+
+        return (int) $idIngreso;
+    }
+
+    /**
+     * Notifica al CLIENTE que su cobro recurrente con Nuvei fue aprobado —
+     * requisito explícito de Nuvei de confirmar cada transacción. Nunca debe
+     * interrumpir la generación de facturación si el envío falla.
+     */
+    private function notificarCobroNuveiCliente(int $idEmpresa, array $susc, float $monto, ?string $transId, ?string $authCode, string $empresaNombre): void
+    {
+        $email = trim((string) ($susc['cliente_email'] ?? ''));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+
+        try {
+            (new \App\Services\EnvioDocumentosSRIService())->enviarConfirmacionPagoNuvei(
+                $idEmpresa,
+                $email,
+                trim((string) ($susc['cliente_nombre'] ?? 'Cliente')),
+                $empresaNombre,
+                $monto,
+                'Suscripción #' . $susc['id'] . ' — ' . ($susc['periodicidad_nombre'] ?? 'período'),
+                true,
+                (string) ($transId ?? ''),
+                (string) ($authCode ?? '')
+            );
+        } catch (\Throwable $e) {
+            error_log('[Suscripciones] Error enviando confirmación de cobro Nuvei al cliente: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Notifica a la EMPRESA (correo de contacto, empresas.mail — mismo patrón
+     * que DeclaracionIvaHandler::avisarIvaAPagar()) que el cobro automático de
+     * una suscripción fue rechazado por Nuvei, para que hagan seguimiento
+     * manual con el cliente. Nunca debe interrumpir la generación de facturación.
+     */
+    /**
+     * Notifica el rechazo de un cobro de suscripción a AMBAS partes:
+     *  - Cliente: correo de "pago rechazado" (mismo requisito de Nuvei que ya
+     *    se usa para Checkout — confirmar cada transacción resuelta).
+     *  - Empresa: detalle completo + si se reintentará automáticamente al día
+     *    siguiente o si ya se agotaron los intentos (fallido definitivo).
+     */
+    private function notificarCobroNuveiRechazado(int $idEmpresa, array $susc, float $monto, string $empresaNombre, bool $agotado, int $intentoActual, int $maxIntentos): void
+    {
+        $descripcion = 'Suscripción #' . $susc['id'] . ' — ' . ($susc['periodicidad_nombre'] ?? 'período');
+
+        $email = trim((string) ($susc['cliente_email'] ?? ''));
+        if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            try {
+                (new \App\Services\EnvioDocumentosSRIService())->enviarConfirmacionPagoNuvei(
+                    $idEmpresa, $email, trim((string) ($susc['cliente_nombre'] ?? 'Cliente')), $empresaNombre,
+                    $monto, $descripcion, false, '', ''
+                );
+            } catch (\Throwable $e) {
+                error_log('[Suscripciones] Error enviando aviso de cobro rechazado al cliente: ' . $e->getMessage());
+            }
+        }
+
+        try {
+            $empresaArr = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $destino    = trim((string) ($empresaArr['mail'] ?? ''));
+            if (!filter_var($destino, FILTER_VALIDATE_EMAIL)) {
+                return;
+            }
+
+            $estadoTexto = $agotado
+                ? 'Se agotaron los ' . $maxIntentos . ' intentos permitidos: el cobro queda marcado como <strong>fallido definitivo</strong>. '
+                  . 'Gestiónalo manualmente (contacta al cliente, cóbralo por otro medio, o pide que registre una tarjeta nueva).'
+                : 'Se reintentará automáticamente en la próxima corrida de esta automatización (intento ' . ($intentoActual + 1) . ' de ' . $maxIntentos . ').';
+
+            $asunto = 'Cobro de suscripción rechazado — Suscripción #' . $susc['id'];
+            $cuerpo = '<div style="font-family:Arial,sans-serif;line-height:1.6;">'
+                . '<p>El cobro automático con Nuvei de la siguiente suscripción fue <strong>rechazado</strong>:</p>'
+                . '<ul>'
+                . '<li><strong>Suscripción:</strong> #' . (int) $susc['id'] . '</li>'
+                . '<li><strong>Cliente:</strong> ' . htmlspecialchars((string) ($susc['cliente_nombre'] ?? '')) . '</li>'
+                . '<li><strong>Monto:</strong> $' . number_format($monto, 2) . '</li>'
+                . '<li><strong>Intento:</strong> ' . $intentoActual . ' de ' . $maxIntentos . '</li>'
+                . '<li><strong>Fecha:</strong> ' . date('d-m-Y H:i:s') . '</li>'
+                . '</ul>'
+                . '<p>' . $estadoTexto . '</p>'
+                . '</div>';
+
+            (new \App\Services\EnvioDocumentosSRIService())->enviarAvisoSimple(
+                $idEmpresa, $destino, $empresaNombre, $asunto, $cuerpo, $empresaNombre
+            );
+        } catch (\Throwable $e) {
+            error_log('[Suscripciones] Error enviando aviso de cobro rechazado a la empresa: ' . $e->getMessage());
+        }
     }
 
     /** Normaliza un teléfono a formato internacional Ecuador (593...). Vacío si no es válido. */

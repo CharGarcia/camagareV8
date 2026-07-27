@@ -291,6 +291,16 @@ class IngresoService
             throw new \Exception('Este ingreso corresponde a un pago con tarjeta. Debes reversar el pago con tarjeta primero (desde la factura, pestaña Pagos) y el ingreso se anulará automáticamente.');
         }
 
+        // Mismo bloqueo para pagos con tarjeta vía Nuvei: reembolsar primero.
+        $stNV = $db->prepare(
+            "SELECT COUNT(*) FROM nuvei_transacciones
+             WHERE id_ingreso = ? AND estado = 'aprobado' AND eliminado = false"
+        );
+        $stNV->execute([$id]);
+        if ((int) $stNV->fetchColumn() > 0) {
+            throw new \Exception('Este ingreso corresponde a un pago con tarjeta (Nuvei). Debes reembolsar el pago primero (desde la factura, pestaña Pagos) y el ingreso se anulará automáticamente.');
+        }
+
         // Validar Periodo Contable antes de anular
         $this->periodosService->validarFechaPermitida(
             $ingreso['fecha_emision'], 

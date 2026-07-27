@@ -24,6 +24,9 @@ class ClienteRepository extends BaseRepository
             if (!$check->fetch()) {
                 $this->db->exec("ALTER TABLE clientes ADD COLUMN id_ingreso_concepto_predeterminado INT NULL");
             }
+            // Límite inferior del rango de auto cobro
+            // (database/migrations/20260725_clientes_monto_minimo_auto_cobro.sql)
+            $this->db->exec("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS monto_minimo_auto_cobro NUMERIC(14,2) NULL");
         } catch (\Throwable $e) {}
     }
 
@@ -183,13 +186,15 @@ class ClienteRepository extends BaseRepository
         $sql = "INSERT INTO {$this->table} (
                     id_empresa, id_usuario, nombre, tipo_id, identificacion, telefono, email,
                     direccion, plazo, provincia, ciudad, status, id_vendedor,
-                    id_forma_pago_sri, id_forma_cobro_predeterminada, tipo_operacion_bancaria_predeterminada, monto_maximo_auto_cobro, id_ingreso_concepto_predeterminado,
+                    id_forma_pago_sri, id_forma_cobro_predeterminada, tipo_operacion_bancaria_predeterminada,
+                    monto_minimo_auto_cobro, monto_maximo_auto_cobro, id_ingreso_concepto_predeterminado,
                     latitud, longitud, geocodificado_en,
                     created_by, created_at, eliminado
                 ) VALUES (
                     :id_empresa, :id_usuario, :nombre, :tipo_id, :identificacion, :telefono, :email,
                     :direccion, :plazo, :provincia, :ciudad, :status, :id_vendedor,
-                    :id_forma_pago_sri, :id_forma_cobro_predeterminada, :tipo_operacion_bancaria_predeterminada, :monto_maximo_auto_cobro, :id_ingreso_concepto_predeterminado,
+                    :id_forma_pago_sri, :id_forma_cobro_predeterminada, :tipo_operacion_bancaria_predeterminada,
+                    :monto_minimo_auto_cobro, :monto_maximo_auto_cobro, :id_ingreso_concepto_predeterminado,
                     :latitud::numeric, :longitud::numeric, :geocodificado_en::timestamp,
                     :id_u, CURRENT_TIMESTAMP, false
                 )";
@@ -211,6 +216,7 @@ class ClienteRepository extends BaseRepository
             ':id_forma_pago_sri' => $data['id_forma_pago_sri'] ?? null,
             ':id_forma_cobro_predeterminada' => $data['id_forma_cobro_predeterminada'] ?? null,
             ':tipo_operacion_bancaria_predeterminada' => $data['tipo_operacion_bancaria_predeterminada'] ?? null,
+            ':monto_minimo_auto_cobro' => $data['monto_minimo_auto_cobro'] ?? null,
             ':monto_maximo_auto_cobro' => $data['monto_maximo_auto_cobro'] ?? null,
             ':id_ingreso_concepto_predeterminado' => $data['id_ingreso_concepto_predeterminado'] ?? null,
             ':latitud'          => $data['latitud'] ?? null,
@@ -248,6 +254,7 @@ class ClienteRepository extends BaseRepository
                 id_forma_pago_sri = :id_forma_pago_sri,
                 id_forma_cobro_predeterminada = :id_forma_cobro_predeterminada,
                 tipo_operacion_bancaria_predeterminada = :tipo_operacion_bancaria_predeterminada,
+                monto_minimo_auto_cobro = :monto_minimo_auto_cobro,
                 monto_maximo_auto_cobro = :monto_maximo_auto_cobro,
                 id_ingreso_concepto_predeterminado = :id_ingreso_concepto_predeterminado,
                 latitud = :latitud::numeric,
@@ -273,6 +280,7 @@ class ClienteRepository extends BaseRepository
             ':id_forma_pago_sri'             => $data['id_forma_pago_sri'] ?? null,
             ':id_forma_cobro_predeterminada' => $data['id_forma_cobro_predeterminada'] ?? null,
             ':tipo_operacion_bancaria_predeterminada' => $data['tipo_operacion_bancaria_predeterminada'] ?? null,
+            ':monto_minimo_auto_cobro'       => $data['monto_minimo_auto_cobro'] ?? null,
             ':monto_maximo_auto_cobro'       => $data['monto_maximo_auto_cobro'] ?? null,
             ':id_ingreso_concepto_predeterminado' => $data['id_ingreso_concepto_predeterminado'] ?? null,
             ':latitud'          => $data['latitud'] ?? null,

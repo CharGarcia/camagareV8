@@ -103,6 +103,20 @@ class BodegaService
         $antes = $this->repository->findById($id, $idEmpresa);
         if (!$antes) throw new Exception('Bodega no existe.');
 
+        // No se puede eliminar una bodega que tenga registros asociados (facturas, inventario, etc.).
+        $usos = $this->repository->usosBodega($id);
+        if ($usos) {
+            $detalle = [];
+            foreach ($usos as $label => $n) {
+                $detalle[] = number_format($n, 0, '.', '.') . ' en ' . $label;
+            }
+            throw new Exception(
+                'No se puede eliminar la bodega porque tiene registros asociados: '
+                . implode(', ', $detalle)
+                . '. Reasigne o anule esos documentos, o traslade el stock a otra bodega, antes de eliminarla.'
+            );
+        }
+
         $this->repository->beginTransaction();
         try {
             $this->repository->delete($id, $idEmpresa, $idUsuario);

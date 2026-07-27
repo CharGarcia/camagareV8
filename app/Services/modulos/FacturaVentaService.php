@@ -178,6 +178,152 @@ class FacturaVentaService
         return (int) $idIngreso;
     }
 
+    /**
+     * Genera automáticamente un Ingreso (cobro) a partir de una transacción
+     * Nuvei APROBADA para una factura de venta. Idempotente: no crea el ingreso
+     * si la transacción ya tiene uno vinculado. Clon de generarIngresoDesdePayphone()
+     * adaptado a nuvei_transacciones (monto ya en dólares decimales, sin /100).
+     *
+     * @param array $trans Fila de nuvei_transacciones (debe tener id_empresa, id_referencia, monto, etc.)
+     * @return int|null  ID del ingreso creado, o null si no aplica / ya existía.
+     */
+    public function generarIngresoDesdeNuvei(array $trans): ?int
+    {
+        // Ya tiene ingreso vinculado — idempotente
+        if (!empty($trans['id_ingreso'])) {
+            return (int) $trans['id_ingreso'];
+        }
+        if (($trans['modulo'] ?? '') !== 'factura_venta' || empty($trans['id_referencia'])) {
+            return null;
+        }
+
+        $db        = Database::getConnection();
+        $idEmpresa = (int) $trans['id_empresa'];
+        $idFactura = (int) $trans['id_referencia'];
+        $monto     = round((float) $trans['monto'], 2);
+        $idUsuario = !empty($trans['created_by']) ? (int) $trans['created_by'] : null;
+
+        // Forma de cobro: la guardada en la transacción, o cualquier tipo NUVEI
+        $nvRepo = new \App\repositories\NuveiRepository();
+        $idFormaCobro = !empty($trans['id_forma_cobro']) ? (int) $trans['id_forma_cobro'] : 0;
+        if ($idFormaCobro > 0) {
+            $formaTarjeta = ['id' => $idFormaCobro];
+        } else {
+            $formaTarjeta = $nvRepo->getFormaCobroNuvei($idEmpresa);
+        }
+        if (!$formaTarjeta) {
+            return null; // sin forma de cobro Nuvei no se puede registrar
+        }
+
+        // Factura
+        $factura = $this->repository->getPorId($idFactura);
+        if (!$factura || (int) $factura['id_empresa'] !== $idEmpresa) {
+            return null;
+        }
+
+        // Punto de emisión de la factura (con fallback a tabla renombrada)
+        $punto = null;
+        try {
+            $stPunto = $db->prepare(
+                "SELECT p.id, e.codigo AS establecimiento, p.codigo_punto AS punto, p.id_establecimiento
+                 FROM empresa_punto_emision p
+                 JOIN empresa_establecimiento e ON e.id = p.id_establecimiento
+                 WHERE p.id = ? AND p.id_empresa = ? AND p.eliminado = false"
+            );
+            $stPunto->execute([(int) $factura['id_punto_emision'], $idEmpresa]);
+            $punto = $stPunto->fetch(\PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {}
+        if (!$punto) {
+            try {
+                $stPunto2 = $db->prepare(
+                    "SELECT id, establecimiento, punto, id_establecimiento
+                     FROM empresa_puntos_emision
+                     WHERE id = ? AND id_empresa = ? AND eliminado = false"
+                );
+                $stPunto2->execute([(int) $factura['id_punto_emision'], $idEmpresa]);
+                $punto = $stPunto2->fetch(\PDO::FETCH_ASSOC);
+            } catch (\Throwable $e) {}
+        }
+        if (!$punto) {
+            return null;
+        }
+
+        // Secuencial de ingreso
+        $secuencialService = new \App\Services\SecuencialService();
+        $secRes = $secuencialService->obtenerSiguienteSecuencial((int) $punto['id'], 'Ingresos');
+
+        // Saldo anterior (cobros previos)
+        $stSaldo = $db->prepare(
+            "SELECT COALESCE(SUM(id2.monto_cobrado), 0)
+             FROM ingresos_detalle id2
+             INNER JOIN ingresos_cabecera ic2 ON id2.id_ingreso = ic2.id
+             WHERE id2.tipo_documento = 'FACTURA'
+               AND id2.id_referencia_documento = ?
+               AND ic2.estado != 'anulado'
+               AND ic2.eliminado = false"
+        );
+        $stSaldo->execute([$idFactura]);
+        $totalCobrado  = (float) $stSaldo->fetchColumn();
+        $saldoAnterior = round((float) $factura['importe_total'] - $totalCobrado, 2);
+
+        $numDoc = $factura['establecimiento'] . '-' . $factura['punto_emision'] . '-' . $factura['secuencial'];
+        $obs    = 'Cobro con tarjeta (Nuvei) — autorización ' . ($trans['authorization_code'] ?? '');
+
+        // Número de ingreso con formato 000-000-000000000
+        $numeroIngreso = str_pad((string) $punto['establecimiento'], 3, '0', STR_PAD_LEFT) . '-'
+                       . str_pad((string) $punto['punto'], 3, '0', STR_PAD_LEFT) . '-'
+                       . str_pad((string) $secRes['secuencial'], 9, '0', STR_PAD_LEFT);
+
+        $payload = [
+            'id_empresa'          => $idEmpresa,
+            'id_establecimiento'  => (int) ($punto['id_establecimiento'] ?? 0),
+            'id_punto_emision'    => (int) $punto['id'],
+            'id_cliente'          => (int) $factura['id_cliente'],
+            'id_usuario'          => $idUsuario,
+            'fecha_emision'       => date('Y-m-d'),
+            'establecimiento'     => $punto['establecimiento'],
+            'punto_emision'       => $punto['punto'],
+            'secuencial'          => $secRes['secuencial'],
+            'numero_ingreso'      => $numeroIngreso,
+            'tipo_ingreso'        => 'FACTURA_VENTA',
+            'id_ingreso_concepto' => null,
+            'monto_total'         => $monto,
+            'observaciones'       => $obs,
+            'recibo_de'           => $factura['cliente_nombre'] ?? '',
+            'id_recibo_cliente'   => (int) $factura['id_cliente'],
+            'detalles'            => [[
+                'tipo_documento'          => 'FACTURA',
+                'id_referencia_documento' => $idFactura,
+                'numero_documento'        => $numDoc,
+                'descripcion'             => 'Cobro de factura ' . $numDoc,
+                'monto_documento'         => (float) $factura['importe_total'],
+                'saldo_anterior'          => $saldoAnterior,
+                'monto_cobrado'           => $monto,
+                'saldo_actual'            => max(0.0, $saldoAnterior - $monto),
+            ]],
+            'pagos' => [[
+                'id_forma_cobro'          => (int) $formaTarjeta['id'],
+                'monto'                   => $monto,
+                'referencia'              => $trans['authorization_code'] ?? null,
+                'tipo_operacion_bancaria' => null,
+                'numero_cheque'           => null,
+            ]],
+        ];
+
+        $ingresoService = new IngresoService(
+            new \App\repositories\modulos\IngresoRepository(),
+            new \App\Rules\modulos\IngresoRules(),
+            $this->logService
+        );
+
+        $idIngreso = $ingresoService->crear($payload);
+
+        // Vincular para idempotencia
+        $nvRepo->vincularIngreso((string) $trans['dev_reference'], (int) $idIngreso);
+
+        return (int) $idIngreso;
+    }
+
     private function getInventarioService(): InventarioService
     {
         if ($this->inventarioService === null) {

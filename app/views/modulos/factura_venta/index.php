@@ -921,6 +921,27 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                 </table>
                                             </div>
                                         </div>
+
+                                        <!-- Pagos con Nuvei -->
+                                        <div class="card border border-primary border-opacity-25 shadow-sm rounded-3 overflow-hidden d-none mt-2" id="fvPagoNuveiHistorialCard">
+                                            <div class="card-header bg-primary bg-opacity-10 py-2 border-bottom border-primary border-opacity-25">
+                                                <h6 class="card-title mb-0 fw-bold text-primary" style="font-size: 0.85rem;"><i class="bi bi-credit-card-2-front me-2"></i>Pagos con Nuvei</h6>
+                                            </div>
+                                            <div class="card-body p-0">
+                                                <table class="table table-hover align-middle mb-0" style="font-size:0.78rem;">
+                                                    <thead class="table-light text-muted border-bottom">
+                                                        <tr>
+                                                            <th class="ps-3">Fecha</th>
+                                                            <th>Estado</th>
+                                                            <th>Autorización</th>
+                                                            <th class="text-end">Monto</th>
+                                                            <th class="text-center pe-3">Acción</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="fvPagoNuveiTbody"></tbody>
+                                                </table>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <!-- Derecha: Formulario -->
@@ -2237,6 +2258,10 @@ $totalPages = $totalPagesOriginal;
             if (btnTicket) btnTicket.classList.add('d-none');
             if (btnAnular) btnAnular.classList.add('d-none');
             vrs.forEach(v => v.classList.add('d-none'));
+            // Factura NUEVA: garantizar el formulario editable. Si se venía de ver una
+            // factura autorizada/anulada, sus controles quedaron deshabilitados y
+            // form.reset() NO los rehabilita → el modal aparecía bloqueado "a veces".
+            fvAplicarSoloLectura(true);
             return;
         }
 
@@ -2301,43 +2326,53 @@ $totalPages = $totalPagesOriginal;
         }
 
         // ”€”€ Lógica de Solo Lectura para la pestaña Factura de Venta ”€”€
-        const esBorrador = st === 'borrador';
+        fvAplicarSoloLectura(st === 'borrador');
+    }
+
+    /**
+     * Aplica el modo lectura/edición a la pestaña de la factura.
+     *   esBorrador = true  → formulario EDITABLE (borrador o factura nueva).
+     *   esBorrador = false → formulario BLOQUEADO (autorizada/anulada).
+     * Se llama también al abrir una factura nueva: si se venía de ver una factura no
+     * editable, sus controles quedaron deshabilitados y form.reset() no los rehabilita.
+     */
+    function fvAplicarSoloLectura(esBorrador) {
         const tabDetalle = document.getElementById('m-tab-detalle');
-        if (tabDetalle) {
-            // Deshabilitar inputs, selects y textareas
-            const controles = tabDetalle.querySelectorAll('input:not([type="hidden"]), select, textarea');
-            controles.forEach(el => {
-                if (el.id === 'm-select-vendedor') {
-                    el.disabled = false;
-                } else {
-                    el.disabled = !esBorrador;
-                }
-            });
+        if (!tabDetalle) return;
 
-            // Ocultar botones de agregar y eliminar (Productos, Info Adicional, Pagos)
-            const btnAddProd = tabDetalle.querySelector('button[onclick="agregarFila()"]');
-            if (btnAddProd) btnAddProd.classList.toggle('d-none', !esBorrador);
+        // Habilitar/deshabilitar inputs, selects y textareas
+        const controles = tabDetalle.querySelectorAll('input:not([type="hidden"]), select, textarea');
+        controles.forEach(el => {
+            if (el.id === 'm-select-vendedor') {
+                el.disabled = false;
+            } else {
+                el.disabled = !esBorrador;
+            }
+        });
 
-            const btnAddInfo = tabDetalle.querySelector('button[onclick="agregarInfoAdicional()"]');
-            if (btnAddInfo) btnAddInfo.classList.toggle('d-none', !esBorrador);
+        // Mostrar/ocultar botones de agregar (Productos, Info Adicional, Pagos)
+        const btnAddProd = tabDetalle.querySelector('button[onclick="agregarFila()"]');
+        if (btnAddProd) btnAddProd.classList.toggle('d-none', !esBorrador);
 
-            const btnAddPago = tabDetalle.querySelector('button[onclick="agregarFormaPago()"]');
-            if (btnAddPago) btnAddPago.classList.toggle('d-none', !esBorrador);
+        const btnAddInfo = tabDetalle.querySelector('button[onclick="agregarInfoAdicional()"]');
+        if (btnAddInfo) btnAddInfo.classList.toggle('d-none', !esBorrador);
 
-            // Ocultar cualquier botón con clase text-danger (basureros de eliminación de filas)
-            const trashBtns = tabDetalle.querySelectorAll('button.text-danger, button.btn-outline-danger');
-            trashBtns.forEach(btn => {
-                if (btn.id !== 'm-btn-pdf') {
-                    btn.classList.toggle('d-none', !esBorrador);
-                }
-            });
+        const btnAddPago = tabDetalle.querySelector('button[onclick="agregarFormaPago()"]');
+        if (btnAddPago) btnAddPago.classList.toggle('d-none', !esBorrador);
 
-            // Deshabilitar botones de selección de métodos de pago (ej. botón de "Transferencia")
-            const paymentBtns = tabDetalle.querySelectorAll('#m-container-pagos button:not(.text-danger)');
-            paymentBtns.forEach(btn => {
-                btn.disabled = !esBorrador;
-            });
-        }
+        // Mostrar/ocultar botones de eliminación de filas (basureros)
+        const trashBtns = tabDetalle.querySelectorAll('button.text-danger, button.btn-outline-danger');
+        trashBtns.forEach(btn => {
+            if (btn.id !== 'm-btn-pdf') {
+                btn.classList.toggle('d-none', !esBorrador);
+            }
+        });
+
+        // Botones de selección de métodos de pago (ej. "Transferencia")
+        const paymentBtns = tabDetalle.querySelectorAll('#m-container-pagos button:not(.text-danger)');
+        paymentBtns.forEach(btn => {
+            btn.disabled = !esBorrador;
+        });
     }
 
     /**
@@ -6163,6 +6198,60 @@ $totalPages = $totalPagesOriginal;
                 cardTarjeta.classList.add('d-none');
             }
 
+            // Pagos con Nuvei
+            let totalPagadoNuvei = 0;
+            const cardNuvei = document.getElementById('fvPagoNuveiHistorialCard');
+            const tbodyNuvei = document.getElementById('fvPagoNuveiTbody');
+            if (cardNuvei && tbodyNuvei && jCob.pagos_nuvei && jCob.pagos_nuvei.length > 0) {
+                cardNuvei.classList.remove('d-none');
+                tbodyNuvei.innerHTML = '';
+                const badgeNV = {
+                    'aprobado' : ['bg-success bg-opacity-10 text-success border-success', 'Aprobado'],
+                    'pendiente': ['bg-warning bg-opacity-10 text-warning border-warning', 'Pendiente'],
+                    'cancelado': ['bg-secondary bg-opacity-10 text-secondary border-secondary', 'Cancelado'],
+                    'rechazado': ['bg-danger bg-opacity-10 text-danger border-danger', 'Rechazado'],
+                    'reverso'  : ['bg-dark bg-opacity-10 text-dark border-dark', 'Reembolsado'],
+                    'error'    : ['bg-danger bg-opacity-10 text-danger border-danger', 'Error'],
+                };
+                const puedeAnularNv = PERM_ACTUALIZAR;
+                jCob.pagos_nuvei.forEach(function(nv) {
+                    const fecha = (nv.updated_at || nv.created_at || '').slice(0, 10).split('-').reverse().join('/');
+                    const [bClass, bLabel] = badgeNV[nv.estado] || badgeNV['error'];
+                    const montoNum = parseFloat(nv.monto);
+                    const monto = montoNum.toFixed(2);
+                    // Solo sumar aprobados que aún NO generaron ingreso (los que sí ya cuentan en cobros)
+                    if (nv.estado === 'aprobado' && !nv.id_ingreso) totalPagadoNuvei += montoNum;
+                    const auth  = nv.authorization_code ? '<code class="text-muted" style="font-size:.7rem;">' + nv.authorization_code + '</code>' : '—';
+                    let accion = '—';
+                    if (nv.estado === 'aprobado' && puedeAnularNv) {
+                        accion = '<button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:.7rem;" '
+                               + 'onclick="fvReversarPagoNuvei(\'' + nv.dev_reference + '\')" title="Reembolsar pago en Nuvei y anular el cobro">'
+                               + '<i class="bi bi-arrow-counterclockwise"></i> Reembolsar</button>';
+                    } else if (nv.estado === 'pendiente' && puedeAnularNv) {
+                        accion = '<button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 btn-fv-cancelar-pago-nuvei" style="font-size:.7rem;" '
+                               + 'data-devref="' + (nv.dev_reference || '').replace(/"/g, '&quot;') + '" title="Cancelar la solicitud de pago enviada al cliente">'
+                               + '<i class="bi bi-x-circle"></i> Cancelar</button>';
+                    }
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = '<td class="ps-3">' + fecha + '</td>'
+                        + '<td><span class="badge ' + bClass + ' border border-opacity-25" style="font-size:.7rem;">' + bLabel + '</span></td>'
+                        + '<td>' + auth + '</td>'
+                        + '<td class="text-end fw-bold">$ ' + monto + '</td>'
+                        + '<td class="text-center pe-3">' + accion + '</td>';
+                    tbodyNuvei.appendChild(tr);
+                });
+
+                // Delegación: clic en botón "Cancelar" de solicitud pendiente
+                tbodyNuvei.querySelectorAll('.btn-fv-cancelar-pago-nuvei').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        fvCancelarPagoNuvei(this.dataset.devref);
+                    });
+                });
+
+            } else if (cardNuvei) {
+                cardNuvei.classList.add('d-none');
+            }
+
             // Retenciones: cada comprobante con su detalle línea por línea.
             const tbodyRet = document.getElementById('m-tbody-retenciones');
             if (tbodyRet) {
@@ -6258,7 +6347,7 @@ $totalPages = $totalPagesOriginal;
                                     .toString().toLowerCase().includes('anulad');
 
             // Saldo = Factura − Cobrado − Retenciones − Notas de Crédito − Pagos tarjeta aprobados
-            totalCobrado += totalPagadoTarjeta;
+            totalCobrado += totalPagadoTarjeta + totalPagadoNuvei;
             const saldo = esAnuladaFV ? 0 : Math.max(0, totalFactura - totalCobrado - totalRetenciones - totalNC);
             _fvSaldoPendiente = saldo;                       // guardar para validación
             _fvSetTarjetas(totalFactura, totalCobrado, totalRetenciones, totalNC, saldo);
@@ -6310,11 +6399,15 @@ $totalPages = $totalPagesOriginal;
             else divBanco.classList.add('d-none');
         }
 
-        // Si es PAYPHONE, el botón cambia a "Enviar cobro con Payphone"
+        // Si es PAYPHONE o NUVEI, el botón cambia a "Enviar cobro con ..."
         const btn = document.getElementById('fvPagoBtnRegistrar');
         if (btn) {
             if (tipo === 'PAYPHONE') {
                 btn.innerHTML = '<i class="bi bi-credit-card me-2"></i>Enviar cobro con Payphone';
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-primary');
+            } else if (tipo === 'NUVEI') {
+                btn.innerHTML = '<i class="bi bi-credit-card-2-front me-2"></i>Enviar cobro con Nuvei';
                 btn.classList.remove('btn-success');
                 btn.classList.add('btn-primary');
             } else {
@@ -6332,6 +6425,8 @@ $totalPages = $totalPagesOriginal;
         const tipo = fp ? (fp.tipo || '').toUpperCase() : '';
         if (tipo === 'PAYPHONE') {
             fvEnviarCobroTarjeta();
+        } else if (tipo === 'NUVEI') {
+            fvEnviarCobroNuvei();
         } else {
             fvRegistrarCobro();
         }
@@ -6533,6 +6628,8 @@ $perm = $permNCRespaldo;
 </div>
 
 <script>
+const WA_PLANTILLAS_LINK_PAGO = ['link_pago_payphone', 'link_pago_nuvei'];
+
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('waSelectPlantilla')?.addEventListener('change', FV_toggleWaMontoPago);
 
@@ -6544,7 +6641,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const select = document.getElementById('waSelectPlantilla');
             const opt = select.options[select.selectedIndex];
-            if (opt && opt.dataset.nombre === 'link_pago_payphone' && _waSaldoPendiente <= 0) {
+            if (opt && WA_PLANTILLAS_LINK_PAGO.includes(opt.dataset.nombre) && _waSaldoPendiente <= 0) {
                 Swal.fire('Atención', 'Esta factura no tiene saldo pendiente de pago; no se puede enviar el enlace.', 'warning');
                 return;
             }
@@ -6586,7 +6683,7 @@ function FV_toggleWaMontoPago() {
     const select   = document.getElementById('waSelectPlantilla');
     const divMonto = document.getElementById('waDivMontoPago');
     const opt      = select.options[select.selectedIndex];
-    const esLinkPago = opt && opt.dataset.nombre === 'link_pago_payphone';
+    const esLinkPago = opt && WA_PLANTILLAS_LINK_PAGO.includes(opt.dataset.nombre);
 
     if (divMonto) divMonto.classList.toggle('d-none', !esLinkPago);
 
@@ -6634,17 +6731,19 @@ function FV_abrirModalWhatsapp() {
             _waSaldoPendiente = parseFloat(data.saldo_pendiente || 0);
             const sinSaldoPendiente = _waSaldoPendiente <= 0;
 
+            const ETIQUETAS_LINK_PAGO = { 'link_pago_payphone': 'Enviar Link de Pago (Payphone)', 'link_pago_nuvei': 'Enviar Link de Pago (Nuvei)' };
+
             select.innerHTML = '<option value="">-- Seleccione una plantilla --</option>';
             data.plantillas.forEach(p => {
-                const esLinkPago = p.nombre === 'link_pago_payphone';
-                const etiqueta = esLinkPago ? 'Enviar Link de Pago (Payphone)' : `${p.nombre} (${p.idioma})`;
+                const esLinkPago = WA_PLANTILLAS_LINK_PAGO.includes(p.nombre);
+                const etiqueta = esLinkPago ? ETIQUETAS_LINK_PAGO[p.nombre] : `${p.nombre} (${p.idioma})`;
                 const disabled = (esLinkPago && sinSaldoPendiente) ? 'disabled title="La factura no tiene saldo pendiente de pago"' : '';
                 select.innerHTML += `<option value="${p.id}" data-nombre="${p.nombre}" ${disabled}>${etiqueta}${esLinkPago && sinSaldoPendiente ? ' (sin saldo pendiente)' : ''}</option>`;
             });
 
             // Seleccionar favorito si existe, o el default (nunca la plantilla de link de pago si no hay saldo pendiente)
             if (typeof APP_FAVORITOS !== 'undefined' && APP_FAVORITOS['plantilla_whatsapp']
-                && !(sinSaldoPendiente && select.querySelector(`option[value="${APP_FAVORITOS['plantilla_whatsapp']}"]`)?.dataset.nombre === 'link_pago_payphone')) {
+                && !(sinSaldoPendiente && WA_PLANTILLAS_LINK_PAGO.includes(select.querySelector(`option[value="${APP_FAVORITOS['plantilla_whatsapp']}"]`)?.dataset.nombre))) {
                 select.value = APP_FAVORITOS['plantilla_whatsapp'];
             } else if (data.id_plantilla_default) {
                 select.value = data.id_plantilla_default;
@@ -6846,6 +6945,193 @@ window.fvCancelarPagoTarjeta = function(ctid) {
         fd.append('client_transaction_id', ctid);
 
         fetch(B_URL + '/' + RUTA_MODULO + '/cancelarPagoTarjetaAjax', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) {
+                    Swal.fire({ icon: 'error', title: 'No se pudo cancelar', text: data.mensaje, target: document.getElementById('modalNuevaFactura') });
+                    return;
+                }
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Solicitud cancelada',
+                    text: data.mensaje,
+                    target: document.getElementById('modalNuevaFactura')
+                });
+                fvCargarCobrosTab();
+            })
+            .catch(function() {
+                Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.', target: document.getElementById('modalNuevaFactura') });
+            });
+    });
+};
+
+// ─── PAGO CON NUVEI (envío por correo al cliente) ────────────────────────────
+
+window.fvEnviarCobroNuvei = async function() {
+    var idFactura = parseInt(FV_ID_ACTIVO) || 0;
+    if (idFactura <= 0) return;
+
+    var idFormaCobro = document.getElementById('fvPagoFormaCobro').value;
+    if (!idFormaCobro) {
+        Swal.fire({ icon: 'warning', title: 'Atención', text: 'Selecciona la forma de cobro (Nuvei).', target: document.getElementById('modalNuevaFactura') });
+        return;
+    }
+    var monto = parseFloat(document.getElementById('fvPagoMonto').value);
+    if (!monto || monto <= 0) {
+        Swal.fire({ icon: 'warning', title: 'Atención', text: 'Ingresa un monto a cobrar mayor a cero.', target: document.getElementById('modalNuevaFactura') });
+        return;
+    }
+    if (_fvSaldoPendiente > 0 && monto > _fvSaldoPendiente + 0.001) {
+        Swal.fire({ icon: 'warning', title: 'Atención', text: 'El monto a cobrar ($' + monto.toFixed(2) + ') no puede superar el saldo pendiente ($' + _fvSaldoPendiente.toFixed(2) + ').', target: document.getElementById('modalNuevaFactura') });
+        return;
+    }
+
+    var mailLbl      = document.getElementById('m-lbl-cliente-correo');
+    var correoActual = (mailLbl && mailLbl.textContent !== 'Sin correo registrado') ? mailLbl.textContent.trim() : '';
+    if (correoActual) {
+        correoActual = correoActual.split(/[,;]+/)[0].trim();
+    }
+
+    var result = await Swal.fire({
+        title: '<i class="bi bi-credit-card-2-front text-primary me-2"></i>Enviar cobro con Nuvei',
+        html: '<p class="text-muted small mb-3">Se enviará al cliente un enlace para pagar <strong>$' + monto.toFixed(2) + '</strong> con Nuvei de forma segura, junto con el PDF de la factura.</p>'
+            + '<label class="form-label small fw-bold d-block text-start mb-1">Correo del cliente</label>'
+            + '<input id="swal-correo-nuvei" type="email" class="swal2-input mx-0 w-100" style="max-width:100%;font-size:.9rem;" placeholder="correo@cliente.com" value="' + correoActual + '">',
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-send me-1"></i>Enviar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#0d6efd',
+        target: document.getElementById('modalNuevaFactura'),
+        width: '420px',
+        focusConfirm: false,
+        preConfirm: function() {
+            var correo = document.getElementById('swal-correo-nuvei').value.trim();
+            if (!correo) {
+                Swal.showValidationMessage('Ingresa un correo electrónico.');
+                return false;
+            }
+            var re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!re.test(correo)) {
+                Swal.showValidationMessage('El formato del correo no es válido.');
+                return false;
+            }
+            return correo;
+        }
+    });
+
+    if (!result.isConfirmed) return;
+
+    var correo = result.value;
+
+    Swal.fire({
+        title: 'Enviando enlace...',
+        text: 'Por favor espera',
+        allowOutsideClick: false,
+        target: document.getElementById('modalNuevaFactura'),
+        didOpen: function() { Swal.showLoading(); }
+    });
+
+    var fd = new FormData();
+    fd.append('id_factura', idFactura);
+    fd.append('correo_destino', correo);
+    fd.append('monto', monto.toFixed(2));
+    fd.append('id_forma_cobro', idFormaCobro);
+
+    fetch(B_URL + '/' + RUTA_MODULO + '/prepararPagoNuveiAjax', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.ok) {
+                Swal.fire({ icon: 'warning', title: 'No se puede procesar', text: data.mensaje, target: document.getElementById('modalNuevaFactura') });
+                return;
+            }
+            Swal.fire({
+                icon: 'success',
+                title: 'Enlace enviado',
+                html: 'El enlace de pago fue enviado a<br><strong>' + data.correo + '</strong>',
+                timer: 4000,
+                showConfirmButton: false,
+                target: document.getElementById('modalNuevaFactura')
+            });
+            fvCargarCobrosTab();
+        })
+        .catch(function() {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.', target: document.getElementById('modalNuevaFactura') });
+        });
+};
+
+window.fvReversarPagoNuvei = function(devRef) {
+    if (!devRef) return;
+    Swal.fire({
+        icon: 'warning',
+        title: '¿Reembolsar pago con tarjeta?',
+        html: 'Se solicitará a <strong>Nuvei</strong> la devolución del dinero al cliente y se <strong>anulará el cobro</strong>. La factura quedará pendiente de pago.',
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-arrow-counterclockwise me-1"></i>Sí, reembolsar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#dc3545',
+        target: document.getElementById('modalNuevaFactura'),
+    }).then(function(res) {
+        if (!res.isConfirmed) return;
+
+        Swal.fire({
+            title: 'Reembolsando pago...',
+            allowOutsideClick: false,
+            target: document.getElementById('modalNuevaFactura'),
+            didOpen: function() { Swal.showLoading(); }
+        });
+
+        var fd = new FormData();
+        fd.append('dev_reference', devRef);
+
+        fetch(B_URL + '/' + RUTA_MODULO + '/anularPagoNuveiAjax', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) {
+                    Swal.fire({ icon: 'error', title: 'No se pudo reembolsar', text: data.mensaje, target: document.getElementById('modalNuevaFactura') });
+                    return;
+                }
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Pago reembolsado',
+                    text: data.aviso || data.mensaje,
+                    target: document.getElementById('modalNuevaFactura')
+                });
+                fvCargarCobrosTab();
+                if (typeof window.FV_fetchSearch === 'function') window.FV_fetchSearch(window.FV_currentPage || 1);
+            })
+            .catch(function() {
+                Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo conectar con el servidor.', target: document.getElementById('modalNuevaFactura') });
+            });
+    });
+};
+
+window.fvCancelarPagoNuvei = function(devRef) {
+    if (!devRef) return;
+    Swal.fire({
+        icon: 'question',
+        title: '¿Cancelar solicitud de pago?',
+        html: 'El enlace de pago enviado al cliente quedará <strong>inválido</strong> y no podrá usarse.<br>'
+            + '<span class="text-muted small">No se ha cobrado ningún monto; esta acción solo anula la solicitud.</span>',
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-x-circle me-1"></i>Sí, cancelar solicitud',
+        cancelButtonText: 'Cerrar',
+        confirmButtonColor: '#6c757d',
+        target: document.getElementById('modalNuevaFactura'),
+    }).then(function(res) {
+        if (!res.isConfirmed) return;
+
+        Swal.fire({
+            title: 'Cancelando solicitud...',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            target: document.getElementById('modalNuevaFactura'),
+            didOpen: function() { Swal.showLoading(); }
+        });
+
+        var fd = new FormData();
+        fd.append('dev_reference', devRef);
+
+        fetch(B_URL + '/' + RUTA_MODULO + '/cancelarPagoNuveiAjax', { method: 'POST', body: fd })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (!data.ok) {

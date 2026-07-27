@@ -71,6 +71,8 @@ class SuscripcionesRepository extends BaseRepository
                            c.email          AS email_cliente,
                            per.nombre       AS nombre_periodicidad,
                            per.meses        AS periodicidad_meses,
+                           nt.ultimos4      AS nuvei_ultimos4,
+                           nt.marca         AS nuvei_marca,
                            (SELECT COUNT(*) FROM suscripciones_pagos
                             WHERE id_suscripcion = s.id AND eliminado = false) AS total_pagos,
                            (SELECT COUNT(*) FROM suscripciones_detalle
@@ -78,6 +80,7 @@ class SuscripcionesRepository extends BaseRepository
                     FROM {$this->table} s
                     LEFT JOIN clientes c   ON c.id  = s.id_cliente
                     LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
+                    LEFT JOIN nuvei_tarjetas_cliente nt ON nt.id = s.id_nuvei_tarjeta
                     $where
                     ORDER BY $orderExpr $ordenDir
                     $limitOffset";
@@ -372,13 +375,13 @@ class SuscripcionesRepository extends BaseRepository
         $sql = "INSERT INTO {$this->table}
                     (id_empresa, id_cliente, id_periodicidad,
                      fecha_inicio, fecha_fin, proximo_cobro,
-                     forma_cobro, estado, tipo_comprobante,
+                     forma_cobro, pasarela_tarjeta, estado, tipo_comprobante,
                      kushki_token, kushki_card_last4, kushki_card_brand, kushki_card_name,
                      observaciones, info_adicional, created_by, created_at, eliminado)
                 VALUES
                     (:id_empresa, :id_cliente, :id_periodicidad,
                      :fecha_inicio, :fecha_fin, :proximo_cobro,
-                     :forma_cobro, :estado, :tipo_comprobante,
+                     :forma_cobro, :pasarela_tarjeta, :estado, :tipo_comprobante,
                      :kushki_token, :kushki_card_last4, :kushki_card_brand, :kushki_card_name,
                      :observaciones, :info_adicional, :created_by, CURRENT_TIMESTAMP, false)";
         $st = $this->db->prepare($sql);
@@ -390,6 +393,7 @@ class SuscripcionesRepository extends BaseRepository
             ':fecha_fin'         => empty($data['fecha_fin']) ? null : $data['fecha_fin'],
             ':proximo_cobro'     => $data['proximo_cobro'],
             ':forma_cobro'       => $data['forma_cobro'] ?? 'credito',
+            ':pasarela_tarjeta'  => $data['pasarela_tarjeta'] ?? null,
             ':estado'            => $data['estado'] ?? 'activo',
             ':tipo_comprobante'  => $data['tipo_comprobante'] ?? 'factura',
             ':kushki_token'      => $data['kushki_token'] ?? null,
@@ -412,6 +416,7 @@ class SuscripcionesRepository extends BaseRepository
                     fecha_fin       = :fecha_fin,
                     proximo_cobro   = :proximo_cobro,
                     forma_cobro     = :forma_cobro,
+                    pasarela_tarjeta= :pasarela_tarjeta,
                     estado          = :estado,
                     tipo_comprobante= :tipo_comprobante,
                     observaciones   = :observaciones,
@@ -427,6 +432,7 @@ class SuscripcionesRepository extends BaseRepository
             ':fecha_fin'       => empty($data['fecha_fin']) ? null : $data['fecha_fin'],
             ':proximo_cobro'   => $data['proximo_cobro'],
             ':forma_cobro'     => $data['forma_cobro'],
+            ':pasarela_tarjeta'=> $data['pasarela_tarjeta'] ?? null,
             ':estado'          => $data['estado'],
             ':tipo_comprobante'=> $data['tipo_comprobante'] ?? 'factura',
             ':observaciones'   => $data['observaciones'] ?? null,
@@ -435,6 +441,22 @@ class SuscripcionesRepository extends BaseRepository
             ':id'              => $id,
             ':id_empresa'      => $idEmpresa,
         ]);
+    }
+
+    /**
+     * Vincula una tarjeta guardada de Nuvei (nuvei_tarjetas_cliente) a la
+     * suscripción como su método de cobro recurrente. Se llama automáticamente
+     * cuando el cliente completa el registro de tarjeta vía el enlace público,
+     * o manualmente al elegir una tarjeta ya existente del cliente.
+     */
+    public function updateNuveiTarjeta(int $id, int $idNuveiTarjeta): bool
+    {
+        $st = $this->db->prepare(
+            "UPDATE {$this->table}
+             SET pasarela_tarjeta = 'nuvei', id_nuvei_tarjeta = :itc, updated_at = CURRENT_TIMESTAMP
+             WHERE id = :id"
+        );
+        return $st->execute([':itc' => $idNuveiTarjeta, ':id' => $id]);
     }
 
     public function delete(int $id, int $idEmpresa, int $idUsuario): bool
@@ -534,10 +556,12 @@ class SuscripcionesRepository extends BaseRepository
     {
         $sql = "INSERT INTO suscripciones_pagos
                     (id_suscripcion, id_empresa, fecha_cobro, monto, estado, id_factura, id_recibo,
-                     kushki_transaction_id, kushki_response, intentos, created_by, created_at, eliminado)
+                     kushki_transaction_id, kushki_response, nuvei_transaction_id, nuvei_response,
+                     intentos, created_by, created_at, eliminado)
                 VALUES
                     (:id_suscripcion, :id_empresa, :fecha_cobro, :monto, :estado, :id_factura, :id_recibo,
-                     :kushki_transaction_id, :kushki_response, :intentos, :created_by, CURRENT_TIMESTAMP, false)";
+                     :kushki_transaction_id, :kushki_response, :nuvei_transaction_id, :nuvei_response,
+                     :intentos, :created_by, CURRENT_TIMESTAMP, false)";
         $st = $this->db->prepare($sql);
         $st->execute([
             ':id_suscripcion'        => $data['id_suscripcion'],
@@ -549,6 +573,8 @@ class SuscripcionesRepository extends BaseRepository
             ':id_recibo'             => $data['id_recibo'] ?? null,
             ':kushki_transaction_id' => $data['kushki_transaction_id'] ?? null,
             ':kushki_response'       => isset($data['kushki_response']) ? json_encode($data['kushki_response']) : null,
+            ':nuvei_transaction_id'  => $data['nuvei_transaction_id'] ?? null,
+            ':nuvei_response'        => isset($data['nuvei_response']) ? json_encode($data['nuvei_response']) : null,
             ':intentos'              => $data['intentos'] ?? 0,
             ':created_by'            => $data['id_usuario'] ?? 0,
         ]);
@@ -561,6 +587,8 @@ class SuscripcionesRepository extends BaseRepository
                     estado = :estado, id_factura = :id_factura,
                     kushki_transaction_id = :kushki_transaction_id,
                     kushki_response = :kushki_response,
+                    nuvei_transaction_id = :nuvei_transaction_id,
+                    nuvei_response = :nuvei_response,
                     intentos = :intentos, ultimo_intento_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id";
         $st = $this->db->prepare($sql);
@@ -569,9 +597,39 @@ class SuscripcionesRepository extends BaseRepository
             ':id_factura'            => $data['id_factura'] ?? null,
             ':kushki_transaction_id' => $data['kushki_transaction_id'] ?? null,
             ':kushki_response'       => isset($data['kushki_response']) ? json_encode($data['kushki_response']) : null,
+            ':nuvei_transaction_id'  => $data['nuvei_transaction_id']  ?? null,
+            ':nuvei_response'        => isset($data['nuvei_response']) ? json_encode($data['nuvei_response']) : null,
             ':intentos'              => $data['intentos'] ?? 0,
             ':id'                    => $idPago,
         ]);
+    }
+
+    /**
+     * Pagos de suscripción pendientes de cobrar (o con intentos fallidos previos,
+     * bajo el tope) cuya suscripción usa tarjeta vía Nuvei con token guardado.
+     * Alimenta la automatización "Cobrar suscripciones (Nuvei)", desacoplada de
+     * la generación del documento.
+     */
+    public function getPagosPendientesNuvei(int $idEmpresa, int $maxIntentos): array
+    {
+        $sql = "SELECT sp.id, sp.id_suscripcion, sp.id_factura, sp.id_recibo, sp.monto, sp.intentos,
+                       s.id_nuvei_tarjeta, per.nombre AS periodicidad_nombre,
+                       c.id AS id_cliente, c.nombre AS cliente_nombre, c.email AS cliente_email
+                FROM suscripciones_pagos sp
+                INNER JOIN suscripciones s ON s.id = sp.id_suscripcion
+                LEFT JOIN clientes c ON c.id = s.id_cliente
+                LEFT JOIN suscripcion_periodicidades per ON per.id = s.id_periodicidad
+                WHERE sp.id_empresa      = :id_empresa
+                  AND sp.eliminado       = false
+                  AND sp.estado IN ('pendiente', 'fallido')
+                  AND sp.intentos        < :max_intentos
+                  AND s.pasarela_tarjeta = 'nuvei'
+                  AND s.id_nuvei_tarjeta IS NOT NULL
+                  AND s.eliminado        = false
+                ORDER BY sp.fecha_cobro ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':max_intentos' => $maxIntentos]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function getPagosPorSuscripcion(int $idSuscripcion): array

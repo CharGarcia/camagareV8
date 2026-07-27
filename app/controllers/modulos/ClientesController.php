@@ -422,8 +422,19 @@ class ClientesController extends BaseModuloController
         $data['id_usuario'] = (int) $_SESSION['id_usuario'];
 
         try {
-            $this->service->crear($data);
-            echo json_encode(['ok' => true, 'msg' => 'Cliente creado correctamente.']);
+            $id = $this->service->crear($data);
+
+            // Devolver la ficha ya persistida: el modal la usa para refrescarse sin
+            // cerrarse, y los módulos que crean clientes al vuelo (pedidos, car wash,
+            // facturación CV) la consumen desde el evento 'clienteGuardado'.
+            $guardado = (new ClienteRepository())->findById($id, $data['id_empresa']);
+
+            echo json_encode([
+                'ok'   => true,
+                'msg'  => 'Cliente creado correctamente.',
+                'id'   => $id,
+                'data' => $guardado ?: array_merge($data, ['id' => $id]),
+            ]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -451,7 +462,15 @@ class ClientesController extends BaseModuloController
                 throw new \Exception('ID de cliente no válido.');
             }
             $this->service->actualizar($id, $idEmpresa, $data);
-            echo json_encode(['ok' => true, 'msg' => 'Cliente actualizado correctamente.']);
+
+            $guardado = (new ClienteRepository())->findById($id, $idEmpresa);
+
+            echo json_encode([
+                'ok'   => true,
+                'msg'  => 'Cliente actualizado correctamente.',
+                'id'   => $id,
+                'data' => $guardado ?: array_merge($data, ['id' => $id]),
+            ]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -502,6 +521,88 @@ class ClientesController extends BaseModuloController
         try {
             $stats = $this->service->getEstadisticas($id, $idEmpresa);
             echo json_encode(['ok' => true, 'data' => $stats]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Previsualiza cuántos cobros (ingresos) se generarían para los documentos
+     * del cliente emitidos hasta hoy que aún tienen saldo. No genera nada.
+     */
+    public function previsualizarCobrosPendientesAjax(): void
+    {
+        $this->requireLeer();
+        $this->requirePermisoModulo('modulos/ingresos', 'w');
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        try {
+            if ($id <= 0) throw new \Exception('Cliente no válido.');
+
+            $svc  = new \App\Services\modulos\CobroAutomaticoClienteService();
+            $prev = $svc->previsualizarPendientes($id, $idEmpresa, date('Y-m-d'));
+
+            if (!$prev['ok']) {
+                echo json_encode(['ok' => false, 'error' => $prev['motivo']]);
+                exit;
+            }
+
+            $detalle = array_map(fn($d) => [
+                'tipo_documento'   => $d['tipo_documento'],
+                'numero_documento' => $d['numero_documento'],
+                'fecha_emision'    => date('d-m-Y', strtotime((string) $d['fecha_emision'])),
+                'monto'            => (float) $d['monto_a_cobrar'],
+            ], array_slice($prev['elegibles'], 0, 10));
+
+            echo json_encode([
+                'ok'                => true,
+                'cantidad'          => count($prev['elegibles']),
+                'total'             => $prev['total'],
+                'detalle'           => $detalle,
+                'cantidad_omitidas' => count($prev['excluidas']),
+            ]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Genera los cobros pendientes del cliente (facturas y recibos de venta con
+     * saldo, emitidos hasta hoy) usando su configuración de la pestaña Cobros.
+     */
+    public function generarCobrosPendientesAjax(): void
+    {
+        $this->requireLeer();
+        $this->requirePermisoModulo('modulos/ingresos', 'w');
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            if ($id <= 0) throw new \Exception('Cliente no válido.');
+
+            $svc = new \App\Services\modulos\CobroAutomaticoClienteService();
+            $res = $svc->generarPendientes($id, $idEmpresa, $idUsuario, date('Y-m-d'));
+
+            if (!$res['ok']) {
+                echo json_encode(['ok' => false, 'error' => $res['motivo']]);
+                exit;
+            }
+
+            echo json_encode([
+                'ok'        => true,
+                'generados' => $res['generados'],
+                'total'     => $res['total'],
+                'omitidas'  => $res['omitidas'],
+                'fallidos'  => $res['fallidos'],
+            ]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
@@ -705,6 +806,11 @@ class ClientesController extends BaseModuloController
             'id_vendedor'      => isset($_POST['id_vendedor']) && $_POST['id_vendedor'] !== '' ? (int)$_POST['id_vendedor'] : null,
             'id_forma_pago_sri' => isset($_POST['id_forma_pago_sri']) && $_POST['id_forma_pago_sri'] !== '' ? (int)$_POST['id_forma_pago_sri'] : null,
             'id_forma_cobro_predeterminada' => isset($_POST['id_forma_cobro_predeterminada']) && $_POST['id_forma_cobro_predeterminada'] !== '' ? (int)$_POST['id_forma_cobro_predeterminada'] : null,
+            // El repositorio ya persistía estos dos campos, pero no se estaban recogiendo
+            // del formulario, así que siempre quedaban en NULL.
+            'tipo_operacion_bancaria_predeterminada' => isset($_POST['tipo_operacion_bancaria_predeterminada']) && $_POST['tipo_operacion_bancaria_predeterminada'] !== '' ? trim($_POST['tipo_operacion_bancaria_predeterminada']) : null,
+            'id_ingreso_concepto_predeterminado' => isset($_POST['id_ingreso_concepto_predeterminado']) && $_POST['id_ingreso_concepto_predeterminado'] !== '' ? (int)$_POST['id_ingreso_concepto_predeterminado'] : null,
+            'monto_minimo_auto_cobro' => isset($_POST['monto_minimo_auto_cobro']) && $_POST['monto_minimo_auto_cobro'] !== '' ? (float)$_POST['monto_minimo_auto_cobro'] : null,
             'monto_maximo_auto_cobro' => isset($_POST['monto_maximo_auto_cobro']) && $_POST['monto_maximo_auto_cobro'] !== '' ? (float)$_POST['monto_maximo_auto_cobro'] : null,
             'latitud'          => isset($_POST['latitud']) && $_POST['latitud'] !== '' ? (float)$_POST['latitud'] : null,
             'longitud'         => isset($_POST['longitud']) && $_POST['longitud'] !== '' ? (float)$_POST['longitud'] : null,

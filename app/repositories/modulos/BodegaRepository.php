@@ -152,6 +152,45 @@ class BodegaRepository extends BaseRepository
     }
 
     /**
+     * Cuenta en cuántos registros de negocio se usa la bodega (para impedir eliminarla si tiene
+     * datos). Revisa TODAS las tablas que referencian id_bodega (documentos, kardex, stock, etc.);
+     * NO cuenta `usuarios_bodegas`, que es solo asignación de acceso. Devuelve [etiqueta => cantidad]
+     * solo de las que tienen registros (vacío = se puede eliminar). Los nombres de tabla son fijos
+     * del código, no entran del usuario.
+     *
+     * @return array<string,int>
+     */
+    public function usosBodega(int $id): array
+    {
+        $tablas = [
+            'ventas_detalle'                    => 'facturas de venta',
+            'inventario_kardex'                 => 'movimientos de inventario (kardex)',
+            'productos_bodegas'                 => 'stock de productos',
+            'recibos_venta_detalle'             => 'recibos de venta',
+            'cambios_producto_cv_detalles'      => 'cambios de producto',
+            'consignaciones_ventas_detalles'    => 'consignaciones',
+            'consignaciones_facturas_detalles'  => 'facturación de consignación',
+            'retornos_cv_detalles'              => 'retornos',
+            'saldos_iniciales_consignaciones'   => 'saldos iniciales de consignación',
+            'importaciones_detalle'             => 'importaciones',
+            'inventario_cargas_detalle'         => 'cargas de inventario',
+            'carwash_ordenes'                   => 'órdenes de lavado',
+            'carwash_ordenes_detalle'           => 'detalle de órdenes de lavado',
+        ];
+        $usos = [];
+        foreach ($tablas as $tabla => $label) {
+            $st = $this->db->prepare("SELECT EXISTS (SELECT 1 FROM {$tabla} WHERE id_bodega = :id)");
+            $st->execute([':id' => $id]);
+            if ((bool) $st->fetchColumn()) {
+                $stc = $this->db->prepare("SELECT COUNT(*) FROM {$tabla} WHERE id_bodega = :id");
+                $stc->execute([':id' => $id]);
+                $usos[$label] = (int) $stc->fetchColumn();
+            }
+        }
+        return $usos;
+    }
+
+    /**
      * Obtiene todos los usuarios de la empresa y cruza con sus permisos de acceso a una bodega.
      */
     public function getUsuariosAcceso(int $idBodega, int $idEmpresa): array

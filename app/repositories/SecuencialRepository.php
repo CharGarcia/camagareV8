@@ -41,6 +41,7 @@ class SecuencialRepository
         'Retornos consignaciones ventas'       => ['tabla' => 'retornos_cv',             'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Facturacion consignaciones ventas'    => ['tabla' => 'consignaciones_facturas', 'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Ordenes car-wash'                     => ['tabla' => 'carwash_ordenes',         'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
+        'Ordenes de taller'                    => ['tabla' => 'taller_ordenes',          'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Cambios de productos'                 => ['tabla' => 'cambios_producto_cv',    'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
         'Importaciones'                        => ['tabla' => 'importaciones_cabecera', 'col_sec' => 'secuencial', 'col_punto' => 'id_punto_emision'],
     ];
@@ -54,7 +55,7 @@ class SecuencialRepository
         'Ventas'         => ['Facturas de venta', 'Recibos de venta', 'Nota de crédito', 'Nota de débito', 'Proformas', 'Guía de remisión'],
         'Compras'        => ['Retenciones de compras', 'Liquidación de compras o servicios', 'Órdenes de compra', 'Importaciones'],
         'Tesorería'      => ['Ingresos', 'Egresos', 'Traspasos'],
-        'Operativos'     => ['Pedidos', 'Cambios de productos', 'Ordenes car-wash'],
+        'Operativos'     => ['Pedidos', 'Cambios de productos', 'Ordenes car-wash', 'Ordenes de taller'],
         'Consignaciones' => ['Consignaciones ventas', 'Retornos consignaciones ventas', 'Facturacion consignaciones ventas'],
     ];
 

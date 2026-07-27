@@ -110,6 +110,51 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // Taller Mecánico — órdenes de trabajo que recorren los departamentos del
+    // taller (diagnóstico, mecánica, enderezada, pintura, armado…). Incluye el
+    // tablero y la pantalla de estación para las tablets de cada departamento.
+    // Ver database/migrations/20260727_create_taller.sql. Actualizar
+    // id_submodulo con el id real tras registrar el submodulo en submodulos_menu
+    // (SELECT id FROM submodulos_menu WHERE ruta = 'modulos/taller';).
+    'modulos/taller' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [
+            'modulos/orden_mecanica.php',
+            'sistema/modulos/orden_mecanica.php',
+        ],
+    ],
+
+    // Tablero del taller: columnas por departamento con los vehículos que están
+    // dentro. Solo lectura, para el jefe de taller o gerencia — módulo aparte
+    // para poder darles la vista sin abrirles la edición de las órdenes.
+    'modulos/taller-tablero' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
+    // Estación del taller: pantalla standalone para la tablet fija de cada
+    // departamento. Expone solo lo que el operario necesita (tomar el trabajo,
+    // registrar consumos, cerrar la etapa); no factura ni elimina órdenes.
+    'modulos/taller-estacion' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
+    // Catálogo de departamentos del taller: define el flujo por el que pasa un
+    // vehículo y, con él, las columnas del tablero y las pantallas de tablet.
+    'modulos/taller-departamentos' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
+    // Checklist de recepción: qué se revisa al recibir cada vehículo. Va aparte
+    // de los departamentos porque es otra cosa — uno define el flujo de trabajo
+    // y este, la revisión de entrada que queda como evidencia en la orden.
+    'modulos/taller-checklist' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     // Punto de Venta — Fase 1: apertura/cierre de caja (ventana standalone).
     // Actualizar id_submodulo con el id real tras registrar el submodulo en
     // submodulos_menu (ruta = 'modulos/caja-pos').

@@ -275,13 +275,57 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
                                     <div class="col-12" id="susc_sec_tarjeta" style="display:none;">
                                         <div class="border rounded-3 p-3 bg-light">
                                             <h6 class="fw-bold small mb-3"><i class="bi bi-credit-card me-1 text-primary"></i>Cobro con Tarjeta</h6>
-                                            <div id="susc_tarjeta_actual" class="alert alert-info py-2 small mb-3 d-none">
-                                                <i class="bi bi-credit-card me-1"></i>
-                                                Tarjeta registrada: <strong id="susc_tarjeta_info"></strong>
+
+                                            <div class="mb-3">
+                                                <label class="small fw-bold">Pasarela *</label>
+                                                <select class="form-select form-select-sm" name="pasarela_tarjeta" id="susc_pasarela_tarjeta" onchange="suscOnPasarelaTarjeta()">
+                                                    <option value="">-- Seleccione --</option>
+                                                    <option value="kushki">Kushki</option>
+                                                    <option value="nuvei">Nuvei</option>
+                                                </select>
                                             </div>
-                                            <div class="alert alert-secondary py-2 small mb-0">
-                                                <i class="bi bi-info-circle me-1"></i>
-                                                El cobro automático con tarjeta estará disponible próximamente con integración de tokenización.
+
+                                            <!-- Kushki -->
+                                            <div id="susc_sec_kushki" style="display:none;">
+                                                <div id="susc_tarjeta_actual" class="alert alert-info py-2 small mb-3 d-none">
+                                                    <i class="bi bi-credit-card me-1"></i>
+                                                    Tarjeta registrada: <strong id="susc_tarjeta_info"></strong>
+                                                </div>
+                                                <div class="alert alert-secondary py-2 small mb-0">
+                                                    <i class="bi bi-info-circle me-1"></i>
+                                                    El cobro automático con tarjeta estará disponible próximamente con integración de tokenización.
+                                                </div>
+                                            </div>
+
+                                            <!-- Nuvei -->
+                                            <div id="susc_sec_nuvei" style="display:none;">
+                                                <div id="susc_nuvei_tarjeta_actual" class="alert alert-success py-2 small mb-3 d-none">
+                                                    <i class="bi bi-check-circle me-1"></i>
+                                                    Tarjeta registrada: <strong id="susc_nuvei_tarjeta_info"></strong>
+                                                </div>
+                                                <div id="susc_nuvei_sin_tarjeta" class="alert alert-warning py-2 small mb-3">
+                                                    <i class="bi bi-exclamation-triangle me-1"></i>
+                                                    Este cliente aún no tiene una tarjeta registrada para cobro automático con Nuvei.
+                                                </div>
+
+                                                <div class="mb-2 d-none" id="susc_nuvei_selector_wrap">
+                                                    <label class="small fw-bold">Usar una tarjeta ya registrada del cliente</label>
+                                                    <div class="d-flex gap-2">
+                                                        <select class="form-select form-select-sm" id="susc_nuvei_selector_tarjeta">
+                                                            <option value="">-- Seleccione --</option>
+                                                        </select>
+                                                        <button type="button" class="btn btn-outline-primary btn-sm text-nowrap" onclick="suscVincularTarjetaNuvei()">
+                                                            <i class="bi bi-link-45deg me-1"></i>Usar
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <button type="button" class="btn btn-outline-primary btn-sm d-none" id="susc_btn_enviar_registro_nuvei" onclick="suscEnviarRegistroTarjetaNuvei()">
+                                                    <i class="bi bi-envelope me-1"></i>Enviar enlace para registrar tarjeta nueva
+                                                </button>
+                                                <div class="form-text" id="susc_nuvei_hint_guardar">
+                                                    Guarda la suscripción primero para poder enviar el enlace de registro.
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -692,6 +736,84 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         const forma = document.getElementById('susc_forma_cobro').value;
         const sec   = document.getElementById('susc_sec_tarjeta');
         sec.style.display = forma === 'tarjeta' ? 'block' : 'none';
+        if (forma === 'tarjeta') suscOnPasarelaTarjeta();
+    };
+
+    /* ── Pasarela de tarjeta (Kushki / Nuvei) ────────────────────────────────── */
+    window.suscOnPasarelaTarjeta = function () {
+        const pasarela  = document.getElementById('susc_pasarela_tarjeta').value;
+        const secKushki = document.getElementById('susc_sec_kushki');
+        const secNuvei  = document.getElementById('susc_sec_nuvei');
+        secKushki.style.display = pasarela === 'kushki' ? 'block' : 'none';
+        secNuvei.style.display  = pasarela === 'nuvei'  ? 'block' : 'none';
+
+        if (pasarela === 'nuvei' && window._suscId) {
+            suscCargarTarjetasNuvei();
+        }
+    };
+
+    /* ── Nuvei: tarjetas guardadas del cliente + estado de registro ──────────── */
+    window.suscCargarTarjetasNuvei = async function () {
+        if (!window._suscId) return;
+        try {
+            const resp = await fetch(`${urlBase}/getTarjetasClienteNuveiAjax?id=${window._suscId}`);
+            const data = await resp.json();
+            if (!data.ok) return;
+
+            const select = document.getElementById('susc_nuvei_selector_tarjeta');
+            const wrap   = document.getElementById('susc_nuvei_selector_wrap');
+            select.innerHTML = '<option value="">-- Seleccione --</option>';
+
+            const otras = data.tarjetas.filter(t => t.id != window._suscNuveiTarjetaActual);
+            if (otras.length > 0) {
+                otras.forEach(t => {
+                    const label = `${t.marca ?? ''} **** ${t.ultimos4 ?? ''}`.trim();
+                    select.innerHTML += `<option value="${t.id}">${label}</option>`;
+                });
+                wrap.classList.remove('d-none');
+            } else {
+                wrap.classList.add('d-none');
+            }
+        } catch (e) { /* silencioso: la sección sigue funcional sin el selector */ }
+    };
+
+    window.suscVincularTarjetaNuvei = function () {
+        const idTarjeta = document.getElementById('susc_nuvei_selector_tarjeta').value;
+        if (!idTarjeta || !window._suscId) return;
+
+        const fd = new FormData();
+        fd.append('id', window._suscId);
+        fd.append('id_nuvei_tarjeta', idTarjeta);
+
+        fetch(`${urlBase}/vincularTarjetaNuveiAjax`, { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) { Swal.fire('Error', data.mensaje, 'error'); return; }
+                Swal.fire({ icon: 'success', title: 'Tarjeta vinculada', timer: 1800, showConfirmButton: false });
+                suscCargarTarjetasNuvei();
+            })
+            .catch(() => Swal.fire('Error', 'No se pudo conectar con el servidor.', 'error'));
+    };
+
+    window.suscEnviarRegistroTarjetaNuvei = function () {
+        if (!window._suscId) return;
+
+        Swal.fire({
+            title: 'Enviando enlace...',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        const fd = new FormData();
+        fd.append('id', window._suscId);
+
+        fetch(`${urlBase}/enviarRegistroTarjetaNuveiAjax`, { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) { Swal.fire('No se pudo enviar', data.mensaje, 'warning'); return; }
+                Swal.fire({ icon: 'success', title: 'Enlace enviado', text: data.mensaje, timer: 3000, showConfirmButton: false });
+            })
+            .catch(() => Swal.fire('Error', 'No se pudo conectar con el servidor.', 'error'));
     };
 
     /* ── Limpiar tabla detalle ────────────────────────────────────────────────── */
@@ -738,6 +860,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         document.getElementById('btnEliminarSusc')?.classList.add('d-none');
         document.getElementById('btnVerPagosSusc')?.classList.add('d-none');
         document.getElementById('susc_tarjeta_actual')?.classList.add('d-none');
+        document.getElementById('susc_pasarela_tarjeta').value = '';
+        document.getElementById('susc_nuvei_tarjeta_actual')?.classList.add('d-none');
+        document.getElementById('susc_nuvei_sin_tarjeta')?.classList.add('d-none');
+        document.getElementById('susc_nuvei_selector_wrap')?.classList.add('d-none');
+        document.getElementById('susc_btn_enviar_registro_nuvei')?.classList.add('d-none');
+        document.getElementById('susc_nuvei_hint_guardar')?.classList.remove('d-none');
+        window._suscId = null;
+        window._suscNuveiTarjetaActual = null;
         suscLimpiarDetalle();
         suscAgregarFilaVacia();
         suscLimpiarInfoAdicional();
@@ -773,7 +903,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
             suscSetCliente({ id: s.id_cliente, nombre: s.nombre_cliente ?? '', identificacion: s.identificacion_cliente ?? '' });
         }
 
-        // Tarjeta
+        // Tarjeta (Kushki)
         if (s.kushki_card_last4) {
             document.getElementById('susc_tarjeta_info').textContent = `${s.kushki_card_brand ?? ''} **** ${s.kushki_card_last4}`;
             document.getElementById('susc_tarjeta_actual')?.classList.remove('d-none');
@@ -781,8 +911,23 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
             document.getElementById('susc_tarjeta_actual')?.classList.add('d-none');
         }
 
-        suscOnFormaCobro();
+        // Tarjeta (Nuvei)
+        document.getElementById('susc_pasarela_tarjeta').value = s.pasarela_tarjeta ?? '';
         window._suscId = s.id;
+        window._suscNuveiTarjetaActual = s.id_nuvei_tarjeta ?? null;
+
+        if (s.id_nuvei_tarjeta && s.nuvei_ultimos4) {
+            document.getElementById('susc_nuvei_tarjeta_info').textContent = `${s.nuvei_marca ?? ''} **** ${s.nuvei_ultimos4}`;
+            document.getElementById('susc_nuvei_tarjeta_actual')?.classList.remove('d-none');
+            document.getElementById('susc_nuvei_sin_tarjeta')?.classList.add('d-none');
+        } else {
+            document.getElementById('susc_nuvei_tarjeta_actual')?.classList.add('d-none');
+            document.getElementById('susc_nuvei_sin_tarjeta')?.classList.remove('d-none');
+        }
+        document.getElementById('susc_btn_enviar_registro_nuvei')?.classList.remove('d-none');
+        document.getElementById('susc_nuvei_hint_guardar')?.classList.add('d-none');
+
+        suscOnFormaCobro();
 
         // Activar primera pestaña
         const tabEl = document.querySelector('#modalSusc a[href="#pane-susc-servicios"]');

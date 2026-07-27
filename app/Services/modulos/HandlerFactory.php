@@ -205,6 +205,15 @@ class HandlerFactory
                              'ayuda' => 'Sobrescribe texto ítem, concepto y detalle para una periodicidad específica. Lo que deje vacío usará el valor general de arriba.'],
                         ],
                     ],
+                    'cobrar_suscripciones_nuvei' => [
+                        'label'       => 'Cobrar suscripciones (Nuvei)',
+                        'descripcion' => 'Cobra con la tarjeta guardada (Nuvei) los períodos ya generados que quedaron pendientes de cobro. Si el cobro es aprobado, registra el Ingreso (con su asiento contable) y avisa al cliente. Si es rechazado, avisa al cliente y a la empresa, y reintenta en las próximas corridas hasta el tope de intentos.',
+                        'handler'     => Handlers\SuscripcionesHandler::class,
+                        'parametros'  => [
+                            ['key' => 'max_intentos', 'label' => 'Máximo de intentos', 'tipo' => 'number', 'default' => 3,
+                             'ayuda' => 'Número de días/corridas que se reintenta un cobro rechazado antes de marcarlo como fallido definitivo. Ejecute esta automatización todos los días para que los reintentos ocurran automáticamente.'],
+                        ],
+                    ],
                     'enviar_aviso_vencimiento' => [
                         'label'       => 'Enviar aviso de vencimiento (Correo)',
                         'descripcion' => 'Envía un correo a los clientes cuya suscripción vence en exactamente N días. Usa el correo configurado en la empresa.',

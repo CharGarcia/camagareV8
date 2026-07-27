@@ -90,6 +90,14 @@ class FormaPagoService
             }
         }
 
+        // Validación especial para NUVEI: es un gateway de cobro online, solo aplica a Ingresos.
+        if ($data['tipo'] === 'NUVEI') {
+            $aplica = strtoupper((string)($data['aplica_en'] ?? ''));
+            if ($aplica !== 'INGRESO') {
+                throw new Exception("Nuvei es un cobro online: solo puede aplicar a Ingresos.");
+            }
+        }
+
         // Validación especial para ANTICIPO: aplica a una sola dirección
         // (INGRESO = anticipos de clientes, EGRESO = anticipos a proveedores), nunca AMBAS.
         if ($data['tipo'] === 'ANTICIPO') {

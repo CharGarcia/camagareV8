@@ -364,11 +364,17 @@
                     const esArrastreEntrante = r.fuente_valor === 'arrastre_entrante_compras' || r.fuente_valor === 'arrastre_entrante_retenciones';
                     const celdaValor = (codigo, valor) => {
                         if (!codigo) return valor !== null ? fmt(valor) : '';
+                        // Ícono de copiar: solo en casilleros con valor distinto de cero.
+                        const tieneValor = valor !== null && valor !== 0;
+                        const icono = tieneValor ? `<i class="bi bi-clipboard copy-casillero-icon text-muted ms-1" data-copy-codigo="${codigo}" title="Copiar valor" role="button" style="cursor:pointer;font-size:0.7rem;"></i>` : '';
+                        let contenido;
                         if (r.editable) {
-                            return `<input type="number" step="0.01" class="form-control form-control-sm text-end p-0 border-0 bg-warning bg-opacity-10 fw-bold" style="height:22px;font-size:0.78rem;" data-casillero-editable="${codigo}" data-decimales="${dec}" value="${(valor ?? 0).toFixed(dec)}">`;
+                            contenido = `<input type="number" step="0.01" class="form-control form-control-sm text-end p-0 border-0 bg-warning bg-opacity-10 fw-bold" style="height:22px;font-size:0.78rem;" data-casillero-editable="${codigo}" data-decimales="${dec}" value="${(valor ?? 0).toFixed(dec)}">`;
+                        } else {
+                            const candado = esArrastreEntrante ? ' <i class="bi bi-lock-fill text-muted" style="font-size:0.65rem;" title="Se completa automáticamente con el arrastre del período anterior"></i>' : '';
+                            contenido = `<span data-casillero-display="${codigo}" data-decimales="${dec}">${valor !== null ? fmt(valor) : ''}</span>${candado}`;
                         }
-                        const candado = esArrastreEntrante ? ' <i class="bi bi-lock-fill text-muted" style="font-size:0.65rem;" title="Se completa automáticamente con el arrastre del período anterior"></i>' : '';
-                        return `<span data-casillero-display="${codigo}" data-decimales="${dec}">${valor !== null ? fmt(valor) : ''}</span>${candado}`;
+                        return `<div class="d-flex align-items-center justify-content-end">${contenido}${icono}</div>`;
                     };
                     const tdBruto = celdaValor(cBruto, vBruto);
                     const tdNetoContenido = celdaValor(cNeto, vNeto);
@@ -458,6 +464,41 @@
 
             recalcularFormulasJS(ultimosValores, ultimoLayout);
             Object.keys(ultimosValores).forEach(cod => actualizarCeldaCasillero(cod, ultimosValores[cod]));
+        });
+
+        // Ícono de copiar: copia el valor ACTUAL del casillero (lee el input si es editable,
+        // o el texto mostrado si es de solo lectura, para no copiar un valor desactualizado
+        // tras un recálculo en vivo).
+        formSRI.addEventListener('click', (e) => {
+            const icono = e.target.closest('.copy-casillero-icon');
+            if (!icono) return;
+            const codigo = icono.getAttribute('data-copy-codigo');
+            const input = formSRI.querySelector(`[data-casillero-editable="${codigo}"]`);
+            const texto = input ? input.value : (formSRI.querySelector(`[data-casillero-display="${codigo}"]`)?.textContent.trim() || '');
+            if (!texto) return;
+
+            const marcarCopiado = () => {
+                icono.classList.remove('bi-clipboard', 'text-muted');
+                icono.classList.add('bi-clipboard-check', 'text-success');
+                setTimeout(() => {
+                    icono.classList.remove('bi-clipboard-check', 'text-success');
+                    icono.classList.add('bi-clipboard', 'text-muted');
+                }, 1200);
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(texto).then(marcarCopiado).catch(() => {});
+            } else {
+                // Respaldo para navegadores/contextos sin acceso al portapapeles moderno.
+                const tmp = document.createElement('textarea');
+                tmp.value = texto;
+                tmp.style.position = 'fixed';
+                tmp.style.opacity = '0';
+                document.body.appendChild(tmp);
+                tmp.select();
+                try { document.execCommand('copy'); marcarCopiado(); } catch (err) {}
+                document.body.removeChild(tmp);
+            }
         });
 
         function renderDetalle(detalle) {

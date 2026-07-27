@@ -26,7 +26,7 @@ class EmpresaInicializadorService
     {
         $this->crearClienteConsumidorFinal($idEmpresa, $idUsuario);
         $this->crearFormaPagoEfectivo($idEmpresa, $idUsuario);
-        $this->crearFormasPagoTarjetaPayphone($idEmpresa, $idUsuario);
+        $this->crearFormasPagoTarjetaOnline($idEmpresa, $idUsuario);
         $this->crearAnticiposDefault($idEmpresa, $idUsuario);
         $this->crearOpcionesIngresoEgresoDefault($idEmpresa, $idUsuario);
         $this->configurarCorreo($idEmpresa, $idUsuario);
@@ -121,15 +121,17 @@ class EmpresaInicializadorService
 
     /**
      * Crea las formas de pago "Tarjeta" (tipo TARJETA, tarjeta física/datáfono,
-     * aplica a Ingresos y Egresos) y "Payphone" (tipo PAYPHONE, cobro online,
-     * solo aplica a Ingresos) por defecto, si no existen. Cada una se verifica
-     * de forma independiente por tipo, igual que crearAnticiposDefault().
+     * aplica a Ingresos y Egresos), "Payphone" (tipo PAYPHONE, cobro online,
+     * solo aplica a Ingresos) y "Nuvei" (tipo NUVEI, cobro online, solo aplica
+     * a Ingresos) por defecto, si no existen. Cada una se verifica de forma
+     * independiente por tipo, igual que crearAnticiposDefault().
      */
-    private function crearFormasPagoTarjetaPayphone(int $idEmpresa, int $idUsuario): void
+    private function crearFormasPagoTarjetaOnline(int $idEmpresa, int $idUsuario): void
     {
         $formas = [
             ['nombre' => 'Tarjeta',  'tipo' => 'TARJETA',  'aplica_en' => 'AMBAS',   'modalidad' => 'AMBAS'],
             ['nombre' => 'Payphone', 'tipo' => 'PAYPHONE', 'aplica_en' => 'INGRESO', 'modalidad' => null],
+            ['nombre' => 'Nuvei',    'tipo' => 'NUVEI',    'aplica_en' => 'INGRESO', 'modalidad' => null],
         ];
 
         $check = $this->db->prepare(

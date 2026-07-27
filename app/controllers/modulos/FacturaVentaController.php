@@ -688,6 +688,14 @@ class FacturaVentaController extends BaseModuloController
                 return;
             }
 
+            // --- Plantilla especial: enviar el ENLACE DE PAGO CON NUVEI ---
+            // Mismo flujo que prepararPagoNuveiAjax() (correo), pero el mensaje sale por WhatsApp.
+            // Requiere una plantilla aprobada en Meta con el nombre exacto 'link_pago_nuvei'.
+            if ($plantillaMeta['nombre'] === 'link_pago_nuvei') {
+                $this->enviarLinkPagoNuveiPorWhatsapp($idEmpresa, $idUsuario, $idFactura, $factura, $plantillaMeta, $telefono, $whatsappService);
+                return;
+            }
+
             // --- Generar el PDF como String ---
             $detalles = $this->repository->getDetalles($idFactura);
             foreach ($detalles as &$d) {
@@ -905,8 +913,8 @@ class FacturaVentaController extends BaseModuloController
 
     /**
      * Calcula el saldo pendiente de cobro de una factura (total - cobrado vía ingresos
-     * - pagos con tarjeta/Payphone aprobados que aún no generaron ingreso). Usado tanto
-     * por el envío del enlace de pago por correo como por WhatsApp.
+     * - pagos con tarjeta/Payphone/Nuvei aprobados que aún no generaron ingreso). Usado
+     * tanto por el envío del enlace de pago por correo como por WhatsApp.
      */
     private function calcularSaldoPendienteTarjeta(array $factura, int $idFactura): float
     {
@@ -937,7 +945,20 @@ class FacturaVentaController extends BaseModuloController
         $stPP->execute([(int) $factura['id_empresa'], $idFactura]);
         $pagadoTarjeta = ((float) $stPP->fetchColumn()) / 100;
 
-        return round($total - $cobrado - $pagadoTarjeta, 2);
+        $stNV = $this->db->prepare(
+            "SELECT COALESCE(SUM(monto), 0)
+             FROM nuvei_transacciones
+             WHERE id_empresa    = ?
+               AND modulo        = 'factura_venta'
+               AND id_referencia = ?
+               AND estado        = 'aprobado'
+               AND id_ingreso    IS NULL
+               AND eliminado     = false"
+        );
+        $stNV->execute([(int) $factura['id_empresa'], $idFactura]);
+        $pagadoNuvei = (float) $stNV->fetchColumn();
+
+        return round($total - $cobrado - $pagadoTarjeta - $pagadoNuvei, 2);
     }
 
     /**
@@ -1027,6 +1048,156 @@ class FacturaVentaController extends BaseModuloController
         }
 
         $urlPago       = $urlBaseAbs . '/pago/' . $cajita['client_transaction_id'];
+        $nombreCliente = $factura['cliente_nombre'] ?? 'Cliente';
+        $valoresVariables = [$nombreCliente, '$' . number_format($montoCobrar, 2), $descripcion, $urlPago];
+
+        // Armar componentes de Meta: solo BODY (sin cabecera ni botones)
+        $componentes   = json_decode($plantillaMeta['componentes'], true) ?? [];
+        $apiComponents = [];
+        $bodyTexto     = '';
+        foreach ($componentes as $comp) {
+            if (($comp['type'] ?? '') === 'BODY') {
+                $bodyTexto = $comp['text'] ?? '';
+                $parameters = array_map(fn($v) => ['type' => 'text', 'text' => (string) $v], $valoresVariables);
+                $apiComponents[] = ['type' => 'body', 'parameters' => $parameters];
+                break;
+            }
+        }
+
+        $result = $whatsappService->sendTemplateMessage($idEmpresa, $telefono, $plantillaMeta['nombre'], $plantillaMeta['idioma'], $apiComponents);
+
+        if (!$result['success']) {
+            echo json_encode(['ok' => false, 'error' => 'Error enviando el enlace de pago: ' . $result['message']]);
+            return;
+        }
+
+        // Guardar mensaje en BD para historial de chat/webhook (no detiene el flujo si falla)
+        try {
+            $metaMessageId = $result['data']['messages'][0]['id'] ?? null;
+            $repoMsj = new \App\repositories\modulos\WhatsappMensajeRepository();
+            $idChat  = $repoMsj->getOrCreateChat($idEmpresa, $telefono, $nombreCliente, 'Enlace de pago enviado', false);
+
+            $templateTextGuardar = $bodyTexto;
+            foreach ($valoresVariables as $idx => $val) {
+                $templateTextGuardar = str_replace('{{' . ($idx + 1) . '}}', $val, $templateTextGuardar);
+            }
+
+            $repoMsj->saveMessage(
+                $idEmpresa,
+                $idChat,
+                'OUT',
+                $telefono,
+                'template',
+                [
+                    'template'      => $plantillaMeta['nombre'],
+                    'variables'     => $valoresVariables,
+                    'template_text' => $templateTextGuardar,
+                ],
+                $metaMessageId,
+                'sent'
+            );
+        } catch (\Throwable $ex) {
+            error_log('Error guardando mensaje en BD: ' . $ex->getMessage());
+        }
+
+        echo json_encode([
+            'ok'      => true,
+            'mensaje' => 'Enlace de pago por $' . number_format($montoCobrar, 2) . ' enviado por WhatsApp al ' . $telefono,
+        ]);
+    }
+
+    /**
+     * Genera el enlace de pago con Nuvei (Checkout) y lo envía por WhatsApp usando
+     * la plantilla rápida 'link_pago_nuvei'. Clon de enviarLinkPagoPorWhatsapp()
+     * (Payphone) adaptado a Nuvei: misma validación de saldo, mismo anti-duplicado
+     * de 15 min y misma transacción en nuvei_transacciones, por lo que el resultado
+     * aparece igual en la pestaña "Pagos" de la factura. La plantilla no lleva botón:
+     * el enlace va como texto plano en el cuerpo (WhatsApp lo vuelve clicable).
+     */
+    private function enviarLinkPagoNuveiPorWhatsapp(
+        int $idEmpresa,
+        int $idUsuario,
+        int $idFactura,
+        array $factura,
+        array $plantillaMeta,
+        string $telefono,
+        \App\services\WhatsappService $whatsappService
+    ): void {
+        if (($factura['estado'] ?? '') !== 'autorizado') {
+            echo json_encode(['ok' => false, 'error' => 'Solo se pueden pagar facturas autorizadas.']);
+            return;
+        }
+
+        $nvRepo     = new \App\repositories\NuveiRepository();
+        $formaCobro = $nvRepo->getFormaCobroNuvei($idEmpresa);
+        if (!$formaCobro) {
+            echo json_encode(['ok' => false, 'error' => 'No hay una forma de cobro de tipo "Nuvei" activa y configurada para la empresa.']);
+            return;
+        }
+
+        // El enlace de pago por WhatsApp solo aplica si la factura tiene saldo pendiente,
+        // y siempre es por el valor total pendiente de pago (no admite cobro parcial).
+        $saldo = $this->calcularSaldoPendienteTarjeta($factura, $idFactura);
+        if ($saldo <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Esta factura no tiene saldo pendiente de pago; no se puede enviar el enlace.']);
+            return;
+        }
+
+        $montoCobrar = $saldo;
+
+        // Evitar enviar un segundo enlace mientras hay uno pendiente reciente (15 min)
+        $stPend = $this->db->prepare(
+            "SELECT COUNT(*)
+             FROM nuvei_transacciones
+             WHERE id_empresa    = ?
+               AND modulo        = 'factura_venta'
+               AND id_referencia = ?
+               AND estado        = 'pendiente'
+               AND eliminado     = false
+               AND created_at >= (CURRENT_TIMESTAMP - INTERVAL '15 minutes')"
+        );
+        $stPend->execute([$idEmpresa, $idFactura]);
+        if ((int) $stPend->fetchColumn() > 0) {
+            echo json_encode(['ok' => false, 'error' => 'Ya existe un enlace de pago pendiente enviado en los últimos 15 minutos. Espera a que el cliente lo complete o a que expire.']);
+            return;
+        }
+
+        $nuvei  = new \App\Services\NuveiService($nvRepo);
+        $numero = ($factura['establecimiento'] ?? '001') . '-' . ($factura['punto_emision'] ?? '001') . '-' . str_pad((string) ($factura['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+        $descripcion = 'Factura ' . $numero;
+
+        $host       = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $scheme     = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $urlBaseAbs = $scheme . '://' . $host . rtrim(BASE_URL, '/');
+
+        // Teléfono del cliente (viene en formato 593XXXXXXXXX) — Nuvei no lo requiere
+        // para Checkout, pero el correo asociado sí; sin correo el resultado no se
+        // notifica por email, solo queda visible en la pestaña Pagos de la factura.
+        $correoCliente = trim($factura['cliente_email'] ?? '');
+
+        try {
+            $checkout = $nuvei->prepararCheckout($idEmpresa, [
+                'monto'          => $montoCobrar,
+                'descripcion'    => $descripcion,
+                'modulo'         => 'factura_venta',
+                'id_referencia'  => $idFactura,
+                'id_cliente'     => (int) $factura['id_cliente'],
+                'id_forma_cobro' => (int) $formaCobro['id'],
+                'email'          => $correoCliente,
+                'url_exito'      => null,
+                'id_usuario'     => $idUsuario,
+            ]);
+        } catch (\InvalidArgumentException $ex) {
+            echo json_encode(['ok' => false, 'error' => $ex->getMessage()]);
+            return;
+        }
+
+        if (empty($checkout['ok'])) {
+            echo json_encode(['ok' => false, 'error' => $checkout['mensaje'] ?? 'No se pudo generar el enlace de pago.']);
+            return;
+        }
+
+        $urlPago       = $urlBaseAbs . '/nuvei/pago/' . $checkout['dev_reference'];
         $nombreCliente = $factura['cliente_nombre'] ?? 'Cliente';
         $valoresVariables = [$nombreCliente, '$' . number_format($montoCobrar, 2), $descripcion, $urlPago];
 
@@ -1834,6 +2005,20 @@ class FacturaVentaController extends BaseModuloController
             $stPP->execute([$idEmpresa, $id]);
             $pagosTarjeta = $stPP->fetchAll(\PDO::FETCH_ASSOC);
 
+            // ── Transacciones Nuvei vinculadas ─────────────────────────────────────
+            $stNV = $db->prepare(
+                "SELECT dev_reference, reference, nuvei_transaction_id, monto, estado,
+                        status_detail, authorization_code, created_at, updated_at, id_ingreso
+                 FROM nuvei_transacciones
+                 WHERE id_empresa    = ?
+                   AND modulo        = 'factura_venta'
+                   AND id_referencia = ?
+                   AND eliminado     = false
+                 ORDER BY created_at DESC"
+            );
+            $stNV->execute([$idEmpresa, $id]);
+            $pagosNuvei = $stNV->fetchAll(\PDO::FETCH_ASSOC);
+
             echo json_encode([
                 'ok'                => true,
                 'factura'           => $factura,
@@ -1842,6 +2027,7 @@ class FacturaVentaController extends BaseModuloController
                 'retenciones'       => $retencionesArray,
                 'total_nc'          => round($totalNC, 2),
                 'pagos_tarjeta'     => $pagosTarjeta,
+                'pagos_nuvei'       => $pagosNuvei,
             ]);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
@@ -2406,6 +2592,318 @@ class FacturaVentaController extends BaseModuloController
 
             $pp  = new \App\Services\PayphoneService($ppRepo);
             $res = $pp->cancelarPagoPendiente($ctid, $idUsuario);
+
+            if (!$res['ok']) {
+                echo json_encode(['ok' => false, 'mensaje' => $res['mensaje'] ?? 'No se pudo cancelar la solicitud.']);
+                exit;
+            }
+
+            echo json_encode(['ok' => true, 'mensaje' => 'Solicitud de pago cancelada.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Envía al cliente un enlace de pago con Nuvei (Checkout) por correo.
+     * Clon de prepararPagoTarjetaAjax() (Payphone) adaptado a Nuvei.
+     */
+    public function prepararPagoNuveiAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa  = (int) $_SESSION['id_empresa'];
+            $idFactura  = (int) ($_POST['id_factura'] ?? 0);
+            $idUsuario  = (int) $_SESSION['id_usuario'];
+
+            if ($idFactura <= 0) {
+                echo json_encode(['ok' => false, 'mensaje' => 'ID de factura inválido.']);
+                exit;
+            }
+
+            $factura = $this->repository->getPorId($idFactura);
+            if (!$factura || (int)$factura['id_empresa'] !== $idEmpresa) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Factura no encontrada.']);
+                exit;
+            }
+            if (($factura['estado'] ?? '') !== 'autorizado') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Solo se pueden pagar facturas autorizadas.']);
+                exit;
+            }
+
+            // Forma de cobro seleccionada (debe ser tipo NUVEI)
+            $idFormaCobro = (int) ($_POST['id_forma_cobro'] ?? 0);
+
+            $formaCobro = null;
+            if ($idFormaCobro > 0) {
+                $stFc = $this->db->prepare(
+                    "SELECT id, nombre, tipo FROM empresa_formas_pago
+                     WHERE id = ? AND id_empresa = ? AND eliminado = false AND activo = true"
+                );
+                $stFc->execute([$idFormaCobro, $idEmpresa]);
+                $formaCobro = $stFc->fetch(\PDO::FETCH_ASSOC);
+            }
+
+            if (!$formaCobro || strtoupper((string) $formaCobro['tipo']) !== 'NUVEI') {
+                echo json_encode([
+                    'ok'      => false,
+                    'mensaje' => 'Debes seleccionar una forma de cobro de tipo "Nuvei" para enviar el cobro con Nuvei.',
+                ]);
+                exit;
+            }
+
+            $saldo = $this->calcularSaldoPendienteTarjeta($factura, $idFactura);
+
+            if ($saldo <= 0) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Esta factura ya se encuentra pagada en su totalidad.']);
+                exit;
+            }
+
+            // Monto a cobrar (parcial permitido). Si no llega, usar el saldo completo.
+            $montoCobrar = round((float) ($_POST['monto'] ?? 0), 2);
+            if ($montoCobrar <= 0) {
+                $montoCobrar = $saldo;
+            }
+            if ($montoCobrar > $saldo + 0.001) {
+                echo json_encode(['ok' => false, 'mensaje' => 'El monto a cobrar ($' . number_format($montoCobrar, 2) . ') no puede superar el saldo pendiente ($' . number_format($saldo, 2) . ').']);
+                exit;
+            }
+
+            // Evitar enviar un segundo enlace mientras hay uno pendiente reciente (15 min)
+            $stPend = $this->db->prepare(
+                "SELECT COUNT(*)
+                 FROM nuvei_transacciones
+                 WHERE id_empresa    = ?
+                   AND modulo        = 'factura_venta'
+                   AND id_referencia = ?
+                   AND estado        = 'pendiente'
+                   AND eliminado     = false
+                   AND created_at >= (CURRENT_TIMESTAMP - INTERVAL '15 minutes')"
+            );
+            $stPend->execute([$idEmpresa, $idFactura]);
+            if ((int) $stPend->fetchColumn() > 0) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Ya existe un enlace de pago pendiente enviado en los últimos 15 minutos. Espera a que el cliente lo complete o a que expire.']);
+                exit;
+            }
+
+            $nuvei  = new \App\Services\NuveiService(new \App\repositories\NuveiRepository());
+            $numero = ($factura['establecimiento'] ?? '001') . '-' . ($factura['punto_emision'] ?? '001') . '-' . str_pad((string)($factura['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+
+            // Usar correo del POST si viene, sino el de la factura
+            $correoPost    = trim($_POST['correo_destino'] ?? '');
+            $correoCliente = filter_var($correoPost, FILTER_VALIDATE_EMAIL)
+                ? $correoPost
+                : trim($factura['cliente_email'] ?? '');
+
+            if (!filter_var($correoCliente, FILTER_VALIDATE_EMAIL)) {
+                echo json_encode(['ok' => false, 'mensaje' => 'El correo ingresado no es válido.']);
+                exit;
+            }
+
+            // URL pública absoluta (BASE_URL puede estar vacío en producción)
+            $host       = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            $scheme     = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $urlBaseAbs = $scheme . '://' . $host . rtrim(BASE_URL, '/');
+
+            $checkout = $nuvei->prepararCheckout($idEmpresa, [
+                'monto'          => $montoCobrar,
+                'descripcion'    => 'Factura ' . $numero,
+                'modulo'         => 'factura_venta',
+                'id_referencia'  => $idFactura,
+                'id_cliente'     => (int) $factura['id_cliente'],
+                'id_forma_cobro' => $idFormaCobro,
+                'email'          => $correoCliente,
+                'url_exito'      => null,
+                'id_usuario'     => $idUsuario,
+            ]);
+
+            if (!$checkout['ok']) {
+                echo json_encode($checkout);
+                exit;
+            }
+
+            // Generar enlace público absoluto para el cliente
+            $urlPago     = $urlBaseAbs . '/nuvei/pago/' . $checkout['dev_reference'];
+            $descripcion = 'Factura ' . $numero;
+
+            // Obtener nombre de la empresa
+            $empresaModel  = new \App\models\Empresa();
+            $empresaData   = $empresaModel->getPorId($idEmpresa) ?? [];
+            $empresaNombre = $empresaData['nombre_comercial'] ?? $empresaData['razon_social'] ?? '';
+
+            // Generar PDF de la factura (igual que reenviarCorreoAjax)
+            $pdfString = '';
+            try {
+                $detalles = $this->repository->getDetalles($idFactura);
+                foreach ($detalles as &$d) {
+                    $d['impuestos'] = $this->repository->getImpuestosDetalle((int)$d['id']);
+                }
+                unset($d);
+                $pagos         = $this->repository->getPagos($idFactura);
+                $infoAdicional = $this->repository->getInfoAdicional($idFactura);
+
+                $establecimientos = $empresaModel->getEstablecimientos($idEmpresa);
+                if (!empty($establecimientos)) {
+                    if (!empty($establecimientos[0]['logo_ruta']))    $empresaData['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+                    if (!empty($establecimientos[0]['direccion']))     $empresaData['direccion_establecimiento'] = $establecimientos[0]['direccion'];
+                    try {
+                        $estRepo   = new \App\repositories\modulos\EmpresaRepository();
+                        $estConfig = $estRepo->getEstablecimientoConfig((int) $establecimientos[0]['id']);
+                        if ($estConfig) {
+                            $estConfig['direccion_matriz']          = $empresaData['direccion'] ?? '';
+                            $estConfig['direccion_establecimiento'] = $establecimientos[0]['direccion'] ?? '';
+                            if (!empty($establecimientos[0]['logo_ruta'])) $estConfig['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+                            $empresaData = array_merge($empresaData, $estConfig);
+                        }
+                    } catch (\Throwable $e) {}
+                }
+
+                $renderer     = new \App\Services\PlantillasPdfRendererService();
+                $plantillaPdf = $renderer->getPlantillaActiva($idEmpresa, 'factura_venta');
+                if ($plantillaPdf) {
+                    $pdfString = $renderer->generar($plantillaPdf, $factura, $detalles, $pagos, $infoAdicional, $empresaData, 'S');
+                } else {
+                    $pdfService = new \App\Services\modulos\FacturaVentaPdfService();
+                    $pdfString  = $pdfService->generar($factura, $detalles, $pagos, $infoAdicional, $empresaData, 'S');
+                }
+            } catch (\Throwable $e) {
+                // Si falla el PDF seguimos, solo enviamos sin adjunto
+                error_log('[PagoNuvei] Error generando PDF: ' . $e->getMessage());
+            }
+
+            // Enviar correo usando la misma config que el envío de comprobantes
+            $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+            $enviado  = $emailSvc->enviarEnlacePagoTarjeta(
+                $idEmpresa,
+                $correoCliente,
+                $factura['cliente_nombre'] ?? '',
+                $empresaNombre,
+                $montoCobrar,
+                $descripcion,
+                $urlPago,
+                $pdfString,
+                'Nuvei'
+            );
+
+            if (!$enviado) {
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifica la configuración de correo de la empresa.']);
+                exit;
+            }
+
+            echo json_encode([
+                'ok'      => true,
+                'mensaje' => 'Enlace de pago enviado al correo ' . $correoCliente,
+                'correo'  => $correoCliente,
+            ]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Reembolsa un pago con tarjeta (Nuvei) y anula automáticamente el ingreso vinculado.
+     * Clon de anularPagoTarjetaAjax() (Payphone) adaptado a Nuvei.
+     */
+    public function anularPagoNuveiAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $devRef    = trim($_POST['dev_reference'] ?? '');
+
+            if ($devRef === '') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Transacción no especificada.']);
+                exit;
+            }
+
+            $nvRepo = new \App\repositories\NuveiRepository();
+            $trans  = $nvRepo->getTransaccionByDevReference($devRef);
+
+            if (!$trans || (int) $trans['id_empresa'] !== $idEmpresa || ($trans['modulo'] ?? '') !== 'factura_venta') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Pago con tarjeta no encontrado.']);
+                exit;
+            }
+            if (($trans['estado'] ?? '') !== 'aprobado') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Solo se puede reembolsar un pago en estado Aprobado.']);
+                exit;
+            }
+
+            // 1) Solicitar el reembolso a Nuvei
+            $nuvei = new \App\Services\NuveiService($nvRepo);
+            $rev   = $nuvei->refund($devRef, null, $idUsuario);
+
+            if (!$rev['ok']) {
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo reembolsar en Nuvei: ' . ($rev['mensaje'] ?? 'error desconocido.')]);
+                exit;
+            }
+
+            // 2) Reembolso aprobado → anular automáticamente el ingreso vinculado
+            $idIngreso = (int) ($trans['id_ingreso'] ?? 0);
+            if ($idIngreso > 0) {
+                try {
+                    $ingresoService = new \App\Services\modulos\IngresoService(
+                        new \App\repositories\modulos\IngresoRepository(),
+                        new \App\Rules\modulos\IngresoRules(),
+                        new \App\Services\LogSistemaService()
+                    );
+                    $ingresoService->anular($idIngreso, $idEmpresa, $idUsuario);
+                } catch (\Throwable $e) {
+                    // El reembolso ya se hizo; informar pero no revertir el estado Nuvei
+                    echo json_encode([
+                        'ok'      => true,
+                        'aviso'   => 'El pago fue reembolsado, pero no se pudo anular el ingreso automáticamente: ' . $e->getMessage(),
+                        'mensaje' => 'Pago reembolsado. Revisa la anulación del ingreso manualmente.',
+                    ]);
+                    exit;
+                }
+            }
+
+            echo json_encode([
+                'ok'      => true,
+                'mensaje' => 'Pago con tarjeta reembolsado y cobro anulado. La factura queda pendiente de pago.',
+            ]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Cancela una solicitud de pago con tarjeta (Nuvei) que está PENDIENTE.
+     * Clon de cancelarPagoTarjetaAjax() (Payphone) adaptado a Nuvei.
+     */
+    public function cancelarPagoNuveiAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $devRef    = trim($_POST['dev_reference'] ?? '');
+
+            if ($devRef === '') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Transacción no especificada.']);
+                exit;
+            }
+
+            $nvRepo = new \App\repositories\NuveiRepository();
+            $trans  = $nvRepo->getTransaccionByDevReference($devRef);
+
+            if (!$trans || (int) $trans['id_empresa'] !== $idEmpresa || ($trans['modulo'] ?? '') !== 'factura_venta') {
+                echo json_encode(['ok' => false, 'mensaje' => 'Solicitud de pago no encontrada.']);
+                exit;
+            }
+
+            $nuvei = new \App\Services\NuveiService($nvRepo);
+            $res   = $nuvei->cancelarPendiente($devRef, $idUsuario);
 
             if (!$res['ok']) {
                 echo json_encode(['ok' => false, 'mensaje' => $res['mensaje'] ?? 'No se pudo cancelar la solicitud.']);
