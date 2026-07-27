@@ -358,7 +358,9 @@ class SuscripcionesController extends BaseModuloController
                 throw new \InvalidArgumentException('Suscripción inválida.');
             }
 
-            $resultado = $this->enviarRegistroTarjetaNuvei($id, $idEmpresa, $idUsuario);
+            $correoDestino = trim($_POST['correo_destino'] ?? '');
+
+            $resultado = $this->enviarRegistroTarjetaNuvei($id, $idEmpresa, $idUsuario, $correoDestino ?: null);
             echo json_encode($resultado);
         } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
@@ -432,7 +434,7 @@ class SuscripcionesController extends BaseModuloController
      * correo al cliente de la suscripción. Reutilizado por store() (envío
      * automático al crear) y por enviarRegistroTarjetaNuveiAjax() (reenvío manual).
      */
-    private function enviarRegistroTarjetaNuvei(int $idSuscripcion, int $idEmpresa, int $idUsuario): array
+    private function enviarRegistroTarjetaNuvei(int $idSuscripcion, int $idEmpresa, int $idUsuario, ?string $correoOverride = null): array
     {
         $db = \App\core\Database::getConnection();
         $st = $db->prepare(
@@ -448,9 +450,14 @@ class SuscripcionesController extends BaseModuloController
             return ['ok' => false, 'mensaje' => 'Suscripción no encontrada.'];
         }
 
-        $correoCliente = trim((string) ($susc['cliente_email'] ?? ''));
+        // Permite corregir el correo desde el modal antes de enviar (mismo patrón
+        // que "Enviar cobro con Nuvei/Payphone" en Facturas de Venta), sin tocar
+        // el correo registrado del cliente si solo se usa para este envío puntual.
+        $correoCliente = filter_var($correoOverride, FILTER_VALIDATE_EMAIL)
+            ? $correoOverride
+            : trim((string) ($susc['cliente_email'] ?? ''));
         if (!filter_var($correoCliente, FILTER_VALIDATE_EMAIL)) {
-            return ['ok' => false, 'mensaje' => 'El cliente no tiene un correo válido registrado.'];
+            return ['ok' => false, 'mensaje' => 'No hay un correo válido para enviar el enlace. Ingresa uno.'];
         }
 
         $nuvei = new \App\Services\NuveiService(new \App\repositories\NuveiRepository());

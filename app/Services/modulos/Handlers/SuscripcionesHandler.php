@@ -671,12 +671,18 @@ class SuscripcionesHandler extends BaseHandler
     {
         $descripcion = 'Suscripción #' . $susc['id'] . ' — ' . ($susc['periodicidad_nombre'] ?? 'período');
 
+        $mensajeRechazoCliente = $agotado
+            ? 'No pudimos procesar el cobro automático de tu suscripción después de varios intentos. '
+              . 'Por favor contáctanos para regularizar tu pago.'
+            : 'No pudimos procesar el cobro automático de tu suscripción. Reintentaremos automáticamente '
+              . 'en los próximos días; no necesitas hacer nada.';
+
         $email = trim((string) ($susc['cliente_email'] ?? ''));
         if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
             try {
                 (new \App\Services\EnvioDocumentosSRIService())->enviarConfirmacionPagoNuvei(
                     $idEmpresa, $email, trim((string) ($susc['cliente_nombre'] ?? 'Cliente')), $empresaNombre,
-                    $monto, $descripcion, false, '', ''
+                    $monto, $descripcion, false, '', '', $mensajeRechazoCliente
                 );
             } catch (\Throwable $e) {
                 error_log('[Suscripciones] Error enviando aviso de cobro rechazado al cliente: ' . $e->getMessage());

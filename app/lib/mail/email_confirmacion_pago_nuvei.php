@@ -37,7 +37,7 @@
     <p>
       <?= $data['aprobado']
           ? 'Tu pago fue procesado correctamente. Aquí tienes el detalle de la transacción.'
-          : 'Tu pago no pudo ser procesado. Puedes intentarlo nuevamente o usar otro método de pago.' ?>
+          : htmlspecialchars($data['mensaje_rechazo'] ?? 'Tu pago no pudo ser procesado. Puedes intentarlo nuevamente o usar otro método de pago.') ?>
     </p>
 
     <div class="detail-box">

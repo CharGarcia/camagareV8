@@ -795,8 +795,40 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
             .catch(() => Swal.fire('Error', 'No se pudo conectar con el servidor.', 'error'));
     };
 
-    window.suscEnviarRegistroTarjetaNuvei = function () {
+    window.suscEnviarRegistroTarjetaNuvei = async function () {
         if (!window._suscId) return;
+
+        const correoActual = window._suscClienteEmail || '';
+
+        const result = await Swal.fire({
+            title: '<i class="bi bi-envelope text-primary me-2"></i>Enviar enlace de registro',
+            html: '<p class="text-muted small mb-3">Se enviará al cliente un enlace para registrar su tarjeta y activar el cobro automático.</p>'
+                + '<label class="form-label small fw-bold d-block text-start mb-1">Correo del cliente</label>'
+                + '<input id="swal-correo-susc-tarjeta" type="email" class="swal2-input mx-0 w-100" style="max-width:100%;font-size:.9rem;" placeholder="correo@cliente.com" value="' + correoActual + '">',
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-send me-1"></i>Enviar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#0d6efd',
+            width: '420px',
+            focusConfirm: false,
+            preConfirm: function () {
+                const correo = document.getElementById('swal-correo-susc-tarjeta').value.trim();
+                if (!correo) {
+                    Swal.showValidationMessage('Ingresa un correo electrónico.');
+                    return false;
+                }
+                const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!re.test(correo)) {
+                    Swal.showValidationMessage('El formato del correo no es válido.');
+                    return false;
+                }
+                return correo;
+            }
+        });
+
+        if (!result.isConfirmed) return;
+
+        const correo = result.value;
 
         Swal.fire({
             title: 'Enviando enlace...',
@@ -806,6 +838,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
 
         const fd = new FormData();
         fd.append('id', window._suscId);
+        fd.append('correo_destino', correo);
 
         fetch(`${urlBase}/enviarRegistroTarjetaNuveiAjax`, { method: 'POST', body: fd })
             .then(r => r.json())
@@ -868,6 +901,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         document.getElementById('susc_nuvei_hint_guardar')?.classList.remove('d-none');
         window._suscId = null;
         window._suscNuveiTarjetaActual = null;
+        window._suscClienteEmail = '';
         suscLimpiarDetalle();
         suscAgregarFilaVacia();
         suscLimpiarInfoAdicional();
@@ -915,6 +949,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigS
         document.getElementById('susc_pasarela_tarjeta').value = s.pasarela_tarjeta ?? '';
         window._suscId = s.id;
         window._suscNuveiTarjetaActual = s.id_nuvei_tarjeta ?? null;
+        window._suscClienteEmail = s.email_cliente ?? '';
 
         if (s.id_nuvei_tarjeta && s.nuvei_ultimos4) {
             document.getElementById('susc_nuvei_tarjeta_info').textContent = `${s.nuvei_marca ?? ''} **** ${s.nuvei_ultimos4}`;

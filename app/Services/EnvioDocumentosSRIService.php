@@ -254,7 +254,8 @@ class EnvioDocumentosSRIService
         string $descripcion,
         bool   $aprobado,
         string $transactionId,
-        string $authorizationCode
+        string $authorizationCode,
+        ?string $mensajeRechazo = null
     ): bool {
         $empresaRepo  = new EmpresaRepository();
         $correoConfig = $empresaRepo->getCorreoConfig($idEmpresa);
@@ -325,6 +326,7 @@ class EnvioDocumentosSRIService
                 'aprobado'            => $aprobado,
                 'transaction_id'      => $transactionId,
                 'authorization_code'  => $authorizationCode,
+                'mensaje_rechazo'     => $mensajeRechazo,
             ];
             ob_start();
             require $docMailDir . '/email_confirmacion_pago_nuvei.php';
