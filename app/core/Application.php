@@ -87,8 +87,7 @@ class Application
             // cerrando la sesión "de pronto" aunque el navegador la crea válida por 2h.
             ini_set('session.gc_maxlifetime', (string) $lifetime);
             // Cookie path=/ para que funcione cuando BASE_URL está vacío (sitio en raíz)
-            session_set_cookie_params([
-                'lifetime' => $lifetime,
+            $cookieBase = [
                 'path' => '/',
                 'domain' => '',
                 // Bajo HTTPS la cookie se marca Secure para que nunca viaje en
@@ -96,8 +95,19 @@ class Application
                 'secure' => \App\Helpers\CabecerasSeguridad::esHttps(),
                 'httponly' => true,
                 'samesite' => 'Lax',
-            ]);
+            ];
+            session_set_cookie_params(['lifetime' => $lifetime] + $cookieBase);
             session_start();
+
+            // Cookie DESLIZANTE. PHP solo manda la cookie al crear la sesión (y al
+            // regenerar el id en el login), con un Expires ABSOLUTO: sin esto la sesión
+            // moría exactamente $lifetime segundos después de entrar aunque el usuario
+            // estuviera trabajando, echándolo al login a media tarea. Reenviarla en cada
+            // request hace que el plazo cuente desde la última actividad, igual que el
+            // gc_maxlifetime del archivo de sesión en el servidor.
+            if (isset($_SESSION['id_usuario'])) {
+                setcookie(session_name(), session_id(), ['expires' => time() + $lifetime] + $cookieBase);
+            }
         }
 
         // Controladores públicos (sin autenticación requerida)

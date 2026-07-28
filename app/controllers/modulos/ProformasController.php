@@ -357,13 +357,17 @@ class ProformasController extends BaseModuloController
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'proforma');
 
             if ($plantilla) {
-                $renderer->generar($plantilla, $cabecera, $detalles, [], $adicional, $empresa);
+                // El usuario configuró una plantilla propia: se respeta (descarga).
+                $renderer->generar($plantilla, $cabecera, $detalles, [], $adicional, $empresa, 'D');
             } else {
-                // No existe plantilla de proforma → generar una básica inline
-                $this->renderPdfBasico($cabecera, $detalles, $adicional);
+                // Diseño propio con logo, descargable.
+                (new \App\Services\modulos\ProformaPdfService())
+                    ->generar($cabecera, $detalles, $adicional, $empresa, 'D');
             }
         } catch (\Throwable $e) {
-            $this->renderPdfBasico($cabecera, $detalles, $adicional);
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            (new \App\Services\modulos\ProformaPdfService())
+                ->generar($cabecera, $detalles, $adicional, $empresa ?? [], 'D');
         }
         exit;
     }
@@ -664,53 +668,12 @@ class ProformasController extends BaseModuloController
                 if (is_string($pdf) && $pdf !== '') return $pdf;
             }
         } catch (\Throwable $e) {
-            // cae al fallback TCPDF básico
+            // cae al diseño propio
         }
 
-        return $this->generarPdfBasicoString($cabecera, $detalles);
-    }
-
-    /** PDF básico (TCPDF) como string: fallback cuando no hay plantilla de proforma. */
-    private function generarPdfBasicoString(array $cabecera, array $detalles): ?string
-    {
         try {
-            $numero = ($cabecera['establecimiento'] ?? '') . '-' . ($cabecera['punto_emision'] ?? '') . '-'
-                    . str_pad((string) ($cabecera['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
-
-            $pdf = new \TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
-            $pdf->SetCreator('CaMaGaRe');
-            $pdf->SetTitle('Proforma ' . $numero);
-            $pdf->setPrintHeader(false);
-            $pdf->setPrintFooter(false);
-            $pdf->SetMargins(12, 12, 12);
-            $pdf->AddPage();
-
-            $html  = '<h2 style="text-align:center;">PROFORMA</h2>';
-            $html .= '<h3 style="text-align:center;">' . htmlspecialchars($numero) . '</h3>';
-            $html .= '<p><strong>Cliente:</strong> ' . htmlspecialchars($cabecera['cliente_nombre'] ?? '')
-                   . ' — ' . htmlspecialchars($cabecera['cliente_ruc'] ?? '') . '</p>';
-            $html .= '<p><strong>Fecha:</strong> ' . date('d-m-Y', strtotime($cabecera['fecha_emision'] ?? 'now')) . '</p>';
-            $html .= '<table border="1" cellpadding="4"><thead><tr style="background-color:#f0f0f0;">'
-                   . '<th>#</th><th>Descripción</th><th>Cant.</th><th>P.Unit.</th><th>Desc.</th><th>Subtotal</th></tr></thead><tbody>';
-            foreach ($detalles as $i => $d) {
-                $html .= '<tr>'
-                    . '<td>' . ($i + 1) . '</td>'
-                    . '<td>' . htmlspecialchars($d['descripcion'] ?? '') . '</td>'
-                    . '<td align="right">' . number_format((float) ($d['cantidad'] ?? 0), 2) . '</td>'
-                    . '<td align="right">$' . number_format((float) ($d['precio_unitario'] ?? 0), 4) . '</td>'
-                    . '<td align="right">$' . number_format((float) ($d['descuento'] ?? 0), 2) . '</td>'
-                    . '<td align="right">$' . number_format((float) ($d['precio_total_sin_impuesto'] ?? 0), 2) . '</td>'
-                    . '</tr>';
-            }
-            $html .= '</tbody></table>';
-            $html .= '<p style="text-align:right;"><strong>Subtotal:</strong> $' . number_format((float) ($cabecera['total_sin_impuestos'] ?? 0), 2) . '</p>';
-            $html .= '<p style="text-align:right;"><strong>TOTAL:</strong> $' . number_format((float) ($cabecera['importe_total'] ?? 0), 2) . '</p>';
-            if (!empty($cabecera['observaciones'])) {
-                $html .= '<p><strong>Observaciones:</strong> ' . htmlspecialchars($cabecera['observaciones']) . '</p>';
-            }
-
-            $pdf->writeHTML($html, true, false, true, false, '');
-            return $pdf->Output('', 'S');
+            return (new \App\Services\modulos\ProformaPdfService())
+                ->generar($cabecera, $detalles, $adicional, $empresa, 'S');
         } catch (\Throwable $e) {
             return null;
         }
@@ -948,37 +911,5 @@ class ProformasController extends BaseModuloController
             </td>
             <td class=\"text-truncate text-muted small\" style=\"max-width:200px;\" data-col=\"observaciones\">{$obs}</td>
         </tr>";
-    }
-
-    private function renderPdfBasico(array $cabecera, array $detalles, array $adicional): void
-    {
-        $numero = htmlspecialchars(($cabecera['establecimiento'] ?? '') . '-' . ($cabecera['punto_emision'] ?? '') . '-' . ($cabecera['secuencial'] ?? ''));
-
-        header('Content-Type: text/html; charset=UTF-8');
-        echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Proforma ' . $numero . '</title>';
-        echo '<style>body{font-family:Arial,sans-serif;font-size:12px;} table{width:100%;border-collapse:collapse;} th,td{border:1px solid #ccc;padding:4px 6px;} .text-end{text-align:right;} .header{text-align:center;margin-bottom:20px;}</style>';
-        echo '</head><body>';
-        echo '<div class="header"><h2>PROFORMA</h2><h3>' . $numero . '</h3></div>';
-        echo '<p><strong>Cliente:</strong> ' . htmlspecialchars($cabecera['cliente_nombre'] ?? '') . ' — ' . htmlspecialchars($cabecera['cliente_ruc'] ?? '') . '</p>';
-        echo '<p><strong>Fecha:</strong> ' . date('d-m-Y', strtotime($cabecera['fecha_emision'] ?? 'now')) . '</p>';
-        echo '<table><tr><th>#</th><th>Descripción</th><th>Cant.</th><th>P.Unit.</th><th>Desc.</th><th>Subtotal</th></tr>';
-        foreach ($detalles as $i => $d) {
-            echo '<tr>';
-            echo '<td>' . ($i + 1) . '</td>';
-            echo '<td>' . htmlspecialchars($d['descripcion']) . '</td>';
-            echo '<td class="text-end">' . number_format((float)$d['cantidad'], 2) . '</td>';
-            echo '<td class="text-end">$' . number_format((float)$d['precio_unitario'], 4) . '</td>';
-            echo '<td class="text-end">$' . number_format((float)$d['descuento'], 2) . '</td>';
-            echo '<td class="text-end">$' . number_format((float)$d['precio_total_sin_impuesto'], 2) . '</td>';
-            echo '</tr>';
-        }
-        echo '</table>';
-        echo '<p class="text-end"><strong>Subtotal:</strong> $' . number_format((float)($cabecera['total_sin_impuestos'] ?? 0), 2) . '</p>';
-        echo '<p class="text-end"><strong>TOTAL:</strong> $' . number_format((float)($cabecera['importe_total'] ?? 0), 2) . '</p>';
-        if ($cabecera['observaciones']) {
-            echo '<p><strong>Observaciones:</strong> ' . htmlspecialchars($cabecera['observaciones']) . '</p>';
-        }
-        echo '<script>window.print();</script>';
-        echo '</body></html>';
     }
 }
