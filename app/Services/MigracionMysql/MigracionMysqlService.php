@@ -2805,10 +2805,14 @@ class MigracionMysqlService
             $pto = str_pad($num[1] ?? '', 3, '0', STR_PAD_LEFT);
             $sec = str_pad(preg_replace('/\D+/', '', $num[2] ?? ''), 9, '0', STR_PAD_LEFT);
 
-            // La clave incluye tipo_comprobante: una FACTURA (01) y una NC (04) del mismo proveedor pueden
-            // compartir número (numeraciones independientes en el SRI). Sin esto, la NC hacía match con la
-            // factura y se "vinculaba" (no se migraba como NC). Verificado: 61 grupos así en la base vieja.
-            $ye = $this->docExistente($pg, 'compras_cabecera', ['id_empresa' => $idEmpresa, 'id_proveedor' => $idProv, 'establecimiento_prov' => $est, 'punto_emision_prov' => $pto, 'secuencial_prov' => $sec, 'tipo_comprobante' => $tcomp]);
+            // Clave de identidad de la compra: proveedor + número (estab-punto-secuencial) + tipo de
+            // comprobante + FECHA DE EMISIÓN. Sin tipo, una NC(04) hacía match con la factura(01) del mismo
+            // número (numeraciones SRI independientes). Sin fecha, el viejo REUSA el mismo número entre años
+            // (ej. factura 001-001-000000001 en 2021 y en 2024) y el 2º documento se colapsaba/perdía.
+            // Verificado en la base vieja: 61 grupos factura/NC mismo número, y 29 grupos mismo número+tipo
+            // con fechas distintas. Con esta clave, cada documento real se migra por separado.
+            $fe = substr((string) $ec['fecha_compra'], 0, 10);
+            $ye = $this->docExistente($pg, 'compras_cabecera', ['id_empresa' => $idEmpresa, 'id_proveedor' => $idProv, 'establecimiento_prov' => $est, 'punto_emision_prov' => $pto, 'secuencial_prov' => $sec, 'tipo_comprobante' => $tcomp, 'fecha_emision' => $fe]);
             if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$est-$pto-$sec", $idUsuario); continue; }
 
             try {
@@ -2822,7 +2826,7 @@ class MigracionMysqlService
                 if ($aut !== null && isset($authUsadas[$aut])) { $aut = null; } // autorización duplicada en el viejo → no repetir (evita 23505)
                 $insCab->execute([
                     ':e' => $idEmpresa, ':prov' => $idProv, ':est' => $est, ':pto' => $pto, ':sec' => $sec,
-                    ':aut' => $aut, ':fe' => substr((string) $ec['fecha_compra'], 0, 10),
+                    ':aut' => $aut, ':fe' => $fe,
                     ':fr' => substr((string) $ec['fecha_registro'], 0, 19) ?: null, ':tot' => (float) $ec['total_compra'],
                     ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2), ':prop' => (float) $ec['propina'],
                     ':obs' => null, ':treg' => $treg, ':tcomp' => $tcomp, ':docmod' => $docmod, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah,
