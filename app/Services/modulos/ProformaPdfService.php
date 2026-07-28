@@ -322,7 +322,11 @@ class ProformaPdfService
     private function pieDocumento(TCPDF $pdf, array $empresa): void
     {
         $mL = 14; $w = 182;
-        $pdf->SetY(-16);
+        // Desactivar el salto automático: escribir en el margen inferior con auto-break
+        // activo generaría una página en blanco extra.
+        $pdf->SetAutoPageBreak(false);
+
+        $pdf->SetY(-15);
         $pdf->SetDrawColor(...$this->grisLinea);
         $pdf->SetLineWidth(0.2);
         $pdf->Line($mL, $pdf->GetY(), $mL + $w, $pdf->GetY());
@@ -330,7 +334,6 @@ class ProformaPdfService
         $pdf->SetY($pdf->GetY() + 1);
         $pdf->SetTextColor(...$this->grisTexto);
         $pdf->SetFont('helvetica', 'I', 7);
-        $nombre = (string) ($empresa['nombre_comercial'] ?? $empresa['nombre'] ?? '');
         $pdf->Cell($w * 0.6, 4, 'Documento no tributario · Proforma sin validez de factura.', 0, 0, 'L');
         $pdf->Cell($w * 0.4, 4, 'Generado el ' . date('d-m-Y H:i'), 0, 1, 'R');
     }
