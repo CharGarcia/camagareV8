@@ -500,6 +500,102 @@
     };
 
 
+    // ── Configuración de esta empresa ────────────────────────────────────────
+
+    const ES_SUPERADMIN = window.VC_ES_SUPERADMIN === true;
+
+    function modalConfig() {
+        return bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConfigVC'));
+    }
+
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    const getVal = (id) => document.getElementById(id)?.value ?? '';
+
+    window.VC_abrirConfig = async function () {
+        try {
+            const res = await (await fetch(`${VC_URL}/getConfigAjax`)).json();
+            if (!res.ok) { avisar('error', 'No se pudo abrir', res.mensaje); return; }
+
+            const c = res.data;
+            document.getElementById('cfg-max').max = res.max_mesh;
+            setVal('cfg-max', c.max_participantes);
+            setVal('cfg-duracion', c.duracion_max_minutos);
+            setVal('cfg-umbral', c.umbral_proveedor_externo);
+
+            if (ES_SUPERADMIN) {
+                setVal('cfg-stun', c.stun_urls);
+                setVal('cfg-turn-urls', c.turn_urls);
+                setVal('cfg-turn-usuario', c.turn_usuario);
+                setVal('cfg-turn-key-id', c.turn_key_id);
+
+                // Los secretos no se muestran: solo se indica si ya están puestos.
+                setVal('cfg-turn-credencial', '');
+                setVal('cfg-turn-api-token', '');
+                document.getElementById('cfg-badge-credencial')?.classList.toggle('d-none', !c.turn_credencial_puesta);
+                document.getElementById('cfg-badge-token')?.classList.toggle('d-none', !c.turn_api_token_puesto);
+
+                pintarEfectiva(res.efectiva);
+            }
+
+            modalConfig().show();
+        } catch (e) {
+            avisar('error', 'Error de conexión', 'No se pudo cargar la configuración.');
+        }
+    };
+
+    /** Resumen de qué servidores se están usando realmente y de dónde salieron. */
+    function pintarEfectiva(ef) {
+        const caja = document.getElementById('cfg-efectiva');
+        if (!caja || !ef) return;
+
+        const etiqueta = (origen) => origen === 'empresa'
+            ? '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" style="font-size:.6rem;">PROPIO</span>'
+            : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:.6rem;">HEREDADO</span>';
+
+        let html = '<div class="border-top pt-2 text-muted">';
+        html += `<div><strong>En uso — STUN:</strong> ${esc(ef.stun_urls) || '<em>ninguno</em>'}</div>`;
+
+        if (ef.hay_turn) {
+            html += `<div><strong>TURN:</strong> ${esc(ef.turn_urls) || '<em>por credencial temporal</em>'} ` +
+                    `${etiqueta(ef.turn_urls ? ef.origen_turn : ef.origen_cloud)}</div>`;
+        } else {
+            html += '<div class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>' +
+                    'Sin TURN: entre el 10% y el 20% de las llamadas no va a conectar.</div>';
+        }
+
+        if (!ef.puede_anular) {
+            html += '<div class="text-warning mt-1"><i class="bi bi-lock me-1"></i>' +
+                    'La configuración global no permite servidores propios: lo que cargue aquí no se aplicará.</div>';
+        }
+
+        caja.innerHTML = html + '</div>';
+    }
+
+    window.VC_guardarConfig = async function () {
+        const fd = new FormData();
+        fd.append('max_participantes', getVal('cfg-max'));
+        fd.append('duracion_max_minutos', getVal('cfg-duracion'));
+        fd.append('umbral_proveedor_externo', getVal('cfg-umbral'));
+
+        if (ES_SUPERADMIN) {
+            fd.append('stun_urls', getVal('cfg-stun').trim());
+            fd.append('turn_urls', getVal('cfg-turn-urls').trim());
+            fd.append('turn_usuario', getVal('cfg-turn-usuario').trim());
+            fd.append('turn_credencial', getVal('cfg-turn-credencial'));
+            fd.append('turn_key_id', getVal('cfg-turn-key-id').trim());
+            fd.append('turn_api_token', getVal('cfg-turn-api-token'));
+        }
+
+        try {
+            const res = await (await fetch(`${VC_URL}/guardarConfigAjax`, { method: 'POST', body: fd })).json();
+            if (!res.ok) { avisar('error', 'No se pudo guardar', res.mensaje); return; }
+            avisarOk(res.mensaje);
+            modalConfig().hide();
+        } catch (e) {
+            avisar('error', 'Error de conexión', 'No se pudo guardar la configuración.');
+        }
+    };
+
     window.VC_copiarEnlace = function () {
         const enlace = document.getElementById('vc-info-enlace')?.value || `${VC_URL}/sala`;
         navigator.clipboard.writeText(enlace)

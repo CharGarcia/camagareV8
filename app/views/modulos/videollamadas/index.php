@@ -70,9 +70,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         <i class="bi bi-camera-video-fill me-1 text-primary"></i> <?= htmlspecialchars($titulo) ?>
     </h5>
     <div class="d-flex align-items-center gap-2">
+        <?php if ($perm['actualizar']): ?>
+            <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="VC_abrirConfig()"
+                    title="Límites de las reuniones de esta empresa">
+                <i class="bi bi-gear me-1"></i> Configurar
+            </button>
+        <?php endif; ?>
         <?php if ($perm['crear']): ?>
             <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="VC_abrirModalNuevo()">
-                <i class="bi bi-plus-lg me-1"></i> Nueva reunión
+                <i class="bi bi-plus-lg me-1"></i> Nueva
             </button>
         <?php endif; ?>
     </div>
@@ -166,6 +172,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 </div>
 
 <?php include __DIR__ . '/modal_sala.php'; ?>
+<?php if ($perm['actualizar']) { include __DIR__ . '/modal_config.php'; } ?>
 
 <script>
     window.VC_URL_BASE  = '<?= $urlBase ?>';
@@ -175,6 +182,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.VC_PAGE      = <?= $page ?>;
     window.VC_MAX_MESH  = <?= (int) $maxMesh ?>;
     window.VC_ID_USUARIO = <?= (int) $idUsuario ?>;
+    window.VC_ES_SUPERADMIN = <?= !empty($esSuperadmin) ? 'true' : 'false' ?>;
     window.VC_PERM = <?= json_encode([
         'crear'      => (bool) $perm['crear'],
         'actualizar' => (bool) $perm['actualizar'],

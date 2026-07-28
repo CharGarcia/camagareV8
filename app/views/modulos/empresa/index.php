@@ -87,11 +87,6 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="videollamadas-tab" data-bs-toggle="tab" data-bs-target="#videollamadas_config" type="button" role="tab">
-                        <i class="bi bi-camera-video me-1"></i>Videollamadas
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
                     <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="transferencias-tab" data-bs-toggle="tab" data-bs-target="#transferencias_config" type="button" role="tab">
                         Pagos al Banco
                     </button>
@@ -1457,139 +1452,6 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                 </div>
 
                 <!-- Pestaña: Aprobación de Transferencias -->
-                <!-- ─── VIDEOLLAMADAS ─────────────────────────────────────── -->
-                <div class="tab-pane fade" id="videollamadas_config" role="tabpanel">
-                    <?php
-                    $vcCfg     = $videollamadas_config ?? [];
-                    $vcMaxMesh = \App\Rules\modulos\VideollamadaRules::MAX_PARTICIPANTES_MESH;
-                    ?>
-                    <?php if (empty($vcCfg)): ?>
-                        <div class="alert alert-warning py-2 px-3 small mb-0">
-                            <i class="bi bi-exclamation-triangle me-1"></i>
-                            El módulo de videollamadas todavía no está disponible en esta instalación.
-                        </div>
-                    <?php else: ?>
-                    <form id="form-videollamadas-config" method="POST">
-                        <input type="hidden" name="section" value="videollamadas_config">
-                        <div class="form-msg mb-3"></div>
-
-                        <div class="row g-4">
-                            <div class="col-md-12">
-                                <h6 class="fw-bold fs-6 text-primary border-bottom pb-2 mb-3">Límites de las reuniones</h6>
-
-                                <div class="alert alert-light border py-2 px-3 small">
-                                    <i class="bi bi-info-circle me-1 text-primary"></i>
-                                    Los servidores que hacen posible la conexión (STUN y TURN) son globales del
-                                    sistema y se administran en <strong>Configuración → Videollamadas</strong>.
-                                    Aquí solo se ajusta cómo trabaja esta empresa.
-                                </div>
-
-                                <div class="row g-3">
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold mb-1">Máximo de participantes</label>
-                                        <input type="number" name="max_participantes" class="form-control form-control-sm"
-                                               min="2" max="<?= (int) $vcMaxMesh ?>"
-                                               value="<?= (int) ($vcCfg['max_participantes'] ?? 6) ?>">
-                                        <div class="text-muted" style="font-size:0.7rem;">
-                                            Tope técnico: <?= (int) $vcMaxMesh ?>. Por encima de 6 la calidad baja
-                                            en conexiones lentas, porque cada participante envía su video a todos
-                                            los demás.
-                                        </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold mb-1">Duración máxima (minutos)</label>
-                                        <input type="number" name="duracion_max_minutos" class="form-control form-control-sm"
-                                               min="5" max="1440"
-                                               value="<?= (int) ($vcCfg['duracion_max_minutos'] ?? 120) ?>">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold mb-1">Umbral de proveedor externo</label>
-                                        <input type="number" name="umbral_proveedor_externo" class="form-control form-control-sm"
-                                               min="2" max="100"
-                                               value="<?= (int) ($vcCfg['umbral_proveedor_externo'] ?? 8) ?>">
-                                        <div class="text-muted" style="font-size:0.7rem;">
-                                            A partir de este número de participantes haría falta un motor de video
-                                            externo.
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <?php if (!empty($es_superadmin)): ?>
-                        <div class="row g-4 mt-1">
-                            <div class="col-md-12">
-                                <h6 class="fw-bold fs-6 text-primary border-bottom pb-2 mb-3">
-                                    Servidores propios
-                                    <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25"
-                                          style="font-size:0.6rem;">SOLO SUPERADMIN</span>
-                                </h6>
-
-                                <div class="alert alert-light border py-2 px-3 small">
-                                    <i class="bi bi-info-circle me-1 text-primary"></i>
-                                    Normalmente esto se deja <strong>vacío</strong>: la empresa hereda los servidores
-                                    globales. Solo se llena si esta empresa debe usar un proveedor distinto, y en ese
-                                    caso hay que cargar el bloque completo (dirección, usuario y credencial): mezclarlo
-                                    con el global daría una configuración que no conecta con ninguno.
-                                </div>
-
-                                <div class="row g-3">
-                                    <div class="col-md-6">
-                                        <label class="form-label small fw-bold mb-1">Servidores STUN</label>
-                                        <input type="text" name="stun_urls" class="form-control form-control-sm"
-                                               value="<?= htmlspecialchars($vcCfg['stun_urls'] ?? '') ?>"
-                                               placeholder="Vacío = hereda el global">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label small fw-bold mb-1">Servidores TURN</label>
-                                        <input type="text" name="turn_urls" class="form-control form-control-sm"
-                                               value="<?= htmlspecialchars($vcCfg['turn_urls'] ?? '') ?>"
-                                               placeholder="Vacío = hereda el global">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold mb-1">Usuario TURN</label>
-                                        <input type="text" name="turn_usuario" class="form-control form-control-sm"
-                                               value="<?= htmlspecialchars($vcCfg['turn_usuario'] ?? '') ?>" autocomplete="off">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold mb-1">
-                                            Credencial TURN
-                                            <?php if (!empty($vcCfg['turn_credencial_puesta'])): ?>
-                                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"
-                                                      style="font-size:0.6rem;">GUARDADA</span>
-                                            <?php endif; ?>
-                                        </label>
-                                        <input type="password" name="turn_credencial" class="form-control form-control-sm"
-                                               placeholder="Vacío = no cambiar" autocomplete="new-password">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold mb-1">TURN Key ID</label>
-                                        <input type="text" name="turn_key_id" class="form-control form-control-sm"
-                                               value="<?= htmlspecialchars($vcCfg['turn_key_id'] ?? '') ?>" autocomplete="off">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold mb-1">
-                                            Token de API
-                                            <?php if (!empty($vcCfg['turn_api_token_puesto'])): ?>
-                                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"
-                                                      style="font-size:0.6rem;">GUARDADO</span>
-                                            <?php endif; ?>
-                                        </label>
-                                        <input type="password" name="turn_api_token" class="form-control form-control-sm"
-                                               placeholder="Vacío = no cambiar" autocomplete="new-password">
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <?php endif; ?>
-
-                        <div class="col-12 mt-4 text-end">
-                            <button type="submit" class="btn btn-primary btn-sm px-4">Guardar Configuración</button>
-                        </div>
-                    </form>
-                    <?php endif; ?>
-                </div>
-
                 <div class="tab-pane fade" id="transferencias_config" role="tabpanel">
                     <form id="form-transferencias-config" method="POST">
                         <input type="hidden" name="section" value="transferencias_config">
@@ -2227,7 +2089,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        const forms = ['form-general', 'form-emisor', 'form-correo', 'form-firma', 'form-punto', 'form-secuenciales', 'form-establecimiento-directo', 'form-decimales', 'form-iva', 'form-facturacion-config', 'form-inventario-config', 'form-transferencias-config', 'form-videollamadas-config', 'form-ice'];
+        const forms = ['form-general', 'form-emisor', 'form-correo', 'form-firma', 'form-punto', 'form-secuenciales', 'form-establecimiento-directo', 'form-decimales', 'form-iva', 'form-facturacion-config', 'form-inventario-config', 'form-transferencias-config', 'form-ice'];
         forms.forEach(id => {
             const f = document.getElementById(id);
             if (!f) return;

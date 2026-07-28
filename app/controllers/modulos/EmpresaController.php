@@ -69,83 +69,9 @@ class EmpresaController extends BaseModuloController
             'ciudades' => $ciudades,
             'formasPagoSri' => $formasPagoSri,
             'usuarios_empresa' => $data['usuarios_empresa'] ?? [],
-            'videollamadas_config' => $this->getVideollamadasConfig($idEmpresa),
-            // Los servidores propios de la empresa solo los edita el nivel 3:
-            // son infraestructura contratada, no una preferencia operativa.
-            'es_superadmin' => (int) ($_SESSION['nivel'] ?? 0) >= 3,
             'rutaModulo' => self::RUTA_MODULO,
             'fullWidth' => true
         ]);
-    }
-
-    /**
-     * Límites de videollamadas de esta empresa (cupo y duración).
-     *
-     * Los servidores STUN/TURN NO se tocan aquí: son configuración global del
-     * sistema y viven en /config/videollamadas.
-     */
-    private function getVideollamadasConfig(int $idEmpresa): array
-    {
-        try {
-            return $this->videollamadaService()->getConfigParaVista(
-                $idEmpresa,
-                (int) ($_SESSION['id_usuario'] ?? 0)
-            );
-        } catch (\Throwable $e) {
-            // Si el módulo de videollamadas aún no está desplegado (faltan las
-            // tablas), la pantalla de empresa debe seguir funcionando igual.
-            return [];
-        }
-    }
-
-    /**
-     * Campos de videollamadas que este usuario tiene permitido guardar.
-     *
-     * Los límites (cupo, duración) los ajusta cualquiera con permiso de
-     * actualizar la empresa. Los SERVIDORES son infraestructura contratada y
-     * quedan reservados al nivel 3: ocultarlos en la vista no basta, porque el
-     * POST se puede manipular.
-     */
-    private function datosVideollamadasPermitidos(): array
-    {
-        $datos = [
-            'max_participantes'        => $_POST['max_participantes'] ?? 6,
-            'duracion_max_minutos'     => $_POST['duracion_max_minutos'] ?? 120,
-            'umbral_proveedor_externo' => $_POST['umbral_proveedor_externo'] ?? 8,
-        ];
-
-        if ((int) ($_SESSION['nivel'] ?? 0) < 3) {
-            // Sin nivel 3 no se tocan los servidores: se reenvían los valores ya
-            // guardados para que guardarConfig() no los borre.
-            $actual = $this->getVideollamadasConfig((int) ($_SESSION['id_empresa'] ?? 0));
-            return $datos + [
-                'stun_urls'    => $actual['stun_urls'] ?? '',
-                'turn_urls'    => $actual['turn_urls'] ?? '',
-                'turn_usuario' => $actual['turn_usuario'] ?? '',
-                'turn_key_id'  => $actual['turn_key_id'] ?? '',
-                // Vacíos = "no cambiar" (los secretos nunca se reenvían).
-                'turn_credencial' => '',
-                'turn_api_token'  => '',
-            ];
-        }
-
-        return $datos + [
-            'stun_urls'       => $_POST['stun_urls'] ?? '',
-            'turn_urls'       => $_POST['turn_urls'] ?? '',
-            'turn_usuario'    => $_POST['turn_usuario'] ?? '',
-            'turn_key_id'     => $_POST['turn_key_id'] ?? '',
-            'turn_credencial' => $_POST['turn_credencial'] ?? '',
-            'turn_api_token'  => $_POST['turn_api_token'] ?? '',
-        ];
-    }
-
-    private function videollamadaService(): \App\Services\modulos\VideollamadaService
-    {
-        return new \App\Services\modulos\VideollamadaService(
-            new \App\repositories\modulos\VideollamadaRepository(),
-            new \App\Rules\modulos\VideollamadaRules(),
-            new \App\Services\LogSistemaService()
-        );
     }
 
     public function save(): void
@@ -233,15 +159,6 @@ class EmpresaController extends BaseModuloController
                     $this->requireActualizar();
                     $res = $this->service->saveTransferenciasConfig($idEmpresa, $_POST);
                     echo json_encode(['ok' => $res]);
-                    break;
-                case 'videollamadas_config':
-                    $this->requireActualizar();
-                    $this->videollamadaService()->guardarConfig(
-                        $idEmpresa,
-                        (int) ($_SESSION['id_usuario'] ?? 0),
-                        $this->datosVideollamadasPermitidos()
-                    );
-                    echo json_encode(['ok' => true]);
                     break;
                 default:
                     throw new \Exception('Sección no válida');

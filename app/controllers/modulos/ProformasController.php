@@ -530,6 +530,7 @@ class ProformasController extends BaseModuloController
                  WHERE p.id_empresa = ?
                    AND p.eliminado  = false
                    AND e.eliminado  = false
+                   AND LOWER(p.estado) = 'activo'
                  ORDER BY e.codigo, p.codigo_punto"
             );
             $st->execute([$idEmpresa]);

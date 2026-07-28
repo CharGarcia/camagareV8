@@ -113,6 +113,8 @@ class VideollamadasController extends BaseModuloController
             'usuarios'    => $this->repository->getUsuariosEmpresa($idEmpresa),
             'maxMesh'     => VideollamadaRules::MAX_PARTICIPANTES_MESH,
             'idUsuario'   => (int) $_SESSION['id_usuario'],
+            // Solo el nivel 3 ve los servidores propios en la configuración.
+            'esSuperadmin' => $this->esSuperadmin(),
         ]);
     }
 
@@ -224,6 +226,64 @@ class VideollamadasController extends BaseModuloController
 
             $this->service->eliminar($id, $idEmpresa, $idUsuario);
             $this->json(['ok' => true, 'mensaje' => 'Reunión eliminada.']);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  Configuración de ESTA empresa
+    //
+    //  Solo los límites (cupo, duración). Los servidores STUN/TURN son
+    //  globales del sistema y viven en /config/videollamadas; aquí únicamente
+    //  el superadministrador puede definir servidores propios de la empresa.
+    // ────────────────────────────────────────────────────────────────────
+
+    public function getConfigAjax(): void
+    {
+        $this->requireActualizar();
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+
+            $datos = [
+                'ok'       => true,
+                'data'     => $this->service->getConfigParaVista($idEmpresa, $idUsuario),
+                'max_mesh' => VideollamadaRules::MAX_PARTICIPANTES_MESH,
+            ];
+
+            // El resumen de qué servidores se usan solo interesa (y solo se
+            // muestra) a quien puede cambiarlos.
+            if ($this->esSuperadmin()) {
+                $ef = $this->service->getConfigEfectiva($idEmpresa, $idUsuario);
+                $datos['efectiva'] = [
+                    'stun_urls'    => $ef['stun_urls'],
+                    'turn_urls'    => $ef['turn_urls'],
+                    'origen_turn'  => $ef['origen_turn'],
+                    'origen_cloud' => $ef['origen_cloud'],
+                    'hay_turn'     => $ef['turn_urls'] !== '' || $ef['turn_key_id'] !== '',
+                    'puede_anular' => $ef['puede_anular'],
+                ];
+            }
+
+            $this->json($datos);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+    }
+
+    public function guardarConfigAjax(): void
+    {
+        $this->requireActualizar();
+
+        try {
+            $this->service->guardarConfig(
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario'],
+                $this->datosConfigPermitidos()
+            );
+            $this->json(['ok' => true, 'mensaje' => 'Configuración guardada.']);
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
@@ -513,6 +573,54 @@ class VideollamadasController extends BaseModuloController
     private function tieneAccesoTotal(): bool
     {
         return !empty($this->getPermisos()['todo']);
+    }
+
+    private function esSuperadmin(): bool
+    {
+        return (int) ($_SESSION['nivel'] ?? 0) >= 3;
+    }
+
+    /**
+     * Campos de configuración que este usuario tiene permitido guardar.
+     *
+     * Los límites los ajusta cualquiera con permiso de actualizar. Los
+     * SERVIDORES son infraestructura contratada y quedan reservados al nivel 3:
+     * ocultarlos en la vista no basta, porque el POST se puede manipular.
+     */
+    private function datosConfigPermitidos(): array
+    {
+        $datos = [
+            'max_participantes'        => $_POST['max_participantes'] ?? 6,
+            'duracion_max_minutos'     => $_POST['duracion_max_minutos'] ?? 120,
+            'umbral_proveedor_externo' => $_POST['umbral_proveedor_externo'] ?? 8,
+        ];
+
+        if (!$this->esSuperadmin()) {
+            // Se reenvían los servidores ya guardados para que guardarConfig()
+            // no los borre al no venir en el formulario.
+            $actual = $this->service->getConfigParaVista(
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario']
+            );
+            return $datos + [
+                'stun_urls'    => $actual['stun_urls'] ?? '',
+                'turn_urls'    => $actual['turn_urls'] ?? '',
+                'turn_usuario' => $actual['turn_usuario'] ?? '',
+                'turn_key_id'  => $actual['turn_key_id'] ?? '',
+                // Vacíos = "no cambiar" (los secretos nunca se reenvían).
+                'turn_credencial' => '',
+                'turn_api_token'  => '',
+            ];
+        }
+
+        return $datos + [
+            'stun_urls'       => $_POST['stun_urls'] ?? '',
+            'turn_urls'       => $_POST['turn_urls'] ?? '',
+            'turn_usuario'    => $_POST['turn_usuario'] ?? '',
+            'turn_key_id'     => $_POST['turn_key_id'] ?? '',
+            'turn_credencial' => $_POST['turn_credencial'] ?? '',
+            'turn_api_token'  => $_POST['turn_api_token'] ?? '',
+        ];
     }
 
     /** Arma el arreglo de datos desde $_POST, ya saneado para el service. */

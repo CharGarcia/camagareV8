@@ -164,13 +164,15 @@ credenciales de servicios contratados.
 El botón **Probar configuración** dice cuántos servidores quedaron disponibles y
 avisa si falta el TURN.
 
-### Los límites: Empresa → Videollamadas
+### Los límites: botón Configurar del módulo
 
-Cada empresa ajusta cómo trabaja: cuánta gente cabe en una reunión, cuánto puede
-durar y a partir de cuántos participantes haría falta otro motor de video.
+Dentro de **Videollamadas**, junto al botón **Nueva**, hay un botón
+**Configurar** para quien tenga permiso de modificar. Ahí se ajusta cómo trabaja
+esta empresa: cuánta gente cabe en una reunión, cuánto puede durar y a partir de
+cuántos participantes haría falta otro motor de video.
 
-En esa misma pestaña, el **superadministrador** puede además cargar servidores
-propios para esa empresa concreta. Normalmente se dejan vacíos y la empresa
+En esa misma ventana, el **superadministrador** puede además cargar servidores
+propios para esta empresa concreta. Normalmente se dejan vacíos y la empresa
 hereda los globales; solo se llenan si debe usar un proveedor distinto.
 
 La herencia funciona **por bloque, no campo por campo**: o la empresa define su
@@ -279,8 +281,7 @@ El nivel 3 (superadministrador) siempre ve todo.
 
 - **1.5** — La configuración se reparte según a quién afecta: los servidores
   (globales del sistema) pasan a **Configuración → Videollamadas**, y los límites
-  de cada empresa a **Empresa → Videollamadas**. Antes estaba todo en un botón
-  dentro del módulo, que no correspondía.
+  de cada empresa quedan en el botón **Configurar** del propio módulo.
 - **1.4** — Invitados externos: cada uno recibe por correo su enlace personal y
   entra sin tener cuenta en el sistema. Envío de invitaciones desde el modal y
   recordatorio automático quince minutos antes de las reuniones programadas.
