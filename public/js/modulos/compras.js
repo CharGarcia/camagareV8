@@ -297,6 +297,58 @@ function CMG_poblarModal(d) {
     if (btnXml) btnXml.classList.toggle('d-none', !tieneXml);
     const btnPdf = document.getElementById('mcBtnPdf');
     if (btnPdf) btnPdf.classList.toggle('d-none', !tieneXml);
+
+    // Solo lectura total: compra migrada o período contable cerrado
+    // (se aplica al final para que prevalezca sobre el bloqueo de electrónica).
+    mcAplicarSoloLectura(d);
+}
+
+/**
+ * Bloquea el modal por completo (solo lectura) cuando la compra proviene de una
+ * migración o su período contable está cerrado. Devuelve true si quedó bloqueado.
+ */
+function mcAplicarSoloLectura(d) {
+    const esV = v => (v === true || v === 't' || v === 1 || v === '1');
+    const esMigrado      = esV(d.es_migrado);
+    const periodoCerrado = esV(d.periodo_cerrado);
+    const bloqueado      = esMigrado || periodoCerrado;
+
+    const aviso    = document.getElementById('mcBloqueoAviso');
+    const avisoTxt = document.getElementById('mcBloqueoAvisoTexto');
+
+    if (!bloqueado) {
+        aviso?.classList.add('d-none');
+        return false;
+    }
+
+    let msg;
+    if (esMigrado && periodoCerrado) {
+        msg = 'Esta compra proviene de una migración y su período contable está cerrado: es de solo lectura.';
+    } else if (esMigrado) {
+        msg = 'Esta compra proviene de una migración: es de solo lectura, no puede editarse.';
+    } else {
+        msg = 'El período contable de esta compra está cerrado: es de solo lectura, no puede editarse.';
+    }
+    if (avisoTxt) avisoTxt.textContent = msg;
+    aviso?.classList.remove('d-none');
+
+    const modal = document.getElementById('modalCompra');
+    // Deshabilitar todos los campos del cuerpo del modal.
+    modal.querySelectorAll('.modal-body input, .modal-body select, .modal-body textarea').forEach(el => {
+        el.disabled = true;
+    });
+    // Deshabilitar botones de edición del cuerpo, salvo exportación y navegación de pestañas.
+    modal.querySelectorAll('.modal-body button').forEach(btn => {
+        if (btn.id === 'mcBtnPdf' || btn.id === 'mcBtnDescargarXml') return;
+        if (btn.hasAttribute('data-bs-toggle')) return; // pestañas
+        btn.disabled = true;
+    });
+
+    // Sin edición ni borrado: ocultar Guardar y Eliminar.
+    document.getElementById('btnGuardarCompra')?.classList.add('d-none');
+    document.getElementById('btnEliminarCompra')?.classList.add('d-none');
+
+    return true;
 }
 
 function mcActualizarBloqueoCampos() {
@@ -432,6 +484,9 @@ function CMG_resetModal() {
     // Ocultar botón PDF (compra nueva / sin guardar)
     const btnPdf = document.getElementById('mcBtnPdf');
     if (btnPdf) btnPdf.classList.add('d-none');
+
+    // Ocultar aviso de solo lectura (migrada / período cerrado)
+    document.getElementById('mcBloqueoAviso')?.classList.add('d-none');
     
     // Ir a primera pestaña
     const tabDetalle = document.getElementById('tab-detalle-tab') || document.getElementById('tab_compra');

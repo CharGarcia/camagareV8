@@ -20,28 +20,6 @@ $ordenDir   = $ordenDir   ?? 'DESC';
 $buscar     = $buscar     ?? '';
 $from       = $from       ?? 0;
 $to         = $to         ?? 0;
-
-$tiposComprobanteMap = [
-    '01' => 'Factura',
-    '03' => 'Liquidación de Compra',
-    '04' => 'Nota de Venta',
-    '05' => 'Nota de Crédito',
-    '06' => 'Nota de Débito',
-    '09' => 'Tique Máq. Registradora',
-    '11' => 'Pasaje',
-    '12' => 'Inst. Financiera',
-    '15' => 'Comp. Reembolso',
-    '16' => 'Comp. Socio Pasajero',
-    '18' => 'Documento Import.',
-    '19' => 'Comp. Combustible',
-    '20' => 'Liquidación Gas',
-    '21' => 'Notas de Crédito RISE',
-    '41' => 'Comp. Reemb. Exterior',
-    '42' => 'Comp. Servicio',
-    '43' => 'Liquidación Imp.',
-    '47' => 'Nota de Crédito Prestamista',
-    '48' => 'Nota de Débito Prestamista',
-];
 ?>
 <style>
     .compras-scroll {
@@ -264,7 +242,7 @@ $tiposComprobanteMap = [
                                 <td data-col="fecha_emision"><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
                                 <td class="fw-medium text-truncate" style="max-width:220px" data-col="proveedor_nombre"><?= htmlspecialchars($r['proveedor_nombre'] ?? '-') ?></td>
                                 <td data-col="proveedor_ruc"><small class="text-muted"><?= htmlspecialchars($r['proveedor_ruc'] ?? '-') ?></small></td>
-                                <td data-col="tipo_comprobante"><small><?= htmlspecialchars($tiposComprobanteMap[$r['tipo_comprobante'] ?? '01'] ?? $r['tipo_comprobante'] ?? '-') ?></small></td>
+                                <td data-col="tipo_comprobante"><small><?= htmlspecialchars(trim((string)($r['tipo_comprobante_nombre'] ?? $r['tipo_comprobante'] ?? '-'))) ?></small></td>
                                 <td data-col="sustento_nombre" class="text-truncate" style="max-width:160px"><small class="text-muted"><?= htmlspecialchars($r['sustento_nombre'] ?? '-') ?></small></td>
                                 <td class="text-end" data-col="total_sin_impuestos"><?= number_format((float)($r['total_sin_impuestos'] ?? 0), 2) ?></td>
                                 <td class="text-end" data-col="monto_iva">$<?= number_format((float)($r['monto_iva'] ?? 0), 2) ?></td>
@@ -298,7 +276,6 @@ $tiposComprobanteMap = [
     window.CMG_puntos = <?= json_encode(array_values($puntos ?? [])) ?>;
     window.CMG_unidadesMedida = <?= json_encode(array_values($unidadesMedida ?? [])) ?>;
     window.CMG_bodegas = <?= json_encode(array_values($bodegas ?? [])) ?>;
-    window.CMG_tiposComp = <?= json_encode($tiposComprobanteMap) ?>;
     window.CMG_empresa = <?= json_encode($empresa ?? []) ?>;
     window.CMG_sucursal = <?= json_encode($sucursal_principal ?? []) ?>;
 </script>

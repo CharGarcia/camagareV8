@@ -291,6 +291,15 @@ class FacturaExpressQrService
         );
 
         $facturaData = $this->_construirDataFactura($items, $idClienteSys, $idEmpresa, $idUsuario, $plantilla);
+
+        // Guardar el correo del cliente en información adicional de la factura, igual
+        // que una factura de venta manual (nombre fijo 'correo del cliente'). Sirve
+        // para el envío del comprobante y para mostrarlo al reabrir la factura.
+        $correoCliente = trim((string) ($solicitud['correo_cliente'] ?? ''));
+        if ($correoCliente !== '' && filter_var($correoCliente, FILTER_VALIDATE_EMAIL)) {
+            $facturaData['info_adicional'][] = ['nombre' => 'correo del cliente', 'valor' => $correoCliente];
+        }
+
         $idFactura   = $factService->crear($facturaData);
 
         $this->repo->marcarFacturada($idSolicitud, $idFactura, $idClienteSys, $idUsuario);

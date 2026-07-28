@@ -33,8 +33,10 @@ class Router
 
         $pathInfo = $_SERVER['PATH_INFO'] ?? '';
         if ($pathInfo === '' && isset($_SERVER['REQUEST_URI'])) {
-            $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-            if ($uri !== false) {
+            // parse_url() devuelve false si la URI está malformada y null si no trae
+            // componente de path (p. ej. peticiones de bots con "?x=1" o URIs absolutas).
+            $uri = parse_url((string) $_SERVER['REQUEST_URI'], PHP_URL_PATH);
+            if (is_string($uri) && $uri !== '') {
                 $uri = $this->normalizePathForRouting($uri);
                 $base = rtrim($this->basePath, '/');
                 if ($base !== '' && str_starts_with($uri, $base)) {

@@ -51,6 +51,32 @@ class ErrorLogService
     }
 
     /**
+     * Registra un error que NO es una excepción (una condición de fallo detectada
+     * a mano). Ej.: un correo que no se pudo enviar por configuración/SMTP.
+     *
+     * @param string $mensaje
+     * @param array  $ctx  ['ruta','accion','clase','tipo'=>'manual','sql_state']
+     */
+    public static function registrarManual(string $mensaje, array $ctx = []): void
+    {
+        try {
+            self::guardar([
+                'tipo'      => $ctx['tipo']      ?? 'manual',
+                'clase'     => $ctx['clase']     ?? null,
+                'mensaje'   => $mensaje,
+                'sql_state' => $ctx['sql_state'] ?? null,
+                'archivo'   => $ctx['archivo']   ?? null,
+                'linea'     => $ctx['linea']     ?? null,
+                'ruta'      => $ctx['ruta']      ?? null,
+                'accion'    => $ctx['accion']    ?? null,
+                'traza'     => null,
+            ]);
+        } catch (\Throwable $propio) {
+            self::fallback($mensaje, $propio);
+        }
+    }
+
+    /**
      * Registra los manejadores globales. Se llama una vez por request desde
      * Application::run(). Solo usa register_shutdown_function: captura los errores
      * FATALES y las excepciones NO capturadas (que PHP convierte en fatal al morir)

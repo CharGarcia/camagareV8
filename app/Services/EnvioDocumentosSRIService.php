@@ -59,7 +59,9 @@ class EnvioDocumentosSRIService
         }
 
         if (empty($listaDestinos)) {
-            error_log("[SRI Correo] No se puede enviar correo: destinatarios inválidos o vacíos para doc $tipoDocumento.");
+            $msg = "Correo NO enviado ($tipoDocumento): el destinatario no tiene un email válido.";
+            error_log("[SRI Correo] $msg (raw: " . $emailDestinoRaw . ")");
+            \App\Services\ErrorLogService::registrarManual($msg, ['ruta' => 'EnvioDocumentosSRIService', 'accion' => 'enviarSiAplica']);
             return false;
         }
 
@@ -71,7 +73,9 @@ class EnvioDocumentosSRIService
             // Usar correo general del sistema
             $smtpData = EmailConfigService::getPhpMailerConfig('envio_documentos_sri');
             if (!$smtpData) {
-                error_log("[SRI Correo] Error: No existe configuración en correos_config con código 'envio_documentos_sri'.");
+                $msg = "Correo NO enviado ($tipoDocumento): falta la configuración de correo del sistema 'envio_documentos_sri' (inexistente o inactiva).";
+                error_log("[SRI Correo] $msg");
+                \App\Services\ErrorLogService::registrarManual($msg, ['ruta' => 'EnvioDocumentosSRIService', 'accion' => 'enviarSiAplica']);
                 return false;
             }
         } else {
@@ -134,7 +138,14 @@ class EnvioDocumentosSRIService
         $baseName = str_replace(' ', '_', $nombreDocStr) . '_' . $numComprobante;
 
         // 5. Enviar usando PHPMailer
-        return $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $htmlCuerpo, $baseName, $xmlString, $pdfString);
+        $enviado = $this->enviarPhpMailer($smtpData, $listaDestinos, $nombreDestino, $asunto, $htmlCuerpo, $baseName, $xmlString, $pdfString);
+        if (!$enviado) {
+            \App\Services\ErrorLogService::registrarManual(
+                "Correo NO enviado ($tipoDocumento) a " . implode(', ', $listaDestinos) . ": el servidor SMTP rechazó o falló el envío. Revise host/usuario/contraseña de 'envio_documentos_sri' o del correo propio de la empresa.",
+                ['ruta' => 'EnvioDocumentosSRIService', 'accion' => 'enviarSiAplica']
+            );
+        }
+        return $enviado;
     }
 
     /**

@@ -191,6 +191,21 @@ class ComprasRepository extends BaseRepository
     // DETALLES
     // ─────────────────────────────────────────────────────────────────────────
 
+    /**
+     * ¿La compra proviene de una migración? (tiene fila en migracion_mysql_map).
+     * Las compras migradas no se pueden editar.
+     */
+    public function esMigrado(int $id, int $idEmpresa): bool
+    {
+        $row = $this->query(
+            "SELECT 1 FROM migracion_mysql_map
+              WHERE entidad = 'compras' AND id_destino = ? AND id_empresa = ?
+              LIMIT 1",
+            [$id, $idEmpresa]
+        )->fetchColumn();
+        return (bool) $row;
+    }
+
     public function getDetalles(int $idCompra): array
     {
         $sql = "SELECT d.*, 

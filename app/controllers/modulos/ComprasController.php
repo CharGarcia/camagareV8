@@ -201,6 +201,13 @@ class ComprasController extends BaseModuloController
                 exit;
             }
 
+            // Flags de solo lectura para el modal:
+            //  - es_migrado: la compra proviene de una migración.
+            //  - periodo_cerrado: la fecha de emisión cae en un período contable cerrado.
+            $flags = $this->service->getFlagsSoloLectura($id, $idEmpresa, $compra['fecha_emision'] ?? null);
+            $compra['es_migrado']      = $flags['es_migrado'];
+            $compra['periodo_cerrado'] = $flags['periodo_cerrado'];
+
             echo json_encode(['ok' => true, 'data' => $compra]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

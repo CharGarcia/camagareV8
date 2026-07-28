@@ -140,4 +140,14 @@ class PeriodosContablesService
             throw new Exception($msg);
         }
     }
+
+    /** Versión booleana (sin excepción) para decidir el bloqueo de UI. */
+    public function esFechaEnPeriodoCerrado(?string $fecha, int $idEmpresa): bool
+    {
+        $fecha = trim((string)$fecha);
+        if ($fecha === '') {
+            return false;
+        }
+        return $this->repository->isFechaEnPeriodoCerrado($fecha, $idEmpresa);
+    }
 }

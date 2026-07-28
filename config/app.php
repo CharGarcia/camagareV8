@@ -78,10 +78,21 @@ $defaults = [
         'csrf' => 'log',
     ],
 
-    // Opciones SSL del SMTP. Vacío = se verifica el certificado (correcto).
-    // En localhost, si el certificado del SMTP falla, desactivar la verificación
-    // SOLO en config/local.php; nunca aquí.
-    'mail_smtp_options' => [],
+    // Opciones SSL del SMTP.
+    // El correo se conecta por IPv4 resuelto a IP (ver _mail_resolve_ipv4_host: evita
+    // que PHPMailer intente IPv6 y cuelgue hasta el timeout en droplets sin ruta IPv6).
+    // Pero al conectar por IP, la verificación del NOMBRE del certificado no puede
+    // coincidir (la IP no está en el CN/SAN del cert) y el TLS falla con
+    // "Peer certificate CN did not match expected CN". Por eso se desactiva
+    // verify_peer_name; se MANTIENE verify_peer: el certificado sigue teniendo que ser
+    // válido y emitido por una CA de confianza (no acepta certificados auto-firmados).
+    'mail_smtp_options' => [
+        'ssl' => [
+            'verify_peer'       => true,
+            'verify_peer_name'  => false,
+            'allow_self_signed' => false,
+        ],
+    ],
 
     // SECRETO: definir en config/local.php ('2captcha_api_key') o en la
     // variable de entorno CMG_2CAPTCHA_KEY. Nunca en este archivo.

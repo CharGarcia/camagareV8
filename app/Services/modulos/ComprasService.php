@@ -99,6 +99,19 @@ class ComprasService
         return $compra;
     }
 
+    /**
+     * Flags de solo lectura de una compra para el modal:
+     *  - es_migrado: proviene de una migración (no editable).
+     *  - periodo_cerrado: su fecha cae en un período contable cerrado (no editable).
+     */
+    public function getFlagsSoloLectura(int $id, int $idEmpresa, ?string $fecha): array
+    {
+        return [
+            'es_migrado'      => $this->repository->esMigrado($id, $idEmpresa),
+            'periodo_cerrado' => $this->periodosService->esFechaEnPeriodoCerrado($fecha, $idEmpresa),
+        ];
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // PARSEO DEL XML (para generar el PDF a partir del comprobante electrónico)
     // ─────────────────────────────────────────────────────────────────────────
@@ -370,6 +383,11 @@ class ComprasService
         $cabecera = $this->repository->getPorId($id, $idEmpresa);
         if (!$cabecera) {
             throw new \Exception('Compra no encontrada.');
+        }
+
+        // Las compras migradas son de solo lectura (no se editan).
+        if ($this->repository->esMigrado($id, $idEmpresa)) {
+            throw new \Exception('Esta compra proviene de una migración y no puede editarse.');
         }
 
         $this->rules->validar($data);

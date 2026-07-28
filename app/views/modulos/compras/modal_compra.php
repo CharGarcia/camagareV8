@@ -27,6 +27,11 @@
           </button>
         </div>
 
+        <!-- Aviso de solo lectura (compra migrada o período contable cerrado) -->
+        <div id="mcBloqueoAviso" class="alert alert-secondary d-flex align-items-center gap-2 py-2 px-3 mb-0 rounded-0 border-0 border-bottom d-none">
+          <i class="bi bi-lock-fill"></i>
+          <span class="small" id="mcBloqueoAvisoTexto"></span>
+        </div>
 
         <!-- Pestañas -->
         <div class="d-flex align-items-center bg-light px-3 pt-2">
