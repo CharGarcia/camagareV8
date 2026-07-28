@@ -1217,6 +1217,9 @@
         const btnAnular   = document.getElementById('ret-btn-anular');
 
         if (btnGuardar)  btnGuardar.disabled  = !esEditable && tieneId;
+        // Bloquear también los CAMPOS del formulario cuando la retención no es editable (no solo el
+        // botón Guardar): una retención ya autorizada/anulada no debe permitir modificar sus datos.
+        bloquearFormularioRet(!esEditable && tieneId);
         if (btnSri) {
             const puedeEnviar = tieneId && cab.estado === 'borrador';
             btnSri.disabled = !puedeEnviar;
@@ -1233,6 +1236,18 @@
             const puedeAnular = tieneId && cab.estado === 'autorizada';
             btnAnular.classList.toggle('d-none', !puedeAnular);
         }
+    }
+
+    // Habilita/deshabilita todos los controles del formulario de la retención (fecha, proveedor,
+    // secuencial, tipo doc, líneas y sus botones). Deja intactos los botones de acción del encabezado
+    // (PDF/XML/Correo/Anular/Guardar), que gestiona toggleBotones. Los hidden no se tocan (llevan ids).
+    function bloquearFormularioRet(bloquear) {
+        const form = document.getElementById('formRetencion');
+        if (!form) return;
+        form.querySelectorAll('input:not([type=hidden]), select, textarea, button').forEach(el => {
+            el.disabled = bloquear;
+        });
+        form.classList.toggle('ret-bloqueada', bloquear);
     }
 
     function actualizarBadgeEstado(estado) {
