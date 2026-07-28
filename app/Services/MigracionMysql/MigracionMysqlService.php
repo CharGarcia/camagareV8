@@ -2252,7 +2252,7 @@ class MigracionMysqlService
                     $insCab->execute([
                         ':e' => $idEmpresa, ':est' => $idEst, ':pto' => $idPto, ':prov' => $idProv, ':u' => $idUsuario,
                         ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec,
-                        ':clave' => self::claveAcceso($ec['aut_sri']), ':aut' => self::nz($ec['aut_sri']), ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
+                        ':clave' => self::claveAcceso($ec['aut_sri']), ':aut' => self::numAutorizacion($ec['aut_sri']), ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
                         ':tot' => (float) $ec['total_liquidacion'], ':estado' => $estado, ':sust' => $sust,
                         ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':cb' => $idUsuario,
                     ]);
@@ -2692,6 +2692,13 @@ class MigracionMysqlService
         // Ids válidos de sustento tributario en el sistema nuevo (para no romper la FK; viejo y nuevo comparten ids)
         $sustValidos = [];
         foreach ($pg->query("SELECT id FROM sustento_tributario") as $s) { $sustValidos[(int) $s['id']] = true; }
+        // numero_autorizacion ya usados en la empresa: el viejo a veces repite la MISMA autorización en
+        // varias compras (dato duplicado) y el índice único uq_compras_numaut_activo lo rechaza (23505).
+        // Se conserva el documento pero la 2ª+ ocurrencia va con numero_autorizacion NULL.
+        $authUsadas = [];
+        foreach ($pg->query("SELECT numero_autorizacion FROM compras_cabecera WHERE id_empresa = " . (int) $idEmpresa . " AND eliminado = false AND numero_autorizacion IS NOT NULL AND numero_autorizacion <> ''") as $a) {
+            $authUsadas[(string) $a['numero_autorizacion']] = true;
+        }
         // id_comprobante viejo -> código SRI (01 factura, 03 liquidación, 04 NC, 05 ND...). NO todos son facturas.
         $mapComprobante = [];
         foreach ($mysql->query("SELECT id_comprobante, codigo_comprobante FROM comprobantes_autorizados") as $cc2) {
@@ -2808,9 +2815,11 @@ class MigracionMysqlService
                 $tsi = 0.0; $tdes = 0.0;
                 foreach ($lineas as $l) { $tsi += (float) $l['subtotal'] - (float) $l['descuento']; $tdes += (float) $l['descuento']; }
 
+                $aut = self::numAutorizacion($ec['aut_sri']);
+                if ($aut !== null && isset($authUsadas[$aut])) { $aut = null; } // autorización duplicada en el viejo → no repetir (evita 23505)
                 $insCab->execute([
                     ':e' => $idEmpresa, ':prov' => $idProv, ':est' => $est, ':pto' => $pto, ':sec' => $sec,
-                    ':aut' => self::nz($ec['aut_sri']), ':fe' => substr((string) $ec['fecha_compra'], 0, 10),
+                    ':aut' => $aut, ':fe' => substr((string) $ec['fecha_compra'], 0, 10),
                     ':fr' => substr((string) $ec['fecha_registro'], 0, 19) ?: null, ':tot' => (float) $ec['total_compra'],
                     ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2), ':prop' => (float) $ec['propina'],
                     ':obs' => null, ':treg' => $treg, ':tcomp' => $tcomp, ':docmod' => $docmod, ':sust' => $sust, ':ad' => $ad, ':ah' => $ah,
@@ -2818,6 +2827,7 @@ class MigracionMysqlService
                     ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':u' => $idUsuario, ':cb' => $idUsuario,
                 ]);
                 $idCompra = (int) $insCab->fetchColumn();
+                if ($aut !== null) { $authUsadas[$aut] = true; }
 
                 foreach ($lineas as $l) {
                     $base_i = (float) $l['subtotal'] - (float) $l['descuento'];
@@ -3064,7 +3074,7 @@ class MigracionMysqlService
                     $insCab->execute([
                         ':e' => $idEmpresa, ':prov' => $idProv, ':u' => $idUsuario, ':est' => $idEst, ':pto' => $idPto,
                         ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec, ':clave' => self::claveAcceso($ec['aut_sri']),
-                        ':aut' => self::nz($ec['aut_sri']), ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1',
+                        ':aut' => self::numAutorizacion($ec['aut_sri']), ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1',
                         ':tds' => (string) ($ec['tipo_comprobante'] ?: '01'), ':nds' => self::nz($ec['numero_comprobante']),
                         ':fds' => $fds, ':tot' => (float) $ec['total_retencion'], ':per' => $per, ':estado' => $estado, ':cb' => $idUsuario,
                     ]);
@@ -3828,6 +3838,19 @@ class MigracionMysqlService
     {
         $s = preg_replace('/\D/', '', (string) $v);
         return (strlen((string) $s) === 49) ? $s : null;
+    }
+
+    /**
+     * Normaliza el NÚMERO DE AUTORIZACIÓN SRI: válido = al menos 10 dígitos (autorización antigua de 10
+     * o clave de 49). Cualquier cosa más corta (vacío, o el placeholder '0' del viejo en docs sin
+     * autorización) → NULL, para no chocar con el índice único parcial `uq_compras_numaut_activo`
+     * (id_empresa, numero_autorizacion) WHERE numero_autorizacion IS NOT NULL AND <> '' — varias
+     * compras con numero_autorizacion='0' reventaban con 23505.
+     */
+    private static function numAutorizacion($v): ?string
+    {
+        $s = trim((string) $v);
+        return (strlen(preg_replace('/\D/', '', $s)) >= 10) ? $s : null;
     }
 
     /** Infiere el tipo de identificación SRI a partir del número. */
