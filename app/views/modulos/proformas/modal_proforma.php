@@ -523,33 +523,21 @@ $totalPages = $pf_totalPagesBackup;
 
 <script>
 (function () {
-    // El modal de Proforma vive dentro de `.cmg-main-content` (overflow:hidden + flex),
-    // que atrapa/recorta a los modales de Cliente/Producto y los deja DETRÁS. La solución
-    // definitiva: sacarlos al <body> (escapan del contenedor) y elevar su z-index al abrir.
-    var Z_SUBMODAL = 2080;   // por encima de la proforma (1060) y del modal de descuento (2070)
-    var Z_BACKDROP = 2075;
-
-    function moverABody(id) {
-        var el = document.getElementById(id);
-        if (el && el.parentElement !== document.body) {
-            document.body.appendChild(el);
-        }
-    }
-    function reubicarSubmodales() {
-        moverABody('modalCliente');
-        moverABody('modalProducto');
-    }
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', reubicarSubmodales);
-    } else {
-        reubicarSubmodales();
-    }
+    // IMPORTANTE: app.css fuerza globalmente `.modal { z-index:5060 !important }` y
+    // `.modal-backdrop { z-index:5055 !important }`. Por eso TODOS los modales quedan en
+    // 5060 sin importar el z-index inline. Para que los modales de Cliente/Producto se
+    // abran ENCIMA del de Proforma, hay que subirlos POR ENCIMA de 5060 (con inline
+    // !important, que gana a la regla global) junto con su backdrop.
+    var Z_SUBMODAL = 5080;   // por encima del modal de proforma (5060 por la regla global)
+    var Z_BACKDROP = 5075;   // dim de la proforma, por debajo del submodal
 
     document.addEventListener('show.bs.modal', function (ev) {
         if (ev.target.id !== 'modalCliente' && ev.target.id !== 'modalProducto') return;
 
-        // Asegurar que estén al frente (el modal y su backdrop más reciente).
+        // 1) Elevar el propio submodal por encima de la proforma.
         ev.target.style.setProperty('z-index', String(Z_SUBMODAL), 'important');
+
+        // 2) Elevar el backdrop más reciente (el de este submodal) sobre la proforma.
         setTimeout(function () {
             var bds = document.querySelectorAll('.modal-backdrop');
             if (bds.length) {
