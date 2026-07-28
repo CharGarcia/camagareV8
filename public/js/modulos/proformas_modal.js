@@ -147,6 +147,24 @@
     /* ── Flag que bloquea sobreescribir el secuencial (modo edición) ── */
     let _bloquearSecuencial = false;
 
+    /* ── ¿La serie activa tiene secuencial configurado? (se actualiza en _cargarSecuencial) ── */
+    let _secuencialConfigurado = true;
+
+    /* ── Aviso de secuencial no configurado (igual que factura de venta) ── */
+    function _avisarSecuencialNoConfigurado(motivo) {
+        const txt = (motivo === 'serie')
+            ? 'Seleccione una serie (punto de emisión) para numerar la proforma.'
+            : 'No está configurado el secuencial para esta serie.<br>Configúrelo en <strong>Empresa → Puntos de emisión</strong> antes de emitir la proforma.';
+        Swal.fire({
+            icon: 'warning',
+            title: 'Secuencial no configurado',
+            html: txt,
+            confirmButtonText: 'Entendido',
+            confirmButtonColor: '#f39c12',
+            target: document.getElementById('modalProforma') || undefined,
+        });
+    }
+
     /* ── Sync establecimiento: igual que syncSerie() en factura de venta ── */
     function _syncEstab(selPunto) {
         const opt = selPunto.selectedOptions[0];
@@ -156,8 +174,17 @@
 
     /* ── Cargar secuencial: réplica exacta de cargarSecuencial() de factura de venta ── */
     async function _cargarSecuencial(idPunto) {
-        if (!idPunto || _bloquearSecuencial) return;
+        if (_bloquearSecuencial) return;
         const inputSec = $id('pf_secuencial');
+
+        // Sin serie / punto de emisión: no hay secuencial configurable.
+        if (!idPunto) {
+            _secuencialConfigurado = false;
+            if (inputSec) { inputSec.value = ''; inputSec.placeholder = 'Sin serie'; }
+            _avisarSecuencialNoConfigurado('serie');
+            return;
+        }
+
         if (inputSec) inputSec.placeholder = 'Cargando...';
         try {
             const resp = await fetch(`${urlBase()}/getSecuencialAjax?id_punto_emision=${idPunto}`);
@@ -172,9 +199,20 @@
                     inputSec.classList.remove('border-warning');
                     inputSec.title = json.detalle || 'Siguiente consecutivo';
                 }
+
+                // ¿Está configurado el secuencial para esta serie?
+                _secuencialConfigurado = (json.configurado !== false);
+                if (json.configurado === false) {
+                    inputSec.classList.add('border-danger');
+                    _avisarSecuencialNoConfigurado('secuencial');
+                } else {
+                    inputSec.classList.remove('border-danger');
+                }
             } else {
                 inputSec.value       = '000000001';
                 inputSec.placeholder = '000000001';
+                _secuencialConfigurado = false;
+                _avisarSecuencialNoConfigurado('secuencial');
             }
         } catch(e) {
             if (inputSec) { inputSec.value = '000000001'; inputSec.placeholder = '000000001'; }
@@ -1128,6 +1166,14 @@
             const payload = _buildPayload();
 
             if (!payload.id_punto_emision)   { toast('Seleccione el punto de emisión', 'error'); return; }
+
+            // Bloqueo: secuencial no configurado para la serie (solo al CREAR una nueva).
+            const _esNuevaProforma = !$id('pf_id')?.value;
+            if (_esNuevaProforma && _secuencialConfigurado === false) {
+                _avisarSecuencialNoConfigurado('secuencial');
+                return;
+            }
+
             if (!payload.secuencial)         { toast('Ingrese el secuencial', 'error'); return; }
             if (!payload.fecha_emision)      { toast('Ingrese la fecha de emisión', 'error'); return; }
             if (!payload.id_cliente)         { toast('Seleccione un cliente', 'error'); return; }

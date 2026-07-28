@@ -523,19 +523,33 @@ $totalPages = $pf_totalPagesBackup;
 
 <script>
 (function () {
-    // El modal de Proforma usa z-index:1060. Los modales de Cliente/Producto que se
-    // abren ENCIMA deben quedar por delante junto con su backdrop. Se fija por JS con
-    // prioridad !important (gana a cualquier estilo inline/CSS) al abrirse.
+    // El modal de Proforma vive dentro de `.cmg-main-content` (overflow:hidden + flex),
+    // que atrapa/recorta a los modales de Cliente/Producto y los deja DETRÁS. La solución
+    // definitiva: sacarlos al <body> (escapan del contenedor) y elevar su z-index al abrir.
     var Z_SUBMODAL = 2080;   // por encima de la proforma (1060) y del modal de descuento (2070)
     var Z_BACKDROP = 2075;
+
+    function moverABody(id) {
+        var el = document.getElementById(id);
+        if (el && el.parentElement !== document.body) {
+            document.body.appendChild(el);
+        }
+    }
+    function reubicarSubmodales() {
+        moverABody('modalCliente');
+        moverABody('modalProducto');
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', reubicarSubmodales);
+    } else {
+        reubicarSubmodales();
+    }
 
     document.addEventListener('show.bs.modal', function (ev) {
         if (ev.target.id !== 'modalCliente' && ev.target.id !== 'modalProducto') return;
 
-        // 1) Elevar el propio modal.
+        // Asegurar que estén al frente (el modal y su backdrop más reciente).
         ev.target.style.setProperty('z-index', String(Z_SUBMODAL), 'important');
-
-        // 2) Elevar el backdrop más reciente (el que crea este modal) por encima de la proforma.
         setTimeout(function () {
             var bds = document.querySelectorAll('.modal-backdrop');
             if (bds.length) {
