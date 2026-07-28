@@ -144,17 +144,13 @@ tramos. Al compartir pantalla no se reduce, para que el texto siga legible.
 
 ## Configuración
 
-Está en **Configuración → Videollamadas**, no dentro del módulo: los servidores
-son configuración de plataforma, no una función del día a día. **Solo la ve el
-superadministrador**, porque guarda credenciales de servicios contratados y
-afecta a todas las empresas.
+Está repartida en dos sitios, según a quién afecte cada cosa.
 
-Tiene dos pestañas.
+### Los servidores: Configuración → Videollamadas
 
-### Global
-
-Los servidores que **heredan todas las empresas**. Se cargan una sola vez aquí,
-no empresa por empresa.
+Es configuración de plataforma: los servidores los usan **todas las empresas** y
+se cargan una sola vez. **Solo la ve el superadministrador**, porque guarda
+credenciales de servicios contratados.
 
 | Ajuste | Para qué sirve |
 |--------|----------------|
@@ -165,30 +161,28 @@ no empresa por empresa.
 | Participantes y duración por defecto | Valores con los que arrancan las empresas nuevas |
 | Permitir servidores propios | Si se apaga, ninguna empresa puede usar un proveedor distinto |
 
-### Esta empresa
+El botón **Probar configuración** dice cuántos servidores quedaron disponibles y
+avisa si falta el TURN.
 
-Los **límites** son siempre propios: cuánta gente cabe, cuánto puede durar una
-reunión y a partir de cuántos participantes haría falta otro motor.
+### Los límites: Empresa → Videollamadas
 
-Los **servidores** solo hay que llenarlos si esta empresa debe usar un proveedor
-distinto al del resto. Si se dejan vacíos, hereda los globales.
+Cada empresa ajusta cómo trabaja: cuánta gente cabe en una reunión, cuánto puede
+durar y a partir de cuántos participantes haría falta otro motor de video.
+
+En esa misma pestaña, el **superadministrador** puede además cargar servidores
+propios para esa empresa concreta. Normalmente se dejan vacíos y la empresa
+hereda los globales; solo se llenan si debe usar un proveedor distinto.
 
 La herencia funciona **por bloque, no campo por campo**: o la empresa define su
 servidor TURN completo (dirección, usuario y credencial), o hereda el global
 entero. Mezclar la dirección de un proveedor con la credencial de otro daría una
 configuración que no conecta con ninguno.
 
-Arriba del todo, un resumen muestra qué servidores se están usando realmente y si
-son **propios** o **heredados**.
-
 ### Sobre las credenciales
 
 Se guardan cifradas y **nunca se vuelven a mostrar**: si deja el campo vacío al
 guardar, se conserva la que ya estaba. Para quitarla hay un botón de papelera
 junto a cada una.
-
-El botón **Probar configuración** dice cuántos servidores quedaron disponibles y
-avisa si falta el TURN.
 
 ## Campos del formulario
 
@@ -283,9 +277,10 @@ El nivel 3 (superadministrador) siempre ve todo.
 
 ## Historial de cambios
 
-- **1.5** — La configuración de servidores se traslada a **Configuración →
-  Videollamadas**. Antes estaba en un botón dentro del módulo, que no
-  correspondía: es configuración de plataforma, no una función operativa.
+- **1.5** — La configuración se reparte según a quién afecta: los servidores
+  (globales del sistema) pasan a **Configuración → Videollamadas**, y los límites
+  de cada empresa a **Empresa → Videollamadas**. Antes estaba todo en un botón
+  dentro del módulo, que no correspondía.
 - **1.4** — Invitados externos: cada uno recibe por correo su enlace personal y
   entra sin tener cuenta en el sistema. Envío de invitaciones desde el modal y
   recordatorio automático quince minutos antes de las reuniones programadas.

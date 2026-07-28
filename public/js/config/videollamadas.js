@@ -57,30 +57,12 @@
         enviar('guardarGlobal', fd);
     };
 
-    window.VCFG_guardarEmpresa = function (extra) {
-        const fd = new FormData();
-        fd.append('max_participantes', val('cfg-max'));
-        fd.append('duracion_max_minutos', val('cfg-duracion'));
-        fd.append('umbral_proveedor_externo', val('cfg-umbral'));
-        fd.append('stun_urls', val('cfg-stun').trim());
-        fd.append('turn_urls', val('cfg-turn-urls').trim());
-        fd.append('turn_usuario', val('cfg-turn-usuario').trim());
-        fd.append('turn_credencial', val('cfg-turn-credencial'));
-        fd.append('turn_key_id', val('cfg-turn-key-id').trim());
-        fd.append('turn_api_token', val('cfg-turn-api-token'));
-        if (extra) fd.append(extra, '1');
-
-        enviar('guardar', fd);
-    };
-
-    window.VCFG_borrarSecreto = async function (campo, esGlobal) {
+    window.VCFG_borrarSecreto = async function (campo) {
         if (typeof Swal !== 'undefined') {
             const r = await Swal.fire({
                 icon: 'warning',
                 title: '¿Borrar el dato guardado?',
-                text: esGlobal
-                    ? 'Afecta a todas las empresas que heredan esta configuración.'
-                    : 'Esta empresa volverá a usar los servidores globales.',
+                text: 'Afecta a todas las empresas, que heredan esta configuración.',
                 showCancelButton: true,
                 confirmButtonText: 'Borrar',
                 cancelButtonText: 'Cancelar',
@@ -89,9 +71,7 @@
             if (!r.isConfirmed) return;
         }
 
-        esGlobal
-            ? window.VCFG_guardarGlobal('borrar_' + campo)
-            : window.VCFG_guardarEmpresa('borrar_' + campo);
+        window.VCFG_guardarGlobal('borrar_' + campo);
     };
 
     window.VCFG_probar = async function () {

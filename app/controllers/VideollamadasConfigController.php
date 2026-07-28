@@ -53,28 +53,10 @@ class VideollamadasConfigController extends Controller
 
         $this->viewWithLayout('layouts.main', 'config.videollamadas', [
             'titulo'   => 'Videollamadas',
-            'empresa'  => $this->service->getConfigParaVista($idEmpresa, $idUsuario),
             'global'   => $this->service->getConfigGlobalParaVista($idUsuario),
             'efectiva' => $this->service->getConfigEfectiva($idEmpresa, $idUsuario),
             'maxMesh'  => VideollamadaRules::MAX_PARTICIPANTES_MESH,
         ]);
-    }
-
-    /** Límites y, si hace falta, servidores propios de la empresa activa. */
-    public function guardarAjax(): void
-    {
-        $this->requireSuperadmin();
-
-        try {
-            $this->service->guardarConfig(
-                (int) $_SESSION['id_empresa'],
-                (int) $_SESSION['id_usuario'],
-                $_POST
-            );
-            $this->json(['ok' => true, 'mensaje' => 'Configuración de la empresa guardada.']);
-        } catch (\Throwable $e) {
-            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
-        }
     }
 
     /** Servidores que hereda todo el sistema. */

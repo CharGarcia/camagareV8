@@ -670,7 +670,6 @@ class ConfigController extends Controller
         $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
         $c = new VideollamadasConfigController();
         $method = match ($sub) {
-            'guardar'       => 'guardarAjax',
             'guardarGlobal' => 'guardarGlobalAjax',
             'probar'        => 'probarAjax',
             default         => 'index',
