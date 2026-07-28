@@ -2142,8 +2142,8 @@ class MigracionMysqlService
         $oldProvRuc   = $mysql->prepare("SELECT ruc_proveedor FROM proveedores WHERE id_proveedor = :id LIMIT 1");
 
         $insCab = $pg->prepare(
-            "INSERT INTO liquidaciones_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_proveedor, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, numero_autorizacion, total_sin_impuestos, total_descuento, importe_total, moneda, estado, tipo_ambiente, created_by)
-             VALUES (:e, :est, :pto, :prov, :u, :fe, :estc, :ptoc, :sec, :clave, :aut, :tsi, :tdes, :tot, 'DOLAR', :estado, :amb, :cb) RETURNING id"
+            "INSERT INTO liquidaciones_cabecera (id_empresa, id_establecimiento, id_punto_emision, id_proveedor, id_usuario, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, numero_autorizacion, total_sin_impuestos, total_descuento, importe_total, moneda, estado, id_sustento_tributario, tipo_ambiente, created_by)
+             VALUES (:e, :est, :pto, :prov, :u, :fe, :estc, :ptoc, :sec, :clave, :aut, :tsi, :tdes, :tot, 'DOLAR', :estado, :sust, :amb, :cb) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO liquidaciones_detalle (id_cabecera, codigo_principal, descripcion, cantidad, precio_unitario, descuento, precio_total_sin_impuesto)
@@ -2155,6 +2155,61 @@ class MigracionMysqlService
         );
         $cuerpoStmt = $mysql->prepare("SELECT cantidad, valor_unitario, subtotal, tarifa_iva, descuento, codigo_producto, nombre_producto FROM cuerpo_liquidacion WHERE ruc_empresa = :r AND serie_liquidacion = :s AND secuencial_liquidacion = :sec");
 
+        // SUSTENTO TRIBUTARIO: encabezado_liquidacion NO lo trae, pero el mismo doc está en
+        // encabezado_compra (id_comprobante=3) con id_sustento. Se cruza por numero_documento
+        // (solo dígitos = estab+pto+secuencial). Solo se acepta un id que exista en sustento_tributario.
+        $sustValidos = [];
+        foreach ($pg->query("SELECT id FROM sustento_tributario") as $s) { $sustValidos[(int) $s['id']] = true; }
+        $sustPorNum = [];
+        foreach ($mysql->query("SELECT numero_documento, id_sustento FROM encabezado_compra WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base) . " AND id_comprobante = 3") as $r) {
+            $k = preg_replace('/\D/', '', (string) $r['numero_documento']);
+            if ($k !== '') { $sustPorNum[$k] = (int) $r['id_sustento']; }
+        }
+        $sustentoDe = function (string $estab, string $pto, string $sec) use ($sustPorNum, $sustValidos): ?int {
+            $id = $sustPorNum[$estab . $pto . $sec] ?? 0;
+            return ($id > 0 && isset($sustValidos[$id])) ? $id : null;
+        };
+
+        // Info adicional (detalle_adicional_liquidacion) + formas de pago SRI (formas_pago_liquidacion),
+        // ambas enlazan por serie+secuencial. Precarga en memoria (tablas pequeñas). Idempotente.
+        $insAdic = $pg->prepare("INSERT INTO liquidaciones_adicional (id_cabecera, nombre, valor) VALUES (?, ?, ?)");
+        $delAdic = $pg->prepare("DELETE FROM liquidaciones_adicional WHERE id_cabecera = ?");
+        $insPago = $pg->prepare("INSERT INTO liquidaciones_pagos (id_cabecera, forma_pago, total, plazo, unidad_tiempo) VALUES (?, ?, ?, ?, ?)");
+        $delPago = $pg->prepare("DELETE FROM liquidaciones_pagos WHERE id_cabecera = ?");
+        $adicMap = null; $pagosMap = null;
+        $precargar = function () use ($mysql, $base, &$adicMap, &$pagosMap): void {
+            if ($adicMap !== null) { return; }
+            $adicMap = []; $pagosMap = [];
+            foreach ($mysql->query("SELECT serie_liquidacion, secuencial_liquidacion, adicional_concepto, adicional_descripcion FROM detalle_adicional_liquidacion WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base) . " ORDER BY id_detalle") as $r) {
+                $adicMap[$r['serie_liquidacion'] . '|' . (int) $r['secuencial_liquidacion']][] = ['n' => $r['adicional_concepto'], 'd' => $r['adicional_descripcion']];
+            }
+            foreach ($mysql->query("SELECT serie_liquidacion, secuencial_liquidacion, id_forma_pago, valor_pago FROM formas_pago_liquidacion WHERE LEFT(ruc_empresa,10) = " . $mysql->quote($base)) as $r) {
+                $pagosMap[$r['serie_liquidacion'] . '|' . (int) $r['secuencial_liquidacion']][] = ['fp' => $r['id_forma_pago'], 'val' => $r['valor_pago']];
+            }
+        };
+        // Copia info adicional + formas de pago de una liquidación (delete+insert, idempotente).
+        $migrarHijos = function (int $idLiq, array $ec) use ($precargar, &$adicMap, &$pagosMap, $insAdic, $delAdic, $insPago, $delPago): void {
+            $precargar();
+            $k = $ec['serie_liquidacion'] . '|' . (int) $ec['secuencial_liquidacion'];
+            $delAdic->execute([$idLiq]);
+            foreach ($adicMap[$k] ?? [] as $a) {
+                $nom = trim((string) $a['n']);
+                if ($nom === '') { continue; }
+                $insAdic->execute([$idLiq, mb_substr($nom, 0, 300), mb_substr(trim((string) $a['d']), 0, 300)]);
+            }
+            $delPago->execute([$idLiq]);
+            foreach ($pagosMap[$k] ?? [] as $f) {
+                $fp = str_pad(trim((string) $f['fp']), 2, '0', STR_PAD_LEFT); // id_forma_pago = código SRI
+                if ($fp === '' || $fp === '00') { continue; }
+                $insPago->execute([$idLiq, $fp, (float) $f['val'], 0, 'dias']);
+            }
+        };
+
+        // Reconciliación por mapa (reemplaza yaMigradoDoc): al re-correr completa sustento/estado/
+        // ambiente + info adicional + formas de pago de las liquidaciones ya migradas.
+        $mapLiq = $this->mapaDe($pg, $idEmpresa, 'liquidaciones');
+        $updCab = $pg->prepare("UPDATE liquidaciones_cabecera SET id_proveedor = ?, fecha_emision = ?, estado = ?, id_sustento_tributario = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+
         $sql = "SELECT id_encabezado_liq, ruc_empresa, fecha_liquidacion, serie_liquidacion, secuencial_liquidacion, id_proveedor, estado_sri, total_liquidacion, ambiente, aut_sri
                   FROM encabezado_liquidacion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_liquidacion', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_liq";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
@@ -2163,7 +2218,7 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_encabezado_liq'];
-            if ($this->yaMigradoDoc($idEmpresa, 'liquidaciones', 'liquidaciones_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
+            $idLiqExist = $mapLiq[(string) $old] ?? null;
             $idProv = $this->resolverOCrearProveedor($provPorIdent, $mapProv, (int) $ec['id_proveedor'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idProv) { $res['omitidos']++; continue; }
 
@@ -2172,44 +2227,55 @@ class MigracionMysqlService
             $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
             $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
             $sec   = str_pad(preg_replace('/\D+/', '', (string) $ec['secuencial_liquidacion']), 9, '0', STR_PAD_LEFT);
-
-            $ye = $this->docExistente($pg, 'liquidaciones_cabecera', ['id_empresa' => $idEmpresa, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $sec]);
-            if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$estab-$pto-$sec", $idUsuario); continue; }
+            if (!$idLiqExist) {
+                $ye = $this->docExistente($pg, 'liquidaciones_cabecera', ['id_empresa' => $idEmpresa, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $sec]);
+                if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$estab-$pto-$sec", $idUsuario); continue; }
+            }
+            $fe     = substr((string) $ec['fecha_liquidacion'], 0, 10);
+            $estado = $this->estadoFacturaSri((string) $ec['estado_sri']);
+            $sust   = $sustentoDe($estab, $pto, $sec);
 
             try {
                 $pg->beginTransaction();
-                $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
-                $idPto = $this->getPuntoEmisionId($idEmpresa, $estab, $pto, $idUsuario);
-                $cuerpoStmt->execute([':r' => $ec['ruc_empresa'], ':s' => $serie, ':sec' => $ec['secuencial_liquidacion']]);
-                $lineas = $cuerpoStmt->fetchAll(PDO::FETCH_ASSOC);
-                $tsi = 0.0; $tdes = 0.0;
-                foreach ($lineas as $l) { $tsi += (float) $l['subtotal'] - (float) $l['descuento']; $tdes += (float) $l['descuento']; }
+                if ($idLiqExist) { // re-correr: reconciliar cabecera + info adicional + pagos
+                    $idLiq = (int) $idLiqExist;
+                    $updCab->execute([$idProv, $fe, $estado, $sust, $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idLiq]);
+                    $res['ya_migrados']++;
+                } else {
+                    $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
+                    $idPto = $this->getPuntoEmisionId($idEmpresa, $estab, $pto, $idUsuario);
+                    $cuerpoStmt->execute([':r' => $ec['ruc_empresa'], ':s' => $serie, ':sec' => $ec['secuencial_liquidacion']]);
+                    $lineas = $cuerpoStmt->fetchAll(PDO::FETCH_ASSOC);
+                    $tsi = 0.0; $tdes = 0.0;
+                    foreach ($lineas as $l) { $tsi += (float) $l['subtotal'] - (float) $l['descuento']; $tdes += (float) $l['descuento']; }
 
-                $insCab->execute([
-                    ':e' => $idEmpresa, ':est' => $idEst, ':pto' => $idPto, ':prov' => $idProv, ':u' => $idUsuario,
-                    ':fe' => substr((string) $ec['fecha_liquidacion'], 0, 10), ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec,
-                    ':clave' => self::claveAcceso($ec['aut_sri']), ':aut' => self::nz($ec['aut_sri']), ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
-                    ':tot' => (float) $ec['total_liquidacion'], ':estado' => $this->estadoFacturaSri((string) $ec['estado_sri']),
-                    ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':cb' => $idUsuario,
-                ]);
-                $idLiq = (int) $insCab->fetchColumn();
-
-                foreach ($lineas as $l) {
-                    $base_i = (float) $l['subtotal'] - (float) $l['descuento'];
-                    $insDet->execute([
-                        ':c' => $idLiq, ':cod' => (string) $l['codigo_producto'], ':desc' => (string) ($l['nombre_producto'] ?: 'ITEM'),
-                        ':cant' => (float) $l['cantidad'], ':pu' => (float) $l['valor_unitario'], ':desc2' => (float) $l['descuento'], ':baseCol' => round($base_i, 2),
+                    $insCab->execute([
+                        ':e' => $idEmpresa, ':est' => $idEst, ':pto' => $idPto, ':prov' => $idProv, ':u' => $idUsuario,
+                        ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec,
+                        ':clave' => self::claveAcceso($ec['aut_sri']), ':aut' => self::nz($ec['aut_sri']), ':tsi' => round($tsi, 2), ':tdes' => round($tdes, 2),
+                        ':tot' => (float) $ec['total_liquidacion'], ':estado' => $estado, ':sust' => $sust,
+                        ':amb' => $this->ambienteEmpresa($pg, $idEmpresa), ':cb' => $idUsuario,
                     ]);
-                    $idDet = (int) $insDet->fetchColumn();
-                    $cod = trim((string) $l['tarifa_iva']);
-                    $pct = self::IVA_PCT[$cod] ?? 0;
-                    $insImp->execute([':d' => $idDet, ':cp' => ($cod === '' ? '0' : $cod), ':tar' => $pct, ':base' => round($base_i, 2), ':val' => round($base_i * $pct / 100, 2)]);
+                    $idLiq = (int) $insCab->fetchColumn();
+
+                    foreach ($lineas as $l) {
+                        $base_i = (float) $l['subtotal'] - (float) $l['descuento'];
+                        $insDet->execute([
+                            ':c' => $idLiq, ':cod' => (string) $l['codigo_producto'], ':desc' => (string) ($l['nombre_producto'] ?: 'ITEM'),
+                            ':cant' => (float) $l['cantidad'], ':pu' => (float) $l['valor_unitario'], ':desc2' => (float) $l['descuento'], ':baseCol' => round($base_i, 2),
+                        ]);
+                        $idDet = (int) $insDet->fetchColumn();
+                        $cod = trim((string) $l['tarifa_iva']);
+                        $pct = self::IVA_PCT[$cod] ?? 0;
+                        $insImp->execute([':d' => $idDet, ':cp' => ($cod === '' ? '0' : $cod), ':tar' => $pct, ':base' => round($base_i, 2), ':val' => round($base_i * $pct / 100, 2)]);
+                    }
+                    $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idLiq, ':cn' => "$estab-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
+                    $res['migrados']++;
                 }
 
-                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idLiq, ':cn' => "$estab-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
+                $migrarHijos($idLiq, $ec); // info adicional + formas de pago SRI
                 $pg->commit();
                 $done[(string) $old] = true;
-                $res['migrados']++;
             } catch (Throwable $ex) {
                 if ($pg->inTransaction()) { $pg->rollBack(); }
                 $res['errores']++;
