@@ -2938,16 +2938,20 @@ class MigracionMysqlService
         $oldProvRuc   = $mysql->prepare("SELECT ruc_proveedor FROM proveedores WHERE id_proveedor = :id LIMIT 1");
 
         $insCab = $pg->prepare(
-            "INSERT INTO retencion_compra_cabecera (id_empresa, id_proveedor, id_usuario, id_establecimiento, id_punto_emision, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, numero_autorizacion, tipo_ambiente, tipo_doc_sustento, num_doc_sustento, fecha_emision_doc_sustento, total_retenido, created_by)
-             VALUES (:e, :prov, :u, :est, :pto, :fe, :estc, :ptoc, :sec, :clave, :aut, :amb, :tds, :nds, :fds, :tot, :cb) RETURNING id"
+            "INSERT INTO retencion_compra_cabecera (id_empresa, id_proveedor, id_usuario, id_establecimiento, id_punto_emision, fecha_emision, establecimiento, punto_emision, secuencial, clave_acceso, numero_autorizacion, tipo_ambiente, tipo_doc_sustento, num_doc_sustento, fecha_emision_doc_sustento, total_retenido, periodo_fiscal, estado, created_by)
+             VALUES (:e, :prov, :u, :est, :pto, :fe, :estc, :ptoc, :sec, :clave, :aut, :amb, :tds, :nds, :fds, :tot, :per, :estado, :cb) RETURNING id"
         );
         $insDet = $pg->prepare(
             "INSERT INTO retencion_compra_detalle (id_empresa, id_retencion, codigo_impuesto, codigo_retencion, concepto, base_imponible, porcentaje_retener, valor_retenido)
              VALUES (:e, :r, :ci, :cr, :con, :bi, :pct, :val)"
         );
-        $cuerpoStmt = $mysql->prepare("SELECT codigo_impuesto, id_retencion, base_imponible, porcentaje_retencion, valor_retenido, nombre_retencion FROM cuerpo_retencion WHERE ruc_empresa = :r AND serie_retencion = :s AND secuencial_retencion = :sec");
+        $cuerpoStmt = $mysql->prepare("SELECT codigo_impuesto, id_retencion, base_imponible, porcentaje_retencion, valor_retenido, nombre_retencion, ejercicio_fiscal FROM cuerpo_retencion WHERE ruc_empresa = :r AND serie_retencion = :s AND secuencial_retencion = :sec");
+        // Reconciliación al re-correr: completa periodo_fiscal/estado y reconstruye el detalle de las ya migradas.
+        $mapRetC = $this->mapaDe($pg, $idEmpresa, 'retenciones_compra');
+        $updCab  = $pg->prepare("UPDATE retencion_compra_cabecera SET id_proveedor = ?, fecha_emision = ?, periodo_fiscal = ?, estado = ?, total_retenido = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $delDet  = $pg->prepare("DELETE FROM retencion_compra_detalle WHERE id_retencion = ?");
 
-        $sql = "SELECT id_encabezado_retencion, ruc_empresa, id_proveedor, serie_retencion, secuencial_retencion, total_retencion, aut_sri, fecha_emision, fecha_documento, tipo_comprobante, numero_comprobante, ambiente
+        $sql = "SELECT id_encabezado_retencion, ruc_empresa, id_proveedor, serie_retencion, secuencial_retencion, total_retencion, aut_sri, fecha_emision, fecha_documento, tipo_comprobante, numero_comprobante, ambiente, estado_sri
                   FROM encabezado_retencion WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . $this->clausulaFecha('fecha_emision', $desde, $hasta, $mysql) . " ORDER BY id_encabezado_retencion";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
@@ -2955,7 +2959,7 @@ class MigracionMysqlService
         while ($ec = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $res['total']++;
             $old = (int) $ec['id_encabezado_retencion'];
-            if ($this->yaMigradoDoc($idEmpresa, 'retenciones_compra', 'retencion_compra_cabecera', $old, $pg)) { $res['ya_migrados']++; continue; }
+            $idRetExist = $mapRetC[(string) $old] ?? null;
             $idProv = $this->resolverOCrearProveedor($provPorIdent, $mapProv, (int) $ec['id_proveedor'], $idEmpresa, $idUsuario, $mysql, $pg);
             if (!$idProv) { $res['omitidos']++; continue; }
 
@@ -2964,27 +2968,45 @@ class MigracionMysqlService
             $estab = str_pad($partes[0] ?? '001', 3, '0', STR_PAD_LEFT);
             $pto   = str_pad($partes[1] ?? '001', 3, '0', STR_PAD_LEFT);
             $sec   = str_pad(preg_replace('/\D+/', '', (string) $ec['secuencial_retencion']), 9, '0', STR_PAD_LEFT);
-            $ye = $this->docExistente($pg, 'retencion_compra_cabecera', ['id_empresa' => $idEmpresa, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $sec]);
-            if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$estab-$pto-$sec", $idUsuario); continue; }
+            if (!$idRetExist) {
+                $ye = $this->docExistente($pg, 'retencion_compra_cabecera', ['id_empresa' => $idEmpresa, 'establecimiento' => $estab, 'punto_emision' => $pto, 'secuencial' => $sec]);
+                if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$estab-$pto-$sec", $idUsuario); continue; }
+            }
             $fe    = substr((string) $ec['fecha_emision'], 0, 10);
             $fds   = substr((string) $ec['fecha_documento'], 0, 10);
             if ($fds === '' || strpos($fds, '0000') === 0) { $fds = $fe; }
+            // Periodo fiscal MM/YYYY desde la fecha (fallback al ejercicio_fiscal del cuerpo).
+            $per = ($fe !== '' && strpos($fe, '0000') !== 0) ? (substr($fe, 5, 2) . '/' . substr($fe, 0, 4)) : '';
+            // Estado: los migrados ya fueron emitidos → 'autorizada' (o 'anulada' si el viejo lo marca).
+            $estado = (stripos((string) $ec['estado_sri'], 'anul') !== false) ? 'anulada' : 'autorizada';
 
             try {
                 $pg->beginTransaction();
-                $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
-                $idPto = $this->getPuntoEmisionId($idEmpresa, $estab, $pto, $idUsuario);
-                $insCab->execute([
-                    ':e' => $idEmpresa, ':prov' => $idProv, ':u' => $idUsuario, ':est' => $idEst, ':pto' => $idPto,
-                    ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec, ':clave' => self::claveAcceso($ec['aut_sri']),
-                    ':aut' => self::nz($ec['aut_sri']), ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1',
-                    ':tds' => (string) ($ec['tipo_comprobante'] ?: '01'), ':nds' => self::nz($ec['numero_comprobante']),
-                    ':fds' => $fds, ':tot' => (float) $ec['total_retencion'], ':cb' => $idUsuario,
-                ]);
-                $idRet = (int) $insCab->fetchColumn();
-
                 $cuerpoStmt->execute([':r' => $ec['ruc_empresa'], ':s' => $serie, ':sec' => $ec['secuencial_retencion']]);
-                foreach ($cuerpoStmt->fetchAll(PDO::FETCH_ASSOC) as $l) {
+                $lineas = $cuerpoStmt->fetchAll(PDO::FETCH_ASSOC);
+                if ($per === '' && !empty($lineas[0]['ejercicio_fiscal'])) { $per = (string) $lineas[0]['ejercicio_fiscal']; }
+                $per = $per ?: '01/1900';
+
+                if ($idRetExist) { // re-correr: reconciliar cabecera + reconstruir detalle
+                    $idRet = (int) $idRetExist;
+                    $updCab->execute([$idProv, $fe, $per, $estado, (float) $ec['total_retencion'], $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario, $idRet]);
+                    $delDet->execute([$idRet]);
+                    $res['ya_migrados']++;
+                } else {
+                    $idEst = $this->getEstablecimientoId($idEmpresa, $estab, $idUsuario);
+                    $idPto = $this->getPuntoEmisionId($idEmpresa, $estab, $pto, $idUsuario);
+                    $insCab->execute([
+                        ':e' => $idEmpresa, ':prov' => $idProv, ':u' => $idUsuario, ':est' => $idEst, ':pto' => $idPto,
+                        ':fe' => $fe, ':estc' => $estab, ':ptoc' => $pto, ':sec' => $sec, ':clave' => self::claveAcceso($ec['aut_sri']),
+                        ':aut' => self::nz($ec['aut_sri']), ':amb' => ((string) $ec['ambiente'] === '2') ? '2' : '1',
+                        ':tds' => (string) ($ec['tipo_comprobante'] ?: '01'), ':nds' => self::nz($ec['numero_comprobante']),
+                        ':fds' => $fds, ':tot' => (float) $ec['total_retencion'], ':per' => $per, ':estado' => $estado, ':cb' => $idUsuario,
+                    ]);
+                    $idRet = (int) $insCab->fetchColumn();
+                    $res['migrados']++;
+                }
+
+                foreach ($lineas as $l) {
                     $insDet->execute([
                         ':e' => $idEmpresa, ':r' => $idRet, ':ci' => trim((string) $l['codigo_impuesto']) ?: '1',
                         ':cr' => trim((string) $l['id_retencion']), ':con' => self::nz($l['nombre_retencion']),
@@ -2992,10 +3014,9 @@ class MigracionMysqlService
                     ]);
                 }
 
-                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idRet, ':cn' => "$estab-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]);
+                if (!$idRetExist) { $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idRet, ':cn' => "$estab-$pto-$sec", ':vin' => 'f', ':cb' => $idUsuario]); }
                 $pg->commit();
                 $done[(string) $old] = true;
-                $res['migrados']++;
             } catch (Throwable $ex) {
                 if ($pg->inTransaction()) { $pg->rollBack(); }
                 $res['errores']++;
