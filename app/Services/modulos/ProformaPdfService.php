@@ -91,6 +91,10 @@ class ProformaPdfService
             $pdf->MultiCell($izqW, 4, implode('  ·  ', $contacto), 0, 'L', false, 1);
         }
 
+        // Fondo real donde termina el bloque de la empresa (se captura ANTES de dibujar
+        // el bloque PROFORMA, porque sus Cell con ln=1 reposicionan el cursor Y hacia arriba).
+        $yEmpresaBottom = $pdf->GetY();
+
         // ── Bloque PROFORMA (derecha) ──
         $xDer = $mL + $izqW;
         $boxH = 30;
@@ -115,8 +119,9 @@ class ProformaPdfService
         $pdf->SetXY($xDer, $y0 + 22.5);
         $pdf->Cell($derW, 5, 'Válida hasta: ' . $vence, 0, 1, 'C');
 
-        // Línea de acento bajo el encabezado
-        $yLinea = max($pdf->GetY(), $y0 + $boxH) + 2;
+        // Línea de acento bajo el encabezado: debajo de lo más bajo entre el texto de la
+        // empresa y el bloque PROFORMA (así la caja del cliente nunca se solapa).
+        $yLinea = max($yEmpresaBottom, $y0 + $boxH) + 2;
         $pdf->SetLineWidth(0.6);
         $pdf->SetDrawColor(...$this->accent);
         $pdf->Line($mL, $yLinea, $mL + $w, $yLinea);
