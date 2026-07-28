@@ -2805,7 +2805,10 @@ class MigracionMysqlService
             $pto = str_pad($num[1] ?? '', 3, '0', STR_PAD_LEFT);
             $sec = str_pad(preg_replace('/\D+/', '', $num[2] ?? ''), 9, '0', STR_PAD_LEFT);
 
-            $ye = $this->docExistente($pg, 'compras_cabecera', ['id_empresa' => $idEmpresa, 'id_proveedor' => $idProv, 'establecimiento_prov' => $est, 'punto_emision_prov' => $pto, 'secuencial_prov' => $sec]);
+            // La clave incluye tipo_comprobante: una FACTURA (01) y una NC (04) del mismo proveedor pueden
+            // compartir número (numeraciones independientes en el SRI). Sin esto, la NC hacía match con la
+            // factura y se "vinculaba" (no se migraba como NC). Verificado: 61 grupos así en la base vieja.
+            $ye = $this->docExistente($pg, 'compras_cabecera', ['id_empresa' => $idEmpresa, 'id_proveedor' => $idProv, 'establecimiento_prov' => $est, 'punto_emision_prov' => $pto, 'secuencial_prov' => $sec, 'tipo_comprobante' => $tcomp]);
             if ($ye) { $this->marcarVinculado($res, $done, $pg, $idEmpresa, $old, $ye, "$est-$pto-$sec", $idUsuario); continue; }
 
             try {
