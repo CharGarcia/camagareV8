@@ -206,9 +206,83 @@ class ComprasRepository extends BaseRepository
         return (bool) $row;
     }
 
+    /**
+     * Suma del importe de las notas de crédito (tipo 04) que modifican esta compra.
+     * Vínculo: nc.documento_modificado = numero de la compra + mismo proveedor/empresa.
+     */
+    public function getTotalNotasCredito(int $idCompra, int $idEmpresa): float
+    {
+        $sql = "SELECT COALESCE(SUM(nc.importe_total), 0)
+                  FROM compras_cabecera nc
+                  JOIN compras_cabecera c
+                       ON nc.documento_modificado = CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov)
+                      AND nc.id_proveedor = c.id_proveedor
+                      AND nc.id_empresa   = c.id_empresa
+                 WHERE c.id = ? AND c.id_empresa = ?
+                   AND nc.tipo_comprobante = '04' AND nc.eliminado = false";
+        return (float) $this->query($sql, [$idCompra, $idEmpresa])->fetchColumn();
+    }
+
+    /**
+     * Documentos relacionados de una compra:
+     *  - Si la compra es una nota de crédito (tipo 04): devuelve la FACTURA que modifica.
+     *  - Si es una factura/compra: devuelve sus NOTAS DE CRÉDITO (tipo 04).
+     * Cada documento incluye sus detalles (líneas).
+     */
+    public function getDocumentosRelacionados(int $idCompra, int $idEmpresa): array
+    {
+        $cab = $this->getPorId($idCompra, $idEmpresa);
+        if (!$cab) {
+            return ['relacion' => 'ninguno', 'documentos' => []];
+        }
+
+        $numero = ($cab['establecimiento_prov'] ?? '') . '-' . ($cab['punto_emision_prov'] ?? '') . '-' . ($cab['secuencial_prov'] ?? '');
+        $esNota = ((string)($cab['tipo_comprobante'] ?? '')) === '04';
+
+        if ($esNota) {
+            // Buscar la factura que esta nota de crédito modifica.
+            $relacion = 'factura';
+            $sql = "SELECT c.id,
+                           CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) AS numero,
+                           c.fecha_emision, c.importe_total, c.total_sin_impuestos, c.tipo_comprobante,
+                           ca.comprobante AS tipo_comprobante_nombre
+                      FROM compras_cabecera c
+                      LEFT JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = c.tipo_comprobante
+                     WHERE c.id_empresa = ? AND c.eliminado = false
+                       AND c.id_proveedor = ?
+                       AND CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) = ?
+                       AND c.tipo_comprobante NOT IN ('04', '05')
+                     ORDER BY c.id ASC";
+            $params = [$idEmpresa, (int)($cab['id_proveedor'] ?? 0), (string)($cab['documento_modificado'] ?? '')];
+        } else {
+            // Buscar las notas de crédito que modifican esta compra.
+            $relacion = 'nota_credito';
+            $sql = "SELECT c.id,
+                           CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) AS numero,
+                           c.fecha_emision, c.importe_total, c.total_sin_impuestos, c.tipo_comprobante,
+                           ca.comprobante AS tipo_comprobante_nombre
+                      FROM compras_cabecera c
+                      LEFT JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = c.tipo_comprobante
+                     WHERE c.id_empresa = ? AND c.eliminado = false
+                       AND c.id_proveedor = ?
+                       AND c.tipo_comprobante = '04'
+                       AND c.documento_modificado = ?
+                     ORDER BY c.id ASC";
+            $params = [$idEmpresa, (int)($cab['id_proveedor'] ?? 0), $numero];
+        }
+
+        $docs = $this->query($sql, $params)->fetchAll();
+        foreach ($docs as &$doc) {
+            $doc['detalles'] = $this->getDetalles((int)$doc['id']);
+        }
+        unset($doc);
+
+        return ['relacion' => $relacion, 'documentos' => $docs];
+    }
+
     public function getDetalles(int $idCompra): array
     {
-        $sql = "SELECT d.*, 
+        $sql = "SELECT d.*,
                        COALESCE(pr.nombre, ph_pr.nombre, d.descripcion) AS producto_nombre, 
                        COALESCE(pr.codigo, ph_pr.codigo) AS producto_codigo, 
                        COALESCE(pr.id_medida, ph_pr.id_medida) AS product_id_medida, 

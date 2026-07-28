@@ -268,6 +268,14 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // Videollamadas: salas de reunión integradas al ERP. El motor de video es
+    // intercambiable (interno WebRTC / proveedor externo) sin tocar el módulo.
+    // Actualizar id_submodulo con el id real tras registrar el submódulo en submodulos_menu.
+    'modulos/videollamadas' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     'modulos/activos-fijos' => [
         'id_submodulo' => 0, // Actualizar con el id real tras insertar el submódulo en submodulos_menu
         'legacy_rutas' => [],
@@ -470,6 +478,12 @@ return [
         'legacy_rutas' => [],
     ],
     'modulos/whatsapp-chat' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+    // Bandeja del equipo de soporte. La burbuja del usuario NO pasa por este
+    // permiso: sus endpoints solo exigen sesión (ver SoporteChatController).
+    'modulos/soporte-chat' => [
         'id_submodulo' => 0,
         'legacy_rutas' => [],
     ],

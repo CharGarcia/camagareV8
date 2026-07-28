@@ -208,6 +208,9 @@ class ComprasController extends BaseModuloController
             $compra['es_migrado']      = $flags['es_migrado'];
             $compra['periodo_cerrado'] = $flags['periodo_cerrado'];
 
+            // Total de notas de crédito que modifican esta compra (para el saldo/pagos).
+            $compra['total_nc'] = $this->repository->getTotalNotasCredito($id, $idEmpresa);
+
             echo json_encode(['ok' => true, 'data' => $compra]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -325,6 +328,30 @@ class ComprasController extends BaseModuloController
         header('Content-Length: ' . strlen($row['detalle_xml']));
 
         echo $row['detalle_xml'];
+        exit;
+    }
+
+    /**
+     * Documentos relacionados de una compra:
+     *  - factura → sus notas de crédito;  nota de crédito → la factura que modifica.
+     */
+    public function getDocumentosRelacionadosAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $id        = (int) ($_GET['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            if (!$id) {
+                echo json_encode(['ok' => false, 'mensaje' => 'ID requerido']);
+                exit;
+            }
+            $rel = $this->repository->getDocumentosRelacionados($id, $idEmpresa);
+            echo json_encode(['ok' => true] + $rel);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
         exit;
     }
 

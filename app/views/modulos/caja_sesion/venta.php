@@ -20,6 +20,8 @@
  * @var array  $empresa
  * @var array  $categorias
  * @var array  $marcas
+ * @var bool   $mostrarUnidadMedida
+ * @var array  $unidadesMedida
  */
 $base = rtrim(BASE_URL ?? '', '/');
 $rutaAjax = $base . '/' . $rutaModulo;
@@ -427,6 +429,12 @@ $rutaAjax = $base . '/' . $rutaModulo;
     const OBLIGATORIO_CADUCIDAD = <?= $obligatorioCaducidad ? 'true' : 'false' ?>;
     const OBLIGATORIO_NUP = <?= $obligatorioNup ? 'true' : 'false' ?>;
     const SOLO_STOCK_POSITIVO = <?= $soloStockPositivo ? 'true' : 'false' ?>;
+    // Empresa → Facturación → "Mostrar unidad de medida" (misma regla que
+    // Factura de Venta). Si el producto solo tiene una unidad compatible (su
+    // unidad por defecto, ej. "Unidad"), no hace falta preguntar — se usa
+    // directo, igual que hace Factura al ocultar el select en ese caso.
+    const MOSTRAR_UNIDAD_MEDIDA = <?= $mostrarUnidadMedida ? 'true' : 'false' ?>;
+    const UNIDADES_MEDIDA = <?= json_encode($unidadesMedida, JSON_UNESCAPED_UNICODE) ?>;
     const LIMITE_CONSUMIDOR_FINAL = <?= (float) $limiteConsumidorFinal ?>;
     // Si solo tienes permiso para uno de los dos documentos, no se muestra
     // selector — se usa ese fijo. Si no tienes ninguno, queda null (se
@@ -1156,12 +1164,27 @@ $rutaAjax = $base . '/' . $rutaModulo;
         }
         const idVariante = variante ? variante.id : null;
 
+        // Unidad de medida (Empresa → Facturación → "Mostrar unidad de
+        // medida"): solo se pregunta si el producto tiene más de una unidad
+        // compatible; si solo tiene la de por defecto (ej. "Unidad"), no hace
+        // falta elegir nada. Puede convertir el precio según el factor.
+        let unidadMedida = null;
+        if (MOSTRAR_UNIDAD_MEDIDA) {
+            const resMedida = await elegirUnidadMedida(p);
+            if (resMedida.cancelado) { enfocarBuscador(); return; }
+            unidadMedida = resMedida.unidad;
+        }
+        const idUnidadMedida = unidadMedida ? unidadMedida.id : null;
+
         // Con NÚP obligatorio cada unidad es su propia línea (un número de
         // serie por línea) — nunca se fusiona con una existente. Tampoco se
-        // fusiona entre variantes distintas del mismo producto (ej. Rojo vs
-        // Azul deben quedar en líneas separadas).
+        // fusiona entre variantes o unidades de medida distintas del mismo
+        // producto (ej. Rojo vs Azul, o Unidad vs Caja, deben quedar en
+        // líneas separadas).
         if (!necesitaNup) {
-            const existente = cart.find(l => l.id_producto === idProducto && (l.id_producto_variante || null) === idVariante);
+            const existente = cart.find(l => l.id_producto === idProducto
+                && (l.id_producto_variante || null) === idVariante
+                && (l.id_unidad_medida || null) === idUnidadMedida);
             if (existente) {
                 existente.cantidad += 1;
                 renderCart();
@@ -1186,17 +1209,25 @@ $rutaAjax = $base . '/' . $rutaModulo;
             nup = val;
         }
 
+        // Si se eligió una unidad distinta a la base del producto (ej. "Caja"
+        // en vez de "Unidad"), el precio se convierte por el factor de cada
+        // una — igual fórmula que Factura de Venta: precio * (factorNuevo / factorBase).
+        const factorRatio = (unidadMedida && unidadMedida.factorBase) ? (unidadMedida.factor / unidadMedida.factorBase) : 1;
+        const precioBase = parseFloat(p.precio_base || 0) * factorRatio;
+        const medidaTag = (unidadMedida && unidadMedida.elegida) ? ' (' + unidadMedida.nombre + ')' : '';
+
         cart.push({
             uid: ++lineSeq,
             id_producto: idProducto,
-            descripcion: p.nombre + (variante ? ' — ' + variante.nombre + ': ' + variante.valor : ''),
-            precio_unitario: parseFloat(p.precio_base || 0) + (variante ? variante.precioAdicional : 0),
+            descripcion: p.nombre + (variante ? ' — ' + variante.nombre + ': ' + variante.valor : '') + medidaTag,
+            precio_unitario: precioBase + (variante ? variante.precioAdicional : 0),
             pct_iva: parseFloat(p.porcentaje_iva_final || 0),
             cantidad: 1,
             lote,
             caducidad,
             nup,
             id_producto_variante: idVariante,
+            id_unidad_medida: idUnidadMedida,
             descuento: 0,
         });
         renderCart();
@@ -1239,6 +1270,78 @@ $rutaAjax = $base . '/' . $rutaModulo;
             },
         });
         return res.isConfirmed ? res.value : null;
+    }
+
+    /**
+     * Unidades de UNIDADES_MEDIDA compatibles con un producto — mismo criterio
+     * que factura_venta/index.php: primero por tipo (p.id_tipo_medida contra
+     * unidad.id_tipo); si no hay ninguna así, cae a la unidad por defecto del
+     * producto (p.id_medida) sola.
+     */
+    function unidadesCompatibles(p) {
+        let compatibles = [];
+        if (p.id_tipo_medida) {
+            compatibles = UNIDADES_MEDIDA.filter(u => u.id_tipo == p.id_tipo_medida);
+        }
+        if (!compatibles.length && p.id_medida) {
+            const base = UNIDADES_MEDIDA.find(u => u.id == p.id_medida);
+            if (base) compatibles = [base];
+        }
+        return compatibles;
+    }
+
+    /**
+     * Resuelve la unidad de medida de una línea. No se pregunta cuando:
+     *  a) solo hay una unidad compatible, o
+     *  b) la unidad por defecto del producto es la "Unidad" genérica.
+     * Ojo: NO basta con mirar `es_base` — esa columna marca la unidad raíz de
+     * CADA tipo (ej. también "Kilogramo" en el tipo Peso, "Litro" en Volumen),
+     * y ahí sí queremos preguntar si hay alternativas reales (Libras/Gramos,
+     * etc.) — un producto que se vende en Kg no debe caer siempre en Kg sin
+     * ofrecer la conversión. Lo único que no exige elegir es el caso puntual
+     * de "Unidad" (tipo que agrupa Unidad/Par/Docena/Ciento/Millar: ahí las
+     * alternativas son empaques por cantidad, no una medida distinta).
+     * Se pregunta entonces cuando el producto tiene más de una unidad
+     * compatible Y su unidad por defecto no es la "Unidad" genérica.
+     * Devuelve { unidad } con {id, nombre, factor, factorBase, elegida}, o
+     * { cancelado: true } si el usuario cierra el selector sin elegir.
+     */
+    async function elegirUnidadMedida(p) {
+        const compatibles = unidadesCompatibles(p);
+        if (!compatibles.length) return { unidad: null };
+
+        const unidadBase = compatibles.find(u => u.id == p.id_medida) || compatibles[0];
+        const factorBase = parseFloat(unidadBase.factor_base || 1);
+        const SINONIMOS_UNIDAD_GENERICA = ['unidad', 'und', 'uni', 'u'];
+        const esUnidadGenerica = SINONIMOS_UNIDAD_GENERICA.includes((unidadBase.nombre || '').trim().toLowerCase())
+            || SINONIMOS_UNIDAD_GENERICA.includes((unidadBase.abreviatura || '').trim().toLowerCase());
+
+        if (compatibles.length === 1 || esUnidadGenerica) {
+            return { unidad: { id: unidadBase.id, nombre: unidadBase.nombre, factor: factorBase, factorBase, elegida: false } };
+        }
+
+        const opciones = compatibles.map(u =>
+            `<option value="${u.id}" data-factor="${parseFloat(u.factor_base || 1)}"${u.id == p.id_medida ? ' selected' : ''}>${escapeHtml(u.nombre)}</option>`
+        ).join('');
+
+        const res = await Swal.fire({
+            title: escapeHtml(p.nombre),
+            html: '<div class="text-start">' +
+                  '<label class="form-label small fw-semibold text-uppercase text-muted mb-1">Elige la unidad de medida</label>' +
+                  '<select id="pv-swal-medida" class="form-select form-select-sm">' + opciones + '</select></div>',
+            showCancelButton: true,
+            confirmButtonText: 'Continuar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#0d6efd',
+            focusConfirm: false,
+            preConfirm: () => {
+                const sel = document.getElementById('pv-swal-medida');
+                const opt = sel.options[sel.selectedIndex];
+                return { id: parseInt(sel.value, 10), nombre: opt.textContent, factor: parseFloat(opt.dataset.factor || 1) };
+            },
+        });
+        if (!res.isConfirmed) return { cancelado: true };
+        return { unidad: { ...res.value, factorBase, elegida: true } };
     }
 
     function seleccionarLote(p, necesitaNup) {
@@ -1897,6 +2000,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
             caducidad: l.caducidad || '',
             nup: l.nup || '',
             id_producto_variante: l.id_producto_variante || '',
+            id_unidad_medida: l.id_unidad_medida || '',
             descuento: l.descuento || 0,
         }))));
 

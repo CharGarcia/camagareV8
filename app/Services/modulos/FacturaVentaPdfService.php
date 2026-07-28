@@ -189,6 +189,32 @@ class FacturaVentaPdfService
             $yIzq = max($yAfterLabel, $yAfterValue);
         }
 
+        // Correo de la empresa (solo si existe), debajo de Dirección Sucursal
+        $correoEmp = trim((string)($empresa['mail'] ?? $empresa['email'] ?? $empresa['correo'] ?? ''));
+        if ($correoEmp !== '') {
+            $pdf->SetXY($mL + 2, $yIzq);
+            $pdf->SetFont('helvetica', 'B', 7);
+            $pdf->MultiCell(20, 3.5, "Correo:", 0, 'L', false, 1);
+            $yLbl = $pdf->GetY();
+            $pdf->SetXY($mL + 22, $yIzq);
+            $pdf->SetFont('helvetica', '', 7);
+            $pdf->MultiCell($izqW - 24, 3.5, $correoEmp, 0, 'L', false, 1);
+            $yIzq = max($yLbl, $pdf->GetY());
+        }
+
+        // Teléfono de la empresa (solo si existe)
+        $telEmp = trim((string)($empresa['telefono'] ?? ''));
+        if ($telEmp !== '') {
+            $pdf->SetXY($mL + 2, $yIzq);
+            $pdf->SetFont('helvetica', 'B', 7);
+            $pdf->MultiCell(20, 3.5, "Teléfono:", 0, 'L', false, 1);
+            $yLbl = $pdf->GetY();
+            $pdf->SetXY($mL + 22, $yIzq);
+            $pdf->SetFont('helvetica', '', 7);
+            $pdf->MultiCell($izqW - 24, 3.5, $telEmp, 0, 'L', false, 1);
+            $yIzq = max($yLbl, $pdf->GetY());
+        }
+
         // Contribuyente Especial
         $resCont = trim($empresa['resolucion_contribuyente'] ?? '');
         if ($resCont) {
@@ -434,6 +460,16 @@ class FacturaVentaPdfService
             ['key' => 'dcto', 'titulo' => "Descuento",          'w' => 16, 'align' => 'R'],
             ['key' => 'ptot', 'titulo' => "Precio\nTotal",      'w' => 14, 'align' => 'R'],
         ];
+
+        // Ocultar la columna "Cód. Auxiliar" si ningún ítem tiene código auxiliar.
+        // Su ancho lo reabsorbe la Descripción en el ajuste de abajo.
+        $hayCodAux = false;
+        foreach ($detalles as $d) {
+            if (trim((string)($d['codigo_auxiliar'] ?? '')) !== '') { $hayCodAux = true; break; }
+        }
+        if (!$hayCodAux) {
+            $cols = array_values(array_filter($cols, fn($c) => $c['key'] !== 'coda'));
+        }
 
         // Ajustar Descripción para que la suma sea exactamente contentW
         $sumaW = array_sum(array_column($cols, 'w'));

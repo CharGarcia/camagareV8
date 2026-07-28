@@ -196,7 +196,8 @@ class FacturaItemsPresentacionService
         $partes = [];
 
         if ($mostrar['unidad']) {
-            $u = trim((string) ($g['unidad_abreviatura'] ?? $g['unidad_nombre'] ?? ''));
+            // Solo la abreviatura de la unidad (ej. "UND", "KG"), nunca el nombre completo.
+            $u = trim((string) ($g['unidad_abreviatura'] ?? ''));
             if ($u !== '') {
                 $partes[] = 'Unidad: ' . $u;
             }

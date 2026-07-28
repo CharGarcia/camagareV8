@@ -114,6 +114,7 @@ class PosVentaService
                 'caducidad' => (string) ($it['caducidad'] ?? ''),
                 'nup' => (string) ($it['nup'] ?? ''),
                 'id_producto_variante' => !empty($it['id_producto_variante']) ? (int) $it['id_producto_variante'] : null,
+                'id_unidad_medida' => !empty($it['id_unidad_medida']) ? (int) $it['id_unidad_medida'] : null,
                 'impuestos' => [[
                     'codigo_impuesto' => '2',
                     'codigo_porcentaje' => $codPct,

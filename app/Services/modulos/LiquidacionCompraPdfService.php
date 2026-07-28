@@ -161,6 +161,32 @@ class LiquidacionCompraPdfService
             $yIzq = max($yAfterLabel, $pdf->GetY());
         }
 
+        // Correo de la empresa (solo si existe), debajo de Dirección Sucursal
+        $correoEmp = trim((string)($emp['mail'] ?? $emp['email'] ?? $emp['correo'] ?? ''));
+        if ($correoEmp !== '') {
+            $pdf->SetXY($mL + 2, $yIzq);
+            $pdf->SetFont(self::FUENTE, 'B', 7);
+            $pdf->MultiCell(20, 3.5, "Correo:", 0, 'L', false, 1);
+            $yLbl = $pdf->GetY();
+            $pdf->SetXY($mL + 22, $yIzq);
+            $pdf->SetFont(self::FUENTE, '', 7);
+            $pdf->MultiCell($izqW - 24, 3.5, $correoEmp, 0, 'L', false, 1);
+            $yIzq = max($yLbl, $pdf->GetY());
+        }
+
+        // Teléfono de la empresa (solo si existe)
+        $telEmp = trim((string)($emp['telefono'] ?? ''));
+        if ($telEmp !== '') {
+            $pdf->SetXY($mL + 2, $yIzq);
+            $pdf->SetFont(self::FUENTE, 'B', 7);
+            $pdf->MultiCell(20, 3.5, "Teléfono:", 0, 'L', false, 1);
+            $yLbl = $pdf->GetY();
+            $pdf->SetXY($mL + 22, $yIzq);
+            $pdf->SetFont(self::FUENTE, '', 7);
+            $pdf->MultiCell($izqW - 24, 3.5, $telEmp, 0, 'L', false, 1);
+            $yIzq = max($yLbl, $pdf->GetY());
+        }
+
         // Contribuyente Especial
         $resCont = trim((string)($emp['resolucion_contribuyente'] ?? $emp['contribuyente_especial'] ?? ''));
         if ($resCont) {

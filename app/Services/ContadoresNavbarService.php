@@ -67,6 +67,9 @@ class ContadoresNavbarService
     /** Ruta MVC del módulo de suscripciones (aviso para la empresa ADMINISTRADORA). */
     public const RUTA_SUSCRIPCIONES = 'modulos/suscripciones';
 
+    /** Ruta MVC de la bandeja de soporte (badge solo para el equipo que atiende). */
+    public const RUTA_SOPORTE = 'modulos/soporte-chat';
+
     /** Ventana en días para "suscripciones por vencer" (cobros próximos de los clientes). */
     private const DIAS_SUSCRIPCIONES_POR_VENCER = 7;
 
@@ -244,7 +247,7 @@ class ContadoresNavbarService
         $rutas = array_unique(array_merge(
             array_values(self::RUTAS_MODULO),
             array_values(self::NOVEDAD_RUTAS),
-            [self::RUTA_EMPRESA, self::RUTA_SUSCRIPCIONES]
+            [self::RUTA_EMPRESA, self::RUTA_SUSCRIPCIONES, self::RUTA_SOPORTE]
         ));
         $perms = [];
         foreach ($rutas as $ruta) {
@@ -258,11 +261,14 @@ class ContadoresNavbarService
      * Contadores que el usuario puede ver, listos para el navbar.
      *
      * @param callable(string):bool $puedeVer  Evalúa permiso 'ver' por ruta MVC.
+     * @param int $nivel Nivel del usuario; solo lo usa el chat de soporte para
+     *                   saber si además de usuario es agente (bandeja global).
      * @return array<string,mixed>
      */
-    public function getContadores(int $idEmpresa, int $idUsuario, callable $puedeVer): array
+    public function getContadores(int $idEmpresa, int $idUsuario, callable $puedeVer, int $nivel = 1): array
     {
         $out = [];
+        $permRuta = [];
 
         if ($idEmpresa > 0) {
             $empresa = $this->contadoresEmpresa($idEmpresa);
@@ -341,6 +347,30 @@ class ContadoresNavbarService
         // sobre otro módulo (el permiso YA es sobre el submódulo mismo).
         if ($idEmpresa > 0 && $idUsuario > 0) {
             $out['submodulos_nuevos'] = $this->submodulosNuevos($idEmpresa, $idUsuario);
+        }
+
+        // Chat de soporte: global por usuario, como tareas. No depende del permiso
+        // sobre el submódulo — la burbuja está disponible para cualquier usuario.
+        // Si la migración del chat aún no se desplegó, se omite sin romper nada.
+        if ($idUsuario > 0) {
+            try {
+                $soporte = new \App\Services\modulos\SoporteChatService(
+                    new \App\repositories\modulos\SoporteChatRepository(),
+                    new \App\Rules\modulos\SoporteChatRules(),
+                    new \App\Services\LogSistemaService(),
+                );
+
+                $out['soporte_sin_leer'] = $soporte->contarSinLeerUsuario($idUsuario);
+
+                // La bandeja solo cuenta para el equipo de soporte, y además
+                // exige permiso 'ver' sobre el módulo.
+                if (!empty($permRuta[self::RUTA_SOPORTE]) && $soporte->esAgente($idUsuario, $idEmpresa, $nivel)) {
+                    $bandeja = $soporte->contarBandeja();
+                    $out['soporte_bandeja'] = $bandeja['espera'] + $bandeja['sin_leer'];
+                }
+            } catch (\Throwable $e) {
+                // Sin chat de soporte disponible: el navbar sigue igual.
+            }
         }
 
         // Tareas: global por usuario, siempre incluido (solo requiere sesión).

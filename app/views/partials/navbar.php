@@ -362,6 +362,10 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                 <i class="bi bi-whatsapp" style="font-size: 1.1rem;"></i>
                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white whatsapp-unread-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
             </a>
+            <a href="<?= $base ?>/modulos/soporte-chat" class="text-white text-decoration-none position-relative me-3 d-none cmg-icon-update soporte-bandeja-icon" title="Consultas de soporte por atender">
+                <i class="bi bi-headset" style="font-size: 1.1rem;"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white soporte-bandeja-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+            </a>
             <a href="#" data-bs-toggle="modal" data-bs-target="#modalSubmodulosNuevos" class="text-white text-decoration-none position-relative me-3 d-none cmg-submod-nuevos-icon" title="Módulos nuevos asignados">
                 <i class="bi bi-stars" style="font-size: 1.1rem;"></i>
                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-success cmg-submod-nuevos-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
@@ -516,6 +520,11 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <i class="bi bi-whatsapp"></i>
                     <span class="position-absolute badge rounded-pill bg-danger text-white whatsapp-unread-badge">0</span>
                     <small>WhatsApp</small>
+                </a>
+                <a class="cmg-icon-update soporte-bandeja-icon d-none" href="<?= $base ?>/modulos/soporte-chat">
+                    <i class="bi bi-headset"></i>
+                    <span class="position-absolute badge rounded-pill bg-danger text-white soporte-bandeja-badge">0</span>
+                    <small>Soporte</small>
                 </a>
                 <a href="#" data-bs-toggle="modal" data-bs-target="#modalSubmodulosNuevos" class="cmg-submod-nuevos-icon d-none">
                     <i class="bi bi-stars"></i>
@@ -680,7 +689,12 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
             guias_remision_borrador:      { icon: '.guias-remision-borrador-icon',      badge: '.guias-remision-borrador-badge' },
             factura_express_pendientes:   { icon: '.factura-express-pendientes-icon',   badge: '.factura-express-pendientes-badge' },
             ordenes_compra_borrador:      { icon: '.ordenes-compra-borrador-icon',      badge: '.ordenes-compra-borrador-badge' },
-            whatsapp_unread:              { icon: '.whatsapp-unread-icon',              badge: '.whatsapp-unread-badge' }
+            whatsapp_unread:              { icon: '.whatsapp-unread-icon',              badge: '.whatsapp-unread-badge' },
+            // Bandeja del equipo de soporte (solo la reciben los agentes).
+            soporte_bandeja:              { icon: '.soporte-bandeja-icon',              badge: '.soporte-bandeja-badge' },
+            // Respuestas sin leer del usuario: no tiene ícono en el navbar, pinta
+            // el badge de la burbuja de soporte (partials/soporte_widget.php).
+            soporte_sin_leer:             { icon: '.soporte-sinleer-icon',              badge: '.soporte-sinleer-badge' }
         };
 
         let CMG_contadoresEnVuelo = false;

@@ -35,6 +35,7 @@ class ContadoresController extends Controller
 
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        $nivel     = (int) ($_SESSION['nivel'] ?? 1);
 
         // Liberar el lock de sesión cuanto antes: este endpoint solo LEE la sesión
         // (nunca escribe) y se consulta con alta frecuencia (polling del navbar).
@@ -47,7 +48,8 @@ class ContadoresController extends Controller
             $contadores = $this->service->getContadores(
                 $idEmpresa,
                 $idUsuario,
-                fn (string $ruta): bool => $this->permisosModuloPorRuta($ruta)['ver'] === true
+                fn (string $ruta): bool => $this->permisosModuloPorRuta($ruta)['ver'] === true,
+                $nivel
             );
             $this->json(['ok' => true, 'contadores' => $contadores]);
         } catch (\Throwable $e) {

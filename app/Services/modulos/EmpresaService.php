@@ -192,8 +192,26 @@ class EmpresaService
 
     public function saveEmisor(int $idEmpresa, array $data): bool
     {
+        // Agente de retención: el SRI (XSD, tipo agenteRetencion) exige SOLO
+        // dígitos, máximo 8. Se normaliza y valida antes de guardar para no
+        // almacenar texto que luego rechazaría el SRI.
+        if (array_key_exists('agente_retencion', $data)) {
+            $raw = trim((string) $data['agente_retencion']);
+            if ($raw === '' || in_array(strtoupper($raw), ['NO', 'N/A', '0'], true)) {
+                // Empresa que NO es agente de retención.
+                $data['agente_retencion'] = '';
+            } elseif (preg_match('/^\d{1,8}$/', $raw)) {
+                $data['agente_retencion'] = $raw;
+            } else {
+                throw new \InvalidArgumentException(
+                    'El campo «Agente de Retención» debe ser el número de resolución: solo dígitos, máximo 8 '
+                    . '(según la ficha técnica del SRI). Ejemplo: 1. Déjelo vacío si la empresa no es agente de retención.'
+                );
+            }
+        }
+
         $fields = [
-            'resolucion_contribuyente', 'id_tipo_regimen', 'tipo_ambiente', 
+            'resolucion_contribuyente', 'id_tipo_regimen', 'tipo_ambiente',
             'agente_retencion', 'tipo_emision'
         ];
         $filtered = array_intersect_key($data, array_flip($fields));

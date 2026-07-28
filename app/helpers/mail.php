@@ -537,6 +537,87 @@ if (!function_exists('enviar_correo_recordatorio_tareas')) {
     }
 }
 
+if (!function_exists('enviar_correo_soporte_pendiente')) {
+    /**
+     * Avisa al equipo de soporte de las conversaciones que llevan demasiado
+     * tiempo en espera. Lo dispara el cron (SoporteChatService::alertarSinAtender).
+     *
+     * @param string|array $correos    Uno o varios destinatarios
+     * @param array        $pendientes Filas de SoporteChatRepository::getSinAtender()
+     */
+    function enviar_correo_soporte_pendiente($correos, array $pendientes): bool
+    {
+        $destinos = array_values(array_filter(
+            array_map('trim', is_array($correos) ? $correos : [$correos]),
+            static fn ($c) => filter_var($c, FILTER_VALIDATE_EMAIL) !== false
+        ));
+
+        if (empty($pendientes) || $destinos === []) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'Sin conversaciones pendientes o sin destinatario válido.';
+            return false;
+        }
+
+        $base = \App\services\EmailConfigService::getDataForSendEmail('notificaciones');
+        if (!$base) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'No hay configuración en correos_config para "notificaciones"';
+            return false;
+        }
+
+        $docMailDir = MVC_APP . '/lib/mail';
+        if (!file_exists($docMailDir . '/phpmailer.php')) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = 'No se encuentra PHPMailer';
+            return false;
+        }
+
+        require_once $docMailDir . '/phpmailer.php';
+        require_once $docMailDir . '/smtp.php';
+        require_once $docMailDir . '/exception.php';
+
+        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        $GLOBALS['LAST_EMAIL_ERROR'] = null;
+
+        try {
+            $mail->isSMTP();
+            $mail->Host = _mail_resolve_ipv4_host($base['host']);
+            $mail->SMTPAuth = true;
+            $mail->Username = $base['emisor'];
+            $mail->Password = $base['pass'];
+            $mail->SMTPSecure = $base['smtp_secure'] ?? 'tls';
+            $mail->Port = $base['port'];
+            $mail->CharSet = 'UTF-8';
+
+            $config = require MVC_CONFIG . '/app.php';
+            if (!empty($config['mail_smtp_options'])) {
+                $mail->SMTPOptions = $config['mail_smtp_options'];
+            }
+
+            $mail->setFrom($base['emisor'], $base['empresa']);
+            foreach ($destinos as $destino) {
+                $mail->addAddress($destino);
+            }
+
+            $n = count($pendientes);
+            $mail->Subject = $n === 1
+                ? 'Soporte: 1 consulta sin atender'
+                : "Soporte: {$n} consultas sin atender";
+
+            // El cron corre en CLI: BASE_URL puede no estar definida.
+            $urlBandeja = defined('BASE_URL') ? rtrim(BASE_URL, '/') . '/modulos/soporte-chat' : '';
+
+            ob_start();
+            require MVC_APP . '/views/emails/soporte_pendiente.php';
+            $mail->Body = ob_get_clean();
+            $mail->isHTML(true);
+
+            return $mail->send();
+        } catch (\PHPMailer\PHPMailer\Exception $e) {
+            $GLOBALS['LAST_EMAIL_ERROR'] = $mail->ErrorInfo ?? $e->getMessage();
+            error_log('Mailer Error (SoportePendiente): ' . ($GLOBALS['LAST_EMAIL_ERROR']));
+            return false;
+        }
+    }
+}
+
 if (!function_exists('enviar_correo_solicitud_firma')) {
     /**
      * Envía el correo de solicitud de formulario de firma electrónica.

@@ -41,6 +41,7 @@
             <li class="nav-item"><a class="nav-link" id="tab_pagos" data-bs-toggle="tab" href="#tabPagos" role="tab"><i class="bi bi-credit-card me-1"></i>Pagos</a></li>
             <li class="nav-item"><a class="nav-link" id="tab-inventario-tab" data-bs-toggle="tab" href="#tabInventario" role="tab"><i class="bi bi-box-seam me-1"></i>Inventario</a></li>
             <li class="nav-item"><a class="nav-link" id="tab-retenciones-tab" data-bs-toggle="tab" href="#tabRetenciones" role="tab"><i class="bi bi-file-earmark-text me-1"></i>Retenciones</a></li>
+            <li class="nav-item d-none" id="tab-relacionados-li"><a class="nav-link" id="tab-relacionados-tab" data-bs-toggle="tab" href="#tabRelacionados" role="tab"><i class="bi bi-link-45deg me-1"></i><span id="tab-relacionados-label">Documento Relacionado</span></a></li>
           </ul>
           <div class="ms-auto pb-1">
             <?php
@@ -407,25 +408,32 @@
             <div class="p-3">
               <!-- Resumen de Deuda -->
               <div class="row g-3 mb-3">
-                <div class="col-md-3">
+                <div class="col-6 col-md">
                   <div class="border rounded-3 p-2 bg-white text-center shadow-sm border-secondary-subtle">
                     <div class="text-muted mb-0 fw-semibold" style="font-size: 0.75rem;">Total Documento</div>
                     <h4 class="fw-bold text-dark mb-0">$ <span id="pagoTotalCompra">0.00</span></h4>
                   </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md">
                   <div class="border rounded-3 p-2 bg-warning bg-opacity-10 border-warning border-opacity-25 text-center shadow-sm">
                     <div class="text-warning mb-0 fw-semibold" style="font-size: 0.75rem;">Retenciones</div>
                     <h4 class="fw-bold text-warning mb-0">$ <span id="pagoTotalRetencion">0.00</span></h4>
                   </div>
                 </div>
-                <div class="col-md-3">
+                <!-- Notas de Crédito (solo compras que las tienen) -->
+                <div class="col-6 col-md d-none" id="pagoCardNc">
+                  <div class="border rounded-3 p-2 bg-info bg-opacity-10 border-info border-opacity-25 text-center shadow-sm">
+                    <div class="text-info mb-0 fw-semibold" style="font-size: 0.75rem;">Notas de Crédito</div>
+                    <h4 class="fw-bold text-info mb-0">$ <span id="pagoTotalNc">0.00</span></h4>
+                  </div>
+                </div>
+                <div class="col-6 col-md">
                   <div class="border rounded-3 p-2 bg-success bg-opacity-10 border-success border-opacity-25 text-center shadow-sm">
                     <div class="text-success mb-0 fw-semibold" style="font-size: 0.75rem;">Total Abonado</div>
                     <h4 class="fw-bold text-success mb-0">$ <span id="pagoTotalAbonado">0.00</span></h4>
                   </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md">
                   <div class="border rounded-3 p-2 bg-danger bg-opacity-10 border-danger border-opacity-25 text-center shadow-sm">
                     <div class="text-danger mb-0 fw-semibold" style="font-size: 0.75rem;">Saldo Pendiente</div>
                     <h4 class="fw-bold text-danger mb-0">$ <span id="pagoSaldoPendiente">0.00</span></h4>
@@ -685,6 +693,22 @@
                 <i class="bi bi-info-circle fs-1 mb-3 text-info opacity-50"></i>
                 <h6 class="fw-semibold">Auditoría e Información</h6>
                 <p class="text-center small">La información de auditoría y estados se mostrará aquí.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════════════════════════════════════════
+               TAB: DOCUMENTOS RELACIONADOS
+               Si el documento es una compra (factura) → muestra sus notas de
+               crédito. Si es una nota de crédito → muestra la factura que modifica.
+          ════════════════════════════════════════ -->
+          <div class="tab-pane fade" id="tabRelacionados" role="tabpanel">
+            <div class="p-3">
+              <div id="mc-relacionados-info" class="small text-muted mb-2"></div>
+              <div id="mc-relacionados-cont">
+                <div class="text-center py-4 text-muted">
+                  <i class="spinner-border spinner-border-sm me-2"></i>Cargando documentos relacionados...
+                </div>
               </div>
             </div>
           </div>

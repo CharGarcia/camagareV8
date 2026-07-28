@@ -526,7 +526,8 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">Agente de Retención</label>
-                            <input type="text" name="agente_retencion" class="form-control form-control-sm" value="<?= htmlspecialchars($empresa['agente_retencion'] ?? '') ?>" placeholder="Nro. Resolución">
+                            <input type="text" name="agente_retencion" class="form-control form-control-sm" value="<?= htmlspecialchars($empresa['agente_retencion'] ?? '') ?>" placeholder="Solo Nro. (ej: 1)" inputmode="numeric" pattern="[0-9]*" maxlength="8" title="Número de resolución del SRI: solo dígitos, máx. 8. Vacío = no es agente de retención.">
+                            <div class="form-text" style="font-size:0.68rem;">Solo el número (SRI: máx. 8 dígitos). Vacío = no aplica.</div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">Tipo Emisión</label>

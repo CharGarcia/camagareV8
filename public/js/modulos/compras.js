@@ -298,6 +298,9 @@ function CMG_poblarModal(d) {
     const btnPdf = document.getElementById('mcBtnPdf');
     if (btnPdf) btnPdf.classList.toggle('d-none', !tieneXml);
 
+    // Pestaña de documentos relacionados (NC ↔ factura)
+    mcActualizarPestanaRelacionados(d);
+
     // Solo lectura total: compra migrada o período contable cerrado
     // (se aplica al final para que prevalezca sobre el bloqueo de electrónica).
     mcAplicarSoloLectura(d);
@@ -487,6 +490,9 @@ function CMG_resetModal() {
 
     // Ocultar aviso de solo lectura (migrada / período cerrado)
     document.getElementById('mcBloqueoAviso')?.classList.add('d-none');
+
+    // Ocultar pestaña de documentos relacionados
+    document.getElementById('tab-relacionados-li')?.classList.add('d-none');
     
     // Ir a primera pestaña
     const tabDetalle = document.getElementById('tab-detalle-tab') || document.getElementById('tab_compra');
@@ -2282,9 +2288,132 @@ if (mcTabsEl) {
             CMG_cargarRetencionesCompra();
         } else if (e.target.id === 'tab-inventario-tab') {
             if (typeof mcSincronizarInventario === 'function') mcSincronizarInventario();
+        } else if (e.target.id === 'tab-relacionados-tab') {
+            mcCargarDocumentosRelacionados();
         }
     });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCUMENTOS RELACIONADOS (factura ↔ notas de crédito)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Muestra u oculta la pestaña de documentos relacionados según el tipo. */
+function mcActualizarPestanaRelacionados(d) {
+    const li    = document.getElementById('tab-relacionados-li');
+    const label = document.getElementById('tab-relacionados-label');
+    if (!li) return;
+
+    const esNota  = String(d.tipo_comprobante || '') === '04';
+    const tieneNc = parseFloat(d.total_nc || 0) > 0.001;
+
+    if (esNota) {
+        if (label) label.textContent = 'Factura Relacionada';
+        li.classList.remove('d-none');
+    } else if (tieneNc) {
+        if (label) label.textContent = 'Notas de Crédito';
+        li.classList.remove('d-none');
+    } else {
+        li.classList.add('d-none');
+    }
+}
+
+window.mcCargarDocumentosRelacionados = async function () {
+    const idCompra = document.getElementById('mcId').value || document.getElementById('modalCompra').dataset.id;
+    const cont = document.getElementById('mc-relacionados-cont');
+    const info = document.getElementById('mc-relacionados-info');
+    if (!cont || !idCompra) return;
+
+    cont.innerHTML = '<div class="text-center py-4 text-muted"><i class="spinner-border spinner-border-sm me-2"></i>Cargando documentos relacionados...</div>';
+    try {
+        const res  = await fetch(`${window.CMG_urlBase}/getDocumentosRelacionadosAjax?id=${idCompra}`);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.mensaje || 'Error');
+
+        const docs      = data.documentos || [];
+        const esFactura = data.relacion === 'factura';
+
+        if (info) {
+            info.textContent = esFactura
+                ? 'Factura de compra que esta nota de crédito modifica:'
+                : `Notas de crédito que modifican esta compra (${docs.length}):`;
+        }
+
+        if (!docs.length) {
+            cont.innerHTML = `<div class="text-center py-4 text-muted"><i class="bi bi-inbox d-block fs-3 mb-2"></i>${esFactura ? 'No se encontró la factura relacionada.' : 'No hay notas de crédito para esta compra.'}</div>`;
+            return;
+        }
+
+        cont.innerHTML = docs.map(doc => mcRenderDocRelacionado(doc)).join('');
+    } catch (e) {
+        cont.innerHTML = `<div class="text-center py-4 text-danger">Error al cargar: ${_esc(e.message)}</div>`;
+    }
+};
+
+/** Renderiza una tarjeta de documento relacionado con sus líneas de detalle. */
+function mcRenderDocRelacionado(doc) {
+    const fecha = doc.fecha_emision ? String(doc.fecha_emision).slice(0, 10).split('-').reverse().join('/') : '—';
+    const total = parseFloat(doc.importe_total || 0).toFixed(2);
+    const nombre = _esc(doc.tipo_comprobante_nombre || doc.tipo_comprobante || 'Documento');
+
+    const filas = (doc.detalles || []).map(det => {
+        const cant = parseFloat(det.cantidad || 0);
+        const pu   = parseFloat(det.precio_unitario || 0);
+        const sub  = parseFloat(det.precio_total_sin_impuesto || 0);
+        return `<tr>
+            <td class="ps-2">${_esc(det.codigo_principal || det.producto_codigo || '')}</td>
+            <td>${_esc(det.descripcion || det.producto_nombre || '')}</td>
+            <td class="text-center">${cant.toFixed(2)}</td>
+            <td class="text-end">${pu.toFixed(2)}</td>
+            <td class="text-end pe-2">${sub.toFixed(2)}</td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="5" class="text-center text-muted py-2">Sin líneas de detalle.</td></tr>';
+
+    return `
+    <div class="border rounded-3 overflow-hidden bg-white shadow-sm mb-3">
+        <div class="d-flex justify-content-between align-items-center bg-light border-bottom px-3 py-2">
+            <div>
+                <span class="fw-bold"><i class="bi bi-file-earmark-text me-1 text-primary"></i>${nombre}</span>
+                <code class="text-secondary ms-2">${_esc(doc.numero || '')}</code>
+                <span class="text-muted small ms-2"><i class="bi bi-calendar-event me-1"></i>${fecha}</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="fw-bold">$ ${total}</span>
+                <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" onclick="mcAbrirRelacionado(${parseInt(doc.id, 10)})" title="Abrir este documento">
+                    <i class="bi bi-box-arrow-up-right"></i>
+                </button>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0" style="font-size: 0.78rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-2" style="width:16%;">Código</th>
+                        <th>Descripción</th>
+                        <th class="text-center" style="width:12%;">Cant.</th>
+                        <th class="text-end" style="width:15%;">P. Unit.</th>
+                        <th class="text-end pe-2" style="width:15%;">Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody>${filas}</tbody>
+            </table>
+        </div>
+    </div>`;
+}
+
+/** Abre un documento relacionado dentro del mismo modal. */
+window.mcAbrirRelacionado = function (id) {
+    if (!id) return;
+    fetch(`${window.CMG_urlBase}/getCompraAjax?id=${id}`)
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) { Swal.fire('Error', res.mensaje || 'No se pudo abrir el documento.', 'error'); return; }
+            CMG_poblarModal(res.data);
+            const tabDetalle = document.getElementById('tab_compra');
+            if (tabDetalle) bootstrap.Tab.getOrCreateInstance(tabDetalle).show();
+        })
+        .catch(e => Swal.fire('Error', e.message, 'error'));
+};
 
 /**
  * Carga el listado de retenciones vinculadas a la compra actual
@@ -2453,6 +2582,7 @@ window.CMG_cargarPagosTab = async function() {
         document.getElementById('pagoTotalCompra').textContent = '0.00';
         document.getElementById('pagoTotalAbonado').textContent = '0.00';
         document.getElementById('pagoSaldoPendiente').textContent = '0.00';
+        document.getElementById('pagoCardNc')?.classList.add('d-none');
         tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Guarda la compra para poder registrar pagos internos.</td></tr>';
         return;
     }
@@ -2584,13 +2714,28 @@ window.CMG_cargarPagosTab = async function() {
             console.error('Error al obtener retenciones para restar del pago:', e);
         }
 
-        const saldo = Math.max(0, totalFactura - totalAbonado - totalRetenido);
+        // Notas de crédito que modifican esta compra (restan del saldo).
+        const totalNc = parseFloat(compra.total_nc || 0);
+
+        const saldo = Math.max(0, totalFactura - totalAbonado - totalRetenido - totalNc);
 
         // Actualizar paneles superiores
         document.getElementById('pagoTotalCompra').textContent = totalFactura.toFixed(2);
         if (document.getElementById('pagoTotalRetencion')) document.getElementById('pagoTotalRetencion').textContent = totalRetenido.toFixed(2);
         document.getElementById('pagoTotalAbonado').textContent = totalAbonado.toFixed(2);
         document.getElementById('pagoSaldoPendiente').textContent = saldo.toFixed(2);
+
+        // Tarjeta de Notas de Crédito (solo si hay)
+        const cardNc = document.getElementById('pagoCardNc');
+        if (cardNc) {
+            if (totalNc > 0.001) {
+                const lblNc = document.getElementById('pagoTotalNc');
+                if (lblNc) lblNc.textContent = totalNc.toFixed(2);
+                cardNc.classList.remove('d-none');
+            } else {
+                cardNc.classList.add('d-none');
+            }
+        }
 
         // Determinar visibilidad de registro
         if (saldo < 0.01) {

@@ -55,6 +55,45 @@ try {
     echo "[" . date('Y-m-d H:i:s') . "] Error en tareas (vencidas/recordatorio): " . $e->getMessage() . "\n";
 }
 
+// ── Chat de soporte: archivar conversaciones cerradas (FIJO, 1 vez al día) ────
+//    Archivar NO borra: solo saca de la bandeja las conversaciones cerradas que
+//    ya cumplieron soporte_config.dias_archivar_cerradas. Se autolimita con una
+//    marca diaria porque el cron corre cada minuto y esto no tiene por qué.
+try {
+    $marcaArchivado = sys_get_temp_dir() . '/sistema_soporte_archivado.txt';
+    $hoy = date('Y-m-d');
+
+    if ((int) date('H') >= 3 && @file_get_contents($marcaArchivado) !== $hoy) {
+        $svcSoporte = new \App\Services\modulos\SoporteChatService(
+            new \App\repositories\modulos\SoporteChatRepository(),
+            new \App\Rules\modulos\SoporteChatRules(),
+            new LogSistemaService(),
+        );
+        $nArchivadas = $svcSoporte->archivarCerradas();
+        file_put_contents($marcaArchivado, $hoy);
+
+        if ($nArchivadas > 0) {
+            echo "[" . date('Y-m-d H:i:s') . "] Soporte: {$nArchivadas} conversación(es) archivada(s).\n";
+        }
+    }
+
+    // Aviso de consultas sin atender: sí corre en CADA tick (el retraso en
+    // responder importa por minutos, no por días). El propio servicio evita
+    // reenviar mientras no cambie la lista, así que no genera spam.
+    $svcAlerta = new \App\Services\modulos\SoporteChatService(
+        new \App\repositories\modulos\SoporteChatRepository(),
+        new \App\Rules\modulos\SoporteChatRules(),
+        new LogSistemaService(),
+    );
+    $alerta = $svcAlerta->alertarSinAtender();
+    if (!empty($alerta['enviado'])) {
+        echo "[" . date('Y-m-d H:i:s') . "] Soporte: aviso enviado por {$alerta['conversaciones']} consulta(s) sin atender.\n";
+    }
+} catch (\Throwable $e) {
+    // Si el módulo de soporte aún no está desplegado, el resto del cron sigue.
+    echo "[" . date('Y-m-d H:i:s') . "] Error archivando conversaciones de soporte: " . $e->getMessage() . "\n";
+}
+
 // ── Ejecutar ──────────────────────────────────────────────────────────────────
 try {
     $repository = new AutomatizacionesRepository();
