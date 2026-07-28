@@ -3123,6 +3123,7 @@ class FacturaVentaController extends BaseModuloController
                 <td class="text-end" data-col="total_ice">$' . number_format((float)($r['total_ice'] ?? 0), 2) . '</td>
                 <td class="text-end" data-col="propina">$' . number_format((float)($r['propina'] ?? 0), 2) . '</td>
                 <td class="text-end fw-bold" data-col="importe_total">$' . number_format((float)($r['importe_total'] ?? 0), 2) . '</td>
+                <td class="text-end fw-bold ' . (($estado === 'anulado' ? 0.0 : $saldo) > 0.01 ? 'text-danger' : 'text-success') . '" data-col="saldo_pendiente">$' . number_format($estado === 'anulado' ? 0.0 : $saldo, 2) . '</td>
                 <td data-col="vendedor_nombre"><span class="text-muted">' . htmlspecialchars($r['vendedor_nombre'] ?? '') . '</span></td>
                 <td data-col="observaciones" class="text-truncate" style="max-width:180px">' . htmlspecialchars($r['observaciones'] ?? '') . '</td>
                 <td data-col="usuario_nombre">' . htmlspecialchars($r['usuario_nombre'] ?? '') . '</td>

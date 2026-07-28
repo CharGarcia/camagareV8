@@ -122,7 +122,7 @@
         const selAnfitrion = document.getElementById('vc-anfitrion');
         if (selAnfitrion && ID_USUARIO) selAnfitrion.value = String(ID_USUARIO);
 
-        ['vcBtnEntrar', 'vcBtnCopiar', 'vcBtnFinalizar', 'vcBtnEliminar', 'vcSepAcciones'].forEach(id => {
+        ['vcBtnEntrar', 'vcBtnCopiar', 'vcBtnInvitar', 'vcBtnFinalizar', 'vcBtnEliminar', 'vcSepAcciones'].forEach(id => {
             document.getElementById(id)?.classList.add('d-none');
         });
         document.getElementById('vcCodigoSala')?.classList.add('d-none');
@@ -205,6 +205,7 @@
         document.getElementById('vcBtnCopiar')?.classList.remove('d-none');
         if (!finalizada) {
             document.getElementById('vcBtnEntrar')?.classList.remove('d-none');
+            document.getElementById('vcBtnInvitar')?.classList.remove('d-none');
         }
         if (s.estado === 'en_curso' && PERM.actualizar) {
             document.getElementById('vcSepAcciones')?.classList.remove('d-none');
@@ -442,6 +443,44 @@
         }
     };
 
+    /** Envía la invitación por correo. Cada participante recibe su propio enlace. */
+    window.VC_enviarInvitaciones = async function () {
+        const id = document.getElementById('vc-id').value;
+        if (!id) return;
+
+        if (typeof Swal !== 'undefined') {
+            const r = await Swal.fire({
+                icon: 'question',
+                title: '¿Enviar las invitaciones?',
+                text: 'Cada participante con correo recibirá el enlace de la reunión.',
+                showCancelButton: true,
+                confirmButtonText: 'Enviar',
+                cancelButtonText: 'Cancelar',
+                target: document.getElementById('modalSalaVC'),
+            });
+            if (!r.isConfirmed) return;
+        }
+
+        const btn = document.getElementById('vcBtnInvitar');
+        btn.disabled = true;
+
+        const fd = new FormData();
+        fd.append('id', id);
+
+        try {
+            const res = await (await fetch(`${VC_URL}/enviarInvitacionesAjax`, { method: 'POST', body: fd })).json();
+            if (res.ok) {
+                avisarOk(res.mensaje);
+            } else {
+                avisar('warning', 'Invitaciones', res.mensaje);
+            }
+        } catch (e) {
+            avisar('error', 'Error de conexión', 'No se pudieron enviar las invitaciones.');
+        } finally {
+            btn.disabled = false;
+        }
+    };
+
     window.VC_finalizarSala = async function () {
         const id = document.getElementById('vc-id').value;
         if (!id) return;
@@ -466,26 +505,48 @@
         return bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConfigVC'));
     }
 
+    const val = (id) => document.getElementById(id)?.value ?? '';
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+
     window.VC_abrirConfig = async function () {
         try {
             const res = await (await fetch(`${VC_URL}/getConfigAjax`)).json();
             if (!res.ok) { avisar('error', 'No se pudo abrir', res.mensaje); return; }
 
-            const c = res.data;
-            document.getElementById('cfg-max').value = c.max_participantes;
+            const c = res.data;      // configuración de esta empresa
+            const g = res.global;    // configuración global del sistema
+
+            // ── Global ──
+            setVal('cfgg-stun', g.stun_urls);
+            setVal('cfgg-turn-urls', g.turn_urls);
+            setVal('cfgg-turn-usuario', g.turn_usuario);
+            setVal('cfgg-turn-key-id', g.turn_key_id);
+            setVal('cfgg-max-def', g.max_participantes_defecto);
+            setVal('cfgg-dur-def', g.duracion_max_defecto);
+            setVal('cfgg-turn-credencial', '');
+            setVal('cfgg-turn-api-token', '');
+            document.getElementById('cfgg-override').checked = !!g.permite_override_empresa;
+            document.getElementById('cfgg-badge-credencial').classList.toggle('d-none', !g.turn_credencial_puesta);
+            document.getElementById('cfgg-badge-token').classList.toggle('d-none', !g.turn_api_token_puesto);
+
+            // ── Esta empresa ──
             document.getElementById('cfg-max').max = res.max_mesh;
-            document.getElementById('cfg-duracion').value = c.duracion_max_minutos;
-            document.getElementById('cfg-umbral').value = c.umbral_proveedor_externo;
-            document.getElementById('cfg-stun').value = c.stun_urls;
-            document.getElementById('cfg-turn-urls').value = c.turn_urls;
-            document.getElementById('cfg-turn-usuario').value = c.turn_usuario;
-            document.getElementById('cfg-turn-key-id').value = c.turn_key_id;
+            setVal('cfg-max', c.max_participantes);
+            setVal('cfg-duracion', c.duracion_max_minutos);
+            setVal('cfg-umbral', c.umbral_proveedor_externo);
+            setVal('cfg-stun', c.stun_urls);
+            setVal('cfg-turn-urls', c.turn_urls);
+            setVal('cfg-turn-usuario', c.turn_usuario);
+            setVal('cfg-turn-key-id', c.turn_key_id);
 
             // Los secretos no se muestran: solo se indica si ya están puestos.
-            document.getElementById('cfg-turn-credencial').value = '';
-            document.getElementById('cfg-turn-api-token').value = '';
+            setVal('cfg-turn-credencial', '');
+            setVal('cfg-turn-api-token', '');
             document.getElementById('cfg-badge-credencial').classList.toggle('d-none', !c.turn_credencial_puesta);
             document.getElementById('cfg-badge-token').classList.toggle('d-none', !c.turn_api_token_puesto);
+
+            document.getElementById('cfg-aviso-override').classList.toggle('d-none', !!res.efectiva.puede_anular);
+            pintarEfectiva(res.efectiva);
             document.getElementById('cfg-resultado-prueba').innerHTML = '';
 
             modalConfig().show();
@@ -494,35 +555,78 @@
         }
     };
 
+    /** Resumen de qué servidores se están usando y de dónde salieron. */
+    function pintarEfectiva(ef) {
+        const caja = document.getElementById('cfg-efectiva');
+        if (!caja) return;
+
+        const etiqueta = (origen) => origen === 'empresa'
+            ? '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" style="font-size:.6rem;">PROPIO</span>'
+            : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:.6rem;">HEREDADO</span>';
+
+        let html = `<div><strong>STUN:</strong> ${esc(ef.stun_urls) || '<em>ninguno</em>'}</div>`;
+
+        if (ef.hay_turn) {
+            html += `<div><strong>TURN:</strong> ${esc(ef.turn_urls) || '<em>por credencial temporal</em>'} ${etiqueta(ef.origen_turn)}</div>`;
+        } else {
+            html += '<div class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>' +
+                    'Sin TURN: entre el 10% y el 20% de las llamadas no va a conectar.</div>';
+        }
+
+        caja.innerHTML = html;
+    }
+
     window.VC_guardarConfig = async function (extra) {
         const fd = new FormData();
-        fd.append('max_participantes', document.getElementById('cfg-max').value);
-        fd.append('duracion_max_minutos', document.getElementById('cfg-duracion').value);
-        fd.append('umbral_proveedor_externo', document.getElementById('cfg-umbral').value);
-        fd.append('stun_urls', document.getElementById('cfg-stun').value.trim());
-        fd.append('turn_urls', document.getElementById('cfg-turn-urls').value.trim());
-        fd.append('turn_usuario', document.getElementById('cfg-turn-usuario').value.trim());
-        fd.append('turn_credencial', document.getElementById('cfg-turn-credencial').value);
-        fd.append('turn_key_id', document.getElementById('cfg-turn-key-id').value.trim());
-        fd.append('turn_api_token', document.getElementById('cfg-turn-api-token').value);
+        fd.append('max_participantes', val('cfg-max'));
+        fd.append('duracion_max_minutos', val('cfg-duracion'));
+        fd.append('umbral_proveedor_externo', val('cfg-umbral'));
+        fd.append('stun_urls', val('cfg-stun').trim());
+        fd.append('turn_urls', val('cfg-turn-urls').trim());
+        fd.append('turn_usuario', val('cfg-turn-usuario').trim());
+        fd.append('turn_credencial', val('cfg-turn-credencial'));
+        fd.append('turn_key_id', val('cfg-turn-key-id').trim());
+        fd.append('turn_api_token', val('cfg-turn-api-token'));
         if (extra) fd.append(extra, '1');
 
+        await enviarConfig(`${VC_URL}/guardarConfigAjax`, fd);
+    };
+
+    window.VC_guardarConfigGlobal = async function (extra) {
+        const fd = new FormData();
+        fd.append('stun_urls', val('cfgg-stun').trim());
+        fd.append('turn_urls', val('cfgg-turn-urls').trim());
+        fd.append('turn_usuario', val('cfgg-turn-usuario').trim());
+        fd.append('turn_credencial', val('cfgg-turn-credencial'));
+        fd.append('turn_key_id', val('cfgg-turn-key-id').trim());
+        fd.append('turn_api_token', val('cfgg-turn-api-token'));
+        fd.append('max_participantes_defecto', val('cfgg-max-def'));
+        fd.append('duracion_max_defecto', val('cfgg-dur-def'));
+        if (document.getElementById('cfgg-override').checked) fd.append('permite_override_empresa', '1');
+        if (extra) fd.append(extra, '1');
+
+        await enviarConfig(`${VC_URL}/guardarConfigGlobalAjax`, fd);
+    };
+
+    async function enviarConfig(url, fd) {
         try {
-            const res = await (await fetch(`${VC_URL}/guardarConfigAjax`, { method: 'POST', body: fd })).json();
+            const res = await (await fetch(url, { method: 'POST', body: fd })).json();
             if (!res.ok) { avisar('error', 'No se pudo guardar', res.mensaje); return; }
             avisarOk(res.mensaje);
-            window.VC_abrirConfig();
+            window.VC_abrirConfig();   // recarga para reflejar la cascada
         } catch (e) {
             avisar('error', 'Error de conexión', 'No se pudo guardar la configuración.');
         }
-    };
+    }
 
-    window.VC_borrarSecreto = async function (campo) {
+    window.VC_borrarSecreto = async function (campo, esGlobal) {
         if (typeof Swal !== 'undefined') {
             const r = await Swal.fire({
                 icon: 'warning',
                 title: '¿Borrar el dato guardado?',
-                text: 'Tendrá que volver a cargarlo para que el TURN funcione.',
+                text: esGlobal
+                    ? 'Afecta a todas las empresas que heredan esta configuración.'
+                    : 'Esta empresa volverá a usar los servidores globales.',
                 showCancelButton: true,
                 confirmButtonText: 'Borrar',
                 cancelButtonText: 'Cancelar',
@@ -531,7 +635,12 @@
             });
             if (!r.isConfirmed) return;
         }
-        window.VC_guardarConfig('borrar_' + campo);
+
+        if (esGlobal) {
+            window.VC_guardarConfigGlobal('borrar_' + campo);
+        } else {
+            window.VC_guardarConfig('borrar_' + campo);
+        }
     };
 
     window.VC_probarTurn = async function () {

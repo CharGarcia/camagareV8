@@ -70,10 +70,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         <i class="bi bi-camera-video-fill me-1 text-primary"></i> <?= htmlspecialchars($titulo) ?>
     </h5>
     <div class="d-flex align-items-center gap-2">
-        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="VC_abrirConfig()"
-                title="Configurar servidores y límites">
-            <i class="bi bi-gear"></i>
-        </button>
+        <?php if (!empty($esSuperadmin)): ?>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="VC_abrirConfig()"
+                    title="Configurar servidores y límites">
+                <i class="bi bi-gear"></i>
+            </button>
+        <?php endif; ?>
         <?php if ($perm['crear']): ?>
             <button type="button" class="btn btn-primary btn-sm px-3 shadow-sm" onclick="VC_abrirModalNuevo()">
                 <i class="bi bi-plus-lg me-1"></i> Nueva reunión
@@ -170,7 +172,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 </div>
 
 <?php include __DIR__ . '/modal_sala.php'; ?>
-<?php include __DIR__ . '/modal_config.php'; ?>
+<?php if (!empty($esSuperadmin)) { include __DIR__ . '/modal_config.php'; } ?>
 
 <script>
     window.VC_URL_BASE  = '<?= $urlBase ?>';

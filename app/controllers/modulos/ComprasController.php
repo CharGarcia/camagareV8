@@ -147,6 +147,14 @@ class ComprasController extends BaseModuloController
                 };
                 $estadoBadge = '<span class="badge ' . $estadoClass . ' border border-opacity-25">' . ucfirst($estado) . '</span>';
 
+                // Celda de Saldo: N/A para notas de crédito; color según pendiente.
+                if (($r['tipo_comprobante'] ?? '') === '04') {
+                    $saldoCell = '<span class="text-muted" title="Las notas de crédito no tienen saldo por pagar">N/A</span>';
+                } else {
+                    $saldoCls  = $saldo > 0.01 ? 'text-danger' : 'text-success';
+                    $saldoCell = '<span class="' . $saldoCls . '">$' . number_format($saldo, 2) . '</span>';
+                }
+
                 echo '<tr class="compra-row" role="button" tabindex="0" data-row=\'' . $rowData . '\' onclick="abrirModalCompra(this)">
                         <td class="ps-3" data-col="secuencial_prov"><code class="text-secondary">' . $numero . '</code></td>
                         <td data-col="fecha_emision">' . $fechaEmision . '</td>
@@ -157,6 +165,7 @@ class ComprasController extends BaseModuloController
                         <td class="text-end" data-col="total_sin_impuestos">' . number_format((float)($r['total_sin_impuestos'] ?? 0), 2) . '</td>
                         <td class="text-end" data-col="monto_iva">$' . number_format((float)($r['monto_iva'] ?? 0), 2) . '</td>
                         <td class="text-end fw-bold" data-col="importe_total">$' . number_format((float)($r['importe_total'] ?? 0), 2) . '</td>
+                        <td class="text-end fw-bold" data-col="saldo_documento">' . $saldoCell . '</td>
                         <td class="text-center" data-col="estado_pago">' . $estadoPagoBadge . '</td>
                         <td class="text-center pe-3" data-col="estado">' . $estadoBadge . '</td>
                       </tr>';

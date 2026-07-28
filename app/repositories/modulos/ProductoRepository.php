@@ -12,7 +12,7 @@ class ProductoRepository extends BaseRepository
         'codigo', 'nombre', 'precio_base', 'status', 'tipo_produccion',
         'nombre_categoria', 'nombre_marca', 'codigo_auxiliar', 'codigo_barras',
         'nombre_medida', 'nombre_tarifa_iva', 'valor_iva', 'pvp',
-        'inventariable', 'stock_minimo', 'stock_maximo', 'valor_ice'
+        'inventariable', 'stock_minimo', 'stock_maximo', 'valor_ice', 'saldo_actual'
     ];
 
     public function __construct()
@@ -98,6 +98,7 @@ class ProductoRepository extends BaseRepository
             'nombre_tarifa_iva' => 'ti.tarifa',
             'valor_iva'        => '((p.precio_base + COALESCE(p.valor_ice, 0)) * (COALESCE(ti.porcentaje_iva, 0) / 100))',
             'pvp'              => '((p.precio_base + COALESCE(p.valor_ice, 0)) * (1 + COALESCE(ti.porcentaje_iva, 0) / 100))',
+            'saldo_actual'     => '(SELECT COALESCE(SUM(k.cantidad), 0) FROM inventario_kardex k WHERE k.id_producto = p.id AND k.id_empresa = p.id_empresa AND k.eliminado = false)',
             default            => "p.{$ordenCol}"
         };
 
@@ -109,9 +110,15 @@ class ProductoRepository extends BaseRepository
                            ti.codigo AS codigo_iva_final,
                            ti.status AS status_iva_final,
                            um.nombre AS nombre_medida,
+                           um.abreviatura AS abreviatura_medida,
                            um.id_tipo AS id_tipo_medida,
                            ((p.precio_base + COALESCE(p.valor_ice, 0)) * (COALESCE(ti.porcentaje_iva, 0)::numeric / 100)) AS valor_iva,
-                           ((p.precio_base + COALESCE(p.valor_ice, 0)) * (1 + COALESCE(ti.porcentaje_iva, 0)::numeric / 100)) AS pvp
+                           ((p.precio_base + COALESCE(p.valor_ice, 0)) * (1 + COALESCE(ti.porcentaje_iva, 0)::numeric / 100)) AS pvp,
+                           (SELECT COALESCE(SUM(k.cantidad), 0)
+                              FROM inventario_kardex k
+                             WHERE k.id_producto = p.id
+                               AND k.id_empresa = p.id_empresa
+                               AND k.eliminado = false) AS saldo_actual
                     FROM {$this->table} p
                     LEFT JOIN categorias cat ON cat.id = p.id_categoria
                     LEFT JOIN marcas mar ON mar.id = p.id_marca

@@ -140,21 +140,82 @@ class VideollamadaRepository extends BaseRepository
     }
 
     /**
-     * Solo el estado de la sala. Lo consulta el poll de señalización una vez por
-     * segundo, así que se mantiene lo más liviano posible.
+     * Lo mínimo que necesita el poll de señalización: estado, anfitrión y si la
+     * sala exige admisión.
+     *
+     * Va con caché de 2 segundos en APCu porque lo consulta CADA participante
+     * CADA segundo: sin esto, una reunión de seis personas dispararía seis
+     * consultas por segundo contra la base gestionada, que es justo el recurso
+     * más escaso del sistema. La caché la comparten todos los participantes de
+     * la misma sala, así que quedan ~0,5 consultas por segundo y sala.
+     *
+     * @return array{estado:string, id_anfitrion:int, sala_espera:bool}
      */
-    public function getEstado(int $idSala, int $idEmpresa): string
+    public function getDatosPoll(int $idSala, int $idEmpresa): array
     {
-        $sql = "SELECT estado FROM videollamadas_salas
+        $clave = 'vc:poll:' . $idEmpresa . ':' . $idSala;
+
+        $cacheado = \App\Helpers\Cache::get($clave);
+        if (is_array($cacheado)) {
+            return $cacheado;
+        }
+
+        $sql = "SELECT estado, id_anfitrion, sala_espera FROM videollamadas_salas
                 WHERE id = :id AND id_empresa = :emp AND eliminado = FALSE";
-        $estado = $this->query($sql, [':id' => $idSala, ':emp' => $idEmpresa])->fetchColumn();
-        return $estado !== false ? (string) $estado : 'finalizada';
+        $row = $this->query($sql, [':id' => $idSala, ':emp' => $idEmpresa])->fetch(PDO::FETCH_ASSOC);
+
+        $datos = $row === false
+            ? ['estado' => 'finalizada', 'id_anfitrion' => 0, 'sala_espera' => false]
+            : [
+                'estado'       => (string) $row['estado'],
+                'id_anfitrion' => (int) $row['id_anfitrion'],
+                'sala_espera'  => filter_var($row['sala_espera'], FILTER_VALIDATE_BOOLEAN),
+            ];
+
+        \App\Helpers\Cache::set($clave, $datos, 2);
+        return $datos;
+    }
+
+    /**
+     * Invalida la caché del poll.
+     * Se llama al cambiar el estado de la sala para que quienes están dentro se
+     * enteren en el acto de que la reunión terminó, sin esperar al TTL.
+     */
+    public function invalidarCachePoll(int $idSala, int $idEmpresa): void
+    {
+        \App\Helpers\Cache::delete('vc:poll:' . $idEmpresa . ':' . $idSala);
     }
 
     public function existeCodigo(string $codigo): bool
     {
         $sql = "SELECT COUNT(*) FROM videollamadas_salas WHERE codigo = :codigo AND eliminado = FALSE";
         return (int) $this->query($sql, [':codigo' => $codigo])->fetchColumn() > 0;
+    }
+
+    /**
+     * Reuniones programadas que empiezan dentro de la ventana indicada y a las
+     * que todavía no se les mandó el recordatorio.
+     *
+     * "Todavía no" se comprueba contra la bitácora de eventos, que es la fuente
+     * de verdad: así el cron puede correr cada minuto sin reenviar nada.
+     * No filtra por empresa porque lo ejecuta el cron para todo el sistema.
+     */
+    public function getSalasPorRecordar(int $minutosAntes): array
+    {
+        $sql = "SELECT s.id, s.id_empresa, s.titulo, s.fecha_inicio
+                FROM videollamadas_salas s
+                WHERE s.eliminado = FALSE
+                  AND s.estado = 'programada'
+                  AND s.tipo = 'programada'
+                  AND s.fecha_inicio IS NOT NULL
+                  AND s.fecha_inicio BETWEEN CURRENT_TIMESTAMP
+                                         AND CURRENT_TIMESTAMP + (:minutos * INTERVAL '1 minute')
+                  AND NOT EXISTS (
+                        SELECT 1 FROM videollamadas_eventos e
+                        WHERE e.id_sala = s.id AND e.tipo = 'recordatorio_enviado'
+                      )
+                ORDER BY s.fecha_inicio";
+        return $this->query($sql, [':minutos' => $minutosAntes])->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function insertSala(array $data): int
@@ -250,6 +311,10 @@ class VideollamadaRepository extends BaseRepository
             ':id'         => $id,
             ':id_empresa' => $idEmpresa,
         ]);
+
+        // Que los participantes vean el cambio en su próximo poll, no dentro de 2s.
+        $this->invalidarCachePoll($id, $idEmpresa);
+
         return $st->rowCount() > 0;
     }
 
@@ -301,6 +366,52 @@ class VideollamadaRepository extends BaseRepository
         ]);
 
         return (int) $st->fetchColumn();
+    }
+
+    /**
+     * Busca al invitado externo por el token de su enlace personal.
+     *
+     * No filtra por empresa a propósito: el token ES la credencial y viene de
+     * fuera, sin sesión. Devuelve la sala junto al participante para que quien
+     * llame pueda validar estado y empresa de una sola vez.
+     */
+    public function getParticipantePorToken(string $token): ?array
+    {
+        $sql = "SELECT p.id, p.id_empresa, p.id_sala, p.id_usuario, p.nombre_invitado, p.email, p.rol,
+                       s.codigo, s.titulo, s.estado, s.sala_espera, s.max_participantes,
+                       s.permite_invitados, s.id_anfitrion
+                FROM videollamadas_participantes p
+                INNER JOIN videollamadas_salas s ON s.id = p.id_sala AND s.eliminado = FALSE
+                WHERE p.token_acceso = :token AND p.eliminado = FALSE";
+        $row = $this->query($sql, [':token' => $token])->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Marca conexión/desconexión de un invitado, que se identifica por su id de fila. */
+    public function marcarConexionParticipante(int $idParticipante, bool $conectado): void
+    {
+        if ($conectado) {
+            $sql = "UPDATE videollamadas_participantes
+                    SET estado = 'conectado',
+                        primera_conexion = COALESCE(primera_conexion, CURRENT_TIMESTAMP),
+                        ultima_conexion = CURRENT_TIMESTAMP,
+                        ip = :ip, user_agent = :ua, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = :id AND eliminado = FALSE";
+            $this->query($sql, [
+                ':ip' => substr((string) ($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45),
+                ':ua' => (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''),
+                ':id' => $idParticipante,
+            ]);
+            return;
+        }
+
+        $sql = "UPDATE videollamadas_participantes
+                SET estado = 'desconectado',
+                    segundos_conectado = segundos_conectado + GREATEST(0,
+                        EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - COALESCE(ultima_conexion, CURRENT_TIMESTAMP)))::int),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND estado = 'conectado' AND eliminado = FALSE";
+        $this->query($sql, [':id' => $idParticipante]);
     }
 
     public function getIdParticipante(int $idSala, int $idEmpresa, int $idUsuario): ?int
@@ -387,7 +498,8 @@ class VideollamadaRepository extends BaseRepository
     //  Eventos (bitácora append-only)
     // ────────────────────────────────────────────────────────────────────
 
-    public function registrarEvento(int $idEmpresa, int $idSala, ?int $idParticipante, string $tipo, ?array $payload, int $idUsuario): void
+    /** $idUsuario es null cuando el evento lo genera un invitado externo, que no tiene cuenta. */
+    public function registrarEvento(int $idEmpresa, int $idSala, ?int $idParticipante, string $tipo, ?array $payload, ?int $idUsuario): void
     {
         $sql = "INSERT INTO videollamadas_eventos (
                     id_empresa, id_sala, id_participante, tipo, payload, created_by, updated_by
@@ -472,6 +584,71 @@ class VideollamadaRepository extends BaseRepository
         ]);
 
         return $st->rowCount() > 0;
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  Configuración GLOBAL (una sola fila para todo el sistema, sin id_empresa)
+    // ────────────────────────────────────────────────────────────────────
+
+    public function getConfigGlobal(): ?array
+    {
+        $sql = "SELECT * FROM videollamadas_config_global WHERE eliminado = FALSE LIMIT 1";
+        $row = $this->query($sql)->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /** Crea la fila global si aún no existe (primera vez que se usa el módulo). */
+    public function crearConfigGlobalPorDefecto(int $idUsuario): void
+    {
+        $sql = "INSERT INTO videollamadas_config_global (stun_urls, created_by, updated_by)
+                SELECT 'stun:stun.l.google.com:19302', :usr, :usr
+                WHERE NOT EXISTS (SELECT 1 FROM videollamadas_config_global WHERE eliminado = FALSE)";
+        $this->query($sql, [':usr' => $idUsuario]);
+    }
+
+    /** Mismo criterio que la de empresa: un secreto en null significa "no lo cambies". */
+    public function guardarConfigGlobal(array $data, int $idUsuario): bool
+    {
+        $sql = "UPDATE videollamadas_config_global SET
+                    stun_urls                 = :stun,
+                    turn_urls                 = :turn_urls,
+                    turn_usuario              = :turn_usuario,
+                    turn_credencial           = COALESCE(:turn_credencial, turn_credencial),
+                    turn_key_id               = :turn_key_id,
+                    turn_api_token            = COALESCE(:turn_api_token, turn_api_token),
+                    max_participantes_defecto = :max_def,
+                    duracion_max_defecto      = :dur_def,
+                    permite_override_empresa  = :override,
+                    updated_by                = :usr,
+                    updated_at                = CURRENT_TIMESTAMP
+                WHERE eliminado = FALSE";
+
+        $st = $this->query($sql, [
+            ':stun'            => $data['stun_urls'],
+            ':turn_urls'       => $data['turn_urls'],
+            ':turn_usuario'    => $data['turn_usuario'],
+            ':turn_credencial' => $data['turn_credencial'],
+            ':turn_key_id'     => $data['turn_key_id'],
+            ':turn_api_token'  => $data['turn_api_token'],
+            ':max_def'         => (int) $data['max_participantes_defecto'],
+            ':dur_def'         => (int) $data['duracion_max_defecto'],
+            ':override'        => !empty($data['permite_override_empresa']),
+            ':usr'             => $idUsuario,
+        ]);
+
+        return $st->rowCount() > 0;
+    }
+
+    public function limpiarSecretoGlobal(string $campo, int $idUsuario): void
+    {
+        $permitidos = ['turn_credencial', 'turn_api_token'];
+        if (!in_array($campo, $permitidos, true)) {
+            return;
+        }
+        $sql = "UPDATE videollamadas_config_global SET {$campo} = NULL, updated_by = :usr,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE eliminado = FALSE";
+        $this->query($sql, [':usr' => $idUsuario]);
     }
 
     /** Borra un secreto guardado (el usuario quiere quitar la credencial, no cambiarla). */

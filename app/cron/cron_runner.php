@@ -94,6 +94,26 @@ try {
     echo "[" . date('Y-m-d H:i:s') . "] Error archivando conversaciones de soporte: " . $e->getMessage() . "\n";
 }
 
+// ── Videollamadas: recordatorio de las reuniones que están por empezar ───────
+//    Corre en CADA tick a propósito: el aviso debe llegar minutos antes, no una
+//    vez al día. No necesita marca de "ya corrí": la consulta descarta las
+//    reuniones que ya tienen su recordatorio en la bitácora, así que cada una
+//    recibe exactamente uno.
+try {
+    $svcVc = new \App\Services\modulos\VideollamadaService(
+        new \App\repositories\modulos\VideollamadaRepository(),
+        new \App\Rules\modulos\VideollamadaRules(),
+        new LogSistemaService(),
+    );
+    $rec = $svcVc->enviarRecordatoriosPendientes(15);
+    if ($rec['salas'] > 0) {
+        echo "[" . date('Y-m-d H:i:s') . "] Videollamadas: {$rec['salas']} reunión(es) recordada(s), {$rec['correos']} correo(s).\n";
+    }
+} catch (\Throwable $e) {
+    // Si el módulo aún no está desplegado (faltan las tablas), el resto sigue.
+    echo "[" . date('Y-m-d H:i:s') . "] Error en recordatorios de videollamadas: " . $e->getMessage() . "\n";
+}
+
 // ── Ejecutar ──────────────────────────────────────────────────────────────────
 try {
     $repository = new AutomatizacionesRepository();

@@ -110,7 +110,7 @@ class ProductosController extends BaseModuloController
 
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-box fs-3 d-block mb-2"></i>No se encontraron productos.</td></tr>';
+            echo '<tr><td colspan="18" class="text-center py-5 text-muted"><i class="bi bi-box fs-3 d-block mb-2"></i>No se encontraron productos.</td></tr>';
         } else {
                 foreach ($rows as $r) {
                 $statusBadge = ((int)($r['status'] ?? 1) == 1)
@@ -139,6 +139,7 @@ class ProductosController extends BaseModuloController
                         <td class="text-center" data-col="inventariable">' . (($r['inventariable'] ?? false) ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-x-circle text-muted"></i>') . '</td>
                         <td class="text-end" data-col="stock_minimo">' . number_format((float)($r['stock_minimo'] ?? 0), 2) . '</td>
                         <td class="text-end" data-col="stock_maximo">' . number_format((float)($r['stock_maximo'] ?? 0), 2) . '</td>
+                        ' . $this->celdaSaldo($r) . '
                         <td class="text-center pe-3" data-col="status">' . $statusBadge . '</td>
                       </tr>';
                 }
@@ -164,6 +165,26 @@ class ProductosController extends BaseModuloController
             'excel_url' => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir"
         ]);
         exit;
+    }
+
+    /**
+     * Celda "Saldo" del listado: existencias sumando todas las bodegas.
+     * Solo aplica a productos que manejan inventario; en el resto muestra "—".
+     */
+    private function celdaSaldo(array $r): string
+    {
+        $esInventariable = in_array((string)($r['inventariable'] ?? ''), ['1', 't', 'true'], true);
+        if (!$esInventariable) {
+            return '<td class="text-end" data-col="saldo_actual"><span class="text-muted">—</span></td>';
+        }
+
+        $saldo  = (float)($r['saldo_actual'] ?? 0);
+        $abrev  = trim((string)($r['abreviatura_medida'] ?? ''));
+        $clase  = $saldo < 0 ? ' text-danger' : '';
+        $unidad = $abrev !== '' ? ' <span class="text-muted small">' . htmlspecialchars($abrev) . '</span>' : '';
+
+        return '<td class="text-end fw-medium' . $clase . '" data-col="saldo_actual">'
+             . number_format($saldo, 2) . $unidad . '</td>';
     }
 
     public function getDetalleAjax(): void
@@ -532,9 +553,14 @@ class ProductosController extends BaseModuloController
                 require_once $autoload;
             }
 
-            $headers = ['Código', 'Código Barras', 'Nombre', 'Categoría', 'Marca', 'Precio Base', 'Estado'];
+            $headers = ['Código', 'Código Barras', 'Nombre', 'Categoría', 'Marca', 'Precio Base', 'Saldo', 'Unidad', 'Estado'];
             $exportData = [];
             foreach ($rows as $r) {
+                // Saldo solo para productos que manejan inventario (suma de todas las bodegas).
+                $esInventariable = in_array((string)($r['inventariable'] ?? ''), ['1', 't', 'true'], true);
+                $saldo  = $esInventariable ? number_format((float)($r['saldo_actual'] ?? 0), 2) : '';
+                $unidad = $esInventariable ? (string)($r['abreviatura_medida'] ?? '') : '';
+
                 $exportData[] = [
                     (string)($r['codigo'] ?? ''),
                     (string)($r['codigo_barras'] ?? ''),
@@ -542,6 +568,8 @@ class ProductosController extends BaseModuloController
                     (string)($r['nombre_categoria'] ?? ''),
                     (string)($r['nombre_marca'] ?? ''),
                     number_format((float)($r['precio_base'] ?? 0), 2),
+                    $saldo,
+                    $unidad,
                     ((int)($r['status'] ?? 1) === 1 ? 'Activo' : 'Inactivo')
                 ];
             }

@@ -277,6 +277,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'total_ice'           => 'ICE',
                     'propina'             => 'Propina',
                     'importe_total'       => 'Total',
+                    'saldo_pendiente'     => 'Saldo',
                     'vendedor_nombre'     => 'Vendedor',
                     'observaciones'       => 'Observaciones',
                     'usuario_nombre'      => 'Usuario',
@@ -350,6 +351,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="sortable-header text-end" role="button" data-sort="importe_total" data-col="importe_total" onclick="window.FV_ordenar(this.dataset.sort)">
                             Total <i class="bi <?= $ordenCol === 'importe_total' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
+                        <th class="text-end" data-col="saldo_pendiente">Saldo</th>
                         <th class="sortable-header" role="button" data-sort="vendedor_nombre" data-col="vendedor_nombre" onclick="window.FV_ordenar(this.dataset.sort)">
                             Vendedor <i class="bi <?= $ordenCol === 'vendedor_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
@@ -373,7 +375,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <tbody id="tbodyFacturas">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="16" class="text-center py-5 text-muted"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No se encontraron facturas.</td>
+                            <td colspan="17" class="text-center py-5 text-muted"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No se encontraron facturas.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
@@ -418,6 +420,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td class="text-end" data-col="total_ice">$<?= number_format((float)($r['total_ice'] ?? 0), 2) ?></td>
                                 <td class="text-end" data-col="propina">$<?= number_format((float)($r['propina'] ?? 0), 2) ?></td>
                                 <td class="text-end fw-bold" data-col="importe_total">$<?= number_format((float)($r['importe_total'] ?? 0), 2) ?></td>
+                                <?php $saldoMostrar = $estado === 'anulado' ? 0.0 : $saldo; ?>
+                                <td class="text-end fw-bold <?= $saldoMostrar > 0.01 ? 'text-danger' : 'text-success' ?>" data-col="saldo_pendiente">$<?= number_format($saldoMostrar, 2) ?></td>
                                 <td data-col="vendedor_nombre"><?= htmlspecialchars($r['vendedor_nombre'] ?? '-') ?></td>
                                 <td data-col="observaciones" class="text-truncate" style="max-width:180px"><?= htmlspecialchars($r['observaciones'] ?? '') ?></td>
                                 <td data-col="usuario_nombre"><?= htmlspecialchars($r['usuario_nombre'] ?? '-') ?></td>

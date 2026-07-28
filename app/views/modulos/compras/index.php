@@ -166,6 +166,7 @@ $to         = $to         ?? 0;
                     'total_sin_impuestos' => 'Subtotal',
                     'monto_iva'        => 'IVA',
                     'importe_total'    => 'Total',
+                    'saldo_documento'  => 'Saldo',
                     'estado_pago'      => 'Pago',
                     'estado'           => 'Estado',
                 ];
@@ -200,6 +201,7 @@ $to         = $to         ?? 0;
                         <th class="text-end sortable-header" role="button" data-sort="total_sin_impuestos" data-col="total_sin_impuestos">Subtotal <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end sortable-header" role="button" data-sort="monto_iva" data-col="monto_iva">IVA <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end sortable-header fw-bold" role="button" data-sort="importe_total" data-col="importe_total">Total <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-end fw-bold" data-col="saldo_documento" title="Saldo = Total − Retención − Notas de crédito − Pagos">Saldo</th>
                         <th class="text-center sortable-header" role="button" data-col="estado_pago">Pago</th>
                         <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
@@ -207,7 +209,7 @@ $to         = $to         ?? 0;
                 <tbody id="tbodyCompras">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-cart3 fs-3 d-block mb-2"></i>No se encontraron compras.</td>
+                            <td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-cart3 fs-3 d-block mb-2"></i>No se encontraron compras.</td>
                         </tr>
                         <?php else: foreach ($rows as $r): 
                             $importeTotal = (float)($r['importe_total'] ?? 0);
@@ -247,6 +249,13 @@ $to         = $to         ?? 0;
                                 <td class="text-end" data-col="total_sin_impuestos"><?= number_format((float)($r['total_sin_impuestos'] ?? 0), 2) ?></td>
                                 <td class="text-end" data-col="monto_iva">$<?= number_format((float)($r['monto_iva'] ?? 0), 2) ?></td>
                                 <td class="text-end fw-bold" data-col="importe_total">$<?= number_format((float)($r['importe_total'] ?? 0), 2) ?></td>
+                                <td class="text-end fw-bold" data-col="saldo_documento">
+                                    <?php if (($r['tipo_comprobante'] ?? '') === '04'): ?>
+                                        <span class="text-muted" title="Las notas de crédito no tienen saldo por pagar">N/A</span>
+                                    <?php else: ?>
+                                        <span class="<?= $saldo > 0.01 ? 'text-danger' : 'text-success' ?>">$<?= number_format($saldo, 2) ?></span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="text-center" data-col="estado_pago"><?= $estadoPagoBadge ?></td>
                                 <td class="text-center pe-3" data-col="estado"><span class="badge <?= $estadoClass ?> border border-opacity-25"><?= ucfirst($estado) ?></span></td>
                             </tr>

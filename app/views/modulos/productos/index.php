@@ -131,6 +131,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'inventariable' => 'Inv.',
                     'stock_minimo' => 'Mín.',
                     'stock_maximo' => 'Máx.',
+                    'saldo_actual' => 'Saldo',
                     'status' => 'Estado'
                 ];
                 ?>
@@ -170,13 +171,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="text-center sortable-header" data-sort="inventariable" role="button" data-col="inventariable">Inv. <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end sortable-header" data-sort="stock_minimo" role="button" data-col="stock_minimo">Mín. <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end sortable-header" data-sort="stock_maximo" role="button" data-col="stock_maximo">Máx. <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-end sortable-header" data-sort="saldo_actual" role="button" data-col="saldo_actual" title="Saldo actual sumando todas las bodegas">Saldo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center pe-3 sortable-header" data-sort="status" role="button" data-col="status">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyProductos">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="17" class="text-center py-5 text-muted">No se encontraron productos.</td>
+                            <td colspan="18" class="text-center py-5 text-muted">No se encontraron productos.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
@@ -199,6 +201,20 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td class="text-center" data-col="inventariable"><?= ($r['inventariable'] ?? false) ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-x-circle text-muted"></i>' ?></td>
                                 <td class="text-end" data-col="stock_minimo"><?= number_format((float)($r['stock_minimo'] ?? 0), 2) ?></td>
                                 <td class="text-end" data-col="stock_maximo"><?= number_format((float)($r['stock_maximo'] ?? 0), 2) ?></td>
+                                <?php
+                                    // Saldo solo para productos que manejan inventario. Los servicios
+                                    // y los productos no inventariables no tienen existencias.
+                                    $esInventariable = in_array((string)($r['inventariable'] ?? ''), ['1', 't', 'true'], true);
+                                    $saldo = (float)($r['saldo_actual'] ?? 0);
+                                    $abrevMedida = trim((string)($r['abreviatura_medida'] ?? ''));
+                                ?>
+                                <td class="text-end fw-medium <?= $saldo < 0 ? 'text-danger' : '' ?>" data-col="saldo_actual">
+                                    <?php if ($esInventariable): ?>
+                                        <?= number_format($saldo, 2) ?><?php if ($abrevMedida !== ''): ?> <span class="text-muted small"><?= htmlspecialchars($abrevMedida) ?></span><?php endif; ?>
+                                    <?php else: ?>
+                                        <span class="text-muted">—</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="text-center pe-3" data-col="status">
                                     <span class="badge bg-<?= ($r['status'] ?? 1) == 1 ? 'success' : 'danger' ?> bg-opacity-10 text-<?= ($r['status'] ?? 1) == 1 ? 'success' : 'danger' ?> border border-<?= ($r['status'] ?? 1) == 1 ? 'success' : 'danger' ?> border-opacity-10"><?= ($r['status'] ?? 1) == 1 ? 'Activo' : 'Inactivo' ?></span>
                                 </td>

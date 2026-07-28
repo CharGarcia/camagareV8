@@ -33,6 +33,10 @@
                             onclick="VC_copiarEnlace()" title="Copiar el enlace de la reunión">
                         <i class="bi bi-link-45deg fs-6"></i>
                     </button>
+                    <button type="button" class="btn btn-outline-info btn-sm px-2 d-none" id="vcBtnInvitar"
+                            onclick="VC_enviarInvitaciones()" title="Enviar la invitación por correo a los participantes">
+                        <i class="bi bi-envelope fs-6"></i>
+                    </button>
                     <div class="vr mx-1 d-none" id="vcSepAcciones"></div>
                     <button type="button" class="btn btn-outline-danger btn-sm px-2 d-none" id="vcBtnFinalizar"
                             onclick="VC_finalizarSala()" title="Finalizar la reunión">

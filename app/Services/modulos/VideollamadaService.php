@@ -335,6 +335,122 @@ class VideollamadaService
     }
 
     // ────────────────────────────────────────────────────────────────────
+    //  Invitaciones por correo
+    // ────────────────────────────────────────────────────────────────────
+
+    /**
+     * Envía a cada participante con correo su invitación (o su recordatorio).
+     *
+     * Cada destinatario recibe SU enlace: los invitados externos el que lleva su
+     * token personal, y los usuarios del sistema la dirección del módulo, porque
+     * ellos entran autenticados.
+     *
+     * Un correo que falla no detiene a los demás ni tumba la operación: se
+     * cuenta y se sigue. Devuelve el detalle para poder decírselo al usuario.
+     *
+     * @return array{enviados:int, fallidos:int, sin_correo:int}
+     */
+    public function enviarInvitaciones(int $idSala, int $idEmpresa, int $idUsuario, bool $esRecordatorio = false): array
+    {
+        $sala = $this->getPorId($idSala, $idEmpresa);
+        if ($sala === null) {
+            throw new \Exception('La reunión no existe o no pertenece a esta empresa.');
+        }
+
+        require_once MVC_APP . '/helpers/mail.php';
+        if (!function_exists('enviar_correo_invitacion_videollamada')) {
+            throw new \Exception('El envío de correo no está disponible en este servidor.');
+        }
+
+        $base = rtrim(BASE_URL ?? '', '/');
+        $nombreEmpresa = '';
+        try {
+            $empresa = (new \App\models\Empresa())->getPorId($idEmpresa);
+            $nombreEmpresa = (string) ($empresa['nombre_comercial'] ?? $empresa['razon_social'] ?? '');
+        } catch (\Throwable $e) {
+            // El nombre de la empresa es decorativo: si falla, el correo sale igual.
+        }
+
+        $resultado = ['enviados' => 0, 'fallidos' => 0, 'sin_correo' => 0];
+
+        foreach ($sala['participantes'] as $p) {
+            $correo = trim((string) ($p['email'] ?? $p['usuario_email'] ?? ''));
+            if ($correo === '') {
+                $resultado['sin_correo']++;
+                continue;
+            }
+
+            $esInvitado = empty($p['id_usuario']);
+            $enlace = $esInvitado && !empty($p['token_acceso'])
+                ? $base . '/videollamada-invitado?t=' . rawurlencode((string) $p['token_acceso'])
+                : $base . '/modulos/videollamadas';
+
+            $ok = enviar_correo_invitacion_videollamada($correo, [
+                'titulo'              => $sala['titulo'],
+                'descripcion'         => $sala['descripcion'] ?? '',
+                'fecha_texto'         => $this->fechaLegible($sala),
+                'anfitrion'           => $sala['anfitrion_nombre'] ?? '',
+                'codigo'              => $sala['codigo'],
+                'enlace'              => $enlace,
+                'nombre_destinatario' => $p['usuario_nombre'] ?? $p['nombre_invitado'] ?? '',
+                'empresa'             => $nombreEmpresa,
+                'es_invitado'         => $esInvitado,
+            ], $esRecordatorio);
+
+            $ok ? $resultado['enviados']++ : $resultado['fallidos']++;
+        }
+
+        $this->repository->registrarEvento(
+            $idEmpresa,
+            $idSala,
+            null,
+            $esRecordatorio ? 'recordatorio_enviado' : 'invitaciones_enviadas',
+            $resultado,
+            $idUsuario ?: null
+        );
+
+        return $resultado;
+    }
+
+    /**
+     * Avisa por correo de las reuniones que están por empezar. Lo llama el cron.
+     *
+     * No lleva marca de "ya corrí hoy" como otras tareas del cron: la condición
+     * de no repetir es por reunión, no por día, y se comprueba en la consulta
+     * contra la bitácora de eventos. Así el cron puede correr cada minuto y cada
+     * reunión recibe exactamente un recordatorio.
+     *
+     * @return array{salas:int, correos:int}
+     */
+    public function enviarRecordatoriosPendientes(int $minutosAntes = 15): array
+    {
+        $salas = $this->repository->getSalasPorRecordar($minutosAntes);
+        $totalCorreos = 0;
+
+        foreach ($salas as $s) {
+            try {
+                $r = $this->enviarInvitaciones((int) $s['id'], (int) $s['id_empresa'], 0, true);
+                $totalCorreos += $r['enviados'];
+            } catch (\Throwable $e) {
+                // Una reunión con problema no debe frenar el resto de la cola.
+                error_log('Videollamadas: recordatorio de la sala ' . $s['id'] . ' falló: ' . $e->getMessage());
+            }
+        }
+
+        return ['salas' => count($salas), 'correos' => $totalCorreos];
+    }
+
+    /** Fecha de la reunión en el formato del sistema, o vacío si es instantánea. */
+    private function fechaLegible(array $sala): string
+    {
+        if (empty($sala['fecha_inicio'])) {
+            return '';
+        }
+        $ts = strtotime((string) $sala['fecha_inicio']);
+        return $ts !== false ? date('d-m-Y H:i:s', $ts) : '';
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     //  Presencia en la sala
     // ────────────────────────────────────────────────────────────────────
 
@@ -348,6 +464,19 @@ class VideollamadaService
 
         $idParticipante = $this->repository->getIdParticipante($idSala, $idEmpresa, $idUsuario);
         $this->repository->registrarEvento($idEmpresa, $idSala, $idParticipante, 'entro', null, $idUsuario);
+    }
+
+    /** Deja constancia de a quién se admitió o rechazó en la sala de espera. */
+    public function registrarAdmision(int $idSala, int $idEmpresa, int $idUsuario, string $peerId, bool $admitido): void
+    {
+        $this->repository->registrarEvento(
+            $idEmpresa,
+            $idSala,
+            null,
+            $admitido ? 'admitido' : 'rechazado',
+            ['peer_id' => $peerId],
+            $idUsuario
+        );
     }
 
     public function registrarSalida(int $idSala, int $idEmpresa, int $idUsuario): void
@@ -371,6 +500,136 @@ class VideollamadaService
             $config = $this->repository->getConfig($idEmpresa) ?? [];
         }
         return $config;
+    }
+
+    /** Configuración global del sistema, creándola la primera vez. */
+    public function getConfigGlobal(int $idUsuario): array
+    {
+        $global = $this->repository->getConfigGlobal();
+        if ($global === null) {
+            $this->repository->crearConfigGlobalPorDefecto($idUsuario);
+            $global = $this->repository->getConfigGlobal() ?? [];
+        }
+        return $global;
+    }
+
+    /**
+     * Configuración que se usa realmente en una llamada: la global, con lo que
+     * la empresa haya decidido sobrescribir.
+     *
+     * La herencia va POR BLOQUE, no campo por campo. Mezclar la dirección de un
+     * servidor TURN con la credencial de otro daría una configuración que no
+     * conecta con ninguno, y el fallo sería dificilísimo de diagnosticar. Los
+     * bloques son tres:
+     *   1. STUN (un solo campo).
+     *   2. TURN estático: dirección + usuario + credencial.
+     *   3. TURN por credenciales temporales: key id + token de API.
+     *
+     * Si la empresa define un bloque, ese bloque es suyo entero; si lo deja
+     * vacío, hereda el global completo.
+     */
+    public function getConfigEfectiva(int $idEmpresa, int $idUsuario): array
+    {
+        $empresa = $this->getConfig($idEmpresa, $idUsuario);
+        $global  = $this->getConfigGlobal($idUsuario);
+
+        // El global manda: si desactiva la anulación, lo de la empresa se ignora.
+        $puedeAnular = !isset($global['permite_override_empresa'])
+            || filter_var($global['permite_override_empresa'], FILTER_VALIDATE_BOOLEAN);
+
+        $stunEmpresa = trim((string) ($empresa['stun_urls'] ?? ''));
+        $stun = ($puedeAnular && $stunEmpresa !== '')
+            ? $stunEmpresa
+            : trim((string) ($global['stun_urls'] ?? ''));
+
+        $empresaDefineTurn  = $puedeAnular && trim((string) ($empresa['turn_urls'] ?? '')) !== '';
+        $empresaDefineCloud = $puedeAnular && trim((string) ($empresa['turn_key_id'] ?? '')) !== '';
+
+        $bloqueTurn  = $empresaDefineTurn ? $empresa : $global;
+        $bloqueCloud = $empresaDefineCloud ? $empresa : $global;
+
+        return [
+            // Los límites NO se heredan: son siempre de la empresa.
+            'max_participantes'        => (int) ($empresa['max_participantes'] ?? 6),
+            'duracion_max_minutos'     => (int) ($empresa['duracion_max_minutos'] ?? 120),
+            'umbral_proveedor_externo' => (int) ($empresa['umbral_proveedor_externo'] ?? 8),
+            'proveedor_defecto'        => (string) ($empresa['proveedor_defecto'] ?? 'interno'),
+
+            'stun_urls'       => $stun,
+            'turn_urls'       => (string) ($bloqueTurn['turn_urls'] ?? ''),
+            'turn_usuario'    => (string) ($bloqueTurn['turn_usuario'] ?? ''),
+            'turn_credencial' => (string) ($bloqueTurn['turn_credencial'] ?? ''),
+            'turn_key_id'     => (string) ($bloqueCloud['turn_key_id'] ?? ''),
+            'turn_api_token'  => (string) ($bloqueCloud['turn_api_token'] ?? ''),
+
+            // Para que la interfaz pueda decir de dónde salió cada cosa.
+            'origen_turn'  => $empresaDefineTurn ? 'empresa' : 'global',
+            'origen_cloud' => $empresaDefineCloud ? 'empresa' : 'global',
+            'puede_anular' => $puedeAnular,
+        ];
+    }
+
+    /** Guarda la configuración global. Solo la usa el superadministrador. */
+    public function guardarConfigGlobal(int $idUsuario, array $data): void
+    {
+        $this->getConfigGlobal($idUsuario); // garantiza que la fila exista
+
+        $credencial = trim((string) ($data['turn_credencial'] ?? ''));
+        $apiToken   = trim((string) ($data['turn_api_token'] ?? ''));
+
+        $this->repository->guardarConfigGlobal([
+            'stun_urls'                 => trim((string) ($data['stun_urls'] ?? '')) ?: null,
+            'turn_urls'                 => trim((string) ($data['turn_urls'] ?? '')) ?: null,
+            'turn_usuario'              => trim((string) ($data['turn_usuario'] ?? '')) ?: null,
+            'turn_key_id'               => trim((string) ($data['turn_key_id'] ?? '')) ?: null,
+            'turn_credencial'           => $credencial !== '' ? CryptoHelper::encriptar($credencial) : null,
+            'turn_api_token'            => $apiToken !== '' ? CryptoHelper::encriptar($apiToken) : null,
+            'max_participantes_defecto' => (int) ($data['max_participantes_defecto'] ?? 6),
+            'duracion_max_defecto'      => (int) ($data['duracion_max_defecto'] ?? 120),
+            'permite_override_empresa'  => !empty($data['permite_override_empresa']),
+        ], $idUsuario);
+
+        foreach (['turn_credencial', 'turn_api_token'] as $campo) {
+            if (!empty($data['borrar_' . $campo])) {
+                $this->repository->limpiarSecretoGlobal($campo, $idUsuario);
+            }
+        }
+
+        // Tabla global: la auditoría va con id_empresa nulo (§7 de CLAUDE.md).
+        $this->logService->registrar(
+            $idUsuario,
+            null,
+            'ACTUALIZAR',
+            'videollamadas_config_global',
+            null,
+            null,
+            [
+                'turn_urls'                => $data['turn_urls'] ?? '',
+                'permite_override_empresa' => !empty($data['permite_override_empresa']),
+                // Nunca se registra el valor de un secreto en la auditoría.
+                'turn_credencial'          => $credencial !== '' ? '(actualizada)' : '(sin cambio)',
+                'turn_api_token'           => $apiToken !== '' ? '(actualizado)' : '(sin cambio)',
+            ]
+        );
+    }
+
+    /** Configuración global lista para el formulario, sin exponer secretos. */
+    public function getConfigGlobalParaVista(int $idUsuario): array
+    {
+        $g = $this->getConfigGlobal($idUsuario);
+
+        return [
+            'stun_urls'                 => (string) ($g['stun_urls'] ?? ''),
+            'turn_urls'                 => (string) ($g['turn_urls'] ?? ''),
+            'turn_usuario'              => (string) ($g['turn_usuario'] ?? ''),
+            'turn_key_id'               => (string) ($g['turn_key_id'] ?? ''),
+            'turn_credencial_puesta'    => trim((string) ($g['turn_credencial'] ?? '')) !== '',
+            'turn_api_token_puesto'     => trim((string) ($g['turn_api_token'] ?? '')) !== '',
+            'max_participantes_defecto' => (int) ($g['max_participantes_defecto'] ?? 6),
+            'duracion_max_defecto'      => (int) ($g['duracion_max_defecto'] ?? 120),
+            'permite_override_empresa'  => !isset($g['permite_override_empresa'])
+                || filter_var($g['permite_override_empresa'], FILTER_VALIDATE_BOOLEAN),
+        ];
     }
 
     /**
@@ -472,7 +731,9 @@ class VideollamadaService
             throw new \Exception('La reunión no existe o no pertenece a esta empresa.');
         }
 
-        $config    = $this->getConfig($idEmpresa, $idUsuario);
+        // Efectiva, no la cruda: aquí es donde se aplica la herencia de los
+        // servidores globales.
+        $config    = $this->getConfigEfectiva($idEmpresa, $idUsuario);
         $proveedor = $this->resolverProveedor($sala, $config);
 
         $participantes = $this->repository->getParticipantes($idSala, $idEmpresa);

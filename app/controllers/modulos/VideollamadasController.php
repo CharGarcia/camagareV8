@@ -26,9 +26,13 @@ use App\Rules\modulos\VideollamadaRules;
 use App\Services\LogSistemaService;
 use App\Services\modulos\VideollamadaService;
 use App\Services\modulos\videollamadas\SenalizacionService;
+use App\Traits\SenalizacionSalaTrait;
 
 class VideollamadasController extends BaseModuloController
 {
+    // Endpoints de señalización compartidos con el controlador público de invitados.
+    use SenalizacionSalaTrait;
+
     /** Clave de sesión donde viaja la sala que se abre en ventana aparte (URLs sin parámetros). */
     private const SESSION_SALA = 'vc_sala_actual';
 
@@ -38,6 +42,14 @@ class VideollamadasController extends BaseModuloController
      * así no puede hacerse pasar por otro participante.
      */
     private const SESSION_PEER = 'vc_peer_id';
+
+    /**
+     * Si el usuario manda en la sala (anfitrión o acceso total).
+     * Se resuelve UNA vez al entrar y se guarda en la sesión: resolverlo en cada
+     * poll costaría dos consultas por segundo y participante solo para saber si
+     * hay que mostrarle la cola de admisión.
+     */
+    private const SESSION_MANDA = 'vc_manda_sala';
 
     private VideollamadaService $service;
     private VideollamadaRepository $repository;
@@ -101,6 +113,7 @@ class VideollamadasController extends BaseModuloController
             'usuarios'    => $this->repository->getUsuariosEmpresa($idEmpresa),
             'maxMesh'     => VideollamadaRules::MAX_PARTICIPANTES_MESH,
             'idUsuario'   => (int) $_SESSION['id_usuario'],
+            'esSuperadmin' => $this->esSuperadmin(),
         ]);
     }
 
@@ -217,6 +230,41 @@ class VideollamadasController extends BaseModuloController
         }
     }
 
+    /** Manda a cada participante su invitación con el enlace que le corresponde. */
+    public function enviarInvitacionesAjax(): void
+    {
+        $this->requireLeer();
+
+        try {
+            $id        = (int) ($_POST['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+
+            $sala = $this->service->getPorId($id, $idEmpresa);
+            if ($sala === null) {
+                $this->json(['ok' => false, 'mensaje' => 'La reunión no existe o no pertenece a esta empresa.']);
+            }
+            if (!$this->tieneAccesoTotal() && (int) $sala['id_anfitrion'] !== $idUsuario) {
+                $this->json(['ok' => false, 'mensaje' => 'Solo el anfitrión puede enviar las invitaciones.']);
+            }
+
+            $r = $this->service->enviarInvitaciones($id, $idEmpresa, $idUsuario);
+
+            $partes = [];
+            if ($r['enviados'] > 0)   $partes[] = $r['enviados'] . ' invitación(es) enviada(s)';
+            if ($r['fallidos'] > 0)   $partes[] = $r['fallidos'] . ' no se pudo(ieron) enviar';
+            if ($r['sin_correo'] > 0) $partes[] = $r['sin_correo'] . ' sin correo registrado';
+
+            $this->json([
+                'ok'       => $r['enviados'] > 0,
+                'mensaje'  => $partes === [] ? 'No hay participantes con correo.' : implode(', ', $partes) . '.',
+                'detalle'  => $r,
+            ]);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  Sala
     // ────────────────────────────────────────────────────────────────────
@@ -291,11 +339,12 @@ class VideollamadasController extends BaseModuloController
         }
 
         $this->view('modulos/videollamadas/sala', [
-            'titulo'     => $sala['titulo'],
-            'sala'       => $sala,
-            'idUsuario'  => $idUsuario,
-            'rutaModulo' => $this->getRutaModulo(),
-            'esAnfitrion' => (int) $sala['id_anfitrion'] === $idUsuario,
+            'titulo'        => $sala['titulo'],
+            'sala'          => $sala,
+            'idUsuario'     => $idUsuario,
+            'nombreUsuario' => (string) ($_SESSION['nombre'] ?? 'Usted'),
+            'rutaModulo'    => $this->getRutaModulo(),
+            'esAnfitrion'   => (int) $sala['id_anfitrion'] === $idUsuario || $this->tieneAccesoTotal(),
         ]);
     }
 
@@ -331,14 +380,19 @@ class VideollamadasController extends BaseModuloController
 
     public function getConfigAjax(): void
     {
-        $this->requireLeer();
+        $this->requireSuperadmin();
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
 
         try {
-            $config = $this->service->getConfigParaVista(
-                (int) $_SESSION['id_empresa'],
-                (int) $_SESSION['id_usuario']
-            );
-            $this->json(['ok' => true, 'data' => $config, 'max_mesh' => VideollamadaRules::MAX_PARTICIPANTES_MESH]);
+            $this->json([
+                'ok'       => true,
+                'data'     => $this->service->getConfigParaVista($idEmpresa, $idUsuario),
+                'global'   => $this->service->getConfigGlobalParaVista($idUsuario),
+                'efectiva' => $this->resumenEfectiva($idEmpresa, $idUsuario),
+                'max_mesh' => VideollamadaRules::MAX_PARTICIPANTES_MESH,
+            ]);
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
@@ -346,7 +400,7 @@ class VideollamadasController extends BaseModuloController
 
     public function guardarConfigAjax(): void
     {
-        $this->requireActualizar();
+        $this->requireSuperadmin();
 
         try {
             $this->service->guardarConfig(
@@ -354,10 +408,38 @@ class VideollamadasController extends BaseModuloController
                 (int) $_SESSION['id_usuario'],
                 $_POST
             );
-            $this->json(['ok' => true, 'mensaje' => 'Configuración guardada.']);
+            $this->json(['ok' => true, 'mensaje' => 'Configuración de la empresa guardada.']);
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
+    }
+
+    /** Configuración global: la comparten todas las empresas. */
+    public function guardarConfigGlobalAjax(): void
+    {
+        $this->requireSuperadmin();
+
+        try {
+            $this->service->guardarConfigGlobal((int) $_SESSION['id_usuario'], $_POST);
+            $this->json(['ok' => true, 'mensaje' => 'Configuración global guardada.']);
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+    }
+
+    /** De dónde sale cada servidor que se está usando realmente. */
+    private function resumenEfectiva(int $idEmpresa, int $idUsuario): array
+    {
+        $ef = $this->service->getConfigEfectiva($idEmpresa, $idUsuario);
+
+        return [
+            'stun_urls'    => $ef['stun_urls'],
+            'turn_urls'    => $ef['turn_urls'],
+            'origen_turn'  => $ef['origen_turn'],
+            'origen_cloud' => $ef['origen_cloud'],
+            'puede_anular' => $ef['puede_anular'],
+            'hay_turn'     => $ef['turn_urls'] !== '' || $ef['turn_key_id'] !== '',
+        ];
     }
 
     /**
@@ -366,7 +448,7 @@ class VideollamadasController extends BaseModuloController
      */
     public function probarTurnAjax(): void
     {
-        $this->requireLeer();
+        $this->requireSuperadmin();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
@@ -376,7 +458,7 @@ class VideollamadasController extends BaseModuloController
         }
 
         try {
-            $config    = $this->service->getConfig($idEmpresa, $idUsuario);
+            $config    = $this->service->getConfigEfectiva($idEmpresa, $idUsuario);
             $proveedor = new \App\Services\modulos\videollamadas\ProveedorInterno();
             $cred      = $proveedor->obtenerCredenciales(['codigo' => ''], $config, []);
 
@@ -409,84 +491,43 @@ class VideollamadasController extends BaseModuloController
     // ────────────────────────────────────────────────────────────────────
     //  Señalización WebRTC
     //
-    //  Estos tres endpoints son el "buzón" por el que los navegadores se ponen
-    //  de acuerdo antes de hablarse directo. Se consultan una vez por segundo
-    //  durante la negociación, así que TODOS liberan el lock de sesión de
-    //  inmediato: si no, el usuario vería congelarse el resto del sistema.
-    //
-    //  Regla: polling corto, NUNCA long-polling. Apache corre en prefork con
-    //  mod_php y una petición que espera bloquea un proceso completo.
+    //  Los endpoints (entrarAjax, senalesAjax, enviarSenalAjax, salirAjax) los
+    //  aporta SenalizacionSalaTrait, que también usa el controlador público de
+    //  invitados. Aquí solo se resuelve la identidad de quien llama.
     // ────────────────────────────────────────────────────────────────────
 
     /**
-     * El navegador anuncia que entró a la sala.
-     * Devuelve su identificador de par, el cursor del buzón, los servidores ICE
-     * y quiénes están ya dentro.
+     * Identidad de un usuario del ERP dentro de la sala.
+     *
+     * Exige sesión y permiso de lectura del módulo, y libera el lock de sesión
+     * antes de devolver: estos endpoints se consultan una vez por segundo y no
+     * pueden dejar bloqueado el resto del sistema para ese usuario.
      */
-    public function entrarAjax(): void
+    protected function contextoSala(bool $creandoPeer = false): array
     {
         $this->requireLeer();
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
         $nombre    = (string) ($_SESSION['nombre'] ?? 'Usuario');
-        $idSala    = (int) ($_POST['id'] ?? $_SESSION[self::SESSION_SALA] ?? 0);
+        $idSala    = (int) ($_POST['id'] ?? $_GET['id'] ?? $_SESSION[self::SESSION_SALA] ?? 0);
 
-        // El identificador de par lo genera el SERVIDOR y vive en la sesión: así
-        // el navegador no puede hacerse pasar por otro participante.
-        $peerId = 'u' . $idUsuario . '-' . bin2hex(random_bytes(5));
-        $_SESSION[self::SESSION_PEER] = $peerId;
+        if ($creandoPeer) {
+            // El identificador de par lo genera el SERVIDOR y vive en la sesión:
+            // así el navegador no puede hacerse pasar por otro participante.
+            $peerId = 'u' . $idUsuario . '-' . bin2hex(random_bytes(5));
+            $_SESSION[self::SESSION_PEER] = $peerId;
 
-        // Ya no se escribe más en la sesión: liberar el lock cuanto antes.
-        if (session_status() === PHP_SESSION_ACTIVE) {
-            session_write_close();
-        }
-
-        try {
             $sala = $this->service->getPorId($idSala, $idEmpresa);
-            if ($sala === null) {
-                $this->json(['ok' => false, 'mensaje' => 'La reunión no existe o no pertenece a esta empresa.']);
-            }
-            if (in_array($sala['estado'], ['finalizada', 'cancelada'], true)) {
-                $this->json(['ok' => false, 'mensaje' => 'Esta reunión ya terminó.']);
-            }
+            $rol  = $sala !== null ? $this->rolEnSala($sala, $idUsuario) : 'participante';
+            $manda = in_array($rol, ['anfitrion', 'moderador'], true);
 
-            $senal = new SenalizacionService();
-            $senal->marcarPresencia($idSala, $peerId, [
-                'id_usuario' => $idUsuario,
-                'nombre'     => $nombre,
-                'anfitrion'  => (int) $sala['id_anfitrion'] === $idUsuario,
-            ]);
-
-            $this->service->registrarEntrada($idSala, $idEmpresa, $idUsuario);
-
-            $this->json([
-                'ok'           => true,
-                'peer_id'      => $peerId,
-                'cursor'       => $senal->getSecuenciaActual($idSala),
-                'presentes'    => $senal->getPresentes($idSala, $peerId),
-                'credenciales' => $this->service->getCredenciales($idSala, $idEmpresa, $idUsuario),
-                'max'          => (int) $sala['max_participantes'],
-            ]);
-        } catch (\Throwable $e) {
-            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
+            // Se deja resuelto para que el poll no recalcule permisos cada segundo.
+            $_SESSION[self::SESSION_MANDA] = $manda;
+        } else {
+            $peerId = (string) ($_SESSION[self::SESSION_PEER] ?? '');
+            $manda  = !empty($_SESSION[self::SESSION_MANDA]);
         }
-    }
-
-    /**
-     * Latido y recogida del buzón: refresca la presencia y devuelve los mensajes
-     * nuevos dirigidos a este participante.
-     */
-    public function senalesAjax(): void
-    {
-        $this->requireLeer();
-
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idUsuario = (int) $_SESSION['id_usuario'];
-        $nombre    = (string) ($_SESSION['nombre'] ?? 'Usuario');
-        $peerId    = (string) ($_SESSION[self::SESSION_PEER] ?? '');
-        $idSala    = (int) ($_GET['id'] ?? $_SESSION[self::SESSION_SALA] ?? 0);
-        $desde     = (int) ($_GET['cursor'] ?? 0);
 
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
@@ -496,97 +537,117 @@ class VideollamadasController extends BaseModuloController
             $this->json(['ok' => false, 'reentrar' => true, 'mensaje' => 'La sesión de la sala se perdió.']);
         }
 
-        try {
-            $senal = new SenalizacionService();
-            $senal->marcarPresencia($idSala, $peerId, [
-                'id_usuario' => $idUsuario,
-                'nombre'     => $nombre,
-            ]);
-
-            $recibido = $senal->recibir($idSala, $peerId, $desde);
-            $estado   = $this->repository->getEstado($idSala, $idEmpresa);
-
-            $this->json([
-                'ok'        => true,
-                'cursor'    => $recibido['cursor'],
-                'mensajes'  => $recibido['mensajes'],
-                'presentes' => $senal->getPresentes($idSala, $peerId),
-                'estado'    => $estado,
-            ]);
-        } catch (\Throwable $e) {
-            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
-        }
+        return [
+            'id_empresa'  => $idEmpresa,
+            'id_sala'     => $idSala,
+            'peer_id'     => $peerId,
+            'nombre'      => $nombre,
+            'id_usuario'  => $idUsuario,
+            'manda_sala'  => $manda,
+            'es_invitado' => false,
+        ];
     }
 
-    /** Deja un mensaje (oferta, respuesta o candidato ICE) para otro participante. */
-    public function enviarSenalAjax(): void
+    protected function alEntrarEnSala(array $ctx): void
+    {
+        $this->service->registrarEntrada($ctx['id_sala'], $ctx['id_empresa'], (int) $ctx['id_usuario']);
+    }
+
+    protected function alSalirDeSala(array $ctx): void
+    {
+        $this->service->registrarSalida($ctx['id_sala'], $ctx['id_empresa'], (int) $ctx['id_usuario']);
+    }
+
+    protected function salaService(): VideollamadaService
+    {
+        return $this->service;
+    }
+
+    protected function salaRepository(): VideollamadaRepository
+    {
+        return $this->repository;
+    }
+
+    /** El anfitrión (o quien tenga acceso total) deja pasar o rechaza a alguien. */
+    public function admitirAjax(): void
     {
         $this->requireLeer();
 
-        $peerId = (string) ($_SESSION[self::SESSION_PEER] ?? '');
-        $idSala = (int) ($_POST['id'] ?? $_SESSION[self::SESSION_SALA] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $idSala    = (int) ($_POST['id'] ?? $_SESSION[self::SESSION_SALA] ?? 0);
+        $peerId    = (string) ($_POST['peer_id'] ?? '');
+        $admitir   = filter_var($_POST['admitir'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $puede     = $this->tieneAccesoTotal();
 
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
         }
 
         if ($peerId === '') {
-            $this->json(['ok' => false, 'reentrar' => true]);
-        }
-
-        $tipo = (string) ($_POST['tipo'] ?? '');
-        if (!in_array($tipo, ['offer', 'answer', 'ice', 'bye', 'estado'], true)) {
-            $this->json(['ok' => false, 'mensaje' => 'Tipo de señal no válido.']);
-        }
-
-        $payload = json_decode((string) ($_POST['payload'] ?? '{}'), true);
-        if (!is_array($payload)) {
-            $payload = [];
+            $this->json(['ok' => false, 'mensaje' => 'Falta indicar a quién admitir.']);
         }
 
         try {
+            $datos = $this->repository->getDatosPoll($idSala, $idEmpresa);
+            if (!$puede && $datos['id_anfitrion'] !== $idUsuario) {
+                $this->json(['ok' => false, 'mensaje' => 'Solo el anfitrión puede admitir participantes.']);
+            }
+
             $senal = new SenalizacionService();
-            $seq = $senal->enviar($idSala, $peerId, (string) ($_POST['para'] ?? ''), $tipo, $payload);
-            $this->json(['ok' => true, 'seq' => $seq]);
+            $senal->resolverAdmision($idSala, $peerId, $admitir);
+
+            $this->service->registrarAdmision($idSala, $idEmpresa, $idUsuario, $peerId, $admitir);
+
+            $this->json(['ok' => true]);
         } catch (\Throwable $e) {
             $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
     }
 
-    /** Salida explícita: quita la presencia y avisa a los demás para que cierren su conexión. */
-    public function salirAjax(): void
-    {
-        $this->requireLeer();
-
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idUsuario = (int) $_SESSION['id_usuario'];
-        $peerId    = (string) ($_SESSION[self::SESSION_PEER] ?? '');
-        $idSala    = (int) ($_POST['id'] ?? $_SESSION[self::SESSION_SALA] ?? 0);
-
-        if (session_status() === PHP_SESSION_ACTIVE) {
-            session_write_close();
-        }
-
-        if ($peerId === '' || $idSala <= 0) {
-            $this->json(['ok' => true]);
-        }
-
-        try {
-            $senal = new SenalizacionService();
-            $senal->enviar($idSala, $peerId, '', 'bye', []);
-            $senal->quitarPresencia($idSala, $peerId);
-            $this->service->registrarSalida($idSala, $idEmpresa, $idUsuario);
-        } catch (\Throwable $e) {
-            // La salida es best-effort: si falla, el TTL de presencia lo resuelve solo.
-            error_log('Videollamadas::salirAjax ' . $e->getMessage());
-        }
-
-        $this->json(['ok' => true]);
-    }
-
     // ────────────────────────────────────────────────────────────────────
     //  Apoyo
     // ────────────────────────────────────────────────────────────────────
+
+    /** Rol del usuario dentro de una sala concreta. */
+    private function rolEnSala(array $sala, int $idUsuario): string
+    {
+        if ((int) $sala['id_anfitrion'] === $idUsuario || $this->tieneAccesoTotal()) {
+            return 'anfitrion';
+        }
+
+        foreach ($sala['participantes'] ?? [] as $p) {
+            if ((int) ($p['id_usuario'] ?? 0) === $idUsuario) {
+                return (string) ($p['rol'] ?? 'participante');
+            }
+        }
+
+        return 'participante';
+    }
+
+    private function tieneAccesoTotal(): bool
+    {
+        return !empty($this->getPermisos()['todo']);
+    }
+
+    private function esSuperadmin(): bool
+    {
+        return (int) ($_SESSION['nivel'] ?? 0) >= 3;
+    }
+
+    /**
+     * La configuración guarda credenciales de servicios contratados y afecta a
+     * todas las empresas, así que queda reservada al superadministrador: no
+     * basta con tener permiso de actualizar reuniones.
+     */
+    private function requireSuperadmin(): void
+    {
+        $this->requireLeer();
+
+        if (!$this->esSuperadmin()) {
+            $this->json(['ok' => false, 'mensaje' => 'Solo el superadministrador puede ver o cambiar esta configuración.'], 403);
+        }
+    }
 
     /** Arma el arreglo de datos desde $_POST, ya saneado para el service. */
     private function datosDesdePost(): array

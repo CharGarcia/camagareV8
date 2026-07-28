@@ -10,28 +10,46 @@
  * ── Malla (mesh) ────────────────────────────────────────────────────────────
  * Se abre una conexión por CADA par de participantes. Con N personas cada
  * navegador sostiene N-1 conexiones y sube N-1 copias de su video: por eso el
- * módulo limita el cupo. El servidor no sufre; la conexión de subida de cada
- * participante, sí.
+ * módulo limita el cupo y por eso la calidad baja sola cuando entra más gente.
  *
  * ── Colisión de ofertas (glare) ─────────────────────────────────────────────
  * Si dos navegadores se ofertan a la vez, la negociación se rompe. Se evita con
  * una regla simple y determinista: de cada par, SOLO el que tiene el
  * identificador menor envía la oferta. El otro espera y responde.
+ *
+ * ── Chat y señales de sala ──────────────────────────────────────────────────
+ * El chat, la mano levantada y el aviso de silencio viajan por el canal de datos
+ * de WebRTC, es decir, directo entre navegadores. NO tocan el servidor.
  */
 (function () {
     'use strict';
 
     const BASE    = window.VCS_BASE;
     const ID_SALA = window.VCS_ID_SALA;
+    const MI_NOMBRE = window.VCS_NOMBRE || 'Usted';
 
     /** Cada cuánto se consulta el buzón mientras alguna conexión negocia. */
     const POLL_NEGOCIANDO = 1000;
     /** Cada cuánto cuando ya está todo conectado (solo se vigila quién entra o sale). */
     const POLL_ESTABLE = 3000;
+    /** Cada cuánto pregunta el que está en la antesala. */
+    const POLL_ESPERA = 2000;
     /** Tiempo sin conectar tras el cual se vuelve a intentar la negociación. */
     const REINTENTO_MS = 8000;
     /** Cuántas veces se reintenta antes de darlo por imposible y avisar. */
     const MAX_REINTENTOS = 3;
+
+    /**
+     * Calidad según cuánta gente haya. En malla, cada participante que entra
+     * multiplica lo que TODOS tienen que subir, así que la única forma de que
+     * seis personas quepan en una conexión doméstica es bajar el listón.
+     */
+    const PERFILES = [
+        { hasta: 1,        alto: 720, bitrate: 1200000 },
+        { hasta: 3,        alto: 540, bitrate:  700000 },
+        { hasta: 5,        alto: 360, bitrate:  400000 },
+        { hasta: Infinity, alto: 270, bitrate:  250000 },
+    ];
 
     let peerId = null;
     let cursor = 0;
@@ -40,13 +58,22 @@
     let pantallaStream = null;
     let pollTimer = null;
     let saliendo = false;
+    let mandaSala = false;
+    let manoArriba = false;
+    let sinLeer = 0;
 
-    /** peerId → { pc, nombre, stream, negociando } */
+    /** peerId → { pc, canal, nombre, stream, negociando, desde, intentos } */
     const peers = new Map();
 
     // ── Utilidades de interfaz ───────────────────────────────────────────────
 
     const $ = (id) => document.getElementById(id);
+
+    const escapar = (s) => String(s ?? '').replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+
+    const cssId = (s) => String(s).replace(/[^a-zA-Z0-9_-]/g, '');
 
     function estado(texto, clase) {
         const el = $('vcEstado');
@@ -86,7 +113,8 @@
             }
         }
 
-        pintarVideoLocal();
+        const v = $('vcVideoLocal');
+        if (v) { v.srcObject = localStream; v.muted = true; }
 
         estado('Entrando a la sala...', 'text-info');
 
@@ -109,14 +137,29 @@
 
         peerId = datos.peer_id;
         cursor = datos.cursor || 0;
-        iceServers = (datos.credenciales && datos.credenciales.ice_servers) || [];
+
+        if (datos.en_espera) {
+            mostrarAntesala(true);
+            estado('En la sala de espera', 'text-warning');
+            agendarPoll(POLL_ESPERA, true);
+            return;
+        }
+
+        arrancarSala(datos);
+    }
+
+    /** Ya dentro: guarda credenciales, conecta con los presentes y empieza a pollear. */
+    function arrancarSala(datos) {
+        mostrarAntesala(false);
+
+        mandaSala = !!datos.manda_sala || mandaSala;
+        iceServers = (datos.credenciales && datos.credenciales.ice_servers) || iceServers;
 
         if (datos.credenciales && !datos.credenciales.turn_configurado) {
             aviso('No hay servidor TURN configurado. Si alguien no logra conectarse, es por esto: ' +
                   'las redes de oficina y el internet móvil suelen necesitar un relay.', 'warning');
         }
 
-        // Quienes ya estaban en la sala: se abre una conexión con cada uno.
         (datos.presentes || []).forEach(p => conectarCon(p.peer_id, p.nombre));
 
         estado(peers.size > 0 ? 'Conectando...' : 'Esperando a los demás...', 'text-info');
@@ -134,21 +177,99 @@
         return 'No se pudo acceder a la cámara ni al micrófono: ' + e.name;
     }
 
+    // ── Sala de espera ───────────────────────────────────────────────────────
+
+    function mostrarAntesala(visible) {
+        $('vcAntesala')?.classList.toggle('d-none', !visible);
+        $('vcEscenario')?.classList.toggle('d-none', visible);
+        $('vcControles')?.classList.toggle('d-none', visible);
+    }
+
+    /** Poll reducido mientras se aguarda la admisión del anfitrión. */
+    async function pollEspera() {
+        if (saliendo) return;
+
+        try {
+            const j = await (await fetch(`${BASE}/senalesAjax?id=${ID_SALA}&cursor=${cursor}&espera=1`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            })).json();
+
+            if (!j.ok) { agendarPoll(POLL_ESPERA, true); return; }
+
+            if (j.rechazado) {
+                mostrarAntesala(true);
+                $('vcAntesalaTexto').innerHTML =
+                    '<i class="bi bi-x-circle text-danger fs-1 d-block mb-3"></i>' +
+                    'El anfitrión no autorizó su ingreso.';
+                estado('Ingreso no autorizado', 'text-danger');
+                return;
+            }
+
+            if (j.estado === 'finalizada' || j.estado === 'cancelada') {
+                $('vcAntesalaTexto').innerHTML =
+                    '<i class="bi bi-clock-history fs-1 d-block mb-3"></i>La reunión terminó.';
+                return;
+            }
+
+            if (j.admitido) {
+                cursor = j.cursor || cursor;
+                arrancarSala(j);
+                return;
+            }
+        } catch (e) { /* reintenta en el siguiente ciclo */ }
+
+        agendarPoll(POLL_ESPERA, true);
+    }
+
+    /** Cola de gente esperando, solo visible para el anfitrión. */
+    function pintarCola(esperando) {
+        const caja = $('vcCola');
+        const lista = $('vcColaLista');
+        if (!caja || !lista) return;
+
+        if (!esperando || esperando.length === 0) {
+            caja.classList.add('d-none');
+            lista.innerHTML = '';
+            return;
+        }
+
+        caja.classList.remove('d-none');
+        lista.innerHTML = esperando.map(p => `
+            <div class="d-flex align-items-center gap-2 py-1">
+                <span class="flex-grow-1 text-truncate small">${escapar(p.nombre || 'Invitado')}</span>
+                <button class="btn btn-success btn-sm py-0 px-2" onclick="VCS_admitir('${escapar(p.peer_id)}', true)">
+                    Admitir
+                </button>
+                <button class="btn btn-outline-danger btn-sm py-0 px-2" onclick="VCS_admitir('${escapar(p.peer_id)}', false)">
+                    No
+                </button>
+            </div>`).join('');
+    }
+
+    window.VCS_admitir = async function (peer, admitir) {
+        const fd = new FormData();
+        fd.append('id', ID_SALA);
+        fd.append('peer_id', peer);
+        fd.append('admitir', admitir ? '1' : '0');
+        try {
+            await fetch(`${BASE}/admitirAjax`, { method: 'POST', body: fd });
+        } catch (e) { /* el poll volverá a mostrarlo si no se aplicó */ }
+    };
+
     // ── Buzón de señalización ────────────────────────────────────────────────
 
-    function agendarPoll(ms) {
+    function agendarPoll(ms, esperando) {
         clearTimeout(pollTimer);
-        pollTimer = setTimeout(poll, ms);
+        pollTimer = setTimeout(esperando ? pollEspera : poll, ms);
     }
 
     async function poll() {
         if (saliendo) return;
 
         try {
-            const r = await fetch(`${BASE}/senalesAjax?id=${ID_SALA}&cursor=${cursor}`, {
+            const j = await (await fetch(`${BASE}/senalesAjax?id=${ID_SALA}&cursor=${cursor}`, {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            });
-            const j = await r.json();
+            })).json();
 
             if (!j.ok) {
                 if (j.reentrar) { estado('Sesión perdida, recargue la ventana', 'text-danger'); return; }
@@ -166,6 +287,7 @@
 
             (j.mensajes || []).forEach(procesarMensaje);
             sincronizarPresentes(j.presentes || []);
+            if (mandaSala) pintarCola(j.esperando || []);
         } catch (e) {
             // Un fallo de red puntual no debe tumbar la sala: se reintenta.
         }
@@ -209,9 +331,7 @@
 
         presentes.forEach(p => {
             vivos.add(p.peer_id);
-            if (!peers.has(p.peer_id)) {
-                conectarCon(p.peer_id, p.nombre);
-            }
+            if (!peers.has(p.peer_id)) conectarCon(p.peer_id, p.nombre);
         });
 
         [...peers.keys()].forEach(id => {
@@ -264,6 +384,7 @@
         const pc = new RTCPeerConnection({ iceServers: iceServers });
         const entrada = {
             pc: pc,
+            canal: null,
             nombre: nombre || 'Participante',
             stream: null,
             negociando: true,
@@ -287,19 +408,23 @@
             if (pc.connectionState === 'connected') {
                 entrada.negociando = false;
                 estado('En llamada', 'text-success');
+                aplicarCalidad();
                 informarRuta(pc);
             } else if (pc.connectionState === 'failed') {
                 entrada.negociando = false;
-                aviso('No se pudo establecer la conexión con ' + entrada.nombre +
+                aviso('No se pudo establecer la conexión con ' + escapar(entrada.nombre) +
                       '. Suele ser falta de servidor TURN.', 'danger');
             } else if (pc.connectionState === 'disconnected') {
                 estado('Reconectando...', 'text-warning');
             }
         };
 
-        // Regla anti-colisión: de cada par, solo el del identificador menor oferta.
+        // El canal de datos lo crea el mismo que oferta; el otro lo recibe.
         if (peerId && peerId < otroPeerId) {
+            prepararCanal(entrada, pc.createDataChannel('cmg'), otroPeerId);
             negociar(otroPeerId, entrada);
+        } else {
+            pc.ondatachannel = (ev) => prepararCanal(entrada, ev.channel, otroPeerId);
         }
 
         actualizarContador();
@@ -329,9 +454,7 @@
                     if (local) tipo = local.candidateType;
                 }
             });
-            if (tipo === 'relay') {
-                estado('En llamada (por relay TURN)', 'text-success');
-            }
+            if (tipo === 'relay') estado('En llamada (por relay TURN)', 'text-success');
         } catch (e) { /* el diagnóstico es opcional */ }
     }
 
@@ -342,6 +465,7 @@
         peers.delete(id);
         document.getElementById('vcTile-' + cssId(id))?.remove();
         if (peers.size === 0) estado('Esperando a los demás...', 'text-secondary');
+        aplicarCalidad();
     }
 
     function cerrarTodo() {
@@ -352,14 +476,130 @@
         estado('Reunión finalizada', 'text-secondary');
     }
 
-    // ── Rejilla de video ─────────────────────────────────────────────────────
+    // ── Canal de datos: chat y señales de sala ───────────────────────────────
 
-    const cssId = (s) => String(s).replace(/[^a-zA-Z0-9_-]/g, '');
+    function prepararCanal(entrada, canal, otroPeerId) {
+        entrada.canal = canal;
 
-    function pintarVideoLocal() {
-        const v = $('vcVideoLocal');
-        if (v) { v.srcObject = localStream; v.muted = true; }
+        canal.onmessage = (ev) => {
+            let d;
+            try { d = JSON.parse(ev.data); } catch (e) { return; }
+
+            if (d.tipo === 'chat') {
+                agregarMensaje(d.nombre || entrada.nombre, d.texto, false);
+            } else if (d.tipo === 'mano') {
+                marcarMano(otroPeerId, !!d.arriba);
+            }
+        };
     }
+
+    function difundir(objeto) {
+        const texto = JSON.stringify(objeto);
+        peers.forEach(entrada => {
+            if (entrada.canal && entrada.canal.readyState === 'open') {
+                try { entrada.canal.send(texto); } catch (e) {}
+            }
+        });
+    }
+
+    window.VCS_enviarChat = function () {
+        const input = $('vcChatInput');
+        const texto = (input.value || '').trim();
+        if (!texto) return;
+
+        difundir({ tipo: 'chat', texto: texto, nombre: MI_NOMBRE });
+        agregarMensaje(MI_NOMBRE, texto, true);
+        input.value = '';
+    };
+
+    function agregarMensaje(nombre, texto, propio) {
+        const caja = $('vcChatMensajes');
+        if (!caja) return;
+
+        const hora = new Date();
+        const p = (n) => String(n).padStart(2, '0');
+
+        const div = document.createElement('div');
+        div.className = 'vc-msg' + (propio ? ' vc-msg-propio' : '');
+        div.innerHTML =
+            `<div class="vc-msg-meta">${escapar(nombre)} · ${p(hora.getHours())}:${p(hora.getMinutes())}</div>` +
+            `<div class="vc-msg-texto">${escapar(texto)}</div>`;
+        caja.appendChild(div);
+        caja.scrollTop = caja.scrollHeight;
+
+        // Si el panel está cerrado, se acumula el contador de no leídos.
+        if (!propio && $('vcChat').classList.contains('d-none')) {
+            sinLeer++;
+            const badge = $('vcChatBadge');
+            badge.textContent = String(sinLeer);
+            badge.classList.remove('d-none');
+        }
+    }
+
+    window.VCS_toggleChat = function () {
+        const panel = $('vcChat');
+        const abierto = !panel.classList.contains('d-none');
+        panel.classList.toggle('d-none', abierto);
+
+        if (!abierto) {
+            sinLeer = 0;
+            $('vcChatBadge').classList.add('d-none');
+            $('vcChatInput')?.focus();
+        }
+    };
+
+    window.VCS_toggleMano = function () {
+        manoArriba = !manoArriba;
+        difundir({ tipo: 'mano', arriba: manoArriba, nombre: MI_NOMBRE });
+
+        const btn = $('vcBtnMano');
+        btn.classList.toggle('btn-warning', manoArriba);
+        btn.classList.toggle('btn-outline-light', !manoArriba);
+    };
+
+    function marcarMano(id, arriba) {
+        const tile = document.getElementById('vcTile-' + cssId(id));
+        if (!tile) return;
+
+        let icono = tile.querySelector('.vc-mano');
+        if (arriba && !icono) {
+            icono = document.createElement('div');
+            icono.className = 'vc-mano';
+            icono.innerHTML = '<i class="bi bi-hand-index-thumb-fill"></i>';
+            tile.appendChild(icono);
+        } else if (!arriba && icono) {
+            icono.remove();
+        }
+    }
+
+    // ── Calidad adaptativa ───────────────────────────────────────────────────
+
+    /**
+     * Ajusta resolución y bitrate al número de participantes.
+     *
+     * La resolución se cambia en el track local (una sola vez, afecta a todos
+     * los envíos) y el bitrate en cada emisor por separado.
+     */
+    function aplicarCalidad() {
+        const total = peers.size;
+        const perfil = PERFILES.find(p => total <= p.hasta) || PERFILES[PERFILES.length - 1];
+
+        const pistaCam = localStream ? localStream.getVideoTracks()[0] : null;
+        if (pistaCam && !pantallaStream) {
+            pistaCam.applyConstraints({ height: { ideal: perfil.alto } }).catch(() => {});
+        }
+
+        peers.forEach(entrada => {
+            const sender = entrada.pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (!sender) return;
+            const params = sender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+            params.encodings[0].maxBitrate = perfil.bitrate;
+            sender.setParameters(params).catch(() => {});
+        });
+    }
+
+    // ── Rejilla de video ─────────────────────────────────────────────────────
 
     function pintarVideoRemoto(id, entrada) {
         const grid = $('vcGrid');
@@ -392,10 +632,6 @@
         const el = $('vcContador');
         if (el) el.textContent = String(peers.size + 1);
     }
-
-    const escapar = (s) => String(s ?? '').replace(/[&<>"']/g, c => (
-        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-    ));
 
     // ── Controles ────────────────────────────────────────────────────────────
 
@@ -465,6 +701,8 @@
         const btn = $('vcBtnPantalla');
         btn.classList.remove('btn-primary');
         btn.classList.add('btn-outline-light');
+
+        aplicarCalidad();
     }
 
     function reemplazarVideoEnPares(pista) {
@@ -505,6 +743,10 @@
         if (saliendo) return;
         saliendo = true;
         if (navigator.sendBeacon) navigator.sendBeacon(`${BASE}/salirAjax`, datosSalida());
+    });
+
+    document.getElementById('vcChatInput')?.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.VCS_enviarChat(); }
     });
 
     iniciar();

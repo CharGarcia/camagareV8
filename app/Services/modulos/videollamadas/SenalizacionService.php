@@ -111,6 +111,46 @@ class SenalizacionService
     }
 
     // ────────────────────────────────────────────────────────────────────
+    //  Sala de espera
+    //
+    //  La admisión vive en memoria y no en la base: vale para esta reunión, no
+    //  es un permiso permanente. Si el servidor se reinicia a mitad de una
+    //  llamada, lo peor que pasa es que el anfitrión vuelva a admitir.
+    // ────────────────────────────────────────────────────────────────────
+
+    /** Admite (o rechaza) a un participante que estaba esperando. */
+    public function resolverAdmision(int $idSala, string $peerId, bool $admitido): void
+    {
+        $valor = ['admitido' => $admitido, 'ts' => time()];
+
+        if (Cache::disponible()) {
+            Cache::set($this->claveAdmision($idSala, $peerId), $valor, 3600);
+            return;
+        }
+
+        $this->escribirArchivo($this->rutaSala($idSala) . '/adm_' . $this->sanear($peerId) . '.json', $valor);
+    }
+
+    /**
+     * Estado de admisión de un participante.
+     * @return bool|null true admitido, false rechazado, null todavía esperando.
+     */
+    public function getAdmision(int $idSala, string $peerId): ?bool
+    {
+        if (Cache::disponible()) {
+            $valor = Cache::get($this->claveAdmision($idSala, $peerId));
+            return is_array($valor) ? (bool) $valor['admitido'] : null;
+        }
+
+        $archivo = $this->rutaSala($idSala) . '/adm_' . $this->sanear($peerId) . '.json';
+        if (!is_file($archivo)) {
+            return null;
+        }
+        $valor = json_decode((string) @file_get_contents($archivo), true);
+        return is_array($valor) ? (bool) $valor['admitido'] : null;
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     //  Mensajes (oferta, respuesta, candidatos ICE, salida)
     // ────────────────────────────────────────────────────────────────────
 
@@ -299,6 +339,11 @@ class SenalizacionService
     private function claveSeq(int $idSala): string
     {
         return $this->prefijo($idSala) . 'seq';
+    }
+
+    private function claveAdmision(int $idSala, string $peerId): string
+    {
+        return $this->prefijo($idSala) . 'adm:' . $this->sanear($peerId);
     }
 
     /** El peer id viene del navegador: se limpia antes de usarlo como clave. */
