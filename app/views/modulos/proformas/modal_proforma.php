@@ -521,23 +521,29 @@ $page       = $pf_pageBackup;
 $totalPages = $pf_totalPagesBackup;
 ?>
 
-<style>
-    /* Los modales de Cliente/Producto deben quedar por encima del modal de
-       Proforma (z-index:1060) y con su backdrop correctamente atenuado. */
-    #modalCliente.show, #modalProducto.show { z-index: 1080 !important; }
-    .pf-submodal-backdrop { z-index: 1075 !important; }
-</style>
 <script>
 (function () {
-    // Al abrir un submodal, elevar el backdrop más reciente sobre la proforma.
+    // El modal de Proforma usa z-index:1060. Los modales de Cliente/Producto que se
+    // abren ENCIMA deben quedar por delante junto con su backdrop. Se fija por JS con
+    // prioridad !important (gana a cualquier estilo inline/CSS) al abrirse.
+    var Z_SUBMODAL = 2080;   // por encima de la proforma (1060) y del modal de descuento (2070)
+    var Z_BACKDROP = 2075;
+
     document.addEventListener('show.bs.modal', function (ev) {
-        if (ev.target.id === 'modalCliente' || ev.target.id === 'modalProducto') {
-            setTimeout(function () {
-                var bds = document.querySelectorAll('.modal-backdrop');
-                if (bds.length > 1) bds[bds.length - 1].classList.add('pf-submodal-backdrop');
-            }, 0);
-        }
+        if (ev.target.id !== 'modalCliente' && ev.target.id !== 'modalProducto') return;
+
+        // 1) Elevar el propio modal.
+        ev.target.style.setProperty('z-index', String(Z_SUBMODAL), 'important');
+
+        // 2) Elevar el backdrop más reciente (el que crea este modal) por encima de la proforma.
+        setTimeout(function () {
+            var bds = document.querySelectorAll('.modal-backdrop');
+            if (bds.length) {
+                bds[bds.length - 1].style.setProperty('z-index', String(Z_BACKDROP), 'important');
+            }
+        }, 0);
     });
+
     // Al cerrar un submodal, si la proforma sigue abierta, conservar el scroll-lock.
     document.addEventListener('hidden.bs.modal', function (ev) {
         if ((ev.target.id === 'modalCliente' || ev.target.id === 'modalProducto')
