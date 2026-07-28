@@ -25,14 +25,9 @@ $url  = $base . '/config/videollamadas';
         <h5 class="mb-0 fw-bold">
             <i class="bi bi-camera-video-fill me-1 text-primary"></i> Configuración de videollamadas
         </h5>
-        <div class="d-flex gap-2">
-            <a href="<?= $base ?>/config" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-left me-1"></i> Configuración
-            </a>
-            <a href="<?= $base ?>/modulos/videollamadas" class="btn btn-outline-primary btn-sm">
-                <i class="bi bi-box-arrow-up-right me-1"></i> Ir a las reuniones
-            </a>
-        </div>
+        <a href="<?= $base ?>/config" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Volver
+        </a>
     </div>
 
     <div class="alert alert-info bg-info bg-opacity-10 border-info border-opacity-25 py-2 px-3 small">

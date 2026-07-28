@@ -30,14 +30,7 @@
 
                 <div class="alert alert-light border py-2 px-3 small">
                     <i class="bi bi-info-circle me-1 text-primary"></i>
-                    Los servidores que hacen posible la conexión son globales del sistema
-                    <?php if (!empty($esSuperadmin)): ?>
-                        y se administran en
-                        <a href="<?= rtrim(BASE_URL, '/') ?>/config/videollamadas">Configuración → Videollamadas</a>.
-                    <?php else: ?>
-                        y los administra el superadministrador.
-                    <?php endif; ?>
-                    Aquí se ajusta cómo trabaja esta empresa.
+                    Los servidores que hacen posible la conexión son globales del sistema.
                 </div>
 
                 <h6 class="small fw-bold text-uppercase text-muted" style="font-size:.7rem;">Límites de las reuniones</h6>
@@ -67,15 +60,20 @@
                 <hr class="my-3">
 
                 <h6 class="small fw-bold text-uppercase text-muted" style="font-size:.7rem;">
-                    Servidores propios
-                    <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25"
-                          style="font-size:.6rem;">SOLO SUPERADMIN</span>
+                    Servidores propios de esta empresa
                 </h6>
                 <p class="small text-muted mb-2">
-                    Normalmente se deja <strong>vacío</strong>: la empresa hereda los servidores globales.
-                    Solo se llena si esta empresa debe usar un proveedor distinto, y en ese caso hay que
-                    cargar el bloque completo (dirección, usuario y credencial): mezclarlo con el global
-                    daría una configuración que no conecta con ninguno.
+                    Esta empresa puede usar sus propios servidores en lugar de los del sistema. Tiene
+                    sentido en dos casos: cuando se contrata un servicio <strong>más cercano o de mayor
+                    capacidad</strong>, que mejora la calidad de la llamada y reduce los cortes; o cuando
+                    esta empresa hace <strong>muchas más reuniones que las demás</strong> y conviene que
+                    su tráfico no compita con el del resto.
+                </p>
+                <p class="small text-muted mb-2">
+                    Si se deja <strong>vacío</strong>, la empresa usa los servidores del sistema, que es
+                    lo normal. Si se llena, hay que cargar el bloque completo —dirección, usuario y
+                    credencial del mismo proveedor—: combinar la dirección de uno con la credencial de
+                    otro deja una configuración que no conecta con ninguno.
                 </p>
 
                 <div class="row g-3">
