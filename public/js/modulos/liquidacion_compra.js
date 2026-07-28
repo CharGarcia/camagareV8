@@ -322,7 +322,10 @@
                         adicional: d.info_adicional || '',
                         total: (parseFloat(d.cantidad) * parseFloat(d.precio_unitario)) - parseFloat(d.descuento)
                     }));
-                    pagos = res.pagos;
+                    // La BD/getPagos devuelve la columna `forma_pago`, pero el render y el resto del JS
+                    // usan `id_forma_pago`. Se normaliza para que el <select> muestre la forma de pago
+                    // (aplica tanto a liquidaciones migradas como a las nativas al reabrirlas).
+                    pagos = (res.pagos || []).map(p => ({ ...p, id_forma_pago: p.id_forma_pago ?? p.forma_pago }));
                     infoAdicional = res.info_adicional;
 
                     poblarFormulario(res.cabecera);

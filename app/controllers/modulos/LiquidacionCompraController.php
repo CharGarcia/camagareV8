@@ -503,47 +503,44 @@ class LiquidacionCompraController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $db = \App\core\Database::getConnection();
 
-        // 1. Puntos de Emisión para Egresos
-        $sqlP = "SELECT id AS id_punto, establecimiento AS estab, punto 
-                 FROM empresa_puntos_emision 
-                 WHERE id_empresa = ? AND eliminado = false AND estado = true";
-        $stP = $db->prepare($sqlP);
-        $stP->execute([$idEmpresa]);
-        $puntos = $stP->fetchAll();
+        // Mismas fuentes/consultas que Compras (ComprasController::getEgresoDependenciesAjax): la
+        // versión anterior usaba nombres de tabla/columna inexistentes (empresa_puntos_emision,
+        // empresa_bancos, tipo='EGRESO', estado=true) → fatal → respuesta vacía → "Unexpected end
+        // of JSON input" al abrir la pestaña Pagos.
+        try {
+            // Formas de pago internas (mismo repo/criterio que Compras)
+            $repoFP = new \App\repositories\modulos\FormaPagoRepository();
+            $formas = $repoFP->getFormasFiltradas($idEmpresa, 'EGRESO');
 
-        // 2. Conceptos de Egreso
-        $sqlC = "SELECT id, nombre, comportamiento 
-                 FROM empresa_opciones_ingreso_egreso 
-                 WHERE id_empresa = ? AND tipo = 'EGRESO' AND eliminado = false";
-        $stC = $db->prepare($sqlC);
-        $stC->execute([$idEmpresa]);
-        $conceptos = $stC->fetchAll();
+            // Conceptos de egreso
+            $stC = $db->prepare("SELECT id, nombre, comportamiento FROM empresa_opciones_ingreso_egreso
+                                 WHERE id_empresa = ? AND aplica_egresos = TRUE AND eliminado = FALSE ORDER BY nombre ASC");
+            $stC->execute([$idEmpresa]);
+            $conceptos = $stC->fetchAll(\PDO::FETCH_ASSOC);
 
-        // 3. Formas de Pago internas
-        $sqlF = "SELECT id, nombre, tipo 
-                 FROM empresa_formas_pago 
-                 WHERE id_empresa = ? AND eliminado = false AND estado = true";
-        $stF = $db->prepare($sqlF);
-        $stF->execute([$idEmpresa]);
-        $formas = $stF->fetchAll();
+            // Puntos de emisión activos (para reservar el secuencial del egreso)
+            $stPto = $db->prepare("SELECT pe.id AS id_punto, pe.codigo_punto AS punto, es.id AS id_estab, es.codigo AS estab
+                                   FROM empresa_punto_emision pe
+                                   JOIN empresa_establecimiento es ON pe.id_establecimiento = es.id
+                                   WHERE es.id_empresa = ? AND pe.eliminado = FALSE AND es.eliminado = FALSE
+                                     AND LOWER(pe.estado) = 'activo'
+                                   ORDER BY es.codigo ASC, pe.codigo_punto ASC");
+            $stPto->execute([$idEmpresa]);
+            $puntos = $stPto->fetchAll(\PDO::FETCH_ASSOC);
 
-        // 4. Bancos
-        $sqlB = "SELECT id, nombre_banco 
-                 FROM empresa_bancos 
-                 WHERE id_empresa = ? AND eliminado = false AND estado = true";
-        $stB = $db->prepare($sqlB);
-        $stB->execute([$idEmpresa]);
-        $bancos = $stB->fetchAll();
+            // Bancos (catálogo global)
+            $bancos = $db->query("SELECT id, nombre_banco FROM bancos_ecuador WHERE status = 1 ORDER BY nombre_banco ASC")->fetchAll(\PDO::FETCH_ASSOC);
 
-        echo json_encode([
-            'ok' => true,
-            'data' => [
+            echo json_encode(['ok' => true, 'data' => [
                 'puntos'      => $puntos,
                 'conceptos'   => $conceptos,
                 'formas_pago' => $formas,
-                'bancos'      => $bancos
-            ]
-        ]);
+                'bancos'      => $bancos,
+            ]]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
         exit;
     }
 
