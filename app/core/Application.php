@@ -49,10 +49,30 @@ class Application
                 // y borraría lo que ApiAuthMiddleware acaba de rellenar desde el JWT.
                 // Arrancar la sesión aquí (con id aleatorio propio y sin cookie) evita
                 // ese re-inicio; no se persiste de forma útil entre requests.
+                //
+                // Directorio de sesiones PROPIO, aislado del de la web. El recolector de
+                // PHP borra, del save_path del request, TODOS los archivos de sesión más
+                // viejos que el gc_maxlifetime vigente, sin mirar a qué usuario pertenece
+                // cada uno. Con el save_path compartido, un solo request de la API —que
+                // baja gc_maxlifetime a 120 s— podía barrer de golpe las sesiones de todos
+                // los usuarios de la web con más de 2 minutos sin actividad, echándolos al
+                // login sin relación entre ellos. Aislado aquí, ese barrido solo alcanza la
+                // basura que genera la propia API (un archivo por request, sin cookie).
+                $rutaSesionesApi = MVC_ROOT . '/storage/sessions_api';
+                if (is_dir($rutaSesionesApi) || @mkdir($rutaSesionesApi, 0775, true) || is_dir($rutaSesionesApi)) {
+                    session_save_path($rutaSesionesApi);
+                    // Este directorio no lo recorre el limpiador del sistema (solo mira los
+                    // save_path de php.ini), así que la API recoge su propia basura.
+                    ini_set('session.gc_probability', '1');
+                    ini_set('session.gc_divisor', '100');
+                    ini_set('session.gc_maxlifetime', '120');
+                }
+                // Si el directorio no se pudo crear se sigue con el save_path compartido,
+                // pero SIN bajar gc_maxlifetime: mejor acumular basura unas horas que
+                // arriesgar el barrido masivo de las sesiones de la web.
                 ini_set('session.use_cookies', '0');
                 ini_set('session.use_only_cookies', '0');
                 ini_set('session.use_trans_sid', '0');
-                ini_set('session.gc_maxlifetime', '120');
                 session_id(bin2hex(random_bytes(16)));
                 session_start();
                 $_SESSION = [];

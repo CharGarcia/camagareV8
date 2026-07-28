@@ -1193,7 +1193,12 @@
 
                 _limpiarBorrador();
                 toast(data.msg || 'Guardado correctamente');
-                getModal().hide();
+
+                // No cerrar el modal: recargar la proforma guardada (igual que factura de
+                // venta). Así queda con su número/estado, secuencial bloqueado y la barra
+                // de acciones (Factura, Recibo, PDF, etc.) habilitada para seguir operando.
+                if (data.id) await _cargarProforma(data.id);
+
                 if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
             } catch(e) {
                 console.error(e);
@@ -1247,12 +1252,120 @@
             window.open(`${urlBase()}/exportarPdfAjax?id=${id}`, '_blank');
         },
 
-        enviarWhatsapp() {
-            toast('Función de WhatsApp próximamente', 'info');
+        async enviarWhatsapp() {
+            const id = $id('pf_id').value;
+            if (!id) { toast('Guarde la proforma antes de enviarla', 'error'); return; }
+
+            const modalProf = document.getElementById('modalProforma');
+            const select    = $id('pf_waSelectPlantilla');
+            select.innerHTML = '<option value="">Cargando plantillas...</option>';
+            $id('pf_waId').value = id;
+
+            try {
+                const data = await (await fetch(`${urlBase()}/getPlantillasWhatsappAjax?id=${id}`, {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })).json();
+
+                if (!data.ok) { toast(data.error || 'Error al cargar plantillas', 'error'); return; }
+
+                if (data.configurado === false) {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'WhatsApp no configurado',
+                        html: 'Aún no tienes configurado el servicio oficial de <b>WhatsApp Business API</b>. Contacta a soporte para activarlo.',
+                        confirmButtonText: 'Entendido',
+                        target: modalProf || undefined,
+                    });
+                    return;
+                }
+                if (!data.plantillas || !data.plantillas.length) {
+                    Swal.fire({
+                        icon: 'info', title: 'Sin plantillas',
+                        text: 'No hay plantillas de WhatsApp aprobadas por Meta para enviar la proforma.',
+                        target: modalProf || undefined,
+                    });
+                    return;
+                }
+
+                select.innerHTML = '<option value="">— Seleccione una plantilla —</option>';
+                data.plantillas.forEach(p => {
+                    select.innerHTML += `<option value="${p.id}" data-nombre="${_esc(p.nombre)}">${_esc(p.nombre)} (${_esc(p.idioma)})</option>`;
+                });
+                if (data.id_plantilla_default) select.value = data.id_plantilla_default;
+
+                $id('pf_waTelefono').value = data.telefono_cliente || '593';
+
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEnviarWhatsappProforma')).show();
+            } catch (e) {
+                console.error(e);
+                toast('Error de conexión', 'error');
+            }
         },
 
-        enviarCorreo() {
-            toast('Función de correo próximamente', 'info');
+        async enviarCorreo() {
+            const id = $id('pf_id').value;
+            if (!id) { toast('Guarde la proforma antes de enviarla', 'error'); return; }
+
+            const correoActual = ($id('pf_clienteEmail')?.textContent || '').trim();
+            const modalEl = document.getElementById('modalProforma');
+
+            const { value: correos, isConfirmed } = await Swal.fire({
+                title: 'Enviar proforma por correo',
+                input: 'text',
+                inputLabel: 'Correos electrónicos (separados por coma o espacio)',
+                inputValue: correoActual,
+                inputPlaceholder: 'cliente@correo.com',
+                target: modalEl || undefined,
+                showCancelButton: true,
+                confirmButtonText: '<i class="bi bi-send me-1"></i> Enviar',
+                cancelButtonText: 'Cancelar',
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) return 'Ingrese al menos un correo válido.';
+                }
+            });
+            if (!isConfirmed) return;
+
+            Swal.fire({
+                title: 'Enviando correo...',
+                text: 'Por favor espera',
+                allowOutsideClick: false,
+                target: modalEl || undefined,
+                didOpen: () => Swal.showLoading(),
+            });
+
+            try {
+                const fd = new FormData();
+                fd.append('id', id);
+                fd.append('correos', correos);
+
+                const resp = await fetch(`${urlBase()}/enviarCorreoAjax`, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: fd,
+                });
+                const data = await resp.json();
+
+                if (data.ok) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: '¡Enviado!',
+                        text: data.mensaje || 'Correo enviado correctamente.',
+                        target: modalEl || undefined,
+                        timer: 2500,
+                        showConfirmButton: false,
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'No se pudo enviar',
+                        text: data.mensaje || 'Verifique la configuración de correo.',
+                        target: modalEl || undefined,
+                    });
+                }
+            } catch (e) {
+                console.error(e);
+                Swal.fire({ icon: 'error', title: 'Error', text: 'Error de conexión al enviar el correo.', target: modalEl || undefined });
+            }
         },
 
         async convertirAFactura() {
@@ -1538,6 +1651,58 @@
             });
         }
 
+        // Envío por WhatsApp (formulario del modal)
+        const formWa = document.getElementById('pf_formWhatsapp');
+        if (formWa) {
+            formWa.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const idProf = $id('pf_waId').value;
+                const idPlan = $id('pf_waSelectPlantilla').value;
+                const tel    = $id('pf_waTelefono').value.trim();
+                const waEl   = document.getElementById('modalEnviarWhatsappProforma');
+
+                if (!idPlan) { toast('Seleccione una plantilla', 'error'); return; }
+                if (!tel)    { toast('Ingrese el teléfono del cliente', 'error'); return; }
+
+                const btn  = $id('pf_btnEnviarWhatsapp');
+                const orig = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando...';
+
+                try {
+                    const fd = new FormData();
+                    fd.append('id', idProf);
+                    fd.append('id_plantilla', idPlan);
+                    fd.append('telefono', tel);
+
+                    const data = await (await fetch(`${urlBase()}/enviarWhatsappAjax`, {
+                        method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    })).json();
+
+                    if (data.ok) {
+                        bootstrap.Modal.getInstance(waEl)?.hide();
+                        Swal.fire({
+                            icon: 'success', title: '¡Enviado!',
+                            text: data.mensaje || 'Proforma enviada por WhatsApp.',
+                            target: document.getElementById('modalProforma') || undefined,
+                            timer: 2500, showConfirmButton: false,
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error', title: 'Error',
+                            text: data.error || 'No se pudo enviar por WhatsApp.',
+                            target: waEl || undefined,
+                        });
+                    }
+                } catch (err) {
+                    console.error(err);
+                    toast('Error de conexión', 'error');
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = orig;
+                }
+            });
+        }
     });
 
     // ─── Crear cliente/producto al vuelo desde la proforma ─────────────────────

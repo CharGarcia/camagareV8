@@ -369,6 +369,354 @@ class ProformasController extends BaseModuloController
     }
 
     /**
+     * Envía la proforma por correo (PDF adjunto) a los destinatarios indicados.
+     * Reutiliza EnvioDocumentosSRIService::enviarPdfSimple (igual maquinaria que factura).
+     */
+    public function enviarCorreoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_POST['id'] ?? 0);
+        $correos   = trim((string) ($_POST['correos'] ?? ''));
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+
+        if (!$id)           { echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']); exit; }
+        if ($correos === '') { echo json_encode(['ok' => false, 'mensaje' => 'Debe indicar al menos un correo.']); exit; }
+
+        try {
+            $cabecera = $this->repository->getPorId($id);
+            if (!$cabecera || (int) $cabecera['id_empresa'] !== $idEmpresa) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Proforma no encontrada.']);
+                exit;
+            }
+
+            $pdf = $this->generarPdfProformaString($id, $idEmpresa, $cabecera);
+            if ($pdf === null || $pdf === '') {
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo generar el PDF de la proforma.']);
+                exit;
+            }
+
+            $numero = ($cabecera['establecimiento'] ?? '') . '-' . ($cabecera['punto_emision'] ?? '') . '-'
+                    . str_pad((string) ($cabecera['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+
+            $empresa       = (new Empresa())->getPorId($idEmpresa) ?? [];
+            $empresaNombre = $empresa['razon_social'] ?? ($empresa['nombre_comercial'] ?? 'CaMaGaRe');
+
+            $asunto = "Proforma {$numero}";
+            $cuerpo = '<p>Estimado(a) ' . htmlspecialchars($cabecera['cliente_nombre'] ?? 'cliente') . ',</p>'
+                    . '<p>Adjuntamos la proforma <strong>' . htmlspecialchars($numero) . '</strong> para su revisión.</p>'
+                    . '<p>Saludos cordiales,<br>' . htmlspecialchars((string) $empresaNombre) . '</p>';
+
+            $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+            $enviado  = $emailSvc->enviarPdfSimple(
+                $idEmpresa,
+                $correos,
+                (string) ($cabecera['cliente_nombre'] ?? ''),
+                $asunto,
+                $cuerpo,
+                $pdf,
+                "Proforma_{$numero}",
+                (string) $empresaNombre
+            );
+
+            if ($enviado) {
+                echo json_encode(['ok' => true, 'mensaje' => 'Correo enviado correctamente.']);
+            } else {
+                echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifique la configuración de correo de la empresa.']);
+            }
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Lista las plantillas de WhatsApp aprobadas por Meta y el teléfono del cliente.
+     * (Mismo mecanismo que Facturas de Venta.)
+     */
+    public function getPlantillasWhatsappAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $id        = (int) ($_GET['id'] ?? 0);
+
+        try {
+            $config = (new \App\models\WhatsappConfig())->obtenerConfiguracion($idEmpresa);
+            if (!$config || empty($config['access_token']) || empty($config['phone_number_id'])) {
+                echo json_encode(['ok' => true, 'configurado' => false]);
+                exit;
+            }
+
+            $todas = (new \App\models\WhatsappPlantilla())->getPlantillasAprobadas($idEmpresa);
+            // Excluir plantillas de enlaces de pago (flujo especial, no aplica a proformas)
+            $excluir    = ['link_pago_payphone', 'link_pago_nuvei'];
+            $plantillas = array_values(array_filter($todas, fn($p) => !in_array($p['nombre'], $excluir, true)));
+
+            // Teléfono del cliente normalizado a formato Ecuador (593…)
+            $telefonoCliente = '593';
+            if ($id > 0) {
+                $prof = $this->repository->getPorId($id);
+                if ($prof && (int) ($prof['id_empresa'] ?? 0) === $idEmpresa && !empty($prof['id_cliente'])) {
+                    $stmt = \App\core\Database::getConnection()->prepare(
+                        "SELECT telefono FROM clientes WHERE id = ? AND id_empresa = ? AND eliminado = FALSE"
+                    );
+                    $stmt->execute([(int) $prof['id_cliente'], $idEmpresa]);
+                    $tel = trim((string) ($stmt->fetchColumn() ?: ''));
+                    if ($tel !== '') {
+                        if (str_starts_with($tel, '0'))        $telefonoCliente = '593' . substr($tel, 1);
+                        elseif (!str_starts_with($tel, '593'))  $telefonoCliente = '593' . $tel;
+                        else                                    $telefonoCliente = $tel;
+                    }
+                }
+            }
+
+            // Plantilla por defecto: la que contenga "proforma"
+            $idDefault = 0;
+            foreach ($plantillas as $p) {
+                if (stripos($p['nombre'], 'proforma') !== false) { $idDefault = (int) $p['id']; break; }
+            }
+
+            echo json_encode([
+                'ok'                   => true,
+                'configurado'          => true,
+                'plantillas'           => $plantillas,
+                'telefono_cliente'     => $telefonoCliente,
+                'id_plantilla_default' => $idDefault,
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Envía la proforma por WhatsApp (PDF adjunto) usando una plantilla aprobada por Meta.
+     * Mapea las variables por posición: 1=Cliente, 2=Número, 3=Total.
+     */
+    public function enviarWhatsappAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            echo json_encode(['ok' => false, 'error' => 'Método no permitido']);
+            exit;
+        }
+
+        $idEmpresa   = (int) $_SESSION['id_empresa'];
+        $idUsuario   = (int) $_SESSION['id_usuario'];
+        $id          = (int) ($_POST['id'] ?? 0);
+        $idPlantilla = (int) ($_POST['id_plantilla'] ?? 0);
+        $telefono    = preg_replace('/[^0-9]/', '', trim((string) ($_POST['telefono'] ?? '')));
+
+        if ($id <= 0 || $idPlantilla <= 0 || $telefono === '') {
+            echo json_encode(['ok' => false, 'error' => 'Datos incompletos.']);
+            exit;
+        }
+        if (str_starts_with($telefono, '593') && strlen($telefono) !== 12) {
+            echo json_encode(['ok' => false, 'error' => 'El teléfono para Ecuador (593) debe tener 12 dígitos.']);
+            exit;
+        }
+
+        try {
+            $cabecera = $this->repository->getPorId($id);
+            if (!$cabecera || (int) $cabecera['id_empresa'] !== $idEmpresa) {
+                echo json_encode(['ok' => false, 'error' => 'Proforma no encontrada.']);
+                exit;
+            }
+
+            $db   = \App\core\Database::getConnection();
+            $stmt = $db->prepare("SELECT * FROM whatsapp_plantillas WHERE id = ? AND id_empresa = ?");
+            $stmt->execute([$idPlantilla, $idEmpresa]);
+            $plantillaMeta = $stmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$plantillaMeta || ($plantillaMeta['estado_meta'] ?? '') !== 'APPROVED') {
+                echo json_encode(['ok' => false, 'error' => 'Plantilla no válida o no aprobada por Meta.']);
+                exit;
+            }
+
+            $pdfString = $this->generarPdfProformaString($id, $idEmpresa, $cabecera);
+            if (empty($pdfString)) {
+                echo json_encode(['ok' => false, 'error' => 'No se pudo generar el PDF de la proforma.']);
+                exit;
+            }
+
+            $numero        = ($cabecera['establecimiento'] ?? '') . '-' . ($cabecera['punto_emision'] ?? '') . '-'
+                           . str_pad((string) ($cabecera['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+            $nombreCliente = $cabecera['cliente_nombre'] ?? 'Cliente';
+            $total         = number_format((float) ($cabecera['importe_total'] ?? 0), 2);
+
+            $whatsappService = new \App\services\WhatsappService();
+
+            // Subir el PDF a los servidores de Meta (devuelve media_id)
+            $tmp = sys_get_temp_dir() . '/proforma_' . $id . '_' . time() . '.pdf';
+            file_put_contents($tmp, $pdfString);
+            $upload = $whatsappService->uploadMessageMedia($idEmpresa, $tmp, 'application/pdf');
+            @unlink($tmp);
+            if (empty($upload['success'])) {
+                echo json_encode(['ok' => false, 'error' => 'Error subiendo PDF a Meta: ' . ($upload['message'] ?? '')]);
+                exit;
+            }
+
+            // Mapear componentes de la plantilla (variables por posición: 1=Cliente, 2=Número, 3=Total)
+            $componentes   = json_decode($plantillaMeta['componentes'] ?? '[]', true) ?? [];
+            $valoresPorPos = [$nombreCliente, $numero, '$' . $total];
+            $apiComponents = [];
+            foreach ($componentes as $comp) {
+                $type = strtoupper($comp['type'] ?? '');
+                if ($type === 'HEADER' && strtoupper($comp['format'] ?? '') === 'DOCUMENT') {
+                    $apiComponents[] = [
+                        'type' => 'header',
+                        'parameters' => [[
+                            'type'     => 'document',
+                            'document' => ['id' => $upload['media_id'], 'filename' => 'Proforma_' . $numero . '.pdf'],
+                        ]],
+                    ];
+                } elseif ($type === 'BODY') {
+                    $texto = $comp['text'] ?? '';
+                    if (preg_match_all('/{{(\d+)}}/', $texto, $m)) {
+                        $numVars = max(array_map('intval', $m[1]));
+                        $params  = [];
+                        for ($i = 1; $i <= $numVars; $i++) {
+                            $params[] = ['type' => 'text', 'text' => (string) ($valoresPorPos[$i - 1] ?? ' ')];
+                        }
+                        $apiComponents[] = ['type' => 'body', 'parameters' => $params];
+                    }
+                }
+            }
+
+            $result = $whatsappService->sendTemplateMessage(
+                $idEmpresa, $telefono, $plantillaMeta['nombre'], $plantillaMeta['idioma'], $apiComponents
+            );
+            if (empty($result['success'])) {
+                echo json_encode(['ok' => false, 'error' => 'Error enviando mensaje: ' . ($result['message'] ?? '')]);
+                exit;
+            }
+
+            // Historial de chat (no crítico)
+            try {
+                $metaMessageId = $result['data']['messages'][0]['id'] ?? null;
+                $repoMsj = new \App\repositories\modulos\WhatsappMensajeRepository();
+                $idChat  = $repoMsj->getOrCreateChat($idEmpresa, $telefono, $nombreCliente, 'Proforma enviada', false);
+
+                $vars = [];
+                foreach ($apiComponents as $c) {
+                    if (strtolower($c['type'] ?? '') === 'body') {
+                        foreach ($c['parameters'] ?? [] as $p) $vars[] = $p['text'] ?? '';
+                        break;
+                    }
+                }
+                $templateText = '';
+                foreach ($componentes as $c) {
+                    if (($c['type'] ?? '') === 'BODY') {
+                        $templateText = $c['text'] ?? '';
+                        foreach ($vars as $idx => $v) $templateText = str_replace('{{' . ($idx + 1) . '}}', $v, $templateText);
+                        break;
+                    }
+                }
+                $repoMsj->saveMessage($idEmpresa, $idChat, 'OUT', $telefono, 'template', [
+                    'template'      => $plantillaMeta['nombre'],
+                    'variables'     => $vars,
+                    'template_text' => $templateText,
+                ], $metaMessageId, 'sent');
+            } catch (\Throwable $ex) {
+                error_log('[Proforma WA] guardar chat: ' . $ex->getMessage());
+            }
+
+            echo json_encode(['ok' => true, 'mensaje' => 'Proforma enviada por WhatsApp exitosamente.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'Error inesperado: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Genera el PDF de la proforma como STRING (para adjuntar en correo/WhatsApp).
+     * Usa la plantilla configurable 'proforma' si existe; si no, un PDF básico TCPDF.
+     */
+    private function generarPdfProformaString(int $id, int $idEmpresa, ?array $cabecera = null): ?string
+    {
+        $cabecera = $cabecera ?? $this->repository->getPorId($id);
+        if (!$cabecera) return null;
+
+        $detalles = $this->repository->getDetalles($id);
+        foreach ($detalles as &$d) {
+            $d['impuestos'] = $this->repository->getImpuestosDetalle((int) $d['id']);
+        }
+        unset($d);
+        $adicional = $this->repository->getInfoAdicional($id);
+
+        $empresaModel = new Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+        $estabs       = $empresaModel->getEstablecimientos($idEmpresa);
+        if (!empty($estabs[0]['logo_ruta'])) {
+            $empresa['logo_ruta'] = $estabs[0]['logo_ruta'];
+        }
+
+        try {
+            $renderer  = new \App\Services\PlantillasPdfRendererService();
+            $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'proforma');
+            if ($plantilla) {
+                $pdf = $renderer->generar($plantilla, $cabecera, $detalles, [], $adicional, $empresa, 'S');
+                if (is_string($pdf) && $pdf !== '') return $pdf;
+            }
+        } catch (\Throwable $e) {
+            // cae al fallback TCPDF básico
+        }
+
+        return $this->generarPdfBasicoString($cabecera, $detalles);
+    }
+
+    /** PDF básico (TCPDF) como string: fallback cuando no hay plantilla de proforma. */
+    private function generarPdfBasicoString(array $cabecera, array $detalles): ?string
+    {
+        try {
+            $numero = ($cabecera['establecimiento'] ?? '') . '-' . ($cabecera['punto_emision'] ?? '') . '-'
+                    . str_pad((string) ($cabecera['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+
+            $pdf = new \TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
+            $pdf->SetCreator('CaMaGaRe');
+            $pdf->SetTitle('Proforma ' . $numero);
+            $pdf->setPrintHeader(false);
+            $pdf->setPrintFooter(false);
+            $pdf->SetMargins(12, 12, 12);
+            $pdf->AddPage();
+
+            $html  = '<h2 style="text-align:center;">PROFORMA</h2>';
+            $html .= '<h3 style="text-align:center;">' . htmlspecialchars($numero) . '</h3>';
+            $html .= '<p><strong>Cliente:</strong> ' . htmlspecialchars($cabecera['cliente_nombre'] ?? '')
+                   . ' — ' . htmlspecialchars($cabecera['cliente_ruc'] ?? '') . '</p>';
+            $html .= '<p><strong>Fecha:</strong> ' . date('d-m-Y', strtotime($cabecera['fecha_emision'] ?? 'now')) . '</p>';
+            $html .= '<table border="1" cellpadding="4"><thead><tr style="background-color:#f0f0f0;">'
+                   . '<th>#</th><th>Descripción</th><th>Cant.</th><th>P.Unit.</th><th>Desc.</th><th>Subtotal</th></tr></thead><tbody>';
+            foreach ($detalles as $i => $d) {
+                $html .= '<tr>'
+                    . '<td>' . ($i + 1) . '</td>'
+                    . '<td>' . htmlspecialchars($d['descripcion'] ?? '') . '</td>'
+                    . '<td align="right">' . number_format((float) ($d['cantidad'] ?? 0), 2) . '</td>'
+                    . '<td align="right">$' . number_format((float) ($d['precio_unitario'] ?? 0), 4) . '</td>'
+                    . '<td align="right">$' . number_format((float) ($d['descuento'] ?? 0), 2) . '</td>'
+                    . '<td align="right">$' . number_format((float) ($d['precio_total_sin_impuesto'] ?? 0), 2) . '</td>'
+                    . '</tr>';
+            }
+            $html .= '</tbody></table>';
+            $html .= '<p style="text-align:right;"><strong>Subtotal:</strong> $' . number_format((float) ($cabecera['total_sin_impuestos'] ?? 0), 2) . '</p>';
+            $html .= '<p style="text-align:right;"><strong>TOTAL:</strong> $' . number_format((float) ($cabecera['importe_total'] ?? 0), 2) . '</p>';
+            if (!empty($cabecera['observaciones'])) {
+                $html .= '<p><strong>Observaciones:</strong> ' . htmlspecialchars($cabecera['observaciones']) . '</p>';
+            }
+
+            $pdf->writeHTML($html, true, false, true, false, '');
+            return $pdf->Output('', 'S');
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
      * Devuelve los datos de la proforma para pre-llenar el formulario de ventas.
      */
     public function convertirAFacturaAjax(): void

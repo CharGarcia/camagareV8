@@ -31,6 +31,17 @@ class VideollamadaRepository extends BaseRepository
         return $st;
     }
 
+    /**
+     * Convierte un booleano de PHP en algo que PostgreSQL acepte.
+     *
+     * PDO envía `false` como CADENA VACÍA, y Postgres la rechaza con
+     * "invalid input syntax for type boolean". Hay que mandar el literal.
+     */
+    private function bool(mixed $valor): string
+    {
+        return !empty($valor) ? 'true' : 'false';
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  Salas
     // ────────────────────────────────────────────────────────────────────
@@ -244,10 +255,10 @@ class VideollamadaRepository extends BaseRepository
             ':duracion'          => !empty($data['duracion_minutos']) ? (int) $data['duracion_minutos'] : null,
             ':id_anfitrion'      => (int) $data['id_anfitrion'],
             ':estado'            => $data['estado'] ?? 'programada',
-            ':sala_espera'       => !empty($data['sala_espera']),
-            ':permite_invitados' => !empty($data['permite_invitados']),
+            ':sala_espera'       => $this->bool($data['sala_espera'] ?? false),
+            ':permite_invitados' => $this->bool($data['permite_invitados'] ?? false),
             ':max_participantes' => (int) ($data['max_participantes'] ?? 6),
-            ':grabar'            => !empty($data['grabar']),
+            ':grabar'            => $this->bool($data['grabar'] ?? false),
             ':usr'               => (int) $data['usuario_id'],
         ]);
 
@@ -280,10 +291,10 @@ class VideollamadaRepository extends BaseRepository
             ':fecha_fin'         => $data['fecha_fin'] ?? null,
             ':duracion'          => !empty($data['duracion_minutos']) ? (int) $data['duracion_minutos'] : null,
             ':id_anfitrion'      => (int) $data['id_anfitrion'],
-            ':sala_espera'       => !empty($data['sala_espera']),
-            ':permite_invitados' => !empty($data['permite_invitados']),
+            ':sala_espera'       => $this->bool($data['sala_espera'] ?? false),
+            ':permite_invitados' => $this->bool($data['permite_invitados'] ?? false),
             ':max_participantes' => (int) ($data['max_participantes'] ?? 6),
-            ':grabar'            => !empty($data['grabar']),
+            ':grabar'            => $this->bool($data['grabar'] ?? false),
             ':usr'               => (int) $data['usuario_id'],
             ':id'                => $id,
             ':id_empresa'        => $idEmpresa,
@@ -632,7 +643,7 @@ class VideollamadaRepository extends BaseRepository
             ':turn_api_token'  => $data['turn_api_token'],
             ':max_def'         => (int) $data['max_participantes_defecto'],
             ':dur_def'         => (int) $data['duracion_max_defecto'],
-            ':override'        => !empty($data['permite_override_empresa']),
+            ':override'        => $this->bool($data['permite_override_empresa'] ?? false),
             ':usr'             => $idUsuario,
         ]);
 

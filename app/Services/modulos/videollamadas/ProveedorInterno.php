@@ -124,10 +124,12 @@ class ProveedorInterno implements ProveedorVideollamada
      * el llamador cae a las credenciales estáticas. Una videollamada nunca debe
      * romperse porque un servicio externo no respondió.
      *
-     * NOTA: el endpoint y el formato de respuesta siguen la API de Cloudflare
-     * Realtime. Si Cloudflare los cambia, esto degrada solo (devuelve null) en
-     * lugar de fallar: revisar su documentación vigente si el TURN deja de
-     * emitirse.
+     * Endpoint (API de Cloudflare Realtime, verificado el 28-07-2026):
+     *   POST /v1/turn/keys/{keyId}/credentials/generate-ice-servers
+     *   Authorization: Bearer {token}   ·   body {"ttl": segundos}
+     *   Respuesta 201 con {"iceServers": {urls, username, credential}}
+     * Si Cloudflare lo cambia, esto degrada solo (devuelve null) en lugar de
+     * fallar: la llamada sigue con las credenciales estáticas.
      */
     private function credencialEfimeraCloudflare(array $config): ?array
     {
@@ -151,7 +153,7 @@ class ProveedorInterno implements ProveedorVideollamada
 
         $ch = curl_init();
         curl_setopt_array($ch, [
-            CURLOPT_URL            => self::URL_CLOUDFLARE_TURN . rawurlencode($keyId) . '/credentials/generate',
+            CURLOPT_URL            => self::URL_CLOUDFLARE_TURN . rawurlencode($keyId) . '/credentials/generate-ice-servers',
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => json_encode(['ttl' => self::TTL_CREDENCIAL]),

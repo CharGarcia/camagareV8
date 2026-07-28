@@ -41,10 +41,17 @@ class ProformaService
         $idUsuario  = (int) $data['id_usuario'];
         $idEstab    = (int) $data['id_establecimiento'];
         $idPunto    = (int) $data['id_punto_emision'];
-        $secuencial = $data['secuencial'];
+
+        // Secuencial AUTORITATIVO del servidor: se recalcula aquí y NO se confía en el
+        // valor enviado por el navegador (el campo es readonly / vista previa y puede
+        // llegar desfasado, provocando números salteados o duplicados). Así lo mostrado
+        // y lo guardado siempre coinciden con el verdadero "siguiente disponible".
+        $secRes     = (new SecuencialService())->obtenerSiguienteSecuencial($idPunto, 'Proformas');
+        $secuencial = $secRes['formateado'] ?? str_pad((string) ($secRes['secuencial'] ?? 1), 9, '0', STR_PAD_LEFT);
+        $data['secuencial'] = $secuencial;
 
         if ($this->repository->existeSecuencial($idEmpresa, $idEstab, $idPunto, $secuencial)) {
-            throw new \RuntimeException("El secuencial {$secuencial} ya está en uso.");
+            throw new \RuntimeException("El secuencial {$secuencial} ya está en uso. Recargue e intente nuevamente.");
         }
 
         $db = Database::getConnection();
@@ -95,6 +102,10 @@ class ProformaService
 
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) $data['id_usuario'];
+
+        // En edición el secuencial NO cambia: se conserva el ya asignado al crear
+        // (el valor del cliente es solo lectura y no debe alterar la numeración).
+        $data['secuencial'] = $proforma['secuencial'];
 
         if ($this->repository->existeSecuencial(
             $idEmpresa,

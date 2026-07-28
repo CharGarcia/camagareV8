@@ -476,6 +476,44 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
     </div>
 </div>
 
+<!-- ── Modal: Enviar Proforma por WhatsApp (plantilla aprobada por Meta) ── -->
+<div class="modal fade" id="modalEnviarWhatsappProforma" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom-0 pb-0">
+                <h5 class="modal-title fw-bold"><i class="bi bi-whatsapp text-success me-2"></i>Enviar Proforma por WhatsApp</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="pf_formWhatsapp">
+                <div class="modal-body pt-3">
+                    <input type="hidden" id="pf_waId">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold mb-1">Plantilla de WhatsApp <span class="text-danger">*</span></label>
+                        <select id="pf_waSelectPlantilla" class="form-select form-select-sm" required>
+                            <option value="">Cargando plantillas...</option>
+                        </select>
+                        <div class="form-text">Solo se muestran plantillas aprobadas por Meta.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Teléfono del Cliente <span class="text-danger">*</span></label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text"><i class="bi bi-telephone"></i></span>
+                            <input type="text" id="pf_waTelefono" class="form-control" placeholder="Ej: 59398000000" required>
+                        </div>
+                        <div class="form-text">Código de país + número (sin +).</div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-top-0">
+                    <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success btn-sm px-4" id="pf_btnEnviarWhatsapp">
+                        <i class="bi bi-send me-1"></i> Enviar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <?php
 // ─────────────────────────────────────────────────────────────────────────────
 // Modales reutilizados para crear Cliente y Producto desde la proforma
@@ -531,8 +569,9 @@ $totalPages = $pf_totalPagesBackup;
     var Z_SUBMODAL = 5080;   // por encima del modal de proforma (5060 por la regla global)
     var Z_BACKDROP = 5075;   // dim de la proforma, por debajo del submodal
 
+    var SUBMODALES = ['modalCliente', 'modalProducto', 'modalEnviarWhatsappProforma'];
     document.addEventListener('show.bs.modal', function (ev) {
-        if (ev.target.id !== 'modalCliente' && ev.target.id !== 'modalProducto') return;
+        if (SUBMODALES.indexOf(ev.target.id) === -1) return;
 
         // 1) Elevar el propio submodal por encima de la proforma.
         ev.target.style.setProperty('z-index', String(Z_SUBMODAL), 'important');
@@ -548,7 +587,7 @@ $totalPages = $pf_totalPagesBackup;
 
     // Al cerrar un submodal, si la proforma sigue abierta, conservar el scroll-lock.
     document.addEventListener('hidden.bs.modal', function (ev) {
-        if ((ev.target.id === 'modalCliente' || ev.target.id === 'modalProducto')
+        if (SUBMODALES.indexOf(ev.target.id) !== -1
             && document.querySelectorAll('.modal.show').length > 0) {
             document.body.classList.add('modal-open');
         }
