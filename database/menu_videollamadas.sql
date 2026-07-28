@@ -10,24 +10,23 @@
 
 -- ═══ PASO 1 ═══ Ver los módulos padre disponibles y elegir uno.
 --
---   SELECT id, nombre_modulo, orden
---   FROM modulos_menu
---   WHERE status = 1
---   ORDER BY orden, nombre_modulo;
+-- OJO: modulos_menu NO tiene columna `status` (solo id, nombre_modulo,
+-- id_icono, orden). La que sí la tiene es submodulos_menu.
+--
+--   SELECT id, nombre_modulo, orden FROM modulos_menu ORDER BY orden, nombre_modulo;
 --
 -- Sugerencias de dónde colgarlo, en orden de preferencia:
---   1. El módulo donde ya vive "WhatsApp / Chat" (agrupa las comunicaciones).
+--   1. El módulo donde ya vive el chat de WhatsApp (agrupa las comunicaciones).
 --   2. Un módulo tipo "Herramientas", "Utilidades" o "General".
 --   3. Si no encaja en ninguno, crear un módulo padre nuevo (ver PASO 1-B).
 
 
 -- ═══ PASO 1-B (OPCIONAL) ═══ Solo si quiere un módulo padre nuevo.
 --
---   INSERT INTO modulos_menu (nombre_modulo, orden, id_icono, status)
+--   INSERT INTO modulos_menu (nombre_modulo, orden, id_icono)
 --   SELECT 'Comunicaciones',
 --          (SELECT COALESCE(MAX(orden), 0) + 1 FROM modulos_menu),
---          (SELECT id_icono FROM modulos_menu WHERE status = 1 LIMIT 1),
---          1
+--          (SELECT id_icono FROM modulos_menu ORDER BY id LIMIT 1)
 --   WHERE NOT EXISTS (SELECT 1 FROM modulos_menu WHERE nombre_modulo = 'Comunicaciones');
 
 

@@ -512,7 +512,13 @@
         const dd = el.closest('.list-group');
         const tr = dd?._pfTr;
         if (!tr) return;
+        dd.classList.add('d-none');
+        _pfLlenarFilaProducto(tr, p);
+    };
 
+    // Rellena una fila del detalle con los datos de un producto. Reutilizable:
+    // desde el autocomplete y al crear un producto nuevo desde la proforma.
+    function _pfLlenarFilaProducto(tr, p) {
         // Obtener precio sin IVA
         const pSin = parseFloat(p.precio_base || 0);
         const pCon = parseFloat(p.pvp || 0);
@@ -560,12 +566,11 @@
         selLista.innerHTML = _listaPreciosOpts(p.precios_lista, pSin);
         selLista.value = '1';
 
-        dd?.classList.add('d-none');
         _recalcFila(tr);
 
         // Foco en cantidad
         tr.querySelector('.input-cantidad')?.focus();
-    };
+    }
 
     function _recalcFila(tr) {
         const cant = parseFloat(tr.querySelector('.input-cantidad').value || 0);
@@ -1333,6 +1338,26 @@
             tr.querySelector('.input-descripcion').focus();
         },
 
+        // Abrir el modal de creación de cliente (mismo modal que Facturas de Venta).
+        // Al guardar, el evento 'clienteGuardado' lo selecciona en la proforma.
+        nuevoCliente() {
+            if (typeof window.abrirModalClienteCrear === 'function') {
+                window.abrirModalClienteCrear();
+            } else {
+                toast('No se pudo abrir el formulario de cliente.', 'error');
+            }
+        },
+
+        // Abrir el modal de creación de producto (mismo modal que Facturas de Venta).
+        // Al guardar, el evento 'productoGuardado' agrega una línea con ese producto.
+        nuevoProducto() {
+            if (typeof window.abrirModalProductoCrear === 'function') {
+                window.abrirModalProductoCrear();
+            } else {
+                toast('No se pudo abrir el formulario de producto.', 'error');
+            }
+        },
+
         eliminarFila(btn) {
             const tr = btn.closest('tr');
             if (tr?._pfDdProd) tr._pfDdProd.remove();  // limpiar dropdown del body
@@ -1467,6 +1492,52 @@
             });
         }
 
+    });
+
+    // ─── Crear cliente/producto al vuelo desde la proforma ─────────────────────
+    // Los modales de Clientes y Productos emiten estos eventos al guardar. Solo se
+    // actúa si el modal de proforma está abierto (evita interferir con otros módulos).
+    const _pfModalAbierto = () =>
+        document.getElementById('modalProforma')?.classList.contains('show');
+
+    document.addEventListener('clienteGuardado', (e) => {
+        if (!_pfModalAbierto()) return;
+        const res = e.detail;
+        if (res && res.ok && res.data) {
+            _seleccionarCliente(res.data);
+        }
+    });
+
+    document.addEventListener('productoGuardado', async (e) => {
+        if (!_pfModalAbierto()) return;
+        const res = e.detail;
+        if (!res || !res.ok || !res.id) return;
+
+        // El /store de productos solo devuelve el id; recuperamos el producto
+        // completo buscándolo por su código (el form aún conserva el valor).
+        const codigo  = document.getElementById('prod_codigo')?.value?.trim() || '';
+        const nombre  = document.getElementById('prod_nombre')?.value?.trim() || '';
+        const termino = codigo || nombre;
+        if (!termino) return;
+
+        try {
+            const resp = await fetch(`${urlBase()}/getProductosAjax?q=${encodeURIComponent(termino)}`);
+            const data = await resp.json();
+            if (data.ok && Array.isArray(data.data)) {
+                const prod = data.data.find(p => String(p.id) === String(res.id)) || data.data[0];
+                if (prod) {
+                    const tbody = $id('pf_tbodyDetalle');
+                    const tr    = _crearFila();
+                    tbody.appendChild(tr);
+                    _pfLlenarFilaProducto(tr, prod);
+                    _calcularTotales();
+                    return;
+                }
+            }
+        } catch (err) {
+            console.error('Error al recuperar el producto recién creado:', err);
+        }
+        toast('Producto creado. Búscalo en el detalle para agregarlo.', 'info');
     });
 
     window.PF = PF;

@@ -195,6 +195,9 @@ window.PF_CONFIG  = {
 </script>
 
 <?php include __DIR__ . '/modal_proforma.php'; ?>
+<!-- JS de los modales reutilizados para crear cliente/producto desde la proforma -->
+<script src="<?= $base ?>/js/modulos/clientes_modal.js?v=<?= time() ?>"></script>
+<script src="<?= $base ?>/js/modulos/productos_modal.js?v=<?= time() ?>"></script>
 <script src="<?= $base ?>/js/modulos/proformas_modal.js?v=<?= time() ?>"></script>
 
 <script>

@@ -113,7 +113,6 @@ class VideollamadasController extends BaseModuloController
             'usuarios'    => $this->repository->getUsuariosEmpresa($idEmpresa),
             'maxMesh'     => VideollamadaRules::MAX_PARTICIPANTES_MESH,
             'idUsuario'   => (int) $_SESSION['id_usuario'],
-            'esSuperadmin' => $this->esSuperadmin(),
         ]);
     }
 
@@ -375,120 +374,6 @@ class VideollamadasController extends BaseModuloController
     }
 
     // ────────────────────────────────────────────────────────────────────
-    //  Configuración de la empresa (servidores STUN/TURN y límites)
-    // ────────────────────────────────────────────────────────────────────
-
-    public function getConfigAjax(): void
-    {
-        $this->requireSuperadmin();
-
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idUsuario = (int) $_SESSION['id_usuario'];
-
-        try {
-            $this->json([
-                'ok'       => true,
-                'data'     => $this->service->getConfigParaVista($idEmpresa, $idUsuario),
-                'global'   => $this->service->getConfigGlobalParaVista($idUsuario),
-                'efectiva' => $this->resumenEfectiva($idEmpresa, $idUsuario),
-                'max_mesh' => VideollamadaRules::MAX_PARTICIPANTES_MESH,
-            ]);
-        } catch (\Throwable $e) {
-            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
-        }
-    }
-
-    public function guardarConfigAjax(): void
-    {
-        $this->requireSuperadmin();
-
-        try {
-            $this->service->guardarConfig(
-                (int) $_SESSION['id_empresa'],
-                (int) $_SESSION['id_usuario'],
-                $_POST
-            );
-            $this->json(['ok' => true, 'mensaje' => 'Configuración de la empresa guardada.']);
-        } catch (\Throwable $e) {
-            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
-        }
-    }
-
-    /** Configuración global: la comparten todas las empresas. */
-    public function guardarConfigGlobalAjax(): void
-    {
-        $this->requireSuperadmin();
-
-        try {
-            $this->service->guardarConfigGlobal((int) $_SESSION['id_usuario'], $_POST);
-            $this->json(['ok' => true, 'mensaje' => 'Configuración global guardada.']);
-        } catch (\Throwable $e) {
-            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
-        }
-    }
-
-    /** De dónde sale cada servidor que se está usando realmente. */
-    private function resumenEfectiva(int $idEmpresa, int $idUsuario): array
-    {
-        $ef = $this->service->getConfigEfectiva($idEmpresa, $idUsuario);
-
-        return [
-            'stun_urls'    => $ef['stun_urls'],
-            'turn_urls'    => $ef['turn_urls'],
-            'origen_turn'  => $ef['origen_turn'],
-            'origen_cloud' => $ef['origen_cloud'],
-            'puede_anular' => $ef['puede_anular'],
-            'hay_turn'     => $ef['turn_urls'] !== '' || $ef['turn_key_id'] !== '',
-        ];
-    }
-
-    /**
-     * Prueba que la configuración entregue servidores utilizables.
-     * Es lo que confirma si el TURN quedó bien puesto antes de una reunión real.
-     */
-    public function probarTurnAjax(): void
-    {
-        $this->requireSuperadmin();
-
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idUsuario = (int) $_SESSION['id_usuario'];
-
-        if (session_status() === PHP_SESSION_ACTIVE) {
-            session_write_close();
-        }
-
-        try {
-            $config    = $this->service->getConfigEfectiva($idEmpresa, $idUsuario);
-            $proveedor = new \App\Services\modulos\videollamadas\ProveedorInterno();
-            $cred      = $proveedor->obtenerCredenciales(['codigo' => ''], $config, []);
-
-            $stun = 0;
-            $turn = 0;
-            foreach ($cred['ice_servers'] as $srv) {
-                $urls = is_array($srv['urls']) ? $srv['urls'] : [$srv['urls']];
-                foreach ($urls as $u) {
-                    if (str_starts_with((string) $u, 'turn')) {
-                        $turn++;
-                    } else {
-                        $stun++;
-                    }
-                }
-            }
-
-            $this->json([
-                'ok'    => true,
-                'stun'  => $stun,
-                'turn'  => $turn,
-                'aviso' => $turn === 0
-                    ? 'No hay TURN disponible. Entre el 10% y el 20% de las llamadas no va a conectar.'
-                    : '',
-            ]);
-        } catch (\Throwable $e) {
-            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
-        }
-    }
-
-    // ────────────────────────────────────────────────────────────────────
     //  Señalización WebRTC
     //
     //  Los endpoints (entrarAjax, senalesAjax, enviarSenalAjax, salirAjax) los
@@ -628,25 +513,6 @@ class VideollamadasController extends BaseModuloController
     private function tieneAccesoTotal(): bool
     {
         return !empty($this->getPermisos()['todo']);
-    }
-
-    private function esSuperadmin(): bool
-    {
-        return (int) ($_SESSION['nivel'] ?? 0) >= 3;
-    }
-
-    /**
-     * La configuración guarda credenciales de servicios contratados y afecta a
-     * todas las empresas, así que queda reservada al superadministrador: no
-     * basta con tener permiso de actualizar reuniones.
-     */
-    private function requireSuperadmin(): void
-    {
-        $this->requireLeer();
-
-        if (!$this->esSuperadmin()) {
-            $this->json(['ok' => false, 'mensaje' => 'Solo el superadministrador puede ver o cambiar esta configuración.'], 403);
-        }
     }
 
     /** Arma el arreglo de datos desde $_POST, ya saneado para el service. */

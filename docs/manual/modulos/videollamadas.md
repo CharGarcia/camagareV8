@@ -6,7 +6,7 @@ ruta_modulo: modulos/videollamadas
 tipo: modulo
 visibilidad: todos
 etiquetas: videollamada, video llamada, videoconferencia, reunion, reuniones, meet, zoom, llamada, conferencia, camara, microfono, sala, sala de espera, juntas, capacitacion, compartir pantalla, chat, levantar la mano
-version: 1.4
+version: 1.5
 orden: 0
 estado: activo
 ---
@@ -144,9 +144,10 @@ tramos. Al compartir pantalla no se reduce, para que el texto siga legible.
 
 ## Configuración
 
-El botón del engranaje, arriba del listado, **solo lo ve el superadministrador**.
-Guarda credenciales de servicios contratados y afecta a todo el sistema, así que
-no basta con tener permiso de modificar reuniones.
+Está en **Configuración → Videollamadas**, no dentro del módulo: los servidores
+son configuración de plataforma, no una función del día a día. **Solo la ve el
+superadministrador**, porque guarda credenciales de servicios contratados y
+afecta a todas las empresas.
 
 Tiene dos pestañas.
 
@@ -282,6 +283,9 @@ El nivel 3 (superadministrador) siempre ve todo.
 
 ## Historial de cambios
 
+- **1.5** — La configuración de servidores se traslada a **Configuración →
+  Videollamadas**. Antes estaba en un botón dentro del módulo, que no
+  correspondía: es configuración de plataforma, no una función operativa.
 - **1.4** — Invitados externos: cada uno recibe por correo su enlace personal y
   entra sin tener cuenta en el sistema. Envío de invitaciones desde el modal y
   recordatorio automático quince minutos antes de las reuniones programadas.

@@ -199,14 +199,22 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                         <div class="row g-2 align-items-center">
 
                                             <div class="col-12 position-relative">
-                                                <div class="input-group input-group-sm flex-grow-1 rounded-pill overflow-hidden border">
-                                                    <span class="input-group-text bg-white border-0 text-primary">
-                                                        <i class="bi bi-search"></i>
-                                                    </span>
-                                                    <input type="text" class="form-control border-0 px-1"
-                                                        id="pf_clienteBuscar"
-                                                        placeholder="Buscar cliente por RUC o Razón Social..." autocomplete="off">
-                                                    <input type="hidden" id="pf_idCliente">
+                                                <div class="d-flex gap-1 align-items-center">
+                                                    <div class="input-group input-group-sm flex-grow-1 rounded-pill overflow-hidden border">
+                                                        <span class="input-group-text bg-white border-0 text-primary">
+                                                            <i class="bi bi-search"></i>
+                                                        </span>
+                                                        <input type="text" class="form-control border-0 px-1"
+                                                            id="pf_clienteBuscar"
+                                                            placeholder="Buscar cliente por RUC o Razón Social..." autocomplete="off">
+                                                        <input type="hidden" id="pf_idCliente">
+                                                    </div>
+                                                    <?php if (!empty($perm['crear'])): ?>
+                                                    <button type="button" class="btn btn-outline-primary btn-sm px-2 rounded-pill flex-shrink-0"
+                                                        onclick="PF.nuevoCliente()" title="Registrar nuevo cliente">
+                                                        <i class="bi bi-person-plus"></i>
+                                                    </button>
+                                                    <?php endif; ?>
                                                 </div>
                                                 <div id="pf_ddClientes" class="pf-dd-clientes list-group shadow d-none"></div>
                                             </div>
@@ -265,10 +273,18 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                     </table>
                                 </div>
                                 <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center">
-                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold"
-                                        onclick="PF.agregarFila()">
-                                        <i class="bi bi-plus-circle me-1"></i>Agregar línea
-                                    </button>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold"
+                                            onclick="PF.agregarFila()">
+                                            <i class="bi bi-plus-circle me-1"></i>Agregar línea
+                                        </button>
+                                        <?php if (!empty($perm['crear'])): ?>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold text-success"
+                                            onclick="PF.nuevoProducto()" title="Registrar nuevo producto en el catálogo">
+                                            <i class="bi bi-box-seam me-1"></i>Nuevo producto
+                                        </button>
+                                        <?php endif; ?>
+                                    </div>
                                     <div class="small fw-bold text-muted pe-3">
                                         Ítems: <span id="pf_countItems">0</span>
                                     </div>
@@ -466,3 +482,75 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
         </div>
     </div>
 </div>
+
+<?php
+// ─────────────────────────────────────────────────────────────────────────────
+// Modales reutilizados para crear Cliente y Producto desde la proforma
+// (mismo mecanismo que Facturas de Venta). Los partials emiten eventos
+// 'clienteGuardado' / 'productoGuardado' que proformas_modal.js escucha.
+// ─────────────────────────────────────────────────────────────────────────────
+?>
+<!-- Elementos sombra para evitar errores en los scripts originales de los modales -->
+<div id="shadow-elements" class="d-none">
+    <input id="buscarCliente">
+    <input id="buscarProducto">
+    <div id="tbodyClientes"></div>
+    <div id="tbodyProductos"></div>
+</div>
+<?php
+// Copia de seguridad de las variables del listado de proformas (los modales las pisan)
+$pf_permBackup       = $perm       ?? null;
+$pf_rutaModuloBackup = $rutaModulo ?? null;
+$pf_ordenColBackup   = $ordenCol   ?? null;
+$pf_ordenDirBackup   = $ordenDir   ?? null;
+$pf_pageBackup       = $page       ?? null;
+$pf_totalPagesBackup = $totalPages ?? null;
+
+// Variables que requieren los modales originales para incluirse sin errores de PHP
+$urlBaseClientes = BASE_URL . '/modulos/clientes';
+$perm        = ['crear' => true, 'editar' => true, 'actualizar' => true, 'eliminar' => true, 'ver' => true];
+$rutaModulo  = 'modulos/productos';
+$canCreateVend = true;
+$ordenCol    = 'nombre';
+$ordenDir    = 'ASC';
+$page        = 1;
+$totalPages  = 1;
+
+include dirname(__DIR__) . '/clientes/modal_cliente.php';
+include dirname(__DIR__) . '/productos/modal.php';
+
+// Restaurar las variables originales del listado de proformas
+$perm       = $pf_permBackup;
+$rutaModulo = $pf_rutaModuloBackup;
+$ordenCol   = $pf_ordenColBackup;
+$ordenDir   = $pf_ordenDirBackup;
+$page       = $pf_pageBackup;
+$totalPages = $pf_totalPagesBackup;
+?>
+
+<style>
+    /* Los modales de Cliente/Producto deben quedar por encima del modal de
+       Proforma (z-index:1060) y con su backdrop correctamente atenuado. */
+    #modalCliente.show, #modalProducto.show { z-index: 1080 !important; }
+    .pf-submodal-backdrop { z-index: 1075 !important; }
+</style>
+<script>
+(function () {
+    // Al abrir un submodal, elevar el backdrop más reciente sobre la proforma.
+    document.addEventListener('show.bs.modal', function (ev) {
+        if (ev.target.id === 'modalCliente' || ev.target.id === 'modalProducto') {
+            setTimeout(function () {
+                var bds = document.querySelectorAll('.modal-backdrop');
+                if (bds.length > 1) bds[bds.length - 1].classList.add('pf-submodal-backdrop');
+            }, 0);
+        }
+    });
+    // Al cerrar un submodal, si la proforma sigue abierta, conservar el scroll-lock.
+    document.addEventListener('hidden.bs.modal', function (ev) {
+        if ((ev.target.id === 'modalCliente' || ev.target.id === 'modalProducto')
+            && document.querySelectorAll('.modal.show').length > 0) {
+            document.body.classList.add('modal-open');
+        }
+    });
+})();
+</script>

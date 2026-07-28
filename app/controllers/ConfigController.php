@@ -661,6 +661,27 @@ class ConfigController extends Controller
     }
 
     /** Despachador de la tarjeta "Errores del sistema" (/config/errores-sistema). */
+    /**
+     * Videollamadas: servidores STUN/TURN globales y límites de la empresa.
+     * Es configuración de plataforma, no una función del módulo de reuniones.
+     */
+    public function videollamadas(): void
+    {
+        $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
+        $c = new VideollamadasConfigController();
+        $method = match ($sub) {
+            'guardar'       => 'guardarAjax',
+            'guardarGlobal' => 'guardarGlobalAjax',
+            'probar'        => 'probarAjax',
+            default         => 'index',
+        };
+        if (method_exists($c, $method)) {
+            $c->$method();
+        } else {
+            $c->index();
+        }
+    }
+
     public function erroresSistema(): void
     {
         $sub = $_GET['action'] ?? $_POST['action'] ?? 'index';
