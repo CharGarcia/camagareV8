@@ -2945,7 +2945,7 @@ class MigracionMysqlService
             "INSERT INTO retencion_compra_detalle (id_empresa, id_retencion, codigo_impuesto, codigo_retencion, concepto, base_imponible, porcentaje_retener, valor_retenido)
              VALUES (:e, :r, :ci, :cr, :con, :bi, :pct, :val)"
         );
-        $cuerpoStmt = $mysql->prepare("SELECT codigo_impuesto, id_retencion, base_imponible, porcentaje_retencion, valor_retenido, nombre_retencion, ejercicio_fiscal FROM cuerpo_retencion WHERE ruc_empresa = :r AND serie_retencion = :s AND secuencial_retencion = :sec");
+        $cuerpoStmt = $mysql->prepare("SELECT codigo_impuesto, impuesto, id_retencion, base_imponible, porcentaje_retencion, valor_retenido, nombre_retencion, ejercicio_fiscal FROM cuerpo_retencion WHERE ruc_empresa = :r AND serie_retencion = :s AND secuencial_retencion = :sec");
         // Reconciliación al re-correr: completa periodo_fiscal/estado y reconstruye el detalle de las ya migradas.
         $mapRetC = $this->mapaDe($pg, $idEmpresa, 'retenciones_compra');
         $updCab  = $pg->prepare("UPDATE retencion_compra_cabecera SET id_proveedor = ?, fecha_emision = ?, periodo_fiscal = ?, estado = ?, total_retenido = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
@@ -3007,9 +3007,11 @@ class MigracionMysqlService
                 }
 
                 foreach ($lineas as $l) {
+                    // codigo_impuesto = TIPO SRI (1 renta / 2 iva / 6 isd) desde el texto viejo `impuesto`;
+                    // codigo_retencion = el código SRI específico del viejo `codigo_impuesto` (312, 304…).
                     $insDet->execute([
-                        ':e' => $idEmpresa, ':r' => $idRet, ':ci' => trim((string) $l['codigo_impuesto']) ?: '1',
-                        ':cr' => trim((string) $l['id_retencion']), ':con' => self::nz($l['nombre_retencion']),
+                        ':e' => $idEmpresa, ':r' => $idRet, ':ci' => self::tipoImpuestoRet($l['impuesto']),
+                        ':cr' => trim((string) $l['codigo_impuesto']), ':con' => self::nz($l['nombre_retencion']),
                         ':bi' => (float) $l['base_imponible'], ':pct' => (float) $l['porcentaje_retencion'], ':val' => (float) $l['valor_retenido'],
                     ]);
                 }
@@ -3734,6 +3736,20 @@ class MigracionMysqlService
     {
         $v = trim((string) $v);
         return $v === '' ? null : $v;
+    }
+
+    /**
+     * Tipo de impuesto SRI de una línea de retención de compra: el viejo `cuerpo_retencion.impuesto`
+     * trae el tipo en TEXTO (RENTA/IVA/ISD). El módulo nuevo clasifica renta/iva/isd por el
+     * codigo_impuesto = '1' (Renta) / '2' (IVA) / '6' (ISD). Si ya viniera numérico, se respeta.
+     */
+    private static function tipoImpuestoRet($v): string
+    {
+        $s = strtoupper(trim((string) $v));
+        if ($s === 'IVA') { return '2'; }
+        if ($s === 'ISD') { return '6'; }
+        if ($s === 'RENTA') { return '1'; }
+        return in_array($s, ['1', '2', '6'], true) ? $s : '1';
     }
 
     /**
