@@ -196,10 +196,11 @@ class FacturaItemsPresentacionService
         $partes = [];
 
         if ($mostrar['unidad']) {
-            // Solo la abreviatura de la unidad (ej. "UND", "KG"), nunca el nombre completo.
+            // Solo la abreviatura de la unidad, capitalizada y sin la etiqueta "Unidad:"
+            // (ej. "gal" → "Gal"). Se muestra sola: "Aceite (Gal)".
             $u = trim((string) ($g['unidad_abreviatura'] ?? ''));
             if ($u !== '') {
-                $partes[] = 'Unidad: ' . $u;
+                $partes[] = ucfirst($u);
             }
         }
         if ($mostrar['lote']) {

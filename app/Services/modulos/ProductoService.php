@@ -152,10 +152,17 @@ class ProductoService
         $antes = $this->repository->getDetalleCompleto($id, $idEmpresa);
         if (!$antes) throw new Exception('El producto no existe.');
 
-        // Si el producto ya fue usado en facturas o inventario, los campos críticos no pueden cambiar
+        // Si el producto ya fue usado en facturas o inventario, los campos que
+        // identifican al producto NO pueden cambiar:
+        //  - codigo: es la llave con la que se homologa, se busca y se reimprime.
+        //  - tipo_produccion: cambiarlo altera inventario y contabilidad.
+        // El NOMBRE sí se puede corregir siempre: cada documento (venta, NC,
+        // compra, guía, proforma, etc.) guarda su propia copia del nombre en su
+        // detalle, de modo que corregir un typo aquí no altera nada ya emitido.
+        // El inventario (kardex) no guarda nombre: lee el actual, así que reflejar
+        // el nombre corregido es justo lo deseado (es el mismo producto físico).
         if ($this->repository->estaUsadoEnDocumentos($id, $idEmpresa)) {
             $data['codigo']          = $antes['codigo'];
-            $data['nombre']          = $antes['nombre'];
             $data['tipo_produccion'] = $antes['tipo_produccion'];
         }
 

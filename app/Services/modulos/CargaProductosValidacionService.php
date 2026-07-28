@@ -383,17 +383,13 @@ class CargaProductosValidacionService
             $f['accion']      = $existente ? 'actualizar' : 'crear';
             $f['id_producto'] = $existente['id'] ?? null;
 
+            // El producto ya usado en documentos conserva su TIPO (código no cambia
+            // porque es la llave). El nombre sí se puede corregir. Se avisa solo si
+            // el archivo intenta cambiar el tipo, que se ignorará.
             if ($existente && isset($this->idsUsados[$existente['id']])) {
-                $cambios = [];
-                if ($existente['nombre'] !== $f['nombre']) {
-                    $cambios[] = 'el nombre';
-                }
                 if ($existente['tipo_produccion'] !== $f['tipo_produccion']) {
-                    $cambios[] = 'el tipo';
-                }
-                if ($cambios) {
-                    $avisos[] = 'El producto ya se usó en documentos: se conservará '
-                        . implode(' y ', $cambios) . ' original.';
+                    $avisos[] = 'El producto ya se usó en documentos: se conservará su tipo '
+                        . '(Producto/Servicio) original.';
                 }
             }
 

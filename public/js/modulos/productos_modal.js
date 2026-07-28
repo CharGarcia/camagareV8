@@ -579,20 +579,20 @@
     }
 
     function aplicarRestriccionesEnUso() {
+        // Producto ya usado en documentos/inventario: se bloquean código y tipo
+        // (identifican al producto). El NOMBRE queda editable: cada documento
+        // guarda su propia copia, así que se puede corregir un typo sin afectar
+        // lo ya emitido.
         const codigo = document.getElementById('prod_codigo');
-        const nombre = document.getElementById('prod_nombre');
         const tipo   = document.getElementById('prod_tipo_produccion');
         if (codigo) { codigo.readOnly = true; codigo.classList.add('bg-light'); }
-        if (nombre) { nombre.readOnly = true; nombre.classList.add('bg-light'); }
         if (tipo)   { tipo.disabled = true; }
     }
 
     function quitarRestriccionesEnUso() {
         const codigo = document.getElementById('prod_codigo');
-        const nombre = document.getElementById('prod_nombre');
         const tipo   = document.getElementById('prod_tipo_produccion');
         if (codigo) { codigo.readOnly = false; codigo.classList.remove('bg-light'); }
-        if (nombre) { nombre.readOnly = false; nombre.classList.remove('bg-light'); }
         if (tipo)   { tipo.disabled = false; }
     }
 
