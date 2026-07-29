@@ -572,7 +572,7 @@ class FacturaVentaController extends BaseModuloController
 
             $todasLasRapidas = [
                 'aviso_mensajes_pendientes', 'factura_por_cobrar', 'factura_venta',
-                'cuenta_por_cobrar', 'renovacion_suscripcion', 'renovacion_firma_electronica',
+                'proforma', 'cuenta_por_cobrar', 'renovacion_suscripcion', 'renovacion_firma_electronica',
                 'retencion_compra', 'nota_credito', 'nota_debito', 'guia_remision',
                 'rol_pagos', 'descuento_empleado'
             ];
@@ -1178,10 +1178,16 @@ class FacturaVentaController extends BaseModuloController
         $scheme     = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
         $urlBaseAbs = $scheme . '://' . $host . rtrim(BASE_URL, '/');
 
-        // Teléfono del cliente (viene en formato 593XXXXXXXXX) — Nuvei no lo requiere
-        // para Checkout, pero el correo asociado sí; sin correo el resultado no se
-        // notifica por email, solo queda visible en la pestaña Pagos de la factura.
+        // Nuvei exige el correo del cliente en init_reference (user.email), aunque el
+        // enlace se entregue por WhatsApp. Sin un correo válido la pasarela rechaza la
+        // referencia, así que se valida antes de crear la transacción — mismo criterio
+        // que prepararPagoNuveiAjax() (correo), pero aquí no hay dónde escribirlo a mano:
+        // se toma el de la ficha del cliente.
         $correoCliente = trim($factura['cliente_email'] ?? '');
+        if (!filter_var($correoCliente, FILTER_VALIDATE_EMAIL)) {
+            echo json_encode(['ok' => false, 'error' => 'Nuvei necesita el correo del cliente para generar el enlace de pago, y este cliente no tiene uno válido registrado. Agrégalo en su ficha e inténtalo de nuevo.']);
+            return;
+        }
 
         try {
             $checkout = $nuvei->prepararCheckout($idEmpresa, [

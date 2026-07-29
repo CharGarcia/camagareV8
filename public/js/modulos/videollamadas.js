@@ -189,7 +189,8 @@
 
         (s.participantes || []).forEach(p => agregarFilaParticipante(p));
 
-        const enlace = `${VC_URL}/sala`;
+        // El enlace lleva el código: sin él no identificaría ninguna sala.
+        const enlace = `${VC_URL}/sala/${encodeURIComponent(s.codigo || '')}`;
         document.getElementById('vc-info-codigo').textContent = s.codigo || '—';
         document.getElementById('vc-info-estado').innerHTML = badgeEstado(s.estado);
         document.getElementById('vc-info-creador').textContent = s.creador_nombre || '—';
@@ -271,6 +272,22 @@
                  ${USUARIOS.map(u => `<option value="${u.id}" ${String(u.id) === String(p.id_usuario) ? 'selected' : ''}>${esc(u.nombre)}</option>`).join('')}
                </select>`;
 
+        // Botón para copiar el enlace personal del invitado (por WhatsApp, etc.).
+        // Solo tiene sentido en invitados externos y una vez guardados: el token
+        // se genera al guardar.
+        let botonEnlace = '';
+        if (esInvitado && PERM.actualizar) {
+            botonEnlace = p.token_acceso
+                ? `<button type="button" class="btn btn-link btn-sm text-primary p-0 me-1"
+                           onclick="VC_copiarEnlaceInvitado('${esc(p.token_acceso)}')" title="Copiar su enlace de acceso">
+                       <i class="bi bi-link-45deg"></i>
+                   </button>`
+                : `<button type="button" class="btn btn-link btn-sm text-secondary p-0 me-1" disabled
+                           title="Guarde la reunión para generar su enlace">
+                       <i class="bi bi-link-45deg"></i>
+                   </button>`;
+        }
+
         const tr = document.createElement('tr');
         tr.dataset.fila = i;
         tr.innerHTML = `
@@ -286,7 +303,8 @@
                     <option value="anfitrion" ${rol === 'anfitrion' ? 'selected' : ''}>Anfitrión</option>
                 </select>
             </td>
-            <td class="p-0 text-center">
+            <td class="p-0 text-center text-nowrap">
+                ${botonEnlace}
                 <button type="button" class="btn btn-link btn-sm text-danger p-0" onclick="VC_quitarParticipante(${i})" title="Quitar">
                     <i class="bi bi-x-lg"></i>
                 </button>
@@ -295,6 +313,33 @@
         document.getElementById('vcTbodyParticipantes').appendChild(tr);
         actualizarContador();
     }
+
+    /**
+     * Copia el enlace personal de un invitado, para mandarlo por WhatsApp o por
+     * donde sea. Si el navegador bloquea el portapapeles (pasa sin HTTPS), se
+     * muestra el enlace para copiarlo a mano.
+     */
+    window.VC_copiarEnlaceInvitado = function (token) {
+        const enlace = `${window.VC_URL_INVITADO}?t=${encodeURIComponent(token)}`;
+
+        navigator.clipboard.writeText(enlace)
+            .then(() => avisarOk('Enlace del invitado copiado'))
+            .catch(() => {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Enlace del invitado',
+                        input: 'text',
+                        inputValue: enlace,
+                        inputAttributes: { readonly: true },
+                        confirmButtonText: 'Cerrar',
+                        target: document.getElementById('modalSalaVC'),
+                    });
+                } else {
+                    prompt('Enlace del invitado:', enlace);
+                }
+            });
+    };
 
     window.VC_quitarParticipante = function (i) {
         document.querySelector(`#vcTbodyParticipantes tr[data-fila="${i}"]`)?.remove();
@@ -597,7 +642,8 @@
     };
 
     window.VC_copiarEnlace = function () {
-        const enlace = document.getElementById('vc-info-enlace')?.value || `${VC_URL}/sala`;
+        const enlace = document.getElementById('vc-info-enlace')?.value || '';
+        if (!enlace) { avisar('warning', 'Sin enlace', 'Guarde la reunión para generar su enlace.'); return; }
         navigator.clipboard.writeText(enlace)
             .then(() => avisarOk('Enlace copiado'))
             .catch(() => avisar('info', 'Enlace de la reunión', enlace));

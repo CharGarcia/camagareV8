@@ -758,6 +758,72 @@ class ProformaService
         return $secService->obtenerSiguienteSecuencial($idPunto, 'Proformas');
     }
 
+    /**
+     * Devuelve (creándolo si no existe) el token de aprobación pública de la proforma.
+     * El token viaja en el enlace del correo para que el cliente apruebe sin login.
+     */
+    public function obtenerTokenAprobacion(int $id, int $idEmpresa): string
+    {
+        $prof = $this->repository->getPorId($id);
+        if (!$prof || (int) $prof['id_empresa'] !== $idEmpresa) {
+            throw new \RuntimeException('Proforma no encontrada.');
+        }
+        if (!empty($prof['aprobacion_token'])) {
+            return (string) $prof['aprobacion_token'];
+        }
+        $token = bin2hex(random_bytes(24));
+        $this->repository->setTokenAprobacion($id, $token);
+        return $token;
+    }
+
+    /** Proforma por token de aprobación (para la página pública). */
+    public function getAprobacionPorToken(string $token): ?array
+    {
+        $token = trim($token);
+        if ($token === '') return null;
+        return $this->repository->getPorTokenAprobacion($token);
+    }
+
+    /**
+     * Aprobación pública por el cliente (desde el correo). Solo si está en borrador.
+     * @return array{numero:string}
+     * @throws \RuntimeException
+     */
+    public function aprobarPorTokenCliente(string $token, string $comentario, string $ip): array
+    {
+        $prof = $this->getAprobacionPorToken($token);
+        if (!$prof) {
+            throw new \RuntimeException('El enlace no es válido o la proforma ya no está disponible.');
+        }
+        if ($prof['estado'] !== 'borrador') {
+            $mapa = [
+                'aprobada'   => 'Esta proforma ya fue aprobada.',
+                'rechazada'  => 'Esta proforma fue rechazada y no puede aprobarse.',
+                'anulada'    => 'Esta proforma está anulada.',
+                'convertida' => 'Esta proforma ya fue facturada.',
+            ];
+            throw new \RuntimeException($mapa[$prof['estado']] ?? 'Esta proforma ya no puede aprobarse.');
+        }
+
+        $id        = (int) $prof['id'];
+        $idEmpresa = (int) $prof['id_empresa'];
+        $comentario = trim(mb_substr($comentario, 0, 1000));
+
+        $this->repository->registrarAprobacionCliente($id, $comentario, $ip);
+
+        try {
+            $this->log->registrar(
+                0, $idEmpresa, 'aprobar_cliente', 'proformas_cabecera', $id,
+                ['estado' => 'borrador'],
+                ['estado' => 'aprobada', 'comentario' => $comentario, 'ip' => $ip]
+            );
+        } catch (\Throwable $e) { /* log no crítico */ }
+
+        $numero = ($prof['establecimiento'] ?? '') . '-' . ($prof['punto_emision'] ?? '') . '-'
+                . str_pad((string) ($prof['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
+        return ['numero' => $numero];
+    }
+
     private function guardarDetalles(int $idProforma, array $detalles): void
     {
         foreach ($detalles as $det) {

@@ -405,12 +405,31 @@ class ProformasController extends BaseModuloController
                     . str_pad((string) ($cabecera['secuencial'] ?? ''), 9, '0', STR_PAD_LEFT);
 
             $empresa       = (new Empresa())->getPorId($idEmpresa) ?? [];
-            $empresaNombre = $empresa['razon_social'] ?? ($empresa['nombre_comercial'] ?? 'CaMaGaRe');
+            $empresaNombre = $empresa['nombre_comercial'] ?? ($empresa['nombre'] ?? 'CaMaGaRe');
 
-            $asunto = "Proforma {$numero}";
-            $cuerpo = '<p>Estimado(a) ' . htmlspecialchars($cabecera['cliente_nombre'] ?? 'cliente') . ',</p>'
-                    . '<p>Adjuntamos la proforma <strong>' . htmlspecialchars($numero) . '</strong> para su revisión.</p>'
-                    . '<p>Saludos cordiales,<br>' . htmlspecialchars((string) $empresaNombre) . '</p>';
+            // Token + enlace absoluto para aprobar desde el correo (solo si está pendiente).
+            $urlAprobar   = '';
+            $mostrarBoton = (($cabecera['estado'] ?? '') === 'borrador');
+            if ($mostrarBoton) {
+                try {
+                    $token   = $this->service->obtenerTokenAprobacion($id, $idEmpresa);
+                    $host    = $_SERVER['HTTP_HOST'] ?? '';
+                    $scheme  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                    $basePub = rtrim(defined('BASE_URL') ? BASE_URL : '', '/');
+                    $urlAprobar = ($host !== '' ? $scheme . '://' . $host : '') . $basePub . '/aprobar-proforma/' . $token;
+                } catch (\Throwable $e) {
+                    $mostrarBoton = false;
+                }
+            }
+
+            $asunto = "Proforma {$numero} · " . $empresaNombre;
+            $cuerpo = $this->construirCorreoProforma(
+                (string) ($cabecera['cliente_nombre'] ?? 'cliente'),
+                $numero,
+                (float) ($cabecera['importe_total'] ?? 0),
+                (string) $empresaNombre,
+                ($mostrarBoton ? $urlAprobar : '')
+            );
 
             $emailSvc = new \App\Services\EnvioDocumentosSRIService();
             $enviado  = $emailSvc->enviarPdfSimple(
@@ -635,6 +654,51 @@ class ProformasController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => 'Error inesperado: ' . $e->getMessage()]);
         }
         exit;
+    }
+
+    /**
+     * Construye el cuerpo HTML del correo de la proforma (diseño simple, inline styles
+     * para compatibilidad con clientes de correo). Incluye el botón de aprobación si se
+     * pasa una URL, y la invitación a responder el correo.
+     */
+    private function construirCorreoProforma(string $cliente, string $numero, float $total, string $empresaNombre, string $urlAprobar): string
+    {
+        $e   = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        $tot = '$' . number_format($total, 2, '.', ',');
+
+        $botonHtml = '';
+        if ($urlAprobar !== '') {
+            $botonHtml =
+                '<tr><td style="padding:6px 0 2px;">'
+              . '<a href="' . $e($urlAprobar) . '" target="_blank" '
+              . 'style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;'
+              . 'font-weight:700;font-size:15px;padding:13px 26px;border-radius:8px;">✓ Aprobar esta proforma</a>'
+              . '</td></tr>'
+              . '<tr><td style="padding:8px 0 0;color:#64748b;font-size:12px;">'
+              . 'También puede aprobarla escribiendo un comentario en el enlace anterior.'
+              . '</td></tr>';
+        }
+
+        return
+            '<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1e293b;max-width:560px;">'
+          . '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" '
+          . 'style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">'
+          . '<tr><td style="background:#1f4e79;color:#ffffff;padding:18px 22px;font-size:18px;font-weight:700;">'
+          . $e($empresaNombre) . '</td></tr>'
+          . '<tr><td style="padding:22px;">'
+          . '<p style="margin:0 0 12px;font-size:15px;">Estimado(a) <strong>' . $e($cliente) . '</strong>,</p>'
+          . '<p style="margin:0 0 12px;font-size:14px;line-height:1.5;">Adjuntamos en PDF la proforma '
+          . '<strong>N.º ' . $e($numero) . '</strong> por un total de <strong>' . $e($tot) . '</strong> para su revisión.</p>'
+          . '<p style="margin:0 0 16px;font-size:14px;line-height:1.5;">Si está de acuerdo, puede '
+          . '<strong>responder a este correo</strong> para confirmarnos'
+          . ($urlAprobar !== '' ? ', o aprobarla directamente con el botón:' : '.') . '</p>'
+          . '<table role="presentation" cellpadding="0" cellspacing="0">' . $botonHtml . '</table>'
+          . '<p style="margin:18px 0 0;font-size:13px;color:#475569;">Quedamos atentos a cualquier consulta.<br>'
+          . 'Saludos cordiales,<br><strong>' . $e($empresaNombre) . '</strong></p>'
+          . '</td></tr>'
+          . '<tr><td style="background:#f8fafc;padding:12px 22px;color:#94a3b8;font-size:11px;">'
+          . 'Documento no tributario · Proforma sin validez de factura.</td></tr>'
+          . '</table></div>';
     }
 
     /**

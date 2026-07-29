@@ -166,15 +166,31 @@ class VideollamadaRules
         }
     }
 
-    /** Solo el anfitrión o un usuario con acceso total pueden iniciar la sala. */
-    public function validarPuedeIniciar(array $sala, int $idUsuario, bool $accesoTotal): void
+    /**
+     * Quién puede entrar a la sala.
+     *
+     * Se distingue ENTRAR de INICIAR:
+     *   - El anfitrión (o alguien con acceso total) puede hacer ambas cosas.
+     *   - Un participante invitado puede entrar cuando la reunión ya está en
+     *     curso, pero no puede adelantarla si todavía está programada.
+     *   - Quien no fue invitado no entra, aunque conozca el enlace.
+     */
+    public function validarPuedeEntrar(array $sala, int $idUsuario, bool $accesoTotal, bool $esParticipante): void
     {
         if ($sala['estado'] === 'finalizada' || $sala['estado'] === 'cancelada') {
             throw new Exception('Esta reunión ya no está disponible.');
         }
 
-        if (!$accesoTotal && (int) $sala['id_anfitrion'] !== $idUsuario) {
-            throw new Exception('Solo el anfitrión puede iniciar esta reunión.');
+        if ($accesoTotal || (int) $sala['id_anfitrion'] === $idUsuario) {
+            return;
+        }
+
+        if (!$esParticipante) {
+            throw new Exception('No está invitado a esta reunión.');
+        }
+
+        if (($sala['estado'] ?? '') === 'programada') {
+            throw new Exception('La reunión todavía no ha comenzado. El anfitrión debe iniciarla.');
         }
     }
 }

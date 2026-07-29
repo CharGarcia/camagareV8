@@ -110,6 +110,9 @@ class VideollamadasController extends BaseModuloController
             'ordenDir'    => $ordenDir,
             'vistaConfig' => $prefsVista,
             'rutaModulo'  => $this->getRutaModulo(),
+            // Aviso de un intento de entrada rechazado (p. ej. abrir el enlace de
+            // una reunión que aún no empieza). Se consume al mostrarlo.
+            'avisoEntrada' => $this->consumirAvisoEntrada(),
             'usuarios'    => $this->repository->getUsuariosEmpresa($idEmpresa),
             'maxMesh'     => VideollamadaRules::MAX_PARTICIPANTES_MESH,
             'idUsuario'   => (int) $_SESSION['id_usuario'],
@@ -182,6 +185,15 @@ class VideollamadasController extends BaseModuloController
         $sala = $this->service->getPorId($id, $idEmpresa);
         if ($sala === null) {
             $this->json(['ok' => false, 'mensaje' => 'La reunión no existe o no pertenece a esta empresa.']);
+        }
+
+        // El token de un invitado es su llave de entrada: solo baja al navegador
+        // de quien puede editar la reunión, que es quien necesita compartirlo.
+        if (empty($this->getPermisos()['actualizar'])) {
+            foreach ($sala['participantes'] as &$p) {
+                unset($p['token_acceso']);
+            }
+            unset($p);
         }
 
         $this->json(['ok' => true, 'data' => $sala]);
@@ -385,16 +397,44 @@ class VideollamadasController extends BaseModuloController
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
-        $idSala    = (int) ($_SESSION[self::SESSION_SALA] ?? 0);
+        $urlModulo = rtrim(BASE_URL ?? '', '/') . '/' . $this->getRutaModulo();
+
+        // La sala llega por su código en la URL (enlace compartible) o, si no
+        // viene, por la que quedó fijada en la sesión al pulsar "entrar".
+        $codigo = trim((string) ($_GET['codigo'] ?? ''));
+        $idSala = (int) ($_SESSION[self::SESSION_SALA] ?? 0);
+
+        if ($codigo !== '') {
+            $porCodigo = $this->repository->getPorCodigo($codigo);
+
+            // El código es único en todo el sistema, así que hay que comprobar
+            // que la sala sea de la empresa activa: si no, el enlace de una
+            // empresa abriría la sala de otra.
+            if ($porCodigo === null || (int) $porCodigo['id_empresa'] !== $idEmpresa) {
+                $this->redirect($urlModulo);
+            }
+            $idSala = (int) $porCodigo['id'];
+            $_SESSION[self::SESSION_SALA] = $idSala;
+        }
 
         if ($idSala <= 0) {
-            $this->redirect(rtrim(BASE_URL ?? '', '/') . '/' . $this->getRutaModulo());
+            $this->redirect($urlModulo);
         }
 
         $sala = $this->service->getPorId($idSala, $idEmpresa);
         if ($sala === null) {
             unset($_SESSION[self::SESSION_SALA]);
-            $this->redirect(rtrim(BASE_URL ?? '', '/') . '/' . $this->getRutaModulo());
+            $this->redirect($urlModulo);
+        }
+
+        // Quien llega por el enlace no pasó por "entrar", así que aquí es donde
+        // se comprueba que tenga derecho a estar en esta reunión.
+        try {
+            $esParticipante = $this->repository->getIdParticipante($idSala, $idEmpresa, $idUsuario) !== null;
+            (new VideollamadaRules())->validarPuedeEntrar($sala, $idUsuario, $this->tieneAccesoTotal(), $esParticipante);
+        } catch (\Throwable $e) {
+            $_SESSION['vc_mensaje'] = $e->getMessage();
+            $this->redirect($urlModulo);
         }
 
         $this->view('modulos/videollamadas/sala', [
@@ -578,6 +618,14 @@ class VideollamadasController extends BaseModuloController
     private function esSuperadmin(): bool
     {
         return (int) ($_SESSION['nivel'] ?? 0) >= 3;
+    }
+
+    /** Lee y borra el aviso que dejó un intento de entrada rechazado. */
+    private function consumirAvisoEntrada(): string
+    {
+        $aviso = (string) ($_SESSION['vc_mensaje'] ?? '');
+        unset($_SESSION['vc_mensaje']);
+        return $aviso;
     }
 
     /**

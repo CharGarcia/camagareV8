@@ -1091,7 +1091,7 @@ $rutaAjax = $base . '/' . $rutaModulo;
                 swalWarning('Esta empresa no tiene WhatsApp Business (Meta) configurado. Configúralo en Empresa → WhatsApp.');
                 return;
             }
-            const plantillas = (json.plantillas || []).filter(p => p.nombre !== 'link_pago_payphone');
+            const plantillas = (json.plantillas || []).filter(p => !['link_pago_payphone', 'link_pago_nuvei'].includes(p.nombre));
             if (!plantillas.length) {
                 swalWarning('No hay una plantilla de WhatsApp aprobada para enviar facturas. Configúrala en Plantillas de WhatsApp.');
                 return;

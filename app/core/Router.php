@@ -121,6 +121,14 @@ class Router
                 }
             }
 
+            // /modulos/videollamadas/sala/{codigo} → abre una sala concreta por su
+            // código público. Sin el código, la sala solo se resolvería por la
+            // sesión, y entonces el enlace no serviría para compartir.
+            if (count($parts) >= 4 && ($parts[0] ?? '') === 'modulos'
+                && ($parts[1] ?? '') === 'videollamadas' && ($parts[2] ?? '') === 'sala') {
+                $_GET['codigo'] = $parts[3];
+            }
+
             // /aceptar-documentos/{token}[/aceptar] → aceptación pública de los
             // documentos legales (acuerdo de datos + contrato de uso), sin auth
             if (($parts[0] ?? '') === 'aceptar-documentos') {
@@ -151,6 +159,13 @@ class Router
                 $_GET['token'] = $parts[1] ?? ($_GET['token'] ?? '');
                 $sub           = $parts[2] ?? '';
                 $action        = in_array($sub, ['aprobar', 'rechazar'], true) ? $sub : 'index';
+            }
+
+            // /aprobar-proforma/{token}[/aprobar] → aprobación pública de la proforma por el cliente (sin auth)
+            if (($parts[0] ?? '') === 'aprobar-proforma') {
+                $controller    = 'ProformaAprobacion';
+                $_GET['token'] = $parts[1] ?? ($_GET['token'] ?? '');
+                $action        = (($parts[2] ?? '') === 'aprobar') ? 'aprobar' : 'index';
             }
 
             // /factura-express/* → formulario público QR (sin auth)

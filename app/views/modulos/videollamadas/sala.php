@@ -235,7 +235,9 @@ $urlModulo = $base . '/' . $rutaModulo;
     window.VCS_NOMBRE  = '<?= htmlspecialchars($nombreUsuario, ENT_QUOTES) ?>';
 
     function VCS_copiarEnlace() {
-        navigator.clipboard.writeText(window.VCS_BASE + '/sala').catch(function () {});
+        // Con el código: sin él el enlace no identifica ninguna sala.
+        var url = window.VCS_BASE + '/sala/' + encodeURIComponent(window.VCS_CODIGO);
+        navigator.clipboard.writeText(url).catch(function () {});
     }
 
     /* El cartel de espera se oculta en cuanto entra alguien más a la rejilla. */

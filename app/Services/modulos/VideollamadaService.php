@@ -285,25 +285,31 @@ class VideollamadaService
             throw new \Exception('La reunión no existe o no pertenece a esta empresa.');
         }
 
-        $this->rules->validarPuedeIniciar($sala, $idUsuario, $accesoTotal);
+        $esParticipante = $this->repository->getIdParticipante($id, $idEmpresa, $idUsuario) !== null;
+        $this->rules->validarPuedeEntrar($sala, $idUsuario, $accesoTotal, $esParticipante);
 
-        if ($sala['estado'] !== 'en_curso') {
+        // Solo quien manda en la sala la pone en curso. Un participante que
+        // entra a una reunión ya empezada no cambia su estado ni deja el evento
+        // de "iniciada": únicamente se suma.
+        $mandaSala = $accesoTotal || (int) $sala['id_anfitrion'] === $idUsuario;
+
+        if ($mandaSala && $sala['estado'] !== 'en_curso') {
             $this->repository->cambiarEstado($id, $idEmpresa, 'en_curso', $idUsuario);
+            $this->repository->registrarEvento($idEmpresa, $id, null, 'sala_iniciada', null, $idUsuario);
+
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresa,
+                'INICIAR',
+                'videollamadas_salas',
+                $id,
+                ['estado' => $sala['estado']],
+                ['estado' => 'en_curso']
+            );
+
+            $sala['estado'] = 'en_curso';
         }
 
-        $this->repository->registrarEvento($idEmpresa, $id, null, 'sala_iniciada', null, $idUsuario);
-
-        $this->logService->registrar(
-            $idUsuario,
-            $idEmpresa,
-            'INICIAR',
-            'videollamadas_salas',
-            $id,
-            ['estado' => $sala['estado']],
-            ['estado' => 'en_curso']
-        );
-
-        $sala['estado'] = 'en_curso';
         return $sala;
     }
 
@@ -381,9 +387,11 @@ class VideollamadaService
             }
 
             $esInvitado = empty($p['id_usuario']);
+            // El invitado externo entra con su token; el usuario del ERP, con el
+            // enlace de la sala, que lleva el código para identificarla.
             $enlace = $esInvitado && !empty($p['token_acceso'])
                 ? $base . '/videollamada-invitado?t=' . rawurlencode((string) $p['token_acceso'])
-                : $base . '/modulos/videollamadas';
+                : $base . '/modulos/videollamadas/sala/' . rawurlencode((string) $sala['codigo']);
 
             $ok = enviar_correo_invitacion_videollamada($correo, [
                 'titulo'              => $sala['titulo'],

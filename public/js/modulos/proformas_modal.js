@@ -124,6 +124,9 @@
         badge.className = 'badge d-none';
         badge.textContent = '';
 
+        // Aviso de aprobación del cliente (oculto en proforma nueva)
+        $id('pf_aprobacionCliente')?.classList.add('d-none');
+
         // Ocultar todos los botones de acción
         ['pf-btn-factura','pf-btn-pedido','pf-btn-recibo','pf-btn-duplicar','pf-vr1',
          'pf-btn-pdf','pf-btn-whatsapp','pf-btn-correo','pf-vr2',
@@ -918,6 +921,22 @@
             if (!tbodyAd.children.length) tbodyAd.appendChild(_crearFilaAdicional());
 
             _aplicarEstado(c.estado);
+
+            // Aviso si el cliente aprobó desde el correo (fecha + comentario)
+            const banner = $id('pf_aprobacionCliente');
+            const bTexto = $id('pf_aprobacionClienteTexto');
+            if (banner && bTexto) {
+                if (c.aprobacion_cliente_fecha) {
+                    const f = _fmtFechaHora(c.aprobacion_cliente_fecha);
+                    const com = (c.aprobacion_cliente_comentario || '').trim();
+                    bTexto.innerHTML = `Aprobada por el cliente el <strong>${_esc(f)}</strong>`
+                        + (com ? ` — "<em>${_esc(com)}</em>"` : '');
+                    banner.classList.remove('d-none');
+                } else {
+                    banner.classList.add('d-none');
+                }
+            }
+
             _cargarFacturas(id);
         } catch(e) {
             console.error(e);
@@ -928,6 +947,13 @@
     /* ── Helper escape HTML ──────────────────────────────────── */
     function _esc(s) {
         return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    /* ── Fecha 'YYYY-MM-DD HH:MM:SS' → 'd-m-Y H:i' ──────────────── */
+    function _fmtFechaHora(v) {
+        const s = String(v || '');
+        const m = s.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+        return m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}` : s;
     }
 
     /* ════════════════════════════════════════════════════════════

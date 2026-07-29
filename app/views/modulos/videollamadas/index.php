@@ -84,6 +84,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     </div>
 </div>
 
+<?php if (!empty($avisoEntrada)): ?>
+    <div class="alert alert-warning alert-dismissible fade show py-2 px-3 small" role="alert">
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        <?= htmlspecialchars($avisoEntrada) ?>
+        <button type="button" class="btn-close btn-sm py-2" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+    </div>
+<?php endif; ?>
+
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">
@@ -176,6 +184,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <script>
     window.VC_URL_BASE  = '<?= $urlBase ?>';
+    // Base del enlace personal de cada invitado externo (lleva su token).
+    window.VC_URL_INVITADO = '<?= $base ?>/videollamada-invitado';
     window.VC_USUARIOS  = <?= json_encode($usuarios, JSON_HEX_TAG | JSON_HEX_APOS) ?>;
     window.VC_ORDEN_COL = '<?= $ordenCol ?>';
     window.VC_ORDEN_DIR = '<?= $ordenDir ?>';

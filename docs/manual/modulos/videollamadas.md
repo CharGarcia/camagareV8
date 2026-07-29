@@ -70,6 +70,10 @@ Cada persona recibe un correo con **su propio enlace**. Al abrirlo entra directo
 a la reunión: no crea cuenta, no instala nada, solo acepta el permiso de cámara y
 micrófono que pide el navegador.
 
+Si prefiere mandarlo por WhatsApp o por otro medio, junto a cada invitado de la
+lista hay un botón de **cadena** que copia su enlace personal. Aparece en gris
+hasta que guarde la reunión, porque el enlace se genera al guardar.
+
 Los usuarios del sistema también reciben su correo, pero con la dirección del
 módulo, porque ellos entran con su sesión normal.
 
@@ -208,8 +212,13 @@ junto a cada una.
 - **Modificar**: editar una reunión y finalizarla.
 - **Eliminar**: eliminar reuniones que no estén en curso.
 - **Acceso total**: ve las reuniones de **toda la empresa**. Sin este permiso,
-  cada usuario ve solo las reuniones que él mismo creó. Además, con acceso total
-  se puede iniciar y finalizar una reunión de la que no se es anfitrión.
+  cada usuario ve las que le incumben: las que creó, las que anfitriona y
+  **aquellas a las que fue invitado**. Además, con acceso total se puede iniciar
+  y finalizar una reunión de la que no se es anfitrión.
+
+**Quién puede iniciar y quién solo entrar**: el anfitrión inicia la reunión; los
+participantes entran una vez empezada. Si alguien invitado intenta entrar antes,
+el sistema le avisa de que el anfitrión aún no la ha iniciado.
 
 El nivel 3 (superadministrador) siempre ve todo.
 

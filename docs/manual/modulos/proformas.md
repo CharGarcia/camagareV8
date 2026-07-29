@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, convertir a factura
-version: 1.0
+etiquetas: proforma, proformas, cotizacion, cotizar, presupuesto, oferta, convertir a factura, enviar por whatsapp
+version: 1.1
 orden: 15
 estado: activo
 ---
@@ -59,6 +59,21 @@ Solo se puede editar una proforma en **borrador**. Si ya está aprobada y necesi
 cambiarla, tiene dos caminos: anularla y crear una nueva, o —cuando el cambio es
 menor— convertirla a factura y corregir en la factura antes de enviarla.
 
+## Enviar la proforma por WhatsApp
+
+Desde la proforma guardada, el botón de **WhatsApp** la manda al cliente con su
+PDF adjunto. Se elige la plantilla aprobada y el número (viene precargado el de
+la ficha del cliente, con el código de país).
+
+Para esto existe la plantilla del sistema **`proforma`**, que se crea en el módulo
+de Plantillas de WhatsApp y rellena, en este orden, el **nombre del cliente**, el
+**número de la proforma** y el **valor total**. Mientras Meta no la apruebe no
+aparece en la lista. Las plantillas de enlace de pago no se ofrecen aquí: una
+proforma todavía no es un cobro.
+
+El mensaje enviado queda registrado en la conversación del cliente dentro del
+Chat de WhatsApp.
+
 ## Eliminar
 
 **Una proforma convertida no se puede eliminar.** Existe una factura que nació de
@@ -84,4 +99,6 @@ comercial.
 
 ## Historial de cambios
 
+- **1.1** — Se documenta el envío de la proforma por WhatsApp y la plantilla del
+  sistema `proforma`.
 - **1.0** — Versión inicial.

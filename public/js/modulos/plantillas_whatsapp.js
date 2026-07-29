@@ -233,6 +233,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 { id: '{{3}}', label: 'Valor Total de la Factura' }
             ]
         },
+        'proforma': {
+            nombre: 'proforma',
+            categoria: 'UTILITY',
+            cabecera: 'DOCUMENT',
+            descripcion: 'Sirve para enviar al cliente su proforma desde el módulo de Proformas, adjuntando el PDF que genera el sistema.',
+            texto: 'Estimado(a) {{1}}, adjunto enviamos la proforma número {{2}} por un valor total de {{3}}. Quedamos atentos a su confirmación.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Cliente' },
+                { id: '{{2}}', label: 'Número de Proforma' },
+                { id: '{{3}}', label: 'Valor Total' }
+            ]
+        },
         'link_pago_payphone': {
             nombre: 'link_pago_payphone',
             categoria: 'UTILITY',
@@ -244,6 +256,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 { id: '{{2}}', label: 'Monto a Pagar' },
                 { id: '{{3}}', label: 'Descripción / Referencia' },
                 { id: '{{4}}', label: 'Enlace de Pago (Payphone)' }
+            ]
+        },
+        'link_pago_nuvei': {
+            nombre: 'link_pago_nuvei',
+            categoria: 'UTILITY',
+            cabecera: 'NONE',
+            descripcion: 'Sirve para enviar al cliente un enlace de pago con tarjeta (Nuvei) para que cancele su saldo pendiente. El enlace abre la página segura de Nuvei y se renueva solo cada vez que el cliente lo abre, por eso no caduca; deja de servir apenas se registra el pago. La plantilla no lleva botón: el texto plano con la URL es suficiente porque WhatsApp la vuelve clicable automáticamente.',
+            texto: 'Estimado(a) {{1}}, tiene un saldo pendiente de pago de {{2}} correspondiente a {{3}}. Puede pagarlo de forma segura con tarjeta en el siguiente enlace: {{4}}. El enlace es personal y se desactiva apenas se registre el pago.',
+            variables: [
+                { id: '{{1}}', label: 'Nombre del Cliente' },
+                { id: '{{2}}', label: 'Monto a Pagar' },
+                { id: '{{3}}', label: 'Descripción / Referencia' },
+                { id: '{{4}}', label: 'Enlace de Pago (Nuvei)' }
             ]
         },
         'cuenta_por_cobrar': {

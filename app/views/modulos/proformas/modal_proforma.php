@@ -151,6 +151,12 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                     <!-- ── TAB PROFORMA ───────────────────────── -->
                     <div class="tab-pane fade show active" id="pf-tab-proforma" role="tabpanel">
 
+                        <!-- Aviso de aprobación del cliente (desde el correo) -->
+                        <div id="pf_aprobacionCliente" class="alert alert-success d-none mb-0 rounded-0 py-2 px-3 small border-0">
+                            <i class="bi bi-check-circle-fill me-1"></i>
+                            <span id="pf_aprobacionClienteTexto"></span>
+                        </div>
+
                         <!-- Cabecera -->
                         <div class="p-3 bg-white border-bottom">
                             <div class="row g-2">

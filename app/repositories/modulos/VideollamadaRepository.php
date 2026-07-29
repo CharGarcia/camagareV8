@@ -64,9 +64,28 @@ class VideollamadaRepository extends BaseRepository
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
 
-        $where = $this->getBaseWhere($idEmpresa, 's', $idUsuarioFiltro);
+        // Sin acceso total, el usuario ve las reuniones que le incumben: las que
+        // creó, las que anfitriona y AQUELLAS A LAS QUE FUE INVITADO. Filtrar
+        // solo por created_by (el criterio habitual de "registros propios")
+        // dejaría a los participantes sin forma de llegar a su propia reunión.
+        //
+        // Los tres placeholders llevan nombre distinto a propósito: sin
+        // EMULATE_PREPARES, repetir el mismo nombre en un SQL falla al ejecutar.
+        $where = $this->getBaseWhere($idEmpresa, 's');
         if ($idUsuarioFiltro !== null) {
-            $params[':id_usuario_filtro'] = $idUsuarioFiltro;
+            $where .= " AND (
+                            s.created_by = :usr_creador
+                            OR s.id_anfitrion = :usr_anfitrion
+                            OR EXISTS (
+                                SELECT 1 FROM videollamadas_participantes p
+                                WHERE p.id_sala = s.id
+                                  AND p.id_usuario = :usr_participante
+                                  AND p.eliminado = FALSE
+                            )
+                        )";
+            $params[':usr_creador']      = $idUsuarioFiltro;
+            $params[':usr_anfitrion']    = $idUsuarioFiltro;
+            $params[':usr_participante'] = $idUsuarioFiltro;
         }
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);

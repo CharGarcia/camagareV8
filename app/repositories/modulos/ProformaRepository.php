@@ -123,6 +123,45 @@ class ProformaRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /** Proforma por su token de aprobación pública (con datos del cliente). */
+    public function getPorTokenAprobacion(string $token): ?array
+    {
+        $sql = "SELECT p.*,
+                       c.nombre         AS cliente_nombre,
+                       c.identificacion AS cliente_ruc,
+                       c.email          AS cliente_email
+                FROM proformas_cabecera p
+                INNER JOIN clientes c ON p.id_cliente = c.id
+                WHERE p.aprobacion_token = ? AND p.eliminado = FALSE
+                LIMIT 1";
+        $row = $this->query($sql, [$token])->fetch();
+        return $row ?: null;
+    }
+
+    /** Fija (o reutiliza) el token de aprobación pública de una proforma. */
+    public function setTokenAprobacion(int $id, string $token): void
+    {
+        $this->query(
+            "UPDATE proformas_cabecera SET aprobacion_token = ?, updated_at = NOW() WHERE id = ?",
+            [$token, $id]
+        );
+    }
+
+    /** Registra la aprobación del cliente: estado = aprobada + comentario/IP/fecha. */
+    public function registrarAprobacionCliente(int $id, string $comentario, string $ip): void
+    {
+        $this->query(
+            "UPDATE proformas_cabecera
+                SET estado = 'aprobada',
+                    aprobacion_cliente_comentario = ?,
+                    aprobacion_cliente_ip = ?,
+                    aprobacion_cliente_fecha = NOW(),
+                    updated_at = NOW()
+              WHERE id = ?",
+            [($comentario !== '' ? $comentario : null), $ip, $id]
+        );
+    }
+
     public function existeSecuencial(int $idEmpresa, int $idEstablecimiento, int $idPunto, string $secuencial, ?int $excluirId = null): bool
     {
         $sql = "SELECT COUNT(*) FROM proformas_cabecera
