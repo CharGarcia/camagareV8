@@ -10,8 +10,8 @@
  *   - 1.617 manejadores inline (onclick/onchange) en las vistas ⇒ la CSP necesita
  *     'unsafe-inline' en script-src. Quitarlo exige refactorizar las vistas.
  *   - Cámara y GPS se usan en clientes, proveedores, puntos de servicio,
- *     consignaciones, empleados y la asistencia pública ⇒ Permissions-Policy
- *     debe permitirlos en el propio origen.
+ *     consignaciones, empleados y la asistencia pública; el micrófono, en las
+ *     videollamadas ⇒ Permissions-Policy debe permitirlos en el propio origen.
  *   - El portal de reservas (/reservas/{slug}) se entrega como <iframe> para que
  *     el cliente lo incruste en SU web ⇒ es la única ruta que no se protege
  *     contra framing (ver CONTROLADORES_EMBEBIBLES).
@@ -77,9 +77,15 @@ class CabecerasSeguridad
         // No filtrar la URL completa (lleva ids de documento) a sitios externos.
         header('Referrer-Policy: strict-origin-when-cross-origin');
 
-        // Cámara y ubicación sí (asistencia, geolocalización de entregas);
-        // micrófono, pagos por API del navegador y sensores, no.
-        header('Permissions-Policy: camera=(self), geolocation=(self), microphone=(), payment=(), usb=(), magnetometer=(), accelerometer=()');
+        // Cámara, micrófono y ubicación sí, solo en el propio origen (asistencia,
+        // geolocalización de entregas y las videollamadas); pagos por API del
+        // navegador y sensores, no.
+        //
+        // El micrófono estuvo bloqueado hasta que llegó el módulo de
+        // videollamadas. Ojo con volver a cerrarlo: esta cabecera manda sobre el
+        // permiso que conceda el usuario, así que el navegador denegaría el
+        // acceso aunque la persona diga que sí, y el error no menciona la causa.
+        header('Permissions-Policy: camera=(self), microphone=(self), geolocation=(self), payment=(), usb=(), magnetometer=(), accelerometer=()');
 
         // Clickjacking: nadie puede meter el sistema en un iframe ajeno.
         $embebible = in_array($controlador, self::CONTROLADORES_EMBEBIBLES, true);
