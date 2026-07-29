@@ -1843,15 +1843,15 @@ class MigracionMysqlService
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
         $oldFacCli   = $mysql->prepare("SELECT id_cliente FROM encabezado_factura WHERE id_encabezado_factura = :id LIMIT 1");
         $mapIngreso  = $this->mapaDe($pg, $idEmpresa, 'ingresos'); // para reconciliar al re-correr
-        $updCab      = $pg->prepare("UPDATE ingresos_cabecera SET fecha_emision = ?, id_cliente = ?, monto_total = ?, observaciones = ?, estado = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $updCab      = $pg->prepare("UPDATE ingresos_cabecera SET fecha_emision = ?, id_cliente = ?, monto_total = ?, observaciones = ?, estado = ?, recibo_de = ?, id_recibo_cliente = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet      = $pg->prepare("DELETE FROM ingresos_detalle WHERE id_ingreso = ?");
         $delPag      = $pg->prepare("DELETE FROM ingresos_pagos WHERE id_ingreso = ?");
 
-        $insCab  = $pg->prepare("INSERT INTO ingresos_cabecera (id_empresa, id_usuario, fecha_emision, secuencial, numero_ingreso, tipo_ingreso, id_cliente, monto_total, observaciones, estado, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, 'FACTURA_VENTA', ?, ?, ?, ?, ?, ?) RETURNING id");
+        $insCab  = $pg->prepare("INSERT INTO ingresos_cabecera (id_empresa, id_usuario, fecha_emision, secuencial, numero_ingreso, tipo_ingreso, id_cliente, monto_total, observaciones, estado, recibo_de, id_recibo_cliente, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, 'FACTURA_VENTA', ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO ingresos_detalle (id_ingreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_cobrado) VALUES (?, 'FACTURA', ?, ?, ?, ?, ?)");
         $insPago = $pg->prepare("INSERT INTO ingresos_pagos (id_ingreso, id_forma_cobro, monto, fecha_cobro, numero_cheque) VALUES (?, ?, ?, ?, ?)");
 
-        $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado
+        $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro
                   FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND tipo_ing_egr = 'INGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
@@ -1881,18 +1881,28 @@ class MigracionMysqlService
                     }
                 }
 
+                // "Recibido de": texto libre siempre presente en el viejo (nombre_ing_egr).
+                // Es la fuente que el listado prioriza (COALESCE(recibo_de, cliente.nombre, '—')).
+                $reciboDe = self::nz($ie['nombre_ing_egr']);
+                // Fallback de cliente por id_cli_pro (referencia directa del ingreso viejo) cuando
+                // el ingreso no apunta a una factura. El "recibo de" enlaza al mismo cliente resuelto.
+                if (!$idCliente && (int) $ie['id_cli_pro'] > 0) {
+                    $idCliente = $this->resolverOCrearCliente($cliPorIdent, $mapCliente, (int) $ie['id_cli_pro'], $idEmpresa, $idUsuario, $mysql, $pg) ?: null;
+                }
+                $idReciboCli = $idCliente;
+
                 $fe  = substr((string) $ie['fecha_ing_egr'], 0, 10);
                 $amb = $this->ambienteEmpresa($pg, $idEmpresa);
                 // Igual que egresos: los ANULADOS del viejo se marcan 'anulado' para no contar como cobro.
                 $estado = (stripos((string) $ie['estado'], 'anul') !== false) ? 'anulado' : 'registrado';
                 if ($idIngExist) { // re-correr: reconciliar cabecera + reconstruir detalle/pagos
                     $idIng = (int) $idIngExist;
-                    $updCab->execute([$fe, $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $amb, $idUsuario, $idIng]);
+                    $updCab->execute([$fe, $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $reciboDe, $idReciboCli, $amb, $idUsuario, $idIng]);
                     $delDet->execute([$idIng]);
                     $delPag->execute([$idIng]);
                     $res['ya_migrados']++;
                 } else {
-                    $insCab->execute([$idEmpresa, $idUsuario, $fe, $sec, (string) $ie['numero_ing_egr'], $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $amb, $idUsuario]);
+                    $insCab->execute([$idEmpresa, $idUsuario, $fe, $sec, (string) $ie['numero_ing_egr'], $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $reciboDe, $idReciboCli, $amb, $idUsuario]);
                     $idIng = (int) $insCab->fetchColumn();
                     $res['migrados']++;
                 }
@@ -1956,15 +1966,15 @@ class MigracionMysqlService
         $provPorIdent = $this->proveedoresPorIdentificacion($pg, $idEmpresa);
         $oldCompProv = $mysql->prepare("SELECT id_proveedor FROM encabezado_compra WHERE codigo_documento = :cd LIMIT 1");
         $mapEgreso   = $this->mapaDe($pg, $idEmpresa, 'egresos'); // para reconciliar al re-correr
-        $updCab      = $pg->prepare("UPDATE egresos_cabecera SET fecha_emision = ?, id_proveedor = ?, monto_total = ?, observaciones = ?, estado = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $updCab      = $pg->prepare("UPDATE egresos_cabecera SET fecha_emision = ?, id_proveedor = ?, monto_total = ?, observaciones = ?, estado = ?, beneficiario_nombre = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet      = $pg->prepare("DELETE FROM egresos_detalle WHERE id_egreso = ?");
         $delPag      = $pg->prepare("DELETE FROM egresos_pagos WHERE id_egreso = ?");
 
-        $insCab  = $pg->prepare("INSERT INTO egresos_cabecera (id_empresa, fecha_emision, numero_egreso, secuencial, tipo_egreso, tipo_sujeto, id_proveedor, monto_total, observaciones, estado, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, 'COMPRA', 'PROVEEDOR', ?, ?, ?, ?, ?, ?) RETURNING id");
+        $insCab  = $pg->prepare("INSERT INTO egresos_cabecera (id_empresa, fecha_emision, numero_egreso, secuencial, tipo_egreso, tipo_sujeto, id_proveedor, monto_total, observaciones, estado, beneficiario_nombre, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, 'COMPRA', 'PROVEEDOR', ?, ?, ?, ?, ?, ?, ?) RETURNING id");
         $insDet  = $pg->prepare("INSERT INTO egresos_detalle (id_egreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_pagado) VALUES (?, 'COMPRA', ?, ?, ?, ?, ?)");
         $insPago = $pg->prepare("INSERT INTO egresos_pagos (id_egreso, id_forma_pago, monto, fecha_cobro, numero_cheque) VALUES (?, ?, ?, ?, ?)");
 
-        $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado
+        $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro
                   FROM ingresos_egresos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base) . " AND tipo_ing_egr = 'EGRESO'" . $this->clausulaFecha('fecha_ing_egr', $desde, $hasta, $mysql) . " ORDER BY id_ing_egr";
         if ($limite > 0) { $sql .= " LIMIT " . (int) $limite; }
         $stmt = $mysql->query($sql);
@@ -1993,6 +2003,14 @@ class MigracionMysqlService
                         if ($idProv) { break; }
                     }
                 }
+                // Fallback: proveedor directo del egreso viejo (id_cli_pro apunta a proveedores en EGRESO)
+                // cuando el egreso no viene de una compra (otros conceptos).
+                if (!$idProv && (int) $ie['id_cli_pro'] > 0) {
+                    $idProv = $this->resolverOCrearProveedor($provPorIdent, $mapProv, (int) $ie['id_cli_pro'], $idEmpresa, $idUsuario, $mysql, $pg) ?: null;
+                }
+                // "Pagado a" de texto libre: siempre presente en el viejo (nombre_ing_egr). Se muestra en el
+                // listado vía COALESCE(proveedor, empleado, beneficiario_nombre, 'N/A') cuando no hay proveedor.
+                $benef = self::nz($ie['nombre_ing_egr']);
 
                 $fe  = substr((string) $ie['fecha_ing_egr'], 0, 10);
                 $amb = $this->ambienteEmpresa($pg, $idEmpresa);
@@ -2001,12 +2019,12 @@ class MigracionMysqlService
                 $estado = (stripos((string) $ie['estado'], 'anul') !== false) ? 'anulado' : 'registrado';
                 if ($idEgrExist) { // re-correr: reconciliar cabecera + reconstruir detalle/pagos
                     $idEgr = (int) $idEgrExist;
-                    $updCab->execute([$fe, $idProv, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $amb, $idUsuario, $idEgr]);
+                    $updCab->execute([$fe, $idProv, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $benef, $amb, $idUsuario, $idEgr]);
                     $delDet->execute([$idEgr]);
                     $delPag->execute([$idEgr]);
                     $res['ya_migrados']++;
                 } else {
-                    $insCab->execute([$idEmpresa, $fe, (string) $ie['numero_ing_egr'], $sec, $idProv, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $amb, $idUsuario]);
+                    $insCab->execute([$idEmpresa, $fe, (string) $ie['numero_ing_egr'], $sec, $idProv, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $benef, $amb, $idUsuario]);
                     $idEgr = (int) $insCab->fetchColumn();
                     $res['migrados']++;
                 }

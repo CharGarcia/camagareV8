@@ -22,6 +22,9 @@ class EgresoRepository extends BaseRepository
             }
             // Nombre a imprimir en el cheque (override del beneficiario del egreso).
             $this->db->exec("ALTER TABLE egresos_pagos ADD COLUMN IF NOT EXISTS beneficiario_cheque VARCHAR(255) NULL");
+            // Beneficiario de texto libre (egresos de otros conceptos sin proveedor/empleado;
+            // p. ej. documentos migrados). Espejo del recibo_de de ingresos.
+            $this->db->exec("ALTER TABLE egresos_cabecera ADD COLUMN IF NOT EXISTS beneficiario_nombre VARCHAR(255) NULL");
         } catch (\Exception $e) {
             // Silenciar en caso de no poseer permisos DDL
         }
@@ -43,7 +46,7 @@ class EgresoRepository extends BaseRepository
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
-            $where .= " AND (e.numero_egreso ILIKE :buscar OR p.razon_social ILIKE :buscar OR emp.nombres_apellidos ILIKE :buscar OR e.observaciones ILIKE :buscar)";
+            $where .= " AND (e.numero_egreso ILIKE :buscar OR p.razon_social ILIKE :buscar OR emp.nombres_apellidos ILIKE :buscar OR e.beneficiario_nombre ILIKE :buscar OR e.observaciones ILIKE :buscar)";
             $params[':buscar'] = '%' . $parsed['texto_libre'] . '%';
         }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
@@ -73,12 +76,12 @@ class EgresoRepository extends BaseRepository
         $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
 
         $ordenExpr = match($ordenCol) {
-            'sujeto_nombre' => 'COALESCE(p.razon_social, emp.nombres_apellidos, \'OTRO\')',
+            'sujeto_nombre' => 'COALESCE(p.razon_social, emp.nombres_apellidos, e.beneficiario_nombre, \'OTRO\')',
             default         => "e.$ordenCol",
         };
 
         $sql = "SELECT e.*,
-                       COALESCE(p.razon_social, emp.nombres_apellidos, 'N/A') AS sujeto_nombre,
+                       COALESCE(p.razon_social, emp.nombres_apellidos, e.beneficiario_nombre, 'N/A') AS sujeto_nombre,
                        COALESCE(p.identificacion, emp.identificacion, '') AS sujeto_ruc,
                        u.nombre AS usuario_nombre,
                        ec.nombre AS concepto_nombre
@@ -99,7 +102,7 @@ class EgresoRepository extends BaseRepository
     public function getPorId(int $id, int $idEmpresa): ?array
     {
         $sql = "SELECT e.*,
-                       COALESCE(p.razon_social, emp.nombres_apellidos, 'N/A') AS sujeto_nombre,
+                       COALESCE(p.razon_social, emp.nombres_apellidos, e.beneficiario_nombre, 'N/A') AS sujeto_nombre,
                        COALESCE(p.identificacion, emp.identificacion, '') AS sujeto_ruc,
                        COALESCE(p.email, emp.email) AS sujeto_email,
                        u.nombre AS usuario_nombre,
