@@ -34,6 +34,11 @@ $estadoColor = ['valida' => 'success', 'sospechosa' => 'warning', 'anulada' => '
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-list-check me-2 text-primary"></i> <?= htmlspecialchars($titulo) ?></h5>
+    <?php if (!empty($perm['actualizar'])): ?>
+    <button type="button" class="btn btn-primary btn-sm" onclick="abrirMarcacionManual()">
+        <i class="bi bi-plus-lg me-1"></i>Registrar marcación
+    </button>
+    <?php endif; ?>
 </div>
 
 <div class="card cmg-table-card border-0 shadow-sm rounded-3">
@@ -140,6 +145,59 @@ $estadoColor = ['valida' => 'success', 'sospechosa' => 'warning', 'anulada' => '
     </div>
 </div>
 
+<?php if (!empty($perm['actualizar'])): ?>
+<!-- Modal: registro manual de marcación (p. ej. la salida que faltó) -->
+<div class="modal fade" id="modalMarcManual" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light py-2">
+                <h6 class="modal-title fw-bold"><i class="bi bi-pencil-square text-primary me-2"></i>Registrar marcación</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3">Registra una marcación que no se hizo (por ejemplo, la salida que faltó). Al guardar, se recalcula la jornada del día.</p>
+                <div class="mb-2 position-relative">
+                    <label class="form-label small fw-bold mb-1">Empleado</label>
+                    <input type="text" id="mm_empleado_texto" class="form-control form-control-sm" autocomplete="off"
+                           placeholder="Escriba nombre o cédula...">
+                    <input type="hidden" id="mm_empleado">
+                    <div id="mm_empleado_dropdown" class="list-group position-absolute w-100 shadow-sm"
+                         style="display:none;z-index:1085;max-height:220px;overflow-y:auto;"></div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-bold mb-1">Tipo</label>
+                    <select id="mm_tipo" class="form-select form-select-sm">
+                        <option value="salida">Salida</option>
+                        <option value="entrada">Entrada</option>
+                        <option value="inicio_break">Inicio break</option>
+                        <option value="fin_break">Fin break</option>
+                    </select>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold mb-1">Fecha</label>
+                        <input type="date" id="mm_fecha" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" max="<?= date('Y-m-d') ?>">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold mb-1">Hora</label>
+                        <input type="time" id="mm_hora" class="form-control form-control-sm" step="1">
+                    </div>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label small fw-bold mb-1">Observación <span class="text-muted fw-normal">(opcional)</span></label>
+                    <input type="text" id="mm_obs" class="form-control form-control-sm" maxlength="255" placeholder="Motivo de la corrección...">
+                </div>
+                <div id="mm_msg" class="mt-2"></div>
+            </div>
+            <div class="modal-footer bg-light border-top p-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i>Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm px-3" id="mmBtnGuardar" onclick="guardarMarcacionManual()"><i class="bi bi-check2-circle me-1"></i>Registrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <script>window.MARCACIONES_URL = '<?= $urlBase ?>';</script>
 <script>
     (function () {
@@ -195,5 +253,117 @@ $estadoColor = ['valida' => 'success', 'sospechosa' => 'warning', 'anulada' => '
                 currentSort = col; currentDir = dir; cargarListado(1);
             }, { col: currentSort, dir: currentDir });
         }
+
+        // ── Registro manual de marcación ────────────────────────────────────
+        let mModal = null, empleadosCargados = false, empleadosLista = [], mmTaInit = false;
+        const modalManual = () => (mModal = mModal || (typeof bootstrap !== 'undefined' ? new bootstrap.Modal(document.getElementById('modalMarcManual')) : null));
+
+        const escHtml = (s) => (s == null ? '' : String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])));
+
+        window.abrirMarcacionManual = async function () {
+            const msg = document.getElementById('mm_msg'); if (msg) msg.innerHTML = '';
+            if (!empleadosCargados) {
+                try {
+                    const resp = await fetch(`${urlBase}/datosManualAjax`);
+                    const j = await resp.json();
+                    if (!j.ok) { if (window.Swal) Swal.fire('Atención', j.error || 'No se pudieron cargar los empleados.', 'warning'); return; }
+                    empleadosLista = j.empleados || [];
+                    if (!empleadosLista.length) { if (window.Swal) Swal.fire('Atención', 'No hay empleados activos.', 'warning'); return; }
+                    empleadosCargados = true;
+                } catch (e) { if (window.Swal) Swal.fire('Error', 'Error de red al cargar empleados.', 'error'); return; }
+            }
+            // Limpiar selección previa al reabrir.
+            document.getElementById('mm_empleado').value = '';
+            document.getElementById('mm_empleado_texto').value = '';
+            document.getElementById('mm_empleado_dropdown').style.display = 'none';
+            mmInitTypeahead();
+            modalManual()?.show();
+        };
+
+        // Buscador de empleados sobre la lista ya cargada (nombre o cédula), estilo
+        // "chip": con selección activa, Backspace/Delete limpia todo de una vez.
+        function mmInitTypeahead() {
+            if (mmTaInit) return;
+            mmTaInit = true;
+            const input = document.getElementById('mm_empleado_texto');
+            const hidden = document.getElementById('mm_empleado');
+            const dd = document.getElementById('mm_empleado_dropdown');
+
+            const cerrar = () => { dd.style.display = 'none'; dd.innerHTML = ''; };
+
+            const filtrar = (q) => {
+                q = q.trim().toLowerCase();
+                const base = q === ''
+                    ? empleadosLista
+                    : empleadosLista.filter(e =>
+                        (e.nombres_apellidos || '').toLowerCase().includes(q) ||
+                        (e.identificacion || '').toLowerCase().includes(q));
+                return base.slice(0, 50); // no volcar 100+ de golpe
+            };
+
+            const pintar = (items) => {
+                if (!items.length) { dd.innerHTML = '<span class="list-group-item small text-muted py-1 px-2">Sin coincidencias</span>'; dd.style.display = 'block'; return; }
+                dd.innerHTML = items.map(e => {
+                    const label = `${e.nombres_apellidos || ''} — ${e.identificacion || ''}`;
+                    return `<a href="#" class="list-group-item list-group-item-action py-1 px-2 small" data-id="${e.id}" data-label="${escHtml(label)}">${escHtml(label)}</a>`;
+                }).join('');
+                dd.style.display = 'block';
+            };
+
+            input.addEventListener('keydown', (e) => {
+                if ((e.key === 'Backspace' || e.key === 'Delete') && hidden.value !== '') {
+                    e.preventDefault(); hidden.value = ''; input.value = ''; cerrar();
+                }
+            });
+            input.addEventListener('input', () => { hidden.value = ''; pintar(filtrar(input.value)); });
+            input.addEventListener('focus', () => { if (hidden.value === '') pintar(filtrar(input.value)); });
+            dd.addEventListener('click', (e) => {
+                const a = e.target.closest('a[data-id]');
+                if (!a) return;
+                e.preventDefault();
+                hidden.value = a.dataset.id;
+                input.value = a.dataset.label;
+                cerrar();
+            });
+            document.addEventListener('click', (e) => {
+                if (e.target !== input && !dd.contains(e.target)) cerrar();
+            });
+        }
+
+        window.guardarMarcacionManual = async function () {
+            const btn = document.getElementById('mmBtnGuardar');
+            const idEmpleado = document.getElementById('mm_empleado').value;
+            const tipo = document.getElementById('mm_tipo').value;
+            const fecha = document.getElementById('mm_fecha').value;
+            const hora = document.getElementById('mm_hora').value;
+            const obs = document.getElementById('mm_obs').value;
+
+            if (!idEmpleado) {
+                if (window.Swal) Swal.fire('Requerido', 'Busque y seleccione un empleado de la lista.', 'warning');
+                return;
+            }
+            if (!fecha || !hora) {
+                if (window.Swal) Swal.fire('Requerido', 'Complete la fecha y la hora.', 'warning');
+                return;
+            }
+            btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
+            try {
+                const fd = new FormData();
+                fd.append('id_empleado', idEmpleado); fd.append('tipo', tipo);
+                fd.append('fecha', fecha); fd.append('hora', hora); fd.append('observacion', obs);
+                const resp = await fetch(`${urlBase}/registrarManualAjax`, { method: 'POST', body: fd });
+                const j = await resp.json();
+                if (j.ok) {
+                    modalManual()?.hide();
+                    document.getElementById('mm_obs').value = '';
+                    cargarListado(window.currentPage || 1);
+                    if (window.Swal) Swal.fire({ icon: 'success', title: j.msg, timer: 1600, showConfirmButton: false });
+                } else if (window.Swal) Swal.fire('Atención', j.error || 'No se pudo registrar.', 'error');
+                else alert(j.error);
+            } catch (e) {
+                if (window.Swal) Swal.fire('Error de red', 'No se pudo conectar con el servidor.', 'error');
+            }
+            btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Registrar';
+        };
     })();
 </script>

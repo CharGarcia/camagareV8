@@ -607,9 +607,16 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
                                             <small class="text-muted d-block mb-1">Enlace personal:</small>
                                             <span id="empCredLink" class="small text-primary text-break"></span>
                                         </div>
+                                        <!-- Solo el código: para enviárselo al empleado si no puede escanear y
+                                             lo pega a mano en la app. -->
+                                        <div id="empCredCodigoWrap" class="mt-2 p-2 bg-light rounded-3 border d-none">
+                                            <small class="text-muted d-block mb-1">Código:</small>
+                                            <span id="empCredCodigo" class="small fw-bold font-monospace text-break d-block mb-2"></span>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="window.empCredCopiarCodigo()"><i class="bi bi-clipboard me-1"></i>Copiar código</button>
+                                        </div>
                                         <div class="d-flex flex-wrap gap-1 mt-3">
                                             <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.empCredGenerar()"><i class="bi bi-qr-code me-1"></i><span id="empCredBtnTxt">Generar QR</span></button>
-                                            <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="empCredBtnCopiar" onclick="window.empCredCopiar()"><i class="bi bi-clipboard me-1"></i>Copiar</button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="empCredBtnCopiar" onclick="window.empCredCopiar()"><i class="bi bi-clipboard me-1"></i>Copiar enlace</button>
                                             <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="empCredBtnImprimir" onclick="window.empCredImprimir()"><i class="bi bi-printer me-1"></i>Imprimir</button>
                                             <button type="button" class="btn btn-outline-warning btn-sm d-none" id="empCredBtnRegen" onclick="window.empCredRegenerar()"><i class="bi bi-arrow-repeat me-1"></i>Regenerar</button>
                                         </div>
@@ -744,7 +751,7 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
     const urlBase = '<?= $urlEmpMod ?>';
     const $ = (id) => document.getElementById(id);
     const swalErr = (m) => window.Swal ? Swal.fire({ icon: 'error', title: 'Error', text: m }) : alert(m);
-    let linkActual = null, nombreActual = '';
+    let linkActual = null, tokenActual = null, nombreActual = '';
     let stream = null, modelsReady = false;
 
     const empId = () => ($('emp_id') ? $('emp_id').value : '');
@@ -759,22 +766,23 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
         nombreActual = empNombre();
         fetch(`${urlBase}/credencialAjax?id=${id}`).then(r => r.json()).then(j => {
             if (!j.ok) { swalErr(j.error); return; }
-            if (j.tiene_credencial) empCredPintar(j.link); else empCredSinCred();
+            if (j.tiene_credencial) empCredPintar(j.link, j.token); else empCredSinCred();
             empRostroPintar(j.tiene_rostro);
         }).catch(() => swalErr('Error de red.'));
     };
 
     function empCredSinCred() {
-        linkActual = null;
+        linkActual = null; tokenActual = null;
         $('empCredEstado').innerHTML = '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Sin credencial</span>';
         $('empCredImg').classList.add('d-none'); $('empCredSinQr').classList.remove('d-none');
         $('empCredLinkWrap').classList.add('d-none');
+        $('empCredCodigoWrap').classList.add('d-none');
         $('empCredBtnTxt').textContent = 'Generar QR';
         ['empCredBtnCopiar','empCredBtnImprimir','empCredBtnRegen'].forEach(i => $(i).classList.add('d-none'));
     }
 
-    function empCredPintar(link) {
-        linkActual = link;
+    function empCredPintar(link, token) {
+        linkActual = link; tokenActual = token;
         $('empCredEstado').innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="bi bi-check-circle me-1"></i>Vinculada</span>';
         const img = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(link)}&size=260x260&margin=10`;
         const el = $('empCredImg'), sp = $('empCredSpinner');
@@ -786,6 +794,8 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
         $('empCredPrintNombre').textContent = nombreActual;
         $('empCredLink').textContent = link;
         $('empCredLinkWrap').classList.remove('d-none');
+        $('empCredCodigo').textContent = token || '';
+        $('empCredCodigoWrap').classList.remove('d-none');
         $('empCredBtnTxt').textContent = 'Ver QR';
         ['empCredBtnCopiar','empCredBtnImprimir','empCredBtnRegen'].forEach(i => $(i).classList.remove('d-none'));
     }
@@ -801,7 +811,7 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
         const id = empId(); if (!id) return;
         const fd = new FormData(); fd.append('id_empleado', id);
         fetch(`${urlBase}/generarCredencialAjax`, { method: 'POST', body: fd })
-            .then(r => r.json()).then(j => { if (!j.ok) { swalErr(j.error); return; } empCredPintar(j.link); })
+            .then(r => r.json()).then(j => { if (!j.ok) { swalErr(j.error); return; } empCredPintar(j.link, j.token); })
             .catch(() => swalErr('Error de red.'));
     };
 
@@ -810,7 +820,7 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
         const run = () => {
             const fd = new FormData(); fd.append('id_empleado', id);
             fetch(`${urlBase}/regenerarCredencialAjax`, { method: 'POST', body: fd })
-                .then(r => r.json()).then(j => { if (!j.ok) { swalErr(j.error); return; } empCredPintar(j.link); window.Swal && Swal.fire({ icon: 'success', title: 'QR regenerado', timer: 1200, showConfirmButton: false }); });
+                .then(r => r.json()).then(j => { if (!j.ok) { swalErr(j.error); return; } empCredPintar(j.link, j.token); window.Swal && Swal.fire({ icon: 'success', title: 'QR regenerado', timer: 1200, showConfirmButton: false }); });
         };
         if (window.Swal) Swal.fire({ icon: 'warning', title: '¿Regenerar credencial?', text: 'El QR anterior dejará de funcionar en el celular del empleado.', showCancelButton: true, confirmButtonText: 'Regenerar', cancelButtonText: 'Cancelar', reverseButtons: true }).then(r => { if (r.isConfirmed) run(); });
         else if (confirm('¿Regenerar credencial?')) run();
@@ -819,6 +829,13 @@ $urlBaseEmpShared = BASE_URL . '/modulos/empleados';
     window.empCredCopiar = function () {
         if (linkActual && navigator.clipboard) navigator.clipboard.writeText(linkActual)
             .then(() => window.Swal && Swal.fire({ icon: 'success', title: 'Copiado', timer: 1000, showConfirmButton: false }));
+    };
+
+    // Copia solo el código (sin el enlace completo) — para enviárselo al empleado si
+    // no puede escanear y lo pega a mano en el campo de la app.
+    window.empCredCopiarCodigo = function () {
+        if (tokenActual && navigator.clipboard) navigator.clipboard.writeText(tokenActual)
+            .then(() => window.Swal && Swal.fire({ icon: 'success', title: 'Código copiado', timer: 1000, showConfirmButton: false }));
     };
 
     window.empCredImprimir = function () {

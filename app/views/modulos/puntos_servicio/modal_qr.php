@@ -31,7 +31,7 @@
                 <h6 class="modal-title fw-bold"><i class="bi bi-qr-code text-primary me-2"></i>QR del punto</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body text-center p-4">
+            <div class="modal-body text-center p-3">
                 <p class="fw-bold mb-3" id="casisQrNombre"></p>
 
                 <div id="casisQrSpinner" class="py-4">
@@ -39,15 +39,23 @@
                     <div class="small text-muted mt-2">Generando QR...</div>
                 </div>
 
-                <img id="casisQrImg" src="" alt="Código QR" class="img-fluid rounded-3 border shadow-sm d-none" style="max-width:280px;">
+                <img id="casisQrImg" src="" alt="Código QR" class="img-fluid rounded-3 border shadow-sm d-none" style="width:100%;max-width:260px;height:auto;">
 
                 <div class="mt-3 p-2 bg-light rounded-3 border">
                     <small class="text-muted d-block mb-1">Contenido del QR:</small>
                     <span id="casisQrTexto" class="small text-primary text-break fw-medium"></span>
                 </div>
+
+                <!-- Solo el código: para enviárselo a un empleado que no pueda escanear y
+                     lo pegue a mano en la app. -->
+                <div class="mt-2 p-2 bg-light rounded-3 border">
+                    <small class="text-muted d-block mb-1">Código del punto:</small>
+                    <span id="casisQrCodigo" class="small fw-bold font-monospace text-break d-block mb-2"></span>
+                    <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="casisCopiarCodigo()"><i class="bi bi-clipboard me-1"></i>Copiar código</button>
+                </div>
             </div>
             <div class="modal-footer bg-light border-top p-2 justify-content-center gap-2 flex-wrap">
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="casisCopiarQr()"><i class="bi bi-clipboard me-1"></i>Copiar</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="casisCopiarQr()"><i class="bi bi-clipboard me-1"></i>Copiar enlace</button>
                 <?php if (($perm['actualizar'] ?? false)): ?>
                 <button type="button" class="btn btn-outline-warning btn-sm" onclick="casisRegenerarQr()"><i class="bi bi-arrow-repeat me-1"></i>Regenerar</button>
                 <?php endif; ?>

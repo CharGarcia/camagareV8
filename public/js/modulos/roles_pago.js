@@ -58,7 +58,29 @@
         modalNuevo()?.show();
     };
 
+    // Avisa si hay jornadas incompletas (requieren revisión) en el período: el rol
+    // tomaría horas estimadas. No bloquea — si no se puede consultar, sigue igual.
+    async function avisarJornadasIncompletas() {
+        const mes = $('rol_periodo_mes')?.value, anio = $('rol_periodo_anio')?.value;
+        if (!mes || !anio) return true;
+        try {
+            const resp = await fetch(`${BASE_URL}/modulos/jornadas/contarIncompletasAjax?mes=${mes}&anio=${anio}`);
+            const j = await resp.json();
+            if (!j.ok || !j.incompletas) return true;
+            const conf = await Swal.fire({
+                icon: 'warning', title: 'Hay jornadas por revisar',
+                html: `El período tiene <b>${j.incompletas}</b> jornada(s) incompleta(s) (requieren revisión). ` +
+                    `El rol tomaría sus horas <b>estimadas</b>. Conviene revisarlas en <b>Jornadas</b> antes de generar.`,
+                showCancelButton: true, confirmButtonText: 'Generar de todos modos', cancelButtonText: 'Revisar primero'
+            });
+            return conf.isConfirmed;
+        } catch (e) {
+            return true; // sin acceso a jornadas o error de red: no bloquear
+        }
+    }
+
     window.generarRol = async function () {
+        if (!(await avisarJornadasIncompletas())) return;
         const btn = $('btnGenerarRol');
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generando...';
         try {

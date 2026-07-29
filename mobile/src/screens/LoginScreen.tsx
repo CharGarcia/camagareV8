@@ -99,8 +99,10 @@ export default function LoginScreen() {
           {cargando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonTexto}>Ingresar</Text>}
         </TouchableOpacity>
 
-        <TouchableOpacity style={{ marginTop: 18 }} onPress={() => navigation.navigate('Asistencia')}>
-          <Text style={styles.enlaceAsistencia}>¿Vienes a marcar asistencia? Toca aquí</Text>
+        <Text style={styles.oSeparador}>— o —</Text>
+
+        <TouchableOpacity style={styles.botonAsistencia} onPress={() => navigation.navigate('Asistencia')}>
+          <Text style={styles.botonAsistenciaTexto}>Marcar asistencia</Text>
         </TouchableOpacity>
       </View>
 
@@ -180,7 +182,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   botonTexto: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  enlaceAsistencia: { color: '#666', fontSize: 13, textAlign: 'center', textDecorationLine: 'underline' },
+  oSeparador: { color: '#999', fontSize: 12, textAlign: 'center', marginTop: 18, marginBottom: 12 },
+  botonAsistencia: {
+    borderWidth: 1,
+    borderColor: '#0d6efd',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  botonAsistenciaTexto: { color: '#0d6efd', fontSize: 16, fontWeight: '600' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
   dialogo: { backgroundColor: '#fff', borderRadius: 12, padding: 20 },
   dialogoTitulo: { fontSize: 17, fontWeight: '700', marginBottom: 8 },

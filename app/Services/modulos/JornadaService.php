@@ -120,6 +120,37 @@ class JornadaService
     }
 
     /**
+     * Recalcula SOLO las jornadas incompletas (requieren revisión) de un rango.
+     * Útil tras agregar marcaciones faltantes, para refrescar en masa sin tocar
+     * las que ya estaban completas. Devuelve cuántas quedaron resueltas.
+     */
+    public function recalcularIncompletas(int $idEmpresa, string $desde, string $hasta, ?int $idUsuario = null): array
+    {
+        $incompletas = $this->repository->getIncompletas($idEmpresa, $desde, $hasta);
+        $procesadas = 0; $resueltas = 0;
+
+        foreach ($incompletas as $j) {
+            $fecha = substr((string) $j['fecha'], 0, 10);
+            $res = $this->recalcularDia($idEmpresa, (int) $j['id_empleado'], $fecha, $idUsuario);
+            $procesadas++;
+            if ($res !== null && ($res['estado'] ?? '') !== 'incompleta') {
+                $resueltas++;
+            }
+        }
+
+        $this->logService->registrar((int) ($idUsuario ?? 0), $idEmpresa, 'RECALCULAR_INCOMPLETAS', 'asistencia_jornadas', null, null,
+            ['desde' => $desde, 'hasta' => $hasta, 'procesadas' => $procesadas, 'resueltas' => $resueltas]);
+
+        return ['procesadas' => $procesadas, 'resueltas' => $resueltas, 'pendientes' => $procesadas - $resueltas];
+    }
+
+    /** Cuenta las jornadas incompletas (requieren revisión) de un rango. */
+    public function contarIncompletas(int $idEmpresa, string $desde, string $hasta): int
+    {
+        return $this->repository->contarIncompletas($idEmpresa, $desde, $hasta);
+    }
+
+    /**
      * Núcleo del cálculo. Devuelve métricas o null si no hay nada que registrar.
      */
     private function calcular(array $marcas, ?array $horario, string $fecha): ?array
@@ -170,7 +201,31 @@ class JornadaService
             }
         }
 
-        $incompleta = ($in !== null); // quedó "adentro" sin salida final
+        // Quedó "adentro" sin salida final. Como no hay marca de salida, el sistema
+        // no tiene evidencia de cuánto se quedó: se cierra el tramo abierto a la HORA
+        // DE SALIDA PROGRAMADA del horario (estimación conservadora que nunca inventa
+        // horas extra). Si no hay horario/hora de salida, el tramo queda sin contar.
+        // En ambos casos la jornada se marca "incompleta" para que se revise.
+        $incompleta = ($in !== null);
+        $cierreAuto = false;
+        $salidaEstimada = null;
+
+        if ($incompleta && $horario && !empty($horario['hora_salida'])) {
+            $salidaProg = $this->horaSalidaProgramada($horario, $fecha);
+            if ($salidaProg !== null && $salidaProg > $in) {
+                $workedSec += ($salidaProg - $in);
+                $salidaEstimada = $salidaProg;
+                $cierreAuto = true;
+            }
+            $in = null;
+
+            // En un cierre estimado las horas no pueden superar la jornada esperada:
+            // no hay evidencia de sobretiempo y el tramo continuo no descuenta breaks.
+            if ($cierreAuto && !empty($horario['horas_jornada'])) {
+                $workedSec = min($workedSec, (float) $horario['horas_jornada'] * 3600);
+            }
+        }
+
         $horasTrab = round($workedSec / 3600, 2);
 
         // Atraso respecto a la hora de entrada del horario + tolerancia.
@@ -184,9 +239,10 @@ class JornadaService
             }
         }
 
-        // Horas extra: trabajo por encima de la jornada esperada.
+        // Horas extra: trabajo por encima de la jornada esperada. NO se calcula en
+        // un cierre automático: sin salida real no hay evidencia de sobretiempo.
         $extraMin = 0;
-        if ($horario && !empty($horario['horas_jornada'])) {
+        if (!$cierreAuto && $horario && !empty($horario['horas_jornada'])) {
             $espSec = (float) $horario['horas_jornada'] * 3600;
             if ($workedSec > $espSec) {
                 $extraMin = (int) round(($workedSec - $espSec) / 60);
@@ -194,11 +250,20 @@ class JornadaService
         }
 
         $estado = $incompleta ? 'incompleta' : 'completa';
-        $obs = $incompleta ? 'Falta la salida final del día.' : null;
+        if (!$incompleta) {
+            $obs = null;
+        } elseif ($cierreAuto) {
+            $obs = 'Falta la salida. Cerrada automáticamente a la hora de salida programada ('
+                . date('H:i', $salidaEstimada) . '). Requiere revisión.';
+        } else {
+            $obs = 'Falta la salida final del día. Requiere revisión.';
+        }
 
         return [
             'primera_entrada'  => $primera ? date('Y-m-d H:i:s', $primera) : null,
-            'ultima_salida'    => $ultima ? date('Y-m-d H:i:s', $ultima) : null,
+            // Con cierre automático se guarda la salida estimada para que el resumen
+            // y el rol tengan horas; sigue marcada "incompleta" para su revisión.
+            'ultima_salida'    => $salidaEstimada ? date('Y-m-d H:i:s', $salidaEstimada) : ($ultima ? date('Y-m-d H:i:s', $ultima) : null),
             'horas_trabajadas' => $horasTrab,
             'atraso_min'       => $atrasoMin,
             'extra_min'        => $extraMin,
@@ -206,6 +271,22 @@ class JornadaService
             'observacion'      => $obs,
             'id_punto'         => $idPunto,
         ];
+    }
+
+    /**
+     * Timestamp de la hora de salida programada del horario para esa fecha.
+     * Si el turno cruza medianoche, la salida cae el día siguiente.
+     */
+    private function horaSalidaProgramada(array $horario, string $fecha): ?int
+    {
+        $hora = trim((string) ($horario['hora_salida'] ?? ''));
+        if ($hora === '') {
+            return null;
+        }
+        $cruza = in_array($horario['cruza_medianoche'] ?? false, [true, 1, '1', 't', 'true'], true);
+        $base = $cruza ? date('Y-m-d', strtotime($fecha . ' +1 day')) : $fecha;
+        $ts = strtotime($base . ' ' . $hora);
+        return $ts === false ? null : $ts;
     }
 
     /** ¿La fecha cae en un día laborable según dias_semana del horario (1=lun..7=dom)? */

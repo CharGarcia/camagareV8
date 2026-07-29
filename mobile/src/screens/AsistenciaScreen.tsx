@@ -268,7 +268,7 @@ export default function AsistenciaScreen() {
           <Text style={styles.nombreEmpleado}>{credencial?.nombre || 'Empleado'}</Text>
           {errorVincular ? <Text style={styles.error}>{errorVincular}</Text> : null}
           <TouchableOpacity style={styles.botonPrimario} onPress={() => abrirEscaneo('punto')} disabled={procesando}>
-            {procesando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonPrimarioTexto}>Escanear punto de servicio</Text>}
+            {procesando ? <ActivityIndicator color="#fff" /> : <Text style={styles.botonPrimarioTexto}>Registrar asistencia</Text>}
           </TouchableOpacity>
 
           {mostrarManualPunto ? (

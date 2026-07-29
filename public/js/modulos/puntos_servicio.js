@@ -120,6 +120,7 @@
 
         document.getElementById('casisQrNombre').textContent = nombre;
         document.getElementById('casisQrTexto').textContent = contenido;
+        document.getElementById('casisQrCodigo').textContent = token;
         document.getElementById('casisPrintNombre').textContent = nombre;
 
         const spinner = document.getElementById('casisQrSpinner');
@@ -146,6 +147,13 @@
     window.casisCopiarQr = function () {
         const txt = document.getElementById('casisQrTexto').textContent;
         if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => swalOk('Copiado'));
+    };
+
+    // Copia solo el código (sin el enlace completo) — para enviárselo a un empleado
+    // que no pueda escanear y lo pegue a mano en el campo de la app.
+    window.casisCopiarCodigo = function () {
+        if (!qrPuntoActual) return;
+        if (navigator.clipboard) navigator.clipboard.writeText(qrPuntoActual.qr_token).then(() => swalOk('Código copiado'));
     };
 
     window.casisRegenerarQr = function () {

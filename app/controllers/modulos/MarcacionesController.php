@@ -155,6 +155,63 @@ class MarcacionesController extends BaseModuloController
             . '</tr>';
     }
 
+    /** Datos para el modal de registro manual: empleados activos + tipos. */
+    public function datosManualAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $empleados = (new \App\repositories\modulos\EmpleadoRepository())->getActivosParaSelect($idEmpresa);
+            echo json_encode(['ok' => true, 'empleados' => $empleados]);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Registro manual de una marcación (p. ej. la salida que faltó). La hace un
+     * usuario del sistema con permiso de actualizar; recalcula la jornada del día.
+     */
+    public function registrarManualAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $idEmpleado = (int) ($_POST['id_empleado'] ?? 0);
+            $tipo       = trim($_POST['tipo'] ?? '');
+            $fecha      = trim($_POST['fecha'] ?? '');
+            $hora       = trim($_POST['hora'] ?? '');
+            $obs        = trim($_POST['observacion'] ?? '');
+
+            if ($idEmpleado <= 0) throw new \Exception('Seleccione un empleado.');
+            if ($fecha === '' || $hora === '') throw new \Exception('Indique la fecha y la hora.');
+
+            $ts = strtotime($fecha . ' ' . $hora);
+            if ($ts === false) throw new \Exception('Fecha u hora no válidas.');
+            if ($ts > time() + 60) throw new \Exception('La marcación no puede ser futura.');
+
+            $id = $this->service->marcarManual([
+                'id_empleado' => $idEmpleado,
+                'tipo'        => $tipo,
+                'fecha_hora'  => date('Y-m-d H:i:s', $ts),
+                'observacion' => $obs !== '' ? $obs : 'Registro manual desde el panel.',
+            ], $idEmpresa, $idUsuario);
+
+            echo json_encode(['ok' => true, 'id' => $id, 'msg' => 'Marcación registrada. Jornada recalculada.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function delete(): void
     {
         $this->requireEliminar();

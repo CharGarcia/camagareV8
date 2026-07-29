@@ -148,6 +148,31 @@ class AsistenciaJornadaRepository extends BaseRepository
         return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'total' => $total];
     }
 
+    /** Cuenta las jornadas incompletas (requieren revisión) en un rango. */
+    public function contarIncompletas(int $idEmpresa, string $desde, string $hasta): int
+    {
+        $st = $this->db->prepare(
+            "SELECT COUNT(*) FROM {$this->table}
+             WHERE id_empresa = :e AND eliminado = false
+               AND estado = 'incompleta' AND fecha BETWEEN :d AND :h"
+        );
+        $st->execute([':e' => $idEmpresa, ':d' => $desde, ':h' => $hasta]);
+        return (int) $st->fetchColumn();
+    }
+
+    /** Pares (id_empleado, fecha) de las jornadas incompletas de un rango, para recalcularlas. */
+    public function getIncompletas(int $idEmpresa, string $desde, string $hasta): array
+    {
+        $st = $this->db->prepare(
+            "SELECT id_empleado, fecha FROM {$this->table}
+             WHERE id_empresa = :e AND eliminado = false
+               AND estado = 'incompleta' AND fecha BETWEEN :d AND :h
+             ORDER BY fecha"
+        );
+        $st->execute([':e' => $idEmpresa, ':d' => $desde, ':h' => $hasta]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /**
      * Resumen agregado por empleado en un rango de fechas: total de faltas,
      * minutos de atraso y minutos de extra. Base para generar Novedades (paso 4).

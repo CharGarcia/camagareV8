@@ -109,7 +109,8 @@ class JornadasController extends BaseModuloController
 
         ob_start();
         if (empty($result['rows'])) {
-            echo '<tr><td colspan="8" class="text-center py-5 text-muted">No hay jornadas calculadas. Usa «Recalcular».</td></tr>';
+            $colspan = !empty($perm['actualizar']) ? 9 : 8;
+            echo '<tr><td colspan="' . $colspan . '" class="text-center py-5 text-muted">No hay jornadas calculadas. Usa «Recalcular».</td></tr>';
         } else {
             foreach ($result['rows'] as $r) {
                 echo $this->renderFila($r);
@@ -144,6 +145,27 @@ class JornadasController extends BaseModuloController
         $atrCell = $atr > 0 ? '<span class="text-danger fw-medium">' . $atr . ' min</span>' : '—';
         $extCell = $ext > 0 ? '<span class="text-success fw-medium">' . $ext . ' min</span>' : '—';
 
+        $esIncompleta = ($r['estado'] ?? '') === 'incompleta';
+        if ($esIncompleta && !empty($r['observacion'])) {
+            $estadoBadge = '<span class="badge bg-' . $ec . ' bg-opacity-10 text-' . $ec
+                . ' border border-' . $ec . ' border-opacity-25" title="' . $h($r['observacion']) . '">'
+                . $h(ucfirst((string) $r['estado'])) . '</span>';
+        }
+
+        // Celda de acción: solo con permiso de actualizar y jornada incompleta.
+        $accionCell = '';
+        if (!empty($this->getPermisos()['actualizar'])) {
+            $btn = '';
+            if ($esIncompleta) {
+                $nombreJs = htmlspecialchars((string) ($r['empleado_nombre'] ?? ''), ENT_QUOTES);
+                $fechaJs  = htmlspecialchars((string) $r['fecha'], ENT_QUOTES);
+                $btn = '<button class="btn btn-outline-warning btn-xs border-0 px-2" title="Corregir: registrar la marcación que falta" '
+                    . 'onclick="abrirCorregirJornada(' . (int) $r['id_empleado'] . ", '" . $fechaJs . "', '" . $nombreJs . "')\">"
+                    . '<i class="bi bi-pencil-square"></i></button>';
+            }
+            $accionCell = '<td class="text-center pe-3">' . $btn . '</td>';
+        }
+
         return '<tr>'
             . '<td class="ps-3 fw-medium" data-col="empleado">' . $h($r['empleado_nombre']) . '</td>'
             . '<td data-col="fecha">' . $h($fecha) . '</td>'
@@ -152,7 +174,8 @@ class JornadasController extends BaseModuloController
             . '<td class="text-center fw-bold" data-col="horas">' . number_format((float) $r['horas_trabajadas'], 2) . '</td>'
             . '<td class="text-center" data-col="atraso">' . $atrCell . '</td>'
             . '<td class="text-center" data-col="extra">' . $extCell . '</td>'
-            . '<td class="text-center pe-3" data-col="estado">' . $estadoBadge . '</td>'
+            . '<td class="text-center" data-col="estado">' . $estadoBadge . '</td>'
+            . $accionCell
             . '</tr>';
     }
 
@@ -166,13 +189,102 @@ class JornadasController extends BaseModuloController
         $hasta = trim($_POST['hasta'] ?? '');
         $idEmpleado = ($_POST['id_empleado'] ?? '') !== '' ? (int) $_POST['id_empleado'] : null;
 
+        $soloIncompletas = (int) ($_POST['solo_incompletas'] ?? 0) === 1;
+
         try {
             if ($desde === '' || $hasta === '') throw new \Exception('Indica el rango de fechas.');
             if (strtotime($desde) === false || strtotime($hasta) === false) throw new \Exception('Fechas no válidas.');
-            $n = $this->service->recalcularRango($idEmpresa, $desde, $hasta, $idUsuario, $idEmpleado);
-            echo json_encode(['ok' => true, 'msg' => "Se procesaron {$n} jornada(s).", 'n' => $n]);
+
+            if ($soloIncompletas) {
+                $r = $this->service->recalcularIncompletas($idEmpresa, $desde, $hasta, $idUsuario);
+                $msg = "Se recalcularon {$r['procesadas']} incompleta(s): {$r['resueltas']} resuelta(s), {$r['pendientes']} siguen requiriendo revisión.";
+                echo json_encode(['ok' => true, 'msg' => $msg] + $r);
+            } else {
+                $n = $this->service->recalcularRango($idEmpresa, $desde, $hasta, $idUsuario, $idEmpleado);
+                echo json_encode(['ok' => true, 'msg' => "Se procesaron {$n} jornada(s).", 'n' => $n]);
+            }
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Registra la marcación que falta (por defecto la salida) de una jornada
+     * incompleta, directamente desde el listado de Jornadas. Reutiliza el motor
+     * de marcaciones y recalcula la jornada del día.
+     */
+    public function corregirMarcacionAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $idEmpleado = (int) ($_POST['id_empleado'] ?? 0);
+            $tipo  = trim($_POST['tipo'] ?? 'salida');
+            $fecha = trim($_POST['fecha'] ?? '');
+            $hora  = trim($_POST['hora'] ?? '');
+            $obs   = trim($_POST['observacion'] ?? '');
+
+            if ($idEmpleado <= 0) throw new \Exception('Empleado no válido.');
+            if ($fecha === '' || $hora === '') throw new \Exception('Indique la fecha y la hora.');
+
+            $ts = strtotime($fecha . ' ' . $hora);
+            if ($ts === false) throw new \Exception('Fecha u hora no válidas.');
+            if ($ts > time() + 60) throw new \Exception('La marcación no puede ser futura.');
+
+            $marcacionSvc = new \App\Services\modulos\MarcacionService(
+                new \App\repositories\modulos\MarcacionRepository(),
+                new \App\repositories\modulos\BiometriaRepository(),
+                new \App\repositories\modulos\AsistenciaPuntoRepository(),
+                new \App\Rules\modulos\MarcacionRules(),
+                new \App\Services\LogSistemaService()
+            );
+            $marcacionSvc->marcarManual([
+                'id_empleado' => $idEmpleado,
+                'tipo'        => $tipo,
+                'fecha_hora'  => date('Y-m-d H:i:s', $ts),
+                'observacion' => $obs !== '' ? $obs : 'Corrección desde Jornadas.',
+            ], $idEmpresa, $idUsuario);
+
+            // Estado de la jornada tras recalcular, para reflejarlo en el listado.
+            $jorn = (new \App\repositories\modulos\AsistenciaJornadaRepository())
+                ->getByDia($idEmpleado, $idEmpresa, $fecha);
+
+            echo json_encode([
+                'ok' => true,
+                'msg' => 'Marcación registrada. Jornada recalculada.',
+                'estado' => $jorn['estado'] ?? null,
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Cuenta jornadas incompletas de un período (para avisar antes de generar el rol). */
+    public function contarIncompletasAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $mes  = (int) ($_GET['mes'] ?? 0);
+            $anio = (int) ($_GET['anio'] ?? 0);
+            if ($mes < 1 || $mes > 12 || $anio < 2000) throw new \Exception('Período no válido.');
+
+            $desde = sprintf('%04d-%02d-01', $anio, $mes);
+            $hasta = date('Y-m-t', strtotime($desde));
+            $n = $this->service->contarIncompletas($idEmpresa, $desde, $hasta);
+
+            echo json_encode(['ok' => true, 'incompletas' => $n]);
+        } catch (\Throwable $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
