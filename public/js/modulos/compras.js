@@ -201,6 +201,11 @@ document.addEventListener('DOMContentLoaded', function () {
 // POBLAR MODAL CON DATOS EXISTENTES
 // ─────────────────────────────────────────────────────────────────────────────
 function CMG_poblarModal(d) {
+    // Revertir cualquier bloqueo de solo-lectura de una compra abierta antes
+    // (evita que los campos queden deshabilitados al pasar de una migrada/período
+    // cerrado a una normal). Debe correr ANTES del bloqueo de electrónica.
+    mcLimpiarBloqueoSoloLectura();
+
     document.getElementById('mcId').value                = d.id || '';
     document.getElementById('mcIdProveedor').value       = d.id_proveedor || '';
     document.getElementById('mcBuscarProveedor').value   = d.proveedor_nombre || '';
@@ -307,8 +312,25 @@ function CMG_poblarModal(d) {
 }
 
 /**
+ * Revierte el bloqueo de solo-lectura: re-habilita SOLO lo que ese bloqueo
+ * deshabilitó (marcado con `.mc-lock-off`) y oculta el banner. Es idempotente y
+ * no toca campos deshabilitados por otra lógica (electrónica, naturales).
+ */
+function mcLimpiarBloqueoSoloLectura() {
+    const modal = document.getElementById('modalCompra');
+    if (!modal) return;
+    modal.querySelectorAll('.mc-lock-off').forEach(el => {
+        el.disabled = false;
+        el.classList.remove('mc-lock-off');
+    });
+    document.getElementById('mcBloqueoAviso')?.classList.add('d-none');
+}
+
+/**
  * Bloquea el modal por completo (solo lectura) cuando la compra proviene de una
  * migración o su período contable está cerrado. Devuelve true si quedó bloqueado.
+ * La limpieza de un bloqueo previo la hace `mcLimpiarBloqueoSoloLectura()` al
+ * inicio de `CMG_poblarModal`/`CMG_resetModal` (antes de esta función).
  */
 function mcAplicarSoloLectura(d) {
     const esV = v => (v === true || v === 't' || v === 1 || v === '1');
@@ -335,16 +357,24 @@ function mcAplicarSoloLectura(d) {
     if (avisoTxt) avisoTxt.textContent = msg;
     aviso?.classList.remove('d-none');
 
-    const modal = document.getElementById('modalCompra');
-    // Deshabilitar todos los campos del cuerpo del modal.
-    modal.querySelectorAll('.modal-body input, .modal-body select, .modal-body textarea').forEach(el => {
+    const modal    = document.getElementById('modalCompra');
+    const pagoForm = document.getElementById('pagoFormNuevo');
+
+    // Deshabilita el elemento marcándolo, salvo que YA estuviera deshabilitado por
+    // otra lógica (no lo tocamos para no re-habilitarlo por error después), o que
+    // sea parte del formulario de pago interno (pagar sí se permite en migradas).
+    const bloquear = el => {
+        if (el.disabled) return;
+        if (pagoForm && pagoForm.contains(el)) return;
         el.disabled = true;
-    });
-    // Deshabilitar botones de edición del cuerpo, salvo exportación y navegación de pestañas.
+        el.classList.add('mc-lock-off');
+    };
+
+    modal.querySelectorAll('.modal-body input, .modal-body select, .modal-body textarea').forEach(bloquear);
     modal.querySelectorAll('.modal-body button').forEach(btn => {
         if (btn.id === 'mcBtnPdf' || btn.id === 'mcBtnDescargarXml') return;
         if (btn.hasAttribute('data-bs-toggle')) return; // pestañas
-        btn.disabled = true;
+        bloquear(btn);
     });
 
     // Sin edición ni borrado: ocultar Guardar y Eliminar.
@@ -488,8 +518,8 @@ function CMG_resetModal() {
     const btnPdf = document.getElementById('mcBtnPdf');
     if (btnPdf) btnPdf.classList.add('d-none');
 
-    // Ocultar aviso de solo lectura (migrada / período cerrado)
-    document.getElementById('mcBloqueoAviso')?.classList.add('d-none');
+    // Revertir bloqueo de solo lectura y ocultar su aviso (migrada / período cerrado)
+    mcLimpiarBloqueoSoloLectura();
 
     // Ocultar pestaña de documentos relacionados
     document.getElementById('tab-relacionados-li')?.classList.add('d-none');
