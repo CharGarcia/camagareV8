@@ -93,6 +93,21 @@
     // ── Arranque ─────────────────────────────────────────────────────────────
 
     async function iniciar() {
+        // Los navegadores solo dan cámara y micrófono en "contexto seguro":
+        // HTTPS o localhost. Por HTTP, navigator.mediaDevices ni siquiera
+        // existe. Sin esta comprobación el fallo sería mudo (la pantalla abre
+        // pero no pasa nada), que es lo peor para diagnosticar.
+        if (!window.isSecureContext || !navigator.mediaDevices) {
+            estado('Se necesita una conexión segura', 'text-danger');
+            aviso(
+                'Esta página está abierta por <strong>http://</strong> y los navegadores solo permiten usar ' +
+                'la cámara y el micrófono por <strong>https://</strong>.<br>' +
+                'Abra la misma dirección cambiando <code>http</code> por <code>https</code>.',
+                'danger'
+            );
+            return;
+        }
+
         estado('Pidiendo cámara y micrófono...', 'text-info');
 
         try {

@@ -297,6 +297,9 @@ El nivel 3 (superadministrador) siempre ve todo.
   todo si alguno está en una red de oficina o usando datos móviles.
 - **"La cámara está siendo usada por otro programa"**: ciérrelo (Teams, Zoom,
   Meet u otra pestaña con la cámara abierta) y vuelva a entrar.
+- **"Se necesita una conexión segura"**: la página se abrió con `http://`. Los
+  navegadores solo permiten cámara y micrófono por `https://`. Abra la misma
+  dirección cambiando `http` por `https`.
 - **Se ve el video pero no se oye**: revise que el micrófono no esté silenciado
   (el botón se pone rojo) y que el volumen del equipo no esté al mínimo.
 - **La reunión no aparece en el listado**: si no tiene permiso de acceso total,
