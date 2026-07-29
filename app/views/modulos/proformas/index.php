@@ -92,6 +92,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'vendedor_nombre'=> 'Vendedor',
                     'importe_total'  => 'Total',
                     'estado'         => 'Estado',
+                    'estado_correo'  => 'Correo',
                     'observaciones'  => 'Observaciones',
                 ];
                 ?>
@@ -131,12 +132,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="sortable-header"       role="button" data-sort="vendedor_nombre" data-col="vendedor_nombre">Vendedor    <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header text-end" role="button" data-sort="importe_total" data-col="importe_total"> Total       <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header text-center" role="button" data-sort="estado"   data-col="estado">          Estado      <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header text-center" role="button" data-sort="estado_correo" data-col="estado_correo">Correo   <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header"       role="button" data-sort="observaciones"  data-col="observaciones">  Observaciones<i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyProformas">
                     <?php if (empty($rows)): ?>
-                        <tr><td colspan="8" class="text-center py-5 text-muted">
+                        <tr><td colspan="9" class="text-center py-5 text-muted">
                             <i class="bi bi-file-earmark-text fs-3 d-block mb-2"></i>No se encontraron proformas.
                         </td></tr>
                     <?php else: ?>
@@ -168,6 +170,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <td class="text-center" data-col="estado">
                                 <span class="badge <?= $estadoClass ?>"><?= $estadoLabel ?></span>
                             </td>
+                            <td class="text-center" data-col="estado_correo"><?= \App\controllers\modulos\ProformasController::badgeCorreo((string)($r['estado_correo'] ?? 'pendiente')) ?></td>
                             <td class="text-truncate text-muted small" style="max-width:200px;" data-col="observaciones"><?= htmlspecialchars(mb_substr($r['observaciones'] ?? '', 0, 60)) ?></td>
                         </tr>
                         <?php endforeach; ?>

@@ -77,7 +77,7 @@ class ProformaRepository extends BaseRepository
         $sqlCount = "SELECT COUNT(*) FROM proformas_cabecera p $joins $where";
         $total = $this->query($sqlCount, $params)->fetchColumn();
 
-        $allowedCols = ['id', 'fecha_emision', 'secuencial', 'importe_total', 'estado', 'cliente_nombre', 'cliente_ruc', 'vendedor_nombre', 'observaciones', 'numero'];
+        $allowedCols = ['id', 'fecha_emision', 'secuencial', 'importe_total', 'estado', 'estado_correo', 'cliente_nombre', 'cliente_ruc', 'vendedor_nombre', 'observaciones', 'numero'];
         if (!in_array($ordenCol, $allowedCols)) $ordenCol = 'fecha_emision';
         $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
 
@@ -144,6 +144,15 @@ class ProformaRepository extends BaseRepository
         $this->query(
             "UPDATE proformas_cabecera SET aprobacion_token = ?, updated_at = NOW() WHERE id = ?",
             [$token, $id]
+        );
+    }
+
+    /** Marca la proforma como "correo enviado" (para el listado general). */
+    public function marcarCorreoEnviado(int $id): void
+    {
+        $this->query(
+            "UPDATE proformas_cabecera SET estado_correo = 'enviado', updated_at = NOW() WHERE id = ?",
+            [$id]
         );
     }
 

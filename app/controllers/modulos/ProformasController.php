@@ -106,7 +106,7 @@ class ProformasController extends BaseModuloController
 
         ob_start();
         if (empty($result['rows'])) {
-            echo '<tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-text fs-3 d-block mb-2"></i>No se encontraron proformas.</td></tr>';
+            echo '<tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-text fs-3 d-block mb-2"></i>No se encontraron proformas.</td></tr>'; // 9 columnas
         } else {
             foreach ($result['rows'] as $r) {
                 echo $this->renderFilaHtml($r);
@@ -444,7 +444,8 @@ class ProformasController extends BaseModuloController
             );
 
             if ($enviado) {
-                echo json_encode(['ok' => true, 'mensaje' => 'Correo enviado correctamente.']);
+                try { $this->repository->marcarCorreoEnviado($id); } catch (\Throwable $e) { /* columna aún no desplegada */ }
+                echo json_encode(['ok' => true, 'mensaje' => 'Correo enviado correctamente.', 'rowHtml' => $this->renderFilaHtml($this->repository->getPorId($id) ?? [])]);
             } else {
                 echo json_encode(['ok' => false, 'mensaje' => 'No se pudo enviar el correo. Verifique la configuración de correo de la empresa.']);
             }
@@ -959,6 +960,7 @@ class ProformasController extends BaseModuloController
         $total    = number_format((float) ($r['importe_total'] ?? 0), 2);
         $vendedor = htmlspecialchars($r['vendedor_nombre'] ?? '-');
         $obs      = htmlspecialchars(mb_substr($r['observaciones'] ?? '', 0, 60));
+        $correo   = self::badgeCorreo((string) ($r['estado_correo'] ?? 'pendiente'));
         $id       = (int) $r['id'];
 
         return "
@@ -973,7 +975,20 @@ class ProformasController extends BaseModuloController
             <td class=\"text-center\" data-col=\"estado\">
                 <span class=\"badge {$estadoClass}\">{$estadoLabel}</span>
             </td>
+            <td class=\"text-center\" data-col=\"estado_correo\">{$correo}</td>
             <td class=\"text-truncate text-muted small\" style=\"max-width:200px;\" data-col=\"observaciones\">{$obs}</td>
         </tr>";
+    }
+
+    /** Badge del estado de envío por correo (reutilizable listado inicial + AJAX). */
+    public static function badgeCorreo(string $estadoCorreo): string
+    {
+        $enviado = ($estadoCorreo === 'enviado');
+        $cls   = $enviado
+            ? 'bg-success bg-opacity-10 text-success border border-success border-opacity-25'
+            : 'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25';
+        $label = $enviado ? 'Enviado' : 'Pendiente';
+        $icon  = $enviado ? 'bi-envelope-check' : 'bi-envelope';
+        return "<span class=\"badge {$cls}\"><i class=\"bi {$icon} me-1\"></i>{$label}</span>";
     }
 }

@@ -225,12 +225,19 @@
                                         <div id="vc-info-creada">—</div>
                                     </div>
                                     <div class="col-12">
-                                        <div class="text-muted" style="font-size:.7rem;">ENLACE DE LA REUNIÓN</div>
+                                        <div class="text-muted" style="font-size:.7rem;">
+                                            ENLACE PARA USUARIOS DEL SISTEMA
+                                        </div>
                                         <div class="input-group input-group-sm mt-1">
                                             <input type="text" class="form-control form-control-sm bg-white" id="vc-info-enlace" readonly>
                                             <button class="btn btn-outline-secondary" type="button" onclick="VC_copiarEnlace()">
                                                 <i class="bi bi-clipboard"></i>
                                             </button>
+                                        </div>
+                                        <div class="form-text small">
+                                            Solo funciona para quien tiene cuenta en CaMaGaRe y está invitado a esta
+                                            reunión. Para alguien de fuera, use el botón de enlace que aparece junto a
+                                            cada invitado en la pestaña <strong>Participantes</strong>.
                                         </div>
                                     </div>
                                 </div>

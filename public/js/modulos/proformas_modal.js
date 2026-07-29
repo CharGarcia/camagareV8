@@ -1379,6 +1379,8 @@
                 const data = await resp.json();
 
                 if (data.ok) {
+                    // Refrescar el listado para que la columna "Correo" muestre "Enviado".
+                    if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
                     Swal.fire({
                         icon: 'success',
                         title: '¡Enviado!',

@@ -92,6 +92,23 @@ Se envía **una sola vez por reunión**, así que no hay riesgo de que la gente
 reciba el mismo aviso repetido. Las reuniones instantáneas y las permanentes no
 generan recordatorio, porque no tienen una hora de inicio que anunciar.
 
+## Los dos enlaces: cuál mandar a quién
+
+Es la confusión más común del módulo. Una reunión tiene **dos tipos de enlace** y
+no son intercambiables:
+
+| Quién entra | De dónde se saca | ¿Necesita cuenta? |
+|---|---|---|
+| Usuario de CaMaGaRe | Pestaña **Información** → *Enlace para usuarios del sistema* | **Sí**, con sesión iniciada y estando invitado a esa reunión |
+| Cualquier persona | Pestaña **Participantes** → botón de **cadena** junto a ese invitado | **No**, entra desde cualquier computador |
+
+Si le manda a alguien de fuera el enlace de usuarios del sistema, le va a aparecer
+la pantalla de inicio de sesión y no podrá pasar. Y si se lo manda a un usuario
+del sistema que no está invitado a esa reunión, el sistema lo devuelve al listado.
+
+El enlace de un invitado es **personal**: lleva su identificación y entra con su
+nombre. Si invita a tres personas, hay tres enlaces distintos, uno para cada una.
+
 ## Dentro de la sala
 
 Su propia imagen aparece pequeña en la esquina inferior derecha; los demás
