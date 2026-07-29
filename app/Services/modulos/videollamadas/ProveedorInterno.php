@@ -175,18 +175,13 @@ class ProveedorInterno implements ProveedorVideollamada
         }
 
         $data = json_decode((string) $respuesta, true);
-        $ice  = $data['iceServers'] ?? null;
+        $turn = $this->normalizarIceServers($data['iceServers'] ?? null);
 
-        if (!is_array($ice) || empty($ice['urls']) || empty($ice['username'])) {
-            error_log('Videollamadas TURN: respuesta de Cloudflare sin iceServers utilizables.');
+        if ($turn === null) {
+            error_log('Videollamadas TURN: respuesta de Cloudflare sin iceServers utilizables: '
+                . substr((string) $respuesta, 0, 300));
             return null;
         }
-
-        $turn = [
-            'urls'       => $ice['urls'],
-            'username'   => (string) $ice['username'],
-            'credential' => (string) ($ice['credential'] ?? ''),
-        ];
 
         // Se cachea algo menos que su vigencia, para no entregar nunca una a punto de vencer.
         Cache::set($claveCache, $turn, self::TTL_CREDENCIAL - 600);
@@ -197,6 +192,41 @@ class ProveedorInterno implements ProveedorVideollamada
     /** No hay nada que liberar: el motor interno no guarda estado fuera de la BD. */
     public function cerrarSala(array $sala, array $config): void
     {
+    }
+
+    /**
+     * Extrae el bloque TURN de lo que devuelve la API de credenciales.
+     *
+     * Cloudflare responde una LISTA de servidores, no uno solo:
+     *   [ {urls: [stun:...]},                       ← STUN, sin credenciales
+     *     {urls: [turn:...], username, credential} ] ← el que nos interesa
+     *
+     * Se recorre buscando el que trae usuario: los que no lo llevan son STUN y
+     * no sirven como relay. También se acepta un objeto único por si la API
+     * cambia de forma, para no volver a quedarnos sin TURN en silencio.
+     *
+     * @return array{urls:mixed,username:string,credential:string}|null
+     */
+    private function normalizarIceServers(mixed $ice): ?array
+    {
+        if (!is_array($ice) || $ice === []) {
+            return null;
+        }
+
+        $servidores = isset($ice['urls']) ? [$ice] : $ice;
+
+        foreach ($servidores as $srv) {
+            if (!is_array($srv) || empty($srv['urls']) || empty($srv['username'])) {
+                continue;
+            }
+            return [
+                'urls'       => $srv['urls'],
+                'username'   => (string) $srv['username'],
+                'credential' => (string) ($srv['credential'] ?? ''),
+            ];
+        }
+
+        return null;
     }
 
     /** Convierte "stun:a:1, turn:b:2" en ['stun:a:1', 'turn:b:2']. */

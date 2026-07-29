@@ -119,20 +119,11 @@
                 <?php endif; ?>
             </div>
 
-            <div class="modal-footer bg-light py-2 d-flex justify-content-between">
-                <?php if (!empty($esSuperadmin)): ?>
-                    <a href="<?= rtrim(BASE_URL, '/') ?>/config/videollamadas" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-globe2 me-1"></i> Servidores globales
-                    </a>
-                <?php else: ?>
-                    <span></span>
-                <?php endif; ?>
-                <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
-                    <button type="button" class="btn btn-primary btn-sm px-3" onclick="VC_guardarConfig()">
-                        <i class="bi bi-save me-1"></i> Guardar
-                    </button>
-                </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary btn-sm px-3" onclick="VC_guardarConfig()">
+                    <i class="bi bi-save me-1"></i> Guardar
+                </button>
             </div>
 
         </div>
