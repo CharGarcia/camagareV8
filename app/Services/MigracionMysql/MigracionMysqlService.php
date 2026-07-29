@@ -1818,6 +1818,36 @@ class MigracionMysqlService
         return (int) $ins->fetchColumn();
     }
 
+    /**
+     * Concepto genérico (get-or-create por empresa) para los ingresos/egresos migrados que NO
+     * están atados a una factura/compra ("otros conceptos"). Con esto la cabecera queda como
+     * ingreso/egreso "por concepto" (tipo OTRO/GENERAL) y su detalle es de texto libre, evitando
+     * que la vista pinte un documento clickeable con id nulo. $tipo = 'ingreso' | 'egreso'.
+     */
+    private function getOrCreateConceptoMigracion(int $idEmpresa, int $idUsuario, string $tipo, PDO $pg): int
+    {
+        static $cache = [];
+        $key = $idEmpresa . '|' . $tipo;
+        if (isset($cache[$key])) { return $cache[$key]; }
+
+        $nombre = $tipo === 'ingreso' ? 'Otros ingresos (migración)' : 'Otros egresos (migración)';
+        $sel = $pg->prepare("SELECT id FROM empresa_opciones_ingreso_egreso WHERE id_empresa = :e AND nombre = :n AND eliminado = false LIMIT 1");
+        $sel->execute([':e' => $idEmpresa, ':n' => $nombre]);
+        $id = $sel->fetchColumn();
+        if ($id !== false) { return $cache[$key] = (int) $id; }
+
+        // PDO+pgsql: los boolean se pasan como literal 'true'/'false' (no false de PHP).
+        $ins = $pg->prepare("INSERT INTO empresa_opciones_ingreso_egreso (id_empresa, nombre, aplica_ingresos, aplica_egresos, comportamiento, estado, created_by) VALUES (:e, :n, :ai, :ae, 'GENERAL', 'ACTIVO', :u) RETURNING id");
+        $ins->execute([
+            ':e'  => $idEmpresa,
+            ':n'  => $nombre,
+            ':ai' => $tipo === 'ingreso' ? 'true' : 'false',
+            ':ae' => $tipo === 'egreso'  ? 'true' : 'false',
+            ':u'  => $idUsuario,
+        ]);
+        return $cache[$key] = (int) $ins->fetchColumn();
+    }
+
     /** Migra cobros (ingresos): cabecera + detalle (enlaza facturas por el mapa) + pagos (forma de cobro). */
     private function migrarIngresos(int $idEmpresa, string $ruc, int $idUsuario, int $limite = 0, ?string $desde = null, ?string $hasta = null): array
     {
@@ -1843,12 +1873,12 @@ class MigracionMysqlService
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
         $oldFacCli   = $mysql->prepare("SELECT id_cliente FROM encabezado_factura WHERE id_encabezado_factura = :id LIMIT 1");
         $mapIngreso  = $this->mapaDe($pg, $idEmpresa, 'ingresos'); // para reconciliar al re-correr
-        $updCab      = $pg->prepare("UPDATE ingresos_cabecera SET fecha_emision = ?, id_cliente = ?, monto_total = ?, observaciones = ?, estado = ?, recibo_de = ?, id_recibo_cliente = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $updCab      = $pg->prepare("UPDATE ingresos_cabecera SET fecha_emision = ?, tipo_ingreso = ?, id_ingreso_concepto = ?, id_cliente = ?, monto_total = ?, observaciones = ?, estado = ?, recibo_de = ?, id_recibo_cliente = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet      = $pg->prepare("DELETE FROM ingresos_detalle WHERE id_ingreso = ?");
         $delPag      = $pg->prepare("DELETE FROM ingresos_pagos WHERE id_ingreso = ?");
 
-        $insCab  = $pg->prepare("INSERT INTO ingresos_cabecera (id_empresa, id_usuario, fecha_emision, secuencial, numero_ingreso, tipo_ingreso, id_cliente, monto_total, observaciones, estado, recibo_de, id_recibo_cliente, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, 'FACTURA_VENTA', ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
-        $insDet  = $pg->prepare("INSERT INTO ingresos_detalle (id_ingreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_cobrado) VALUES (?, 'FACTURA', ?, ?, ?, ?, ?)");
+        $insCab  = $pg->prepare("INSERT INTO ingresos_cabecera (id_empresa, id_usuario, fecha_emision, secuencial, numero_ingreso, tipo_ingreso, id_ingreso_concepto, id_cliente, monto_total, observaciones, estado, recibo_de, id_recibo_cliente, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+        $insDet  = $pg->prepare("INSERT INTO ingresos_detalle (id_ingreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_cobrado) VALUES (?, ?, ?, ?, ?, ?, ?)");
         $insPago = $pg->prepare("INSERT INTO ingresos_pagos (id_ingreso, id_forma_cobro, monto, fecha_cobro, numero_cheque) VALUES (?, ?, ?, ?, ?)");
 
         $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro
@@ -1891,26 +1921,48 @@ class MigracionMysqlService
                 }
                 $idReciboCli = $idCliente;
 
+                // Clasificación: ¿es de "otros conceptos"? (ninguna línea referencia una factura vieja).
+                // Los de concepto se guardan como ingreso tipo OTRO + concepto genérico, con detalle de
+                // texto libre (tipo_documento='OTRO'), para que la vista NO pinte un documento clickeable
+                // con id nulo. Los que sí referencian factura quedan como FACTURA_VENTA (como antes).
+                $esConcepto = true;
+                foreach ($dets as $d) { if ((int) $d['codigo_documento_cv'] > 0) { $esConcepto = false; break; } }
+                if ($esConcepto) {
+                    $tipoIngreso = 'OTRO';
+                    $idConcepto  = $this->getOrCreateConceptoMigracion($idEmpresa, $idUsuario, 'ingreso', $pg);
+                } else {
+                    $tipoIngreso = 'FACTURA_VENTA';
+                    $idConcepto  = null;
+                }
+
                 $fe  = substr((string) $ie['fecha_ing_egr'], 0, 10);
                 $amb = $this->ambienteEmpresa($pg, $idEmpresa);
                 // Igual que egresos: los ANULADOS del viejo se marcan 'anulado' para no contar como cobro.
                 $estado = (stripos((string) $ie['estado'], 'anul') !== false) ? 'anulado' : 'registrado';
                 if ($idIngExist) { // re-correr: reconciliar cabecera + reconstruir detalle/pagos
                     $idIng = (int) $idIngExist;
-                    $updCab->execute([$fe, $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $reciboDe, $idReciboCli, $amb, $idUsuario, $idIng]);
+                    $updCab->execute([$fe, $tipoIngreso, $idConcepto, $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $reciboDe, $idReciboCli, $amb, $idUsuario, $idIng]);
                     $delDet->execute([$idIng]);
                     $delPag->execute([$idIng]);
                     $res['ya_migrados']++;
                 } else {
-                    $insCab->execute([$idEmpresa, $idUsuario, $fe, $sec, (string) $ie['numero_ing_egr'], $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $reciboDe, $idReciboCli, $amb, $idUsuario]);
+                    $insCab->execute([$idEmpresa, $idUsuario, $fe, $sec, (string) $ie['numero_ing_egr'], $tipoIngreso, $idConcepto, $idCliente, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $reciboDe, $idReciboCli, $amb, $idUsuario]);
                     $idIng = (int) $insCab->fetchColumn();
                     $res['migrados']++;
                 }
 
                 foreach ($dets as $d) {
-                    $idFac  = $mapFactura[(string) (int) $d['codigo_documento_cv']] ?? null;
-                    $numDoc = (preg_match('/(\d{1,3}-\d{1,3}-\d+)/', (string) $d['detalle_ing_egr'], $mnum) ? $mnum[1] : null);
-                    $insDet->execute([$idIng, $idFac, $numDoc, self::nz($d['detalle_ing_egr']), (float) $d['valor_ing_egr'], (float) $d['valor_ing_egr']]);
+                    $cv = (int) $d['codigo_documento_cv'];
+                    if ($cv > 0) { // línea de documento: factura de venta
+                        $tdoc   = 'FACTURA';
+                        $idRef  = $mapFactura[(string) $cv] ?? null;
+                        $numDoc = (preg_match('/(\d{1,3}-\d{1,3}-\d+)/', (string) $d['detalle_ing_egr'], $mnum) ? $mnum[1] : null);
+                    } else { // línea de concepto: texto libre, sin documento clickeable
+                        $tdoc   = 'OTRO';
+                        $idRef  = null;
+                        $numDoc = null;
+                    }
+                    $insDet->execute([$idIng, $tdoc, $idRef, $numDoc, self::nz($d['detalle_ing_egr']), (float) $d['valor_ing_egr'], (float) $d['valor_ing_egr']]);
                 }
 
                 $formaStmt->execute([':cd' => $cod]);
@@ -1966,12 +2018,12 @@ class MigracionMysqlService
         $provPorIdent = $this->proveedoresPorIdentificacion($pg, $idEmpresa);
         $oldCompProv = $mysql->prepare("SELECT id_proveedor FROM encabezado_compra WHERE codigo_documento = :cd LIMIT 1");
         $mapEgreso   = $this->mapaDe($pg, $idEmpresa, 'egresos'); // para reconciliar al re-correr
-        $updCab      = $pg->prepare("UPDATE egresos_cabecera SET fecha_emision = ?, id_proveedor = ?, monto_total = ?, observaciones = ?, estado = ?, beneficiario_nombre = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
+        $updCab      = $pg->prepare("UPDATE egresos_cabecera SET fecha_emision = ?, tipo_egreso = ?, id_egreso_concepto = ?, id_proveedor = ?, monto_total = ?, observaciones = ?, estado = ?, beneficiario_nombre = ?, tipo_ambiente = ?, updated_at = now(), updated_by = ? WHERE id = ?");
         $delDet      = $pg->prepare("DELETE FROM egresos_detalle WHERE id_egreso = ?");
         $delPag      = $pg->prepare("DELETE FROM egresos_pagos WHERE id_egreso = ?");
 
-        $insCab  = $pg->prepare("INSERT INTO egresos_cabecera (id_empresa, fecha_emision, numero_egreso, secuencial, tipo_egreso, tipo_sujeto, id_proveedor, monto_total, observaciones, estado, beneficiario_nombre, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, 'COMPRA', 'PROVEEDOR', ?, ?, ?, ?, ?, ?, ?) RETURNING id");
-        $insDet  = $pg->prepare("INSERT INTO egresos_detalle (id_egreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_pagado) VALUES (?, 'COMPRA', ?, ?, ?, ?, ?)");
+        $insCab  = $pg->prepare("INSERT INTO egresos_cabecera (id_empresa, fecha_emision, numero_egreso, secuencial, tipo_egreso, tipo_sujeto, id_proveedor, id_egreso_concepto, monto_total, observaciones, estado, beneficiario_nombre, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, ?, 'PROVEEDOR', ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+        $insDet  = $pg->prepare("INSERT INTO egresos_detalle (id_egreso, tipo_documento, id_referencia_documento, numero_documento, descripcion, monto_documento, monto_pagado) VALUES (?, ?, ?, ?, ?, ?, ?)");
         $insPago = $pg->prepare("INSERT INTO egresos_pagos (id_egreso, id_forma_pago, monto, fecha_cobro, numero_cheque) VALUES (?, ?, ?, ?, ?)");
 
         $sql = "SELECT id_ing_egr, codigo_documento, numero_ing_egr, valor_ing_egr, fecha_ing_egr, detalle_adicional, estado, nombre_ing_egr, id_cli_pro
@@ -2012,6 +2064,23 @@ class MigracionMysqlService
                 // listado vía COALESCE(proveedor, empleado, beneficiario_nombre, 'N/A') cuando no hay proveedor.
                 $benef = self::nz($ie['nombre_ing_egr']);
 
+                // Clasificación: ¿es de "otros conceptos"? (ninguna línea referencia una compra vieja).
+                // Los de concepto se guardan como egreso tipo GENERAL + concepto genérico, con detalle de
+                // texto libre (tipo_documento='MANUAL'), para que la vista NO pinte un documento clickeable
+                // con id nulo. Los que sí referencian compra quedan como COMPRA (como antes).
+                $esConcepto = true;
+                foreach ($dets as $d) {
+                    $cdv = (string) $d['codigo_documento_cv'];
+                    if ($cdv !== '' && $cdv !== '0') { $esConcepto = false; break; }
+                }
+                if ($esConcepto) {
+                    $tipoEgreso = 'GENERAL';
+                    $idConcepto = $this->getOrCreateConceptoMigracion($idEmpresa, $idUsuario, 'egreso', $pg);
+                } else {
+                    $tipoEgreso = 'COMPRA';
+                    $idConcepto = null;
+                }
+
                 $fe  = substr((string) $ie['fecha_ing_egr'], 0, 10);
                 $amb = $this->ambienteEmpresa($pg, $idEmpresa);
                 // Estado del egreso: los ANULADOS del viejo se marcan 'anulado' para NO contar como
@@ -2019,20 +2088,28 @@ class MigracionMysqlService
                 $estado = (stripos((string) $ie['estado'], 'anul') !== false) ? 'anulado' : 'registrado';
                 if ($idEgrExist) { // re-correr: reconciliar cabecera + reconstruir detalle/pagos
                     $idEgr = (int) $idEgrExist;
-                    $updCab->execute([$fe, $idProv, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $benef, $amb, $idUsuario, $idEgr]);
+                    $updCab->execute([$fe, $tipoEgreso, $idConcepto, $idProv, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $benef, $amb, $idUsuario, $idEgr]);
                     $delDet->execute([$idEgr]);
                     $delPag->execute([$idEgr]);
                     $res['ya_migrados']++;
                 } else {
-                    $insCab->execute([$idEmpresa, $fe, (string) $ie['numero_ing_egr'], $sec, $idProv, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $benef, $amb, $idUsuario]);
+                    $insCab->execute([$idEmpresa, $fe, (string) $ie['numero_ing_egr'], $sec, $tipoEgreso, $idProv, $idConcepto, (float) $ie['valor_ing_egr'], self::nz($ie['detalle_adicional']), $estado, $benef, $amb, $idUsuario]);
                     $idEgr = (int) $insCab->fetchColumn();
                     $res['migrados']++;
                 }
 
                 foreach ($dets as $d) {
-                    $idComp = $compraPorCod[(string) $d['codigo_documento_cv']] ?? null;
-                    $numDoc = (preg_match('/(\d{1,3}-\d{1,3}-\d+)/', (string) $d['detalle_ing_egr'], $mnum) ? $mnum[1] : null);
-                    $insDet->execute([$idEgr, $idComp, $numDoc, self::nz($d['detalle_ing_egr']), (float) $d['valor_ing_egr'], (float) $d['valor_ing_egr']]);
+                    $cdv = (string) $d['codigo_documento_cv'];
+                    if ($cdv !== '' && $cdv !== '0') { // línea de documento: compra
+                        $tdoc   = 'COMPRA';
+                        $idRef  = $compraPorCod[$cdv] ?? null;
+                        $numDoc = (preg_match('/(\d{1,3}-\d{1,3}-\d+)/', (string) $d['detalle_ing_egr'], $mnum) ? $mnum[1] : null);
+                    } else { // línea de concepto: texto libre, sin documento clickeable
+                        $tdoc   = 'MANUAL';
+                        $idRef  = null;
+                        $numDoc = null;
+                    }
+                    $insDet->execute([$idEgr, $tdoc, $idRef, $numDoc, self::nz($d['detalle_ing_egr']), (float) $d['valor_ing_egr'], (float) $d['valor_ing_egr']]);
                 }
 
                 $formaStmt->execute([':cd' => $cod]);

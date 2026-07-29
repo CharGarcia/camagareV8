@@ -928,7 +928,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     : (badgesDoc[d.tipo_bd] || `<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:0.65rem">${d.tipo_bd}</span>`);
                 const numeroCell = esNominaTipo
                     ? `<span class="small fw-bold">${d.numero}</span>`
-                    : `<code class="small text-primary fw-bold pointer text-decoration-underline" onclick="abrirPrevisualizadorDoc(${d.id}, '${d.tipo_bd}')">${d.numero}</code>`;
+                    : (d.id
+                        ? `<code class="small text-primary fw-bold pointer text-decoration-underline" onclick="abrirPrevisualizadorDoc(${d.id}, '${d.tipo_bd}')">${d.numero}</code>`
+                        : `<code class="small text-secondary fw-bold">${d.numero}</code>`);
                 const tieneItems = Array.isArray(d.items) && d.items.length > 0;
                 const tr = document.createElement('tr');
                 tr.innerHTML = `

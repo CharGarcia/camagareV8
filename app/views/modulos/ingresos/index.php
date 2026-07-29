@@ -1348,7 +1348,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 const previewTipo = (f.tipo_documento === 'RECIBO') ? 'RECIBO_VENTA' : 'FACTURA_VENTA';
                 const numeroCell = esSaldoIni
                     ? `<code class="text-secondary fw-bold">${f.numero}</code> <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.62rem;">Saldo inicial</span>`
-                    : `<code class="text-primary fw-bold pointer text-decoration-underline" onclick="abrirPrevisualizadorDoc(${f.id}, '${previewTipo}')">${f.numero}</code>`;
+                    : (f.id
+                        ? `<code class="text-primary fw-bold pointer text-decoration-underline" onclick="abrirPrevisualizadorDoc(${f.id}, '${previewTipo}')">${f.numero}</code>`
+                        : `<code class="text-secondary fw-bold">${f.numero}</code>`);
 
                 tr.innerHTML = `
                     <td class="text-center">
