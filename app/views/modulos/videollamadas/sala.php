@@ -235,8 +235,10 @@ $urlModulo = $base . '/' . $rutaModulo;
     window.VCS_NOMBRE  = '<?= htmlspecialchars($nombreUsuario, ENT_QUOTES) ?>';
 
     function VCS_copiarEnlace() {
-        // Con el código: sin él el enlace no identifica ninguna sala.
-        var url = window.VCS_BASE + '/sala/' + encodeURIComponent(window.VCS_CODIGO);
+        // Con dominio y con el código: BASE_URL es relativo, así que sin
+        // location.origin el enlace copiado no serviría fuera del sistema.
+        var ruta = window.VCS_BASE + '/sala/' + encodeURIComponent(window.VCS_CODIGO);
+        var url  = /^https?:\/\//i.test(ruta) ? ruta : window.location.origin + ruta;
         navigator.clipboard.writeText(url).catch(function () {});
     }
 

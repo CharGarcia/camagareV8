@@ -37,6 +37,18 @@
         { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     ));
 
+    /**
+     * Convierte una ruta del sistema en una dirección completa con dominio.
+     *
+     * Hace falta para todo enlace que se vaya a COMPARTIR: BASE_URL es relativo
+     * (en producción es cadena vacía, porque el sistema vive en la raíz del
+     * dominio), así que copiar la ruta tal cual daría algo como
+     * "/modulos/videollamadas/sala/abc" que fuera del sistema no lleva a ningún lado.
+     */
+    const urlCompleta = (ruta) => /^https?:\/\//i.test(ruta)
+        ? ruta
+        : window.location.origin + (ruta.startsWith('/') ? ruta : '/' + ruta);
+
     // ── Listado / búsqueda / paginación ──────────────────────────────────────
 
     window.VC_buscar = function (p = 1) {
@@ -189,8 +201,9 @@
 
         (s.participantes || []).forEach(p => agregarFilaParticipante(p));
 
-        // El enlace lleva el código: sin él no identificaría ninguna sala.
-        const enlace = `${VC_URL}/sala/${encodeURIComponent(s.codigo || '')}`;
+        // Con dominio y con el código: sin lo primero no se puede compartir, y
+        // sin lo segundo no identificaría ninguna sala.
+        const enlace = urlCompleta(`${VC_URL}/sala/${encodeURIComponent(s.codigo || '')}`);
         document.getElementById('vc-info-codigo').textContent = s.codigo || '—';
         document.getElementById('vc-info-estado').innerHTML = badgeEstado(s.estado);
         document.getElementById('vc-info-creador').textContent = s.creador_nombre || '—';
@@ -320,7 +333,7 @@
      * muestra el enlace para copiarlo a mano.
      */
     window.VC_copiarEnlaceInvitado = function (token) {
-        const enlace = `${window.VC_URL_INVITADO}?t=${encodeURIComponent(token)}`;
+        const enlace = urlCompleta(`${window.VC_URL_INVITADO}?t=${encodeURIComponent(token)}`);
 
         navigator.clipboard.writeText(enlace)
             .then(() => avisarOk('Enlace del invitado copiado'))
@@ -507,22 +520,52 @@
         }
 
         const btn = document.getElementById('vcBtnInvitar');
+        const iconoOriginal = btn.innerHTML;
         btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+        // El envío por SMTP tarda un par de segundos por destinatario, así que
+        // hay que decirle al usuario que está pasando algo.
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: 'Enviando invitaciones...',
+                text: 'Puede tardar unos segundos según cuántos participantes haya.',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: () => Swal.showLoading(),
+                target: document.getElementById('modalSalaVC'),
+            });
+        }
 
         const fd = new FormData();
         fd.append('id', id);
 
+        // El resultado se muestra dentro del modal (target): si no, quedaría
+        // detrás por el z-index y el usuario no lo vería.
+        const resultado = (icono, titulo, texto) => {
+            if (typeof Swal === 'undefined') { avisar(icono, titulo, texto); return; }
+            Swal.fire({
+                icon: icono,
+                title: titulo,
+                text: texto,
+                target: document.getElementById('modalSalaVC'),
+                confirmButtonColor: '#0d6efd',
+            });
+        };
+
         try {
             const res = await (await fetch(`${VC_URL}/enviarInvitacionesAjax`, { method: 'POST', body: fd })).json();
             if (res.ok) {
-                avisarOk(res.mensaje);
+                resultado('success', 'Invitaciones enviadas', res.mensaje);
             } else {
-                avisar('warning', 'Invitaciones', res.mensaje);
+                resultado('warning', 'No se enviaron las invitaciones', res.mensaje);
             }
         } catch (e) {
-            avisar('error', 'Error de conexión', 'No se pudieron enviar las invitaciones.');
+            resultado('error', 'Error de conexión', 'No se pudieron enviar las invitaciones.');
         } finally {
             btn.disabled = false;
+            btn.innerHTML = iconoOriginal;
         }
     };
 

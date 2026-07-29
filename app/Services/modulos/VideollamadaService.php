@@ -368,7 +368,6 @@ class VideollamadaService
             throw new \Exception('El envío de correo no está disponible en este servidor.');
         }
 
-        $base = rtrim(BASE_URL ?? '', '/');
         $nombreEmpresa = '';
         try {
             $empresa = (new \App\models\Empresa())->getPorId($idEmpresa);
@@ -389,9 +388,14 @@ class VideollamadaService
             $esInvitado = empty($p['id_usuario']);
             // El invitado externo entra con su token; el usuario del ERP, con el
             // enlace de la sala, que lleva el código para identificarla.
+            //
+            // url_absoluta() es imprescindible aquí: BASE_URL es relativo (en
+            // producción es cadena vacía) y en un correo una ruta relativa no
+            // lleva a ninguna parte. Además esto corre desde el cron, sin
+            // contexto de petición.
             $enlace = $esInvitado && !empty($p['token_acceso'])
-                ? $base . '/videollamada-invitado?t=' . rawurlencode((string) $p['token_acceso'])
-                : $base . '/modulos/videollamadas/sala/' . rawurlencode((string) $sala['codigo']);
+                ? url_absoluta('videollamada-invitado?t=' . rawurlencode((string) $p['token_acceso']))
+                : url_absoluta('modulos/videollamadas/sala/' . rawurlencode((string) $sala['codigo']));
 
             $ok = enviar_correo_invitacion_videollamada($correo, [
                 'titulo'              => $sala['titulo'],
