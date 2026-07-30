@@ -14,6 +14,17 @@ class Empresa extends BaseModel
 {
     public const COLUMNAS_ORDEN = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'nombre_provincia', 'nombre_ciudad', 'estado'];
 
+    /**
+     * Verifica que la empresa siga habilitada (estado activo y no eliminada).
+     * Usado para revalidar la empresa activa en sesión ante cada request.
+     */
+    public function estaActiva(int $idEmpresa): bool
+    {
+        $id = $this->escape((string) $idEmpresa);
+        $sql = "SELECT 1 FROM empresas WHERE id = '{$id}' AND estado = '1' AND eliminado = false LIMIT 1";
+        return !empty($this->query($sql));
+    }
+
     public function getEmpresasAsignadas(int $idUsuario): array
     {
         $id = $this->escape((string) $idUsuario);

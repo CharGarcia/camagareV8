@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\middleware;
 
 use App\Services\SesionActivaService;
+use App\models\Empresa;
 
 class AuthMiddleware
 {
@@ -38,6 +39,25 @@ class AuthMiddleware
             } catch (\Throwable $e) {
                 // Si la tabla aún no existe o hay error de BD, no bloquear el acceso
                 // (compatibilidad durante la migración)
+            }
+        }
+
+        // Validar que la empresa activa en sesión siga habilitada. Nivel 3 (superadmin)
+        // no se restringe: debe poder entrar a una empresa inactiva para reactivarla o
+        // administrarla. Se throttlea a cada 5 min (igual que el token) para no golpear
+        // la BD en cada request.
+        if (!empty($_SESSION['id_empresa']) && (int) ($_SESSION['nivel'] ?? 0) !== 3) {
+            $ultimaVerificacion = $_SESSION['_empresa_last_check'] ?? 0;
+            if (time() - $ultimaVerificacion > 300) {
+                try {
+                    $empresaModel = new Empresa();
+                    if (!$empresaModel->estaActiva((int) $_SESSION['id_empresa'])) {
+                        self::forzarLogout('La empresa a la que pertenece su sesión fue desactivada. Contacte al administrador.');
+                    }
+                    $_SESSION['_empresa_last_check'] = time();
+                } catch (\Throwable $e) {
+                    // Error de BD: no bloquear el acceso
+                }
             }
         }
 
