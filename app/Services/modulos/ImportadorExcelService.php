@@ -686,10 +686,12 @@ class ImportadorExcelService
             ? $this->resolverOCrearCatalogo('marcas', $marcaNombre, $idEmpresa, $idUsuario)
             : null;
 
-        // Medida: solo aplica para Productos (tipo_produccion = '01'), no para Servicios
+        // Medida: solo aplica para Productos (tipo_produccion = '01'), no para Servicios.
+        // Nota: no usar empty() porque un código de unidad puede ser "0"
+        // (empty("0") devuelve true), lo que rechazaría una medida válida.
         $idMedida     = null;
         $idTipoMedida = null;
-        if ($tipoProduccion === '01' && !empty($codigoMedidaRaw)) {
+        if ($tipoProduccion === '01' && $codigoMedidaRaw !== '') {
             [$idMedida, $idTipoMedida] = $this->resolverUnidadMedida($codigoMedidaRaw, $idEmpresa, $numeroFila);
         }
 
@@ -699,7 +701,7 @@ class ImportadorExcelService
             // vacío y sigue siendo Producto, se preserva la medida ya asignada
             // en vez de dejarla en null (evita borrar la medida en cada
             // reimportación que solo actualiza otros campos).
-            $actualizarMedida = $tipoProduccion === '02' || !empty($codigoMedidaRaw);
+            $actualizarMedida = $tipoProduccion === '02' || $codigoMedidaRaw !== '';
 
             $sql = "UPDATE productos SET
                         updated_by = :updated_by, updated_at = CURRENT_TIMESTAMP,
