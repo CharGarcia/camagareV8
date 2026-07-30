@@ -111,7 +111,6 @@ class ProductoRepository extends BaseRepository
                            ti.status AS status_iva_final,
                            um.nombre AS nombre_medida,
                            um.abreviatura AS abreviatura_medida,
-                           um.id_tipo AS id_tipo_medida,
                            ((p.precio_base + COALESCE(p.valor_ice, 0)) * (COALESCE(ti.porcentaje_iva, 0)::numeric / 100)) AS valor_iva,
                            ((p.precio_base + COALESCE(p.valor_ice, 0)) * (1 + COALESCE(ti.porcentaje_iva, 0)::numeric / 100)) AS pvp,
                            (SELECT COALESCE(SUM(k.cantidad), 0)
