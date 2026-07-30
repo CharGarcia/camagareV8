@@ -732,22 +732,30 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                     <div class="d-flex align-items-center gap-3 flex-wrap">
 
                                         <!-- Miniatura actual / preview -->
-                                        <div class="border rounded-2 bg-light d-flex align-items-center justify-content-center overflow-hidden flex-shrink-0"
-                                             style="width:110px;height:80px;" id="est-logo-wrap">
+                                        <div class="d-flex flex-column align-items-center gap-1 flex-shrink-0">
+                                            <div class="border rounded-2 bg-light d-flex align-items-center justify-content-center overflow-hidden"
+                                                 style="width:110px;height:80px;" id="est-logo-wrap">
+                                                <?php if (!empty($est['logo_ruta'])): ?>
+                                                    <img id="est-logo-preview"
+                                                         src="<?= htmlspecialchars((string)$est['logo_ruta']) ?>"
+                                                         alt="Logo actual"
+                                                         style="max-width:108px;max-height:78px;object-fit:contain;"
+                                                         onerror="this.style.display='none';document.getElementById('est-logo-placeholder').style.display='flex';">
+                                                    <div id="est-logo-placeholder" class="flex-column align-items-center justify-content-center text-muted" style="display:none;font-size:.65rem;text-align:center;">
+                                                        <i class="bi bi-image fs-4 d-block mb-1"></i>Sin logo
+                                                    </div>
+                                                <?php else: ?>
+                                                    <img id="est-logo-preview" src="" alt="" style="max-width:108px;max-height:78px;object-fit:contain;display:none;">
+                                                    <div id="est-logo-placeholder" class="flex-column align-items-center justify-content-center text-muted" style="display:flex;font-size:.65rem;text-align:center;">
+                                                        <i class="bi bi-image fs-4 d-block mb-1"></i>Sin logo
+                                                    </div>
+                                                <?php endif; ?>
+                                            </div>
                                             <?php if (!empty($est['logo_ruta'])): ?>
-                                                <img id="est-logo-preview"
-                                                     src="<?= htmlspecialchars((string)$est['logo_ruta']) ?>"
-                                                     alt="Logo actual"
-                                                     style="max-width:108px;max-height:78px;object-fit:contain;"
-                                                     onerror="this.style.display='none';document.getElementById('est-logo-placeholder').style.display='flex';">
-                                                <div id="est-logo-placeholder" class="flex-column align-items-center justify-content-center text-muted" style="display:none;font-size:.65rem;text-align:center;">
-                                                    <i class="bi bi-image fs-4 d-block mb-1"></i>Sin logo
-                                                </div>
-                                            <?php else: ?>
-                                                <img id="est-logo-preview" src="" alt="" style="max-width:108px;max-height:78px;object-fit:contain;display:none;">
-                                                <div id="est-logo-placeholder" class="flex-column align-items-center justify-content-center text-muted" style="display:flex;font-size:.65rem;text-align:center;">
-                                                    <i class="bi bi-image fs-4 d-block mb-1"></i>Sin logo
-                                                </div>
+                                                <a href="<?= htmlspecialchars((string)$est['logo_ruta']) ?>" download target="_blank" rel="noopener"
+                                                   class="small text-decoration-none" style="font-size:.65rem;">
+                                                    <i class="bi bi-download me-1"></i>Descargar logo actual
+                                                </a>
                                             <?php endif; ?>
                                         </div>
 
@@ -761,6 +769,14 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                                 <?php if (!empty($est['logo_ruta'])): ?>
                                                     <br><span class="text-success"><i class="bi bi-check-circle me-1"></i>Logo actual guardado.</span>
                                                 <?php endif; ?>
+                                            </div>
+                                            <div class="alert alert-light border py-2 px-2 mt-2 mb-0" style="font-size:.68rem;">
+                                                <i class="bi bi-info-circle me-1 text-primary"></i>
+                                                <strong>Espacio del logo en el PDF (factura, NC, retención, liquidación, guía, recibo):</strong>
+                                                un recuadro de <strong>81&nbsp;mm × 25.4&nbsp;mm</strong> (≈ relación de aspecto <strong>3.2&nbsp;: 1</strong>, panorámico).
+                                                El logo se ajusta completo dentro del recuadro sin deformarse (se centra y se reduce si hace falta),
+                                                así que un logo <strong>horizontal/apaisado</strong> aprovecha mejor el espacio que uno cuadrado o vertical.
+                                                Resolución sugerida para buena nitidez al imprimir: <strong>~960 × 300&nbsp;px</strong> (o mayor, misma proporción).
                                             </div>
                                         </div>
 
