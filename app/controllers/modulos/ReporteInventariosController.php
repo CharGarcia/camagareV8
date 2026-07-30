@@ -272,7 +272,7 @@ class ReporteInventariosController extends BaseModuloController
             $estado = $r['estado_stock'] ?? 'NORMAL';
             $badgeClass = $badges[$estado] ?? 'bg-secondary';
             return '<tr>'
-                . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span><br><small class="text-muted">' . htmlspecialchars($r['producto_codigo'] ?? '') . '</small></td>'
+                . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
                 . '<td class="small">' . htmlspecialchars($r['categoria_nombre'] ?? '') . '</td>'
                 . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
                 . '<td class="text-end fw-bold">' . number_format((float) ($r['stock_actual'] ?? 0), 2) . '</td>'
@@ -303,7 +303,7 @@ class ReporteInventariosController extends BaseModuloController
             $cad = !empty($r['fecha_caducidad']) ? date('d-m-Y', strtotime($r['fecha_caducidad'])) : '-';
             return '<tr>'
                 . '<td class="small text-nowrap">' . date('d-m-Y H:i', strtotime($r['fecha_movimiento'] ?? '')) . '</td>'
-                . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span><br><small class="text-muted">' . htmlspecialchars($r['producto_codigo'] ?? '') . '</small></td>'
+                . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
                 . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
                 . '<td class="text-center small text-uppercase">' . htmlspecialchars($r['tipo_movimiento'] ?? '') . '</td>'
                 . '<td class="small">' . htmlspecialchars($r['origen_label'] ?? '') . '</td>'
@@ -348,7 +348,7 @@ class ReporteInventariosController extends BaseModuloController
             return '<tr>'
                 . '<td class="small">' . date('d-m-Y', strtotime($r['fecha_emision'] ?? '')) . '<br><small class="text-muted">' . htmlspecialchars($r['secuencial'] ?? '') . '</small></td>'
                 . '<td><span class="fw-bold">' . htmlspecialchars($r['cliente_nombre'] ?? '') . '</span><br><small class="text-muted">' . htmlspecialchars($r['cliente_identificacion'] ?? '') . '</small></td>'
-                . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span><br><small class="text-muted">' . htmlspecialchars($r['producto_codigo'] ?? '') . '</small></td>'
+                . '<td><span class="fw-bold">' . htmlspecialchars($r['producto_nombre'] ?? '') . '</span></td>'
                 . '<td class="small">' . htmlspecialchars($r['bodega_nombre'] ?? '') . '</td>'
                 . '<td class="text-end">' . number_format((float) ($r['cantidad_consignada'] ?? 0), 2) . '</td>'
                 . '<td class="text-end fw-bold">' . number_format($saldo, 2) . '</td>'

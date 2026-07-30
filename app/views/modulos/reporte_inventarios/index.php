@@ -14,6 +14,13 @@
         white-space: normal !important;
         word-break: break-word;
     }
+    /* El nombre del producto/cliente seleccionado en los buscadores no debe
+       envolver a varias líneas: eso estira la columna y descuadra el resto de
+       la fila de filtros (p. ej. el botón "Generar" queda desalineado). */
+    #riTabsContent small[id$="-seleccionado"] {
+        display: block; overflow: hidden; text-overflow: ellipsis;
+        white-space: nowrap; max-width: 100%;
+    }
     .ri-kpi-icon { width: 48px; height: 48px; }
     .ri-nav-tabs .nav-link { font-weight: 600; font-size: .85rem; }
     .ri-nav-tabs .nav-link.active { border-bottom: 3px solid var(--bs-primary); }
@@ -291,7 +298,7 @@
                                     <input type="text" id="ri-mv-nup" class="form-control form-control-sm shadow-none border" placeholder="NUP">
                                 </div>
 
-                                <div class="col-md-3 position-relative">
+                                <div class="col-md-6 position-relative">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Producto</label>
                                     <div class="input-group input-group-sm">
                                         <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
@@ -302,7 +309,7 @@
                                     <div id="ri-mv-dropdown-producto" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:calc(100% - 1.5rem);max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                                     <small class="text-muted fst-italic" id="ri-mv-producto-seleccionado"></small>
                                 </div>
-                                <div class="col-md-2">
+                                <div class="col-md-3">
                                     <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Agrupar por</label>
                                     <select id="ri-mv-agrupar" class="form-select form-select-sm shadow-none border">
                                         <option value="NINGUNO">Detallado</option>
@@ -314,7 +321,7 @@
                                         <option value="MES">Por Mes</option>
                                     </select>
                                 </div>
-                                <div class="col-md-2 d-flex align-items-end">
+                                <div class="col-md-3 d-flex align-items-end">
                                     <button type="submit" class="btn btn-primary btn-sm shadow-sm w-100"><i class="bi bi-search me-1"></i>Generar</button>
                                 </div>
                             </form>
