@@ -45,11 +45,11 @@ $tabActivo = $tabActivo ?? 'ESF';
         <div class="tab-pane fade <?= ($tabActivo === $tipo) ? 'show active' : '' ?>" id="tab-<?= $tipo ?>" role="tabpanel">
             
             <div class="card shadow-sm border-0 cmg-table-card">
-                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
-                    <div class="d-flex align-items-center gap-2">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2 border-bottom">
+                    <div class="d-flex align-items-center flex-wrap gap-2">
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
-                            <input type="text" id="search-<?= $tipo ?>" class="form-control bg-light border-start-0" placeholder="Buscar casillero..." style="width: 250px;" onkeyup="filtrarTabla('<?= $tipo ?>')">
+                            <input type="text" id="search-<?= $tipo ?>" class="form-control bg-light border-start-0" placeholder="Buscar casillero..." style="width: 250px;max-width:100%" onkeyup="filtrarTabla('<?= $tipo ?>')">
                         </div>
                     </div>
                 </div>

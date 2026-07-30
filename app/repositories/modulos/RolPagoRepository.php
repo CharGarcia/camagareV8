@@ -250,28 +250,41 @@ class RolPagoRepository extends BaseRepository
         return $map;
     }
 
-    /** [id_empleado => neto pagado por egreso en SEMANAL/QUINCENA del mes] (para el neteo mensual). */
+    /**
+     * [id_empleado => ['neteo'=>neto ya pagado por egreso en SEMANAL/QUINCENA del mes,
+     *                  'descuentos'=>total_egresos de esas mismas corridas]] para el neteo mensual.
+     *
+     * 'neteo' es lo que ya salió de caja (se resta del rol mensual). 'descuentos' son los
+     * egresos (descuentos, préstamos cobrados, días no laborados, etc.) que YA redujeron
+     * ese pago de quincena/semana: sin restarlos también en el mensual, el descuento no
+     * afecta el total del mes (solo se corre de la quincena al cierre de mes). Se agregan
+     * por id de rol_detalle (no por fila de pago) para no duplicar si hubo pagos parciales.
+     */
     public function getPagadoNeteoMasivo(int $idEmpresa, array $ids, int $anio, int $mes): array
     {
-        $map = array_fill_keys(array_map('intval', $ids), 0.0);
+        $map = array_fill_keys(array_map('intval', $ids), ['neteo' => 0.0, 'descuentos' => 0.0]);
         if (empty($ids)) return $map;
         $in = implode(',', array_map('intval', $ids));
-        $sql = "SELECT d.id_empleado, COALESCE(SUM(ed.monto_pagado), 0) AS pagado
-                FROM egresos_detalle ed
-                JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
-                JOIN rol_detalle d ON d.id = ed.id_referencia_documento
-                JOIN rol_cabecera c ON c.id = d.id_rol
-                WHERE ed.tipo_documento = 'ROL' AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false
-                  AND d.id_empresa = :emp AND d.id_empleado IN ($in)
-                  AND c.periodo_anio = :a AND c.periodo_mes = :m
-                  AND c.tipo_rol IN ('SEMANAL','QUINCENA') AND c.eliminado = false
-                  AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
-                GROUP BY d.id_empleado";
+        $sql = "SELECT sub.id_empleado, COALESCE(SUM(sub.pagado), 0) AS neteo, COALESCE(SUM(sub.total_egresos), 0) AS descuentos
+                FROM (
+                    SELECT d.id, d.id_empleado, d.total_egresos, SUM(ed.monto_pagado) AS pagado
+                    FROM egresos_detalle ed
+                    JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                    JOIN rol_detalle d ON d.id = ed.id_referencia_documento
+                    JOIN rol_cabecera c ON c.id = d.id_rol
+                    WHERE ed.tipo_documento = 'ROL' AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false
+                      AND d.id_empresa = :emp AND d.id_empleado IN ($in)
+                      AND c.periodo_anio = :a AND c.periodo_mes = :m
+                      AND c.tipo_rol IN ('SEMANAL','QUINCENA') AND c.eliminado = false
+                      AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
+                    GROUP BY d.id, d.id_empleado, d.total_egresos
+                ) sub
+                GROUP BY sub.id_empleado";
         try {
             $st = $this->db->prepare($sql);
             $st->execute([':emp' => $idEmpresa, ':a' => $anio, ':m' => $mes]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $map[(int) $r['id_empleado']] = (float) $r['pagado'];
+                $map[(int) $r['id_empleado']] = ['neteo' => (float) $r['neteo'], 'descuentos' => (float) $r['descuentos']];
             }
         } catch (\Throwable $e) {
             // egresos no disponible → todos en 0
@@ -414,11 +427,13 @@ class RolPagoRepository extends BaseRepository
                 $avisos[] = ['tipo' => 'anticipo', 'empleado' => $r['empleado'], 'concepto' => $r['concepto'], 'monto' => (float) $r['monto']];
             }
 
-            // Préstamos (7/8/9): cuota de este período cuyo préstamo aún no fue desembolsado.
+            // Préstamo Empresa (9): cuota de este período cuyo préstamo aún no fue desembolsado.
+            // Quirografario (7) e Hipotecario (8) no aplican aquí: los desembolsa el
+            // IESS/banco directamente al empleado, no la empresa (ver CatalogoNovedades::CODS_PRESTAMO).
             $sqlP = "SELECT emp.nombres_apellidos AS empleado, n.tipo_nombre AS concepto, n.valor AS monto
                      FROM novedades n JOIN empleados emp ON emp.id = n.id_empleado
                      WHERE n.id_empresa = :emp AND n.periodo_anio = :a AND n.periodo_mes = :m AND n.aplica_en = :ap
-                       AND n.tipo_codigo IN ('7','8','9') AND n.estado = 'activo' AND n.eliminado = false
+                       AND n.tipo_codigo = '9' AND n.estado = 'activo' AND n.eliminado = false
                        AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
                        AND (SELECT COALESCE(SUM(n2.valor), 0) FROM novedades n2
                              WHERE n2.id_empresa = n.id_empresa AND n2.id_empleado = n.id_empleado

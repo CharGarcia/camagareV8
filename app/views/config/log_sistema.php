@@ -20,6 +20,12 @@ $opcionesFiltros = $opcionesFiltros ?? ['acciones' => [], 'tablas' => [], 'usuar
         padding: 0 4px;
         border-radius: 3px;
     }
+    @media (max-width: 575.98px) {
+        #logFiltros > div { flex: 1 1 100%; }
+        #logFiltros > div .form-select,
+        #logFiltros > div .form-control { width: 100% !important; min-width: 0 !important; }
+        #logFiltros #btnLimpiarFiltros { flex: 1 1 100%; }
+    }
 </style>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -34,8 +40,8 @@ $opcionesFiltros = $opcionesFiltros ?? ['acciones' => [], 'tablas' => [], 'usuar
 
 <div class="card cmg-table-card border-0 shadow-sm rounded-3 bg-white">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <form id="logFormBuscar" class="input-group input-group-sm" style="width:320px" onsubmit="event.preventDefault(); LOGSIS_cambiarPagina(1);">
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <form id="logFormBuscar" class="input-group input-group-sm" style="width:320px;max-width:100%" onsubmit="event.preventDefault(); LOGSIS_cambiarPagina(1);">
                 <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
                 <input type="text" id="logInputBuscar" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar…  usuario:juan  accion:eliminar" autocomplete="off">
                 <button type="button" class="btn btn-outline-secondary" title="Ayuda de búsqueda" data-bs-toggle="collapse" data-bs-target="#logFiltrosAyuda"><i class="bi bi-question-lg"></i></button>

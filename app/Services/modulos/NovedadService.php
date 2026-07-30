@@ -30,7 +30,11 @@ class NovedadService
 
     public function getDetalle(int $id, int $idEmpresa): ?array
     {
-        return $this->repository->getDetalle($id, $idEmpresa);
+        $data = $this->repository->getDetalle($id, $idEmpresa);
+        if ($data) {
+            $data['bloqueada'] = $this->rolYaPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['aplica_en'] ?? 'rol', $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0);
+        }
+        return $data;
     }
 
     public function crear(array $data): int
@@ -115,14 +119,35 @@ class NovedadService
     /**
      * Lanza excepción si el empleado ya tiene un rol PAGADO para el tipo (según aplica_en)
      * y período de la novedad: no se puede crear/editar/eliminar una novedad que afectaría
-     * un rol ya pagado. Silencioso si el módulo de roles/egresos no está disponible.
+     * un rol ya pagado.
      */
     private function bloquearSiRolPagado(int $idEmpresa, $idEmpleado, ?string $aplicaEn, $anio, $mes): void
+    {
+        if (!$this->rolYaPagado($idEmpresa, $idEmpleado, $aplicaEn, $anio, $mes)) return;
+
+        $tipo = match (strtolower((string) ($aplicaEn ?: 'rol'))) {
+            'semanal'  => 'SEMANAL',
+            'quincena' => 'QUINCENA',
+            default    => 'MENSUAL',
+        };
+        $etiqueta = match ($tipo) { 'SEMANAL' => 'semanal', 'QUINCENA' => 'quincena', default => 'mensual' };
+        throw new Exception('No se puede crear, editar ni eliminar esta novedad: el rol ' . $etiqueta
+            . ' de ' . str_pad((string) (int) $mes, 2, '0', STR_PAD_LEFT) . '/' . (int) $anio
+            . ' del empleado ya está pagado. Anule el pago/rol de ese período si necesita modificarla.');
+    }
+
+    /**
+     * ¿El rol (según aplica_en) del empleado para ese período ya está pagado/contabilizado
+     * o tiene algún pago registrado? A diferencia de bloquearSiRolPagado(), no lanza
+     * excepción: se usa para que la UI (modal) se muestre bloqueada de entrada, en vez de
+     * dejar editar y recién avisar al guardar. Silencioso si roles/egresos no está desplegado.
+     */
+    private function rolYaPagado(int $idEmpresa, $idEmpleado, ?string $aplicaEn, $anio, $mes): bool
     {
         $idEmpleado = (int) $idEmpleado;
         $anio = (int) $anio;
         $mes  = (int) $mes;
-        if ($idEmpleado <= 0 || $mes < 1 || $anio < 2000) return;
+        if ($idEmpleado <= 0 || $mes < 1 || $anio < 2000) return false;
 
         $tipo = match (strtolower((string) ($aplicaEn ?: 'rol'))) {
             'semanal'  => 'SEMANAL',
@@ -131,17 +156,10 @@ class NovedadService
         };
 
         try {
-            $pagado = (new \App\repositories\modulos\RolPagoRepository())
+            return (new \App\repositories\modulos\RolPagoRepository())
                 ->existeRolPagadoPeriodo($idEmpresa, $idEmpleado, $tipo, $anio, $mes);
         } catch (\Throwable $e) {
-            return; // roles/egresos no desplegado → sin restricción
-        }
-
-        if ($pagado) {
-            $etiqueta = match ($tipo) { 'SEMANAL' => 'semanal', 'QUINCENA' => 'quincena', default => 'mensual' };
-            throw new Exception('No se puede crear, editar ni eliminar esta novedad: el rol ' . $etiqueta
-                . ' de ' . str_pad((string) $mes, 2, '0', STR_PAD_LEFT) . '/' . $anio
-                . ' del empleado ya está pagado. Anule el pago/rol de ese período si necesita modificarla.');
+            return false; // roles/egresos no desplegado → sin restricción
         }
     }
 

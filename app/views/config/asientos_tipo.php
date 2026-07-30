@@ -38,8 +38,8 @@ $base = BASE_URL;
 <!-- Tarjeta principal estándar de tablas (cmg-table-card) -->
 <div class="card cmg-table-card border-0 shadow-sm rounded-3 bg-white">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <form id="asiento-tipo-form-buscar" class="input-group input-group-sm" style="width:280px" onsubmit="event.preventDefault(); ASIENTOTIPO_cambiarPagina(1);">
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <form id="asiento-tipo-form-buscar" class="input-group input-group-sm" style="width:280px;max-width:100%" onsubmit="event.preventDefault(); ASIENTOTIPO_cambiarPagina(1);">
                 <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
                 <input type="text" id="asientoTipoInputBuscar" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar por código, referencia..." autocomplete="off">
             </form>

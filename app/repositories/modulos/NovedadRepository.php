@@ -66,12 +66,67 @@ class NovedadRepository extends BaseRepository
         // Anexar estado de pago (derivado del rol): la novedad está pagada si aparece
         // como rubro en una línea de rol que fue pagada vía egreso.
         $pagadas = $this->idsNovedadesPagadas(array_column($rows, 'id'), $idEmpresa);
+        // Anexar si la novedad está BLOQUEADA para editar/eliminar: mismo criterio que
+        // NovedadService::bloquearSiRolPagado (rol del período ya pagado/contabilizado
+        // o con algún pago registrado), calculado en lote para no hacer N+1 en el listado.
+        $bloqueadas = $this->combosRolBloqueado($rows, $idEmpresa);
         foreach ($rows as &$r) {
             $r['pagada'] = isset($pagadas[(int) $r['id']]);
+            $r['bloqueada'] = isset($bloqueadas[$this->claveCombo($r)]);
         }
         unset($r);
 
         return ['rows' => $rows, 'total' => $total];
+    }
+
+    /** Clave [id_empleado|tipo_rol|anio|mes] para cruzar una novedad con su corrida de rol. */
+    private function claveCombo(array $r): string
+    {
+        $tipoRol = match (strtolower((string) ($r['aplica_en'] ?? 'rol'))) {
+            'semanal'  => 'SEMANAL',
+            'quincena' => 'QUINCENA',
+            default    => 'MENSUAL',
+        };
+        return ((int) $r['id_empleado']) . '|' . $tipoRol . '|' . ((int) $r['periodo_anio']) . '|' . ((int) $r['periodo_mes']);
+    }
+
+    /**
+     * Combos [id_empleado|tipo_rol|anio|mes] cuyo rol ya está pagado/contabilizado o
+     * tiene algún pago registrado por egreso: toda novedad de ese combo queda bloqueada
+     * para editar/eliminar (mismo criterio que RolPagoRepository::existeRolPagadoPeriodo,
+     * en lote para todos los empleados del listado en una sola consulta).
+     */
+    private function combosRolBloqueado(array $rows, int $idEmpresa): array
+    {
+        $idsEmp = array_values(array_unique(array_map(fn($r) => (int) $r['id_empleado'], $rows)));
+        if (empty($idsEmp)) return [];
+        $in = implode(',', $idsEmp);
+        $sql = "SELECT DISTINCT d.id_empleado, c.tipo_rol, c.periodo_anio, c.periodo_mes
+                FROM rol_detalle d
+                JOIN rol_cabecera c ON c.id = d.id_rol
+                WHERE d.id_empresa = :emp AND d.id_empleado IN ($in) AND c.eliminado = false
+                  AND (
+                    c.estado IN ('pagado','contabilizado')
+                    OR EXISTS (
+                        SELECT 1 FROM egresos_detalle ed
+                        JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                        WHERE ed.tipo_documento = 'ROL' AND ec.estado != 'anulado'
+                          AND ec.eliminado = false AND ed.eliminado = false
+                          AND ed.id_referencia_documento = d.id AND ed.monto_pagado > 0
+                    )
+                  )";
+        $set = [];
+        try {
+            $st = $this->db->prepare($sql);
+            $st->execute([':emp' => $idEmpresa]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $clave = ((int) $r['id_empleado']) . '|' . $r['tipo_rol'] . '|' . ((int) $r['periodo_anio']) . '|' . ((int) $r['periodo_mes']);
+                $set[$clave] = true;
+            }
+        } catch (\Throwable $e) {
+            // Nómina/roles no desplegado en esta instalación: sin bloqueo derivado del rol.
+        }
+        return $set;
     }
 
     /**

@@ -173,6 +173,32 @@ class EmpresaController extends BaseModuloController
         exit;
     }
 
+    public function testCorreo(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            $this->requireActualizar();
+            $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+            if ($idEmpresa <= 0) {
+                echo json_encode(['ok' => false, 'error' => 'No hay una empresa seleccionada en la sesión.']);
+                exit;
+            }
+
+            $destino = trim($_POST['destino'] ?? '');
+            if ($destino === '' || !filter_var($destino, FILTER_VALIDATE_EMAIL)) {
+                echo json_encode(['ok' => false, 'error' => 'Ingrese un correo de destino válido.']);
+                exit;
+            }
+
+            $res = $this->service->testCorreo($idEmpresa, $_POST, $destino);
+            echo json_encode($res);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function deletePunto(): void
     {
         header('Content-Type: application/json');

@@ -344,6 +344,18 @@ body.cmg-has-table .cmg-main-content > .container-fluid > div:has(> h5) {
 .modal-backdrop { z-index: 5055 !important; }
 .swal2-container { z-index: 10000 !important; }
 
+/* Offcanvas del menú móvil (navbar.php): el ancho por defecto de Bootstrap
+   (400px) es más ancho que la mayoría de pantallas de celular, así que el
+   panel se sale del viewport (aparece cortado / con scroll horizontal).
+   Se limita a un porcentaje del ancho visible en pantallas angostas. */
+@media (max-width: 575.98px) {
+  .offcanvas.offcanvas-start,
+  .offcanvas.offcanvas-end {
+    width: 88vw !important;
+    max-width: 360px !important;
+  }
+}
+
 /* Contenedor del menú horizontal - debajo del navbar */
 .cmg-menu-wrapper {
   width: 100% !important;

@@ -687,6 +687,7 @@ class EmpleadosController extends BaseModuloController
             'departamento'          => trim($_POST['departamento'] ?? ''),
             'codigo_sectorial_iess'  => trim($_POST['codigo_sectorial_iess'] ?? ''),
             'atraso_modo'           => trim($_POST['atraso_modo'] ?? ''),
+            'excluir_calculo_ir'    => trim($_POST['excluir_calculo_ir'] ?? 'no'),
         ];
 
         // Manejo de arrays dinámicos (vienen como JSON desde el frontend para JS a servidor)

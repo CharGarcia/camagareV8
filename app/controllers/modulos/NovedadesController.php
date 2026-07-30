@@ -137,6 +137,9 @@ class NovedadesController extends BaseModuloController
         $pagoBadge = !empty($r['pagada'])
             ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="bi bi-check-circle me-1"></i>Pagada</span>'
             : '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Pendiente</span>';
+        $accionCelda = !empty($r['bloqueada'])
+            ? '<span class="text-muted" title="Bloqueada: el rol de este período ya está pagado"><i class="bi bi-lock-fill"></i></span>'
+            : '<button class="btn btn-outline-danger btn-xs border-0 px-2" onclick="eliminarRegistro(' . (int) $r['id'] . ')" title="Eliminar"><i class="bi bi-trash"></i></button>';
 
         return '<tr class="novedad-row" role="button" data-row=\'' . $dataJson . '\' onclick="abrirModalEditar(this)">'
             . '<td class="ps-3 fw-medium" data-col="empleado">' . $h($r['empleado_nombre']) . '</td>'
@@ -149,9 +152,7 @@ class NovedadesController extends BaseModuloController
             . '<td data-col="motivo" class="small text-muted">' . $h($r['motivo_nombre'] ?? '—') . '</td>'
             . '<td class="text-center" data-col="estado">' . $estadoBadge . '</td>'
             . '<td class="text-center" data-col="pago">' . $pagoBadge . '</td>'
-            . '<td class="text-center pe-3" onclick="event.stopPropagation()">'
-            . '<button class="btn btn-outline-danger btn-xs border-0 px-2" onclick="eliminarRegistro(' . (int) $r['id'] . ')" title="Eliminar"><i class="bi bi-trash"></i></button>'
-            . '</td></tr>';
+            . '<td class="text-center pe-3" onclick="event.stopPropagation()">' . $accionCelda . '</td></tr>';
     }
 
     public function store(): void

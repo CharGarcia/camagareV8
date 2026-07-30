@@ -435,6 +435,16 @@ class EmpresaService
         return $this->repository->saveCorreoConfig($idEmpresa, $data);
     }
 
+    public function testCorreo(int $idEmpresa, array $data, string $destino): array
+    {
+        $tipoCorreo = $data['tipo_correo'] ?? 'camagare';
+        $emisor = $this->repository->getEmisorConfig($idEmpresa);
+        $nombreEmpresa = $emisor['nombre_comercial'] ?? $emisor['nombre'] ?? '';
+
+        $envioService = new \App\Services\EnvioDocumentosSRIService();
+        return $envioService->enviarCorreoPrueba($tipoCorreo, $data, $destino, $nombreEmpresa);
+    }
+
     public function uploadFirma(int $idEmpresa, ?array $file, string $password, bool $forzar = false): array
     {
         if (!$file || $file['error'] !== UPLOAD_ERR_OK) {

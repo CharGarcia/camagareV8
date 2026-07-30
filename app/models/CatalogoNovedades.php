@@ -34,8 +34,13 @@ final class CatalogoNovedades
         return in_array($codigo, self::CODS_PAGO_EGRESO, true);
     }
 
-    /** Préstamos: cuota de descuento directo, pero SOLO si el préstamo ya fue desembolsado (pagado). */
-    public const CODS_PRESTAMO = ['7', '8', '9'];
+    /**
+     * Préstamos cuya cuota descuenta directo SOLO si el préstamo ya fue desembolsado
+     * (pagado) por la EMPRESA. Solo el Préstamo Empresa (9): en Quirografario (7) e
+     * Hipotecario (8) el desembolso lo hace el IESS/banco directamente al empleado, no
+     * la empresa, así que su cuota descuenta directo (como un Descuento normal).
+     */
+    public const CODS_PRESTAMO = ['9'];
 
     public static function esPrestamo(string $codigo): bool
     {

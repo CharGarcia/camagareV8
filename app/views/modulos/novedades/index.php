@@ -166,7 +166,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                     <?php endif; ?>
                                 </td>
                                 <td class="text-center pe-3" onclick="event.stopPropagation()">
-                                    <button class="btn btn-outline-danger btn-xs border-0 px-2" onclick="eliminarRegistro(<?= $row['id'] ?>)" title="Eliminar"><i class="bi bi-trash"></i></button>
+                                    <?php if (!empty($row['bloqueada'])): ?>
+                                        <span class="text-muted" title="Bloqueada: el rol de este período ya está pagado"><i class="bi bi-lock-fill"></i></span>
+                                    <?php else: ?>
+                                        <button class="btn btn-outline-danger btn-xs border-0 px-2" onclick="eliminarRegistro(<?= $row['id'] ?>)" title="Eliminar"><i class="bi bi-trash"></i></button>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>

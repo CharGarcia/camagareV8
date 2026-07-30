@@ -25,13 +25,18 @@ use App\models\CatalogoNovedades;
  *  - Anticipo (novedad 3): NO se descuenta al registrarse; se paga por egreso y el rol
  *    descuenta solo lo pagado ($anticiposPagados[id_novedad]).
  *  - Descuento (2): egreso directo por su valor.
- *  - Préstamos (7,8,9): la cuota descuenta directo SOLO si el préstamo ya fue desembolsado
- *    (pagado por egreso); si no, no descuenta ($prestamosNoDesembolsados[id_novedad]).
- *  - Neteo (solo MENSUAL): resta lo ya pagado en SEMANAL/QUINCENA del mes.
+ *  - Préstamo Quirografario (7) e Hipotecario (8): egreso directo por su valor, igual que
+ *    un Descuento. Los desembolsa el IESS/banco directamente al empleado, no la empresa,
+ *    así que no dependen de un egreso propio para empezar a descontarse.
+ *  - Préstamo Empresa (9): la cuota descuenta directo SOLO si el préstamo ya fue desembolsado
+ *    por la empresa (pagado por egreso); si no, no descuenta ($prestamosNoDesembolsados[id_novedad]).
+ *  - Neteo (solo MENSUAL): resta lo ya pagado en SEMANAL/QUINCENA del mes, MÁS los
+ *    descuentos que ya se aplicaron en esas corridas (sin esto, un descuento de quincena
+ *    no afecta el total del mes: solo se corre de la quincena al cierre de mes).
  */
 class RolCalculoService
 {
-    public function calcular(array $emp, string $tipo, array $salario, array $rubrosFijos, array $novedades, float $neteo = 0.0, float $vacaciones = 0.0, int $diasTrabajados = 30, array $anticiposPagados = [], array $prestamosNoDesembolsados = [], array $tramosIr = [], float $rebajaGastosPersonalesAnual = 0.0): array
+    public function calcular(array $emp, string $tipo, array $salario, array $rubrosFijos, array $novedades, float $neteo = 0.0, float $vacaciones = 0.0, int $diasTrabajados = 30, array $anticiposPagados = [], array $prestamosNoDesembolsados = [], array $tramosIr = [], float $rebajaGastosPersonalesAnual = 0.0, float $descuentosNeteo = 0.0): array
     {
         $esMensual = $tipo === 'MENSUAL';
         $rubros = [];
@@ -120,7 +125,7 @@ class RolCalculoService
                     $rubros[] = $this->r('egreso', $nom . ' (' . $val . 'd)', $cod, 'novedad', $monto, false, $idn);
                     $egresos += $monto;
                     break;
-                default: // 2 Descuento: descuento directo, sin egreso
+                default: // 2 Descuento, 7 Préstamo Quirografario, 8 Préstamo Hipotecario: descuento directo, sin egreso
                     $rubros[] = $this->r('egreso', $nom, $cod, 'novedad', $val, false, $idn);
                     $egresos += $val;
                     break;
@@ -215,6 +220,14 @@ class RolCalculoService
             $neteo = round($neteo, 2);
             $rubros[] = $this->r('egreso', 'Neteo semanas/quincenas del mes', null, 'neteo', $neteo, false);
             $egresos += $neteo;
+        }
+        // 6b) Descuentos ya aplicados en esas quincenas/semanas (código 2, préstamos cobrados,
+        // días no laborados, etc.). El neteo (6) solo resta el NETO ya pagado; sin esta línea,
+        // ese descuento no reduce el total del mes, solo se traslada de la quincena al cierre.
+        if ($esMensual && $descuentosNeteo > 0) {
+            $descuentosNeteo = round($descuentosNeteo, 2);
+            $rubros[] = $this->r('egreso', 'Descuentos aplicados en quincenas/semanas del mes', null, 'neteo', $descuentosNeteo, false);
+            $egresos += $descuentosNeteo;
         }
 
         $ingresos = round($ingresos, 2);

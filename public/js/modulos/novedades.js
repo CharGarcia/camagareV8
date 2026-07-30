@@ -138,9 +138,39 @@
         }
     };
 
+    // ─── Bloqueo de solo lectura (rol del período ya pagado/contabilizado) ──
+    // El backend ya rechaza el guardado (NovedadService::bloquearSiRolPagado); esto
+    // evita que el usuario intente editar sin saber que no se va a guardar.
+    function novLimpiarBloqueoSoloLectura() {
+        const modal = document.getElementById('modalNovedad');
+        if (!modal) return;
+        modal.querySelectorAll('.nov-lock-off').forEach(el => {
+            el.disabled = false;
+            el.classList.remove('nov-lock-off');
+        });
+        document.getElementById('novBloqueoAviso')?.classList.add('d-none');
+        document.getElementById('btnGuardarNov')?.classList.remove('d-none');
+    }
+
+    function novAplicarSoloLectura(bloqueada) {
+        if (!bloqueada) return;
+        document.getElementById('novBloqueoAviso')?.classList.remove('d-none');
+        const modal = document.getElementById('modalNovedad');
+        if (modal) {
+            modal.querySelectorAll('.modal-body input, .modal-body select, .modal-body textarea').forEach(el => {
+                if (el.disabled) return;
+                el.disabled = true;
+                el.classList.add('nov-lock-off');
+            });
+        }
+        document.getElementById('btnGuardarNov')?.classList.add('d-none');
+        document.getElementById('btnEliminarNov')?.classList.add('d-none');
+    }
+
     window.abrirModalCrear = function () {
         if (!form) return;
         form.reset();
+        novLimpiarBloqueoSoloLectura();
         document.getElementById('nov_id').value = '';
         document.getElementById('tituloModalNov').textContent = 'Nueva Novedad';
         document.getElementById('btnEliminarNov')?.classList.add('d-none');
@@ -163,6 +193,7 @@
         if (!form || !id) return;
 
         form.reset();
+        novLimpiarBloqueoSoloLectura();
         document.getElementById('nov_id').value = id;
         document.getElementById('tituloModalNov').textContent = 'Editar Novedad';
         document.getElementById('btnEliminarNov')?.classList.remove('d-none');
@@ -194,6 +225,8 @@
             // Sincroniza el "auto" con lo cargado: si la observación coincide con el
             // texto autogenerado, seguirá sincronizándose; si es manual, se respeta.
             obsAuto = textoObsAuto();
+
+            novAplicarSoloLectura(!!d.bloqueada);
         } catch (e) {}
     };
 

@@ -20,6 +20,10 @@ $mesActual  = (int) date('n');
                     <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
                 <div class="modal-body">
+                    <div id="novBloqueoAviso" class="alert alert-secondary d-flex align-items-center gap-2 py-2 px-3 mb-3 d-none">
+                        <i class="bi bi-lock-fill"></i>
+                        <span class="small" id="novBloqueoAvisoTexto">Esta novedad no se puede modificar: el rol de este período ya está pagado. Anule el pago/rol de ese período si necesita corregirla.</span>
+                    </div>
                     <input type="hidden" name="id" id="nov_id" value="">
                     <div class="row g-3">
                         <div class="col-md-8 position-relative">

@@ -595,6 +595,68 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                         </div>
                                     </div>
                                 </div>
+
+                                <!-- Tarjeta informativa: cómo obtener host/puerto/SSL según el proveedor de correo -->
+                                <div class="card border-info-subtle bg-info bg-opacity-10 mb-2">
+                                    <div class="card-body p-2">
+                                        <p class="small fw-bold mb-2 text-info-emphasis"><i class="bi bi-info-circle me-1"></i> ¿No sabes qué Host, Puerto o SSL usar? Guíate según tu proveedor de correo:</p>
+                                        <div class="accordion accordion-flush" id="accordionCorreoAyuda">
+                                            <div class="accordion-item">
+                                                <h2 class="accordion-header" id="headingGmail">
+                                                    <button class="accordion-button collapsed py-2 small fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseGmail" aria-expanded="false" aria-controls="collapseGmail">
+                                                        <i class="bi bi-envelope-at me-2"></i> Gmail / Google Workspace
+                                                    </button>
+                                                </h2>
+                                                <div id="collapseGmail" class="accordion-collapse collapse" aria-labelledby="headingGmail" data-bs-parent="#accordionCorreoAyuda">
+                                                    <div class="accordion-body small py-2">
+                                                        <ul class="mb-1 ps-3">
+                                                            <li><strong>Host:</strong> smtp.gmail.com</li>
+                                                            <li><strong>Puerto:</strong> 587 (con SSL/TLS habilitado). También funciona el puerto 465.</li>
+                                                            <li><strong>Usuario:</strong> tu correo completo (ej: nombre@gmail.com)</li>
+                                                            <li><strong>Contraseña:</strong> Gmail <u>no acepta tu contraseña normal</u>. Debes activar la verificación en dos pasos y generar una <strong>"Contraseña de aplicación"</strong> en <span class="text-body">myaccount.google.com → Seguridad → Verificación en dos pasos → Contraseñas de aplicaciones</span>, y usar esa clave de 16 caracteres aquí.</li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="accordion-item">
+                                                <h2 class="accordion-header" id="headingOutlook">
+                                                    <button class="accordion-button collapsed py-2 small fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOutlook" aria-expanded="false" aria-controls="collapseOutlook">
+                                                        <i class="bi bi-envelope-at me-2"></i> Outlook / Hotmail / Office 365
+                                                    </button>
+                                                </h2>
+                                                <div id="collapseOutlook" class="accordion-collapse collapse" aria-labelledby="headingOutlook" data-bs-parent="#accordionCorreoAyuda">
+                                                    <div class="accordion-body small py-2">
+                                                        <ul class="mb-1 ps-3">
+                                                            <li><strong>Host:</strong> smtp.office365.com (cuentas @outlook.com, @hotmail.com y Office 365)</li>
+                                                            <li><strong>Puerto:</strong> 587 (con SSL/TLS habilitado)</li>
+                                                            <li><strong>Usuario:</strong> tu correo completo (ej: nombre@outlook.com)</li>
+                                                            <li><strong>Contraseña:</strong> si tienes activada la verificación en dos pasos (recomendado), Microsoft exige generar una <strong>"Contraseña de aplicación"</strong> en account.microsoft.com → Seguridad, en lugar de tu contraseña normal.</li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="accordion-item">
+                                                <h2 class="accordion-header" id="headingOtro">
+                                                    <button class="accordion-button collapsed py-2 small fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOtro" aria-expanded="false" aria-controls="collapseOtro">
+                                                        <i class="bi bi-envelope-at me-2"></i> Correo propio / dominio empresarial (cPanel, Zoho, etc.)
+                                                    </button>
+                                                </h2>
+                                                <div id="collapseOtro" class="accordion-collapse collapse" aria-labelledby="headingOtro" data-bs-parent="#accordionCorreoAyuda">
+                                                    <div class="accordion-body small py-2">
+                                                        <ul class="mb-1 ps-3">
+                                                            <li><strong>Host:</strong> normalmente <code>mail.tudominio.com</code> o <code>smtp.tudominio.com</code> — lo indica tu proveedor de hosting o correo.</li>
+                                                            <li><strong>Puerto:</strong> 587 (SSL/TLS, recomendado) o 465 (SSL directo).</li>
+                                                            <li><strong>Usuario:</strong> tu correo completo (ej: nombre@tudominio.com)</li>
+                                                            <li><strong>Contraseña:</strong> la contraseña normal de esa cuenta de correo.</li>
+                                                            <li>En cPanel: entra a <em>Cuentas de correo</em> → tu cuenta → <em>Configurar cliente de correo</em> para ver los datos exactos de tu proveedor.</li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <p class="small mb-0 mt-2 text-muted"><i class="bi bi-lightbulb me-1"></i> Guarda la configuración y usa el botón <strong>"Probar Envío"</strong> para confirmar que todo funciona antes de activar el envío automático.</p>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="col-md-12 mt-2">
@@ -611,6 +673,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                         </div>
 
                         <div class="col-12 mt-4 text-end">
+                            <button type="button" class="btn btn-outline-secondary btn-sm px-3 me-2" onclick="probarEnvioCorreo()"><i class="bi bi-send"></i> Probar Envío</button>
                             <button type="submit" class="btn btn-primary btn-sm px-4">Guardar Configuración SMTP</button>
                         </div>
                     </form>
@@ -2234,6 +2297,58 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
     document.addEventListener('DOMContentLoaded', function() {
         toggleSmtpFields();
     });
+
+    async function probarEnvioCorreo() {
+        if (typeof Swal === 'undefined') { alert('SweetAlert no disponible'); return; }
+
+        const { value: destino } = await Swal.fire({
+            title: 'Probar envío de correo',
+            text: 'Se enviará un correo de prueba usando la configuración actual (Camagare o propia).',
+            input: 'email',
+            inputLabel: 'Correo de destino',
+            inputPlaceholder: 'correo@ejemplo.com',
+            showCancelButton: true,
+            confirmButtonText: 'Enviar prueba',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#0d6efd',
+            cancelButtonColor: '#6c757d',
+            reverseButtons: true,
+            inputValidator: (value) => {
+                if (!value) return 'Ingrese un correo de destino';
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Ingrese un correo válido';
+            }
+        });
+
+        if (!destino) return;
+
+        Swal.fire({
+            title: 'Enviando correo de prueba...',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        try {
+            const form = document.getElementById('form-correo');
+            const formData = new FormData(form);
+            formData.set('destino', destino);
+
+            const response = await fetch('<?= $base ?>/modulos/empresa/testCorreo', {
+                method: 'POST',
+                body: formData
+            });
+            const res = await response.json();
+            Swal.close();
+
+            if (res.ok) {
+                swalToastOk('Correo de prueba enviado correctamente a ' + destino);
+            } else {
+                swalError(res.error || 'No se pudo enviar el correo de prueba');
+            }
+        } catch (err) {
+            Swal.close();
+            swalError('Error de conexión con el servidor');
+        }
+    }
 
     function toggleSmtpFields() {
         const isPropio = document.getElementById('tipo_propio').checked;

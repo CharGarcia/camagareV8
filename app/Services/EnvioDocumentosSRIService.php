@@ -252,6 +252,75 @@ class EnvioDocumentosSRIService
     }
 
     /**
+     * Envía un correo de prueba con la configuración de correo indicada
+     * (Camagare o propio), sin depender de que ya esté guardada en BD —
+     * usa los datos tal como están en el formulario al momento de probar.
+     */
+    public function enviarCorreoPrueba(string $tipoCorreo, array $datosSmtp, string $destino, string $nombreEmpresa): array
+    {
+        if ($tipoCorreo === 'camagare') {
+            $smtpData = EmailConfigService::getPhpMailerConfig('envio_documentos_sri');
+            if (!$smtpData) {
+                return ['ok' => false, 'error' => "No hay una configuración de correo del sistema activa ('envio_documentos_sri')."];
+            }
+        } else {
+            $enc = !empty($datosSmtp['ssl_habilitado']) ? 'tls' : '';
+            $smtpData = [
+                'host'       => trim($datosSmtp['host'] ?? ''),
+                'port'       => (int) ($datosSmtp['puerto'] ?? 587),
+                'username'   => trim($datosSmtp['correo_emisor'] ?? ''),
+                'password'   => (string) ($datosSmtp['password_correo_emisor'] ?? ''),
+                'from'       => trim($datosSmtp['correo_emisor'] ?? ''),
+                'fromName'   => $nombreEmpresa ?: 'Emisor Electrónico',
+                'smtpSecure' => $enc,
+            ];
+            if ($smtpData['host'] === '' || $smtpData['username'] === '') {
+                return ['ok' => false, 'error' => 'Complete al menos el host y el correo emisor para poder probar el correo propio.'];
+            }
+        }
+
+        $docMailDir = MVC_APP . '/lib/mail';
+        if (!file_exists($docMailDir . '/phpmailer.php')) {
+            return ['ok' => false, 'error' => 'No se encuentra la librería PHPMailer en el servidor.'];
+        }
+        require_once $docMailDir . '/phpmailer.php';
+        require_once $docMailDir . '/smtp.php';
+        require_once $docMailDir . '/exception.php';
+
+        $mail = new PHPMailer(true);
+        try {
+            $mail->isSMTP();
+            $mail->Host       = _mail_resolve_ipv4_host($smtpData['host']);
+            $mail->SMTPAuth   = true;
+            $mail->Username   = $smtpData['username'];
+            $mail->Password   = $smtpData['password'];
+            $mail->SMTPSecure = $smtpData['smtpSecure'] ?? 'tls';
+            $mail->Port       = $smtpData['port'];
+            $mail->CharSet    = 'UTF-8';
+
+            $config = require MVC_CONFIG . '/app.php';
+            if (!empty($config['mail_smtp_options'])) {
+                $mail->SMTPOptions = $config['mail_smtp_options'];
+            }
+
+            $mail->setFrom($smtpData['from'], $smtpData['fromName']);
+            $mail->addAddress($destino);
+            $mail->Subject = 'Correo de prueba' . ($nombreEmpresa ? " - {$nombreEmpresa}" : '');
+            $mail->isHTML(true);
+            $mail->Body = "<div style='font-family: Arial, sans-serif; line-height: 1.5;'>"
+                . "<p>Este es un correo de prueba enviado desde la configuración de correo de <strong>"
+                . htmlspecialchars($nombreEmpresa ?: 'su empresa') . "</strong>.</p>"
+                . "<p>Si usted recibió este mensaje, la configuración de envío de correo está funcionando correctamente.</p>"
+                . "</div>";
+
+            $mail->send();
+            return ['ok' => true];
+        } catch (Exception $e) {
+            return ['ok' => false, 'error' => $mail->ErrorInfo ?: $e->getMessage()];
+        }
+    }
+
+    /**
      * Envía al cliente la confirmación de una transacción de Nuvei ya resuelta
      * (aprobada o rechazada), con transaction_ID y código de autorización —
      * requisito explícito de Nuvei para poder salir a producción.

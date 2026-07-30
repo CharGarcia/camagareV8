@@ -246,7 +246,8 @@ class RolPagoService
 
                 $rubrosF  = $rubrosMap[$idEmp] ?? [];
                 $noveds   = $novedMap[$idEmp] ?? [];
-                $neteo    = $neteoMap[$idEmp] ?? 0.0;
+                $neteo           = $neteoMap[$idEmp]['neteo'] ?? 0.0;
+                $descuentosNeteo = $neteoMap[$idEmp]['descuentos'] ?? 0.0;
                 $vacacion = $vacMap[$idEmp] ?? 0.0;
                 $dias = 30;
                 if ($esMensual) {
@@ -260,7 +261,7 @@ class RolPagoService
                     }
                 }
 
-                $calc = $this->calc->calcular($emp, $tipo, $salario, $rubrosF, $noveds, $neteo, $vacacion, $dias, $anticiposMap, $prestamosNoDesemb, $tramosIr, (float) ($rebajaGastoMap[$idEmp] ?? 0.0));
+                $calc = $this->calc->calcular($emp, $tipo, $salario, $rubrosF, $noveds, $neteo, $vacacion, $dias, $anticiposMap, $prestamosNoDesemb, $tramosIr, (float) ($rebajaGastoMap[$idEmp] ?? 0.0), $descuentosNeteo);
 
                 // Omite empleados sin ningún concepto (p. ej. base 0 y sin novedades).
                 if ($calc['total_ingresos'] == 0 && $calc['total_egresos'] == 0) {
