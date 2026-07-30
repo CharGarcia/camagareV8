@@ -694,16 +694,22 @@ class ImportadorExcelService
         }
 
         if ($idExistenteProducto) {
+            // La medida solo se toca si el Excel trae CODIGO_MEDIDA, o si el
+            // producto pasó a ser Servicio (que nunca lleva medida). Si viene
+            // vacío y sigue siendo Producto, se preserva la medida ya asignada
+            // en vez de dejarla en null (evita borrar la medida en cada
+            // reimportación que solo actualiza otros campos).
+            $actualizarMedida = $tipoProduccion === '02' || !empty($codigoMedidaRaw);
+
             $sql = "UPDATE productos SET
                         updated_by = :updated_by, updated_at = CURRENT_TIMESTAMP,
                         nombre = :nombre, codigo_auxiliar = :codigo_auxiliar, codigo_barras = :codigo_barras,
                         precio_base = :precio_base, tipo_produccion = :tipo_produccion, tarifa_iva = :tarifa_iva,
                         inventariable = :inventariable, opciones = :opciones,
-                        id_categoria = :id_categoria, id_marca = :id_marca,
-                        id_medida = :id_medida, id_tipo_medida = :id_tipo_medida
+                        id_categoria = :id_categoria, id_marca = :id_marca"
+                        . ($actualizarMedida ? ", id_medida = :id_medida, id_tipo_medida = :id_tipo_medida" : "") . "
                     WHERE id = :id AND id_empresa = :id_empresa";
-            $st = $this->db->prepare($sql);
-            $st->execute([
+            $params = [
                 ':updated_by'      => $idUsuario,
                 ':nombre'          => $nombre,
                 ':codigo_auxiliar' => $codigoAuxiliar,
@@ -715,11 +721,15 @@ class ImportadorExcelService
                 ':opciones'        => $opciones,
                 ':id_categoria'    => $idCategoria,
                 ':id_marca'        => $idMarca,
-                ':id_medida'       => $idMedida,
-                ':id_tipo_medida'  => $idTipoMedida,
                 ':id'              => (int)$idExistenteProducto,
                 ':id_empresa'      => $idEmpresa,
-            ]);
+            ];
+            if ($actualizarMedida) {
+                $params[':id_medida'] = $idMedida;
+                $params[':id_tipo_medida'] = $idTipoMedida;
+            }
+            $st = $this->db->prepare($sql);
+            $st->execute($params);
             return (int)$idExistenteProducto;
         }
 
