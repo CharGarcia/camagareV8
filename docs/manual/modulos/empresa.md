@@ -59,6 +59,18 @@ aprobación, los textos de los correos, entre otros.
 - **El logo no sale en el PDF**: compruebe que esté cargado y en un formato
   admitido.
 
+## Operadoras de transporte comercial (placa en la factura)
+
+La marca **"Operadora de transporte comercial (excepto taxis)"** la define el
+**superadministrador** al crear o editar la empresa en **Configuración → Empresas
+del sistema**. Si la empresa está marcada, la factura pide la **placa del
+vehículo** como campo obligatorio y la incluye en el XML y el PDF, según la Ficha
+Técnica SRI v2.34 (Anexo 25). No aplica para taxis ni para socios o accionistas
+de taxis.
+
 ## Historial de cambios
 
+- **1.1** — Se documenta la marca "Operadora de transporte comercial" (se define
+  en Configuración → Empresas del sistema; placa del vehículo obligatoria en la
+  factura, normativa SRI 2026).
 - **1.0** — Versión inicial.

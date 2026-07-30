@@ -439,6 +439,11 @@ class FacturaVentaRepository extends BaseRepository
             $cols[]   = 'id_proforma';
             $params[] = (int) $data['id_proforma'];
         }
+        // Placa del vehículo (operadoras de transporte — Ficha SRI v2.34, Anexo 25)
+        if (in_array('placa', $colsOpcionales) && !empty($data['placa'])) {
+            $cols[]   = 'placa';
+            $params[] = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $data['placa']));
+        }
         if (in_array('id_cotizacion_publicidad', $colsOpcionales) && !empty($data['id_cotizacion_publicidad'])) {
             $cols[]   = 'id_cotizacion_publicidad';
             $params[] = (int) $data['id_cotizacion_publicidad'];
@@ -624,6 +629,13 @@ class FacturaVentaRepository extends BaseRepository
         if (in_array('clave_acceso', $colsOpcionales) && !empty($data['clave_acceso'])) {
             $sets[]   = 'clave_acceso = ?';
             $params[] = $data['clave_acceso'];
+        }
+        // Placa del vehículo (operadoras de transporte — Ficha SRI v2.34, Anexo 25)
+        if (in_array('placa', $colsOpcionales)) {
+            $sets[]   = 'placa = ?';
+            $params[] = !empty($data['placa'])
+                ? strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $data['placa']))
+                : null;
         }
 
         $params[] = $id;

@@ -66,6 +66,12 @@ class EmpresaInicializadorService
             return;
         }
 
+        // El correo del consumidor final se toma del correo de la empresa.
+        $mailEmp = $this->db->prepare("SELECT mail FROM empresas WHERE id = :id LIMIT 1");
+        $mailEmp->execute([':id' => $idEmpresa]);
+        $correo = trim((string) ($mailEmp->fetchColumn() ?: ''));
+        $correo = $correo !== '' ? $correo : null;
+
         $stmt = $this->db->prepare(
             "INSERT INTO clientes (
                 id_empresa, id_usuario, nombre, tipo_id, identificacion,
@@ -73,13 +79,14 @@ class EmpresaInicializadorService
                 created_by, created_at, eliminado
              ) VALUES (
                 :id_empresa, :id_usuario, 'CONSUMIDOR FINAL', '07', '9999999999999',
-                NULL, NULL, NULL, 0, 1,
+                NULL, :email, NULL, 0, 1,
                 :id_usuario, NOW(), false
              )"
         );
         $stmt->execute([
             ':id_empresa' => $idEmpresa,
             ':id_usuario' => $idUsuario,
+            ':email'      => $correo,
         ]);
     }
 

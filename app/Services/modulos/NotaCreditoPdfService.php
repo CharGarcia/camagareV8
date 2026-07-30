@@ -46,6 +46,10 @@ class NotaCreditoPdfService
 
     private function renderizar(array $nc, array $detalles, array $infoAdicional, array $empresa): void
     {
+        // RUC del proveedor del sistema en la Información Adicional del RIDE
+        // (Res. NAC-DGERCGC26-00000027): el impreso debe reflejar lo mismo que el XML.
+        $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
+
         // Decimales configurados por la empresa (igual que en el sistema/UI).
         $this->decCantidad = max(0, (int)($empresa['decimales_cantidad'] ?? 2));
         $this->decPrecio   = max(0, (int)($empresa['decimales_precio']   ?? 2));

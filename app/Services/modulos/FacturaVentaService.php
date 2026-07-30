@@ -470,6 +470,21 @@ class FacturaVentaService
         }
     }
 
+    /**
+     * Operadoras de transporte comercial (Ficha SRI v2.34, Anexo 25): la placa del
+     * vehículo es requisito de llenado obligatorio en la factura. Solo aplica cuando
+     * la EMPRESA está marcada como operadora (empresas.factura_operadora_transporte,
+     * definido por el superadmin en config/empresas-sistema).
+     */
+    private function validarPlacaTransporte(array $data, array $empresaConfig): void
+    {
+        $esOperadora = ($empresaConfig['factura_operadora_transporte'] ?? 'false') === 'true'
+            || ($empresaConfig['factura_operadora_transporte'] ?? false) === true;
+        if ($esOperadora && trim((string)($data['placa'] ?? '')) === '') {
+            throw new \Exception('Debe ingresar la placa del vehículo con el que se prestó el servicio de transporte (requisito del SRI para operadoras de transporte).');
+        }
+    }
+
     public function actualizar(int $id, array $data): int
     {
         // Solo se pueden actualizar facturas en estado borrador
@@ -484,6 +499,7 @@ class FacturaVentaService
         $this->validarSecuencial($data, $id);
 
         $empresaConfig = $data['empresa_config'] ?? [];
+        $this->validarPlacaTransporte($data, $empresaConfig);
         $data['tipo_ambiente'] = (string) ($empresaConfig['tipo_ambiente'] ?? '1');
         $data['tipo_emision']  = (string) ($empresaConfig['tipo_emision']  ?? '1');
 
@@ -691,17 +707,11 @@ class FacturaVentaService
             // Generar XML y persistir en detalle_xml FUERA de la transacciÃ³n principal
             $this->generarYGuardarXml($id, $data['empresa_config'] ?? []);
 
-            // Generar/actualizar asiento contable FUERA de la transacciÃ³n principal
-            // para que un fallo en el asiento nunca revierta la factura ya guardada.
+            // El asiento contable YA NO se genera al guardar/actualizar. Se genera cuando se
+            // corre la sincronización de contabilidad (SincronizadorAsientosService), que toma
+            // las facturas autorizadas sin asiento (id_asiento_contable IS NULL). Así, guardar
+            // la factura nunca falla ni se retrasa por cuentas contables sin configurar.
             $this->lastAsientoWarning = null;
-            try {
-                if (($data['estado'] ?? 'borrador') === 'autorizado') {
-                    $this->procesarAsientoContable($id, $data, $numFactura);
-                }
-            } catch (\Throwable $eAsiento) {
-                error_log("[FacturaVenta] Asiento no generado para factura $id: " . $eAsiento->getMessage());
-                $this->lastAsientoWarning = $eAsiento->getMessage();
-            }
 
             // Sincronizar SRI 104
             $this->sincronizarCasilleros($id, $data);
@@ -719,6 +729,7 @@ class FacturaVentaService
 
         // Tomar tipo_ambiente y tipo_emision desde la configuraciÃ³n de empresa
         $empresaConfig = $data['empresa_config'] ?? [];
+        $this->validarPlacaTransporte($data, $empresaConfig);
         $data['tipo_ambiente'] = (string) ($empresaConfig['tipo_ambiente'] ?? '1');
         $data['tipo_emision']  = (string) ($empresaConfig['tipo_emision']  ?? '1');
         $data['estado_correo'] = 'pendiente';
@@ -923,20 +934,11 @@ class FacturaVentaService
         // Generar XML y persistir en detalle_xml FUERA de la transacciÃ³n principal
         $this->generarYGuardarXml($idVenta, $data['empresa_config'] ?? []);
 
-        // Generar asiento contable FUERA de la transacciÃ³n principal
-        // para que un fallo en el asiento nunca revierta la factura ya guardada.
-        // Solo facturas 'autorizado' se contabilizan (igual que actualizar(), lÃ­nea ~552):
-        // un borrador no debe generar un asiento activo, o queda huÃ©rfano si el borrador
-        // se descarta despuÃ©s (eliminar() no anula asientos por diseÃ±o de los borradores).
+        // El asiento contable YA NO se genera al crear la factura. Se genera cuando se corre
+        // la sincronización de contabilidad (SincronizadorAsientosService), que toma las
+        // facturas autorizadas sin asiento (id_asiento_contable IS NULL). Así, crear la
+        // factura nunca falla ni se retrasa por cuentas contables sin configurar.
         $this->lastAsientoWarning = null;
-        try {
-            if (($data['estado'] ?? 'borrador') === 'autorizado') {
-                $this->procesarAsientoContable($idVenta, $data, $numFactura);
-            }
-        } catch (\Throwable $eAsiento) {
-            error_log("[FacturaVenta] Asiento no generado para factura $idVenta: " . $eAsiento->getMessage());
-            $this->lastAsientoWarning = $eAsiento->getMessage();
-        }
 
         return $idVenta;
     }

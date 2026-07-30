@@ -558,7 +558,7 @@ class ReciboVentaController extends BaseModuloController
 
             echo json_encode([
                 'ok'             => true,
-                'mensaje'        => 'Factura ' . $res['numero_factura'] . ' generada. El recibo quedó facturado.',
+                'mensaje'        => 'Factura ' . $res['numero_factura'] . ' generada. El recibo quedó anulado para no duplicar la venta.',
                 'id_factura'     => $res['id_factura'],
                 'numero_factura' => $res['numero_factura'],
             ]);

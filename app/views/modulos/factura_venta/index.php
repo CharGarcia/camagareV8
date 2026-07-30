@@ -562,6 +562,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                     <?php endforeach; ?>
                                                 </select>
                                             </div>
+                                            <?php if (($empresa['factura_operadora_transporte'] ?? 'false') === 'true' || ($empresa['factura_operadora_transporte'] ?? false) === true): ?>
+                                            <!-- Placa del vehículo (operadoras de transporte — Ficha SRI v2.34, Anexo 25) -->
+                                            <div class="col-md-3">
+                                                <label class="x-small fw-bold text-muted mb-1">Placa del vehículo <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control form-control-sm border-primary border-opacity-10 text-uppercase" name="placa" id="m-input-placa"
+                                                       style="height: 31px;" maxlength="20" placeholder="ABC1234" autocomplete="off"
+                                                       oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '')">
+                                            </div>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
 
@@ -614,9 +623,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                 <tr class="table-light border-bottom">
                                                     <th class="ps-3 py-2 small fw-bold text-muted" style="width: 34%;">Descripción</th>
                                                     <th class="py-2 small fw-bold text-muted" style="width: 7%;">Adicional</th>
-                                                    <th class="py-2 small fw-bold text-muted col-medida-header <?= (($empresa['mostrar_unidad_medida'] ?? true) === 'true' || ($empresa['mostrar_unidad_medida'] ?? true) === true) ? '' : 'd-none' ?>" style="width: 8%;">Medida</th>
+                                                    <th class="py-2 small fw-bold text-muted col-medida-header col-medida d-none" style="width: 8%;">Medida</th>
                                                     <th class="py-2 small fw-bold text-muted text-center" style="width: 6%;">Cant.</th>
-                                                    <th class="py-2 small fw-bold text-muted" style="width: 12%;">Precios</th>
+                                                    <th class="py-2 small fw-bold text-muted col-lista-precios d-none" style="width: 12%;">Precios</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width: 8%;">P. Sin Imp.</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width: 8%;">P. Con Imp.</th>
                                                     <th class="py-2 small fw-bold text-muted text-end" style="width: 7%;">Desc.</th>
@@ -677,6 +686,24 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                                     <th class="py-0" style="width: 10%;"></th>
                                                                 </tr>
                                                             </thead>
+                                                            <?php $rucProveedorSri = \App\Helpers\SriProveedorHelper::rucProveedor(); ?>
+                                                            <?php if ($rucProveedorSri !== ''): ?>
+                                                            <!-- Campo normativo fijo (Res. NAC-DGERCGC26-00000027 / Ficha v2.34 Anexo 26):
+                                                                 lo agrega el sistema en el XML y el RIDE; no es editable ni eliminable. -->
+                                                            <tbody>
+                                                                <tr class="table-light">
+                                                                    <td class="ps-2 p-0 align-middle">
+                                                                        <span class="small text-muted fst-italic"><i class="bi bi-lock-fill me-1" style="font-size:0.65rem;"></i><?= htmlspecialchars(\App\Helpers\SriProveedorHelper::CAMPO_NOMBRE) ?></span>
+                                                                    </td>
+                                                                    <td class="p-0 align-middle">
+                                                                        <span class="small text-muted fst-italic"><?= htmlspecialchars($rucProveedorSri) ?></span>
+                                                                    </td>
+                                                                    <td class="p-0 align-middle text-center">
+                                                                        <i class="bi bi-shield-check text-success" style="font-size:0.75rem;" title="Campo obligatorio del SRI: lo agrega el sistema automáticamente en el XML y el PDF"></i>
+                                                                    </td>
+                                                                </tr>
+                                                            </tbody>
+                                                            <?php endif; ?>
                                                             <tbody id="m-tbody-info-adicional"></tbody>
                                                         </table>
                                                     </div>
@@ -1363,6 +1390,7 @@ $totalPages = $totalPagesOriginal;
         calculo_iva: '<?= $empresa['calculo_iva_facturacion'] ?? 'linea_linea' ?>',
         valor_limite_consumidor_final: <?= isset($empresa['valor_limite_consumidor_final']) && $empresa['valor_limite_consumidor_final'] !== null && $empresa['valor_limite_consumidor_final'] !== '' ? (float)$empresa['valor_limite_consumidor_final'] : 'null' ?>,
         id_forma_pago_sri_def: <?= isset($empresa['id_forma_pago_sri_def']) && $empresa['id_forma_pago_sri_def'] !== null ? (int)$empresa['id_forma_pago_sri_def'] : 'null' ?>,
+        factura_operadora_transporte: <?= (($empresa['factura_operadora_transporte'] ?? false) === 'true' || ($empresa['factura_operadora_transporte'] ?? false) === true) ? 'true' : 'false' ?>,
         editar_precio_factura: <?= (($empresa['editar_precio_factura'] ?? true) === 'true' || ($empresa['editar_precio_factura'] ?? true) === true) ? 'true' : 'false' ?>,
         editar_iva_factura: <?= (($empresa['editar_iva_factura'] ?? true) === 'true' || ($empresa['editar_iva_factura'] ?? true) === true) ? 'true' : 'false' ?>,
         editar_descuento_factura: <?= (($empresa['editar_descuento_factura'] ?? true) === 'true' || ($empresa['editar_descuento_factura'] ?? true) === true) ? 'true' : 'false' ?>,
@@ -1454,9 +1482,19 @@ $totalPages = $totalPagesOriginal;
             // Solo cargar el siguiente secuencial cuando es una factura NUEVA (FV_ID_ACTIVO === 0)
             // Para facturas existentes el secuencial ya fue seteado y no debe sobreescribirse
             if (FV_ID_ACTIVO === 0) {
+                // Aplicar los FAVORITOS del usuario (serie, bodega, vendedor, forma de pago
+                // SRI) ANTES de cargar el secuencial: si el favorito cambia la serie, el
+                // secuencial debe cargarse para esa serie, no para la del select por defecto.
+                // Va aquí (y no con un setTimeout al abrir) para cubrir TODOS los caminos de
+                // factura nueva, incluido "Nueva factura" tras el aviso de borrador sin guardar.
+                if (typeof aplicarFavoritosModal === 'function') {
+                    aplicarFavoritosModal('#modalNuevaFactura');
+                }
                 const selectPto = document.getElementById('m-select-puntos');
                 if (selectPto && selectPto.value) {
-                    cargarSecuencial(selectPto.value);
+                    // syncSerie (no cargarSecuencial directo): también sincroniza el
+                    // id_establecimiento con el punto que quedó seleccionado.
+                    syncSerie(selectPto.value);
                 }
             }
 
@@ -1593,6 +1631,14 @@ $totalPages = $totalPagesOriginal;
             text: 'El total de la factura no puede ser negativo.'
         });
 
+        // Operadoras de transporte (Ficha SRI v2.34, Anexo 25): placa obligatoria.
+        const _placa = (document.getElementById('m-input-placa')?.value || '').trim();
+        if (EMPRESA_CONFIG.factura_operadora_transporte && !_placa) return Swal.fire({
+            icon: 'warning',
+            title: 'Atención',
+            text: 'Debe ingresar la placa del vehículo con el que se prestó el servicio de transporte (requisito del SRI para operadoras de transporte).'
+        });
+
         // ”€”€ Recolectar ítems ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
         let totalSinImpuestos = 0;
         let totalDescuento = 0;
@@ -1616,6 +1662,18 @@ $totalPages = $totalPagesOriginal;
                     icon: 'warning',
                     title: 'Atención',
                     text: `"${desc || 'Ítem'}": la cantidad debe ser un número mayor a cero.`
+                });
+                hayError = true;
+                return;
+            }
+            // Precio y descuento nunca negativos (los inputs ya lo impiden; esto es la red).
+            const _prec = parseFloat(tr.querySelector('.input-precio')?.value) || 0;
+            const _dcto = parseFloat(tr.querySelector('.input-desc')?.value) || 0;
+            if (_prec < 0 || _dcto < 0) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Atención',
+                    text: `"${desc || 'Ítem'}": el precio y el descuento no pueden ser negativos.`
                 });
                 hayError = true;
                 return;
@@ -1816,6 +1874,7 @@ $totalPages = $totalPagesOriginal;
             importe_total: totalFactura.toFixed(2),
             propina: propina.toFixed(2),
             observaciones: document.getElementById('m-input-observaciones')?.value || '',
+            placa: (document.getElementById('m-input-placa')?.value || '').trim(),
             detalles,
             pagos,
             info_adicional: infoAdicional,
@@ -2584,17 +2643,10 @@ $totalPages = $totalPagesOriginal;
             return;
         }
 
-        // Sin borrador: apertura normal
+        // Sin borrador: apertura normal.
+        // Los favoritos y el secuencial se aplican en shown.bs.modal (cubre todos los caminos).
         fvResetearModal();
         modalMain.show();
-
-        // Aplicar favoritos para nueva factura
-        if (typeof aplicarFavoritosModal === 'function') {
-            setTimeout(() => {
-                aplicarFavoritosModal('#modalNuevaFactura');
-            }, 150);
-        }
-        // cargarSecuencial se ejecuta en shown.bs.modal cuando el modal está visible
     }
 
     function syncSerie(idPunto) {
@@ -3633,24 +3685,24 @@ $totalPages = $totalPagesOriginal;
                 </div>
             </td>
             <td><input type="text" class="form-control form-control-sm input-detalle input-adicional text-muted fst-italic" placeholder="Info adicional"></td>
-            <td class="${EMPRESA_CONFIG.mostrar_unidad_medida ? '' : 'd-none'}">
+            <td class="col-medida d-none">
                 <select class="form-select form-select-sm input-detalle input-medida d-none">
                     <option value="">Medida</option>
                 </select>
             </td>
-            <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="1" step="any" oninput="calcFila(this)"></td>
-            <td>
-                <select class="form-select form-select-sm input-detalle input-lista-precios">
+            <td><input type="number" class="form-control form-control-sm input-detalle text-center input-cantidad" value="1" step="any" min="0" oninput="calcFila(this)"></td>
+            <td class="col-lista-precios d-none">
+                <select class="form-select form-select-sm input-detalle input-lista-precios d-none">
                     <option value="1">Precio 1</option>
                     <option value="2">Precio 2</option>
                     <option value="3">Precio 3</option>
                 </select>
             </td>
-            <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${(0).toFixed(DEC_PRECIO)}" step="any" oninput="calcSinImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(DEC_PRECIO)" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
-            <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio-iva" value="${(0).toFixed(DEC_PRECIO)}" step="any" oninput="calcConImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(DEC_PRECIO)" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
+            <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio" value="${(0).toFixed(DEC_PRECIO)}" step="any" min="0" oninput="calcSinImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(DEC_PRECIO)" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
+            <td><input type="number" class="form-control form-control-sm input-detalle text-end input-precio-iva" value="${(0).toFixed(DEC_PRECIO)}" step="any" min="0" oninput="calcConImp(this)" onblur="this.value=parseFloat(this.value||0).toFixed(DEC_PRECIO)" ${EMPRESA_CONFIG.editar_precio_factura ? '' : 'readonly'}></td>
             <td>
                 <div class="d-flex align-items-center">
-                    <input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="0.00" step="any" oninput="calcFila(this)" ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'readonly'}>
+                    <input type="number" class="form-control form-control-sm input-detalle text-end text-danger input-desc" value="0.00" step="any" min="0" oninput="calcFila(this)" ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'readonly'}>
                     <button type="button" class="btn btn-link btn-sm p-1 text-primary shadow-none border-0 ${EMPRESA_CONFIG.editar_descuento_factura ? '' : 'd-none'}" onclick="abrirModalDescuento(this)" title="Aplicar descuento rápido">
                         <i class="bi bi-plus-circle"></i>
                     </button>
@@ -3911,6 +3963,9 @@ $totalPages = $totalPagesOriginal;
                     selPrecios.appendChild(opt);
                 });
             }
+            // El selector solo se muestra si el producto tiene precios ADICIONALES:
+            // con solo el precio base no hay nada que elegir.
+            selPrecios.classList.toggle('d-none', !(p.precios_lista && p.precios_lista.length > 0));
 
             // Cambiar precio al seleccionar de la lista
             selPrecios.onchange = () => {
@@ -4249,7 +4304,14 @@ $totalPages = $totalPagesOriginal;
         calcFila(tr.querySelector('.input-cantidad'));
     }
 
+    // Cantidad, precios y descuento no admiten negativos: min="0" cubre los spinners,
+    // esto corrige lo tecleado a mano (p. ej. "-5" pasa a 0 al instante).
+    function fvNoNegativo(el) {
+        if (el && el.value !== '' && parseFloat(el.value) < 0) el.value = 0;
+    }
+
     window.calcSinImp = function(el) {
+        fvNoNegativo(el);
         const tr = el.closest('tr');
         const pSin = parseFloat(el.value) || 0;
         const ivaPct = parseFloat(tr.querySelector('.input-iva').value) || 0;
@@ -4258,6 +4320,7 @@ $totalPages = $totalPagesOriginal;
     }
 
     window.calcConImp = function(el) {
+        fvNoNegativo(el);
         const tr = el.closest('tr');
         const pCon = parseFloat(el.value) || 0;
         const ivaPct = parseFloat(tr.querySelector('.input-iva').value) || 0;
@@ -4270,6 +4333,7 @@ $totalPages = $totalPagesOriginal;
     const r2 = v => Math.round(v * 100) / 100;
 
     function calcFila(el) {
+        fvNoNegativo(el);
         const tr = el.closest('tr');
         const cant = parseFloat(tr.querySelector('.input-cantidad').value) || 0;
         const prec = parseFloat(tr.querySelector('.input-precio').value) || 0;
@@ -4291,7 +4355,27 @@ $totalPages = $totalPagesOriginal;
         calcTotales();
     }
 
+    /**
+     * Columnas dinámicas del detalle: "Precios" y "Medida" solo se muestran si algún
+     * ítem de la factura las usa (su select por fila quedó visible). Si ningún producto
+     * las necesita, la columna entera (encabezado + celdas) se oculta para no confundir.
+     * Medida además respeta la configuración de empresa (mostrar_unidad_medida).
+     */
+    function fvActualizarColumnasDinamicas() {
+        const hayPrecios = !!document.querySelector('#m-tbodyDetalle .input-lista-precios:not(.d-none)');
+        document.querySelectorAll('#modalNuevaFactura .col-lista-precios').forEach(el => {
+            el.classList.toggle('d-none', !hayPrecios);
+        });
+
+        const hayMedida = !!EMPRESA_CONFIG.mostrar_unidad_medida
+            && !!document.querySelector('#m-tbodyDetalle .input-medida:not(.d-none)');
+        document.querySelectorAll('#modalNuevaFactura .col-medida').forEach(el => {
+            el.classList.toggle('d-none', !hayMedida);
+        });
+    }
+
     function calcTotales() {
+        fvActualizarColumnasDinamicas();
         const modoIva = EMPRESA_CONFIG.calculo_iva ?? 'linea_linea';
 
         let subtotalGeneral = 0; // suma de (cant - prec) antes de descuento - para mostrar bruto
@@ -4839,6 +4923,9 @@ $totalPages = $totalPagesOriginal;
             const inputDias = document.getElementById('m-input-dias-credito');
             if (inputObs) inputObs.value = cab.observaciones || '';
             if (inputDias) inputDias.value = cab.dias_credito || 0;
+            // Placa del vehículo (operadoras de transporte)
+            const inputPlaca = document.getElementById('m-input-placa');
+            if (inputPlaca) inputPlaca.value = cab.placa || '';
             // Plazo SRI: tomar del primer pago guardado
             const selPlazoCred = form?.querySelector('[name="sri_plazo"]');
             if (selPlazoCred && json.pagos && json.pagos.length > 0 && json.pagos[0].unidad_tiempo) {
@@ -4999,6 +5086,9 @@ $totalPages = $totalPagesOriginal;
                             selPrecios.appendChild(opt);
                         });
                     }
+
+                    // El selector solo se muestra si el producto tiene precios adicionales.
+                    selPrecios.classList.toggle('d-none', !(d.precios_lista && d.precios_lista.length > 0));
 
                     // Intentar seleccionar el precio que coincida con el guardado
                     const precioActual = parseFloat(d.precio_unitario || 0);

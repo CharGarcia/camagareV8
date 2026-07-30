@@ -188,6 +188,21 @@ class ReciboVentaRepository extends BaseRepository
         $this->db->prepare($sql)->execute([$estado, $idUsuario, $id]);
     }
 
+    /**
+     * Al generar una factura desde el recibo, el recibo queda ANULADO (para que
+     * la venta NO se duplique en reportes/CXC) dejando en observaciones la
+     * referencia a la factura generada.
+     */
+    public function marcarAnuladoPorFactura(int $id, int $idUsuario, string $numFactura): void
+    {
+        $sql = "UPDATE recibos_venta_cabecera
+                SET estado = 'anulado',
+                    observaciones = TRIM(BOTH ' ' FROM COALESCE(observaciones, '') || ' [Facturado con ' || ? || ']'),
+                    updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?";
+        $this->db->prepare($sql)->execute([$numFactura, $idUsuario, $id]);
+    }
+
     public function actualizarVendedor(int $id, ?int $idVendedor, int $idUsuario): void
     {
         $sql = "UPDATE recibos_venta_cabecera SET id_vendedor = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";

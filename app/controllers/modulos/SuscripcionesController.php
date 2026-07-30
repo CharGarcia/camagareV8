@@ -174,11 +174,18 @@ class SuscripcionesController extends BaseModuloController
         echo '<button type="button" class="btn btn-outline-secondary" onclick="cambiarPaginaAjax(' . ($page + 1) . ')" ' . ($page >= $totalPages ? 'disabled' : '') . '><i class="bi bi-chevron-right"></i></button>';
         $paginHtml = ob_get_clean();
 
+        // URLs de exportación con el buscador/orden actuales, para que el JS
+        // mantenga los botones PDF/Excel sincronizados con el filtro aplicado.
+        $qs      = 'b=' . urlencode($buscar) . '&sort=' . urlencode($ordenCol) . '&dir=' . urlencode($ordenDir);
+        $urlBase = BASE_URL . '/' . self::RUTA_MODULO;
+
         echo json_encode([
             'ok'         => true,
             'rows'       => $rowsHtml,
             'pagination' => $paginHtml,
             'info'       => "$from-$to/$total",
+            'pdf_url'    => $urlBase . '/export-pdf?' . $qs,
+            'excel_url'  => $urlBase . '/export-excel?' . $qs,
         ]);
     }
 
@@ -699,6 +706,147 @@ class SuscripcionesController extends BaseModuloController
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()], JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+    }
+
+    // ── Exportar listado ───────────────────────────────────────────────────────
+
+    /** Filas del listado según el buscador/orden actual (sin paginar). */
+    private function filasParaExportar(): array
+    {
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'proximo_cobro');
+        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
+
+        $perm            = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        return $data['rows'] ?? [];
+    }
+
+    private const CABECERAS_EXPORT = [
+        'Cliente', 'Identificación', 'Periodicidad', 'Comprobante', 'Forma de cobro',
+        'Próximo cobro', 'Fecha inicio', 'Fecha fin', 'Ítems', 'Estado',
+    ];
+
+    /** Una fila del listado a array de celdas, en el orden de CABECERAS_EXPORT. */
+    private function filaExport(array $r): array
+    {
+        $fecha = static fn($v) => !empty($v) ? date('d-m-Y', strtotime((string) $v)) : '-';
+        return [
+            (string) ($r['nombre_cliente'] ?? ''),
+            (string) ($r['identificacion_cliente'] ?? ''),
+            (string) ($r['nombre_periodicidad'] ?? '-'),
+            ucfirst((string) ($r['tipo_comprobante'] ?? 'factura')),
+            ucfirst((string) ($r['forma_cobro'] ?? '')),
+            $fecha($r['proximo_cobro'] ?? null),
+            $fecha($r['fecha_inicio'] ?? null),
+            $fecha($r['fecha_fin'] ?? null),
+            (string) ((int) ($r['total_items'] ?? 0)),
+            ucfirst((string) ($r['estado'] ?? 'activo')),
+        ];
+    }
+
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+
+        try {
+            $rows = $this->filasParaExportar();
+
+            $empresa       = (new \App\models\Empresa())->getPorId((int) $_SESSION['id_empresa']);
+            $nombreEmpresa = $empresa['nombre'] ?? 'REPORTE DE SUSCRIPCIONES';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $anchos = ['22%', '13%', '10%', '9%', '9%', '9%', '9%', '9%', '4%', '6%'];
+
+            ob_start();
+            ?>
+            <style>
+                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 7.5pt; table-layout: fixed; }
+                th { background: #f2f2f2; border: 1px solid #ccc; padding: 4px; text-align: left; }
+                td { border: 1px solid #ccc; padding: 4px; overflow: hidden; word-wrap: break-word; }
+                .header { text-align: center; margin-bottom: 12px; }
+                h1 { margin: 0; font-size: 14pt; color: #333; }
+                h2 { margin: 3px 0 0 0; color: #666; font-size: 10pt; text-transform: uppercase; }
+            </style>
+            <page backtop="10mm" backbottom="10mm" backleft="8mm" backright="8mm">
+                <div class="header">
+                    <h1><?= htmlspecialchars($nombreEmpresa) ?></h1>
+                    <h2>Listado de Suscripciones</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <?php foreach (self::CABECERAS_EXPORT as $i => $h): ?>
+                                <th style="width: <?= $anchos[$i] ?? 'auto' ?>"><?= htmlspecialchars($h) ?></th>
+                            <?php endforeach; ?>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rows as $r): ?>
+                            <tr>
+                                <?php foreach ($this->filaExport($r) as $celda): ?>
+                                    <td><?= htmlspecialchars($celda) ?></td>
+                                <?php endforeach; ?>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </page>
+            <?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Suscripciones_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $_SESSION['suscripciones_msg'] = ['danger', 'Error al generar PDF: ' . $e->getMessage()];
+            $this->redirect(BASE_URL . '/' . self::RUTA_MODULO);
+        }
+    }
+
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+
+        try {
+            $rows = $this->filasParaExportar();
+
+            $empresa       = (new \App\models\Empresa())->getPorId((int) $_SESSION['id_empresa']);
+            $nombreEmpresa = $empresa['nombre'] ?? '';
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $exportData = array_map(fn($r) => $this->filaExport($r), $rows);
+
+            $reportService = new \App\Services\ReportService();
+            $reportService->exportToExcel(
+                'Suscripciones',
+                self::CABECERAS_EXPORT,
+                $exportData,
+                'Listado de Suscripciones',
+                $nombreEmpresa
+            );
+            exit;
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            if (!headers_sent()) {
+                $_SESSION['suscripciones_msg'] = ['danger', 'Error al generar Excel: ' . $e->getMessage()];
+                $this->redirect(BASE_URL . '/' . self::RUTA_MODULO);
+            }
+            exit;
         }
     }
 

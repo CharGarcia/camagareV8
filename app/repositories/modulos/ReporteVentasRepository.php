@@ -38,7 +38,7 @@ class ReporteVentasRepository extends BaseRepository
                 'fk_det'      => 'id_recibo',          // detalle.id_recibo = cabecera.id
                 'fk_imp'      => 'id_recibo_detalle',  // impuestos.id_recibo_detalle = detalle.id
                 'fk_adic'     => 'id_recibo',
-                'estado_ok'   => "{alias}.estado NOT IN ('borrador', 'anulado')",
+                'estado_ok'   => "{alias}.estado NOT IN ('borrador', 'anulado', 'facturado')",
                 'retenciones' => false,
                 'clave'       => false,
                 'vendedor'    => true,

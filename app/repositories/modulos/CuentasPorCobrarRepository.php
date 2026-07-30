@@ -15,19 +15,21 @@ class CuentasPorCobrarRepository extends BaseRepository
     }
 
     /**
-     * CTE que calcula lo cobrado por factura hasta una fecha de corte opcional.
+     * CTE que calcula lo cobrado por documento hasta una fecha de corte opcional.
      * Si $fechaHasta es null, incluye todos los cobros (comportamiento en tiempo real).
+     * $tipoDoc: 'FACTURA' (facturas de venta) o 'RECIBO' (recibos de venta).
      */
-    private function getCteCobrado(?string $fechaHasta = null): string
+    private function getCteCobrado(?string $fechaHasta = null, string $tipoDoc = 'FACTURA'): string
     {
         $filtroFecha = $fechaHasta ? "AND ic2.fecha_emision <= :cobrado_hasta" : '';
+        $tipoDoc     = $tipoDoc === 'RECIBO' ? 'RECIBO' : 'FACTURA'; // literal seguro
         return "
             SELECT id2.id_referencia_documento AS id_venta,
                    SUM(id2.monto_cobrado)       AS total_cobrado
             FROM ingresos_detalle id2
             INNER JOIN ingresos_cabecera ic2
                    ON ic2.id = id2.id_ingreso
-            WHERE id2.tipo_documento = 'FACTURA'
+            WHERE id2.tipo_documento = '{$tipoDoc}'
               AND ic2.estado    != 'anulado'
               AND ic2.eliminado  = false
               {$filtroFecha}
@@ -152,56 +154,78 @@ class CuentasPorCobrarRepository extends BaseRepository
     }
 
     /**
-     * Estadísticas para las tarjetas superiores.
+     * Normaliza el filtro de tipo de documento del listado unificado.
+     * Valores: TODOS | FACTURA | RECIBO | SALDO_INICIAL.
+     */
+    private function getTipoDoc(array $filtros): string
+    {
+        $t = strtoupper(trim((string)($filtros['tipo_doc'] ?? 'TODOS')));
+        return in_array($t, ['FACTURA', 'RECIBO', 'SALDO_INICIAL'], true) ? $t : 'TODOS';
+    }
+
+    /**
+     * Estadísticas para las tarjetas superiores (respeta el filtro tipo_doc).
      */
     public function getEstadisticas(int $idEmpresa, array $filtros): array
     {
-        // Para estadísticas, no aplicar filtro de estado pues queremos todos los saldos
-        $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
-        [$where, $params] = $this->buildWhere($idEmpresa, $filtrosSinEstado);
-        $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
+        $tipoDoc = $this->getTipoDoc($filtros);
+        $r = ['total_facturas' => 0, 'total_saldo' => 0, 'total_vencido' => 0, 'total_al_dia' => 0, 'facturas_vencidas' => 0];
 
-        $sql = "
-            WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
-                 retenido AS (" . $this->getCteRetenido($fh) . "),
-                 nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . ")
-            SELECT
-                COUNT(v.id) AS total_facturas,
-                SUM(v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) AS total_saldo,
-                SUM(CASE
-                    WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE
-                    THEN v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)
-                    ELSE 0
-                END) AS total_vencido,
-                SUM(CASE
-                    WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date >= CURRENT_DATE
-                    THEN v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)
-                    ELSE 0
-                END) AS total_al_dia,
-                COUNT(CASE
-                    WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE THEN 1
-                END) AS facturas_vencidas
-            FROM ventas_cabecera v
-            JOIN clientes c ON c.id = v.id_cliente
-            LEFT JOIN cobrado  cb ON cb.id_venta = v.id
-            LEFT JOIN retenido rt ON rt.id_venta = v.id
-            LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
-            WHERE {$where}
-        ";
+        if (in_array($tipoDoc, ['TODOS', 'FACTURA'], true)) {
+            // Para estadísticas, no aplicar filtro de estado pues queremos todos los saldos
+            $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
+            [$where, $params] = $this->buildWhere($idEmpresa, $filtrosSinEstado);
+            $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
 
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        $r = $st->fetch(PDO::FETCH_ASSOC);
+            $sql = "
+                WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
+                     retenido AS (" . $this->getCteRetenido($fh) . "),
+                     nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . ")
+                SELECT
+                    COUNT(v.id) AS total_facturas,
+                    SUM(v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) AS total_saldo,
+                    SUM(CASE
+                        WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE
+                        THEN v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)
+                        ELSE 0
+                    END) AS total_vencido,
+                    SUM(CASE
+                        WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date >= CURRENT_DATE
+                        THEN v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)
+                        ELSE 0
+                    END) AS total_al_dia,
+                    COUNT(CASE
+                        WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE THEN 1
+                    END) AS facturas_vencidas
+                FROM ventas_cabecera v
+                JOIN clientes c ON c.id = v.id_cliente
+                LEFT JOIN cobrado  cb ON cb.id_venta = v.id
+                LEFT JOIN retenido rt ON rt.id_venta = v.id
+                LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+                WHERE {$where}
+            ";
+
+            $st = $this->db->prepare($sql);
+            $st->execute($params);
+            $r = $st->fetch(PDO::FETCH_ASSOC) ?: $r;
+        }
+
+        // Sumar los recibos de venta pendientes (mismo filtro de cliente/fechas)
+        $rec = in_array($tipoDoc, ['TODOS', 'RECIBO'], true)
+            ? $this->getStatsRecibos($idEmpresa, $filtros)
+            : ['cnt' => 0, 'total_saldo' => 0, 'total_vencido' => 0, 'total_al_dia' => 0, 'vencidas' => 0];
 
         // Sumar los saldos iniciales CXC (mismo filtro de cliente)
-        $si = $this->getStatsSaldosInicialesCxc($idEmpresa, $filtros);
+        $si = in_array($tipoDoc, ['TODOS', 'SALDO_INICIAL'], true)
+            ? $this->getStatsSaldosInicialesCxc($idEmpresa, $filtros)
+            : ['cnt' => 0, 'total_saldo' => 0, 'total_vencido' => 0, 'total_al_dia' => 0, 'vencidas' => 0];
 
         return [
-            'total_facturas'   => (int)($r['total_facturas']    ?? 0) + $si['cnt'],
-            'total_saldo'      => (float)($r['total_saldo']     ?? 0) + $si['total_saldo'],
-            'total_vencido'    => (float)($r['total_vencido']   ?? 0) + $si['total_vencido'],
-            'total_al_dia'     => (float)($r['total_al_dia']    ?? 0) + $si['total_al_dia'],
-            'facturas_vencidas'=> (int)($r['facturas_vencidas'] ?? 0) + $si['vencidas'],
+            'total_facturas'   => (int)($r['total_facturas']    ?? 0) + $rec['cnt']           + $si['cnt'],
+            'total_saldo'      => (float)($r['total_saldo']     ?? 0) + $rec['total_saldo']   + $si['total_saldo'],
+            'total_vencido'    => (float)($r['total_vencido']   ?? 0) + $rec['total_vencido'] + $si['total_vencido'],
+            'total_al_dia'     => (float)($r['total_al_dia']    ?? 0) + $rec['total_al_dia']  + $si['total_al_dia'],
+            'facturas_vencidas'=> (int)($r['facturas_vencidas'] ?? 0) + $rec['vencidas']      + $si['vencidas'],
         ];
     }
 
@@ -277,55 +301,67 @@ class CuentasPorCobrarRepository extends BaseRepository
     }
 
     /**
-     * Análisis de antigüedad (aging) para el gráfico.
+     * Análisis de antigüedad (aging) para el gráfico (respeta el filtro tipo_doc).
      */
     public function getAntiguedad(int $idEmpresa, array $filtros): array
     {
-        $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
-        [$where, $params] = $this->buildWhere($idEmpresa, $filtrosSinEstado);
-        $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
+        $tipoDoc = $this->getTipoDoc($filtros);
+        $r = ['tramo_vigente' => 0, 'tramo_1_30' => 0, 'tramo_31_60' => 0, 'tramo_61_90' => 0, 'tramo_mas_90' => 0];
 
-        $sql = "
-            WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
-                 retenido AS (" . $this->getCteRetenido($fh) . "),
-                 nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . ")
-            SELECT
-                SUM(CASE WHEN dias_vencido BETWEEN 1 AND 30
-                    THEN saldo ELSE 0 END) AS tramo_1_30,
-                SUM(CASE WHEN dias_vencido BETWEEN 31 AND 60
-                    THEN saldo ELSE 0 END) AS tramo_31_60,
-                SUM(CASE WHEN dias_vencido BETWEEN 61 AND 90
-                    THEN saldo ELSE 0 END) AS tramo_61_90,
-                SUM(CASE WHEN dias_vencido > 90
-                    THEN saldo ELSE 0 END) AS tramo_mas_90,
-                SUM(CASE WHEN dias_vencido <= 0
-                    THEN saldo ELSE 0 END) AS tramo_vigente
-            FROM (
+        if (in_array($tipoDoc, ['TODOS', 'FACTURA'], true)) {
+            $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
+            [$where, $params] = $this->buildWhere($idEmpresa, $filtrosSinEstado);
+            $fh = $this->aplicarFechaCorteCtEs($filtros, $params);
+
+            $sql = "
+                WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
+                     retenido AS (" . $this->getCteRetenido($fh) . "),
+                     nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . ")
                 SELECT
-                    v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
-                    (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido
-                FROM ventas_cabecera v
-                JOIN clientes c ON c.id = v.id_cliente
-                LEFT JOIN cobrado  cb ON cb.id_venta = v.id
-                LEFT JOIN retenido rt ON rt.id_venta = v.id
-                LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
-                WHERE {$where}
-            ) sub
-        ";
+                    SUM(CASE WHEN dias_vencido BETWEEN 1 AND 30
+                        THEN saldo ELSE 0 END) AS tramo_1_30,
+                    SUM(CASE WHEN dias_vencido BETWEEN 31 AND 60
+                        THEN saldo ELSE 0 END) AS tramo_31_60,
+                    SUM(CASE WHEN dias_vencido BETWEEN 61 AND 90
+                        THEN saldo ELSE 0 END) AS tramo_61_90,
+                    SUM(CASE WHEN dias_vencido > 90
+                        THEN saldo ELSE 0 END) AS tramo_mas_90,
+                    SUM(CASE WHEN dias_vencido <= 0
+                        THEN saldo ELSE 0 END) AS tramo_vigente
+                FROM (
+                    SELECT
+                        v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
+                        (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido
+                    FROM ventas_cabecera v
+                    JOIN clientes c ON c.id = v.id_cliente
+                    LEFT JOIN cobrado  cb ON cb.id_venta = v.id
+                    LEFT JOIN retenido rt ON rt.id_venta = v.id
+                    LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+                    WHERE {$where}
+                ) sub
+            ";
 
-        $st = $this->db->prepare($sql);
-        $st->execute($params);
-        $r = $st->fetch(PDO::FETCH_ASSOC);
+            $st = $this->db->prepare($sql);
+            $st->execute($params);
+            $r = $st->fetch(PDO::FETCH_ASSOC) ?: $r;
+        }
+
+        // Sumar los tramos de los recibos de venta (mismo filtro de cliente/fechas)
+        $rec = in_array($tipoDoc, ['TODOS', 'RECIBO'], true)
+            ? $this->getAntiguedadRecibos($idEmpresa, $filtros)
+            : ['vigente' => 0, 'tramo_1_30' => 0, 'tramo_31_60' => 0, 'tramo_61_90' => 0, 'mas_90' => 0];
 
         // Sumar los tramos de los saldos iniciales CXC (mismo filtro de cliente)
-        $si = $this->getAntiguedadSaldosInicialesCxc($idEmpresa, $filtros);
+        $si = in_array($tipoDoc, ['TODOS', 'SALDO_INICIAL'], true)
+            ? $this->getAntiguedadSaldosInicialesCxc($idEmpresa, $filtros)
+            : ['vigente' => 0, 'tramo_1_30' => 0, 'tramo_31_60' => 0, 'tramo_61_90' => 0, 'mas_90' => 0];
 
         return [
-            'vigente'    => (float)($r['tramo_vigente']  ?? 0) + $si['vigente'],
-            'tramo_1_30' => (float)($r['tramo_1_30']    ?? 0) + $si['tramo_1_30'],
-            'tramo_31_60'=> (float)($r['tramo_31_60']   ?? 0) + $si['tramo_31_60'],
-            'tramo_61_90'=> (float)($r['tramo_61_90']   ?? 0) + $si['tramo_61_90'],
-            'mas_90'     => (float)($r['tramo_mas_90']  ?? 0) + $si['mas_90'],
+            'vigente'    => (float)($r['tramo_vigente']  ?? 0) + $rec['vigente']     + $si['vigente'],
+            'tramo_1_30' => (float)($r['tramo_1_30']    ?? 0) + $rec['tramo_1_30']  + $si['tramo_1_30'],
+            'tramo_31_60'=> (float)($r['tramo_31_60']   ?? 0) + $rec['tramo_31_60'] + $si['tramo_31_60'],
+            'tramo_61_90'=> (float)($r['tramo_61_90']   ?? 0) + $rec['tramo_61_90'] + $si['tramo_61_90'],
+            'mas_90'     => (float)($r['tramo_mas_90']  ?? 0) + $rec['mas_90']      + $si['mas_90'],
         ];
     }
 
@@ -399,6 +435,259 @@ class CuentasPorCobrarRepository extends BaseRepository
             'tramo_61_90' => (float)($r['tramo_61_90']  ?? 0),
             'mas_90'      => (float)($r['tramo_mas_90'] ?? 0),
         ];
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // RECIBOS DE VENTA (espejo del listado de facturas; cobros con
+    // tipo_documento = 'RECIBO'; sin retenciones ni notas de crédito)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * WHERE del listado de recibos de venta. Un recibo cuenta como CxC salvo
+     * que esté anulado o facturado (al facturarlo, la factura hereda el saldo).
+     */
+    private function buildWhereRecibos(int $idEmpresa, array $filtros): array
+    {
+        $where = "v.id_empresa = :id_empresa
+              AND v.eliminado  = false
+              AND v.estado NOT IN ('anulado','facturado')
+              AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_ta)";
+
+        $params = [
+            ':id_empresa'    => $idEmpresa,
+            ':id_empresa_ta' => $idEmpresa,
+        ];
+
+        $saldoExpr = "(v.importe_total - COALESCE(cb.total_cobrado, 0))";
+
+        // Filtro de estado CxC (mismos valores que el listado de facturas)
+        $estado = $filtros['estado'] ?? 'PENDIENTES';
+        if ($estado === 'PENDIENTES') {
+            $where .= " AND {$saldoExpr} > 0";
+        } elseif ($estado === 'VENCIDAS') {
+            $where .= " AND {$saldoExpr} > 0
+                        AND (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE";
+        } elseif ($estado === 'AL_DIA') {
+            $where .= " AND {$saldoExpr} > 0
+                        AND (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date >= CURRENT_DATE";
+        } elseif ($estado === 'PAGADAS') {
+            $where .= " AND {$saldoExpr} <= 0";
+        }
+        // TODOS → sin filtro extra
+
+        if (!empty($filtros['fecha_desde'])) {
+            $where .= " AND v.fecha_emision >= :fecha_desde";
+            $params[':fecha_desde'] = $filtros['fecha_desde'];
+        }
+        if (!empty($filtros['fecha_hasta'])) {
+            $where .= " AND v.fecha_emision <= :fecha_hasta";
+            $params[':fecha_hasta'] = $filtros['fecha_hasta'];
+        }
+        if (!empty($filtros['id_cliente'])) {
+            $rawClientes = is_array($filtros['id_cliente']) ? $filtros['id_cliente'] : explode(',', (string)$filtros['id_cliente']);
+            $clientes = array_filter(array_map('intval', $rawClientes));
+            if (!empty($clientes)) {
+                $in = [];
+                foreach (array_values($clientes) as $i => $id) {
+                    $k = ":rcli{$i}"; $in[] = $k; $params[$k] = $id;
+                }
+                $where .= " AND v.id_cliente IN (" . implode(',', $in) . ")";
+            }
+        }
+
+        return [$where, $params];
+    }
+
+    /**
+     * Listado de recibos de venta para CxC (mismas columnas que getListado;
+     * total_retenido y total_nc siempre 0: el recibo no tiene retenciones ni NC).
+     */
+    public function getListadoRecibos(int $idEmpresa, array $filtros): array
+    {
+        [$where, $params] = $this->buildWhereRecibos($idEmpresa, $filtros);
+        $fh = !empty($filtros['fecha_hasta']) ? $filtros['fecha_hasta'] : null;
+        if ($fh) $params[':cobrado_hasta'] = $fh;
+
+        $sql = "
+            WITH cobrado AS (" . $this->getCteCobrado($fh, 'RECIBO') . ")
+            SELECT
+                v.id,
+                v.fecha_emision,
+                CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_factura,
+                c.id                        AS id_cliente,
+                c.nombre                    AS cliente_nombre,
+                c.identificacion            AS cliente_ruc,
+                COALESCE(c.email,'')        AS cliente_email,
+                COALESCE(c.telefono,'')     AS cliente_telefono,
+                v.importe_total             AS total,
+                COALESCE(cb.total_cobrado, 0)                       AS total_cobrado,
+                0                                                   AS total_retenido,
+                0                                                   AS total_nc,
+                v.importe_total - COALESCE(cb.total_cobrado, 0)     AS saldo,
+                v.fecha_emision + INTERVAL '1 day' * v.dias_credito AS fecha_vencimiento,
+                v.dias_credito,
+                (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido
+            FROM recibos_venta_cabecera v
+            JOIN clientes c ON c.id = v.id_cliente
+            LEFT JOIN cobrado cb ON cb.id_venta = v.id
+            WHERE {$where}
+            ORDER BY fecha_vencimiento ASC, v.fecha_emision DESC
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Agregados de los recibos de venta pendientes para las tarjetas superiores.
+     */
+    private function getStatsRecibos(int $idEmpresa, array $filtros): array
+    {
+        $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
+        [$where, $params] = $this->buildWhereRecibos($idEmpresa, $filtrosSinEstado);
+        $fh = !empty($filtros['fecha_hasta']) ? $filtros['fecha_hasta'] : null;
+        if ($fh) $params[':cobrado_hasta'] = $fh;
+
+        $sql = "
+            WITH cobrado AS (" . $this->getCteCobrado($fh, 'RECIBO') . ")
+            SELECT
+                COUNT(v.id) AS cnt,
+                COALESCE(SUM(v.importe_total - COALESCE(cb.total_cobrado, 0)), 0) AS total_saldo,
+                COALESCE(SUM(CASE
+                    WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE
+                    THEN v.importe_total - COALESCE(cb.total_cobrado, 0) ELSE 0 END), 0) AS total_vencido,
+                COALESCE(SUM(CASE
+                    WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date >= CURRENT_DATE
+                    THEN v.importe_total - COALESCE(cb.total_cobrado, 0) ELSE 0 END), 0) AS total_al_dia,
+                COUNT(CASE
+                    WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE THEN 1 END) AS vencidas
+            FROM recibos_venta_cabecera v
+            JOIN clientes c ON c.id = v.id_cliente
+            LEFT JOIN cobrado cb ON cb.id_venta = v.id
+            WHERE {$where}
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'cnt'           => (int)($r['cnt']            ?? 0),
+            'total_saldo'   => (float)($r['total_saldo']  ?? 0),
+            'total_vencido' => (float)($r['total_vencido']?? 0),
+            'total_al_dia'  => (float)($r['total_al_dia'] ?? 0),
+            'vencidas'      => (int)($r['vencidas']       ?? 0),
+        ];
+    }
+
+    /**
+     * Tramos de antigüedad de los recibos de venta pendientes.
+     */
+    private function getAntiguedadRecibos(int $idEmpresa, array $filtros): array
+    {
+        $filtrosSinEstado = array_merge($filtros, ['estado' => 'PENDIENTES']);
+        [$where, $params] = $this->buildWhereRecibos($idEmpresa, $filtrosSinEstado);
+        $fh = !empty($filtros['fecha_hasta']) ? $filtros['fecha_hasta'] : null;
+        if ($fh) $params[':cobrado_hasta'] = $fh;
+
+        $sql = "
+            WITH cobrado AS (" . $this->getCteCobrado($fh, 'RECIBO') . ")
+            SELECT
+                COALESCE(SUM(CASE WHEN dias_vencido <= 0              THEN saldo ELSE 0 END), 0) AS tramo_vigente,
+                COALESCE(SUM(CASE WHEN dias_vencido BETWEEN 1 AND 30  THEN saldo ELSE 0 END), 0) AS tramo_1_30,
+                COALESCE(SUM(CASE WHEN dias_vencido BETWEEN 31 AND 60 THEN saldo ELSE 0 END), 0) AS tramo_31_60,
+                COALESCE(SUM(CASE WHEN dias_vencido BETWEEN 61 AND 90 THEN saldo ELSE 0 END), 0) AS tramo_61_90,
+                COALESCE(SUM(CASE WHEN dias_vencido > 90              THEN saldo ELSE 0 END), 0) AS tramo_mas_90
+            FROM (
+                SELECT
+                    v.importe_total - COALESCE(cb.total_cobrado, 0) AS saldo,
+                    (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido
+                FROM recibos_venta_cabecera v
+                JOIN clientes c ON c.id = v.id_cliente
+                LEFT JOIN cobrado cb ON cb.id_venta = v.id
+                WHERE {$where}
+            ) sub
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'vigente'     => (float)($r['tramo_vigente'] ?? 0),
+            'tramo_1_30'  => (float)($r['tramo_1_30']   ?? 0),
+            'tramo_31_60' => (float)($r['tramo_31_60']  ?? 0),
+            'tramo_61_90' => (float)($r['tramo_61_90']  ?? 0),
+            'mas_90'      => (float)($r['tramo_mas_90'] ?? 0),
+        ];
+    }
+
+    /**
+     * Datos de un recibo de venta para validar el cobro (espejo de
+     * getFacturaParaCobro). Excluye recibos anulados o ya facturados.
+     */
+    public function getReciboParaCobro(int $idRecibo, int $idEmpresa): ?array
+    {
+        $sql = "
+            WITH cobrado AS (" . $this->getCteCobrado(null, 'RECIBO') . ")
+            SELECT
+                v.*,
+                c.nombre         AS cliente_nombre,
+                c.email          AS cliente_email,
+                c.telefono       AS cliente_telefono,
+                c.identificacion AS cliente_ruc,
+                COALESCE(cb.total_cobrado, 0)                   AS total_cobrado,
+                0                                               AS total_retenido,
+                0                                               AS total_nc,
+                v.importe_total - COALESCE(cb.total_cobrado, 0) AS saldo,
+                CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_factura,
+                (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date    AS fecha_vencimiento
+            FROM recibos_venta_cabecera v
+            JOIN clientes c ON c.id = v.id_cliente
+            LEFT JOIN cobrado cb ON cb.id_venta = v.id
+            WHERE v.id         = :id
+              AND v.id_empresa = :id_empresa
+              AND v.eliminado  = false
+              AND v.estado NOT IN ('anulado','facturado')
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $idRecibo, ':id_empresa' => $idEmpresa]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
+     * Historial de cobros de un recibo de venta específico.
+     */
+    public function getHistorialCobrosRecibo(int $idRecibo, int $idEmpresa): array
+    {
+        $sql = "
+            SELECT
+                ic.id,
+                ic.fecha_emision,
+                ic.numero_ingreso,
+                ic.observaciones,
+                id2.monto_cobrado,
+                u.nombre AS usuario_nombre,
+                efp.nombre AS forma_cobro
+            FROM ingresos_detalle id2
+            INNER JOIN ingresos_cabecera ic  ON ic.id  = id2.id_ingreso
+            LEFT  JOIN usuarios          u   ON u.id   = ic.id_usuario
+            LEFT  JOIN ingresos_pagos    ip  ON ip.id_ingreso = ic.id
+            LEFT  JOIN empresa_formas_pago efp ON efp.id = ip.id_forma_cobro
+            WHERE id2.tipo_documento           = 'RECIBO'
+              AND id2.id_referencia_documento  = :id_recibo
+              AND ic.id_empresa                = :id_empresa
+              AND ic.estado                   != 'anulado'
+              AND ic.eliminado                 = false
+              AND (efp.id IS NULL OR efp.id_empresa = :id_empresa_fp)
+            ORDER BY ic.fecha_emision DESC, ic.id DESC
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_recibo' => $idRecibo, ':id_empresa' => $idEmpresa, ':id_empresa_fp' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**

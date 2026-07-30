@@ -309,6 +309,15 @@ class XmlRetencionCompraService
             $node->appendChild($campo);
         }
 
+        // RUC del proveedor del sistema (Res. NAC-DGERCGC26-00000027, Art. 5).
+        $rucProveedor = \App\Helpers\SriProveedorHelper::rucProveedor();
+        if ($rucProveedor !== '') {
+            $campo = $dom->createElement('campoAdicional');
+            $campo->setAttribute('nombre', \App\Helpers\SriProveedorHelper::CAMPO_NOMBRE);
+            $campo->appendChild($dom->createTextNode($rucProveedor));
+            $node->appendChild($campo);
+        }
+
         return $node;
     }
 

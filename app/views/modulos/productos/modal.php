@@ -46,6 +46,20 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
         overflow-x: visible !important;
     }
 }
+
+/* Líneas editables de la pestaña Precios (estilo Factura de Venta). */
+.table-detalle-precios td { vertical-align: middle; padding: 4px 6px; }
+.table-detalle-precios .input-precio-linea {
+    border: 1px solid transparent;
+    background: transparent;
+    box-shadow: none;
+}
+.table-detalle-precios .input-precio-linea:hover { border-color: #dee2e6; }
+.table-detalle-precios .input-precio-linea:focus {
+    border-color: #86b7fe;
+    background: #fff;
+}
+.table-detalle-precios tbody tr:hover { background-color: #f8f9fa; }
 </style>
 
 <!-- Modal Producto -->
@@ -257,52 +271,34 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                             </div>
                         </div>
 
-                        <!-- TAB PRECIOS -->
+                        <!-- TAB PRECIOS (diseño de líneas editables, igual que Factura de Venta) -->
                         <div class="tab-pane fade" id="pane-precios" role="tabpanel">
-                            <div class="card border-0 bg-light bg-opacity-50 mb-3">
-                                <div class="card-body p-3">
-                                    <div class="row g-2 align-items-end">
-                                        <div class="col-md-4">
-                                            <label class="form-label small fw-bold text-muted mb-1">Nombre Precio</label>
-                                            <input type="text" id="pre_nombre" class="form-control form-control-sm shadow-none" placeholder="Ej: Mayorista">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small fw-bold text-muted mb-1">Precio</label>
-                                            <input type="number" id="pre_valor" step="0.01" class="form-control form-control-sm shadow-none text-end" placeholder="0.00">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small fw-bold text-muted mb-1">Desde</label>
-                                            <input type="date" id="pre_desde" class="form-control form-control-sm shadow-none">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <label class="form-label small fw-bold text-muted mb-1">Hasta</label>
-                                            <input type="date" id="pre_hasta" class="form-control form-control-sm shadow-none">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <button type="button" class="btn btn-primary btn-sm w-100 shadow-sm" onclick="agregarPrecio()">
-                                                <i class="bi bi-plus-lg"></i> Añadir
-                                            </button>
-                                        </div>
+                            <p class="text-muted small mb-2">
+                                Defina precios adicionales (mayorista, distribuidor, etc.). El precio base se configura en la pestaña General.
+                            </p>
+                            <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+                                <div class="table-responsive" style="max-height: 300px;">
+                                    <table class="table table-sm table-detalle-precios mb-0 text-nowrap">
+                                        <thead>
+                                            <tr class="table-light border-bottom">
+                                                <th class="ps-3 py-2 small fw-bold text-muted" style="width: 40%;">Nombre / Detalle</th>
+                                                <th class="py-2 small fw-bold text-muted text-end" style="width: 20%;">Precio</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width: 17%;">Desde</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width: 17%;">Hasta</th>
+                                                <th style="width: 40px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tb-precios"></tbody>
+                                    </table>
+                                </div>
+                                <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center">
+                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" onclick="agregarPrecio()">
+                                        <i class="bi bi-plus-circle me-1"></i> Agregar precio
+                                    </button>
+                                    <div class="small fw-bold text-muted pe-2">
+                                        Precios: <span id="pre-count">0</span>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="table-responsive" style="max-height: 250px;">
-                                <table class="table table-sm table-bordered mb-0 small text-center">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th class="text-start">Nombre / Detalle</th>
-                                            <th>Precio</th>
-                                            <th>Desde</th>
-                                            <th>Hasta</th>
-                                            <th style="width:50px;"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tb-precios">
-                                        <tr>
-                                            <td colspan="5" class="text-muted py-3">No hay precios adicionales</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
                             </div>
                         </div>
 

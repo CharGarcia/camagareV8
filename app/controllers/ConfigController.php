@@ -969,6 +969,79 @@ class ConfigController extends Controller
         $this->redirect(BASE_URL . '/config/permisos-modulos');
     }
 
+    /**
+     * RUC del proveedor del sistema de facturación (Res. NAC-DGERCGC26-00000027).
+     * Config GLOBAL (tabla configuracion_sistema), solo nivel 3. GET muestra la
+     * pantalla; POST guarda el nuevo RUC con auditoría en log_sistema.
+     */
+    public function sriProveedor(): void
+    {
+        $this->requireAuth();
+        $nivel = (int) ($_SESSION['nivel'] ?? 1);
+        if ($nivel < 3) {
+            $_SESSION['config_msg'] = ['danger', 'Solo el super administrador puede configurar el RUC del proveedor.'];
+            $this->redirect(BASE_URL . '/config');
+            return;
+        }
+
+        $db = \App\core\Database::getConnection();
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $ruc = preg_replace('/\D/', '', (string) ($_POST['ruc_proveedor'] ?? ''));
+            if ($ruc !== '' && strlen($ruc) !== 13) {
+                $_SESSION['config_msg'] = ['danger', 'El RUC debe tener exactamente 13 dígitos (o dejarse vacío para desactivar el campo).'];
+                $this->redirect(BASE_URL . '/config/sri-proveedor');
+                return;
+            }
+
+            $st = $db->prepare("SELECT id, valor FROM configuracion_sistema WHERE clave = 'sri_ruc_proveedor_sistema' AND eliminado = false LIMIT 1");
+            $st->execute();
+            $fila = $st->fetch(\PDO::FETCH_ASSOC);
+
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            if ($fila) {
+                $up = $db->prepare("UPDATE configuracion_sistema SET valor = :valor, updated_at = NOW(), updated_by = :usr WHERE id = :id");
+                $up->execute([':valor' => $ruc, ':usr' => $idUsuario, ':id' => (int) $fila['id']]);
+            } else {
+                $ins = $db->prepare("INSERT INTO configuracion_sistema (clave, valor, descripcion, created_by, updated_by)
+                                     VALUES ('sri_ruc_proveedor_sistema', :valor, 'RUC del proveedor del sistema de facturación electrónica (Res. NAC-DGERCGC26-00000027).', :usr, :usr2)");
+                $ins->execute([':valor' => $ruc, ':usr' => $idUsuario, ':usr2' => $idUsuario]);
+            }
+
+            (new \App\Services\LogSistemaService())->registrar(
+                $idUsuario,
+                null, // configuración global: sin empresa
+                'actualizar',
+                'configuracion_sistema',
+                $fila ? (int) $fila['id'] : null,
+                ['sri_ruc_proveedor_sistema' => $fila['valor'] ?? null],
+                ['sri_ruc_proveedor_sistema' => $ruc]
+            );
+
+            $_SESSION['config_msg'] = ['success', 'RUC del proveedor guardado. Se incluirá como "RUC Proveedor" en la información adicional de los comprobantes que se emitan desde ahora.'];
+            $this->redirect(BASE_URL . '/config/sri-proveedor');
+            return;
+        }
+
+        $rucActual = '';
+        try {
+            $st = $db->prepare("SELECT valor FROM configuracion_sistema WHERE clave = 'sri_ruc_proveedor_sistema' AND eliminado = false LIMIT 1");
+            $st->execute();
+            $rucActual = trim((string) ($st->fetchColumn() ?: ''));
+        } catch (\Throwable $e) {
+            // Tabla aún no migrada: mostrar el respaldo de config/app.php.
+        }
+        if ($rucActual === '') {
+            $rucActual = \App\Helpers\SriProveedorHelper::rucProveedor();
+        }
+
+        $this->viewWithLayout('layouts.main', 'config.sri_proveedor', [
+            'titulo'     => 'RUC Proveedor (SRI)',
+            'rucActual'  => $rucActual,
+            'nombreCampo' => \App\Helpers\SriProveedorHelper::CAMPO_NOMBRE,
+        ]);
+    }
+
     public function appearance(): void
     {
         $this->requireAuth();

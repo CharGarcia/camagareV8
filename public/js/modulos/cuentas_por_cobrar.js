@@ -42,6 +42,7 @@ async function CXC_cargar() {
     const params = new URLSearchParams({
         accion:      'generarAjax',
         estado:      document.getElementById('cxc-estado')?.value       || 'PENDIENTES',
+        tipo_doc:    document.getElementById('cxc-tipo-doc')?.value     || 'TODOS',
         fecha_desde: document.getElementById('cxc-fecha-desde')?.value  || '',
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value  || '',
         id_cliente:  CXC_getClientesSeleccionados(),
@@ -158,12 +159,19 @@ function CXC_renderTabla(filas) {
     tbody.innerHTML = html;
 }
 
+/* Clave única de una fila del listado unificado (los ids pueden repetirse
+   entre facturas, recibos y saldos iniciales; el origen los distingue). */
+function CXC_keyFila(r) {
+    return `${r.origen}:${r.id}`;
+}
+
 /* Construye una fila <tr> de detalle (11 columnas). Reutilizada por la vista
-   detallada y por la vista agrupada (para las facturas dentro de cada cliente). */
+   detallada y por la vista agrupada (para los documentos dentro de cada cliente). */
 function CXC_filaHtml(r) {
     const dias     = parseInt(r.dias_vencido) || 0;
     const saldo    = parseFloat(r.saldo);
-    const selec    = CXC_seleccionados.has(r.id);
+    const key      = CXC_keyFila(r);
+    const selec    = CXC_seleccionados.has(key);
 
     let badgeHtml, rowClass = '';
     if (saldo <= 0) {
@@ -184,16 +192,22 @@ function CXC_filaHtml(r) {
     const fEmision   = CXC_fmtFecha(r.fecha_emision);
     const fVenc      = CXC_fmtFecha(r.fecha_vencimiento);
     const esSaldo    = r.origen === 'SALDO_INICIAL';
-    const origenBadge = esSaldo
-        ? `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 small px-2" title="Saldo inicial de apertura">Saldo inicial</span>`
-        : `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 small px-2">Factura</span>`;
+    const esRecibo   = r.origen === 'RECIBO';
+    let origenBadge;
+    if (esSaldo) {
+        origenBadge = `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 small px-2" title="Saldo inicial de apertura">Saldo inicial</span>`;
+    } else if (esRecibo) {
+        origenBadge = `<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 small px-2" title="Recibo de venta (comprobante interno)">Recibo</span>`;
+    } else {
+        origenBadge = `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 small px-2">Factura</span>`;
+    }
 
     return `
         <tr class="${rowClass}" style="cursor:pointer;" title="Clic para ver el detalle" data-id="${r.id}" data-origen="${r.origen}" data-cliente="${esc(r.cliente_nombre)}" data-factura="${esc(r.numero_factura)}">
             <td class="text-center p-1">
-                <input class="form-check-input cxc-chk" type="checkbox" value="${r.id}"
+                <input class="form-check-input cxc-chk" type="checkbox" value="${key}"
                        ${esSaldo ? 'disabled' : (selec ? 'checked' : '')}
-                       onchange="CXC_toggleSeleccion(${r.id}, this.checked)">
+                       onchange="CXC_toggleSeleccion('${key}', this.checked)">
             </td>
             <td class="ps-2 fw-semibold text-truncate" title="${esc(r.numero_factura)}" style="font-size:.8rem;white-space:nowrap;">${esc(r.numero_factura)}</td>
             <td class="text-center" style="white-space:nowrap;">${origenBadge}</td>
@@ -217,9 +231,10 @@ function CXC_filaHtml(r) {
                     </button>
                     ${!esSaldo ? `
                     <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;" title="Enviar recordatorio email"
-                            onclick="CXC_abrirEmail(${r.id}, '${esc(r.numero_factura)}', '${esc(r.cliente_email || '')}', '${esc(r.cliente_nombre)}')">
+                            onclick="CXC_abrirEmail(${r.id}, '${esc(r.numero_factura)}', '${esc(r.cliente_email || '')}', '${esc(r.cliente_nombre)}', '${r.origen}')">
                         <i class="bi bi-envelope"></i>
-                    </button>
+                    </button>` : ''}
+                    ${(!esSaldo && !esRecibo) ? `
                     <button class="btn btn-sm py-0 px-2" style="font-size:.72rem;background:#25d366;color:#fff;" title="Enviar WhatsApp"
                             onclick="CXC_abrirWA(${r.id}, '${esc(r.numero_factura)}', '${esc(r.cliente_telefono || '')}', '${esc(r.cliente_nombre)}')">
                         <i class="bi bi-whatsapp"></i>
@@ -318,15 +333,16 @@ function CXC_filtrarTabla(q) {
 /* ════════════════════════════════════════════════════
    SELECCIÓN
 ════════════════════════════════════════════════════ */
-function CXC_toggleSeleccion(id, sel) {
-    sel ? CXC_seleccionados.add(id) : CXC_seleccionados.delete(id);
+function CXC_toggleSeleccion(key, sel) {
+    sel ? CXC_seleccionados.add(key) : CXC_seleccionados.delete(key);
 }
 
 function CXC_seleccionarTodos(sel) {
-    // Solo facturas: los saldos iniciales no tienen email/WhatsApp
+    // Facturas y recibos: los saldos iniciales no tienen email/WhatsApp
     CXC_filtradoLocal.forEach(r => {
         if (r.origen === 'SALDO_INICIAL') return;
-        sel ? CXC_seleccionados.add(r.id) : CXC_seleccionados.delete(r.id);
+        const key = CXC_keyFila(r);
+        sel ? CXC_seleccionados.add(key) : CXC_seleccionados.delete(key);
     });
     document.querySelectorAll('.cxc-chk:not([disabled])').forEach(c => c.checked = sel);
 }
@@ -345,20 +361,27 @@ async function CXC_abrirModalCobro(idVenta, origen = 'FACTURA') {
               importe_total: fila.total, total_cobrado: fila.total_cobrado,
               total_retenido: fila.total_retenido || 0, total_nc: 0, saldo: fila.saldo };
     } else {
-        // Factura: obtener datos en tiempo real del servidor
+        // Factura o recibo: obtener datos en tiempo real del servidor
+        const infoUrl = origen === 'RECIBO'
+            ? `${BASE_URL}/${RUTA_MODULO_CXC}/getReciboParaCobroInfoAjax?id_recibo=${idVenta}`
+            : `${BASE_URL}/${RUTA_MODULO_CXC}/getFacturaParaCobroInfoAjax?id_venta=${idVenta}`;
         try {
-            const resp = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/getFacturaParaCobroInfoAjax?id_venta=${idVenta}`);
+            const resp = await fetch(infoUrl);
             const data = await resp.json();
-            if (!data.ok) { alert(data.error || 'Error al cargar la factura.'); return; }
+            if (!data.ok) { alert(data.error || 'Error al cargar el documento.'); return; }
             f = data.factura;
         } catch(e) {
-            const fila = CXC_datos.find(r => r.id == idVenta);
+            const fila = CXC_datos.find(r => r.id == idVenta && r.origen === origen);
             if (!fila) return;
             f = { numero_factura: fila.numero_factura, cliente_nombre: fila.cliente_nombre,
                   importe_total: fila.total, total_cobrado: fila.total_cobrado,
                   total_retenido: fila.total_retenido || 0, total_nc: fila.total_nc || 0, saldo: fila.saldo };
         }
     }
+
+    // Etiqueta del documento en la tarjeta informativa del modal
+    const lblDoc = document.getElementById('cobro-doc-label');
+    if (lblDoc) lblDoc.textContent = origen === 'RECIBO' ? 'Recibo' : (origen === 'SALDO_INICIAL' ? 'Saldo inicial' : 'Factura');
 
     const saldo = Math.max(0, parseFloat(f.saldo));
 
@@ -491,9 +514,10 @@ async function CXC_guardarCobro() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Registrando…';
 
     try {
-        const esSaldo = CXC_cobroOrigen === 'SALDO_INICIAL';
+        const esSaldo  = CXC_cobroOrigen === 'SALDO_INICIAL';
+        const esRecibo = CXC_cobroOrigen === 'RECIBO';
         const fd = new FormData();
-        fd.append(esSaldo ? 'id_saldo' : 'id_venta', idVenta);
+        fd.append(esSaldo ? 'id_saldo' : (esRecibo ? 'id_recibo' : 'id_venta'), idVenta);
         fd.append('id_punto_emision',   idPunto);
         fd.append('id_ingreso_concepto',concepto);
         fd.append('monto',              monto);
@@ -508,7 +532,8 @@ async function CXC_guardarCobro() {
             fd.append('numero_operacion',        document.getElementById('cobro-num-op')?.value  || '');
         }
 
-        const endpoint = esSaldo ? 'registrarCobroSaldoInicialAjax' : 'registrarCobroAjax';
+        const endpoint = esSaldo ? 'registrarCobroSaldoInicialAjax'
+                       : (esRecibo ? 'registrarCobroReciboAjax' : 'registrarCobroAjax');
         const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/${endpoint}`, {
             method: 'POST',
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -535,8 +560,10 @@ async function CXC_guardarCobro() {
    MODAL HISTORIAL
 ════════════════════════════════════════════════════ */
 async function CXC_abrirHistorial(idVenta, nroFactura, origen = 'FACTURA') {
-    const esSaldo = origen === 'SALDO_INICIAL';
-    document.getElementById('historial-subtitulo').textContent = (esSaldo ? 'Saldo inicial: ' : 'Factura: ') + nroFactura;
+    const esSaldo  = origen === 'SALDO_INICIAL';
+    const esRecibo = origen === 'RECIBO';
+    const prefijo  = esSaldo ? 'Saldo inicial: ' : (esRecibo ? 'Recibo: ' : 'Factura: ');
+    document.getElementById('historial-subtitulo').textContent = prefijo + nroFactura;
     document.getElementById('historial-tbody').innerHTML = '<tr><td colspan="6" class="text-center text-muted">Cargando…</td></tr>';
     document.getElementById('historial-total').textContent = '0.00';
 
@@ -545,7 +572,9 @@ async function CXC_abrirHistorial(idVenta, nroFactura, origen = 'FACTURA') {
     try {
         const url = esSaldo
             ? `${BASE_URL}/${RUTA_MODULO_CXC}/historialCobrosSaldoInicialAjax?id_saldo=${idVenta}`
-            : `${BASE_URL}/${RUTA_MODULO_CXC}/historialCobrosAjax?id_venta=${idVenta}`;
+            : (esRecibo
+                ? `${BASE_URL}/${RUTA_MODULO_CXC}/historialCobrosReciboAjax?id_recibo=${idVenta}`
+                : `${BASE_URL}/${RUTA_MODULO_CXC}/historialCobrosAjax?id_venta=${idVenta}`);
         const r = await fetch(url, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
@@ -586,9 +615,13 @@ async function CXC_abrirHistorial(idVenta, nroFactura, origen = 'FACTURA') {
 /* ════════════════════════════════════════════════════
    MODAL EMAIL
 ════════════════════════════════════════════════════ */
-function CXC_abrirEmail(idVenta, nroFactura, email, clienteNombre) {
+let CXC_emailOrigen = 'FACTURA'; // origen del documento en el modal de email
+
+function CXC_abrirEmail(idVenta, nroFactura, email, clienteNombre, origen = 'FACTURA') {
+    CXC_emailOrigen = origen;
+    const prefijo = origen === 'RECIBO' ? 'Recibo' : 'Factura';
     document.getElementById('email-id-venta').value        = idVenta;
-    document.getElementById('email-subtitulo').textContent = `Factura: ${nroFactura} — ${clienteNombre}`;
+    document.getElementById('email-subtitulo').textContent = `${prefijo}: ${nroFactura} — ${clienteNombre}`;
     document.getElementById('email-destino').value         = email || '';
     document.getElementById('email-asunto').value          = '';
     document.getElementById('email-mensaje').value         = '';
@@ -605,6 +638,7 @@ async function CXC_enviarEmail() {
 
     const fd = new FormData();
     fd.append('id_venta', idVenta);
+    fd.append('origen',   CXC_emailOrigen);
     fd.append('email',    email);
     fd.append('asunto',   asunto);
     fd.append('mensaje',  msg);
@@ -630,42 +664,133 @@ async function CXC_enviarEmail() {
 /* ════════════════════════════════════════════════════
    ENVÍO MASIVO EMAIL
 ════════════════════════════════════════════════════ */
-function CXC_envioMasivoEmail() {
-    const ids = [...CXC_seleccionados];
-    if (!ids.length) {
-        CXC_toast('Seleccione al menos una factura.', 'warning');
-        return;
-    }
-    const filas = CXC_datos.filter(r => ids.includes(r.id));
-    const sinEmail = filas.filter(r => !r.cliente_email);
-    if (sinEmail.length) {
-        CXC_toast(`${sinEmail.length} cliente(s) sin email registrado.`, 'warning');
-    }
-    const conEmail = filas.filter(r => r.cliente_email);
-    if (!conEmail.length) {
-        CXC_toast('Ningún cliente seleccionado tiene email.', 'danger');
-        return;
-    }
-    if (!confirm(`¿Enviar recordatorio por email a ${conEmail.length} cliente(s)?`)) return;
+let CXC_masivoGrupos = []; // grupos por cliente del modal de envío masivo
 
-    let enviados = 0;
-    const envios = conEmail.map(async r => {
+/* Abre el modal de revisión: un grupo por cliente con su correo editable.
+   El envío real ocurre en CXC_confirmarEnvioMasivo(). */
+function CXC_envioMasivoEmail() {
+    const keys = [...CXC_seleccionados];
+    if (!keys.length) {
+        CXC_toast('Seleccione al menos un documento.', 'warning');
+        return;
+    }
+    const filas = CXC_datos.filter(r => keys.includes(CXC_keyFila(r)));
+    if (!filas.length) {
+        CXC_toast('Seleccione al menos un documento.', 'warning');
+        return;
+    }
+
+    // Agrupar por cliente: se envía UN correo por cliente con el resumen
+    // de todos sus documentos seleccionados (facturas y recibos).
+    const mapa = new Map();
+    for (const r of filas) {
+        const idCli = parseInt(r.id_cliente) || 0;
+        const k = idCli || ('r:' + (r.cliente_ruc || r.cliente_nombre || '?'));
+        let g = mapa.get(k);
+        if (!g) {
+            g = { idCliente: idCli, nombre: r.cliente_nombre || 'Sin nombre', ruc: r.cliente_ruc || '',
+                  email: r.cliente_email || '', numDocs: 0, saldo: 0, documentos: [] };
+            mapa.set(k, g);
+        }
+        if (!g.email && r.cliente_email) g.email = r.cliente_email;
+        g.numDocs++;
+        g.saldo += parseFloat(r.saldo) || 0;
+        g.documentos.push({ origen: r.origen || 'FACTURA', id: r.id });
+    }
+    CXC_masivoGrupos = [...mapa.values()].sort((a, b) => b.saldo - a.saldo);
+
+    const tbody = document.getElementById('em-masivo-tbody');
+    tbody.innerHTML = CXC_masivoGrupos.map((g, i) => `
+        <tr>
+            <td class="ps-2" style="font-size:.82rem;">
+                <div class="fw-semibold text-truncate" style="max-width:240px;" title="${esc(g.nombre)}">${esc(g.nombre)}</div>
+                <div class="text-muted" style="font-size:.7rem;">${esc(g.ruc)}</div>
+            </td>
+            <td class="text-center" style="font-size:.8rem;">${g.numDocs}</td>
+            <td class="text-end fw-semibold" style="font-size:.8rem;color:#dc3545;">$${CXC_fmt(g.saldo)}</td>
+            <td class="pe-2 py-1">
+                <input type="text" class="form-control form-control-sm shadow-none em-masivo-correo ${g.email ? '' : 'border-warning'}"
+                       data-idx="${i}" value="${esc(g.email)}" placeholder="Sin correo — se omite"
+                       title="Varios destinatarios separados por coma"
+                       oninput="this.classList.remove('is-invalid')">
+            </td>
+        </tr>`).join('');
+
+    document.getElementById('em-masivo-resumen').innerHTML =
+        `<strong>${filas.length}</strong> documento(s) de <strong>${CXC_masivoGrupos.length}</strong> cliente(s). ` +
+        `Se enviará <strong>un correo por cliente</strong> con la tabla resumen de sus documentos y el total pendiente.`;
+
+    new bootstrap.Modal(document.getElementById('modalEmailMasivo')).show();
+}
+
+function CXC_emailValido(v) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
+/* Valida los correos del modal y dispara el envío agrupado. */
+async function CXC_confirmarEnvioMasivo() {
+    const inputs = document.querySelectorAll('#em-masivo-tbody .em-masivo-correo');
+    const correos = {};      // id_cliente -> correos editados (para este envío)
+    let documentos = [];
+    let conCorreo = 0, invalidos = 0, omitidos = 0;
+
+    inputs.forEach(inp => {
+        const g = CXC_masivoGrupos[parseInt(inp.dataset.idx)];
+        if (!g) return;
+        const val = inp.value.trim();
+        if (!val) { omitidos++; return; }
+
+        const partes = val.split(/[\s,;]+/).filter(Boolean);
+        if (!partes.every(CXC_emailValido)) {
+            inp.classList.add('is-invalid');
+            invalidos++;
+            return;
+        }
+        conCorreo++;
+        if (g.idCliente > 0) correos[g.idCliente] = partes.join(',');
+        documentos = documentos.concat(g.documentos);
+    });
+
+    if (invalidos) {
+        CXC_toast(`Hay ${invalidos} correo(s) inválido(s). Corríjalos o déjelos vacíos para omitir al cliente.`, 'warning');
+        return;
+    }
+    if (!conCorreo) {
+        CXC_toast('Ningún cliente tiene correo. Complete al menos uno para enviar.', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('btn-enviar-masivo');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando…';
+
+    try {
         const fd = new FormData();
-        fd.append('id_venta', r.id);
-        fd.append('email',    r.cliente_email);
-        try {
-            const res = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/enviarEmailAjax`, {
-                method: 'POST',
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                body: fd
-            });
-            const d = await res.json();
-            if (d.ok) enviados++;
-        } catch {}
-    });
-    Promise.all(envios).then(() => {
-        CXC_toast(`${enviados}/${conEmail.length} correos enviados.`, 'success');
-    });
+        fd.append('documentos', JSON.stringify(documentos));
+        fd.append('correos',    JSON.stringify(correos));
+
+        const r = await fetch(`${BASE_URL}/${RUTA_MODULO_CXC}/enviarEmailMasivoAjax`, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd
+        });
+        const d = await r.json();
+
+        if (d.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('modalEmailMasivo'))?.hide();
+            let mensaje = d.mensaje || 'Correos enviados.';
+            if (omitidos) mensaje += ` ${omitidos} cliente(s) omitido(s) por no tener correo.`;
+            const hayAvisos = omitidos + (d.sin_email || 0) + (d.con_error || 0) + (d.no_encontrados || 0) > 0;
+            CXC_toast(mensaje, hayAvisos ? 'warning' : 'success');
+        } else {
+            CXC_toast(d.error || 'Error al enviar.', 'danger');
+        }
+    } catch (e) {
+        CXC_toast('Error de conexión.', 'danger');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send me-1"></i>Enviar';
+    }
 }
 
 /* ════════════════════════════════════════════════════
@@ -863,6 +988,8 @@ function CXC_limpiarFiltros() {
     const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
 
     document.getElementById('cxc-estado').value      = 'PENDIENTES';
+    const selTipoDoc = document.getElementById('cxc-tipo-doc');
+    if (selTipoDoc) selTipoDoc.value = 'TODOS';
     document.getElementById('cxc-fecha-desde').value = '';
     document.getElementById('cxc-fecha-hasta').value = hoyStr;
     document.getElementById('cxc-search-cliente').value = '';
@@ -882,6 +1009,7 @@ function CXC_limpiarFiltros() {
 function CXC_exportarExcel() {
     const params = new URLSearchParams({
         estado:      document.getElementById('cxc-estado')?.value      || 'PENDIENTES',
+        tipo_doc:    document.getElementById('cxc-tipo-doc')?.value    || 'TODOS',
         fecha_desde: document.getElementById('cxc-fecha-desde')?.value || '',
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value || '',
         id_cliente:  CXC_getClientesSeleccionados(),
@@ -892,6 +1020,7 @@ function CXC_exportarExcel() {
 function CXC_exportarPDF() {
     const params = new URLSearchParams({
         estado:      document.getElementById('cxc-estado')?.value      || 'PENDIENTES',
+        tipo_doc:    document.getElementById('cxc-tipo-doc')?.value    || 'TODOS',
         fecha_desde: document.getElementById('cxc-fecha-desde')?.value || '',
         fecha_hasta: document.getElementById('cxc-fecha-hasta')?.value || '',
         id_cliente:  CXC_getClientesSeleccionados(),

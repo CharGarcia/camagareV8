@@ -94,6 +94,12 @@ $defaults = [
         ],
     ],
 
+    // RUC del PROVEEDOR del sistema de facturación (CaMaGaRe). Resolución SRI
+    // NAC-DGERCGC26-00000027, Art. 5: todo comprobante electrónico debe incluir en
+    // su información adicional el RUC del proveedor del sistema. Es un valor global
+    // (el proveedor es el mismo para todas las empresas); vacío = no se agrega.
+    'sri_ruc_proveedor_sistema' => '1792708389001',
+
     // SECRETO: definir en config/local.php ('2captcha_api_key') o en la
     // variable de entorno CMG_2CAPTCHA_KEY. Nunca en este archivo.
     '2captcha_api_key' => '',

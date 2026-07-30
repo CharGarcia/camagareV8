@@ -79,7 +79,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
 
                                 <!-- Bodega -->
                                 <div class="col-md-4">
-                                    <label class="form-label small fw-bold text-muted">Bodega <span class="text-danger">*</span></label>
+                                    <label class="form-label small fw-bold text-muted">Bodega <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('inventario', 'ajuste_id_bodega', 'id_bodega') ?> <span class="text-danger">*</span></label>
                                     <select name="id_bodega" id="ajuste_id_bodega" class="form-select form-select-sm" required>
                                         <option value="">Seleccione bodega...</option>
                                         <?php foreach($bodegas as $b): ?>
@@ -92,7 +92,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
 
                                 <!-- Movimiento -->
                                 <div class="col-md-4">
-                                    <label class="form-label small fw-bold text-muted">Tipo Movimiento <span class="text-danger">*</span></label>
+                                    <label class="form-label small fw-bold text-muted">Tipo Movimiento <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('inventario', 'ajuste_tipo_mov', 'tipo_movimiento') ?> <span class="text-danger">*</span></label>
                                     <select name="tipo_movimiento" id="ajuste_tipo_mov" class="form-select form-select-sm fw-bold" required>
                                         <option value="entrada">ENTRADA (+)</option>
                                         <option value="salida">SALIDA (-)</option>
@@ -116,7 +116,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
 
                                 <!-- Unidad de Medida -->
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-bold text-muted">Unidad de Medida <span class="text-danger">*</span></label>
+                                    <label class="form-label small fw-bold text-muted">Unidad de Medida <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('inventario', 'ajuste_id_medida', 'id_medida') ?> <span class="text-danger">*</span></label>
                                     <select name="id_medida" id="ajuste_id_medida" class="form-select form-select-sm" required>
                                         <option value="">Seleccione medida...</option>
                                     </select>
@@ -308,6 +308,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                     originalTipo = '';
                     modalLabel.innerHTML = `<i class="bi bi-plus-lg me-2"></i>Registrar Movimiento`;
                     btnGuardar.innerHTML = `<i class="bi bi-check-lg me-1"></i>Confirmar Registro`;
+                    aplicarFavoritosNuevo();
                 }
 
                 modalObj.show();
@@ -318,6 +319,20 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
 
         // Mantener compatibilidad con el botón "Nuevo"
         window.abrirModalNuevoAjuste = () => window.abrirModalAjuste();
+
+        // Aplica los valores favoritos del usuario al registrar un movimiento nuevo.
+        // (La medida se aplica en cargarMedidasProducto, tras cargar las opciones.)
+        function aplicarFavoritosNuevo() {
+            if (typeof APP_FAVORITOS === 'undefined') return;
+            if (APP_FAVORITOS.id_bodega) {
+                selectBodega.value = APP_FAVORITOS.id_bodega;
+                selectBodega.dispatchEvent(new Event('change'));
+            }
+            if (APP_FAVORITOS.tipo_movimiento) {
+                selectTipoMov.value = APP_FAVORITOS.tipo_movimiento;
+                selectTipoMov.dispatchEvent(new Event('change'));
+            }
+        }
 
         function restablecerCampoLote() {
             loteContainer.innerHTML = `<input type="text" name="numero_lote" id="ajuste_lote_input" class="form-control form-control-sm" placeholder="Ej: LOT-2024-001">`;
@@ -428,12 +443,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
 
                     // Determinar la medida por defecto:
                     //   1) la que viene seleccionada (edición)
-                    //   2) la medida base del producto
-                    //   3) la unidad llamada "Unidad"
-                    //   4) la primera de la lista
+                    //   2) el favorito del usuario (solo en alta)
+                    //   3) la medida base del producto
+                    //   4) la unidad llamada "Unidad"
+                    //   5) la primera de la lista
+                    const favMedida = (typeof APP_FAVORITOS !== 'undefined') ? APP_FAVORITOS.id_medida : null;
                     let defaultId = '';
                     if (idSeleccionada && medidas.some(m => m.id == idSeleccionada)) {
                         defaultId = idSeleccionada;
+                    } else if (favMedida && medidas.some(m => m.id == favMedida)) {
+                        defaultId = favMedida;
                     } else if (json.id_medida_base && medidas.some(m => m.id == json.id_medida_base)) {
                         defaultId = json.id_medida_base;
                     } else {
@@ -447,6 +466,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigI
                         html += `<option value="${m.id}" ${selected}>${m.nombre} (${m.abreviatura})</option>`;
                     });
                     selectMedida.innerHTML = html;
+                    selectMedida.dispatchEvent(new Event('change')); // sincroniza la estrella de favorito
                 }
             } catch (e) {
                 console.error('Error al cargar medidas:', e);

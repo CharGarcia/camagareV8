@@ -38,6 +38,9 @@ class XmlLiquidacionCompraService
         $this->decPrecio   = max(0, min(6, (int)($empresa['decimales_precio']   ?? 2)));
 
         $dom = new \DOMDocument('1.0', 'UTF-8');
+        // RUC del proveedor del sistema en información adicional (Res. NAC-DGERCGC26-00000027).
+        $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
+
         $dom->formatOutput = false;
 
         $root = $dom->createElement('liquidacionCompra');

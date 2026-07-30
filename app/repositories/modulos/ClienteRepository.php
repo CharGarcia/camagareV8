@@ -51,6 +51,20 @@ class ClienteRepository extends BaseRepository
             $where .= " AND (c.nombre ILIKE :buscar OR c.identificacion ILIKE :buscar OR c.email ILIKE :buscar OR c.telefono ILIKE :buscar)";
             $params[':buscar'] = '%' . $parsed['texto_libre'] . '%';
         }
+
+        // La columna c.status es entera (1=activo, 0=inactivo) pero el buscador
+        // envía 'activo'/'inactivo'. Traducir para no romper el bind a integer.
+        $mapEstado = ['activo' => '1', 'inactivo' => '0'];
+        foreach (['estado', 'status'] as $claveEstado) {
+            if (!isset($parsed['filtros'][$claveEstado])) {
+                continue;
+            }
+            $val = $parsed['filtros'][$claveEstado]['valor'];
+            $parsed['filtros'][$claveEstado]['valor'] = is_array($val)
+                ? array_map(fn($v) => $mapEstado[strtolower(trim((string)$v))] ?? $v, $val)
+                : ($mapEstado[strtolower(trim((string)$val))] ?? $val);
+        }
+
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
             'texto' => [
                 'nombre'         => 'c.nombre',

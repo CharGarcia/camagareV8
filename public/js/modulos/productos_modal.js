@@ -274,11 +274,8 @@
     };
 
     function renderListas(d = {}) {
-        const tbPre = document.getElementById('tb-precios');
-        if (tbPre) {
-            tbPre.innerHTML = preciosObj.length === 0 ? '<tr><td colspan="5" class="text-muted py-3">No hay precios adicionales</td></tr>' : 
-            preciosObj.map((p, i) => `<tr><td class="text-start">${p.nombre_precio}</td><td class="fw-bold">$${parseFloat(p.precio).toFixed(2)}</td><td>${p.valido_desde || '—'}</td><td>${p.valido_hasta || '—'}</td><td><button type="button" class="btn btn-sm text-danger p-0" onclick="quitarPrecio(${i})"><i class="bi bi-x-circle-fill"></i></button></td></tr>`).join('');
-        }
+        // Los precios se manejan como filas editables (patrón Factura de Venta),
+        // no como lista de solo lectura: ver renderPrecios()/agregarPrecio().
         const tbComp = document.getElementById('tb-componentes');
         if (tbComp) {
             tbComp.innerHTML = componentesObj.length === 0 ? '<tr><td colspan="5" class="text-muted py-3">No hay componentes</td></tr>' :
@@ -348,33 +345,85 @@
         } catch (e) { console.error(e); }
     };
 
+    // ── Precios: filas editables inline (estilo Factura de Venta) ────────────
+
+    function filaPrecioHTML(p = {}) {
+        const nombre = (p.nombre_precio ?? '').toString().replace(/"/g, '&quot;');
+        const precio = parseFloat(p.precio ?? 0).toFixed(2);
+        const desde  = p.valido_desde || '';
+        const hasta  = p.valido_hasta || '';
+        return `
+            <tr class="fila-precio">
+                <td class="ps-3">
+                    <input type="text" class="form-control form-control-sm input-precio-linea pre-nombre" placeholder="Ej: Mayorista" value="${nombre}">
+                </td>
+                <td>
+                    <input type="number" step="0.01" min="0" class="form-control form-control-sm input-precio-linea text-end pre-valor" placeholder="0.00" value="${precio}"
+                        onblur="this.value = parseFloat(this.value || 0).toFixed(2)">
+                </td>
+                <td>
+                    <input type="date" class="form-control form-control-sm input-precio-linea text-center pre-desde" value="${desde}">
+                </td>
+                <td>
+                    <input type="date" class="form-control form-control-sm input-precio-linea text-center pre-hasta" value="${hasta}">
+                </td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-sm text-danger p-0 shadow-none border-0" onclick="quitarPrecio(this)" title="Quitar">
+                        <i class="bi bi-x-circle-fill"></i>
+                    </button>
+                </td>
+            </tr>`;
+    }
+
+    // Pinta las filas de precios a partir de un arreglo (al abrir el modal).
+    // Si no hay precios, deja una fila vacía lista para escribir.
+    function renderPrecios(precios = []) {
+        const tb = document.getElementById('tb-precios');
+        if (!tb) return;
+        const lista = (precios && precios.length) ? precios : [{}];
+        tb.innerHTML = lista.map(p => filaPrecioHTML(p)).join('');
+        actualizarContadorPrecios();
+    }
+
+    function actualizarContadorPrecios() {
+        const tb = document.getElementById('tb-precios');
+        const cont = document.getElementById('pre-count');
+        if (cont && tb) cont.textContent = tb.querySelectorAll('tr.fila-precio').length;
+    }
+
+    // Agrega una fila vacía y enfoca su nombre.
     window.agregarPrecio = function() {
-        const nInput = document.getElementById('pre_nombre');
-        const vInput = document.getElementById('pre_valor');
-        const dInput = document.getElementById('pre_desde');
-        const hInput = document.getElementById('pre_hasta');
-
-        const n = nInput.value.trim();
-        const p = parseFloat(vInput.value || 0);
-        if (!n || p <= 0) return;
-        
-        preciosObj.push({ 
-            nombre_precio: n, 
-            precio: p, 
-            valido_desde: dInput.value, 
-            valido_hasta: hInput.value 
-        });
-
-        // Limpiar campos
-        nInput.value = '';
-        vInput.value = '';
-        dInput.value = '';
-        hInput.value = '';
-        nInput.focus();
-
-        renderListas();
+        const tb = document.getElementById('tb-precios');
+        if (!tb) return;
+        tb.insertAdjacentHTML('beforeend', filaPrecioHTML());
+        actualizarContadorPrecios();
+        tb.querySelector('tr.fila-precio:last-child .pre-nombre')?.focus();
     };
-    window.quitarPrecio = i => { preciosObj.splice(i, 1); renderListas(); };
+
+    // Quita la fila del botón pulsado.
+    window.quitarPrecio = function(btn) {
+        btn.closest('tr.fila-precio')?.remove();
+        actualizarContadorPrecios();
+    };
+
+    // Lee las filas del DOM y arma el arreglo a guardar (ignora filas sin nombre
+    // o sin precio válido, igual que hacía el flujo anterior).
+    function recogerPrecios() {
+        const filas = document.querySelectorAll('#tb-precios tr.fila-precio');
+        const out = [];
+        filas.forEach(tr => {
+            const nombre = tr.querySelector('.pre-nombre')?.value.trim() || '';
+            const precio = parseFloat(tr.querySelector('.pre-valor')?.value || 0);
+            if (!nombre || !(precio > 0)) return;
+            out.push({
+                nombre_precio: nombre,
+                precio: precio,
+                valido_desde: tr.querySelector('.pre-desde')?.value || '',
+                valido_hasta: tr.querySelector('.pre-hasta')?.value || '',
+            });
+        });
+        return out;
+    }
 
     window.agregarComponente = function() {
         const idInput = document.getElementById('comp_id');
@@ -457,6 +506,7 @@
         preciosObj = []; componentesObj = []; variantesObj = [];
         codigoAutogenerado = '';
         renderListas();
+        renderPrecios([]); // producto nuevo: sin precios adicionales
         window.removerImagen();
         quitarRestriccionesEnUso();
         activarTabGeneral();
@@ -606,6 +656,7 @@
                 componentesObj = d.componentes || [];
                 variantesObj = d.variantes || [];
                 renderListas(d);
+                renderPrecios(preciosObj); // filas editables con los precios guardados
                 if (d.imagen) mostrarImagen(d.imagen);
                 if (d.stock_actual_general !== undefined) {
                     document.getElementById('prod_stock_actual').value = parseFloat(d.stock_actual_general).toFixed(2);
@@ -653,7 +704,7 @@
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
         try {
             const fd = new FormData(f);
-            fd.append('precios',     JSON.stringify(preciosObj));
+            fd.append('precios',     JSON.stringify(recogerPrecios())); // se leen las filas editables
             fd.append('componentes', JSON.stringify(componentesObj));
             fd.append('variantes',   JSON.stringify(variantesObj));
 

@@ -20,7 +20,7 @@
             <small class="text-muted">Seguimiento de saldos pendientes, cobros y recordatorios</small>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-            <button class="btn btn-outline-primary btn-sm" onclick="CXC_envioMasivoEmail()" title="Enviar correo a todos los seleccionados">
+            <button class="btn btn-outline-primary btn-sm" onclick="CXC_envioMasivoEmail()" title="Un correo por cliente con el resumen de sus documentos seleccionados">
                 <i class="bi bi-envelope me-1"></i>Envío Masivo Email
             </button>
         </div>
@@ -39,6 +39,18 @@
             <div id="collapseFiltrosCxC" class="accordion-collapse collapse show">
                 <div class="accordion-body bg-light bg-opacity-10 p-3 pt-2">
                     <form id="form-filtros-cxc" onsubmit="event.preventDefault(); CXC_cargar();" class="row g-2 align-items-start">
+
+                        <!-- Tipo de documento -->
+                        <div class="col-6 col-md-auto">
+                            <label class="form-label small fw-bold mb-1 text-muted text-uppercase" style="font-size:.65rem;">Documento</label>
+                            <select id="cxc-tipo-doc" name="tipo_doc" class="form-select form-select-sm shadow-none border" style="width:170px;"
+                                    onchange="CXC_cargar()">
+                                <option value="TODOS" selected>Todos</option>
+                                <option value="FACTURA">Facturas de venta</option>
+                                <option value="RECIBO">Recibos de venta</option>
+                                <option value="SALDO_INICIAL">Saldos iniciales</option>
+                            </select>
+                        </div>
 
                         <!-- Estado CxC -->
                         <div class="col-6 col-md-auto">
@@ -108,7 +120,7 @@
                         <i class="bi bi-receipt fs-4"></i>
                     </div>
                     <div>
-                        <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Facturas</div>
+                        <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Documentos</div>
                         <div class="fw-bold fs-4" id="cxc-stat-facturas">0</div>
                     </div>
                 </div>
@@ -136,7 +148,7 @@
                     <div>
                         <div class="text-muted small fw-bold text-uppercase" style="font-size:.62rem;">Vencido</div>
                         <div class="fw-bold fs-5 text-danger">$<span id="cxc-stat-vencido">0.00</span></div>
-                        <div class="text-muted" style="font-size:.7rem;"><span id="cxc-stat-fvencidas">0</span> facturas vencidas</div>
+                        <div class="text-muted" style="font-size:.7rem;"><span id="cxc-stat-fvencidas">0</span> documentos vencidos</div>
                     </div>
                 </div>
             </div>
@@ -259,7 +271,7 @@
                 <div class="p-2 border rounded-3 bg-light mb-3" id="cobro-info-factura">
                     <div class="row g-1">
                         <div class="col-6">
-                            <div class="text-muted" style="font-size:.7rem;">Factura</div>
+                            <div class="text-muted" style="font-size:.7rem;" id="cobro-doc-label">Documento</div>
                             <div class="fw-bold" id="cobro-nro-factura"></div>
                         </div>
                         <div class="col-6">
@@ -267,7 +279,7 @@
                             <div class="fw-bold" id="cobro-cliente"></div>
                         </div>
                         <div class="col-3 mt-1">
-                            <div class="text-muted" style="font-size:.7rem;">Total Factura</div>
+                            <div class="text-muted" style="font-size:.7rem;">Total Documento</div>
                             <div class="fw-semibold">$<span id="cobro-total-fact"></span></div>
                         </div>
                         <div class="col-3 mt-1">
@@ -446,6 +458,49 @@
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-primary btn-sm px-4" onclick="CXC_enviarEmail()">
                     <i class="bi bi-send me-1"></i>Enviar Correo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODAL: Envío Masivo Email (revisión de correos por cliente)
+═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalEmailMasivo" tabindex="-1" aria-labelledby="modalEmailMasivoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header py-2 px-3" style="background:#0d6efd;">
+                <h6 class="modal-title fw-bold text-white" id="modalEmailMasivoLabel">
+                    <i class="bi bi-envelope-paper me-2"></i>Envío Masivo de Recordatorios
+                </h6>
+                <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <p class="small mb-2" id="em-masivo-resumen"></p>
+                <div class="table-responsive border rounded-2" style="max-height:50vh;overflow-y:auto;">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light" style="position:sticky;top:0;z-index:5;">
+                            <tr>
+                                <th class="ps-2">Cliente</th>
+                                <th class="text-center" style="width:60px;">Docs</th>
+                                <th class="text-end" style="width:100px;">Saldo</th>
+                                <th style="width:42%;">Correo destinatario</th>
+                            </tr>
+                        </thead>
+                        <tbody id="em-masivo-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="form-text mt-2">
+                    <i class="bi bi-info-circle me-1"></i>Revise y corrija los correos antes de enviar; puede poner
+                    varios destinatarios separados por coma. Deje el correo vacío para omitir a ese cliente.
+                    Los cambios aplican solo a este envío (no modifican la ficha del cliente).
+                </div>
+            </div>
+            <div class="modal-footer py-2 px-3">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm px-4" id="btn-enviar-masivo" onclick="CXC_confirmarEnvioMasivo()">
+                    <i class="bi bi-send me-1"></i>Enviar
                 </button>
             </div>
         </div>

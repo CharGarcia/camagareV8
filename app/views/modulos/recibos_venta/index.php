@@ -4962,7 +4962,7 @@ $totalPages = $totalPagesOriginal;
         const result = await Swal.fire({
             title: '¿Generar factura de venta?',
             html: `Se creará una <strong>factura de venta con impuestos</strong> a partir de este recibo.<br>
-                   El recibo quedará <strong>FACTURADO</strong> (sin validez, pero visible y conservando su número);
+                   El recibo quedará <strong>ANULADO</strong> (para no duplicar la venta), visible y conservando su número;
                    se revertirán su inventario, su asiento contable y sus cobros.` + avisoIngresos,
             icon: 'question',
             showCancelButton: true,

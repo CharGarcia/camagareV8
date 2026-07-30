@@ -285,14 +285,10 @@ class ReciboVentaService
             throw $e;
         }
 
-        // Asiento contable fuera de la transacción (un fallo no revierte el recibo).
+        // El asiento contable YA NO se genera al crear el recibo. Lo genera la sincronización
+        // de contabilidad (SincronizadorAsientosService) para los recibos sin asiento. Así,
+        // crear el recibo nunca falla por cuentas contables sin configurar.
         $this->lastAsientoWarning = null;
-        try {
-            $this->procesarAsientoContable($idRecibo, $data, $numRecibo);
-        } catch (\Throwable $eAsiento) {
-            error_log("[ReciboVenta] Asiento no generado para recibo $idRecibo: " . $eAsiento->getMessage());
-            $this->lastAsientoWarning = $eAsiento->getMessage();
-        }
 
         return $idRecibo;
     }
@@ -361,13 +357,10 @@ class ReciboVentaService
             throw $e;
         }
 
+        // El asiento contable YA NO se genera al actualizar el recibo. Lo genera la
+        // sincronización de contabilidad (SincronizadorAsientosService) para los recibos
+        // sin asiento. Así, actualizar el recibo nunca falla por cuentas sin configurar.
         $this->lastAsientoWarning = null;
-        try {
-            $this->procesarAsientoContable($id, $data, $numRecibo);
-        } catch (\Throwable $eAsiento) {
-            error_log("[ReciboVenta] Asiento no generado para recibo $id: " . $eAsiento->getMessage());
-            $this->lastAsientoWarning = $eAsiento->getMessage();
-        }
 
         return $id;
     }
@@ -654,11 +647,12 @@ class ReciboVentaService
         try {
             $this->anularCobrosVinculados($idRecibo, $idEmpresa, $idUsuario);
             $this->anularAsiento($recibo, $idEmpresa, $idUsuario);
-            $this->repository->actualizarEstado($idRecibo, 'facturado', $idUsuario);
+            // El recibo queda ANULADO para que la venta NO se duplique (recibo + factura).
+            $this->repository->marcarAnuladoPorFactura($idRecibo, $idUsuario, $numFactura);
 
             $this->logService->registrar(
                 $idUsuario, $idEmpresa, 'FACTURAR', 'recibos_venta_cabecera', $idRecibo,
-                $recibo, ['id_recibo' => $idRecibo, 'nuevo_estado' => 'facturado', 'id_factura' => $idFactura, 'numero_factura' => $numFactura]
+                $recibo, ['id_recibo' => $idRecibo, 'nuevo_estado' => 'anulado', 'id_factura' => $idFactura, 'numero_factura' => $numFactura]
             );
 
             if ($managed) $db->commit();

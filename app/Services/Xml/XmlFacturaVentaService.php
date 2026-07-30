@@ -35,6 +35,9 @@ class XmlFacturaVentaService
         $this->decCantidad = max(0, min(6, (int)($empresa['decimales_cantidad'] ?? 2)));
         $this->decPrecio   = max(0, min(6, (int)($empresa['decimales_precio']   ?? 2)));
 
+        // RUC del proveedor del sistema en información adicional (Res. NAC-DGERCGC26-00000027).
+        $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
+
         // Agrupación y etiquetas de ítems configuradas por la empresa. Se aplica
         // antes de construir infoFactura para que los totales se calculen sobre
         // las mismas líneas que se emiten; es el mismo servicio que usa el PDF,
@@ -138,6 +141,14 @@ class XmlFacturaVentaService
         $this->txt($dom, $el, 'propina',      $this->dec2($cab['propina']      ?? 0));
         $this->txt($dom, $el, 'importeTotal', $this->dec2($cab['importe_total'] ?? 0));
         $this->txt($dom, $el, 'moneda',       strtoupper($cab['moneda'] ?? 'DOLAR'));
+
+        // Placa del vehículo — operadoras de transporte comercial, excepto taxis
+        // (Ficha Técnica SRI v2.34, Anexo 25 / Res. NAC-DGERCGC26-00000024).
+        // Va ENTRE <moneda> y <pagos>; letras y números sin espacios (ABC1234).
+        $placa = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string)($cab['placa'] ?? '')));
+        if ($placa !== '') {
+            $this->txt($dom, $el, 'placa', $placa);
+        }
 
         // Pagos
         $pagosEl = $dom->createElement('pagos');

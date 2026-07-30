@@ -170,6 +170,7 @@ function estadoPagoBadge($estado) {
                         data-periodo-vigencia-hasta="<?= htmlspecialchars($r['periodo_vigencia_hasta'] ?? '') ?>"
                         data-estado-pago="<?= htmlspecialchars($r['estado_pago'] ?? 'pendiente') ?>"
                         data-obligado-contabilidad="<?= htmlspecialchars($r['obligado_contabilidad'] ?? 'NO') ?>"
+                        data-operadora-transporte="<?= (($r['factura_operadora_transporte'] ?? 'false') === 'true' || ($r['factura_operadora_transporte'] ?? false) === true) ? 'true' : 'false' ?>"
                         data-max-usuarios="<?= (int)($r['max_usuarios'] ?? 3) ?>"
                         data-id-empresa-suscripciones="<?= (int)($r['id_empresa_suscripciones'] ?? 0) ?>"
                         data-es-administradora="<?= !empty($r['es_administradora_suscripciones']) ? '1' : '0' ?>"
@@ -296,6 +297,15 @@ function estadoPagoBadge($estado) {
                         <div class="col-12">
                             <label for="crear-direccion" class="form-label">Dirección</label>
                             <input type="text" id="crear-direccion" name="direccion" class="form-control form-control-sm" placeholder="Dirección">
+                        </div>
+                        <div class="col-12">
+                            <!-- El hidden garantiza que la clave llegue también con el switch apagado -->
+                            <input type="hidden" name="factura_operadora_transporte" value="false">
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" role="switch" id="crear-operadora-transporte" name="factura_operadora_transporte" value="true">
+                                <label class="form-check-label small" for="crear-operadora-transporte">Operadora de transporte comercial (excepto taxis)</label>
+                                <div class="form-text mt-0" style="font-size:0.7rem;">Ficha Técnica SRI v2.34, Anexo 25: sus facturas pedirán la <strong>placa del vehículo</strong> (obligatoria) y la incluirán en el XML y el PDF.</div>
+                            </div>
                         </div>
                         <div class="col-12">
                             <label for="crear-mail" class="form-label">Correo</label>
@@ -463,6 +473,15 @@ function estadoPagoBadge($estado) {
                                         <option value="NO">NO</option>
                                         <option value="SI">SI</option>
                                     </select>
+                                </div>
+                                <div class="col-12">
+                                    <!-- El hidden garantiza que la clave llegue también con el switch apagado -->
+                                    <input type="hidden" name="factura_operadora_transporte" value="false">
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="edit-operadora-transporte" name="factura_operadora_transporte" value="true">
+                                        <label class="form-check-label small" for="edit-operadora-transporte">Operadora de transporte comercial (excepto taxis)</label>
+                                        <div class="form-text mt-0" style="font-size:0.7rem;">Ficha Técnica SRI v2.34, Anexo 25: sus facturas pedirán la <strong>placa del vehículo</strong> (obligatoria) y la incluirán en el XML y el PDF.</div>
+                                    </div>
                                 </div>
                                 <div class="col-md-5">
                                     <label for="edit-mail" class="form-label">Correo empresa</label>
@@ -796,6 +815,7 @@ function estadoPagoBadge($estado) {
         document.getElementById('edit-telefono').value = el.dataset.telefono || '';
         document.getElementById('edit-mail').value = el.dataset.mail || '';
         document.getElementById('edit-obligado-contabilidad').value = (el.dataset.obligadoContabilidad || 'NO').toUpperCase() === 'SI' ? 'SI' : 'NO';
+        document.getElementById('edit-operadora-transporte').checked = (el.dataset.operadoraTransporte || 'false') === 'true';
         document.getElementById('edit-estado').value = (el.dataset.estado === '1') ? '1' : '0';
         var codProv = el.dataset.codProv || '';
         var codCiudad = el.dataset.codCiudad || '';

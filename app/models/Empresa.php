@@ -67,6 +67,7 @@ class Empresa extends BaseModel
                 e.id_empresa_suscripciones, COALESCE(e.es_administradora_suscripciones, false) AS es_administradora_suscripciones,
                 e.id_cliente_facturado,
                 e.id_suscripcion,
+                COALESCE(e.factura_operadora_transporte, 'false') AS factura_operadora_transporte,
                 COALESCE(NULLIF(ctrl.nombre_comercial,''), ctrl.nombre) AS ctrl_nombre, ctrl.ruc AS ctrl_ruc, ctrl.establecimiento AS ctrl_estab,
                 cli.nombre AS cli_nombre, cli.identificacion AS cli_identificacion,
                 p.nombre AS nombre_provincia, c.nombre AS nombre_ciudad
@@ -249,8 +250,12 @@ class Empresa extends BaseModel
             ? (int) $data['id_suscripcion'] : null;
         $idSuscSql = $idSusc !== null ? (string) $idSusc : 'NULL';
 
-        $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, obligado_contabilidad, max_usuarios, id_empresa_suscripciones, es_administradora_suscripciones, id_cliente_facturado, id_suscripcion)
-            VALUES ('{$nombre}', '{$nombreComercial}', '{$ruc}', '{$estEsc}', '{$direccion}', '{$telefono}', '{$tipo}', '{$nomRepLegal}', '{$cedRepLegal}', '{$mail}', '{$codProv}', '{$codCiudad}', '{$estado}', NOW(), '{$idUsuario}', '{$nombreContador}', '{$rucContador}', {$valCobroSql}, {$vigenciaDesde}, {$vigenciaHasta}, {$estadoPago}, '{$obligadoCont}', {$maxUsuarios}, {$idEmpSuscSql}, {$esAdminSql}, {$idEmpFactSql}, {$idSuscSql})";
+        // Operadora de transporte comercial, excepto taxis (Ficha SRI v2.34, Anexo 25):
+        // su factura exige la placa del vehículo en XML y PDF.
+        $operadoraTransporte = $this->esValorVerdadero($data['factura_operadora_transporte'] ?? null) ? 'true' : 'false';
+
+        $sql = "INSERT INTO empresas (nombre, nombre_comercial, ruc, establecimiento, direccion, telefono, tipo, nom_rep_legal, ced_rep_legal, mail, cod_prov, cod_ciudad, estado, fecha_agregado, id_usuario, nombre_contador, ruc_contador, valor_cobro, periodo_vigencia_desde, periodo_vigencia_hasta, estado_pago, obligado_contabilidad, max_usuarios, id_empresa_suscripciones, es_administradora_suscripciones, id_cliente_facturado, id_suscripcion, factura_operadora_transporte)
+            VALUES ('{$nombre}', '{$nombreComercial}', '{$ruc}', '{$estEsc}', '{$direccion}', '{$telefono}', '{$tipo}', '{$nomRepLegal}', '{$cedRepLegal}', '{$mail}', '{$codProv}', '{$codCiudad}', '{$estado}', NOW(), '{$idUsuario}', '{$nombreContador}', '{$rucContador}', {$valCobroSql}, {$vigenciaDesde}, {$vigenciaHasta}, {$estadoPago}, '{$obligadoCont}', {$maxUsuarios}, {$idEmpSuscSql}, {$esAdminSql}, {$idEmpFactSql}, {$idSuscSql}, '{$operadoraTransporte}')";
         $this->execute($sql);
         $id = $this->lastInsertId('empresas_id_seq');
 
@@ -307,7 +312,7 @@ class Empresa extends BaseModel
         }
 
         $sets = [];
-        $campos = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_cliente_facturado', 'id_suscripcion'];
+        $campos = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_cliente_facturado', 'id_suscripcion', 'factura_operadora_transporte'];
         foreach ($campos as $c) {
             if (array_key_exists($c, $data)) {
                 if (in_array($c, ['valor_cobro'], true)) {

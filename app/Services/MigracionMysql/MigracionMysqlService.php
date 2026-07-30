@@ -28,6 +28,13 @@ class MigracionMysqlService
         'proveedores'       => ['label' => 'Proveedores',                      'tabla' => 'proveedores',                'fecha' => 'fecha_agregado', 'tipo' => 'catalogo'],
         'vendedores'        => ['label' => 'Vendedores',                       'tabla' => 'vendedores',                 'fecha' => 'fecha_registro', 'tipo' => 'catalogo'],
         'bodegas'           => ['label' => 'Bodegas',                          'tabla' => 'bodega',                     'fecha' => null,             'tipo' => 'catalogo'],
+        // La tabla vieja de empleados filtra por id_empresa (id viejo), NO por ruc_empresa; se resuelve
+        // vía empresas (LEFT(ruc,10)). Marcado con 'ruc_via_empresa' para el conteo/análisis.
+        'empleados'         => ['label' => 'Empleados',                        'tabla' => 'empleados',                  'fecha' => null,             'tipo' => 'catalogo', 'ruc_via_empresa' => true],
+        // Formas de cobro/pago (opciones: efectivo, caja chica…) y cuentas bancarias → empresa_formas_pago.
+        // DEBEN ir antes de ingresos/egresos: sus pagos enlazan a estas formas.
+        'formas_pago'       => ['label' => 'Formas de cobro/pago (efectivo, caja…)', 'tabla' => 'opciones_cobros_pagos', 'fecha' => null,             'tipo' => 'catalogo'],
+        'cuentas_bancarias' => ['label' => 'Cuentas bancarias (formas de pago)', 'tabla' => 'cuentas_bancarias',        'fecha' => null,             'tipo' => 'catalogo'],
         'facturas'          => ['label' => 'Facturas de venta',                'tabla' => 'encabezado_factura',         'fecha' => 'fecha_factura',  'tipo' => 'documento'],
         'notas_credito'     => ['label' => 'Notas de crédito',                 'tabla' => 'encabezado_nc',              'fecha' => 'fecha_nc',       'tipo' => 'documento'],
         'retenciones_venta' => ['label' => 'Retenciones en venta',             'tabla' => 'encabezado_retencion_venta', 'fecha' => 'fecha_emision',  'tipo' => 'documento'],
@@ -74,7 +81,10 @@ class MigracionMysqlService
                 if ($fecha) {
                     $sel .= ", MIN(CASE WHEN `$fecha` >= '2000-01-01' THEN `$fecha` END) AS fmin, MAX(`$fecha`) AS fmax";
                 }
-                $whereF = "LEFT(ruc_empresa, 10) = :b" . (!empty($def['filtro']) ? " AND " . $def['filtro'] : "");
+                $whereF = (!empty($def['ruc_via_empresa'])
+                        ? "id_empresa IN (SELECT id FROM empresas WHERE LEFT(ruc, 10) = :b)"
+                        : "LEFT(ruc_empresa, 10) = :b")
+                    . (!empty($def['filtro']) ? " AND " . $def['filtro'] : "");
                 $st = $pdo->prepare("SELECT $sel FROM `{$def['tabla']}` WHERE $whereF");
                 $st->execute([':b' => $base]);
                 $row = $st->fetch();
@@ -132,6 +142,12 @@ class MigracionMysqlService
                 return $this->migrarVendedores($idEmpresa, $ruc, $idUsuario);
             case 'bodegas':
                 return $this->migrarBodegas($idEmpresa, $ruc, $idUsuario);
+            case 'empleados':
+                return $this->migrarEmpleados($idEmpresa, $ruc, $idUsuario);
+            case 'cuentas_bancarias':
+                return $this->migrarCuentasBancarias($idEmpresa, $ruc, $idUsuario);
+            case 'formas_pago':
+                return $this->migrarFormasPago($idEmpresa, $ruc, $idUsuario);
             case 'facturas':
                 return $this->migrarFacturas($idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
             case 'compras':
@@ -231,7 +247,8 @@ class MigracionMysqlService
     /** Tabla destino (sistema nuevo) por entidad. Se usa para avisar de registros ya existentes. */
     private const DESTINO_TABLA = [
         'plan_cuentas' => 'plan_cuentas', 'clientes' => 'clientes', 'productos' => 'productos',
-        'proveedores' => 'proveedores', 'vendedores' => 'vendedores', 'bodegas' => 'bodegas',
+        'proveedores' => 'proveedores', 'vendedores' => 'vendedores', 'bodegas' => 'bodegas', 'empleados' => 'empleados',
+        'cuentas_bancarias' => 'empresa_formas_pago', 'formas_pago' => 'empresa_formas_pago',
         'facturas' => 'ventas_cabecera', 'notas_credito' => 'notas_credito_cabecera',
         'retenciones_venta' => 'retencion_venta_cabecera', 'retenciones_compra' => 'retencion_compra_cabecera',
         'recibos' => 'recibos_venta_cabecera', 'liquidaciones' => 'liquidaciones_cabecera',
@@ -284,7 +301,7 @@ class MigracionMysqlService
     }
 
     /** Catálogos: NO se eliminan con esta herramienta (se auto-corrigen al re-migrar por reconciliación). */
-    private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'proveedores', 'vendedores', 'bodegas'];
+    private const ELIMINAR_VEDADAS = ['plan_cuentas', 'clientes', 'productos', 'proveedores', 'vendedores', 'bodegas', 'empleados', 'cuentas_bancarias', 'formas_pago'];
 
     /**
      * Cuántos registros ELIMINARÍA por entidad (para la confirmación previa). Solo cuenta lo que la
@@ -892,6 +909,245 @@ class MigracionMysqlService
             } catch (Throwable $ex) {
                 if ($pg->inTransaction()) $pg->rollBack();
                 $res['errores']++;
+            }
+        }
+        return $res;
+    }
+
+    /**
+     * Migra los empleados del contribuyente. La tabla vieja `empleados` filtra por `id_empresa` (id
+     * viejo), no por `ruc_empresa`: se resuelven todos los id de empresa del RUC base vía `empresas`.
+     * Catálogo maestro (solo id_empresa, sin tipo_ambiente; ver regla del módulo Empleados).
+     */
+    private function migrarEmpleados(int $idEmpresa, string $ruc, int $idUsuario): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+        $res = ['entidad' => 'empleados', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'empleado sin identificación', 'errores' => 0];
+
+        // id de empresa viejos que comparten el RUC base (todos los establecimientos).
+        $empIds = [];
+        $qe = $mysql->prepare("SELECT id FROM empresas WHERE LEFT(ruc, 10) = :b");
+        $qe->execute([':b' => $base]);
+        foreach ($qe->fetchAll(PDO::FETCH_COLUMN) as $eid) { $empIds[] = (int) $eid; }
+        if (empty($empIds)) { return $res; }
+        $inList = implode(',', array_map('intval', $empIds));
+
+        // Mapa banco viejo (id_bancos) -> banco nuevo (bancos_ecuador.id) por codigo_banco (código SRI estable).
+        $oldCod = [];
+        foreach ($mysql->query("SELECT id_bancos, codigo_banco FROM bancos_ecuador") as $b) { $oldCod[(int) $b['id_bancos']] = (string) $b['codigo_banco']; }
+        $newByCod = [];
+        foreach ($pg->query("SELECT id, codigo_banco FROM bancos_ecuador") as $b) { $newByCod[(string) $b['codigo_banco']] = (int) $b['id']; }
+
+        $done = $this->idsMigrados($pg, $idEmpresa, 'empleados');
+        // Dedup por identificación dentro de la empresa (prefiere el vivo con id más bajo).
+        $buscar = $pg->prepare("SELECT id FROM empleados WHERE id_empresa = :e AND identificacion = :ident ORDER BY eliminado, id LIMIT 1");
+        $ins = $pg->prepare(
+            "INSERT INTO empleados (id_empresa, tipo_id, identificacion, nombres_apellidos, direccion, email, telefono,
+                                    sexo, fecha_nacimiento, estado, id_banco_ecuador, tipo_cuenta, numero_cuenta, created_by)
+             VALUES (:e, :tid, :ident, :nom, :dir, :cor, :tel, :sexo, :fnac, :est, :banco, :tcta, :ncta, :cb) RETURNING id"
+        );
+        $insMap = $this->stmtMap($pg, 'empleados');
+
+        $stmt = $mysql->query("SELECT id, tipo_id, documento, nombres_apellidos, direccion, email, telefono, sexo, fecha_nacimiento, status, id_banco, tipo_cta, numero_cta FROM empleados WHERE id_empresa IN ($inList)");
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $r['id'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            $ident = trim((string) $r['documento']);
+            if ($ident === '') { $res['omitidos']++; continue; }
+            $nombre = trim((string) $r['nombres_apellidos']) ?: $ident;
+
+            // Mapeos de códigos viejos -> valores del sistema nuevo.
+            $tipoId = ((int) $r['tipo_id'] === 3) ? 'pasaporte' : 'cedula';          // legacy: casi todo 1 (cédula)
+            $sexo   = ['1' => 'M', '2' => 'F'][(string) $r['sexo']] ?? null;
+            $estado = ((int) $r['status'] === 1) ? 'activo' : 'inactivo';
+            $tcta   = ['1' => 'ahorros', '2' => 'corriente'][(string) $r['tipo_cta']] ?? null;
+            $oldB   = (int) $r['id_banco'];
+            $banco  = ($oldB > 0 && isset($oldCod[$oldB], $newByCod[$oldCod[$oldB]])) ? $newByCod[$oldCod[$oldB]] : null;
+
+            try {
+                $pg->beginTransaction();
+                $buscar->execute([':e' => $idEmpresa, ':ident' => $ident]);
+                $ex = $buscar->fetchColumn();
+                if ($ex !== false) {
+                    $idDest = (int) $ex; $vin = true; $res['vinculados']++;
+                    if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = $nombre; }
+                } else {
+                    $ins->execute([
+                        ':e' => $idEmpresa, ':tid' => $tipoId, ':ident' => $ident, ':nom' => $nombre,
+                        ':dir' => self::nz($r['direccion']), ':cor' => self::nz($r['email']), ':tel' => self::nz($r['telefono']),
+                        ':sexo' => $sexo, ':fnac' => self::fechaCorta($r['fecha_nacimiento']), ':est' => $estado,
+                        ':banco' => $banco, ':tcta' => $tcta, ':ncta' => self::nz($r['numero_cta']), ':cb' => $idUsuario,
+                    ]);
+                    $idDest = (int) $ins->fetchColumn(); $vin = false; $res['migrados']++;
+                }
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idDest, ':cn' => substr($ident, 0, 120), ':vin' => $vin ? 't' : 'f', ':cb' => $idUsuario]);
+                $pg->commit(); $done[(string) $old] = true;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
+
+    /**
+     * Mapa de bancos viejo↔nuevo (cache por proceso). Devuelve [oldCod, newByCod, newNameById]:
+     * oldCod = id_bancos viejo → codigo_banco; newByCod = codigo_banco → id nuevo; newNameById = id nuevo → nombre.
+     * El catálogo bancos_ecuador viejo y nuevo comparten codigo_banco (código SRI estable).
+     */
+    private ?array $bancoMapsCache = null;
+    private function bancoMaps(PDO $mysql, PDO $pg): array
+    {
+        if ($this->bancoMapsCache !== null) { return $this->bancoMapsCache; }
+        $oldCod = [];
+        foreach ($mysql->query("SELECT id_bancos, codigo_banco FROM bancos_ecuador") as $b) { $oldCod[(int) $b['id_bancos']] = (string) $b['codigo_banco']; }
+        $newByCod = []; $newNameById = [];
+        foreach ($pg->query("SELECT id, codigo_banco, nombre_banco FROM bancos_ecuador") as $b) {
+            $newByCod[(string) $b['codigo_banco']] = (int) $b['id'];
+            $newNameById[(int) $b['id']] = (string) $b['nombre_banco'];
+        }
+        return $this->bancoMapsCache = [$oldCod, $newByCod, $newNameById];
+    }
+
+    /**
+     * id_tipo_cuenta viejo → tipo_cuenta del sistema nuevo (mayúsculas, como el módulo Formas de pago).
+     * Solo se distinguen 1=AHORROS y 2=CORRIENTE; cualquier otro (3, y 4=tarjeta) va a AHORROS por defecto.
+     */
+    private static function tipoCuentaBanco(int $idTipo): string
+    {
+        return ['1' => 'AHORROS', '2' => 'CORRIENTE'][(string) $idTipo] ?? 'AHORROS';
+    }
+
+    /**
+     * get-or-create de una FORMA DE PAGO bancaria (empresa_formas_pago tipo='BANCO', aplica_en='AMBAS')
+     * a partir de una fila de cuentas_bancarias viejas. Dedup por numero_cuenta dentro de la empresa.
+     * Inserta también el mapa (entidad 'cuentas_bancarias', old id_cuenta → forma nueva). Idempotente.
+     * Devuelve ['id'=>int, 'nuevo'=>bool].
+     */
+    private function getOrCreateFormaBanco(int $idEmpresa, int $idUsuario, array $cta, PDO $mysql, PDO $pg, \PDOStatement $insMap): array
+    {
+        [$oldCod, $newByCod, $newNameById] = $this->bancoMaps($mysql, $pg);
+        $oldCuenta = (int) $cta['id_cuenta'];
+        $num = trim((string) $cta['numero_cuenta']);
+        if ($num === '') { $num = 'CTA-' . $oldCuenta; }
+        $oldB   = (int) $cta['id_banco'];
+        $banco  = ($oldB > 0 && isset($oldCod[$oldB], $newByCod[$oldCod[$oldB]])) ? $newByCod[$oldCod[$oldB]] : null;
+        $tcta   = self::tipoCuentaBanco((int) $cta['id_tipo_cuenta']);
+        $nomBco = $banco !== null ? ($newNameById[$banco] ?? 'BANCO') : 'BANCO';
+        $nombre = mb_substr($nomBco . ' - ' . $num, 0, 100);
+
+        // Dedup por número de cuenta (prefiere la viva con id más bajo).
+        $buscar = $pg->prepare("SELECT id FROM empresa_formas_pago WHERE id_empresa = :e AND tipo = 'BANCO' AND numero_cuenta = :n ORDER BY eliminado, id LIMIT 1");
+        $buscar->execute([':e' => $idEmpresa, ':n' => $num]);
+        $ex = $buscar->fetchColumn();
+        if ($ex !== false) {
+            $idForma = (int) $ex; $nuevo = false;
+        } else {
+            // aplica_en='AMBAS' (ingresos y egresos). id_banco puede ser null si el banco viejo no mapeó.
+            $ins = $pg->prepare("INSERT INTO empresa_formas_pago (id_empresa, nombre, activo, tipo, aplica_en, id_banco, tipo_cuenta, numero_cuenta, created_by)
+                                 VALUES (:e, :nom, true, 'BANCO', 'AMBAS', :banco, :tcta, :num, :cb) RETURNING id");
+            $ins->execute([':e' => $idEmpresa, ':nom' => $nombre, ':banco' => $banco, ':tcta' => $tcta, ':num' => $num, ':cb' => $idUsuario]);
+            $idForma = (int) $ins->fetchColumn(); $nuevo = true;
+        }
+        $insMap->execute([':e' => $idEmpresa, ':o' => $oldCuenta, ':d' => $idForma, ':cn' => substr($num, 0, 120), ':vin' => $nuevo ? 'f' : 't', ':cb' => $idUsuario]);
+        return ['id' => $idForma, 'nuevo' => $nuevo];
+    }
+
+    /**
+     * Resuelve la forma de cobro/pago de una línea de formas_pagos_ing_egr:
+     *  - id_cuenta>0  → forma BANCARIA (cuenta migrada; get-or-create de respaldo si no está en el mapa).
+     *  - id_cuenta=0  → opción por codigo_forma_pago (efectivo/caja…): mapa de formas_pago, luego el
+     *    cache por nombre y, en último caso, la forma por defecto (Efectivo).
+     * No cachea los resultados creados al vuelo (viven dentro de la transacción del ingreso/egreso; un
+     * rollback los eliminaría). Los pre-migrados sí vienen en los mapas.
+     */
+    private function resolverFormaCobroPago(int $oldCuenta, string $cfp, int $idEmpresa, int $idUsuario, array $mapCuenta, array $mapFormaP, array $formaCache, int $formaDef, \PDOStatement $ctaStmt, \PDOStatement $insMapCta, PDO $mysql, PDO $pg): int
+    {
+        if ($oldCuenta > 0) {
+            if (isset($mapCuenta[(string) $oldCuenta])) { return (int) $mapCuenta[(string) $oldCuenta]; }
+            $ctaStmt->execute([':id' => $oldCuenta]);
+            $cta = $ctaStmt->fetch(PDO::FETCH_ASSOC);
+            if ($cta) { return $this->getOrCreateFormaBanco($idEmpresa, $idUsuario, $cta, $mysql, $pg, $insMapCta)['id']; }
+            return $formaDef;
+        }
+        return $mapFormaP[$cfp] ?? $formaCache[$cfp] ?? $formaDef;
+    }
+
+    /**
+     * Migra las cuentas bancarias del contribuyente a formas de cobro/pago (tipo BANCO, aplica AMBAS).
+     * DEBE correrse ANTES de ingresos/egresos: sus pagos con id_cuenta>0 enlazan a estas formas.
+     */
+    private function migrarCuentasBancarias(int $idEmpresa, string $ruc, int $idUsuario): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+        $res = ['entidad' => 'cuentas_bancarias', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'errores' => 0];
+
+        $done   = $this->idsMigrados($pg, $idEmpresa, 'cuentas_bancarias');
+        $insMap = $this->stmtMap($pg, 'cuentas_bancarias');
+
+        $stmt = $mysql->query("SELECT id_cuenta, id_banco, id_tipo_cuenta, numero_cuenta FROM cuentas_bancarias WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base));
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $r['id_cuenta'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            try {
+                $pg->beginTransaction();
+                $out = $this->getOrCreateFormaBanco($idEmpresa, $idUsuario, $r, $mysql, $pg, $insMap);
+                if ($out['nuevo']) { $res['migrados']++; }
+                else { $res['vinculados']++; if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = trim((string) $r['numero_cuenta']); } }
+                $pg->commit(); $done[(string) $old] = true;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
+            }
+        }
+        return $res;
+    }
+
+    /**
+     * Migra las formas de cobro/pago (catálogo viejo opciones_cobros_pagos: efectivo, caja chica…) a
+     * empresa_formas_pago (tipo EFECTIVO, aplica AMBAS) y registra el mapa (old opciones.id → forma nueva).
+     * DEBE correrse ANTES de ingresos/egresos: sus pagos con id_cuenta=0 enlazan a estas formas por
+     * codigo_forma_pago (= opciones.id). Dedup por nombre (reusa getOrCreateFormaPago).
+     */
+    private function migrarFormasPago(int $idEmpresa, string $ruc, int $idUsuario): array
+    {
+        $base  = substr(preg_replace('/\D+/', '', $ruc), 0, 10);
+        $mysql = LegacyMysqlConnection::get();
+        $pg    = Database::getConnection();
+        $res = ['entidad' => 'formas_pago', 'total' => 0, 'migrados' => 0, 'vinculados' => 0, 'vinculados_muestra' => [], 'ya_migrados' => 0, 'omitidos' => 0, 'omitidos_motivo' => 'opción sin descripción', 'errores' => 0];
+
+        $done   = $this->idsMigrados($pg, $idEmpresa, 'formas_pago');
+        $insMap = $this->stmtMap($pg, 'formas_pago');
+        $chk    = $pg->prepare("SELECT id FROM empresa_formas_pago WHERE id_empresa = :e AND nombre = :n AND eliminado = false LIMIT 1");
+
+        $stmt = $mysql->query("SELECT id, descripcion FROM opciones_cobros_pagos WHERE LEFT(ruc_empresa, 10) = " . $mysql->quote($base));
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $res['total']++;
+            $old = (int) $r['id'];
+            if (isset($done[(string) $old])) { $res['ya_migrados']++; continue; }
+            $nombre = trim((string) $r['descripcion']);
+            if ($nombre === '') { $res['omitidos']++; continue; }
+            try {
+                $pg->beginTransaction();
+                $chk->execute([':e' => $idEmpresa, ':n' => $nombre]);
+                $ya = $chk->fetchColumn();                       // ¿ya existía una forma con ese nombre?
+                $idForma = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, $nombre, $pg);
+                if ($ya !== false) { $res['vinculados']++; if (count($res['vinculados_muestra']) < 8) { $res['vinculados_muestra'][] = $nombre; } }
+                else { $res['migrados']++; }
+                $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $idForma, ':cn' => substr($nombre, 0, 120), ':vin' => $ya !== false ? 't' : 'f', ':cb' => $idUsuario]);
+                $pg->commit(); $done[(string) $old] = true;
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                if (empty($res['error_muestra'])) { $res['error_muestra'] = substr($ex->getMessage(), 0, 180); }
             }
         }
         return $res;
@@ -1868,7 +2124,13 @@ class MigracionMysqlService
         $formaDef = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, 'Efectivo', $pg);
 
         $detStmt   = $mysql->prepare("SELECT valor_ing_egr, detalle_ing_egr, codigo_documento_cv FROM detalle_ingresos_egresos WHERE codigo_documento = :cd AND tipo_documento = 'INGRESO'");
-        $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, fecha_pago, cheque FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'INGRESO'");
+        $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, id_cuenta, fecha_pago, cheque FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'INGRESO'");
+        // Forma de cobro BANCARIA: cuando el pago viejo trae id_cuenta>0 (codigo_forma_pago='0'), enlaza a la
+        // cuenta bancaria migrada (empresa_formas_pago tipo BANCO). Preferir el mapa; get-or-create de respaldo.
+        $mapCuenta  = $this->mapaDe($pg, $idEmpresa, 'cuentas_bancarias'); // old id_cuenta -> forma
+        $mapFormaP  = $this->mapaDe($pg, $idEmpresa, 'formas_pago');       // old opciones.id -> forma
+        $ctaStmt    = $mysql->prepare("SELECT id_cuenta, id_banco, id_tipo_cuenta, numero_cuenta FROM cuentas_bancarias WHERE id_cuenta = :id LIMIT 1");
+        $insMapCta  = $this->stmtMap($pg, 'cuentas_bancarias');
         $mapCliente  = $this->mapaDe($pg, $idEmpresa, 'clientes');
         $cliPorIdent = $this->clientesPorIdentificacion($pg, $idEmpresa);
         $oldFacCli   = $mysql->prepare("SELECT id_cliente FROM encabezado_factura WHERE id_encabezado_factura = :id LIMIT 1");
@@ -1967,7 +2229,7 @@ class MigracionMysqlService
 
                 $formaStmt->execute([':cd' => $cod]);
                 foreach ($formaStmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
-                    $idForma = $formaCache[(string) $f['codigo_forma_pago']] ?? $formaDef;
+                    $idForma = $this->resolverFormaCobroPago((int) $f['id_cuenta'], (string) $f['codigo_forma_pago'], $idEmpresa, $idUsuario, $mapCuenta, $mapFormaP, $formaCache, $formaDef, $ctaStmt, $insMapCta, $mysql, $pg);
                     $insPago->execute([$idIng, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), ((int) $f['cheque']) ?: null]);
                 }
 
@@ -2012,7 +2274,12 @@ class MigracionMysqlService
         $formaDef = $this->getOrCreateFormaPago($idEmpresa, $idUsuario, 'Efectivo', $pg);
 
         $detStmt   = $mysql->prepare("SELECT valor_ing_egr, detalle_ing_egr, codigo_documento_cv FROM detalle_ingresos_egresos WHERE codigo_documento = :cd AND tipo_documento = 'EGRESO'");
-        $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, fecha_pago, cheque FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'EGRESO'");
+        $formaStmt = $mysql->prepare("SELECT valor_forma_pago, codigo_forma_pago, id_cuenta, fecha_pago, cheque FROM formas_pagos_ing_egr WHERE codigo_documento = :cd AND tipo_documento = 'EGRESO'");
+        // Forma de pago BANCARIA por id_cuenta (ver ingresos): enlaza a la cuenta bancaria migrada.
+        $mapCuenta = $this->mapaDe($pg, $idEmpresa, 'cuentas_bancarias');
+        $mapFormaP = $this->mapaDe($pg, $idEmpresa, 'formas_pago');
+        $ctaStmt   = $mysql->prepare("SELECT id_cuenta, id_banco, id_tipo_cuenta, numero_cuenta FROM cuentas_bancarias WHERE id_cuenta = :id LIMIT 1");
+        $insMapCta = $this->stmtMap($pg, 'cuentas_bancarias');
 
         $mapProv     = $this->mapaDe($pg, $idEmpresa, 'proveedores');
         $provPorIdent = $this->proveedoresPorIdentificacion($pg, $idEmpresa);
@@ -2114,7 +2381,7 @@ class MigracionMysqlService
 
                 $formaStmt->execute([':cd' => $cod]);
                 foreach ($formaStmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
-                    $idForma = $formaCache[(string) $f['codigo_forma_pago']] ?? $formaDef;
+                    $idForma = $this->resolverFormaCobroPago((int) $f['id_cuenta'], (string) $f['codigo_forma_pago'], $idEmpresa, $idUsuario, $mapCuenta, $mapFormaP, $formaCache, $formaDef, $ctaStmt, $insMapCta, $mysql, $pg);
                     $insPago->execute([$idEgr, $idForma, (float) $f['valor_forma_pago'], self::fechaCorta($f['fecha_pago']), ((int) $f['cheque']) ?: null]);
                 }
 

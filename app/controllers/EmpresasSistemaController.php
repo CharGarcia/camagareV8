@@ -103,6 +103,8 @@ class EmpresasSistemaController extends Controller
             'ruc_contador' => trim($_POST['ruc_contador'] ?? ''),
             'estado' => trim($_POST['estado'] ?? '1'),
             'obligado_contabilidad' => strtoupper(trim($_POST['obligado_contabilidad'] ?? 'NO')) === 'SI' ? 'SI' : 'NO',
+            // Operadora de transporte comercial (Ficha SRI v2.34, Anexo 25): placa obligatoria en factura.
+            'factura_operadora_transporte' => !empty($_POST['factura_operadora_transporte']) && $_POST['factura_operadora_transporte'] !== 'false' ? 'true' : 'false',
             'id_usuario' => (string) $idUsuario,
             'valor_cobro' => $_POST['valor_cobro'] ?? null,
             'periodo_vigencia_desde' => trim($_POST['periodo_vigencia_desde'] ?? ''),
@@ -271,7 +273,13 @@ class EmpresasSistemaController extends Controller
             }
         }
 
-        $allKeys = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_cliente_facturado', 'id_suscripcion'];
+        $allKeys = ['nombre', 'nombre_comercial', 'ruc', 'establecimiento', 'direccion', 'telefono', 'mail', 'nom_rep_legal', 'ced_rep_legal', 'cod_prov', 'cod_ciudad', 'nombre_contador', 'ruc_contador', 'estado', 'valor_cobro', 'periodo_vigencia_desde', 'periodo_vigencia_hasta', 'estado_pago', 'obligado_contabilidad', 'max_usuarios', 'id_empresa_suscripciones', 'es_administradora_suscripciones', 'id_cliente_facturado', 'id_suscripcion', 'factura_operadora_transporte'];
+        // El checkbox del switch se normaliza a 'true'/'false' (el hidden del form
+        // garantiza que la clave siempre llegue, también cuando está desmarcado).
+        if (array_key_exists('factura_operadora_transporte', $_POST)) {
+            $_POST['factura_operadora_transporte'] =
+                (!empty($_POST['factura_operadora_transporte']) && $_POST['factura_operadora_transporte'] !== 'false') ? 'true' : 'false';
+        }
         $data = [];
         foreach ($allKeys as $k) {
             if (array_key_exists($k, $_POST)) {

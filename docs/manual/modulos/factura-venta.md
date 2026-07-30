@@ -91,8 +91,27 @@ y asiento contable) según la configuración de la empresa.
   establecimiento y punto de emisión.
 - **El cliente no recibe el correo**: verifique la dirección registrada en su ficha.
 
+## Normativa SRI 2026: RUC del proveedor y placa de transporte
+
+- **RUC Proveedor (todas las empresas)**: por la Resolución NAC-DGERCGC26-00000027,
+  el sistema agrega automáticamente el campo **"RUC Proveedor"** en la información
+  adicional del XML y del PDF de todos los comprobantes electrónicos. En la pestaña
+  *Info. Adicional* del modal se muestra como una fila fija con candado: **no se
+  puede editar ni eliminar**. El valor lo configura el superadministrador en
+  `/config/sri-proveedor`.
+- **Placa del vehículo (solo operadoras de transporte)**: si la empresa tiene activo
+  el switch **"Operadora de transporte comercial (excepto taxis)"** (módulo Empresa →
+  pestaña Facturación), la factura pide la **placa del vehículo** (obligatoria, formato
+  `ABC1234` sin espacios ni guiones). La placa sale en el XML (tag `<placa>`) y en el
+  PDF (casilla *Placa / Matrícula*). Ficha Técnica SRI v2.34, Anexo 25.
+
 ## Historial de cambios
 
+- **1.2** — Normativa SRI 2026: campo fijo "RUC Proveedor" en info adicional (no
+  editable) y placa del vehículo obligatoria para operadoras de transporte
+  comercial. Columnas "Precios" y "Medida" del detalle ahora solo aparecen cuando
+  algún ítem las usa. Los ítems ya no aceptan cantidades, precios ni descuentos
+  negativos. Al abrir una factura nueva se aplican los favoritos del usuario.
 - **1.1** — Se documenta el envío por WhatsApp y el enlace de pago con tarjeta,
   disponible ahora también con **Nuvei** además de Payphone.
 - **1.0** — Versión inicial.

@@ -338,22 +338,10 @@ class FacturaVentaController extends BaseModuloController
                     $idVendedor = !empty($data['id_vendedor']) ? (int) $data['id_vendedor'] : null;
                     $this->service->actualizarVendedor($idExistente, $idVendedor, $data['id_empresa'], $data['id_usuario']);
 
-                    // Si no tiene asiento contable, generarlo por primera vez.
-                    // Si ya tiene uno, no se toca.
+                    // El asiento contable ya no se genera aquí: lo genera la sincronización de
+                    // contabilidad (SincronizadorAsientosService) para las facturas autorizadas
+                    // sin asiento. Guardar/actualizar nunca falla por cuentas sin configurar.
                     $asientoWarning = null;
-                    if (empty($cabeceraDb['id_asiento_contable'])) {
-                        $numFactura = $cabeceraDb['establecimiento'] . '-'
-                                    . $cabeceraDb['punto_emision'] . '-'
-                                    . str_pad((string)$cabeceraDb['secuencial'], 9, '0', STR_PAD_LEFT);
-                        $data['fecha_emision'] = $cabeceraDb['fecha_emision'];
-                        $data['id_cliente']    = $cabeceraDb['id_cliente'];
-                        try {
-                            $this->service->procesarAsientoContable($idExistente, $data, $numFactura);
-                        } catch (\Throwable $eAsiento) {
-                            error_log("[FacturaVenta] Asiento no generado para factura $idExistente: " . $eAsiento->getMessage());
-                            $asientoWarning = $eAsiento->getMessage();
-                        }
-                    }
 
                     $id = $idExistente;
                     $mensaje = 'Factura actualizada exitosamente.';
