@@ -1274,6 +1274,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 const btnChqDl = (p.tipo_operacion_bancaria === 'CHEQUE' && p.id_pago)
                     ? `<button type="button" class="btn btn-link btn-sm text-danger p-0 ms-1 align-baseline" title="Descargar PDF del cheque" onclick="descargarChequesPdf(${p.id_pago})"><i class="bi bi-file-earmark-pdf"></i></button>`
                     : '';
+                const btnChqCfg = (p.tipo_operacion_bancaria === 'CHEQUE' && p.id_forma)
+                    ? `<button type="button" class="btn btn-link btn-sm text-secondary p-0 ms-1 align-baseline" title="Configurar impresión de cheques de este banco" onclick="configurarImpresionCheque(${p.id_forma})"><i class="bi bi-gear"></i></button>`
+                    : '';
 
                 // Cheque: permitir editar la fecha de cobro solo si NO está reportado como cobrado (conciliado).
                 let btnEditFecha = '', badgeCobrado = '', btnEditNombre = '', infoNombre = '';
@@ -1292,7 +1295,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td><span class="badge bg-secondary bg-opacity-10 text-secondary border border-opacity-25">${p.nombre}</span></td>
-                    <td class="small">${txtRef} ${btnChq}${btnChqDl}${btnEditFecha}${btnEditNombre}${infoNombre}${badgeCobrado}</td>
+                    <td class="small">${txtRef} ${btnChq}${btnChqDl}${btnChqCfg}${btnEditFecha}${btnEditNombre}${infoNombre}${badgeCobrado}</td>
                     <td class="text-end fw-bold text-primary">$${p.monto.toFixed(2)}</td>
                     <td class="text-center">${btnTrash}</td>
                 `;
@@ -1338,6 +1341,23 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.body.appendChild(a);
         a.click();
         a.remove();
+    }
+
+    // Abre el diseñador visual de Plantillas de Documentos, ya listo para el banco
+    // de esta forma de pago (crea la plantilla si aún no existe). Afecta a TODOS
+    // los cheques de ese banco, no solo al pago actual.
+    async function configurarImpresionCheque(idFormaPago) {
+        if (!idFormaPago) {
+            Swal.fire({ icon: 'info', title: 'Selecciona un banco', text: 'Elige una cuenta/banco específico para configurar su plantilla de cheque.' });
+            return;
+        }
+        try {
+            const res = await (await fetch(`${EGR_URL}/configurarImpresionChequeAjax?id_forma_pago=${idFormaPago}`)).json();
+            if (!res.ok) { Swal.fire('No se pudo', res.mensaje || 'Error al configurar la impresión.', 'warning'); return; }
+            window.open(res.url, '_blank');
+        } catch (e) {
+            Swal.fire('Error', 'No se pudo abrir el configurador de impresión.', 'error');
+        }
     }
 
     async function imprimirChequeIndividual(idPago) {
@@ -2982,12 +3002,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         <div class="row g-2 mb-2 align-items-end">
           <div class="col-md-3">
             <label class="form-label small fw-bold">Cuenta / Banco</label>
-            <select id="chq-filtro-forma" class="form-select form-select-sm" onchange="cargarChequesImprimir()">
-              <option value="0">Todas</option>
-              <?php foreach ($formasPago as $fp): if (strtoupper($fp['tipo'] ?? '') !== 'BANCO') continue; ?>
-                <option value="<?= (int)$fp['id'] ?>"><?= htmlspecialchars($fp['nombre']) ?></option>
-              <?php endforeach; ?>
-            </select>
+            <div class="d-flex gap-1">
+              <select id="chq-filtro-forma" class="form-select form-select-sm" onchange="cargarChequesImprimir()">
+                <option value="0">Todas</option>
+                <?php foreach ($formasPago as $fp): if (strtoupper($fp['tipo'] ?? '') !== 'BANCO') continue; ?>
+                  <option value="<?= (int)$fp['id'] ?>"><?= htmlspecialchars($fp['nombre']) ?></option>
+                <?php endforeach; ?>
+              </select>
+              <button type="button" class="btn btn-outline-secondary btn-sm" title="Configurar impresión del banco seleccionado" onclick="configurarImpresionCheque(document.getElementById('chq-filtro-forma').value)">
+                <i class="bi bi-gear"></i>
+              </button>
+            </div>
           </div>
           <div class="col-md-2">
             <label class="form-label small fw-bold">Desde (cobro)</label>

@@ -625,7 +625,7 @@ class IngresosController extends BaseModuloController
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'ingreso');
             if ($plantilla) {
-                $renderer->generar($plantilla, $ingreso, $detalles, $pagos, [], $empresa, 'D');
+                $renderer->generar($plantilla, $ingreso, $detalles, $pagos, [], $empresa, 'D', $asiento);
             } else {
                 (new \App\Services\modulos\ComprobanteCajaPdfService())
                     ->generarIngreso($ingreso, $detalles, $pagos, $empresa, 'D', $asiento);

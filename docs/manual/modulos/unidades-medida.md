@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/unidades-medida
 tipo: modulo
 visibilidad: todos
-etiquetas: unidades, unidad de medida, medidas, kilo, litro, caja, unidad, peso, volumen, longitud, area, tiempo, empaque, quintal, arroba, libra, galon, factor, conversion, unidad base, importar medidas
-version: 1.1
+etiquetas: unidades, unidad de medida, medidas, kilo, litro, caja, unidad, peso, volumen, longitud, area, tiempo, empaque, quintal, arroba, libra, galon, caneca, factor, conversion, unidad base, importar medidas
+version: 1.2
 orden: 60
 estado: activo
 ---
@@ -49,14 +49,16 @@ guarde su ficha en Configuración → Empresas.
 |------|----------|------|
 | CANTIDAD | unidad, par, docena, ciento, millar | unidad |
 | PESO | miligramo, gramo, onza, libra, kilogramo, arroba, quintal, tonelada | kilogramo |
-| VOLUMEN | mililitro, litro, galón, metro cúbico | litro |
+| VOLUMEN | mililitro, litro, galón, caneca, metro cúbico | litro |
 | LONGITUD | milímetro, centímetro, pulgada, pie, yarda, metro, kilómetro | metro |
 | ÁREA | centímetro cuadrado, metro cuadrado, pie cuadrado, hectárea | metro cuadrado |
 | TIEMPO | minuto, hora, día, semana, mes | hora |
 | EMPAQUE | caja, paquete, funda, saco, rollo, juego | caja |
 
 La **arroba** son 25 libras (11.3398 kg) y el **quintal** 100 libras
-(45.3592 kg), que es el uso comercial ecuatoriano.
+(45.3592 kg), que es el uso comercial ecuatoriano. La **caneca** son 18.9271
+litros (equivalente a 5 galones), medida usual para combustibles, aceites y
+químicos.
 
 El tipo **TIEMPO** sirve para cobrar mano de obra y servicios por duración
 (taller, car-wash, alquileres).
@@ -121,6 +123,8 @@ creó el propio usuario.
 
 ## Historial de cambios
 
+- **1.2** — Se agregó la **caneca** (18.9271 litros) al catálogo por defecto
+  de volumen.
 - **1.1** — Catálogo por defecto en cada empresa (7 tipos, 39 unidades),
   explicación de la unidad base y el factor, y carga masiva desde Excel con la
   entidad unificada *Unidades y tipos de medida*.

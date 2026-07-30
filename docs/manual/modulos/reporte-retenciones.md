@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_retenciones
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de retenciones, retenciones practicadas, retenciones recibidas, iva, renta, declaracion, cuadrar 103
-version: 1.0
+version: 1.1
 orden: 50
 estado: activo
 ---
@@ -40,4 +40,6 @@ Disponible en **PDF** y **Excel**.
 
 ## Historial de cambios
 
+- **1.1** — El detalle exportado a Excel/PDF ya no se corta en 5000 filas; el tope
+  de 5000 se mantiene solo para la vista en pantalla.
 - **1.0** — Versión inicial.

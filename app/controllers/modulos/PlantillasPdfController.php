@@ -64,8 +64,10 @@ class PlantillasPdfController extends BaseModuloController
             'to'         => $total > 0 ? min($page * $perPage, $total) : 0,
             'buscar'     => $buscar,
             'tipoFiltro' => $tipo,
-            'tiposDoc'   => PlantillasPdfService::getTiposDocumento(),
-            'permisos'   => $this->getPermisos(),
+            'tiposDoc'      => PlantillasPdfService::getTiposDocumento(),
+            'tiposConSeed'  => \App\Services\PlantillasPdfSeedService::tiposConSeed(),
+            'bancos'        => (new \App\models\BancoEcuador())->getAll(),
+            'permisos'      => $this->getPermisos(),
         ]);
     }
 
@@ -101,17 +103,28 @@ class PlantillasPdfController extends BaseModuloController
         try {
             $idEmpresa = (int)($_SESSION['id_empresa'] ?? 0);
             $idUsuario = (int)($_SESSION['id_usuario'] ?? 0);
+            $tipo      = trim($_POST['tipo_documento'] ?? 'factura_venta');
+            $origen    = trim($_POST['origen'] ?? 'original'); // 'original' | 'blanco'
 
             $data = [
                 'id_empresa'     => $idEmpresa,
-                'tipo_documento' => trim($_POST['tipo_documento'] ?? 'factura_venta'),
+                'tipo_documento' => $tipo,
                 'nombre'         => trim($_POST['nombre'] ?? ''),
                 'descripcion'    => trim($_POST['descripcion'] ?? ''),
+                'id_banco'       => (int)($_POST['id_banco'] ?? 0) ?: null,
+                'origen'         => $origen,
                 'created_by'     => $idUsuario,
             ];
 
             $id = $this->service->crear($data);
-            echo json_encode(['ok' => true, 'mensaje' => 'Plantilla creada.', 'id' => $id]);
+
+            $mensaje = 'Plantilla creada en blanco.';
+            if ($origen === 'original') {
+                $mensaje = PlantillasPdfService::tieneSeedOriginal($tipo)
+                    ? 'Plantilla creada a partir del diseño original del sistema.'
+                    : 'Aún no hay un diseño original para este tipo de documento; se creó en blanco.';
+            }
+            echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
@@ -133,6 +146,7 @@ class PlantillasPdfController extends BaseModuloController
                 'tipo_documento' => trim($_POST['tipo_documento'] ?? ''),
                 'nombre'         => trim($_POST['nombre'] ?? ''),
                 'descripcion'    => trim($_POST['descripcion'] ?? ''),
+                'id_banco'       => (int)($_POST['id_banco'] ?? 0) ?: null,
                 'updated_by'     => $idUsuario,
             ];
 

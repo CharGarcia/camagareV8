@@ -316,22 +316,41 @@ class RetencionesVentasController extends BaseModuloController
                 die('Retención no encontrada');
             }
 
-            $pdfService = new \App\Services\modulos\RetencionVentaPdfService();
-
-            // Preferir el XML autorizado (documento oficial). Si no hay XML
-            // (retención manual), armar el PDF con los datos de BD.
+            // Preferir el XML autorizado (documento oficial, tal cual se envió al
+            // SRI: nunca se reemplaza por una plantilla). Si no hay XML (retención
+            // manual), sí se puede usar la plantilla activa del módulo.
             $xml = trim($cabecera['detalle_xml'] ?? '');
             if ($xml !== '') {
-                $pdfService->generarDesdeXml($xml);
+                (new \App\Services\modulos\RetencionVentaPdfService())->generarDesdeXml($xml);
             } else {
                 $lineas  = $this->repository->getDetalle($id);
                 $empresa = (new Empresa())->getPorId($idEmpresa) ?? [];
-                $pdfService->generar($cabecera, $lineas, $empresa);
+                $this->generarPdfRetencionVenta($idEmpresa, $cabecera, $lineas, $empresa, 'D');
             }
         } catch (\Throwable $e) {
             die('Error al generar PDF: ' . $e->getMessage());
         }
         exit;
+    }
+
+    /**
+     * Genera el PDF de una retención en ventas MANUAL (sin XML autorizado) usando
+     * la plantilla activa (tipo 'retencion_venta'); si no hay una configurada,
+     * usa el diseño original hardcodeado. Las retenciones con XML autorizado
+     * siempre se renderizan desde ese XML, nunca desde aquí.
+     */
+    private function generarPdfRetencionVenta(int $idEmpresa, array $cabecera, array $lineas, array $empresa, string $outputDest)
+    {
+        $renderer  = new \App\Services\PlantillasPdfRendererService();
+        $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'retencion_venta');
+        if ($plantilla) {
+            return $renderer->generar($plantilla, $cabecera, $lineas, [], [], $empresa, $outputDest);
+        }
+        $pdfService = new \App\Services\modulos\RetencionVentaPdfService();
+        if ($outputDest === 'S') {
+            return $pdfService->generarBytes($cabecera, $lineas, $empresa);
+        }
+        return $pdfService->generar($cabecera, $lineas, $empresa);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

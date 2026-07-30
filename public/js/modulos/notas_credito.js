@@ -67,6 +67,11 @@
             const pgInfo = document.getElementById('nc-pagination-info');
             if (pgInfo) pgInfo.textContent = data.info ?? '';
 
+            const btnPdf = document.getElementById('btnExportPdf');
+            if (btnPdf && data.pdf_url) btnPdf.href = data.pdf_url;
+            const btnExcel = document.getElementById('btnExportExcel');
+            if (btnExcel && data.excel_url) btnExcel.href = data.excel_url;
+
             NC_actualizarIconosOrden(sort, dir);
         } catch (e) {
             console.error('Error al buscar NC:', e);

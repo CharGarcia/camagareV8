@@ -407,8 +407,14 @@ class ReciboVentaController extends BaseModuloController
                 } catch (\Throwable $e) {}
             }
 
-            $pdfService = new \App\Services\modulos\ReciboVentaPdfService();
-            $pdfService->generar($recibo, $detalles, $pagos, $infoAdicional, $empresa);
+            $renderer  = new \App\Services\PlantillasPdfRendererService();
+            $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'recibo_venta');
+            if ($plantilla) {
+                $renderer->generar($plantilla, $recibo, $detalles, $pagos, $infoAdicional, $empresa, 'D');
+            } else {
+                (new \App\Services\modulos\ReciboVentaPdfService())
+                    ->generar($recibo, $detalles, $pagos, $infoAdicional, $empresa);
+            }
         } catch (\Throwable $e) {
             http_response_code(500); echo 'Error al generar PDF: ' . $e->getMessage();
         }

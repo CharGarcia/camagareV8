@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_ingresos_egresos
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de ingresos y egresos, movimiento de dinero, cobros y pagos, por tercero, forma de pago, concepto, exportar
-version: 1.0
+version: 1.1
 orden: 30
 estado: activo
 ---
@@ -56,4 +56,6 @@ movimientos hubo por encima de cierto monto.
 
 ## Historial de cambios
 
+- **1.1** — El detalle exportado a Excel/PDF ya no se corta en 5000 filas; el tope
+  de 5000 se mantiene solo para la vista en pantalla.
 - **1.0** — Versión inicial.

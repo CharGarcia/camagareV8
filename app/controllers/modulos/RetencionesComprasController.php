@@ -381,12 +381,30 @@ class RetencionesComprasController extends BaseModuloController
                 $empresa['direccion_establecimiento'] = $est['direccion'] ?? '';
             }
 
-            $pdfService = new \App\Services\modulos\RetencionCompraPdfService();
-            $pdfService->generar($cabecera, $lineas, $empresa);
+            $this->generarPdfRetencionCompra($idEmpresa, $cabecera, $lineas, $empresa, 'D');
         } catch (\Throwable $e) {
             die('Error al generar PDF: ' . $e->getMessage());
         }
         exit;
+    }
+
+    /**
+     * Genera el PDF de una retención en compras usando la plantilla activa
+     * (tipo 'retencion_compra') del módulo Plantillas de Documentos; si la
+     * empresa no tiene una configurada, usa el diseño original hardcodeado.
+     */
+    private function generarPdfRetencionCompra(int $idEmpresa, array $cabecera, array $lineas, array $empresa, string $outputDest)
+    {
+        $renderer  = new \App\Services\PlantillasPdfRendererService();
+        $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'retencion_compra');
+        if ($plantilla) {
+            return $renderer->generar($plantilla, $cabecera, $lineas, [], [], $empresa, $outputDest);
+        }
+        $pdfService = new \App\Services\modulos\RetencionCompraPdfService();
+        if ($outputDest === 'S') {
+            return $pdfService->generarBytes($cabecera, $lineas, $empresa);
+        }
+        return $pdfService->generar($cabecera, $lineas, $empresa);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -488,8 +506,7 @@ class RetencionesComprasController extends BaseModuloController
             }
 
             // PDF de la retención
-            $pdfService = new \App\Services\modulos\RetencionCompraPdfService();
-            $pdfString  = $pdfService->generarBytes($cabecera, $lineas, $empresa);
+            $pdfString = $this->generarPdfRetencionCompra($idEmpresa, $cabecera, $lineas, $empresa, 'S');
 
             // XML: usar el autorizado guardado; si no existe, regenerar
             $xmlString = $cabecera['detalle_xml'] ?? '';

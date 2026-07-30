@@ -6,7 +6,7 @@ ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri
-version: 1.0
+version: 1.1
 orden: 30
 estado: activo
 ---
@@ -52,6 +52,12 @@ mal, hay que gestionarlo como cualquier comprobante autorizado erróneo.
 Una nota de crédito por devolución **devuelve la mercadería al inventario** y
 reduce el saldo por cobrar de esa factura.
 
+## Exportar el listado
+
+Los botones **Excel** y **PDF** de la parte superior del listado exportan las
+notas de crédito que coinciden con el buscador y el orden aplicados en ese
+momento (no solo la página visible).
+
 ## Errores frecuentes
 
 - **"Solo se pueden generar notas de crédito para facturas en estado
@@ -63,4 +69,5 @@ reduce el saldo por cobrar de esa factura.
 
 ## Historial de cambios
 
+- **1.1** — Agregada la exportación a Excel y PDF del listado (no existía).
 - **1.0** — Versión inicial.

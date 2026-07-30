@@ -113,9 +113,8 @@ class NotaCreditoRepository extends BaseRepository
                 LEFT JOIN usuarios u ON nc.id_usuario = u.id
                 LEFT JOIN empresas e ON e.id = nc.id_empresa
                 $where
-                ORDER BY $ordenExpr $ordenDir
-                LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
-        
+                ORDER BY $ordenExpr $ordenDir" . ($perPage > 0 ? " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset : "");
+
         $st = $this->db->prepare($sql);
         $st->execute($params);
         $rows = $st->fetchAll();

@@ -8,6 +8,8 @@
 /** @var string $buscar */
 /** @var string $tipoFiltro */
 /** @var array $tiposDoc */
+/** @var array $tiposConSeed */
+/** @var array $bancos */
 /** @var array $permisos */
 $base = BASE_URL;
 $ruta = $base . '/modulos/plantillas-pdf';
@@ -46,16 +48,17 @@ $ruta = $base . '/modulos/plantillas-pdf';
     <table class="table table-hover table-sm align-middle mb-0" style="font-size:0.82rem">
         <thead class="table-light">
             <tr>
-                <th style="width:35%">Nombre</th>
-                <th style="width:20%">Tipo de Documento</th>
-                <th style="width:25%">Descripción</th>
+                <th style="width:28%">Nombre</th>
+                <th style="width:17%">Tipo de Documento</th>
+                <th style="width:15%">Banco</th>
+                <th style="width:20%">Descripción</th>
                 <th class="text-center" style="width:10%">Estado</th>
                 <th class="text-center" style="width:10%">Acciones</th>
             </tr>
         </thead>
         <tbody id="tbody-plantillas">
         <?php if (empty($rows)): ?>
-            <tr><td colspan="5" class="text-center py-5 text-muted">
+            <tr><td colspan="6" class="text-center py-5 text-muted">
                 <i class="bi bi-file-earmark-pdf fs-3 d-block mb-2"></i>
                 No hay plantillas. Crea la primera con el botón "Nueva plantilla".
             </td></tr>
@@ -73,6 +76,7 @@ $ruta = $base . '/modulos/plantillas-pdf';
                     <?php endif; ?>
                 </td>
                 <td><?= htmlspecialchars($tiposDoc[$r['tipo_documento']] ?? $r['tipo_documento']) ?></td>
+                <td><?= $r['banco_nombre'] ? htmlspecialchars($r['banco_nombre']) : '<span class="text-muted">—</span>' ?></td>
                 <td class="text-muted text-truncate" style="max-width:200px"><?= htmlspecialchars($r['descripcion'] ?? '') ?></td>
                 <td class="text-center">
                     <?php if ($activa): ?>
@@ -147,8 +151,30 @@ $ruta = $base . '/modulos/plantillas-pdf';
                     </select>
                 </div>
                 <div class="mb-2">
+                    <label class="form-label d-block">¿De dónde parte?</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="new-origen" id="new-origen-original" value="original" checked>
+                        <label class="form-check-label small" for="new-origen-original">
+                            Plantilla original del sistema <span id="new-origen-sinseed" class="text-muted" style="display:none">(no disponible para este tipo; se creará en blanco)</span>
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="new-origen" id="new-origen-blanco" value="blanco">
+                        <label class="form-check-label small" for="new-origen-blanco">En blanco</label>
+                    </div>
+                </div>
+                <div class="mb-2">
                     <label class="form-label">Nombre <span class="text-danger">*</span></label>
                     <input type="text" id="new-nombre" class="form-control form-control-sm" placeholder="Ej: Factura estándar empresa" style="height:28px;font-size:0.85rem">
+                </div>
+                <div class="mb-2" id="new-banco-wrap" style="display:none">
+                    <label class="form-label">Banco <span class="text-muted small">(opcional; en blanco = genérica de la empresa)</span></label>
+                    <select id="new-banco" class="form-select form-select-sm" style="height:28px;font-size:0.85rem;padding:2px 8px">
+                        <option value="">— Genérica de la empresa —</option>
+                        <?php foreach ($bancos as $b): ?>
+                        <option value="<?= (int)($b['id'] ?? 0) ?>"><?= htmlspecialchars($b['nombre_banco'] ?? '') ?></option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
                 <div class="mb-2">
                     <label class="form-label">Descripción</label>
@@ -187,6 +213,15 @@ $ruta = $base . '/modulos/plantillas-pdf';
                     <label class="form-label">Nombre <span class="text-danger">*</span></label>
                     <input type="text" id="edit-nombre" class="form-control form-control-sm" style="height:28px;font-size:0.85rem">
                 </div>
+                <div class="mb-2" id="edit-banco-wrap" style="display:none">
+                    <label class="form-label">Banco <span class="text-muted small">(opcional; en blanco = genérica de la empresa)</span></label>
+                    <select id="edit-banco" class="form-select form-select-sm" style="height:28px;font-size:0.85rem;padding:2px 8px">
+                        <option value="">— Genérica de la empresa —</option>
+                        <?php foreach ($bancos as $b): ?>
+                        <option value="<?= (int)($b['id'] ?? 0) ?>"><?= htmlspecialchars($b['nombre_banco'] ?? '') ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
                 <div class="mb-2">
                     <label class="form-label">Descripción</label>
                     <input type="text" id="edit-descripcion" class="form-control form-control-sm" style="height:28px;font-size:0.85rem">
@@ -211,6 +246,22 @@ $ruta = $base . '/modulos/plantillas-pdf';
 <script>
 (function () {
     const RUTA = '<?= $ruta ?>';
+    const TIPOS_CON_SEED = <?= json_encode(array_values($tiposConSeed)) ?>;
+
+    // Si el tipo elegido no tiene plantilla original registrada, deshabilita esa
+    // opción y fuerza "En blanco" (solo aplica al modal de creación).
+    function toggleOrigenDisponible() {
+        const tipo = document.getElementById('new-tipo')?.value;
+        const tieneSeed = TIPOS_CON_SEED.includes(tipo);
+        const radioOriginal = document.getElementById('new-origen-original');
+        const nota = document.getElementById('new-origen-sinseed');
+        if (!radioOriginal || !nota) return;
+        radioOriginal.disabled = !tieneSeed;
+        nota.style.display = tieneSeed ? 'none' : '';
+        if (!tieneSeed) document.getElementById('new-origen-blanco').checked = true;
+    }
+    document.getElementById('new-tipo')?.addEventListener('change', toggleOrigenDisponible);
+    toggleOrigenDisponible();
 
     async function ajaxPost(accion, body) {
         const fd = new FormData();
@@ -229,14 +280,26 @@ $ruta = $base . '/modulos/plantillas-pdf';
         setTimeout(() => el.remove(), 3500);
     }
 
+    // Muestra el selector de Banco solo para tipo_documento = 'cheque'.
+    function toggleBancoWrap(selTipoId, wrapId) {
+        const sel  = document.getElementById(selTipoId);
+        const wrap = document.getElementById(wrapId);
+        if (!sel || !wrap) return;
+        wrap.style.display = (sel.value === 'cheque') ? '' : 'none';
+    }
+    document.getElementById('new-tipo')?.addEventListener('change', () => toggleBancoWrap('new-tipo', 'new-banco-wrap'));
+    document.getElementById('edit-tipo')?.addEventListener('change', () => toggleBancoWrap('edit-tipo', 'edit-banco-wrap'));
+
     // Crear plantilla
     document.getElementById('btn-crear-plantilla')?.addEventListener('click', async () => {
-        const tipo  = document.getElementById('new-tipo').value;
-        const nom   = document.getElementById('new-nombre').value.trim();
-        const desc  = document.getElementById('new-descripcion').value.trim();
+        const tipo   = document.getElementById('new-tipo').value;
+        const nom    = document.getElementById('new-nombre').value.trim();
+        const desc   = document.getElementById('new-descripcion').value.trim();
+        const banco  = document.getElementById('new-banco')?.value || '';
+        const origen = document.querySelector('input[name="new-origen"]:checked')?.value || 'original';
         if (!nom) { toast('El nombre es obligatorio.', 'danger'); return; }
 
-        const r = await ajaxPost('store', { tipo_documento: tipo, nombre: nom, descripcion: desc });
+        const r = await ajaxPost('store', { tipo_documento: tipo, nombre: nom, descripcion: desc, id_banco: banco, origen });
         if (r.ok) {
             toast(r.mensaje);
             setTimeout(() => location.reload(), 800);
@@ -253,6 +316,9 @@ $ruta = $base . '/modulos/plantillas-pdf';
             document.getElementById('edit-tipo').value        = row.tipo_documento;
             document.getElementById('edit-nombre').value      = row.nombre;
             document.getElementById('edit-descripcion').value = row.descripcion || '';
+            const selBanco = document.getElementById('edit-banco');
+            if (selBanco) selBanco.value = row.id_banco || '';
+            toggleBancoWrap('edit-tipo', 'edit-banco-wrap');
             const btnElModal = document.getElementById('btn-eliminar-desde-modal');
             if (btnElModal) btnElModal.dataset.id = row.id;
             new bootstrap.Modal(document.getElementById('modalEditar')).show();
@@ -261,13 +327,14 @@ $ruta = $base . '/modulos/plantillas-pdf';
 
     // Guardar edición
     document.getElementById('btn-guardar-edicion')?.addEventListener('click', async () => {
-        const id   = document.getElementById('edit-id').value;
-        const tipo = document.getElementById('edit-tipo').value;
-        const nom  = document.getElementById('edit-nombre').value.trim();
-        const desc = document.getElementById('edit-descripcion').value.trim();
+        const id    = document.getElementById('edit-id').value;
+        const tipo  = document.getElementById('edit-tipo').value;
+        const nom   = document.getElementById('edit-nombre').value.trim();
+        const desc  = document.getElementById('edit-descripcion').value.trim();
+        const banco = document.getElementById('edit-banco')?.value || '';
         if (!nom) { toast('El nombre es obligatorio.', 'danger'); return; }
 
-        const r = await ajaxPost('update', { id, tipo_documento: tipo, nombre: nom, descripcion: desc });
+        const r = await ajaxPost('update', { id, tipo_documento: tipo, nombre: nom, descripcion: desc, id_banco: banco });
         if (r.ok) {
             toast(r.mensaje);
             setTimeout(() => location.reload(), 800);
@@ -279,7 +346,7 @@ $ruta = $base . '/modulos/plantillas-pdf';
     // Activar
     document.querySelectorAll('.btn-activar').forEach(btn => {
         btn.addEventListener('click', async () => {
-            if (!confirm('¿Activar esta plantilla? Se desactivará la plantilla activa actual para este tipo de documento.')) return;
+            if (!confirm('¿Activar esta plantilla? Se desactivará la plantilla activa actual para este tipo de documento y banco (si aplica).')) return;
             const r = await ajaxPost('activar', { id: btn.dataset.id });
             if (r.ok) { toast(r.mensaje); setTimeout(() => location.reload(), 800); }
             else toast(r.mensaje, 'danger');

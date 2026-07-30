@@ -254,7 +254,7 @@ class ReporteRetencionesController extends BaseModuloController
                     (int)$r['comprobantes'], (int)$r['lineas'], (float)$r['total']], $rows);
                 return ['headers' => $headers, 'data' => $data, 'right' => [3,4,5], 'money' => [5]];
             default:
-                $rows = $this->repository->getReporteDetallado($idEmpresa, $f);
+                $rows = $this->repository->getReporteDetallado($idEmpresa, $f, 0);
                 $headers = ['Tipo', 'Número', 'Fecha', 'Clave de Acceso', 'Sujeto', 'Identificación', 'Período Fiscal', 'Estado',
                     'Doc. Sustento', 'N° Doc. Sustento', 'Fecha Doc. Sustento', 'Impuesto', 'Código Retención', 'Concepto',
                     'Base Imponible', 'Porcentaje', 'Valor Retenido'];

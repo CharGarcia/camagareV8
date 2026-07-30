@@ -187,6 +187,171 @@ class ComprasController extends BaseModuloController
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // EXPORTAR EXCEL / PDF (LISTADO)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private function estadoPagoTexto(array $r): string
+    {
+        $importeTotal = (float)($r['importe_total'] ?? 0);
+        $pagado       = (float)($r['total_pagado'] ?? 0);
+        $nc           = (float)($r['total_nc'] ?? 0);
+        $retencion    = (float)($r['total_retencion'] ?? 0);
+        $saldo        = max(0, $importeTotal - $pagado - $nc - $retencion);
+
+        if ((string)($r['tipo_comprobante'] ?? '') === '04') {
+            return 'Pagada';
+        }
+        if ($saldo <= 0.01) {
+            return 'Pagada';
+        }
+        if (($pagado + $nc + $retencion) > 0) {
+            return 'Abonada';
+        }
+        return 'Pendiente';
+    }
+
+    private function getListadoParaExport(): array
+    {
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'fecha_emision');
+        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'DESC'));
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        return $this->repository->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+    }
+
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+        $rows = $this->getListadoParaExport()['rows'];
+
+        $idEmpresa    = (int) $_SESSION['id_empresa'];
+        $empresaModel = new Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa);
+        $nombreEmpresa = $empresa['nombre'] ?? '';
+
+        $headers    = ['Número', 'Fecha Emisión', 'Proveedor', 'RUC', 'Comprobante', 'Sustento', 'Subtotal', 'IVA', 'Total', 'Saldo', 'Estado Pago', 'Estado'];
+        $exportData = [];
+        foreach ($rows as $r) {
+            $numero = ($r['establecimiento_prov'] ?? '') . '-' . ($r['punto_emision_prov'] ?? '') . '-' . ($r['secuencial_prov'] ?? '');
+            $importeTotal = (float)($r['importe_total'] ?? 0);
+            $pagado       = (float)($r['total_pagado'] ?? 0);
+            $nc           = (float)($r['total_nc'] ?? 0);
+            $retencion    = (float)($r['total_retencion'] ?? 0);
+            $saldo        = ((string)($r['tipo_comprobante'] ?? '') === '04') ? 0 : max(0, $importeTotal - $pagado - $nc - $retencion);
+
+            $exportData[] = [
+                (string)$numero,
+                !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                (string)($r['proveedor_nombre'] ?? ''),
+                (string)($r['proveedor_ruc'] ?? ''),
+                (string)($r['tipo_comprobante_nombre'] ?? $r['tipo_comprobante'] ?? ''),
+                (string)($r['sustento_nombre'] ?? ''),
+                (float)($r['total_sin_impuestos'] ?? 0),
+                (float)($r['monto_iva'] ?? 0),
+                $importeTotal,
+                $saldo,
+                $this->estadoPagoTexto($r),
+                ucfirst((string)($r['estado'] ?? '')),
+            ];
+        }
+
+        try {
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+            $reportService = new \App\Services\ReportService();
+            $reportService->exportToExcel('Compras', $headers, $exportData, 'Listado Compras', $nombreEmpresa);
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar Excel: ' . $e->getMessage();
+            exit;
+        }
+    }
+
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+        $rows = $this->getListadoParaExport()['rows'];
+
+        $idEmpresa    = (int) $_SESSION['id_empresa'];
+        $empresaModel = new Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa);
+        $nombreEmpresa = $empresa['nombre'] ?? 'REPORTE DE COMPRAS';
+
+        try {
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            ob_start();
+?>
+            <style>
+                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 7pt; table-layout: fixed; }
+                th { background: #f2f2f2; border: 1px solid #ccc; padding: 3px; text-align: left; }
+                td { border: 1px solid #ccc; padding: 3px; overflow: hidden; word-wrap: break-word; }
+                .text-end { text-align: right; }
+                .header { text-align: center; margin-bottom: 15px; width: 100%; }
+                h1 { margin: 0; font-size: 14pt; color: #333; }
+                h2 { margin: 3px 0 0 0; color: #666; font-size: 10pt; text-transform: uppercase; }
+            </style>
+            <page backtop="10mm" backbottom="10mm" backleft="10mm" backright="10mm">
+                <div class="header">
+                    <h1><?= htmlspecialchars($nombreEmpresa) ?></h1>
+                    <h2>Listado de Compras</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 10%">Número</th>
+                            <th style="width: 8%">Fecha</th>
+                            <th style="width: 22%">Proveedor</th>
+                            <th style="width: 10%">RUC</th>
+                            <th style="width: 14%">Comprobante</th>
+                            <th style="width: 10%" class="text-end">Subtotal</th>
+                            <th style="width: 8%" class="text-end">IVA</th>
+                            <th style="width: 10%" class="text-end">Total</th>
+                            <th style="width: 8%">Estado Pago</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rows as $r): ?>
+                            <?php $numero = ($r['establecimiento_prov'] ?? '') . '-' . ($r['punto_emision_prov'] ?? '') . '-' . ($r['secuencial_prov'] ?? ''); ?>
+                            <tr>
+                                <td><?= htmlspecialchars((string)$numero) ?></td>
+                                <td><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
+                                <td><?= htmlspecialchars((string)($r['proveedor_nombre'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string)($r['proveedor_ruc'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string)($r['tipo_comprobante_nombre'] ?? $r['tipo_comprobante'] ?? '')) ?></td>
+                                <td class="text-end"><?= number_format((float)($r['total_sin_impuestos'] ?? 0), 2) ?></td>
+                                <td class="text-end"><?= number_format((float)($r['monto_iva'] ?? 0), 2) ?></td>
+                                <td class="text-end"><?= number_format((float)($r['importe_total'] ?? 0), 2) ?></td>
+                                <td><?= $this->estadoPagoTexto($r) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </page>
+<?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('Compras_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar PDF: ' . $e->getMessage();
+            exit;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // GET COMPRA AJAX
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -415,9 +580,17 @@ class ComprasController extends BaseModuloController
                 'tipo_ambiente'      => $cabecera['tipo_ambiente'] ?? '1',
             ];
 
-            $pdfService = new \App\Services\modulos\ComprasPdfService();
-            // 'D' = forzar descarga del archivo PDF.
-            $pdfService->generar($cabecera, $parsed['detalles'], $parsed['pagos'], $parsed['infoAdicional'], $empresa, 'D');
+            // 'D' = forzar descarga del archivo PDF. Los datos vienen siempre del
+            // XML del proveedor (documento recibido); la plantilla solo cambia
+            // cómo se presenta esa información, no los datos en sí.
+            $renderer  = new \App\Services\PlantillasPdfRendererService();
+            $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'compras');
+            if ($plantilla) {
+                $renderer->generar($plantilla, $cabecera, $parsed['detalles'], $parsed['pagos'], $parsed['infoAdicional'], $empresa, 'D');
+            } else {
+                (new \App\Services\modulos\ComprasPdfService())
+                    ->generar($cabecera, $parsed['detalles'], $parsed['pagos'], $parsed['infoAdicional'], $empresa, 'D');
+            }
         } catch (\Throwable $e) {
             http_response_code(500);
             echo 'Error al generar PDF: ' . $e->getMessage();

@@ -514,12 +514,12 @@ const canvas = new fabric.Canvas('cv-disenador', {
 function dibujarGuias() {
     canvas.getObjects().filter(o => o.data?.guia).forEach(o => canvas.remove(o));
     const opts = { stroke:'#aad4f5', strokeWidth:0.5, strokeDashArray:[4,4], selectable:false, evented:false, excludeFromExport:true, data:{guia:true} };
-    const mL = MARGIN_MM.l * MM * zoom;
-    const mR = (PG_W_MM - MARGIN_MM.r) * MM * zoom;
-    const mT = MARGIN_MM.t * MM * zoom;
-    const mB = (PG_H_MM - MARGIN_MM.b) * MM * zoom;
-    const h  = PG_H_MM * MM * zoom;
-    const w  = PG_W_MM * MM * zoom;
+    const mL = MARGIN_MM.l * MM;
+    const mR = (PG_W_MM - MARGIN_MM.r) * MM;
+    const mT = MARGIN_MM.t * MM;
+    const mB = (PG_H_MM - MARGIN_MM.b) * MM;
+    const h  = PG_H_MM * MM;
+    const w  = PG_W_MM * MM;
     canvas.add(new fabric.Line([mL, 0, mL, h], opts));
     canvas.add(new fabric.Line([mR, 0, mR, h], opts));
     canvas.add(new fabric.Line([0, mT, w, mT], opts));
@@ -576,8 +576,12 @@ canvas.on('object:removed',  () => guardarEstado());
 canvas.on('object:modified', () => guardarEstado());
 
 // ── Crear elementos ──────────────────────────────────────────
-function mm(v) { return v * MM * zoom; }
-function px2mm(v) { return Math.round((v / (MM * zoom)) * 10) / 10; }
+// Conversión mm↔px SIEMPRE a "zoom 100%" (espacio de contenido de Fabric):
+// el zoom visual lo aplica únicamente canvas.setZoom() (ver setZoom()), nunca
+// estas coordenadas. Mezclarlos aquí desincroniza posición al cargar vs. al
+// guardar si el zoom cambió entre medio (bug ya corregido).
+function mm(v) { return v * MM; }
+function px2mm(v) { return Math.round((v / MM) * 10) / 10; }
 
 function elementoBase(tipo, extra = {}) {
     return Object.assign({
@@ -589,7 +593,7 @@ function elementoBase(tipo, extra = {}) {
 
 function addTexto(xmm = 15, ymm = 20, texto = 'Texto fijo') {
     const obj = new fabric.Textbox(texto, Object.assign(elementoBase('texto'), {
-        left: mm(xmm), top: mm(ymm), width: mm(50), fontSize: 8 * zoom,
+        left: mm(xmm), top: mm(ymm), width: mm(50), fontSize: 8,
         fontFamily: 'Helvetica', fill: '#000000', backgroundColor: 'transparent',
         borderColor:'#3b82f6', cornerColor:'#3b82f6', cornerSize:7,
     }));
@@ -599,7 +603,7 @@ function addTexto(xmm = 15, ymm = 20, texto = 'Texto fijo') {
 
 function addCampo(campo, etiqueta, xmm = 15, ymm = 20) {
     const obj = new fabric.Textbox('[' + etiqueta + ']', Object.assign(elementoBase('campo'), {
-        left: mm(xmm), top: mm(ymm), width: mm(60), fontSize: 8 * zoom,
+        left: mm(xmm), top: mm(ymm), width: mm(60), fontSize: 8,
         fontFamily: 'Helvetica', fill: '#1a56db', backgroundColor: '#e7f0ff',
         borderColor:'#3b82f6', cornerColor:'#3b82f6', cornerSize:7,
     }));
@@ -611,7 +615,7 @@ function addCampo(campo, etiqueta, xmm = 15, ymm = 20) {
 function addRect(xmm = 15, ymm = 30) {
     const obj = new fabric.Rect(Object.assign(elementoBase('rectangulo'), {
         left: mm(xmm), top: mm(ymm), width: mm(50), height: mm(20),
-        fill: '#ffffff', stroke: '#000000', strokeWidth: 0.5 * zoom, rx: 0, ry: 0,
+        fill: '#ffffff', stroke: '#000000', strokeWidth: 0.5, rx: 0, ry: 0,
         borderColor:'#3b82f6', cornerColor:'#3b82f6', cornerSize:7,
     }));
     canvas.add(obj); canvas.setActiveObject(obj); canvas.renderAll();
@@ -619,7 +623,7 @@ function addRect(xmm = 15, ymm = 30) {
 
 function addLinea(xmm = 10, ymm = 50, x2mm = 200) {
     const obj = new fabric.Line([mm(xmm), mm(ymm), mm(x2mm), mm(ymm)], Object.assign(elementoBase('linea'), {
-        stroke: '#000000', strokeWidth: 0.5 * zoom,
+        stroke: '#000000', strokeWidth: 0.5,
         borderColor:'#3b82f6', cornerColor:'#3b82f6', cornerSize:7,
     }));
     canvas.add(obj); canvas.setActiveObject(obj); canvas.renderAll();
@@ -628,13 +632,13 @@ function addLinea(xmm = 10, ymm = 50, x2mm = 200) {
 function addTabla(campo, etiqueta, xmm = 10, ymm = 100) {
     const obj = new fabric.Rect(Object.assign(elementoBase('tabla'), {
         left: mm(xmm), top: mm(ymm), width: mm(190), height: mm(30),
-        fill: '#fffde7', stroke: '#ffc107', strokeWidth: 1 * zoom,
+        fill: '#fffde7', stroke: '#ffc107', strokeWidth: 1,
         borderColor:'#ffc107', cornerColor:'#ffc107', cornerSize:7,
     }));
     obj.data.campo    = campo;
     obj.data.etiqueta = etiqueta;
     const label = new fabric.Text('⊞ TABLA: ' + etiqueta, {
-        left: mm(xmm) + 6, top: mm(ymm) + 6, fontSize: 9 * zoom,
+        left: mm(xmm) + 6, top: mm(ymm) + 6, fontSize: 9,
         fontFamily:'Helvetica', fill:'#b45309', selectable:false, evented:false,
         data:{ owner: obj.cacheKey }
     });
@@ -646,12 +650,12 @@ function addTabla(campo, etiqueta, xmm = 10, ymm = 100) {
 function addBarcode(xmm = 10, ymm = 50) {
     const obj = new fabric.Rect(Object.assign(elementoBase('codigoBarras'), {
         left: mm(xmm), top: mm(ymm), width: mm(76), height: mm(14),
-        fill: '#f1f5f9', stroke: '#334155', strokeWidth: 0.5 * zoom,
+        fill: '#f1f5f9', stroke: '#334155', strokeWidth: 0.5,
         borderColor:'#334155', cornerColor:'#334155', cornerSize:7,
     }));
     obj.data.campo = '{clave_acceso}';
     const label = new fabric.Text('▐▌▐▌ Código de barras', {
-        left: mm(xmm) + 4, top: mm(ymm) + 3, fontSize: 8 * zoom,
+        left: mm(xmm) + 4, top: mm(ymm) + 3, fontSize: 8,
         fontFamily:'Helvetica', fill:'#334155', selectable:false, evented:false,
     });
     canvas.add(obj); canvas.add(label);
@@ -797,7 +801,7 @@ function aplicarVisual() {
             text:            obj.data.contenido !== '' ? obj.data.contenido : (obj.text ?? ''),
             fill:            obj.data.colorTexto,
             backgroundColor: obj.data.colorFondo !== '#ffffff' ? obj.data.colorFondo : 'transparent',
-            fontSize:        obj.data.tamano * zoom,
+            fontSize:        obj.data.tamano,
             fontFamily:      FONT_MAP[obj.data.fuente]    ?? 'Helvetica',
             fontWeight:      (obj.data.estilo ?? '').includes('B') ? 'bold'   : 'normal',
             fontStyle:       (obj.data.estilo ?? '').includes('I') ? 'italic' : 'normal',
@@ -808,15 +812,15 @@ function aplicarVisual() {
         obj.set({
             fill:        obj.data.colorFondo,
             stroke:      obj.data.borde.color,
-            strokeWidth: obj.data.borde.grosor * zoom,
-            rx:          obj.data.borde.radio  * zoom,
-            ry:          obj.data.borde.radio  * zoom,
+            strokeWidth: obj.data.borde.grosor,
+            rx:          obj.data.borde.radio,
+            ry:          obj.data.borde.radio,
         });
     }
     if (obj.type === 'line') {
         obj.set({
             stroke:      obj.data.borde?.color   ?? '#000000',
-            strokeWidth: (obj.data.borde?.grosor ?? 0.5) * zoom,
+            strokeWidth: (obj.data.borde?.grosor ?? 0.5),
         });
     }
 
@@ -1091,7 +1095,7 @@ document.addEventListener('keydown', e => {
             case 'texto':
             case 'campo':
                 obj = new fabric.Textbox(el.contenido || '[' + (el.campo ?? '') + ']', {
-                    left: x, top: y, width: w, fontSize: (el.tamano ?? 8) * zoom,
+                    left: x, top: y, width: w, fontSize: (el.tamano ?? 8),
                     fontFamily:  FONT_MAP[el.fuente] ?? 'Helvetica',
                     fontWeight:  (el.estilo ?? '').includes('B') ? 'bold'   : 'normal',
                     fontStyle:   (el.estilo ?? '').includes('I') ? 'italic' : 'normal',
@@ -1107,15 +1111,15 @@ document.addEventListener('keydown', e => {
                     left: x, top: y, width: w, height: h,
                     fill: el.colorFondo ?? '#ffffff',
                     stroke: el.borde?.color ?? '#000000',
-                    strokeWidth: (el.borde?.grosor ?? 0.3) * zoom,
-                    rx: (el.borde?.radio ?? 0) * zoom,
-                    ry: (el.borde?.radio ?? 0) * zoom,
+                    strokeWidth: (el.borde?.grosor ?? 0.3),
+                    rx: (el.borde?.radio ?? 0),
+                    ry: (el.borde?.radio ?? 0),
                 });
                 break;
             case 'linea':
                 obj = new fabric.Line([x, y, x + w, y], {
                     stroke: el.borde?.color ?? '#000000',
-                    strokeWidth: (el.borde?.grosor ?? 0.5) * zoom,
+                    strokeWidth: (el.borde?.grosor ?? 0.5),
                 });
                 break;
             default:

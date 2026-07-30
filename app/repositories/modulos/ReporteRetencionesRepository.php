@@ -189,14 +189,16 @@ class ReporteRetencionesRepository extends BaseRepository
 
     // ── Consultas públicas ────────────────────────────────────────────────────
 
-    /** Listado por línea de impuesto (detalle) — nivel más granular, toda la información. */
-    public function getReporteDetallado(int $idEmpresa, array $f): array
+    /** Listado por línea de impuesto (detalle) — nivel más granular, toda la información. $limite = 0 => sin tope (usar solo para exportación). */
+    public function getReporteDetallado(int $idEmpresa, array $f, int $limite = 5000): array
     {
         [$union, $params] = $this->armarUnion($idEmpresa, $f);
         $textoWhere = $this->filtroTexto($f, $params);
         $sql = "SELECT * FROM ( $union ) r WHERE 1=1 $textoWhere
-                ORDER BY fecha DESC, numero DESC, codigo_impuesto
-                LIMIT 5000";
+                ORDER BY fecha DESC, numero DESC, codigo_impuesto";
+        if ($limite > 0) {
+            $sql .= " LIMIT $limite";
+        }
         return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 

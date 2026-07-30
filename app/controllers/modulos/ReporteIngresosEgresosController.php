@@ -281,7 +281,7 @@ class ReporteIngresosEgresosController extends BaseModuloController
                 }, $rows);
                 return ['headers' => $headers, 'data' => $data, 'right' => [1,2,3,4,5], 'money' => [1,3,5]];
             default:
-                $rows = $this->repository->getReporteDetallado($idEmpresa, $f);
+                $rows = $this->repository->getReporteDetallado($idEmpresa, $f, 0);
                 $headers = ['Flujo', 'Número', 'Fecha', 'Tercero', 'Tipo Doc.', 'N° Documento', 'Descripción', 'Concepto', 'Estado', 'Monto'];
                 $data = array_map(fn($r) => [$fl($r['tipo_flujo']), $r['numero'],
                     !empty($r['fecha']) ? date('d/m/Y', strtotime($r['fecha'])) : '',

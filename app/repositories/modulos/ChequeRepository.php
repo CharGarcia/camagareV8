@@ -85,6 +85,7 @@ class ChequeRepository extends BaseRepository
                    COALESCE(p.identificacion, emp.identificacion, '')     AS beneficiario_ident,
                    fp.nombre                     AS forma_nombre,
                    fp.numero_cuenta              AS cuenta_numero,
+                   fp.id_banco                   AS id_banco,
                    b.nombre_banco                AS banco_nombre,
                    ci.id                         AS impreso_id,
                    to_char(ci.fecha_impresion, 'DD-MM-YYYY HH24:MI') AS impreso_fecha,

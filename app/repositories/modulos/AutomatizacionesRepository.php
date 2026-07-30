@@ -48,15 +48,17 @@ class AutomatizacionesRepository extends BaseRepository
             WHERE a.id_empresa = :id_empresa AND a.eliminado = false
             {$whereFiltro}
             ORDER BY a.{$ordenCol} {$ordenDir}
-            LIMIT :limit OFFSET :offset
+            " . ($perPage > 0 ? "LIMIT :limit OFFSET :offset" : "") . "
         ";
 
         $stmt = $this->db->prepare($sql);
         foreach ($params as $k => $v) {
             $stmt->bindValue($k, $v);
         }
-        $stmt->bindValue(':limit',  $perPage, \PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset,  \PDO::PARAM_INT);
+        if ($perPage > 0) {
+            $stmt->bindValue(':limit',  $perPage, \PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset,  \PDO::PARAM_INT);
+        }
         $stmt->execute();
         $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 

@@ -6,6 +6,7 @@ namespace App\Services\modulos;
 
 use App\repositories\modulos\ChequeRepository;
 use App\Services\PlantillasPdfRendererService;
+use App\Services\PlantillasPdfSeedService;
 use App\Services\LogSistemaService;
 use App\models\Empresa;
 
@@ -13,7 +14,8 @@ use App\models\Empresa;
  * Orquesta la impresión de cheques (pagos de egreso tipo CHEQUE):
  *  - Lista los cheques por imprimir y su estado.
  *  - Genera el PDF usando la plantilla 'cheque' del módulo Plantillas de
- *    Documentos (o una plantilla por defecto si la empresa aún no configuró una).
+ *    Documentos (o la plantilla original del sistema si la empresa/banco aún
+ *    no configuró una — ver `PlantillasPdfSeedService`).
  *  - Registra cada impresión en cheques_impresos (control anti-error) con
  *    transacción y auditoría.
  */
@@ -21,26 +23,6 @@ class ChequeImpresionService
 {
     private ChequeRepository $repo;
     private LogSistemaService $log;
-
-    /**
-     * Plantilla por defecto de cheque (fallback), según el ESTÁNDAR de cheque en
-     * Ecuador: 15.5 cm × 7.5 cm, todo el texto en MAYÚSCULAS. Coordenadas en mm
-     * medidas desde la esquina superior izquierda del cheque:
-     *  - Beneficiario ("Páguese a la orden de"): arriba 24, izq. 20 → 100 (w=80).
-     *  - Valor en número: izq. 120, misma fila (y=24).
-     *  - Valor en letras: arriba 30, izq. 20 (puede envolver a la fila siguiente).
-     *  - Ciudad, fecha (aaaa-mm-dd): arriba 43, izq. 10.
-     * El usuario puede afinarla en Plantillas de Documentos.
-     */
-    private const PLANTILLA_DEFAULT = '{
-        "pagina": {"formato":"CUSTOM","ancho":155,"alto":75,"orientacion":"L","margenTop":0,"margenLeft":0,"margenRight":0,"margenBottom":0},
-        "elementos": [
-            {"tipo":"campo","campo":"{beneficiario}","x":20,"y":24,"w":80,"h":6,"alineacion":"L","fuente":"helvetica","tamano":10},
-            {"tipo":"campo","campo":"{monto_numero_protegido}","x":120,"y":24,"w":33,"h":6,"alineacion":"L","fuente":"helvetica","tamano":11,"estilo":"B"},
-            {"tipo":"campo","campo":"{monto_letras}","x":20,"y":30,"w":133,"h":10,"alineacion":"L","fuente":"helvetica","tamano":9},
-            {"tipo":"campo","campo":"{ciudad_fecha}","x":10,"y":43,"w":120,"h":6,"alineacion":"L","fuente":"helvetica","tamano":10}
-        ]
-    }';
 
     public function __construct()
     {
@@ -78,13 +60,30 @@ class ChequeImpresionService
             throw new \RuntimeException('No se encontraron cheques válidos para imprimir.');
         }
 
-        $empresa   = $this->cargarEmpresa($idEmpresa);
-        $plantilla = $this->getPlantilla($idEmpresa);
+        $empresa = $this->cargarEmpresa($idEmpresa);
+
+        // Cada cheque puede ser de un banco distinto: se resuelve (y cachea) la
+        // plantilla activa por banco, y se marca en cada fila la clave de mapa
+        // que le corresponde para que el renderer arme cada página con su propio
+        // diseño (formato, orientación y campos).
+        $plantillasPorBanco = [];
+        foreach ($cheques as &$chq) {
+            $idBanco = (int) ($chq['id_banco'] ?? 0) ?: null;
+            $clave   = $idBanco !== null ? (string) $idBanco : '0';
+            if (!array_key_exists($clave, $plantillasPorBanco)) {
+                $plantillasPorBanco[$clave] = $this->getPlantilla($idEmpresa, $idBanco);
+            }
+            $chq['_banco_key'] = $clave;
+        }
+        unset($chq);
+        if (!array_key_exists('0', $plantillasPorBanco)) {
+            $plantillasPorBanco['0'] = $this->getPlantilla($idEmpresa, null);
+        }
 
         // Generar el PDF en memoria ANTES de registrar (si falla el render, no
         // marcamos como impreso).
         $renderer = new PlantillasPdfRendererService();
-        $pdf      = $renderer->generarCheques($plantilla, $cheques, $empresa, 'S');
+        $pdf      = $renderer->generarCheques($plantillasPorBanco, $cheques, $empresa, 'S');
         if (!is_string($pdf) || $pdf === '') {
             throw new \RuntimeException('No se pudo generar el PDF de los cheques.');
         }
@@ -147,19 +146,38 @@ class ChequeImpresionService
         return $n;
     }
 
+    /**
+     * Resuelve o crea la plantilla de cheque para un banco específico, y la
+     * activa (queda como vigente de ese banco). Usada por el botón "Configurar
+     * impresión" de Egresos. Devuelve el id de la plantilla lista para abrir en
+     * el diseñador visual (`/modulos/plantillas-pdf?action=disenador&id=`).
+     */
+    public function resolverConfiguracionImpresion(int $idEmpresa, int $idBanco, int $idUsuario, string $nombreBanco = ''): int
+    {
+        $nombre = 'Cheque' . ($nombreBanco !== '' ? (' - ' . $nombreBanco) : (' - Banco #' . $idBanco));
+        return (new \App\Services\PlantillasPdfService())->obtenerOCrearParaBanco(
+            $idEmpresa,
+            'cheque',
+            $idBanco,
+            $nombre,
+            PlantillasPdfSeedService::getSeed('cheque'),
+            $idUsuario
+        );
+    }
+
     // ── Internos ────────────────────────────────────────────────────────────────
 
-    /** Plantilla activa 'cheque' de la empresa o la de por defecto. */
-    private function getPlantilla(int $idEmpresa): array
+    /** Plantilla activa 'cheque' del banco indicado (o genérica de la empresa), o la original del sistema. */
+    private function getPlantilla(int $idEmpresa, ?int $idBanco): array
     {
         $renderer  = new PlantillasPdfRendererService();
-        $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'cheque');
+        $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'cheque', $idBanco);
         if ($plantilla) {
             return $plantilla;
         }
         return [
             'tipo_documento' => 'cheque',
-            'configuracion'  => self::PLANTILLA_DEFAULT,
+            'configuracion'  => PlantillasPdfSeedService::getSeed('cheque'),
         ];
     }
 

@@ -141,8 +141,11 @@ class ComprasRepository extends BaseRepository
                 LEFT  JOIN usuarios u            ON c.created_by = u.id
                 LEFT  JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = c.tipo_comprobante
                 $where
-                ORDER BY $ordenExpr $ordenDir
-                LIMIT $perPage OFFSET $offset";
+                ORDER BY $ordenExpr $ordenDir";
+
+        if ($perPage > 0) {
+            $sql .= " LIMIT $perPage OFFSET $offset";
+        }
 
         $rows = $this->query($sql, $params)->fetchAll();
 

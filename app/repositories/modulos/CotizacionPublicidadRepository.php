@@ -99,8 +99,7 @@ class CotizacionPublicidadRepository extends BaseRepository
                        u.nombre         AS usuario_nombre
                 FROM cotizacion_publicidad_cabecera q $joins
                 $where
-                ORDER BY $ordenExpr $ordenDir, q.id DESC
-                LIMIT $perPage OFFSET $offset";
+                ORDER BY $ordenExpr $ordenDir, q.id DESC" . ($perPage > 0 ? " LIMIT $perPage OFFSET $offset" : "");
 
         $rows = $this->query($sql, $params)->fetchAll();
         return ['rows' => $rows, 'total' => (int) $total];

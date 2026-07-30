@@ -526,12 +526,28 @@ class FacturacionCvController extends BaseModuloController
             $doc = $this->service->getDetalleCompleto($id, $idEmpresa);
             if (!$doc) { http_response_code(404); echo 'Documento no encontrado'; exit; }
             $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
-            (new \App\Services\modulos\ConsignacionFacturaPdfService())->generar($doc, $doc['detalles'] ?? [], $empresa, 'D');
+            $this->generarPdfConsignacionFactura($idEmpresa, $doc, $empresa, 'D');
         } catch (\Throwable $e) {
             http_response_code(500);
             echo 'Error al generar PDF: ' . $e->getMessage();
         }
         exit;
+    }
+
+    /**
+     * Genera el PDF de una facturación de consignación usando la plantilla
+     * activa (tipo 'consignacion_factura'); si no hay una configurada, usa el
+     * diseño original hardcodeado.
+     */
+    private function generarPdfConsignacionFactura(int $idEmpresa, array $doc, array $empresa, string $outputDest)
+    {
+        $detalles = $doc['detalles'] ?? [];
+        $renderer  = new \App\Services\PlantillasPdfRendererService();
+        $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'consignacion_factura');
+        if ($plantilla) {
+            return $renderer->generar($plantilla, $doc, $detalles, [], $doc['info_adicional'] ?? [], $empresa, $outputDest);
+        }
+        return (new \App\Services\modulos\ConsignacionFacturaPdfService())->generar($doc, $detalles, $empresa, $outputDest);
     }
 
     public function enviarCorreoAjax(): void
@@ -549,7 +565,7 @@ class FacturacionCvController extends BaseModuloController
             if (!$doc) { if (ob_get_level() > 0) ob_end_clean(); echo json_encode(['ok' => false, 'mensaje' => 'Documento no encontrado.']); exit; }
 
             $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
-            $pdfString = (new \App\Services\modulos\ConsignacionFacturaPdfService())->generar($doc, $doc['detalles'] ?? [], $empresa, 'S');
+            $pdfString = $this->generarPdfConsignacionFactura($idEmpresa, $doc, $empresa, 'S');
 
             $numero = trim((string)($doc['serie'] ?? '') . '-' . (string)($doc['secuencial'] ?? ''), '-');
             $correosDestino = trim($_POST['correos'] ?? '');

@@ -486,7 +486,7 @@ class EgresosController extends BaseModuloController
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'egreso');
             if ($plantilla) {
-                $renderer->generar($plantilla, $egreso, $detalles, $pagos, [], $empresa, 'D');
+                $renderer->generar($plantilla, $egreso, $detalles, $pagos, [], $empresa, 'D', $asiento);
             } else {
                 (new \App\Services\modulos\ComprobanteCajaPdfService())
                     ->generarEgreso($egreso, $detalles, $pagos, $empresa, 'D', $asiento);
@@ -563,6 +563,46 @@ class EgresosController extends BaseModuloController
         } catch (\Throwable $e) {
             http_response_code(500);
             echo 'Error al imprimir cheque: ' . $e->getMessage();
+        }
+        exit;
+    }
+
+    /**
+     * Resuelve (o crea) la plantilla de impresión de cheque del banco de la forma
+     * de pago indicada, y devuelve la URL del diseñador visual para configurarla.
+     * Afecta a TODOS los cheques de ese banco (no solo al pago actual).
+     */
+    public function configurarImpresionChequeAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+        try {
+            $idEmpresa    = (int) $_SESSION['id_empresa'];
+            $idUsuario    = (int) ($_SESSION['id_usuario'] ?? 0);
+            $idFormaPago  = (int) ($_GET['id_forma_pago'] ?? 0);
+            if ($idFormaPago <= 0) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Selecciona una cuenta/banco específico.']);
+                exit;
+            }
+
+            $forma = (new \App\repositories\modulos\FormaPagoRepository())->getPorId($idFormaPago, $idEmpresa);
+            if (!$forma) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Forma de pago no encontrada.']);
+                exit;
+            }
+            $idBanco = (int) ($forma['id_banco'] ?? 0);
+            if ($idBanco <= 0) {
+                echo json_encode(['ok' => false, 'mensaje' => 'Esta forma de pago no tiene un banco asociado.']);
+                exit;
+            }
+
+            $id  = (new \App\Services\modulos\ChequeImpresionService())
+                ->resolverConfiguracionImpresion($idEmpresa, $idBanco, $idUsuario, (string) ($forma['banco_nombre'] ?? ''));
+            $url = BASE_URL . '/modulos/plantillas-pdf?action=disenador&id=' . $id;
+            echo json_encode(['ok' => true, 'id' => $id, 'url' => $url]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
         exit;
     }

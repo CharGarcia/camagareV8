@@ -2079,6 +2079,7 @@ window.mcSincronizarInventario = function(forceReset = false) {
             nup: tr.querySelector('.input-inv-nup')?.value,
             caducidad: tr.querySelector('.input-inv-caducidad')?.value,
             cantidad: tr.querySelector('.input-inv-cantidad')?.value,
+            costo: tr.querySelector('.input-inv-costo')?.value,
             procesar: tr.querySelector('.input-inv-check')?.checked
         };
     });
@@ -2169,7 +2170,7 @@ window.mcSincronizarInventario = function(forceReset = false) {
                 <td><select class="form-select form-select-sm border-0 bg-light input-inv-medida" style="font-size: 0.75rem;">${opcMedidaLocal}</select></td>
                 <td><select class="form-select form-select-sm border-0 bg-light input-inv-bodega" style="font-size: 0.75rem;">${opcBodegaLocal}</select></td>
                 <td><input type="number" class="form-control form-control-sm border-0 bg-light text-center fw-bold input-inv-cantidad" value="${(forceReset || prev.cantidad === undefined) ? pendiente : prev.cantidad}" data-cant-original="${item.cantidad}" min="0.0001" max="${pendiente}" step="any" ${isDisabled ? 'readonly' : ''} style="font-size: 0.75rem;"></td>
-                <td><input type="number" class="form-control form-control-sm border-0 bg-light text-end input-inv-costo" value="${item.costo.toFixed(4)}" readonly style="font-size: 0.75rem;"></td>
+                <td><input type="number" class="form-control form-control-sm border-0 bg-light text-end input-inv-costo" value="${(prev.costo === undefined || prev.costo === '') ? item.costo.toFixed(4) : prev.costo}" min="0.0001" step="any" ${isDisabled ? 'readonly' : ''} style="font-size: 0.75rem;"></td>
                 <td><input type="text" class="form-control form-control-sm border-0 bg-light text-center input-inv-lote" value="${_esc(prev.lote||'')}" placeholder="Lote..." style="font-size: 0.75rem;"></td>
                 <td><input type="text" class="form-control form-control-sm border-0 bg-light text-center input-inv-nup" value="${_esc(prev.nup||'')}" placeholder="NUP/Serial..." style="font-size: 0.75rem;"></td>
                 <td><input type="date" class="form-control form-control-sm border-0 bg-light input-inv-caducidad" value="${prev.caducidad||''}" style="font-size: 0.75rem;"></td>

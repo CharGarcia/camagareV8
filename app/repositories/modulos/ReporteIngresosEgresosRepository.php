@@ -249,14 +249,16 @@ class ReporteIngresosEgresosRepository extends BaseRepository
 
     // ── Consultas públicas ────────────────────────────────────────────────────
 
-    /** Listado por documento (detalle). */
-    public function getReporteDetallado(int $idEmpresa, array $f): array
+    /** Listado por documento (detalle). $limite = 0 => sin tope (usar solo para exportación). */
+    public function getReporteDetallado(int $idEmpresa, array $f, int $limite = 5000): array
     {
         [$union, $params] = $this->armarUnion($idEmpresa, $f);
         $textoWhere = $this->filtroTexto($f, $params);
         $sql = "SELECT * FROM ( $union ) r WHERE 1=1 $textoWhere
-                ORDER BY fecha DESC, numero DESC, tipo_documento
-                LIMIT 5000";
+                ORDER BY fecha DESC, numero DESC, tipo_documento";
+        if ($limite > 0) {
+            $sql .= " LIMIT $limite";
+        }
         return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 

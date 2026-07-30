@@ -24,10 +24,12 @@ class PlantillasPdfRepository extends BaseModel
 
         $rows = $this->query(
             "SELECT p.id, p.tipo_documento, p.nombre, p.descripcion, p.es_activa, p.estado,
+                    p.id_banco, b.nombre_banco AS banco_nombre,
                     p.created_at, p.updated_at,
                     u.nombre AS creado_por
              FROM plantillas_pdf p
              LEFT JOIN usuarios u ON u.id = p.created_by
+             LEFT JOIN bancos_ecuador b ON b.id = p.id_banco
              {$where}
              ORDER BY p.tipo_documento ASC, p.nombre ASC
              LIMIT {$perPage} OFFSET {$offset}"
@@ -44,15 +46,50 @@ class PlantillasPdfRepository extends BaseModel
         return $rows[0] ?? null;
     }
 
-    public function getActiva(int $idEmpresa, string $tipoDocumento): ?array
+    /**
+     * Plantilla activa. Si $idBanco viene informado, busca primero la activa de
+     * ESE banco; si no existe, cae a la activa genérica de la empresa (id_banco NULL).
+     */
+    public function getActiva(int $idEmpresa, string $tipoDocumento, ?int $idBanco = null): ?array
+    {
+        $tipo = $this->escape($tipoDocumento);
+
+        if ($idBanco !== null) {
+            $rows = $this->query(
+                "SELECT * FROM plantillas_pdf
+                 WHERE id_empresa = {$idEmpresa}
+                   AND tipo_documento = '{$tipo}'
+                   AND id_banco = {$idBanco}
+                   AND es_activa = true
+                   AND eliminado = false
+                 LIMIT 1"
+            );
+            if (!empty($rows)) return $rows[0];
+        }
+
+        $rows = $this->query(
+            "SELECT * FROM plantillas_pdf
+             WHERE id_empresa = {$idEmpresa}
+               AND tipo_documento = '{$tipo}'
+               AND id_banco IS NULL
+               AND es_activa = true
+               AND eliminado = false
+             LIMIT 1"
+        );
+        return $rows[0] ?? null;
+    }
+
+    /** Cualquier plantilla (activa o borrador) de un banco específico, para reutilizarla en vez de duplicar. */
+    public function getPorBanco(int $idEmpresa, string $tipoDocumento, int $idBanco): ?array
     {
         $tipo = $this->escape($tipoDocumento);
         $rows = $this->query(
             "SELECT * FROM plantillas_pdf
              WHERE id_empresa = {$idEmpresa}
                AND tipo_documento = '{$tipo}'
-               AND es_activa = true
+               AND id_banco = {$idBanco}
                AND eliminado = false
+             ORDER BY es_activa DESC, id DESC
              LIMIT 1"
         );
         return $rows[0] ?? null;
@@ -66,12 +103,16 @@ class PlantillasPdfRepository extends BaseModel
         $descripcion   = $this->escape($data['descripcion'] ?? '');
         $config        = $this->escape($data['configuracion'] ?? '{"pagina":{"formato":"A4","orientacion":"P","margenTop":10,"margenLeft":10,"margenRight":10},"elementos":[]}');
         $createdBy     = (int)($data['created_by'] ?? 0);
+        $idBanco       = isset($data['id_banco']) && (int)$data['id_banco'] > 0 ? (int)$data['id_banco'] : null;
+        $idBancoSql    = $idBanco !== null ? (string)$idBanco : 'NULL';
+        $esActiva      = !empty($data['es_activa']) ? 'true' : 'false';
+        $estado        = $this->escape($data['estado'] ?? 'borrador');
 
         $this->execute(
             "INSERT INTO plantillas_pdf
-                (id_empresa, tipo_documento, nombre, descripcion, configuracion, es_activa, estado, created_by, updated_by, created_at, updated_at)
+                (id_empresa, tipo_documento, nombre, descripcion, configuracion, id_banco, es_activa, estado, created_by, updated_by, created_at, updated_at)
              VALUES
-                ({$idEmpresa}, '{$tipo}', '{$nombre}', '{$descripcion}', '{$config}', false, 'borrador', {$createdBy}, {$createdBy}, NOW(), NOW())"
+                ({$idEmpresa}, '{$tipo}', '{$nombre}', '{$descripcion}', '{$config}', {$idBancoSql}, {$esActiva}, '{$estado}', {$createdBy}, {$createdBy}, NOW(), NOW())"
         );
         return (int)$this->lastInsertId('plantillas_pdf_id_seq');
     }
@@ -82,11 +123,12 @@ class PlantillasPdfRepository extends BaseModel
         $descripcion = $this->escape($data['descripcion'] ?? '');
         $tipo        = $this->escape($data['tipo_documento'] ?? 'factura_venta');
         $updatedBy   = (int)($data['updated_by'] ?? 0);
+        $idBancoSql  = (isset($data['id_banco']) && (int)$data['id_banco'] > 0) ? (string)(int)$data['id_banco'] : 'NULL';
 
         return $this->execute(
             "UPDATE plantillas_pdf SET
                 nombre = '{$nombre}', descripcion = '{$descripcion}', tipo_documento = '{$tipo}',
-                updated_by = {$updatedBy}, updated_at = NOW()
+                id_banco = {$idBancoSql}, updated_by = {$updatedBy}, updated_at = NOW()
              WHERE id = {$id} AND eliminado = false"
         );
     }
@@ -100,12 +142,18 @@ class PlantillasPdfRepository extends BaseModel
         );
     }
 
-    public function activar(int $id, int $idEmpresa, string $tipoDocumento): bool
+    /**
+     * Activa una plantilla y desactiva las demás del MISMO alcance: mismo
+     * empresa+tipo+banco (o mismo empresa+tipo genérica si $idBanco es NULL).
+     * Así activar una plantilla de un banco no apaga las de otros bancos.
+     */
+    public function activar(int $id, int $idEmpresa, string $tipoDocumento, ?int $idBanco = null): bool
     {
         $tipo = $this->escape($tipoDocumento);
+        $scopeBanco = $idBanco !== null ? "id_banco = {$idBanco}" : "id_banco IS NULL";
         $this->execute(
             "UPDATE plantillas_pdf SET es_activa = false
-             WHERE id_empresa = {$idEmpresa} AND tipo_documento = '{$tipo}' AND eliminado = false"
+             WHERE id_empresa = {$idEmpresa} AND tipo_documento = '{$tipo}' AND {$scopeBanco} AND eliminado = false"
         );
         return $this->execute(
             "UPDATE plantillas_pdf SET es_activa = true, estado = 'activo', updated_at = NOW()

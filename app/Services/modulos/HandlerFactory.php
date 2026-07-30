@@ -184,6 +184,38 @@ class HandlerFactory
                 ],
             ],
 
+            'roles_pago' => [
+                'label'   => 'Roles de pago',
+                'icono'   => 'fa-money-check-alt',
+                'acciones' => [
+                    'generar_mensual' => [
+                        'label'       => 'Generar rol mensual',
+                        'descripcion' => 'Seleccione el día que desea generar el rol de pagos.',
+                        'handler'     => Handlers\RolesPagoHandler::class,
+                        'parametros'  => [
+                            ['key' => 'periodo', 'label' => 'Período a generar', 'tipo' => 'select', 'default' => 'mes_anterior',
+                             'opciones' => [
+                                 'mes_anterior' => 'Mes anterior (recomendado: ya cerrado)',
+                                 'mes_en_curso' => 'Mes en curso',
+                             ],
+                             'ayuda' => 'Mes anterior: ejecútela a inicios de mes para generar la nómina del mes que acaba de cerrar. Mes en curso: para generarla antes de que termine el mes.'],
+                        ],
+                    ],
+                    'generar_quincena' => [
+                        'label'       => 'Generar quincena',
+                        'descripcion' => 'Seleccione qué día quiere generar la quincena en la parte de abajo.',
+                        'handler'     => Handlers\RolesPagoHandler::class,
+                        'parametros'  => [],
+                    ],
+                    'generar_semanal' => [
+                        'label'       => 'Generar semana',
+                        'descripcion' => 'Seleccione cuando quiere que se genere más abajo. (solo se puede generar hasta 3 veces por mes)',
+                        'handler'     => Handlers\RolesPagoHandler::class,
+                        'parametros'  => [],
+                    ],
+                ],
+            ],
+
             'suscripciones' => [
                 'label'   => 'Suscripciones',
                 'icono'   => 'fa-repeat',

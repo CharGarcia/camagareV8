@@ -855,14 +855,36 @@ class LiquidacionCompraController extends BaseModuloController
             $datos = $this->cargarDatosDocumento($id, $idEmpresa);
             if (!$datos) { die('Liquidación no encontrada'); }
 
-            $pdfService = new \App\Services\modulos\LiquidacionCompraPdfService();
-            $pdfService->generar(
-                $datos['cabecera'], $datos['detalles'], $datos['pagos'], $datos['info_adicional'], $datos['empresa']
-            );
+            $this->generarPdfLiquidacion($idEmpresa, $datos, 'D');
         } catch (\Throwable $e) {
             die('Error al generar PDF: ' . $e->getMessage());
         }
         exit;
+    }
+
+    /**
+     * Genera el PDF de una liquidación de compra usando la plantilla activa
+     * (tipo 'liquidacion_compra') del módulo Plantillas de Documentos; si la
+     * empresa no tiene una configurada, usa el diseño original hardcodeado.
+     */
+    private function generarPdfLiquidacion(int $idEmpresa, array $datos, string $outputDest)
+    {
+        $renderer  = new \App\Services\PlantillasPdfRendererService();
+        $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'liquidacion_compra');
+        if ($plantilla) {
+            return $renderer->generar(
+                $plantilla, $datos['cabecera'], $datos['detalles'], $datos['pagos'], $datos['info_adicional'], $datos['empresa'], $outputDest
+            );
+        }
+        $pdfService = new \App\Services\modulos\LiquidacionCompraPdfService();
+        if ($outputDest === 'S') {
+            return $pdfService->generarBytes(
+                $datos['cabecera'], $datos['detalles'], $datos['pagos'], $datos['info_adicional'], $datos['empresa']
+            );
+        }
+        return $pdfService->generar(
+            $datos['cabecera'], $datos['detalles'], $datos['pagos'], $datos['info_adicional'], $datos['empresa']
+        );
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -894,10 +916,7 @@ class LiquidacionCompraController extends BaseModuloController
 
             $cabecera = $datos['cabecera'];
 
-            $pdfService = new \App\Services\modulos\LiquidacionCompraPdfService();
-            $pdfString  = $pdfService->generarBytes(
-                $cabecera, $datos['detalles'], $datos['pagos'], $datos['info_adicional'], $datos['empresa']
-            );
+            $pdfString = $this->generarPdfLiquidacion($idEmpresa, $datos, 'S');
 
             // XML autorizado ya persistido (o el generado como respaldo).
             $xmlString = (string)($cabecera['detalle_xml'] ?? '');

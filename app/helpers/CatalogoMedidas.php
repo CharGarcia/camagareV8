@@ -65,10 +65,11 @@ class CatalogoMedidas
                 'nombre'    => 'VOLUMEN',
                 'sinonimos' => ['VOLUMEN', 'CAPACIDAD'],
                 'unidades'  => [
-                    ['codigo' => 'ML',  'nombre' => 'MILILITRO',     'abreviatura' => 'ml',  'factor_base' => 0.001,    'es_base' => false],
-                    ['codigo' => 'LT',  'nombre' => 'LITRO',         'abreviatura' => 'l',   'factor_base' => 1.0,      'es_base' => true],
-                    ['codigo' => 'GAL', 'nombre' => 'GALÓN',         'abreviatura' => 'gal', 'factor_base' => 3.785412, 'es_base' => false],
-                    ['codigo' => 'M3',  'nombre' => 'METRO CÚBICO',  'abreviatura' => 'm³',  'factor_base' => 1000.0,   'es_base' => false],
+                    ['codigo' => 'ML',  'nombre' => 'MILILITRO',     'abreviatura' => 'ml',  'factor_base' => 0.001,     'es_base' => false],
+                    ['codigo' => 'LT',  'nombre' => 'LITRO',         'abreviatura' => 'l',   'factor_base' => 1.0,       'es_base' => true],
+                    ['codigo' => 'GAL', 'nombre' => 'GALÓN',         'abreviatura' => 'gal', 'factor_base' => 3.785412,  'es_base' => false],
+                    ['codigo' => 'CAN', 'nombre' => 'CANECA',        'abreviatura' => 'can', 'factor_base' => 18.9271,   'es_base' => false],
+                    ['codigo' => 'M3',  'nombre' => 'METRO CÚBICO',  'abreviatura' => 'm³',  'factor_base' => 1000.0,    'es_base' => false],
                 ],
             ],
             [

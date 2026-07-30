@@ -6,7 +6,7 @@ ruta_modulo: modulos/egresos
 tipo: modulo
 visibilidad: todos
 etiquetas: egresos, egreso, pago, pagar, dinero que sale, proveedor, empleado, cheque, transferencia, comprobante de egreso
-version: 1.0
+version: 1.1
 orden: 20
 estado: activo
 ---
@@ -73,7 +73,25 @@ documentos que había pagado y se anula su asiento contable.
 
 Cuando el pago sale por cheque se puede registrar su **fecha de cobro**, para
 saber cuándo se hizo efectivo. Los cheques se imprimen desde la propia fila de
-pago del egreso, o en lote desde el listado.
+pago del egreso, o en lote desde el listado (botón **Imprimir cheques**), tanto
+a PDF (descarga) como directo a la impresora (abre el diálogo de impresión del
+navegador). Cada impresión queda registrada (control anti-reimpresión): si un
+cheque ya se imprimió, el sistema avisa y pide confirmar antes de reimprimirlo.
+
+### Configurar impresión por banco
+
+Cada banco tiene su propio formato de cheque preimpreso (posición del
+beneficiario, el monto, la fecha, etc.). Junto al botón de imprimir cheque (fila
+individual) y en el modal de impresión en lote (junto al selector "Cuenta /
+Banco") hay un icono **engranaje** ("Configurar impresión"): abre el diseñador
+visual del módulo **Plantillas de Documentos**, ya listo para el banco de esa
+cuenta. Si el banco no tiene todavía una plantilla propia, el sistema crea una
+automáticamente (hoja A4 vertical, con los campos en una posición inicial) y la
+activa; desde ahí se arrastran los campos a su posición exacta.
+
+Los ajustes que se guarden ahí **aplican a todos los cheques de ese banco**, sin
+afectar a los de otros bancos. Ver también
+[Plantillas de Documentos](modulos/plantillas-pdf).
 
 ## Asiento contable
 
@@ -101,4 +119,7 @@ ve solo los que registró.
 
 ## Historial de cambios
 
+- **1.1** — Configurar impresión de cheque por banco desde la fila de pago y el
+  modal de impresión en lote (abre el diseñador visual, crea la plantilla del
+  banco si no existe).
 - **1.0** — Versión inicial.

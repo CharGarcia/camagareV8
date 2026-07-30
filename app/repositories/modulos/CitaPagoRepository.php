@@ -118,10 +118,12 @@ class CitaPagoRepository extends BaseRepository
             $joins
             $where
             ORDER BY $orderExpr
-            LIMIT :limit OFFSET :offset
+            " . ($perPage > 0 ? "LIMIT :limit OFFSET :offset" : "") . "
         ";
-        $params[':limit']  = $perPage;
-        $params[':offset'] = $offset;
+        if ($perPage > 0) {
+            $params[':limit']  = $perPage;
+            $params[':offset'] = $offset;
+        }
 
         $stmt = $this->db->prepare($sql);
         foreach ($params as $k => $v) {

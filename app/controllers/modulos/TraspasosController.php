@@ -317,7 +317,7 @@ class TraspasosController extends BaseModuloController
             $renderer  = new \App\Services\PlantillasPdfRendererService();
             $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'traspaso');
             if ($plantilla) {
-                $renderer->generar($plantilla, $traspaso, [], [], [], $empresa, 'D');
+                $renderer->generar($plantilla, $traspaso, [], [], [], $empresa, 'D', $asiento);
             } else {
                 (new \App\Services\modulos\ComprobanteCajaPdfService())
                     ->generarTraspaso($traspaso, $empresa, 'D', $asiento);

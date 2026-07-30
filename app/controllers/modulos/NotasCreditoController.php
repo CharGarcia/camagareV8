@@ -160,14 +160,152 @@ class NotasCreditoController extends BaseModuloController
               <button type="button" class="btn btn-outline-secondary" ' . $nextDisabled . ' onclick="window.NC_cambiarPaginaAjax(' . ($page + 1) . ')"><i class="bi bi-chevron-right"></i></button>';
         $paginationHtml = ob_get_clean();
 
+        $urlBase = BASE_URL . '/' . $this->getRutaModulo();
         echo json_encode([
             'ok'         => true,
             'rows'       => $rowsHtml,
             'pagination' => $paginationHtml,
             'info'       => "$from-$to/$total",
             'total'      => $total,
+            'pdf_url'    => $urlBase . '/export-pdf?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
+            'excel_url'  => $urlBase . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
         ]);
         exit;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // EXPORTAR EXCEL / PDF (LISTADO)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private function getListadoParaExport(): array
+    {
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
+        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'fecha_emision');
+        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'DESC'));
+
+        $perm = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+
+        return $this->repository->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+    }
+
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+        $rows = $this->getListadoParaExport()['rows'];
+
+        $idEmpresa     = (int) $_SESSION['id_empresa'];
+        $empresaModel  = new Empresa();
+        $empresa       = $empresaModel->getPorId($idEmpresa);
+        $nombreEmpresa = $empresa['nombre'] ?? '';
+
+        $headers    = ['Número', 'Fecha Emisión', 'Cliente', 'Identificación', 'Doc. Modificado', 'Subtotal', 'Descuento', 'Total', 'Motivo', 'Estado'];
+        $exportData = [];
+        foreach ($rows as $r) {
+            $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
+            $exportData[] = [
+                (string)$numero,
+                !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                (string)($r['cliente_nombre'] ?? ''),
+                (string)($r['cliente_ruc'] ?? ''),
+                (string)($r['num_doc_modificado'] ?? ''),
+                (float)($r['total_sin_impuestos'] ?? 0),
+                (float)($r['total_descuento'] ?? 0),
+                (float)($r['importe_total'] ?? 0),
+                (string)($r['motivo'] ?? ''),
+                ucfirst((string)($r['estado'] ?? '')),
+            ];
+        }
+
+        try {
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+            $reportService = new \App\Services\ReportService();
+            $reportService->exportToExcel('Notas de Crédito', $headers, $exportData, 'Listado Notas de Crédito', $nombreEmpresa);
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar Excel: ' . $e->getMessage();
+            exit;
+        }
+    }
+
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+        $rows = $this->getListadoParaExport()['rows'];
+
+        $idEmpresa     = (int) $_SESSION['id_empresa'];
+        $empresaModel  = new Empresa();
+        $empresa       = $empresaModel->getPorId($idEmpresa);
+        $nombreEmpresa = $empresa['nombre'] ?? 'REPORTE DE NOTAS DE CRÉDITO';
+
+        try {
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            ob_start();
+?>
+            <style>
+                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 7pt; table-layout: fixed; }
+                th { background: #f2f2f2; border: 1px solid #ccc; padding: 3px; text-align: left; }
+                td { border: 1px solid #ccc; padding: 3px; overflow: hidden; word-wrap: break-word; }
+                .text-end { text-align: right; }
+                .header { text-align: center; margin-bottom: 15px; width: 100%; }
+                h1 { margin: 0; font-size: 14pt; color: #333; }
+                h2 { margin: 3px 0 0 0; color: #666; font-size: 10pt; text-transform: uppercase; }
+            </style>
+            <page backtop="10mm" backbottom="10mm" backleft="10mm" backright="10mm">
+                <div class="header">
+                    <h1><?= htmlspecialchars($nombreEmpresa) ?></h1>
+                    <h2>Listado de Notas de Crédito</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 10%">Número</th>
+                            <th style="width: 8%">Fecha</th>
+                            <th style="width: 22%">Cliente</th>
+                            <th style="width: 10%">Identificación</th>
+                            <th style="width: 12%">Doc. Modificado</th>
+                            <th style="width: 12%" class="text-end">Total</th>
+                            <th style="width: 18%">Motivo</th>
+                            <th style="width: 8%">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rows as $r): ?>
+                            <?php $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? ''); ?>
+                            <tr>
+                                <td><?= htmlspecialchars((string)$numero) ?></td>
+                                <td><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
+                                <td><?= htmlspecialchars((string)($r['cliente_nombre'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string)($r['cliente_ruc'] ?? '')) ?></td>
+                                <td><?= htmlspecialchars((string)($r['num_doc_modificado'] ?? '')) ?></td>
+                                <td class="text-end"><?= number_format((float)($r['importe_total'] ?? 0), 2) ?></td>
+                                <td><?= htmlspecialchars((string)($r['motivo'] ?? '')) ?></td>
+                                <td><?= ucfirst((string)($r['estado'] ?? '')) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </page>
+<?php
+            $content = ob_get_clean();
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf->writeHTML($content);
+            $html2pdf->output('NotasCredito_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            header('Content-Type: text/html');
+            echo 'Error al generar PDF: ' . $e->getMessage();
+            exit;
+        }
     }
 
     public function getNcAjax(): void
@@ -574,12 +712,30 @@ class NotasCreditoController extends BaseModuloController
             [$empresa] = $this->construirEmpresaComprobante($idEmpresa, $nc);
             $infoAdicional = $this->repository->getInfoAdicional($id);
 
-            $pdfService = new \App\Services\modulos\NotaCreditoPdfService();
-            $pdfService->generar($nc, $detalles, $empresa, $infoAdicional);
+            $this->generarPdfNotaCredito($idEmpresa, $nc, $detalles, $empresa, $infoAdicional, 'D');
         } catch (\Throwable $e) {
             die('Error al generar PDF: ' . $e->getMessage());
         }
         exit;
+    }
+
+    /**
+     * Genera el PDF de una nota de crédito usando la plantilla activa (tipo
+     * 'nota_credito') del módulo Plantillas de Documentos; si la empresa no
+     * tiene una configurada, usa el diseño original hardcodeado (fallback).
+     */
+    private function generarPdfNotaCredito(int $idEmpresa, array $nc, array $detalles, array $empresa, array $infoAdicional, string $outputDest)
+    {
+        $renderer  = new \App\Services\PlantillasPdfRendererService();
+        $plantilla = $renderer->getPlantillaActiva($idEmpresa, 'nota_credito');
+        if ($plantilla) {
+            return $renderer->generar($plantilla, $nc, $detalles, [], $infoAdicional, $empresa, $outputDest);
+        }
+        $pdfService = new \App\Services\modulos\NotaCreditoPdfService();
+        if ($outputDest === 'S') {
+            return $pdfService->generarBytes($nc, $detalles, $empresa, $infoAdicional);
+        }
+        return $pdfService->generar($nc, $detalles, $empresa, $infoAdicional, $outputDest);
     }
 
     public function exportXmlDoc(): void
@@ -665,8 +821,7 @@ class NotasCreditoController extends BaseModuloController
             $infoAdicional = $this->repository->getInfoAdicional($id);
             [$empresa, $dirEstablecimiento] = $this->construirEmpresaComprobante($idEmpresa, $nc);
 
-            $pdfService = new \App\Services\modulos\NotaCreditoPdfService();
-            $pdfString  = $pdfService->generarBytes($nc, $detalles, $empresa, $infoAdicional);
+            $pdfString = $this->generarPdfNotaCredito($idEmpresa, $nc, $detalles, $empresa, $infoAdicional, 'S');
 
             // XML autorizado persistido; si no existe (NC vieja), se regenera y guarda.
             $xmlString = $nc['detalle_xml'] ?? '';

@@ -27,9 +27,9 @@ class PlantillasPdfRendererService
 
     // ── Punto de entrada externo ──────────────────────────────────────────────
 
-    public function getPlantillaActiva(int $idEmpresa, string $tipoDocumento): ?array
+    public function getPlantillaActiva(int $idEmpresa, string $tipoDocumento, ?int $idBanco = null): ?array
     {
-        return $this->repo->getActiva($idEmpresa, $tipoDocumento);
+        return $this->repo->getActiva($idEmpresa, $tipoDocumento, $idBanco);
     }
 
     /**
@@ -43,12 +43,15 @@ class PlantillasPdfRendererService
         array $pagos,
         array $infoAdicional,
         array $empresa,
-        string $outputDest = 'D'
+        string $outputDest = 'D',
+        ?array $asiento = null
     ) {
+        $tipoDocumento = $plantilla['tipo_documento'] ?? 'factura_venta';
+
         // Agrupación y etiquetas de ítems configuradas por la empresa. Solo aplica
         // a facturas de venta: este renderer es genérico y el resto de documentos
         // (egresos, consignaciones, …) no tienen esta configuración.
-        if (($plantilla['tipo_documento'] ?? '') === 'factura_venta') {
+        if ($tipoDocumento === 'factura_venta') {
             $detalles = (new \App\Services\modulos\FacturaItemsPresentacionService())
                 ->preparar($detalles, $empresa);
             // RUC del proveedor del sistema (Res. NAC-DGERCGC26-00000027): ya viene
@@ -79,13 +82,17 @@ class PlantillasPdfRendererService
         $this->decCantidad = max(0, (int)($empresa['decimales_cantidad'] ?? 2));
         $this->decPrecio   = max(0, (int)($empresa['decimales_precio']   ?? 2));
 
-        $totales      = $this->calcularTotales($detalles, $cabecera);
-        $this->datos  = $this->construirDatos($cabecera, $empresa, $totales);
+        $totales     = $this->calcularTotales($detalles, $cabecera);
+        $this->datos = array_merge(
+            $this->construirDatos($cabecera, $empresa, $totales),
+            $this->construirDatosEspecificos($tipoDocumento, $cabecera, $empresa, $asiento)
+        );
 
         $this->pdf = new TCPDF($orient, 'mm', $formatoTcpdf, true, 'UTF-8', false);
         $this->pdf->SetCreator('Sistema');
         $this->pdf->SetAuthor($empresa['nombre'] ?? '');
-        $this->pdf->SetTitle('Factura ' . $this->numeroFactura($cabecera));
+        $numDoc = $this->numeroFactura($cabecera);
+        $this->pdf->SetTitle(trim(($this->datos['{titulo_documento}'] ?? 'Documento') . ' ' . $numDoc));
         $this->pdf->SetMargins($mL, $mT, $mR);
         $this->pdf->SetAutoPageBreak(true, $mB);
         $this->pdf->setPrintHeader(false);
@@ -97,65 +104,66 @@ class PlantillasPdfRendererService
         usort($elementos, fn($a, $b) => (int)($a['z'] ?? 0) <=> (int)($b['z'] ?? 0));
 
         foreach ($elementos as $el) {
-            $this->renderizarElemento($el, $detalles, $pagos, $infoAdicional);
+            $this->renderizarElemento($el, $detalles, $pagos, $infoAdicional, $asiento);
         }
 
-        $num = $this->numeroFactura($cabecera);
+        $nombreArchivo = str_replace(' ', '_', trim(($this->datos['{titulo_documento}'] ?? 'Documento') . '_' . $numDoc));
         if ($outputDest === 'S') {
-            return $this->pdf->Output('Factura_' . $num . '.pdf', 'S');
+            return $this->pdf->Output($nombreArchivo . '.pdf', 'S');
         }
-        $this->pdf->Output('Factura_' . $num . '.pdf', $outputDest);
+        $this->pdf->Output($nombreArchivo . '.pdf', $outputDest);
     }
 
     /**
-     * Genera el PDF de uno o varios CHEQUES (una página por cheque) usando la
-     * plantilla de tipo 'cheque'. Cada elemento se posiciona en mm sobre el
-     * formato preimpreso. `$cheques` es una lista de arrays con los datos de
-     * cada cheque (ver construirDatosCheque).
+     * Genera el PDF de uno o varios CHEQUES (una página por cheque). Cada cheque
+     * puede tener su propia plantilla (formato, orientación y elementos), lo que
+     * permite imprimir en un mismo lote cheques de bancos distintos con su propio
+     * diseño. `$plantillasPorBanco` es un mapa clave→plantilla, donde la clave es
+     * el `id_banco` del cheque (como string) o `'0'` para la plantilla genérica
+     * de la empresa (sin banco). Cada cheque en `$cheques` debe traer `_banco_key`
+     * con la clave que le corresponde en ese mapa.
      */
-    public function generarCheques(array $plantilla, array $cheques, array $empresa, string $outputDest = 'I')
+    public function generarCheques(array $plantillasPorBanco, array $cheques, array $empresa, string $outputDest = 'I')
     {
-        $config    = json_decode($plantilla['configuracion'] ?? '{}', true) ?? [];
-        $pagCfg    = $config['pagina'] ?? [];
-        $elementos = $config['elementos'] ?? [];
-
-        $formato = strtoupper($pagCfg['formato']     ?? 'A4');
-        $orient  = strtoupper($pagCfg['orientacion'] ?? 'P');
-        $mL = (float)($pagCfg['margenLeft']   ?? 10);
-        $mR = (float)($pagCfg['margenRight']  ?? 10);
-        $mT = (float)($pagCfg['margenTop']    ?? 10);
-        $mB = (float)($pagCfg['margenBottom'] ?? 10);
-
-        // Tamaño personalizado (p. ej. el cheque estándar 155×75 mm): se define con
-        // formato CUSTOM + ancho/alto en mm.
-        $ancho = (float)($pagCfg['ancho'] ?? 0);
-        $alto  = (float)($pagCfg['alto']  ?? 0);
-        if ($formato === 'CUSTOM' && $ancho > 0 && $alto > 0) {
-            $formatoTcpdf = [$ancho, $alto];
-        } else {
-            $formatoTcpdf = match($formato) {
-                'LETTER' => 'LETTER',
-                'LEGAL'  => 'LEGAL',
-                'A5'     => 'A5',
-                default  => 'A4',
-            };
-        }
-
-        // Ordenar elementos por z-index una sola vez.
-        usort($elementos, fn($a, $b) => (int)($a['z'] ?? 0) <=> (int)($b['z'] ?? 0));
-
-        $this->pdf = new TCPDF($orient, 'mm', $formatoTcpdf, true, 'UTF-8', false);
+        $this->pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $this->pdf->SetCreator('Sistema');
         $this->pdf->SetAuthor($empresa['nombre'] ?? '');
         $this->pdf->SetTitle('Cheques');
-        $this->pdf->SetMargins($mL, $mT, $mR);
-        $this->pdf->SetAutoPageBreak(false, $mB);
         $this->pdf->setPrintHeader(false);
         $this->pdf->setPrintFooter(false);
+        $this->pdf->SetAutoPageBreak(false);
         $this->pdf->SetFont('helvetica', '', 9);
 
         foreach ($cheques as $chq) {
-            $this->pdf->AddPage();
+            $bancoKey  = (string)($chq['_banco_key'] ?? '0');
+            $plantilla = $plantillasPorBanco[$bancoKey] ?? $plantillasPorBanco['0'] ?? null;
+            $config    = json_decode($plantilla['configuracion'] ?? '{}', true) ?? [];
+            $pagCfg    = $config['pagina'] ?? [];
+            $elementos = $config['elementos'] ?? [];
+            usort($elementos, fn($a, $b) => (int)($a['z'] ?? 0) <=> (int)($b['z'] ?? 0));
+
+            $formato = strtoupper($pagCfg['formato']     ?? 'A4');
+            $orient  = strtoupper($pagCfg['orientacion'] ?? 'P');
+            $mL = (float)($pagCfg['margenLeft']  ?? 10);
+            $mR = (float)($pagCfg['margenRight'] ?? 10);
+            $mT = (float)($pagCfg['margenTop']   ?? 10);
+
+            // Tamaño personalizado (p. ej. un cheque suelto): formato CUSTOM + ancho/alto en mm.
+            $ancho = (float)($pagCfg['ancho'] ?? 0);
+            $alto  = (float)($pagCfg['alto']  ?? 0);
+            if ($formato === 'CUSTOM' && $ancho > 0 && $alto > 0) {
+                $formatoTcpdf = [$ancho, $alto];
+            } else {
+                $formatoTcpdf = match($formato) {
+                    'LETTER' => 'LETTER',
+                    'LEGAL'  => 'LEGAL',
+                    'A5'     => 'A5',
+                    default  => 'A4',
+                };
+            }
+
+            $this->pdf->AddPage($orient, $formatoTcpdf);
+            $this->pdf->SetMargins($mL, $mT, $mR);
             $this->datos = $this->construirDatosCheque($chq, $empresa);
             foreach ($elementos as $el) {
                 $this->renderizarElemento($el, [], [], []);
@@ -170,7 +178,7 @@ class PlantillasPdfRendererService
 
     // ── Dispatcher de elementos ───────────────────────────────────────────────
 
-    private function renderizarElemento(array $el, array $detalles, array $pagos, array $infoAdicional): void
+    private function renderizarElemento(array $el, array $detalles, array $pagos, array $infoAdicional, ?array $asiento = null): void
     {
         $tipo = $el['tipo'] ?? 'texto';
         $x    = (float)($el['x'] ?? 0);
@@ -184,7 +192,7 @@ class PlantillasPdfRendererService
             'rectangulo'   => $this->renderRectangulo($el, $x, $y, $w, $h),
             'linea'        => $this->renderLinea($el, $x, $y, $w),
             'codigoBarras' => $this->renderBarcode($el, $x, $y, $w, $h),
-            'tabla'        => $this->renderTabla($el, $x, $y, $w, $detalles, $pagos, $infoAdicional),
+            'tabla'        => $this->renderTabla($el, $x, $y, $w, $detalles, $pagos, $infoAdicional, $asiento),
             'imagen'       => $this->renderImagen($el, $x, $y, $w, $h),
             default        => null,
         };
@@ -276,7 +284,7 @@ class PlantillasPdfRendererService
         $this->pdf->Image($path, $x, $y, $w, $h > 0 ? $h : 0, '', '', '', false, 300);
     }
 
-    private function renderTabla(array $el, float $x, float $y, float $w, array $detalles, array $pagos, array $infoAdicional): void
+    private function renderTabla(array $el, float $x, float $y, float $w, array $detalles, array $pagos, array $infoAdicional, ?array $asiento = null): void
     {
         switch ($el['campo'] ?? '') {
             case 'tabla:detalles':
@@ -287,6 +295,18 @@ class PlantillasPdfRendererService
                 break;
             case 'tabla:info_adicional':
                 $this->renderTablaInfoAdicional($el, $x, $y, $w, $infoAdicional);
+                break;
+            case 'tabla:retenciones':
+                $this->renderTablaRetenciones($el, $x, $y, $w, $detalles);
+                break;
+            case 'tabla:asiento':
+                $this->renderTablaAsiento($el, $x, $y, $w, $asiento);
+                break;
+            case 'tabla:cambio_devuelto':
+                $this->renderTablaDetalles($el, $x, $y, $w, array_values(array_filter($detalles, fn($d) => ($d['tipo_linea'] ?? '') === 'devolucion')));
+                break;
+            case 'tabla:cambio_entrega':
+                $this->renderTablaDetalles($el, $x, $y, $w, array_values(array_filter($detalles, fn($d) => ($d['tipo_linea'] ?? '') === 'entrega')));
                 break;
         }
     }
@@ -531,6 +551,154 @@ class PlantillasPdfRendererService
         }
     }
 
+    /** Tabla "DETALLE DE RETENCIONES" (retención en compras/ventas): impuesto, código, concepto, base, %, valor. */
+    private function renderTablaRetenciones(array $el, float $x, float $y, float $w, array $lineas): void
+    {
+        if (empty($lineas)) return;
+        $pdf  = $this->pdf;
+        $cfg  = $el['tablaConfig'] ?? [];
+        $est  = $cfg['estilos']    ?? [];
+
+        $defCols = [
+            ['key' => 'impuesto_label',    'titulo' => 'Impuesto',    'ancho' => 24, 'alineacion' => 'C', 'visible' => true],
+            ['key' => 'codigo_retencion',  'titulo' => 'Código',      'ancho' => 18, 'alineacion' => 'C', 'visible' => true],
+            ['key' => 'concepto',          'titulo' => 'Concepto',    'ancho' => 0,  'alineacion' => 'L', 'visible' => true],
+            ['key' => 'base_imponible',    'titulo' => 'Base Impon.', 'ancho' => 26, 'alineacion' => 'R', 'visible' => true],
+            ['key' => 'porcentaje_retener','titulo' => '%',           'ancho' => 16, 'alineacion' => 'C', 'visible' => true],
+            ['key' => 'valor_retenido',    'titulo' => 'Valor Ret.',  'ancho' => 26, 'alineacion' => 'R', 'visible' => true],
+        ];
+
+        $cfgCols = !empty($cfg['columnas']) ? $cfg['columnas'] : $defCols;
+        $cols    = array_values(array_filter($cfgCols, fn($c) => (bool)($c['visible'] ?? true)));
+        $fixedW  = array_sum(array_map(fn($c) => (float)($c['ancho'] ?? 0), $cols));
+        $flexW   = max(10.0, $w - $fixedW);
+        foreach ($cols as &$c) {
+            if ((float)($c['ancho'] ?? 0) === 0.0) $c['ancho'] = $flexW;
+        }
+        unset($c);
+
+        $headerBg    = $this->hexRgb($est['headerBg']    ?? '#e6e6e6');
+        $headerColor = $this->hexRgb($est['headerColor'] ?? '#000000');
+        $headerSize  = (float)($est['headerSize']  ?? 7);
+        $rowSize     = (float)($est['rowSize']     ?? 7);
+        $lh          = (float)($est['lineaAltura'] ?? 4.5);
+        $bdColor     = $this->hexRgb($est['bordeColor']  ?? '#000000');
+        $bdGrosor    = (float)($est['bordeGrosor'] ?? 0.3);
+
+        $etiquetasImpuesto = ['1' => 'Renta (IR)', 'RENTA' => 'Renta (IR)', '2' => 'IVA', 'IVA' => 'IVA', '6' => 'ISD', 'ISD' => 'ISD'];
+
+        $pdf->SetFont('helvetica', 'B', $headerSize);
+        $pdf->SetFillColor(...$headerBg);
+        $pdf->SetTextColor(...$headerColor);
+        $pdf->SetLineWidth($bdGrosor);
+        $pdf->SetDrawColor(...$bdColor);
+        $pdf->SetXY($x, $y);
+        foreach ($cols as $col) {
+            $pdf->Cell((float)$col['ancho'], $lh + 1, $col['titulo'], 1, 0, 'C', true);
+        }
+        $pdf->Ln();
+        $y = $pdf->GetY();
+
+        $pdf->SetFont('helvetica', '', $rowSize);
+        $pdf->SetTextColor(0, 0, 0);
+        foreach ($lineas as $l) {
+            $codImp = strtoupper((string)($l['codigo_impuesto'] ?? '1'));
+            $vals = [];
+            foreach ($cols as $col) {
+                $vals[] = match ($col['key']) {
+                    'impuesto_label'     => $etiquetasImpuesto[$codImp] ?? $codImp,
+                    'concepto'           => (string)($l['concepto'] ?? $l['sri_concepto'] ?? ''),
+                    'base_imponible'     => number_format((float)($l['base_imponible'] ?? 0), 2),
+                    'porcentaje_retener' => number_format((float)($l['porcentaje_retener'] ?? 0), 2) . '%',
+                    'valor_retenido'     => number_format((float)($l['valor_retenido'] ?? 0), 2),
+                    default              => (string)($l[$col['key']] ?? ''),
+                };
+            }
+            $xCur = $x;
+            $yRow = $pdf->GetY();
+            foreach ($cols as $i => $col) {
+                $pdf->SetXY($xCur, $yRow);
+                $pdf->MultiCell((float)$col['ancho'], $lh, $vals[$i], 1, $col['alineacion'], false, 0);
+                $xCur += (float)$col['ancho'];
+            }
+            $pdf->SetXY($x, $yRow + $lh);
+        }
+    }
+
+    /** Tabla del asiento contable (egreso/ingreso/traspaso): cuenta, debe, haber. */
+    private function renderTablaAsiento(array $el, float $x, float $y, float $w, ?array $asiento): void
+    {
+        $lineas = $asiento['detalles'] ?? [];
+        if (empty($lineas)) return;
+        $pdf  = $this->pdf;
+        $cfg  = $el['tablaConfig'] ?? [];
+        $est  = $cfg['estilos']    ?? [];
+
+        $defCols = [
+            ['key' => 'codigo_cuenta', 'titulo' => 'Código',  'ancho' => 22, 'alineacion' => 'L', 'visible' => true],
+            ['key' => 'nombre_cuenta', 'titulo' => 'Cuenta',  'ancho' => 0,  'alineacion' => 'L', 'visible' => true],
+            ['key' => 'debe',          'titulo' => 'Debe',    'ancho' => 26, 'alineacion' => 'R', 'visible' => true],
+            ['key' => 'haber',         'titulo' => 'Haber',   'ancho' => 26, 'alineacion' => 'R', 'visible' => true],
+        ];
+
+        $cfgCols = !empty($cfg['columnas']) ? $cfg['columnas'] : $defCols;
+        $cols    = array_values(array_filter($cfgCols, fn($c) => (bool)($c['visible'] ?? true)));
+        $fixedW  = array_sum(array_map(fn($c) => (float)($c['ancho'] ?? 0), $cols));
+        $flexW   = max(10.0, $w - $fixedW);
+        foreach ($cols as &$c) {
+            if ((float)($c['ancho'] ?? 0) === 0.0) $c['ancho'] = $flexW;
+        }
+        unset($c);
+
+        $headerBg   = $this->hexRgb($est['headerBg']   ?? '#e6e6e6');
+        $headerSize = (float)($est['headerSize'] ?? 7);
+        $rowSize    = (float)($est['rowSize']    ?? 7);
+        $lh         = (float)($est['lineaAltura'] ?? 4.5);
+
+        $pdf->SetFont('helvetica', 'B', $headerSize);
+        $pdf->SetFillColor(...$headerBg);
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->SetLineWidth(0.3);
+        $pdf->SetDrawColor(0, 0, 0);
+        $pdf->SetXY($x, $y);
+        foreach ($cols as $col) {
+            $pdf->Cell((float)$col['ancho'], $lh + 1, $col['titulo'], 1, 0, 'C', true);
+        }
+        $pdf->Ln();
+
+        $pdf->SetFont('helvetica', '', $rowSize);
+        $sumDebe = 0.0; $sumHaber = 0.0;
+        foreach ($lineas as $l) {
+            $debe  = (float)($l['debe']  ?? 0);
+            $haber = (float)($l['haber'] ?? 0);
+            $sumDebe  += $debe;
+            $sumHaber += $haber;
+            $vals = [];
+            foreach ($cols as $col) {
+                $vals[] = match ($col['key']) {
+                    'debe'  => $debe  > 0 ? number_format($debe, 2)  : '',
+                    'haber' => $haber > 0 ? number_format($haber, 2) : '',
+                    default => (string)($l[$col['key']] ?? ''),
+                };
+            }
+            $xCur = $x;
+            $yRow = $pdf->GetY();
+            foreach ($cols as $i => $col) {
+                $pdf->SetXY($xCur, $yRow);
+                $pdf->Cell((float)$col['ancho'], $lh, $vals[$i], 1, 0, $col['alineacion']);
+                $xCur += (float)$col['ancho'];
+            }
+            $pdf->SetXY($x, $yRow + $lh);
+        }
+
+        // Fila de totales.
+        $pdf->SetFont('helvetica', 'B', $rowSize);
+        $labelW = array_sum(array_map(fn($c) => (float)$c['ancho'], array_slice($cols, 0, count($cols) - 2)));
+        $pdf->Cell($labelW, $lh, 'TOTALES', 1, 0, 'R');
+        $pdf->Cell((float)$cols[count($cols) - 2]['ancho'], $lh, number_format($sumDebe, 2), 1, 0, 'R');
+        $pdf->Cell((float)$cols[count($cols) - 1]['ancho'], $lh, number_format($sumHaber, 2), 1, 1, 'R');
+    }
+
     // ── Construcción del mapa de datos ────────────────────────────────────────
 
     private function construirDatos(array $cabecera, array $empresa, array $totales): array
@@ -561,6 +729,13 @@ class PlantillasPdfRendererService
             '{empresa_logo}'          => $empresa['logo'] ?? '',
             // ── Factura
             '{numero_factura}'        => $this->numeroFactura($cabecera),
+            // Número genérico para comprobantes internos (consignación, retorno,
+            // cambio de producto, facturación de consignación…): usan serie-secuencial
+            // en vez de establecimiento-puntoEmisión-secuencial. Egreso/Ingreso/Traspaso
+            // lo sobreescriben con su propio campo en construirDatosEspecificos().
+            '{cc_numero}'              => array_key_exists('serie', $cabecera)
+                ? trim((string) $cabecera['serie'] . '-' . (string) ($cabecera['secuencial'] ?? ''), '-')
+                : $this->numeroFactura($cabecera),
             '{fecha_emision}'         => $fecha,
             '{numero_autorizacion}'   => $cabecera['clave_acceso'] ?? '',
             '{clave_acceso}'          => $cabecera['clave_acceso'] ?? '',
@@ -585,6 +760,151 @@ class PlantillasPdfRendererService
             '{propina}'               => number_format($totales['propina'], 2),
             '{valor_total}'           => number_format($totales['valor_total'], 2),
         ];
+    }
+
+    /**
+     * Placeholders PROPIOS de cada tipo de documento (además de los genéricos de
+     * `construirDatos()`): motivo de una NC, transportista de una guía, proveedor
+     * emisor de una liquidación/compra, asiento de un egreso/ingreso, etc. Un tipo
+     * sin variante aquí simplemente no agrega nada (usa solo lo genérico).
+     */
+    private function construirDatosEspecificos(string $tipo, array $cabecera, array $empresa, ?array $asiento): array
+    {
+        $fmtFecha = function ($v): string {
+            if (empty($v)) return '';
+            $ts = strtotime((string) $v);
+            return $ts ? date('d/m/Y', $ts) : (string) $v;
+        };
+        $fmtMonto = fn($v) => number_format((float) $v, 2);
+
+        return match ($tipo) {
+            'nota_credito' => [
+                '{nc_motivo}'                => (string) ($cabecera['motivo'] ?? ''),
+                '{nc_num_doc_modificado}'    => (string) ($cabecera['num_doc_modificado'] ?? ''),
+                '{nc_fecha_doc_sustento}'    => $fmtFecha($cabecera['fecha_emision_docs_sustento'] ?? ''),
+                '{titulo_documento}'         => 'Nota de Crédito',
+            ],
+            'guia_remision' => [
+                '{gr_transportista_nombre}'         => (string) ($cabecera['transportista_nombre'] ?? ''),
+                '{gr_transportista_ruc}'             => (string) ($cabecera['transportista_ruc'] ?? ''),
+                '{gr_placa}'                          => (string) ($cabecera['placa'] ?? ''),
+                '{gr_fecha_inicio_transporte}'       => $fmtFecha($cabecera['fecha_inicio_transporte'] ?? ''),
+                '{gr_fecha_fin_transporte}'          => $fmtFecha($cabecera['fecha_fin_transporte'] ?? ''),
+                '{gr_direccion_partida}'              => (string) ($cabecera['direccion_partida'] ?? ''),
+                '{gr_direccion_destino}'              => (string) ($cabecera['direccion_destino'] ?? $cabecera['cliente_direccion'] ?? ''),
+                '{gr_motivo_traslado}'                => (string) ($cabecera['motivo_traslado'] ?? ''),
+                '{gr_ruta}'                            => (string) ($cabecera['ruta'] ?? ''),
+                '{gr_doc_aduanero_unico}'            => (string) ($cabecera['doc_aduanero_unico'] ?? ''),
+                '{gr_num_doc_sustento}'               => (string) ($cabecera['num_doc_sustento'] ?? ''),
+                '{gr_cod_doc_sustento}'               => (string) ($cabecera['cod_doc_sustento'] ?? ''),
+                '{gr_num_autorizacion_doc_sustento}' => (string) ($cabecera['num_autorizacion_doc_sustento'] ?? ''),
+                '{gr_fecha_doc_sustento}'            => $fmtFecha($cabecera['fecha_emision_doc_sustento'] ?? ''),
+                '{titulo_documento}'                  => 'Guía de Remisión',
+            ],
+            'liquidacion_compra', 'compras' => [
+                '{proveedor_nombre}'          => (string) ($cabecera['proveedor_nombre'] ?? ''),
+                '{proveedor_ruc}'             => (string) ($cabecera['proveedor_ruc'] ?? ''),
+                '{proveedor_direccion}'       => (string) ($cabecera['proveedor_direccion'] ?? ''),
+                '{proveedor_nombre_tipo_id}'  => (string) ($cabecera['proveedor_nombre_tipo_id'] ?? ''),
+                '{proveedor_email}'           => (string) ($cabecera['proveedor_email'] ?? ''),
+                '{compra_tipo_comprobante}'   => (string) ($cabecera['tipo_comprobante'] ?? ''),
+                '{compra_numero_autorizacion}'=> (string) ($cabecera['numero_autorizacion'] ?? ''),
+                '{compra_fecha_autorizacion}' => $fmtFecha($cabecera['fecha_autorizacion'] ?? ''),
+                '{compra_numero_prov}'        => trim(
+                    (string) ($cabecera['establecimiento_prov'] ?? '') . '-' .
+                    (string) ($cabecera['punto_emision_prov'] ?? '') . '-' .
+                    (string) ($cabecera['secuencial_prov'] ?? ''),
+                    '-'
+                ),
+                '{titulo_documento}' => $tipo === 'compras' ? 'Compra' : 'Liquidación de Compra',
+            ],
+            'egreso', 'ingreso', 'traspaso' => [
+                '{cc_recibo_de}'       => (string) ($cabecera['recibo_de'] ?? $cabecera['recibo_cliente_nombre'] ?? $cabecera['cliente_nombre'] ?? ''),
+                '{cc_sujeto_nombre}'   => (string) ($cabecera['sujeto_nombre'] ?? ''),
+                '{cc_sujeto_ruc}'      => (string) ($cabecera['sujeto_ruc'] ?? ''),
+                '{cc_origen_nombre}'   => (string) ($cabecera['origen_nombre'] ?? ''),
+                '{cc_destino_nombre}'  => (string) ($cabecera['destino_nombre'] ?? ''),
+                '{cc_numero}'          => (string) ($cabecera['numero_ingreso'] ?? $cabecera['numero_egreso'] ?? $cabecera['numero_traspaso'] ?? ''),
+                '{cc_monto}'           => $fmtMonto($cabecera['monto'] ?? 0),
+                '{cc_monto_total}'     => $fmtMonto($cabecera['monto_total'] ?? $cabecera['monto'] ?? 0),
+                '{cc_monto_letras}'    => $this->montoEnLetras((float) ($cabecera['monto_total'] ?? $cabecera['monto'] ?? 0)),
+                '{cc_usuario_nombre}'  => (string) ($cabecera['usuario_nombre'] ?? ''),
+                '{cc_estado}'          => (string) ($cabecera['estado'] ?? ''),
+                '{titulo_documento}'   => match ($tipo) { 'egreso' => 'Comprobante de Egreso', 'ingreso' => 'Comprobante de Ingreso', default => 'Comprobante de Traspaso' },
+            ],
+            'proforma' => [
+                '{pf_dias_vigencia}'  => (string) ($cabecera['dias_vigencia'] ?? ''),
+                '{pf_fecha_vigencia}' => $this->sumarDias($cabecera['fecha_emision'] ?? '', (int) ($cabecera['dias_vigencia'] ?? 0)),
+                '{titulo_documento}'  => 'Proforma',
+            ],
+            'retorno_cv' => [
+                '{rt_motivo}'               => (string) ($cabecera['motivo'] ?? ''),
+                '{rt_fecha_retorno}'        => $fmtFecha($cabecera['fecha_retorno'] ?? ''),
+                '{rt_usuario_nombre}'       => (string) ($cabecera['usuario_nombre'] ?? ''),
+                '{rt_responsable_traslado}' => (string) ($cabecera['responsable_traslado_nombre'] ?? ''),
+                '{titulo_documento}'        => 'Retorno de Consignación',
+            ],
+            'consignacion' => [
+                '{cg_fecha_entrega}'        => $fmtFecha($cabecera['fecha_entrega'] ?? ''),
+                '{cg_vendedor_nombre}'      => (string) ($cabecera['vendedor_nombre'] ?? ''),
+                '{cg_responsable_traslado}' => (string) ($cabecera['responsable_traslado_nombre'] ?? ''),
+                '{cg_punto_partida}'        => (string) ($cabecera['punto_partida'] ?? ''),
+                '{cg_punto_llegada}'        => (string) ($cabecera['punto_llegada'] ?? ''),
+                '{titulo_documento}'        => 'Consignación en Ventas',
+            ],
+            'cambio_producto_cv' => [
+                '{cp_fecha_cambio}'        => $fmtFecha($cabecera['fecha_cambio'] ?? ''),
+                '{cp_usuario_nombre}'      => (string) ($cabecera['usuario_nombre'] ?? ''),
+                '{cp_motivo}'              => (string) ($cabecera['motivo'] ?? ''),
+                '{cp_subtotal_devuelto}'   => $fmtMonto($cabecera['subtotal_devuelto'] ?? 0),
+                '{cp_subtotal_entregado}'  => $fmtMonto($cabecera['subtotal_entregado'] ?? 0),
+                '{cp_diferencia}'          => $fmtMonto($cabecera['diferencia'] ?? 0),
+                '{titulo_documento}'       => 'Cambio de Productos',
+            ],
+            'retencion_compra', 'retencion_venta' => [
+                '{ret_sujeto_nombre}'         => (string) ($cabecera['proveedor_razon_social'] ?? $cabecera['cliente_nombre'] ?? ''),
+                '{ret_sujeto_identificacion}' => (string) ($cabecera['proveedor_identificacion'] ?? $cabecera['cliente_identificacion'] ?? ''),
+                '{ret_periodo_fiscal}'        => (string) ($cabecera['periodo_fiscal'] ?? ''),
+                '{ret_tipo_doc_sustento}'     => match ((string) ($cabecera['tipo_doc_sustento'] ?? '01')) {
+                    '01' => 'Factura', '03' => 'Liquidación de Compra', '05' => 'Nota de Débito',
+                    default => (string) ($cabecera['tipo_doc_sustento'] ?? ''),
+                },
+                '{ret_num_doc_sustento}'    => (string) ($cabecera['num_doc_sustento'] ?? ''),
+                '{ret_fecha_doc_sustento}'  => $fmtFecha($cabecera['fecha_emision_doc_sustento'] ?? ''),
+                '{titulo_documento}'        => 'Comprobante de Retención',
+            ],
+            'consignacion_factura' => [
+                '{cf_vendedor_nombre}' => (string) ($cabecera['vendedor_nombre'] ?? ''),
+                '{cf_factura_origen}'  => (string) ($cabecera['numero_factura'] ?? ''),
+                '{titulo_documento}'   => 'Facturación de Consignación',
+            ],
+            'recibo_venta' => [
+                '{rv_placa}'          => (string) ($cabecera['placa'] ?? ''),
+                '{rv_monto_letras}'   => (string) ($cabecera['monto_letras'] ?? $cabecera['valor_letras'] ?? $this->montoEnLetras((float) ($cabecera['importe_total'] ?? 0))),
+                '{rv_con_impuestos}'  => !empty($cabecera['con_impuestos']) ? 'SI' : 'NO',
+                '{titulo_documento}'  => 'Recibo de Venta',
+            ],
+            default => ['{titulo_documento}' => 'Documento'],
+        };
+    }
+
+    /** Fecha + N días (para vigencia de proforma). Vacío si no hay fecha o días. */
+    private function sumarDias($fecha, int $dias): string
+    {
+        if (empty($fecha) || $dias <= 0) return '';
+        $ts = strtotime((string) $fecha);
+        if (!$ts) return '';
+        return date('d/m/Y', strtotime("+{$dias} days", $ts));
+    }
+
+    /** Monto en letras genérico (reutiliza el mismo validador que usan cheques). */
+    private function montoEnLetras(float $monto): string
+    {
+        require_once \MVC_ROOT . '/app/validadores/numero_letras.php';
+        if (function_exists('num_letras')) {
+            return strtoupper(trim(preg_replace('/\s+/', ' ', (string) num_letras(number_format($monto, 2, '.', '')))));
+        }
+        return number_format($monto, 2);
     }
 
     /**
