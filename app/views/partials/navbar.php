@@ -187,6 +187,20 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
         background-color: #e9ecef;
         color: var(--bs-primary);
     }
+    /* Fila de botones rápidos del offcanvas móvil (IA Soporte, POS, Manual, etc.):
+       pueden ser hasta 7 botones con texto — sin flex-wrap se salían del panel. */
+    .cmg-mobile-btns-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .cmg-mobile-btns-row > a {
+        flex: 1 1 46%;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
 </style>
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary cmg-navbar-compact position-relative">
     <div class="container-fluid gap-2 align-items-center py-1 d-flex flex-wrap flex-lg-nowrap">
@@ -533,7 +547,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                 </a>
             </div>
 
-            <div class="d-flex gap-2">
+            <div class="cmg-mobile-btns-row">
                 <?php if (\App\Helpers\Permisos::puedeVer('modulos/ia-soporte')): ?>
                 <a href="<?= $base ?>/modulos/ia-soporte" class="btn btn-outline-primary btn-sm flex-grow-1"
                    target="_blank" rel="noopener">

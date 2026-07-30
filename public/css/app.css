@@ -951,6 +951,15 @@ th[data-col] {
    en cascada. En móvil eso impide mostrar el scrollbar horizontal.
    Solución: resetear todo el app-shell y usar scroll natural de página. */
 @media (max-width: 767.98px) {
+    /* 0. Respaldo: el <html> también puede quedar bloqueado con estilos inline
+          (scripts.php, applyAppShell) si el JS corre antes de este CSS o en algún
+          caso límite. Sin esto la página no puede bajar y no se ve la barra
+          vertical, aunque el <body> ya esté liberado. */
+    html:has(body.cmg-has-table) {
+        overflow: auto !important;
+        height: auto !important;
+    }
+
     /* 1. Resetear body: la PÁGINA puede hacer scroll vertical normalmente.
           El header sticky sigue funcionando con position:sticky. */
     body.cmg-has-table {

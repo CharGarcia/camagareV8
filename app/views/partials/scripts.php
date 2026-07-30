@@ -98,7 +98,13 @@
      *    para activar el layout de altura fija solo en esas páginas.
      * ---------------------------------------------------------------- */
     function applyAppShell() {
-        if (document.querySelector('.cmg-table-card') && !document.body.classList.contains('cmg-no-app-shell')) {
+        // En móvil (<768px, mismo corte que el CSS) el app-shell de altura fija
+        // se desactiva: la página usa scroll natural. Bloquear aquí el <html>/<body>
+        // con estilos inline dejaba el scroll roto en móvil porque el CSS de
+        // rescate (@media max-width:767.98px) solo puede sobreescribir el <body>
+        // vía clase; el <html> se quedaba con overflow:hidden inline para siempre.
+        var esMovil = window.innerWidth < 768;
+        if (document.querySelector('.cmg-table-card') && !document.body.classList.contains('cmg-no-app-shell') && !esMovil) {
             document.body.classList.add('cmg-has-table');
             // Bloquear scroll en html y body para que NADA fuera de
             // los contenedores de tabla pueda moverse
