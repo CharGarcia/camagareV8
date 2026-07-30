@@ -77,21 +77,27 @@ class RolPagoService
     }
 
     /**
-     * Regenera la corrida SI y SOLO SI sigue en estado 'generado' y aún no tiene pagos
-     * (egresos) registrados: así lo que se muestra (ver, PDF) o se usa para pagar
-     * (generar egresos en lote) siempre refleja las novedades, préstamos desembolsados,
-     * reglas de cálculo, etc. más recientes, aunque hayan cambiado después de generar
-     * la corrida. Una corrida ya pagada/contabilizada/anulada, o con algún egreso
-     * registrado, NUNCA se toca aquí (regenerarla movería los IDs de rol_detalle y
-     * rompería el vínculo con los pagos ya hechos — ver generar()).
+     * Regenera la corrida SI Y SOLO SI sigue en estado 'generado' (no pagada,
+     * contabilizada ni anulada): así lo que se muestra (ver, PDF) o se usa para
+     * pagar (generar egresos en lote) siempre refleja las novedades, préstamos
+     * desembolsados, reglas de cálculo, etc. más recientes, aunque hayan cambiado
+     * después de generar la corrida por última vez.
      *
-     * Barato en el caso común: si no aplica, es solo un SELECT de existencia
-     * (tienePagos). Devuelve true si efectivamente regeneró.
+     * generar() ya sabe, internamente, respetar a los empleados que dentro de esta
+     * misma corrida ya tienen un egreso pagado (regeneración parcial: solo se
+     * actualizan las líneas de quien todavía no cobra). Por eso aquí ya NO se
+     * excluye una corrida solo porque tenga pagos parciales — antes eso dejaba
+     * "congelados" para siempre a los empleados que aún no habían cobrado, con
+     * valores viejos (p. ej. un IR que ya no debería aplicar).
+     *
+     * Barato en el caso común: si el estado ya no es 'generado' (la inmensa mayoría
+     * de lo que se consulta día a día son corridas históricas ya cerradas), es solo
+     * el SELECT de findCabecera. Devuelve true si efectivamente regeneró.
      */
     public function refrescarSiCorresponde(int $id, int $idEmpresa, int $idUsuario): bool
     {
         $cab = $this->repo->findCabecera($id, $idEmpresa);
-        if (!$cab || ($cab['estado'] ?? '') !== 'generado' || $this->repo->tienePagos($id)) {
+        if (!$cab || ($cab['estado'] ?? '') !== 'generado') {
             return false;
         }
         try {
@@ -219,12 +225,12 @@ class RolPagoService
         if (in_array($cab['estado'], ['pagado', 'contabilizado', 'anulado'], true)) {
             throw new Exception('No se puede regenerar una corrida en estado ' . CatalogoRol::nombreEstado($cab['estado']) . '.');
         }
-        // Si el rol ya tiene pagos (egresos), NO se regenera: al recrear rol_detalle cambiarían
-        // los IDs y se romperían los vínculos de pago (quedarían huérfanos → mostraría "pendiente"
-        // y podría duplicarse el pago). El rol queda congelado una vez que se empieza a pagar.
-        if ($this->repo->tienePagos($id)) {
-            return $this->getDetalle($id, $idEmpresa);
-        }
+        // Si el rol ya tiene pagos (egresos) para ALGÚN empleado, esas líneas NO se
+        // tocan: recrearlas cambiaría sus IDs y rompería el vínculo con el pago ya
+        // hecho. Pero los empleados que TODAVÍA no cobraron sí deben poder seguir
+        // recalculándose (regeneración parcial más abajo), para que no se queden
+        // con valores viejos solo porque un compañero suyo ya cobró.
+        $empleadosPagados = $this->repo->tienePagos($id) ? $this->repo->getEmpleadosPagadosDelRol($id) : [];
 
         $tipo    = (string) $cab['tipo_rol'];
         $anio    = (int) $cab['periodo_anio'];
@@ -286,13 +292,18 @@ class RolPagoService
 
         $this->repo->beginTransaction();
         try {
-            $this->repo->borrarDetalle($id);
+            if (empty($empleadosPagados)) {
+                $this->repo->borrarDetalle($id);
+            }
 
             // Loop en memoria: solo cálculo, sin consultas.
             $filasDetalle = []; // [ ['id_empleado'=>int, 'calc'=>[...]], ... ]
             foreach ($empleados as $emp) {
                 $idEmp = (int) $emp['id'];
 
+                if (isset($empleadosPagados[$idEmp])) {
+                    continue; // ya cobró: su línea no se toca
+                }
                 if ($esParcial && isset($mensualPagadoSet[$idEmp])) {
                     $excluidosMensualPagado++;
                     continue;
@@ -335,21 +346,44 @@ class RolPagoService
                 throw new Exception('No se puede generar esta corrida: el rol de fin de mes de ' . str_pad((string) $mes, 2, '0', STR_PAD_LEFT) . '/' . $anio . ' ya está pagado para todos los empleados del período.');
             }
 
-            // Inserción en lote: detalle (con RETURNING para mapear id) + rubros.
-            if (!empty($filasDetalle)) {
-                $idsDetalle = $this->repo->insertDetalleMasivo($id, $idEmpresa, $filasDetalle);
-                $filasRubro = [];
+            if (empty($empleadosPagados)) {
+                // Camino normal (nadie ha cobrado todavía): inserción en lote de todo el detalle.
+                if (!empty($filasDetalle)) {
+                    $idsDetalle = $this->repo->insertDetalleMasivo($id, $idEmpresa, $filasDetalle);
+                    $filasRubro = [];
+                    foreach ($filasDetalle as $f) {
+                        $idDet = $idsDetalle[$f['id_empleado']] ?? null;
+                        if ($idDet === null) continue;
+                        foreach ($f['calc']['rubros'] as $r) {
+                            $filasRubro[] = ['id_detalle' => $idDet, 'rubro' => $r];
+                        }
+                    }
+                    $this->repo->insertRubrosMasivo($idEmpresa, $filasRubro);
+                }
+                foreach ($totales as $k => $v) $totales[$k] = round($v, 2);
+            } else {
+                // Regeneración PARCIAL: hay empleados ya pagados (sus líneas no se tocaron
+                // arriba). Las de los que aún no cobran se actualizan en el sitio (o se
+                // insertan, si son nuevos en la nómina); nunca se borra nada del rol.
+                $idsExistentes = $this->repo->getIdsDetallePorEmpleadoMasivo($id, array_column($filasDetalle, 'id_empleado'));
                 foreach ($filasDetalle as $f) {
-                    $idDet = $idsDetalle[$f['id_empleado']] ?? null;
-                    if ($idDet === null) continue;
-                    foreach ($f['calc']['rubros'] as $r) {
-                        $filasRubro[] = ['id_detalle' => $idDet, 'rubro' => $r];
+                    $idDet = $idsExistentes[$f['id_empleado']] ?? null;
+                    if ($idDet !== null) {
+                        $this->repo->updateDetalle($idDet, $f['calc']);
+                        $this->repo->reemplazarRubrosDetalle($idDet, $idEmpresa, $f['calc']['rubros']);
+                    } else {
+                        $idDet = $this->repo->insertDetalle($id, $idEmpresa, $f['id_empleado'], $f['calc']);
+                        foreach ($f['calc']['rubros'] as $r) {
+                            $this->repo->insertRubro($idDet, $idEmpresa, $r);
+                        }
                     }
                 }
-                $this->repo->insertRubrosMasivo($idEmpresa, $filasRubro);
+                // Los totales de la cabecera deben sumar TODO el rol: líneas ya pagadas
+                // (congeladas) + las que se acaban de actualizar.
+                $totales = $this->repo->sumarTotalesDelRol($id);
+                foreach ($totales as $k => $v) $totales[$k] = round($v, 2);
             }
 
-            foreach ($totales as $k => $v) $totales[$k] = round($v, 2);
             $this->repo->updateTotalesEstado($id, $totales, 'generado');
             $this->log->registrar($idUsuario, $idEmpresa, 'GENERAR', 'rol_cabecera', $id, $cab, $totales);
             $this->repo->commit();

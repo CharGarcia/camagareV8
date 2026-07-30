@@ -189,14 +189,15 @@ class RolPagoRepository extends BaseRepository
     public function insertDetalle(int $idRol, int $idEmpresa, int $idEmpleado, array $t): int
     {
         $sql = "INSERT INTO rol_detalle (id_rol, id_empresa, id_empleado, dias_trabajados, sueldo_base,
-                    total_ingresos, total_egresos, aporte_iess, aporte_patronal, neto)
-                VALUES (:r, :emp, :e, :dias, :sb, :ti, :te, :ap, :app, :neto)";
+                    total_ingresos, total_egresos, aporte_iess, aporte_patronal, retencion_renta, neto)
+                VALUES (:r, :emp, :e, :dias, :sb, :ti, :te, :ap, :app, :ir, :neto)";
         $st = $this->db->prepare($sql);
         $st->execute([
             ':r' => $idRol, ':emp' => $idEmpresa, ':e' => $idEmpleado,
             ':dias' => $t['dias_trabajados'], ':sb' => $t['sueldo_base'],
             ':ti' => $t['total_ingresos'], ':te' => $t['total_egresos'],
-            ':ap' => $t['aporte_iess'], ':app' => $t['aporte_patronal'], ':neto' => $t['neto'],
+            ':ap' => $t['aporte_iess'], ':app' => $t['aporte_patronal'],
+            ':ir' => $t['retencion_renta'] ?? 0, ':neto' => $t['neto'],
         ]);
         return $this->lastInsertId();
     }
@@ -211,6 +212,90 @@ class RolPagoRepository extends BaseRepository
             ':codigo' => $r['codigo'] ?? null, ':origen' => $r['origen'], ':valor' => $r['valor'],
             ':ai' => !empty($r['aporta_iess']) ? 'true' : 'false', ':idn' => $r['id_novedad'] ?? null,
         ]);
+    }
+
+    // ─── Regeneración PARCIAL (rol con pagos parciales: no se puede borrarDetalle) ─
+
+    /**
+     * [id_empleado => true] de empleados de este rol que YA tienen un egreso ROL
+     * registrado. A propósito SIN try/catch: solo se llama después de confirmar
+     * tienePagos()=true (que sí es resiliente), así que aquí las tablas de egresos
+     * ya se sabe que existen — si esta consulta fallara igual, es mejor abortar la
+     * regeneración completa (excepción) que arriesgarse a tratar como "no pagado"
+     * a un empleado que sí lo está, y sobrescribir su línea ya vinculada a un egreso.
+     */
+    public function getEmpleadosPagadosDelRol(int $idRol): array
+    {
+        $sql = "SELECT DISTINCT d.id_empleado
+                FROM rol_detalle d
+                JOIN egresos_detalle ed ON ed.id_referencia_documento = d.id AND ed.tipo_documento = 'ROL'
+                JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                WHERE d.id_rol = :r AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false";
+        $set = [];
+        $st = $this->db->prepare($sql);
+        $st->execute([':r' => $idRol]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $idEmp) {
+            $set[(int) $idEmp] = true;
+        }
+        return $set;
+    }
+
+    /** [id_empleado => id_detalle] de las filas YA EXISTENTES de este rol, para esos empleados. */
+    public function getIdsDetallePorEmpleadoMasivo(int $idRol, array $idsEmpleado): array
+    {
+        $map = [];
+        $idsEmpleado = array_values(array_unique(array_map('intval', $idsEmpleado)));
+        if (empty($idsEmpleado)) return $map;
+        $in = implode(',', $idsEmpleado);
+        $st = $this->db->prepare("SELECT id, id_empleado FROM rol_detalle WHERE id_rol = :r AND id_empleado IN ($in)");
+        $st->execute([':r' => $idRol]);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $map[(int) $r['id_empleado']] = (int) $r['id'];
+        }
+        return $map;
+    }
+
+    /** Actualiza en el sitio (mismo id) los totales calculados de una línea ya existente. */
+    public function updateDetalle(int $idDetalle, array $t): void
+    {
+        $sql = "UPDATE rol_detalle SET
+                    dias_trabajados = :dias, sueldo_base = :sb,
+                    total_ingresos = :ti, total_egresos = :te,
+                    aporte_iess = :ap, aporte_patronal = :app, retencion_renta = :ir, neto = :neto
+                WHERE id = :id";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':dias' => $t['dias_trabajados'], ':sb' => $t['sueldo_base'],
+            ':ti' => $t['total_ingresos'], ':te' => $t['total_egresos'],
+            ':ap' => $t['aporte_iess'], ':app' => $t['aporte_patronal'],
+            ':ir' => $t['retencion_renta'] ?? 0, ':neto' => $t['neto'], ':id' => $idDetalle,
+        ]);
+    }
+
+    /** Reemplaza los rubros de una línea ya existente (borra e inserta los nuevos). */
+    public function reemplazarRubrosDetalle(int $idDetalle, int $idEmpresa, array $rubros): void
+    {
+        $this->db->prepare("DELETE FROM rol_detalle_rubro WHERE id_detalle = :d")->execute([':d' => $idDetalle]);
+        foreach ($rubros as $r) {
+            $this->insertRubro($idDetalle, $idEmpresa, $r);
+        }
+    }
+
+    /** Suma los totales actuales de TODAS las líneas de un rol (para recalcular la cabecera tras una regeneración parcial). */
+    public function sumarTotalesDelRol(int $idRol): array
+    {
+        $sql = "SELECT COALESCE(SUM(total_ingresos), 0) AS ingresos, COALESCE(SUM(total_egresos), 0) AS egresos,
+                       COALESCE(SUM(neto), 0) AS neto, COALESCE(SUM(aporte_patronal), 0) AS aporte_patronal
+                FROM rol_detalle WHERE id_rol = :r";
+        $st = $this->db->prepare($sql);
+        $st->execute([':r' => $idRol]);
+        $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+        return [
+            'ingresos'        => (float) ($r['ingresos'] ?? 0),
+            'egresos'         => (float) ($r['egresos'] ?? 0),
+            'neto'            => (float) ($r['neto'] ?? 0),
+            'aporte_patronal' => (float) ($r['aporte_patronal'] ?? 0),
+        ];
     }
 
     // ─── Lectores masivos (para generación en lote, evitan N+1) ───────────────
