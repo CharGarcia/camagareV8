@@ -44,7 +44,7 @@ class RolesPagoController extends BaseModuloController
         $perPage  = 20;
 
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
-        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, (int) $_SESSION['id_usuario']);
         $totalPages = $perPage > 0 ? (int) ceil($result['total'] / $perPage) : 1;
 
         $this->viewWithLayout('layouts.main', 'modulos.roles_pago.index', [
@@ -81,7 +81,7 @@ class RolesPagoController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result     = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, (int) $_SESSION['id_usuario']);
         $totalPages = $perPage > 0 ? (int) ceil($result['total'] / $perPage) : 1;
         $from = $result['total'] > 0 ? (($page - 1) * $perPage) + 1 : 0;
         $to   = $result['total'] > 0 ? min($page * $perPage, $result['total']) : 0;
@@ -211,10 +211,12 @@ class RolesPagoController extends BaseModuloController
         $tieneConcepto = ((int) $stC->fetchColumn()) > 0;
 
         // Empleados del rol que aún tienen saldo pendiente: el usuario elige a
-        // cuáles generarles el egreso (los ya pagados no se listan).
+        // cuáles generarles el egreso (los ya pagados no se listan). Se refresca antes
+        // de listar (si la corrida sigue sin pagos) para no mostrar montos desactualizados.
         $idRol = (int) ($_GET['id_rol'] ?? 0);
         $empleados = [];
         if ($idRol > 0) {
+            $this->service->refrescarSiCorresponde($idRol, $idEmpresa, (int) $_SESSION['id_usuario']);
             foreach ((new RolPagoRepository())->getDetalleCompleto($idRol, $idEmpresa) as $d) {
                 if (round((float) ($d['saldo'] ?? 0), 2) <= 0.01) {
                     continue; // ya pagado
@@ -324,7 +326,7 @@ class RolesPagoController extends BaseModuloController
         $id = (int) ($_GET['id'] ?? 0);
         $idEmpresa = (int) $_SESSION['id_empresa'];
         try {
-            $rol = $this->service->getDetalle($id, $idEmpresa);
+            $rol = $this->service->getDetalle($id, $idEmpresa, (int) $_SESSION['id_usuario']);
             if (!$rol) { http_response_code(404); echo 'Corrida no encontrada'; exit; }
 
             $mes = CatalogoNovedades::MESES[(int) $rol['periodo_mes']] ?? $rol['periodo_mes'];
@@ -369,7 +371,7 @@ class RolesPagoController extends BaseModuloController
         $this->requireLeer();
         header('Content-Type: application/json');
         $idDetalle = (int) ($_GET['det'] ?? 0);
-        $data = $this->service->getEmpleadoCompleto($idDetalle, (int) $_SESSION['id_empresa']);
+        $data = $this->service->getEmpleadoCompleto($idDetalle, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
         echo json_encode($data ? ['ok' => true, 'data' => $data] : ['ok' => false, 'error' => 'No encontrado']);
         exit;
     }
@@ -382,7 +384,7 @@ class RolesPagoController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $dest = ($_GET['view'] ?? '') === '1' ? 'I' : 'D'; // descarga por defecto
         try {
-            $lin = $this->service->getLineaEmpleado($idDetalle, $idEmpresa);
+            $lin = $this->service->getLineaEmpleado($idDetalle, $idEmpresa, (int) $_SESSION['id_usuario']);
             if (!$lin) { http_response_code(404); echo 'Línea no encontrada'; exit; }
             $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
             (new RolPagoPdfService())->generarEmpleado($lin, $empresa, $dest);
@@ -400,7 +402,7 @@ class RolesPagoController extends BaseModuloController
         $idDetalle = (int) ($_POST['det'] ?? 0);
         $idEmpresa = (int) $_SESSION['id_empresa'];
         try {
-            $lin = $this->service->getLineaEmpleado($idDetalle, $idEmpresa);
+            $lin = $this->service->getLineaEmpleado($idDetalle, $idEmpresa, (int) $_SESSION['id_usuario']);
             if (!$lin) throw new \Exception('Línea no encontrada.');
 
             $email = trim((string) ($lin['email'] ?? ''));

@@ -32,7 +32,8 @@ class NovedadService
     {
         $data = $this->repository->getDetalle($id, $idEmpresa);
         if ($data) {
-            $data['bloqueada'] = $this->rolYaPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['aplica_en'] ?? 'rol', $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0);
+            $data['bloqueada'] = $this->rolYaPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['aplica_en'] ?? 'rol', $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0)
+                || $this->yaDesembolsada($idEmpresa, $data);
         }
         return $data;
     }
@@ -74,6 +75,8 @@ class NovedadService
         // Bloquear si el destino ANTERIOR o el NUEVO corresponden a un rol ya pagado.
         $this->bloquearSiRolPagado($idEmpresa, $old['id_empleado'] ?? 0, $old['aplica_en'] ?? 'rol', $old['periodo_anio'] ?? 0, $old['periodo_mes'] ?? 0);
         $this->bloquearSiRolPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['aplica_en'] ?? 'rol', $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0);
+        // Bloquear si esta novedad (Anticipo o cuota de Préstamo Empresa) ya fue desembolsada.
+        $this->bloquearSiYaDesembolsada($idEmpresa, $old);
 
         $idUsuario = (int) $data['id_usuario'];
         $this->repository->beginTransaction();
@@ -103,6 +106,8 @@ class NovedadService
 
         // No permitir eliminar una novedad que ya afecta a un rol pagado.
         $this->bloquearSiRolPagado($idEmpresa, $old['id_empleado'] ?? 0, $old['aplica_en'] ?? 'rol', $old['periodo_anio'] ?? 0, $old['periodo_mes'] ?? 0);
+        // No permitir eliminar un Anticipo o cuota de Préstamo Empresa ya desembolsados.
+        $this->bloquearSiYaDesembolsada($idEmpresa, $old);
 
         $this->repository->beginTransaction();
         try {
@@ -158,6 +163,49 @@ class NovedadService
         try {
             return (new \App\repositories\modulos\RolPagoRepository())
                 ->existeRolPagadoPeriodo($idEmpresa, $idEmpleado, $tipo, $anio, $mes);
+        } catch (\Throwable $e) {
+            return false; // roles/egresos no desplegado → sin restricción
+        }
+    }
+
+    /**
+     * Lanza excepción si esta novedad (Anticipo código 3, o cuota de Préstamo Empresa
+     * código 9) ya tiene un desembolso registrado por egreso: el rol descuenta lo
+     * REALMENTE pagado (no el valor de este registro), así que editarla/eliminarla
+     * dejaría ese pago sin respaldo o descuadraría el cálculo de cuotas pendientes.
+     */
+    private function bloquearSiYaDesembolsada(int $idEmpresa, array $novedad): void
+    {
+        if (!$this->yaDesembolsada($idEmpresa, $novedad)) return;
+
+        $cod = (string) ($novedad['tipo_codigo'] ?? '');
+        $msg = $cod === '3'
+            ? 'No se puede editar ni eliminar este Anticipo: ya fue pagado por egreso.'
+            : 'No se puede editar ni eliminar esta cuota: el Préstamo Empresa de este empleado ya tiene desembolsos registrados por egreso.';
+        throw new Exception($msg . ' Anule ese egreso si necesita corregirlo, o registre una novedad nueva de ajuste.');
+    }
+
+    /**
+     * ¿Esta novedad (Anticipo o cuota de Préstamo Empresa) ya tiene un desembolso
+     * registrado por egreso? No lanza excepción: se usa para bloquear la UI de entrada
+     * (ver bloquearSiYaDesembolsada, que sí la lanza al guardar). Silencioso si
+     * roles/egresos no está desplegado.
+     */
+    private function yaDesembolsada(int $idEmpresa, array $novedad): bool
+    {
+        $cod = (string) ($novedad['tipo_codigo'] ?? '');
+        if ($cod !== '3' && $cod !== '9') return false;
+
+        $idNovedad = (int) ($novedad['id'] ?? 0);
+        $idEmpleado = (int) ($novedad['id_empleado'] ?? 0);
+        if ($idEmpleado <= 0 || $idNovedad <= 0) return false;
+
+        try {
+            $rolRepo = new \App\repositories\modulos\RolPagoRepository();
+            $monto = $cod === '3'
+                ? ($rolRepo->getAnticiposPagadosMasivo($idEmpresa, [$idNovedad])[$idNovedad] ?? 0.0)
+                : $rolRepo->getDesembolsadoPrestamoEmpleado($idEmpresa, $idEmpleado, '9');
+            return $monto > 0.001;
         } catch (\Throwable $e) {
             return false; // roles/egresos no desplegado → sin restricción
         }

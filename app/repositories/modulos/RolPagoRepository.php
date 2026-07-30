@@ -321,6 +321,29 @@ class RolPagoRepository extends BaseRepository
     }
 
     /**
+     * Total desembolsado (egreso PRESTAMO{tipoCodigo}) para un empleado en ese tipo de
+     * préstamo. Se usa para bloquear la edición/eliminación de una cuota: una vez que hay
+     * algún desembolso registrado, las cuotas existentes de ese empleado+tipo ya no deben
+     * tocarse (el rol descuenta según el total de cuotas registrado en ese momento).
+     */
+    public function getDesembolsadoPrestamoEmpleado(int $idEmpresa, int $idEmpleado, string $tipoCodigo): float
+    {
+        $sql = "SELECT COALESCE(SUM(ed.monto_pagado), 0)
+                FROM egresos_detalle ed
+                JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                WHERE ed.tipo_documento = :td AND ed.id_referencia_documento = :emp2
+                  AND ec.estado != 'anulado' AND ec.eliminado = false AND ed.eliminado = false
+                  AND ec.id_empresa = :emp";
+        try {
+            $st = $this->db->prepare($sql);
+            $st->execute([':td' => 'PRESTAMO' . $tipoCodigo, ':emp2' => $idEmpleado, ':emp' => $idEmpresa]);
+            return (float) $st->fetchColumn();
+        } catch (\Throwable $e) {
+            return 0.0; // egresos no disponible → sin desembolso
+        }
+    }
+
+    /**
      * [id_novedad => true] de cuotas de préstamo cuyo préstamo AÚN NO fue desembolsado
      * (lo pagado por egreso PRESTAMO{codigo} para ese empleado < total de sus cuotas de ese tipo).
      * El rol no debe descontar la cuota hasta que el préstamo se haya entregado (pagado).
@@ -616,6 +639,27 @@ class RolPagoRepository extends BaseRepository
         if (!$row) return null;
         $rub = $this->db->prepare("SELECT * FROM rol_detalle_rubro WHERE id_detalle = :d ORDER BY tipo DESC, id");
         $rub->execute([':d' => $idDetalle]);
+        $row['rubros'] = $rub->fetchAll(PDO::FETCH_ASSOC);
+        return $row;
+    }
+
+    /**
+     * Igual que getLinea(), pero busca por (id_rol, id_empleado) en vez de id_detalle:
+     * se usa para volver a ubicar la línea de un empleado después de refrescar la
+     * corrida, ya que regenerar borra e reinserta rol_detalle con IDs nuevos.
+     */
+    public function getLineaPorEmpleado(int $idRol, int $idEmpleado, int $idEmpresa): ?array
+    {
+        $sql = "SELECT d.*, e.nombres_apellidos, e.identificacion, e.email, e.cargo,
+                       e.decimo_tercero, e.decimo_cuarto, e.fondos_reserva
+                FROM rol_detalle d JOIN empleados e ON e.id = d.id_empleado
+                WHERE d.id_rol = :r AND d.id_empleado = :emp2 AND d.id_empresa = :emp";
+        $st = $this->db->prepare($sql);
+        $st->execute([':r' => $idRol, ':emp2' => $idEmpleado, ':emp' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) return null;
+        $rub = $this->db->prepare("SELECT * FROM rol_detalle_rubro WHERE id_detalle = :d ORDER BY tipo DESC, id");
+        $rub->execute([':d' => $row['id']]);
         $row['rubros'] = $rub->fetchAll(PDO::FETCH_ASSOC);
         return $row;
     }

@@ -70,9 +70,16 @@ class NovedadRepository extends BaseRepository
         // NovedadService::bloquearSiRolPagado (rol del período ya pagado/contabilizado
         // o con algún pago registrado), calculado en lote para no hacer N+1 en el listado.
         $bloqueadas = $this->combosRolBloqueado($rows, $idEmpresa);
+        // + mismo criterio que NovedadService::bloquearSiYaDesembolsada: Anticipo (3) ya
+        // pagado por egreso, o cuota de Préstamo Empresa (9) cuyo empleado ya tiene
+        // desembolsos registrados.
+        $desembolsadas = $this->idsDesembolsadas($rows, $idEmpresa);
         foreach ($rows as &$r) {
             $r['pagada'] = isset($pagadas[(int) $r['id']]);
-            $r['bloqueada'] = isset($bloqueadas[$this->claveCombo($r)]);
+            $cod = (string) ($r['tipo_codigo'] ?? '');
+            $porDesembolso = ($cod === '3' && isset($desembolsadas['a' . (int) $r['id']]))
+                || ($cod === '9' && isset($desembolsadas['p' . (int) $r['id_empleado']]));
+            $r['bloqueada'] = isset($bloqueadas[$this->claveCombo($r)]) || $porDesembolso;
         }
         unset($r);
 
@@ -126,6 +133,61 @@ class NovedadRepository extends BaseRepository
         } catch (\Throwable $e) {
             // Nómina/roles no desplegado en esta instalación: sin bloqueo derivado del rol.
         }
+        return $set;
+    }
+
+    /**
+     * Claves ['a{id_novedad}' => true] para Anticipos (3) ya pagados por egreso, y
+     * ['p{id_empleado}' => true] para empleados con algún desembolso de Préstamo Empresa
+     * (9) registrado. Una sola consulta por tipo para todo el listado (sin N+1).
+     */
+    private function idsDesembolsadas(array $rows, int $idEmpresa): array
+    {
+        $set = [];
+
+        $idsAnticipo = array_values(array_unique(array_filter(array_map(
+            fn($r) => ((string) ($r['tipo_codigo'] ?? '')) === '3' ? (int) $r['id'] : null,
+            $rows
+        ))));
+        if (!empty($idsAnticipo)) {
+            $in = implode(',', $idsAnticipo);
+            $sql = "SELECT ed.id_referencia_documento AS id_novedad
+                    FROM egresos_detalle ed JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                    WHERE ed.tipo_documento = 'ANTICIPO' AND ec.estado != 'anulado'
+                      AND ec.eliminado = false AND ed.eliminado = false
+                      AND ec.id_empresa = :emp AND ed.id_referencia_documento IN ($in)
+                    GROUP BY ed.id_referencia_documento
+                    HAVING SUM(ed.monto_pagado) > 0.001";
+            try {
+                $st = $this->db->prepare($sql);
+                $st->execute([':emp' => $idEmpresa]);
+                foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $id) { $set['a' . (int) $id] = true; }
+            } catch (\Throwable $e) {
+                // egresos no disponible → sin bloqueo derivado del desembolso
+            }
+        }
+
+        $idsEmpPrestamo9 = array_values(array_unique(array_filter(array_map(
+            fn($r) => ((string) ($r['tipo_codigo'] ?? '')) === '9' ? (int) $r['id_empleado'] : null,
+            $rows
+        ))));
+        if (!empty($idsEmpPrestamo9)) {
+            $in = implode(',', $idsEmpPrestamo9);
+            $sql = "SELECT DISTINCT ed.id_referencia_documento AS id_empleado
+                    FROM egresos_detalle ed JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
+                    WHERE ed.tipo_documento = 'PRESTAMO9' AND ec.estado != 'anulado'
+                      AND ec.eliminado = false AND ed.eliminado = false
+                      AND ec.id_empresa = :emp AND ed.id_referencia_documento IN ($in)
+                      AND ed.monto_pagado > 0.001";
+            try {
+                $st = $this->db->prepare($sql);
+                $st->execute([':emp' => $idEmpresa]);
+                foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $idEmp) { $set['p' . (int) $idEmp] = true; }
+            } catch (\Throwable $e) {
+                // egresos no disponible → sin bloqueo derivado del desembolso
+            }
+        }
+
         return $set;
     }
 

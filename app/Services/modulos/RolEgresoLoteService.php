@@ -44,6 +44,12 @@ class RolEgresoLoteService
             throw new \Exception('El rol debe estar generado para pagarlo. Estado actual: ' . $cab['estado'] . '.');
         }
 
+        // Se refresca antes de pagar (si sigue en 'generado' y sin pagos todavía): así el
+        // egreso se calcula con las novedades/reglas más recientes, no con lo que había
+        // cuando se generó la corrida por última vez.
+        (new RolPagoService($rolRepo, new \App\Rules\modulos\RolPagoRules(), $this->log))
+            ->refrescarSiCorresponde($idRol, $idEmpresa, $idUsuario);
+
         $fecha   = !empty($opts['fecha']) ? $opts['fecha'] : date('Y-m-d');
         $idForma = (int) ($opts['id_forma_pago'] ?? 0);
         $idPunto = (int) ($opts['id_punto_emision'] ?? 0);

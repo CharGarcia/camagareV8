@@ -28,25 +28,42 @@ class RolPagoService
         $this->ir = new ImpuestoRentaEmpleadoService();
     }
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array
+    /**
+     * $idUsuarioActual (distinto de $idUsuarioFiltro, que es el filtro de "solo mis
+     * registros"): si se pasa, refresca las filas 'generado' SIN pagos de la página
+     * actual antes de devolverlas, para que la columna Neto no se vea desactualizada.
+     * Acotado a la página (perPage filas, ~20): el costo real (regenerar) solo se paga
+     * en las pocas corridas todavía abiertas; el resto es un SELECT de existencia c/u.
+     */
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, ?int $idUsuarioActual = null): array
     {
-        return $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result = $this->repo->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+
+        if ($idUsuarioActual !== null) {
+            foreach ($result['rows'] as &$r) {
+                if (($r['estado'] ?? '') !== 'generado') continue;
+                if ($this->refrescarSiCorresponde((int) $r['id'], $idEmpresa, $idUsuarioActual)) {
+                    $fresca = $this->repo->findCabecera((int) $r['id'], $idEmpresa);
+                    if ($fresca) {
+                        $r['total_ingresos']   = $fresca['total_ingresos'];
+                        $r['total_egresos']    = $fresca['total_egresos'];
+                        $r['total_neto']       = $fresca['total_neto'];
+                        $r['aporte_patronal']  = $fresca['aporte_patronal'] ?? ($r['aporte_patronal'] ?? null);
+                    }
+                }
+            }
+            unset($r);
+        }
+
+        return $result;
     }
 
     public function getDetalle(int $id, int $idEmpresa, ?int $idUsuario = null): ?array
     {
         $cab = $this->repo->findCabecera($id, $idEmpresa);
         if (!$cab) return null;
-        // Auto-refresco al abrir: si el rol está 'generado' (aún no pagado/contabilizado),
-        // se regenera para reflejar cambios recientes (novedades, préstamos desembolsados,
-        // neteo, etc.). Los borrador/pagado/contabilizado/anulado NO se tocan. Barato (batch).
-        if ($idUsuario !== null && ($cab['estado'] ?? '') === 'generado' && !$this->repo->tienePagos($id)) {
-            try {
-                $this->generar($id, $idEmpresa, $idUsuario);
-                $cab = $this->repo->findCabecera($id, $idEmpresa);
-            } catch (\Throwable $e) {
-                // Si la regeneración falla, se muestra lo último guardado.
-            }
+        if ($idUsuario !== null && $this->refrescarSiCorresponde($id, $idEmpresa, $idUsuario)) {
+            $cab = $this->repo->findCabecera($id, $idEmpresa);
         }
         $cab['detalle'] = $this->repo->getDetalleCompleto($id, $idEmpresa);
         // Avisos: anticipos/préstamos del período aún sin desembolsar (no se descuentan en el rol).
@@ -59,19 +76,56 @@ class RolPagoService
         return $cab;
     }
 
-    /** Línea (empleado) del rol con su cabecera, para PDF/correo individual. */
-    public function getLineaEmpleado(int $idDetalle, int $idEmpresa): ?array
+    /**
+     * Regenera la corrida SI y SOLO SI sigue en estado 'generado' y aún no tiene pagos
+     * (egresos) registrados: así lo que se muestra (ver, PDF) o se usa para pagar
+     * (generar egresos en lote) siempre refleja las novedades, préstamos desembolsados,
+     * reglas de cálculo, etc. más recientes, aunque hayan cambiado después de generar
+     * la corrida. Una corrida ya pagada/contabilizada/anulada, o con algún egreso
+     * registrado, NUNCA se toca aquí (regenerarla movería los IDs de rol_detalle y
+     * rompería el vínculo con los pagos ya hechos — ver generar()).
+     *
+     * Barato en el caso común: si no aplica, es solo un SELECT de existencia
+     * (tienePagos). Devuelve true si efectivamente regeneró.
+     */
+    public function refrescarSiCorresponde(int $id, int $idEmpresa, int $idUsuario): bool
+    {
+        $cab = $this->repo->findCabecera($id, $idEmpresa);
+        if (!$cab || ($cab['estado'] ?? '') !== 'generado' || $this->repo->tienePagos($id)) {
+            return false;
+        }
+        try {
+            $this->generar($id, $idEmpresa, $idUsuario);
+            return true;
+        } catch (\Throwable $e) {
+            return false; // Si falla, se usan los últimos datos guardados.
+        }
+    }
+
+    /**
+     * Línea (empleado) del rol con su cabecera, para PDF/correo individual. Si se pasa
+     * $idUsuario y la corrida se refresca, el id_detalle original queda obsoleto
+     * (regenerar reinserta rol_detalle con IDs nuevos): se vuelve a ubicar la línea de
+     * este mismo empleado en la corrida ya refrescada.
+     */
+    public function getLineaEmpleado(int $idDetalle, int $idEmpresa, ?int $idUsuario = null): ?array
     {
         $lin = $this->repo->getLinea($idDetalle, $idEmpresa);
         if (!$lin) return null;
+
+        if ($idUsuario !== null && $this->refrescarSiCorresponde((int) $lin['id_rol'], $idEmpresa, $idUsuario)) {
+            $nueva = $this->repo->getLineaPorEmpleado((int) $lin['id_rol'], (int) $lin['id_empleado'], $idEmpresa);
+            if ($nueva) $lin = $nueva;
+        }
+
         $lin['cabecera'] = $this->repo->findCabecera((int) $lin['id_rol'], $idEmpresa);
         return $lin;
     }
 
     /** Detalle completo de un empleado del rol: general (rubros) + provisiones + asiento. */
-    public function getEmpleadoCompleto(int $idDetalle, int $idEmpresa): ?array
+    public function getEmpleadoCompleto(int $idDetalle, int $idEmpresa, ?int $idUsuario = null): ?array
     {
-        $lin = $this->getLineaEmpleado($idDetalle, $idEmpresa);
+        $lin = $this->getLineaEmpleado($idDetalle, $idEmpresa, $idUsuario);
         if (!$lin) return null;
         $esMensual = (($lin['cabecera']['tipo_rol'] ?? '') === 'MENSUAL');
         $salario = $this->repo->getSalario((int) ($lin['cabecera']['periodo_anio'] ?? 0));

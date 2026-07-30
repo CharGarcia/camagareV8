@@ -229,17 +229,21 @@ class ImportadorExcelService
     private function insertarCliente(array $fila, int $numeroFila, int $idEmpresa, string $tipoAmbiente, int $idUsuario): int
     {
         $tipoIdRaw      = $this->sanitizarTexto(trim((string)($fila[0] ?? '')), 50);
-        $identificacion = $this->sanitizarTexto(trim((string)($fila[1] ?? '')), 20);
+        // El límite real de la columna es 50; se valida a 20 más abajo según el
+        // tipo de identificación (validarIdentificacionCliente), pero se extrae
+        // completa aquí para que ese mensaje muestre el valor real, no uno recortado.
+        $identificacion = $this->sanitizarTexto(trim((string)($fila[1] ?? '')), 50);
         $nombre         = $this->sanitizarTexto(trim((string)($fila[2] ?? '')), 255);
         $direccion      = $this->sanitizarTexto(trim((string)($fila[3] ?? '')), 255);
         $emailRaw       = $this->sanitizarTexto(trim((string)($fila[4] ?? '')), 500);
-        $telefono       = $this->sanitizarTexto(trim((string)($fila[5] ?? '')), 30);
+        $telefono       = $this->campoTexto($fila, 5, 'TELEFONO', 20, $numeroFila);
         $plazo          = abs((int)($fila[6] ?? 0));
         $provinciaNombre = trim((string)($fila[7] ?? ''));
         $ciudadNombre    = trim((string)($fila[8] ?? ''));
 
         // Validar y normalizar emails
         $email = $this->validarYNormalizarEmails($emailRaw, $numeroFila);
+        $email = $this->validarLongitud($email, 200, 'EMAIL', $numeroFila);
 
         if (empty($identificacion) || empty($nombre)) {
             throw new Exception("Fila {$numeroFila}: Identificación y Nombre son obligatorios.");
@@ -567,6 +571,47 @@ class ImportadorExcelService
         return mb_substr(trim($valor), 0, $maxLen);
     }
 
+    /**
+     * Extrae y limpia un campo de texto de la fila y valida que no exceda el
+     * largo real de la columna en la base de datos. En vez de truncar en
+     * silencio (lo que después falla al guardar con el error crudo de
+     * PostgreSQL "value too long for type character varying"), se avisa aquí
+     * mismo qué campo está mal, cuántos caracteres trae y cuántos admite.
+     */
+    private function campoTexto(array $fila, int $indice, string $campo, int $maxLen, int $numeroFila): string
+    {
+        return $this->validarLongitud(
+            trim((string)($fila[$indice] ?? '')),
+            $maxLen,
+            $campo,
+            $numeroFila
+        );
+    }
+
+    /**
+     * Limpia caracteres de control/peligrosos y valida el largo máximo de un
+     * valor ya extraído (útil cuando el valor se construye después de leer la
+     * celda, como el email normalizado). Lanza un error legible por el
+     * usuario en vez de truncar o dejar que falle la consulta SQL.
+     */
+    private function validarLongitud(string $valor, int $maxLen, string $campo, int $numeroFila): string
+    {
+        $valor = preg_replace('/[\x00-\x1F\x7F]/', '', $valor);
+        $valor = trim((string)preg_replace("/['\";\\\\<>]/", '', $valor));
+
+        $largo = mb_strlen($valor);
+        if ($largo > $maxLen) {
+            $muestra = $largo > 60 ? mb_substr($valor, 0, 60) . '…' : $valor;
+            throw new Exception(
+                "Fila {$numeroFila}: El campo {$campo} no se puede cargar porque tiene {$largo} caracteres " .
+                "y el máximo permitido es {$maxLen}. Valor recibido: \"{$muestra}\". " .
+                "Corrija el dato en el Excel para que {$campo} tenga máximo {$maxLen} caracteres."
+            );
+        }
+
+        return $valor;
+    }
+
     private function insertarProducto(array $fila, int $numeroFila, int $idEmpresa, string $tipoAmbiente, int $idUsuario): int
     {
         $codigoPrincipal = $this->sanitizarTexto(trim((string)($fila[0] ?? '')), 50);
@@ -746,11 +791,11 @@ class ImportadorExcelService
 
     private function insertarRetencionSri(array $fila, int $numeroFila, int $idUsuario): int
     {
-        $codigo = trim((string)($fila[0] ?? ''));
-        $concepto = trim((string)($fila[1] ?? ''));
+        $codigo = $this->campoTexto($fila, 0, 'CODIGO_RETENCION', 5, $numeroFila);
+        $concepto = $this->campoTexto($fila, 1, 'CONCEPTO', 250, $numeroFila);
         $porcentaje = floatval($fila[2] ?? 0);
-        $impuesto = trim((string)($fila[3] ?? ''));
-        $codigoAts = trim((string)($fila[4] ?? ''));
+        $impuesto = $this->campoTexto($fila, 3, 'IMPUESTO', 50, $numeroFila);
+        $codigoAts = $this->campoTexto($fila, 4, 'CODIGO_ATS', 5, $numeroFila);
         $desde = trim((string)($fila[5] ?? ''));
         $hasta = trim((string)($fila[6] ?? ''));
 
@@ -825,9 +870,9 @@ class ImportadorExcelService
 
     private function insertarVehiculo(array $fila, int $numeroFila, int $idEmpresa, int $idUsuario): int
     {
-        $placa = trim((string)($fila[0] ?? ''));
-        $marca = trim((string)($fila[1] ?? ''));
-        $modelo = trim((string)($fila[2] ?? ''));
+        $placa = $this->campoTexto($fila, 0, 'PLACA', 20, $numeroFila);
+        $marca = $this->campoTexto($fila, 1, 'MARCA', 100, $numeroFila);
+        $modelo = $this->campoTexto($fila, 2, 'MODELO', 100, $numeroFila);
         $anio = (int)($fila[3] ?? 0);
 
         if (empty($placa)) throw new Exception("Fila {$numeroFila}: La placa es obligatoria.");
@@ -845,19 +890,22 @@ class ImportadorExcelService
     private function insertarProveedor(array $fila, int $numeroFila, int $idEmpresa, int $idUsuario): int
     {
         $tipoIdRaw       = $this->sanitizarTexto(trim((string)($fila[0]  ?? '')), 50);
-        $identificacion  = $this->sanitizarTexto(trim((string)($fila[1]  ?? '')), 20);
-        $razonSocial     = $this->sanitizarTexto(trim((string)($fila[2]  ?? '')), 255);
-        $nombreComercial = $this->sanitizarTexto(trim((string)($fila[3]  ?? '')), 255);
-        $direccion       = $this->sanitizarTexto(trim((string)($fila[4]  ?? '')), 255);
+        // El límite real de la columna es 25; se valida a 20 más abajo según el
+        // tipo de identificación (validarIdentificacionProveedor), pero se extrae
+        // completa aquí para que ese mensaje muestre el valor real, no uno recortado.
+        $identificacion  = $this->sanitizarTexto(trim((string)($fila[1]  ?? '')), 25);
+        $razonSocial     = $this->campoTexto($fila, 2, 'RAZON_SOCIAL', 200, $numeroFila);
+        $nombreComercial = $this->campoTexto($fila, 3, 'NOMBRE_COMERCIAL', 200, $numeroFila);
+        $direccion       = $this->campoTexto($fila, 4, 'DIRECCION', 150, $numeroFila);
         $emailRaw        = $this->sanitizarTexto(trim((string)($fila[5]  ?? '')), 500);
-        $telefono        = $this->sanitizarTexto(trim((string)($fila[6]  ?? '')), 30);
+        $telefono        = $this->campoTexto($fila, 6, 'TELEFONO', 50, $numeroFila);
         $plazo           = abs((int)($fila[7]  ?? 0));
         $provinciaNombre    = trim((string)($fila[8]  ?? ''));
         $ciudadNombre       = trim((string)($fila[9]  ?? ''));
         $tipoEmpresaNombre  = $this->sanitizarTexto(trim((string)($fila[10] ?? '')), 100);
         $bancoNombre        = $this->sanitizarTexto(trim((string)($fila[11] ?? '')), 150);
         $tipoCuentaRaw      = $this->sanitizarTexto(trim((string)($fila[12] ?? '')), 30);
-        $numeroCuenta       = $this->sanitizarTexto(trim((string)($fila[13] ?? '')), 50);
+        $numeroCuenta       = $this->campoTexto($fila, 13, 'NUMERO_CUENTA', 50, $numeroFila);
         $sustentoRaw        = $this->sanitizarTexto(trim((string)($fila[14] ?? '')), 20);
 
         if (empty($identificacion) || empty($razonSocial)) {
@@ -872,6 +920,7 @@ class ImportadorExcelService
 
         // Validar emails
         $email = $this->validarYNormalizarEmails($emailRaw, $numeroFila);
+        $email = $this->validarLongitud($email, 100, 'EMAIL', $numeroFila);
 
         // Buscar proveedor existente → UPDATE si existe, INSERT si no
         $stCheck = $this->db->prepare(
@@ -1051,13 +1100,13 @@ class ImportadorExcelService
 
     private function insertarEmpleado(array $fila, int $numeroFila, int $idEmpresa, int $idUsuario): int
     {
-        $tipoId = trim((string)($fila[0] ?? ''));
-        $identificacion = trim((string)($fila[1] ?? ''));
-        $nombres = trim((string)($fila[2] ?? ''));
-        $email = trim((string)($fila[3] ?? ''));
-        $telefono = trim((string)($fila[4] ?? ''));
+        $tipoId = $this->campoTexto($fila, 0, 'TIPO_IDENTIFICACION', 20, $numeroFila);
+        $identificacion = $this->campoTexto($fila, 1, 'IDENTIFICACION', 25, $numeroFila);
+        $nombres = $this->campoTexto($fila, 2, 'NOMBRES_APELLIDOS', 255, $numeroFila);
+        $email = $this->campoTexto($fila, 3, 'EMAIL', 100, $numeroFila);
+        $telefono = $this->campoTexto($fila, 4, 'TELEFONO', 50, $numeroFila);
         $direccion = trim((string)($fila[5] ?? ''));
-        $cargo = trim((string)($fila[6] ?? ''));
+        $cargo = $this->campoTexto($fila, 6, 'CARGO', 100, $numeroFila);
         $sueldo = floatval($fila[7] ?? 0);
 
         if (empty($identificacion) || empty($nombres)) throw new Exception("Fila {$numeroFila}: Identificación y Nombres son obligatorios.");
@@ -1468,7 +1517,7 @@ class ImportadorExcelService
 
     private function insertarPlanCuenta(array $fila, int $numeroFila, int $idEmpresa, int $idUsuario): int
     {
-        $codigo = trim((string)($fila[0] ?? ''));
+        $codigo = $this->campoTexto($fila, 0, 'CODIGO_CUENTA', 50, $numeroFila);
         $nombre = trim((string)($fila[1] ?? ''));
         $tipo = trim((string)($fila[2] ?? ''));
         $nivel = (int)($fila[3] ?? 1);
