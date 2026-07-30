@@ -47,6 +47,10 @@ class GuiaRemisionService
 
         $data = $this->prepararData($data);
 
+        // RUC Proveedor (Res. NAC-DGERCGC26-00000027) se agrega aquí, al crear —
+        // así solo los documentos nuevos lo llevan; los ya emitidos no se alteran.
+        $adicionales = \App\Helpers\SriProveedorHelper::conRucProveedor($adicionales);
+
         $db = Database::getConnection();
         $db->beginTransaction();
         try {

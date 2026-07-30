@@ -42,9 +42,9 @@ class LiquidacionCompraPdfService
 
     private function construir(array $cabecera, array $detalles, array $pagos, array $infoAdicional, array $empresa): \TCPDF
     {
-        // RUC del proveedor del sistema en la Información Adicional del RIDE
-        // (Res. NAC-DGERCGC26-00000027): el impreso debe reflejar lo mismo que el XML.
-        $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
+        // RUC del proveedor del sistema (Res. NAC-DGERCGC26-00000027): ya viene
+        // guardado en $infoAdicional desde LiquidacionCompraService::crear() para
+        // los documentos nuevos; no se inyecta aquí para no aplicarlo a los ya emitidos.
 
         require_once MVC_ROOT . '/vendor/autoload.php';
 

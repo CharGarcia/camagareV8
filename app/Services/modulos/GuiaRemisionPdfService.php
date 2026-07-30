@@ -63,9 +63,9 @@ class GuiaRemisionPdfService
 
     private function renderizar(array $cabecera, array $detalles, array $infoAdicional, array $empresa): void
     {
-        // RUC del proveedor del sistema en la Información Adicional del RIDE
-        // (Res. NAC-DGERCGC26-00000027): el impreso debe reflejar lo mismo que el XML.
-        $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
+        // RUC del proveedor del sistema (Res. NAC-DGERCGC26-00000027): ya viene
+        // guardado en $infoAdicional desde GuiaRemisionService::crear() para los
+        // documentos nuevos; no se inyecta aquí para no aplicarlo a los ya emitidos.
 
         $this->decCantidad = max(0, min(6, (int)($empresa['decimales_cantidad'] ?? 2)));
         $cabecera          = $this->completarDatosSri($cabecera);

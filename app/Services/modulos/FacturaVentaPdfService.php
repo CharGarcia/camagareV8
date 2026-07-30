@@ -37,9 +37,9 @@ class FacturaVentaPdfService
 
     private function renderizar(array $cabecera, array $detalles, array $pagos, array $infoAdicional, array $empresa): void
     {
-        // RUC del proveedor del sistema en la Información Adicional del RIDE
-        // (Res. NAC-DGERCGC26-00000027): el impreso debe reflejar lo mismo que el XML.
-        $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
+        // RUC del proveedor del sistema (Res. NAC-DGERCGC26-00000027): ya viene
+        // guardado en $infoAdicional desde FacturaVentaService::crear() para los
+        // documentos nuevos; no se inyecta aquí para no aplicarlo a los ya emitidos.
 
         // Decimales configurados por la empresa (igual que en el sistema/UI),
         // acotados a 0..6 igual que el XML para que ambos impriman lo mismo.
@@ -417,11 +417,13 @@ class FacturaVentaPdfService
         $pdf->SetFont('helvetica', 'B', 7.5);
         $pdf->Cell(22, $lh, $fecha, 0, 0, 'L');
         
-        $pdf->SetFont('helvetica', '', 7.5);
-        $pdf->Cell(25, $lh, 'Placa / Matrícula:', 0, 0, 'L');
-        $pdf->SetFont('helvetica', 'B', 7.5);
-        $pdf->Cell(20, $lh, $cab['placa'] ?? '', 0, 0, 'L');
-        
+        if (!empty($cab['placa'])) {
+            $pdf->SetFont('helvetica', '', 7.5);
+            $pdf->Cell(25, $lh, 'Placa / Matrícula:', 0, 0, 'L');
+            $pdf->SetFont('helvetica', 'B', 7.5);
+            $pdf->Cell(20, $lh, $cab['placa'], 0, 0, 'L');
+        }
+
         $pdf->SetFont('helvetica', '', 7.5);
         $pdf->Cell(22, $lh, 'Guía remisión:', 0, 0, 'L');
         $pdf->SetFont('helvetica', 'B', 7.5);
@@ -429,11 +431,15 @@ class FacturaVentaPdfService
         
         $yBox += $lh + 1;
 
-        // Fila 3: Dirección
+        // Fila 3: Dirección | Teléfono | Correo
         $pdf->SetFont('helvetica', '', 7.5);
         $pdf->SetXY($mL + 2, $yBox + 1);
         $pdf->Cell(15, $lh, 'Direccion:', 0, 0, 'L');
-        $pdf->Cell($cW - 17, $lh, $cab['cliente_direccion'] ?? '', 0, 1, 'L');
+        $pdf->Cell(60, $lh, $cab['cliente_direccion'] ?? '', 0, 0, 'L');
+        $pdf->Cell(16, $lh, 'Telefono:', 0, 0, 'L');
+        $pdf->Cell(26, $lh, $cab['cliente_telefono'] ?? '', 0, 0, 'L');
+        $pdf->Cell(14, $lh, 'Correo:', 0, 0, 'L');
+        $pdf->Cell($cW - 2 - 15 - 60 - 16 - 26 - 14, $lh, $cab['cliente_email'] ?? '', 0, 1, 'L');
         $yBox += $lh + 2;
 
         // Borde de la caja

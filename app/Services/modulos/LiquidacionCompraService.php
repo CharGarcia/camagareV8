@@ -63,11 +63,13 @@ class LiquidacionCompraService
                 $this->repository->insertPago($pago);
             }
 
-            if (!empty($data['info_adicional'])) {
-                foreach ($data['info_adicional'] as $info) {
-                    $info['id_cabecera'] = $id;
-                    $this->repository->insertInfoAdicional($info);
-                }
+            // RUC Proveedor (Res. NAC-DGERCGC26-00000027) se agrega aquí, al crear —
+            // así solo los documentos nuevos lo llevan; los ya emitidos no se alteran.
+            $infoAdicional = is_array($data['info_adicional'] ?? null) ? $data['info_adicional'] : [];
+            $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
+            foreach ($infoAdicional as $info) {
+                $info['id_cabecera'] = $id;
+                $this->repository->insertInfoAdicional($info);
             }
 
             $this->logService->registrar(

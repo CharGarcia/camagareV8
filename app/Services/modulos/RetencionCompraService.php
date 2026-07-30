@@ -83,6 +83,11 @@ class RetencionCompraService
         // Validar que el secuencial no esté duplicado (igual que factura de venta)
         $this->validarSecuencial($data);
 
+        // RUC Proveedor (Res. NAC-DGERCGC26-00000027): se congela aquí, al crear —
+        // igual que en factura/NC/liquidación/guía, así solo los documentos nuevos
+        // lo llevan y los ya emitidos no se alteran (ver XmlRetencionCompraService).
+        $data['ruc_proveedor_sistema'] = \App\Helpers\SriProveedorHelper::rucProveedor() ?: null;
+
         $db = Database::getConnection();
         $managed = !$db->inTransaction();
         if ($managed) $db->beginTransaction();

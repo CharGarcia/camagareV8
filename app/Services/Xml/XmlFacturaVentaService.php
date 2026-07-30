@@ -35,8 +35,9 @@ class XmlFacturaVentaService
         $this->decCantidad = max(0, min(6, (int)($empresa['decimales_cantidad'] ?? 2)));
         $this->decPrecio   = max(0, min(6, (int)($empresa['decimales_precio']   ?? 2)));
 
-        // RUC del proveedor del sistema en información adicional (Res. NAC-DGERCGC26-00000027).
-        $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
+        // RUC del proveedor del sistema (Res. NAC-DGERCGC26-00000027): ya viene
+        // guardado en $infoAdicional desde FacturaVentaService::crear() para los
+        // documentos nuevos; no se inyecta aquí para no aplicarlo a los ya emitidos.
 
         // Agrupación y etiquetas de ítems configuradas por la empresa. Se aplica
         // antes de construir infoFactura para que los totales se calculen sobre

@@ -310,7 +310,12 @@ class XmlRetencionCompraService
         }
 
         // RUC del proveedor del sistema (Res. NAC-DGERCGC26-00000027, Art. 5).
-        $rucProveedor = \App\Helpers\SriProveedorHelper::rucProveedor();
+        // Se lee de la propia cabecera (columna ruc_proveedor_sistema), congelado
+        // ahí por RetencionCompraService::crear() al emitir — igual que los otros
+        // 4 comprobantes guardan su fila de info adicional al crear. Las
+        // retenciones ya emitidas antes de este cambio tienen la columna en NULL
+        // y no llevan el campo.
+        $rucProveedor = trim((string) ($cab['ruc_proveedor_sistema'] ?? ''));
         if ($rucProveedor !== '') {
             $campo = $dom->createElement('campoAdicional');
             $campo->setAttribute('nombre', \App\Helpers\SriProveedorHelper::CAMPO_NOMBRE);

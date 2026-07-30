@@ -18,8 +18,10 @@ class XmlGuiaRemisionService
         ?string $dirEstablecimiento = null
     ): string {
         $dom = new \DOMDocument('1.0', 'UTF-8');
-        // RUC del proveedor del sistema en información adicional (Res. NAC-DGERCGC26-00000027).
-        $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
+        // RUC del proveedor del sistema (Res. NAC-DGERCGC26-00000027): ya viene
+        // guardado en $infoAdicional desde GuiaRemisionService::crear() (arreglo
+        // "adicionales") para los documentos nuevos; no se inyecta aquí para no
+        // aplicarlo a los ya emitidos.
 
         $dom->formatOutput = false;
 

@@ -124,7 +124,11 @@ class NotaCreditoService
             $db->commit();
             // Info adicional fuera de la transacción: si la tabla no existe (BD sin
             // migrar) NO debe impedir que la NC se guarde.
-            $this->guardarInfoAdicional($idNC, $data['info_adicional'] ?? []);
+            // RUC Proveedor (Res. NAC-DGERCGC26-00000027) se agrega aquí, al crear —
+            // así solo los documentos nuevos lo llevan; los ya emitidos no se alteran.
+            $infoAdicional = is_array($data['info_adicional'] ?? null) ? $data['info_adicional'] : [];
+            $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
+            $this->guardarInfoAdicional($idNC, $infoAdicional);
             $this->generarYGuardarXml($idNC, $data['empresa_config'] ?? []);
         } catch (Exception $e) {
             $db->rollBack();

@@ -233,6 +233,7 @@ class FacturaVentaRepository extends BaseRepository
                        c.identificacion      AS cliente_ruc,
                        c.direccion           AS cliente_direccion,
                        c.email               AS cliente_email,
+                       c.telefono            AS cliente_telefono,
                        c.tipo_id             AS cliente_tipo_id,
                        c.plazo               AS cliente_plazo,
                        COALESCE(icv.nombre,'') AS cliente_nombre_tipo_id,

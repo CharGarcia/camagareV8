@@ -51,9 +51,9 @@ class PlantillasPdfRendererService
         if (($plantilla['tipo_documento'] ?? '') === 'factura_venta') {
             $detalles = (new \App\Services\modulos\FacturaItemsPresentacionService())
                 ->preparar($detalles, $empresa);
-            // RUC del proveedor del sistema en la Información Adicional del RIDE
-            // (Res. NAC-DGERCGC26-00000027): el impreso debe reflejar lo mismo que el XML.
-            $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
+            // RUC del proveedor del sistema (Res. NAC-DGERCGC26-00000027): ya viene
+            // guardado en $infoAdicional desde FacturaVentaService::crear() para los
+            // documentos nuevos; no se inyecta aquí para no aplicarlo a los ya emitidos.
         }
 
         $config    = json_decode($plantilla['configuracion'] ?? '{}', true) ?? [];

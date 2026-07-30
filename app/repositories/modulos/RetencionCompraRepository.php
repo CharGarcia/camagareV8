@@ -372,7 +372,7 @@ class RetencionCompraRepository extends BaseRepository
                     num_doc_sustento, fecha_emision_doc_sustento,
                     doc_sustento_subtotal, doc_sustento_iva, doc_sustento_total,
                     total_retenido, numero_autorizacion,
-                    estado, detalle_xml,
+                    estado, detalle_xml, ruc_proveedor_sistema,
                     created_by, updated_by
                 ) VALUES (
                     :ie, :ip, :iu, :iest, :ipt,
@@ -382,7 +382,7 @@ class RetencionCompraRepository extends BaseRepository
                     :nds, :feds,
                     :dss, :dsi, :dst,
                     :tr, :na,
-                    :est, :dxml,
+                    :est, :dxml, :rps,
                     :cb, :ub
                 ) RETURNING id";
 
@@ -414,6 +414,7 @@ class RetencionCompraRepository extends BaseRepository
             ':na'   => $d['clave_acceso']         ?? null,
             ':est'  => $d['estado']    ?? 'borrador',
             ':dxml' => $d['detalle_xml'] ?? null,
+            ':rps'  => $d['ruc_proveedor_sistema'] ?? null,
             ':cb'   => !empty($d['id_usuario']) ? $d['id_usuario'] : null,
             ':ub'   => !empty($d['id_usuario']) ? $d['id_usuario'] : null,
         ]);

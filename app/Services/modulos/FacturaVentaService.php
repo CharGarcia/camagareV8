@@ -905,11 +905,17 @@ class FacturaVentaService
                 }
             }
 
-            if (!empty($data['info_adicional']) && is_array($data['info_adicional'])) {
-                foreach ($data['info_adicional'] as $ia) {
-                    $ia['id_venta'] = $idVenta;
-                    $this->repository->insertInfoAdicional($ia);
-                }
+            // Campos de sistema en info adicional: se agregan aquí (una sola vez, al
+            // crear) para que queden guardados con el documento y viajen igual en el
+            // XML y el RIDE sin importar el origen (Factura de Venta o POS). Así también
+            // solo los documentos nuevos los llevan; los ya emitidos no se alteran.
+            $infoAdicional = is_array($data['info_adicional'] ?? null) ? $data['info_adicional'] : [];
+            $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
+            $infoAdicional = $this->conCorreoClienteInfoAdicional($infoAdicional, (int) $data['id_cliente'], $idEmpresa);
+
+            foreach ($infoAdicional as $ia) {
+                $ia['id_venta'] = $idVenta;
+                $this->repository->insertInfoAdicional($ia);
             }
 
             $this->logService->registrar(
@@ -954,7 +960,32 @@ class FacturaVentaService
         return $idVenta;
     }
 
+    /**
+     * Agrega (o actualiza) la fila fija "Correo del cliente" en info adicional —
+     * mismo nombre de campo que ya usa el modal de Factura de Venta (JS,
+     * actualizarInfoCorreoCliente) para que ambos orígenes (formulario manual y
+     * POS) queden consistentes. No duplica si ya vino en el payload; se omite si
+     * el cliente no tiene correo registrado.
+     */
+    private function conCorreoClienteInfoAdicional(array $infoAdicional, int $idCliente, int $idEmpresa): array
+    {
+        $cliente = (new \App\repositories\modulos\ClienteRepository())->findById($idCliente, $idEmpresa);
+        $email = trim((string) ($cliente['email'] ?? ''));
+        if ($email === '') {
+            return $infoAdicional;
+        }
 
+        foreach ($infoAdicional as $i => $ia) {
+            if (strcasecmp(trim((string) ($ia['nombre'] ?? '')), 'Correo del cliente') === 0) {
+                $infoAdicional[$i]['nombre'] = 'Correo del cliente';
+                $infoAdicional[$i]['valor']  = $email;
+                return $infoAdicional;
+            }
+        }
+
+        $infoAdicional[] = ['nombre' => 'Correo del cliente', 'valor' => $email];
+        return $infoAdicional;
+    }
 
     public function getPorId(int $id, int $idEmpresa): ?array
     {

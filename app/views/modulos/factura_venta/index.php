@@ -703,8 +703,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                             <?php $rucProveedorSri = \App\Helpers\SriProveedorHelper::rucProveedor(); ?>
                                                             <?php if ($rucProveedorSri !== ''): ?>
                                                             <!-- Campo normativo fijo (Res. NAC-DGERCGC26-00000027 / Ficha v2.34 Anexo 26):
-                                                                 lo agrega el sistema en el XML y el RIDE; no es editable ni eliminable. -->
-                                                            <tbody>
+                                                                 lo agrega el sistema al CREAR el documento (FacturaVentaService::crear);
+                                                                 esta fila es solo la vista previa para una factura NUEVA — se oculta al
+                                                                 editar una factura ya existente porque esa, si es anterior a hoy, no lo tiene. -->
+                                                            <tbody id="m-tbody-ruc-proveedor-preview">
                                                                 <tr class="table-light">
                                                                     <td class="ps-2 p-0 align-middle">
                                                                         <span class="small text-muted fst-italic"><i class="bi bi-lock-fill me-1" style="font-size:0.65rem;"></i><?= htmlspecialchars(\App\Helpers\SriProveedorHelper::CAMPO_NOMBRE) ?></span>
@@ -2616,6 +2618,7 @@ $totalPages = $totalPagesOriginal;
     function abrirModalFactura() {
         // Nueva factura: asegurar ID en cero y permitir carga normal del consecutivo
         FV_ID_ACTIVO = 0;
+        document.getElementById('m-tbody-ruc-proveedor-preview')?.classList.remove('d-none');
         FV_FECHA_EMISION = null;
         FV_CLIENTE_RUC   = '';
         FV_BLOQUEAR_SECUENCIAL = false;
@@ -4758,6 +4761,9 @@ $totalPages = $totalPagesOriginal;
         FV_BLOQUEAR_SECUENCIAL = true;
         fvResetearModal();
         FV_ID_ACTIVO = id;
+        // Factura existente: se oculta la vista previa del RUC Proveedor — ese campo
+        // solo se guarda en documentos nuevos (ver comentario junto al <tbody>).
+        document.getElementById('m-tbody-ruc-proveedor-preview')?.classList.add('d-none');
         // Pestañas de módulos relacionados (proforma, etc.) — solo las que tengan datos.
         fvCargarPestanhasRelacionadas(id);
         FV_FECHA_EMISION = (data.fecha_emision || '').split(' ')[0].split('T')[0] || null;
