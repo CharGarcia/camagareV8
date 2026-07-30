@@ -143,9 +143,10 @@ class XmlFacturaVentaService
         $this->txt($dom, $el, 'moneda',       strtoupper($cab['moneda'] ?? 'DOLAR'));
 
         // Placa del vehículo — operadoras de transporte comercial, excepto taxis
-        // (Ficha Técnica SRI v2.34, Anexo 25 / Res. NAC-DGERCGC26-00000024).
-        // Va ENTRE <moneda> y <pagos>; letras y números sin espacios (ABC1234).
-        $placa = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string)($cab['placa'] ?? '')));
+        // (Ficha Técnica SRI v2.34, Anexo 25/Tabla 33 / Res. NAC-DGERCGC26-00000024).
+        // Va ENTRE <moneda> y <pagos>; 3 letras + 4 dígitos (motos con 3 dígitos se
+        // rellenan con un cero a la izquierda).
+        $placa = \App\Helpers\PlacaTransporteHelper::normalizar((string)($cab['placa'] ?? ''));
         if ($placa !== '') {
             $this->txt($dom, $el, 'placa', $placa);
         }

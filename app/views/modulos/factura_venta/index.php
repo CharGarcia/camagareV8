@@ -537,9 +537,32 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                 <label class="x-small fw-bold text-muted mb-1">Secuencial</label>
                                                 <input type="text" class="form-control form-control-sm border-primary border-opacity-25 text-center text-dark py-0 bg-light" style="height: 31px;" name="secuencial" id="m-input-secuencial" placeholder="000000001" maxlength="9" readonly>
                                             </div>
-                                            <!-- 4. Bodega -->
-                                            <?php if (($empresa['facturacion_inventario'] ?? 'true') === 'true' || ($empresa['facturacion_inventario'] ?? 'true') === true): ?>
-                                                <div class="col-md-3">
+                                            <?php
+                                                // Anchos dinámicos de los últimos 6 de las 12 columnas (Fecha+Serie+Secuencial
+                                                // ya ocuparon 6): se reparten entre Placa, Bodega y Vendedor según cuáles
+                                                // estén visibles. Sin Placa, el reparto es idéntico al de siempre
+                                                // (Bodega 3 / Vendedor 3, o Vendedor 6 si tampoco hay Bodega).
+                                                $mostrarBodega = (($empresa['facturacion_inventario'] ?? 'true') === 'true' || ($empresa['facturacion_inventario'] ?? 'true') === true);
+                                                $mostrarPlaca  = (($empresa['factura_operadora_transporte'] ?? 'false') === 'true' || ($empresa['factura_operadora_transporte'] ?? false) === true);
+                                                $colPlaca      = $mostrarPlaca ? 2 : 0;
+                                                $colBodega     = $mostrarBodega ? ($mostrarPlaca ? 2 : 3) : 0;
+                                                $colVendedor   = 6 - $colPlaca - $colBodega;
+                                            ?>
+                                            <!-- 4. Placa del vehículo (operadoras de transporte — Ficha SRI v2.34, Anexo 25,
+                                                 Tabla 33): máscara 3 letras + 3-4 números (ABC1234; motos ABC123, se rellena
+                                                 con 0 al guardar). -->
+                                            <?php if ($mostrarPlaca): ?>
+                                            <div class="col-md-<?= $colPlaca ?>">
+                                                <label class="x-small fw-bold text-muted mb-1">Placa <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control form-control-sm border-primary border-opacity-10 text-uppercase" name="placa" id="m-input-placa"
+                                                       style="height: 31px;" maxlength="7" placeholder="ABC1234" autocomplete="off"
+                                                       pattern="[A-Za-z]{3}[0-9]{3,4}" title="3 letras seguidas de 3 o 4 números (ej. ABC1234)"
+                                                       oninput="fvMaskPlaca(this)" onblur="fvNormalizarPlaca(this)">
+                                            </div>
+                                            <?php endif; ?>
+                                            <!-- 5. Bodega -->
+                                            <?php if ($mostrarBodega): ?>
+                                                <div class="col-md-<?= $colBodega ?>">
                                                     <label class="x-small fw-bold text-muted mb-1">
                                                         Bodega <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'm-select-bodega', 'id_bodega') ?>
                                                     </label>
@@ -550,8 +573,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                     </select>
                                                 </div>
                                             <?php endif; ?>
-                                            <!-- 5. Vendedor -->
-                                            <div class="col-md-<?= (($empresa['facturacion_inventario'] ?? 'true') === 'true' || ($empresa['facturacion_inventario'] ?? 'true') === true) ? '3' : '6' ?>">
+                                            <!-- 6. Vendedor -->
+                                            <div class="col-md-<?= $colVendedor ?>">
                                                 <label class="x-small fw-bold text-muted mb-1">
                                                     Vendedor <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'm-select-vendedor', 'id_vendedor') ?>
                                                 </label>
@@ -562,15 +585,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                     <?php endforeach; ?>
                                                 </select>
                                             </div>
-                                            <?php if (($empresa['factura_operadora_transporte'] ?? 'false') === 'true' || ($empresa['factura_operadora_transporte'] ?? false) === true): ?>
-                                            <!-- Placa del vehículo (operadoras de transporte — Ficha SRI v2.34, Anexo 25) -->
-                                            <div class="col-md-3">
-                                                <label class="x-small fw-bold text-muted mb-1">Placa del vehículo <span class="text-danger">*</span></label>
-                                                <input type="text" class="form-control form-control-sm border-primary border-opacity-10 text-uppercase" name="placa" id="m-input-placa"
-                                                       style="height: 31px;" maxlength="20" placeholder="ABC1234" autocomplete="off"
-                                                       oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '')">
-                                            </div>
-                                            <?php endif; ?>
                                         </div>
                                     </div>
 
@@ -1631,13 +1645,23 @@ $totalPages = $totalPagesOriginal;
             text: 'El total de la factura no puede ser negativo.'
         });
 
-        // Operadoras de transporte (Ficha SRI v2.34, Anexo 25): placa obligatoria.
-        const _placa = (document.getElementById('m-input-placa')?.value || '').trim();
-        if (EMPRESA_CONFIG.factura_operadora_transporte && !_placa) return Swal.fire({
-            icon: 'warning',
-            title: 'Atención',
-            text: 'Debe ingresar la placa del vehículo con el que se prestó el servicio de transporte (requisito del SRI para operadoras de transporte).'
-        });
+        // Operadoras de transporte (Ficha SRI v2.34, Anexo 25/Tabla 33): placa
+        // obligatoria con formato ecuatoriano (3 letras + 3 o 4 números).
+        const inputPlacaVal = document.getElementById('m-input-placa');
+        if (inputPlacaVal) fvNormalizarPlaca(inputPlacaVal);
+        const _placa = (inputPlacaVal?.value || '').trim();
+        if (EMPRESA_CONFIG.factura_operadora_transporte) {
+            if (!_placa) return Swal.fire({
+                icon: 'warning',
+                title: 'Atención',
+                text: 'Debe ingresar la placa del vehículo con el que se prestó el servicio de transporte (requisito del SRI para operadoras de transporte).'
+            });
+            if (!/^[A-Z]{3}[0-9]{4}$/.test(_placa)) return Swal.fire({
+                icon: 'warning',
+                title: 'Atención',
+                text: 'La placa debe tener el formato de 3 letras seguidas de números (ej. ABC1234).'
+            });
+        }
 
         // ”€”€ Recolectar ítems ”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€”€
         let totalSinImpuestos = 0;
@@ -4308,6 +4332,30 @@ $totalPages = $totalPagesOriginal;
     // esto corrige lo tecleado a mano (p. ej. "-5" pasa a 0 al instante).
     function fvNoNegativo(el) {
         if (el && el.value !== '' && parseFloat(el.value) < 0) el.value = 0;
+    }
+
+    /**
+     * Máscara de placa vehicular ecuatoriana (Ficha SRI v2.34, Tabla 33): exactamente
+     * 3 letras seguidas de hasta 4 números; cualquier otro carácter se descarta al
+     * teclear. No se rellena aquí (el relleno de motos con 3 dígitos se hace al
+     * salir del campo, en fvNormalizarPlaca) para no interrumpir mientras se escribe.
+     */
+    function fvMaskPlaca(el) {
+        const cursorAlFinal = el.selectionStart === el.value.length;
+        let letras = '', numeros = '';
+        for (const ch of el.value.toUpperCase()) {
+            if (letras.length < 3 && /[A-Z]/.test(ch)) letras += ch;
+            else if (letras.length === 3 && numeros.length < 4 && /[0-9]/.test(ch)) numeros += ch;
+        }
+        el.value = letras + numeros;
+        if (cursorAlFinal) el.setSelectionRange(el.value.length, el.value.length);
+    }
+
+    /** Motos (3 letras + 3 dígitos): al salir del campo se rellena con un cero a la
+     *  izquierda del bloque numérico, como exige la Tabla 33 (caso 2) para el XML. */
+    function fvNormalizarPlaca(el) {
+        const m = el.value.match(/^([A-Z]{3})([0-9]{3})$/);
+        if (m) el.value = m[1] + '0' + m[2];
     }
 
     window.calcSinImp = function(el) {

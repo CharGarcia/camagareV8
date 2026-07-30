@@ -471,18 +471,29 @@ class FacturaVentaService
     }
 
     /**
-     * Operadoras de transporte comercial (Ficha SRI v2.34, Anexo 25): la placa del
-     * vehículo es requisito de llenado obligatorio en la factura. Solo aplica cuando
-     * la EMPRESA está marcada como operadora (empresas.factura_operadora_transporte,
-     * definido por el superadmin en config/empresas-sistema).
+     * Operadoras de transporte comercial (Ficha SRI v2.34, Anexo 25/Tabla 33): la
+     * placa del vehículo es requisito obligatorio, con formato 3 letras + 4 dígitos
+     * (motos con 3 dígitos se rellenan con un cero a la izquierda). Solo aplica
+     * cuando la EMPRESA está marcada como operadora (empresas.factura_operadora_transporte,
+     * definido por el superadmin en config/empresas-sistema). Normaliza $data['placa']
+     * en el sitio para que quede lista para persistir/emitir en el XML.
      */
-    private function validarPlacaTransporte(array $data, array $empresaConfig): void
+    private function validarPlacaTransporte(array &$data, array $empresaConfig): void
     {
         $esOperadora = ($empresaConfig['factura_operadora_transporte'] ?? 'false') === 'true'
             || ($empresaConfig['factura_operadora_transporte'] ?? false) === true;
-        if ($esOperadora && trim((string)($data['placa'] ?? '')) === '') {
+        if (!$esOperadora) {
+            return;
+        }
+
+        $placa = \App\Helpers\PlacaTransporteHelper::normalizar((string)($data['placa'] ?? ''));
+        if ($placa === '') {
             throw new \Exception('Debe ingresar la placa del vehículo con el que se prestó el servicio de transporte (requisito del SRI para operadoras de transporte).');
         }
+        if (!\App\Helpers\PlacaTransporteHelper::esValida($placa)) {
+            throw new \Exception('La placa "' . $placa . '" no tiene un formato válido (debe ser 3 letras seguidas de números, ej. ABC1234).');
+        }
+        $data['placa'] = $placa;
     }
 
     public function actualizar(int $id, array $data): int

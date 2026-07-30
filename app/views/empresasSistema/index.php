@@ -468,16 +468,16 @@ function estadoPagoBadge($estado) {
                                     <input type="text" id="edit-nombre-comercial" name="nombre_comercial" class="form-control form-control-sm" placeholder="Nombre comercial">
                                 </div>
                                 <div class="col-md-2">
-                                    <label for="edit-obligado-contabilidad" class="form-label">Obligado a llevar contabilidad</label>
+                                    <label for="edit-obligado-contabilidad" class="form-label">Contabilidad?</label>
                                     <select id="edit-obligado-contabilidad" name="obligado_contabilidad" class="form-select form-select-sm">
                                         <option value="NO">NO</option>
                                         <option value="SI">SI</option>
                                     </select>
                                 </div>
-                                <div class="col-12">
+                                <div class="col-md-10 d-flex align-items-center">
                                     <!-- El hidden garantiza que la clave llegue también con el switch apagado -->
                                     <input type="hidden" name="factura_operadora_transporte" value="false">
-                                    <div class="form-check form-switch mb-0">
+                                    <div class="form-check form-switch mb-0 mt-3">
                                         <input class="form-check-input" type="checkbox" role="switch" id="edit-operadora-transporte" name="factura_operadora_transporte" value="true">
                                         <label class="form-check-label small" for="edit-operadora-transporte">Operadora de transporte comercial (excepto taxis)</label>
                                         <div class="form-text mt-0" style="font-size:0.7rem;">Ficha Técnica SRI v2.34, Anexo 25: sus facturas pedirán la <strong>placa del vehículo</strong> (obligatoria) y la incluirán en el XML y el PDF.</div>
