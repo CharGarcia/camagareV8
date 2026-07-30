@@ -202,6 +202,14 @@ return [
         ],
     ],
 
+    // Pendiente: registrar el submódulo en submodulos_menu (ruta = 'modulos/nota_debito')
+    // y asignar permisos en modulos_asignados (ver database/menu_nota_debito.sql),
+    // luego actualizar este id_submodulo con el id real generado.
+    'modulos/nota_debito' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     'modulos/guias_remision' => [
         'id_submodulo' => 166,
         'legacy_rutas' => [],

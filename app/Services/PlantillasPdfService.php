@@ -90,6 +90,21 @@ class PlantillasPdfService
             ],
             'Especiales'      => ['{barcode}' => 'Código de Barras (clave acceso)', '{texto_libre}' => 'Texto fijo'],
         ],
+        'nota_debito' => [
+            'Empresa'         => self::CAMPOS_EMPRESA,
+            'Nota de Débito'  => self::CAMPOS_AUTORIZACION_SRI + [
+                '{nd_num_doc_modificado}' => 'N.° del comprobante modificado',
+                '{nd_fecha_doc_sustento}' => 'Fecha del comprobante modificado',
+            ],
+            'Cliente'         => self::CAMPOS_CLIENTE,
+            'Totales'         => self::CAMPOS_TOTALES,
+            'Tablas'          => [
+                'tabla:motivos'        => 'Tabla de Motivos',
+                'tabla:pagos'          => 'Tabla de Formas de Pago',
+                'tabla:info_adicional' => 'Tabla Información Adicional',
+            ],
+            'Especiales'      => ['{barcode}' => 'Código de Barras (clave acceso)', '{texto_libre}' => 'Texto fijo'],
+        ],
         'guia_remision' => [
             'Empresa'         => self::CAMPOS_EMPRESA,
             'Guía'            => [

@@ -194,12 +194,19 @@ class FacturaVentaController extends BaseModuloController
         }
         unset($d);
 
+        $reembolsos = $this->repository->getReembolsos($id);
+        foreach ($reembolsos as &$r) {
+            $r['impuestos'] = $this->repository->getImpuestosReembolso((int) $r['id']);
+        }
+        unset($r);
+
         echo json_encode([
             'ok'             => true,
             'cabecera'       => $cabecera,
             'detalles'       => $detalles,
             'pagos'          => $this->repository->getPagos($id),
             'info_adicional' => $this->repository->getInfoAdicional($id),
+            'reembolsos'     => $reembolsos,
         ]);
         exit;
     }
@@ -1549,6 +1556,29 @@ class FacturaVentaController extends BaseModuloController
             $p['variantes']     = $repo->getVariantes((int)$p['id'], $idEmpresa);
             return $p;
         }, $result['rows']);
+
+        echo json_encode(['ok' => true, 'data' => $rows]);
+        exit;
+    }
+
+    /**
+     * Typeahead de compras ya registradas, para autocompletar una línea de
+     * "Reembolso" (SRI): trae el documento del proveedor + el detalle de
+     * impuestos agregado, listo para guardarse como reembolsoDetalle.
+     */
+    public function buscarComprasReembolsoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar    = trim($_GET['q'] ?? '');
+
+        $compras = $this->repository->buscarComprasParaReembolso($idEmpresa, $buscar);
+        $rows = array_map(function ($c) {
+            $c['impuestos'] = $this->repository->getImpuestosAgregadosCompra((int) $c['id']);
+            return $c;
+        }, $compras);
 
         echo json_encode(['ok' => true, 'data' => $rows]);
         exit;

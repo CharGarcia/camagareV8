@@ -99,6 +99,7 @@ class EnvioDocumentosSRIService
         $nombreDocStr = match ($tipoDocumento) {
             'factura_venta' => 'Factura',
             'nota_credito' => 'Nota de Crédito',
+            'nota_debito' => 'Nota de Débito',
             'retencion_compra' => 'Comprobante de Retención',
             'guia_remision' => 'Guía de Remisión',
             'liquidacion_compra' => 'Liquidación de Compra',
@@ -565,6 +566,7 @@ class EnvioDocumentosSRIService
         $nombreDocStr = match ($tipoDocumento) {
             'factura_venta'      => 'Factura',
             'nota_credito'       => 'Nota de Crédito',
+            'nota_debito'        => 'Nota de Débito',
             'retencion_compra'   => 'Comprobante de Retención',
             'guia_remision'      => 'Guía de Remisión',
             'liquidacion_compra' => 'Liquidación de Compra',

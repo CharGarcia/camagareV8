@@ -7,6 +7,13 @@
     .ri-ex-scroll thead th, .ri-mv-scroll thead th, .ri-va-scroll thead th, .ri-cv-scroll thead th {
         position: sticky; top: 0; z-index: 10; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6;
     }
+    /* Texto largo: se envuelve dentro de la celda y la fila crece, en vez de
+       recortarse con ellipsis (a diferencia del estándar de listados con
+       cmg-table-card, que sí usa ellipsis de una línea). */
+    .ri-ex-scroll table td, .ri-mv-scroll table td, .ri-va-scroll table td, .ri-cv-scroll table td {
+        white-space: normal !important;
+        word-break: break-word;
+    }
     .ri-kpi-icon { width: 48px; height: 48px; }
     .ri-nav-tabs .nav-link { font-weight: 600; font-size: .85rem; }
     .ri-nav-tabs .nav-link.active { border-bottom: 3px solid var(--bs-primary); }

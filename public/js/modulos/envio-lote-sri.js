@@ -14,6 +14,7 @@
     const TIPO_LABEL = {
         factura_venta:      ['Factura', 'primary'],
         nota_credito:       ['Nota crédito', 'info'],
+        nota_debito:        ['Nota débito', 'dark'],
         retencion_compra:   ['Retención', 'warning'],
         liquidacion_compra: ['Liquidación', 'secondary'],
     };

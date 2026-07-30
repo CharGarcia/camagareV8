@@ -2391,6 +2391,105 @@ class AsientoBuilderService
     }
 
     /**
+     * Arma el asiento contable de una nota de débito de venta.
+     *   DEBE : Cuentas por Cobrar, por el valor total (aumenta lo que debe el cliente).
+     *   HABER: Ventas (subtotal) + IVA Ventas (si aplica).
+     * A diferencia de la NC, NO se invierte (una ND es del mismo signo que una
+     * factura) y NO hay líneas de costo/inventario (la ND no tiene producto).
+     */
+    public function generarAsientoNotaDebitoVenta(int $idEmpresa, int $idNotaDebito): array
+    {
+        $db = \App\core\Database::getConnection();
+
+        $stCab = $db->prepare(
+            "SELECT importe_total, total_sin_impuestos, id_cliente
+             FROM nota_debito_cabecera WHERE id = ?"
+        );
+        $stCab->execute([$idNotaDebito]);
+        $cab = $stCab->fetch(\PDO::FETCH_ASSOC) ?: [];
+        $importeTotal = round((float)($cab['importe_total']      ?? 0), 2);
+        $subtotal     = round((float)($cab['total_sin_impuestos'] ?? 0), 2);
+        $idCliente    = (int) ($cab['id_cliente'] ?? 0);
+        if ($importeTotal <= 0.0 && $subtotal <= 0.0) {
+            return [];
+        }
+
+        $comercial = []; // por cobrar + ventas + IVA
+
+        // IVA por tarifa: los impuestos de la ND están a nivel de cabecera (sin
+        // producto), así que la cascada solo llega hasta cliente > general.
+        $sqlIva = "SELECT i.codigo_porcentaje, SUM(i.valor) AS total_valor,
+                          COALESCE(ap_cli.id_cuenta, ap_gen.id_cuenta) AS id_cuenta,
+                          pc.codigo AS cuenta_codigo, pc.nombre AS cuenta_nombre
+                   FROM nota_debito_impuestos i
+                   LEFT JOIN asientos_programados ap_cli
+                          ON ap_cli.id_referencia = :id_cliente AND ap_cli.tipo_referencia = 'cliente'
+                         AND ap_cli.id_asiento_tipo = 0 AND ap_cli.codigo_tarifa_iva = i.codigo_porcentaje::text
+                         AND ap_cli.direccion_iva = 'venta' AND ap_cli.id_empresa = :emp AND ap_cli.eliminado = false
+                   LEFT JOIN asientos_programados ap_gen
+                          ON ap_gen.id_referencia   = CAST(i.codigo_porcentaje AS INTEGER)
+                         AND ap_gen.tipo_referencia = 'iva_ventas_factura'
+                         AND ap_gen.id_empresa      = :emp AND ap_gen.eliminado = false
+                   LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_cli.id_cuenta, ap_gen.id_cuenta)
+                   WHERE i.id_nota_debito = :id AND i.codigo_impuesto = '2'
+                   GROUP BY i.codigo_porcentaje, COALESCE(ap_cli.id_cuenta, ap_gen.id_cuenta), pc.codigo, pc.nombre";
+        $stIva = $db->prepare($sqlIva);
+        $stIva->execute([':emp' => $idEmpresa, ':id' => $idNotaDebito, ':id_cliente' => $idCliente]);
+        while ($row = $stIva->fetch(\PDO::FETCH_ASSOC)) {
+            $valorIva = round((float)$row['total_valor'], 2);
+            if ($valorIva <= 0 || empty($row['id_cuenta'])) continue;
+            $comercial[] = [
+                'id_cuenta_contable' => (int)$row['id_cuenta'],
+                'cuenta_codigo'      => $row['cuenta_codigo'],
+                'cuenta_nombre'      => $row['cuenta_nombre'],
+                'debe'               => 0.0,
+                'haber'              => $valorIva,
+                'referencia_detalle' => 'IVA Ventas (ND)',
+            ];
+        }
+
+        // Reglas base de ventas_factura → por cobrar (debe) y subtotal/ventas (haber).
+        $reglas = $this->programadoRepo->getReglasGeneralesPorConcepto($idEmpresa, 'ventas_factura');
+        foreach ($reglas as $r) {
+            if (empty($r['id_cuenta'])) continue;
+            $codigo   = strtoupper($r['codigo']   ?? '');
+            $concepto = strtolower($r['concepto'] ?? $r['referencia'] ?? '');
+            $ladoNatural = ($r['debe_haber'] ?? 'debe') === 'haber' ? 'haber' : 'debe';
+
+            $valor = 0.0;
+            if (str_contains($codigo, 'PORCOBRAR') || str_contains($concepto, 'cobrar')) {
+                $valor = $importeTotal;
+            } elseif (str_contains($codigo, 'SUBTOTAL') || str_contains($concepto, 'subtotal')) {
+                $valor = $subtotal;
+            } else {
+                continue; // costo/inventario/ICE/propina/descuento no aplican a la ND
+            }
+            if ($valor <= 0) continue;
+
+            $comercial[] = [
+                'id_cuenta_contable' => (int)$r['id_cuenta'],
+                'cuenta_codigo'      => $r['cuenta_codigo'] ?? '',
+                'cuenta_nombre'      => $r['cuenta_nombre'] ?? '',
+                'debe'               => $ladoNatural === 'debe' ? round($valor, 2) : 0.0,
+                'haber'              => $ladoNatural === 'debe' ? 0.0 : round($valor, 2),
+                'referencia_detalle' => ($r['concepto'] ?? $r['referencia'] ?? '') . ' (ND)',
+            ];
+        }
+
+        if (empty($comercial)) {
+            return [];
+        }
+
+        $totalDebe  = round(array_sum(array_column($comercial, 'debe')),  2);
+        $totalHaber = round(array_sum(array_column($comercial, 'haber')), 2);
+        if ($totalDebe === 0.0 && $totalHaber === 0.0) {
+            throw new \Exception("No hay cuentas configuradas para la nota de débito de venta o los montos son cero.");
+        }
+
+        return $this->aplicarAjusteRedondeo($comercial, $reglas, 'ventas (nota de débito)');
+    }
+
+    /**
      * Arma el asiento contable de una retención recibida en ventas.
      *   DEBE : cuenta configurada por cada código de retención (retenciones_venta_debe),
      *          por el valor retenido de ese código.

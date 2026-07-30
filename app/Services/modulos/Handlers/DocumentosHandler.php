@@ -232,8 +232,14 @@ class DocumentosHandler extends BaseHandler
                     if ((int)$e['id'] === (int)$factura['id_establecimiento']) { $dirEst = $e['direccion'] ?? null; break; }
                 }
             }
+            $reembolsos = $repo->getReembolsos($id);
+            foreach ($reembolsos as &$r) {
+                $r['impuestos'] = $repo->getImpuestosReembolso((int)$r['id']);
+            }
+            unset($r);
+
             $xmlService = new \App\Services\Xml\XmlFacturaVentaService();
-            $xmlString  = $xmlService->generar($factura, $detalles, $pagos, $infoAdicional, $empresa, $dirEst);
+            $xmlString  = $xmlService->generar($factura, $detalles, $pagos, $infoAdicional, $empresa, $dirEst, $reembolsos);
             try { $repo->updateDetalleXml($id, $xmlString); } catch (\Throwable) {}
         }
 

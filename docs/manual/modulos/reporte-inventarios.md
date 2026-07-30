@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de inventario, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar
-version: 1.0
+version: 1.1
 orden: 40
 estado: activo
 ---
@@ -44,7 +44,16 @@ Disponible en **PDF** y **Excel**. Para el conteo, el PDF es el más práctico.
 - **El valor no coincide con la contabilidad**: compare contra el mayor de la
   cuenta de inventario; las diferencias suelen venir de compras sin procesar sus
   entradas.
+- **Existencias y Valorización vacías, pero Movimientos (Kardex) sí muestra
+  datos**: en empresas migradas desde el sistema anterior, el kardex migrado no
+  actualizaba el stock cacheado del producto/bodega del que leen estas dos
+  pestañas. Se corrigió para migraciones nuevas; las empresas ya migradas antes
+  de la corrección necesitan el script de reparación
+  `database/migrations/20260730_backfill_productos_bodegas_migracion.sql`.
 
 ## Historial de cambios
 
+- **1.1** — Corrección: el kardex migrado desde el sistema anterior no
+  sincronizaba el stock cacheado, dejando vacías Existencias y Valorización
+  para empresas migradas.
 - **1.0** — Versión inicial.

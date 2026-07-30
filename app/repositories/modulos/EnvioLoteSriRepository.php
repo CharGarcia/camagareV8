@@ -20,7 +20,7 @@ use PDO;
 class EnvioLoteSriRepository extends BaseRepository
 {
     /** Tipos soportados y su tabla/estados no enviables. */
-    private const TIPOS = ['factura_venta', 'nota_credito', 'retencion_compra', 'liquidacion_compra'];
+    private const TIPOS = ['factura_venta', 'nota_credito', 'nota_debito', 'retencion_compra', 'liquidacion_compra'];
 
     public function __construct()
     {
@@ -102,6 +102,12 @@ class EnvioLoteSriRepository extends BaseRepository
                 'nc', 'notas_credito_cabecera',
                 'LEFT JOIN clientes c ON c.id = nc.id_cliente',
                 'c.nombre', 'nc.importe_total',
+                "('autorizado','aprobado','anulado')",
+            ],
+            'nota_debito' => [
+                'nd', 'nota_debito_cabecera',
+                'LEFT JOIN clientes c ON c.id = nd.id_cliente',
+                'c.nombre', 'nd.importe_total',
                 "('autorizado','aprobado','anulado')",
             ],
             'retencion_compra' => [

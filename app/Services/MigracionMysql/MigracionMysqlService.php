@@ -2014,6 +2014,14 @@ class MigracionMysqlService
 
         $qStock = $pg->prepare("SELECT COALESCE(SUM(CASE WHEN tipo_movimiento = 'entrada' THEN cantidad ELSE -cantidad END), 0) FROM inventario_kardex WHERE id_empresa = ? AND id_producto = ? AND id_bodega = ? AND eliminado = false");
         $ins    = $pg->prepare("INSERT INTO inventario_kardex (id_empresa, id_producto, id_bodega, tipo_movimiento, referencia_tipo, fecha_movimiento, cantidad, costo_unitario, costo_total, stock_anterior, stock_posterior, numero_lote, observaciones, tipo_ambiente, created_by) VALUES (?, ?, ?, ?, 'migracion', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+        // El kardex migrado por sí solo no alimenta productos_bodegas (el reporte de Existencias/
+        // Valorización lee de ahí, no del kardex): sin este upsert el stock migrado queda invisible
+        // en esas dos pestañas aunque el Kardex sí lo muestre.
+        $upsertStock = $pg->prepare("INSERT INTO productos_bodegas (id_empresa, id_producto, id_bodega, stock_actual, created_by, updated_by)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (id_producto, id_bodega)
+                DO UPDATE SET stock_actual = EXCLUDED.stock_actual, updated_by = EXCLUDED.updated_by,
+                              updated_at = CURRENT_TIMESTAMP, eliminado = false");
         $stock  = [];
 
         $sql = "SELECT id_inventario, id_producto, id_bodega, codigo_producto, nombre_producto, cantidad_entrada, cantidad_salida, costo_unitario, precio, operacion, fecha_registro, referencia, lote
@@ -2047,6 +2055,8 @@ class MigracionMysqlService
 
                 $ins->execute([$idEmpresa, $idProd, $idBod, $esEntrada ? 'entrada' : 'salida', substr((string) $iv['fecha_registro'], 0, 19), $cant, $cu, $cant * $cu, $ant, $post, self::nz($iv['lote']), self::nz($iv['referencia']), $this->ambienteEmpresa($pg, $idEmpresa), $idUsuario]);
                 $kid = (int) $ins->fetchColumn();
+
+                $upsertStock->execute([$idEmpresa, $idProd, $idBod, $post, $idUsuario, $idUsuario]);
 
                 $insMap->execute([':e' => $idEmpresa, ':o' => $old, ':d' => $kid, ':cn' => (string) $old, ':vin' => 'f', ':cb' => $idUsuario]);
                 $pg->commit();

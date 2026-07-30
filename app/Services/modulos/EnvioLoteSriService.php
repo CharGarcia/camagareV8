@@ -22,7 +22,7 @@ use App\Services\LogSistemaService;
  */
 class EnvioLoteSriService
 {
-    private const TIPOS_VALIDOS = ['factura_venta', 'nota_credito', 'retencion_compra', 'liquidacion_compra'];
+    private const TIPOS_VALIDOS = ['factura_venta', 'nota_credito', 'nota_debito', 'retencion_compra', 'liquidacion_compra'];
 
     private EnvioLoteSriRepository $repo;
     private LogSistemaService $log;
@@ -170,6 +170,7 @@ class EnvioLoteSriService
             $res = match ($tipo) {
                 'factura_venta'      => $svc->enviarFacturaVenta($id, $idEmpresa, $idUsuario),
                 'nota_credito'       => $svc->enviarNotaCredito($id, $idEmpresa, $idUsuario),
+                'nota_debito'        => $svc->enviarNotaDebito($id, $idEmpresa, $idUsuario),
                 'retencion_compra'   => $svc->enviarRetencionCompra($id, $idEmpresa, $idUsuario),
                 'liquidacion_compra' => $svc->enviarLiquidacionCompra($id, $idEmpresa, $idUsuario),
                 default              => throw new \RuntimeException("Tipo de comprobante no soportado: {$tipo}"),

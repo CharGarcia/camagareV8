@@ -15,6 +15,7 @@ class FacturaVentaRules
         $this->validarCabecera($data);
         $this->validarPagos($data);
         $this->validarReglasEstablecimiento($data, $estConfig);
+        $this->validarReembolsos($data);
     }
 
     private function validarCabecera(array $data): void
@@ -101,6 +102,41 @@ class FacturaVentaRules
 
             // 3. Reglas de Inventario (Lotes, Caducidad, NUP)
             $this->validarItemInventario($d, $num, $estConfig);
+        }
+    }
+
+    /**
+     * Reembolso SRI: cada línea referencia un documento de un tercero (proveedor)
+     * que la empresa pagó a nombre del cliente. Valida el formato exigido por el
+     * XSD del comprobante (tipoIdentificacionProveedorReembolso, tipoProveedorReembolso)
+     * y que traiga al menos un impuesto con base/valor.
+     */
+    private function validarReembolsos(array $data): void
+    {
+        if (empty($data['reembolsos']) || !is_array($data['reembolsos'])) {
+            return;
+        }
+
+        foreach ($data['reembolsos'] as $i => $r) {
+            $num = $i + 1;
+
+            if (!in_array((string) ($r['tipo_identificacion_proveedor'] ?? ''), ['04', '05', '06', '07', '08'], true)) {
+                throw new \Exception("Reembolso #{$num}: el tipo de identificación del proveedor no es válido.");
+            }
+            if (empty($r['identificacion_proveedor'])) {
+                throw new \Exception("Reembolso #{$num}: debe indicar la identificación del proveedor.");
+            }
+            if (!in_array((string) ($r['tipo_proveedor'] ?? ''), ['01', '02'], true)) {
+                throw new \Exception("Reembolso #{$num}: el tipo de proveedor debe ser 01 (servicios profesionales) o 02 (gasto).");
+            }
+            if (empty($r['cod_doc_reembolso']) || empty($r['estab_doc_reembolso']) || empty($r['pto_emi_doc_reembolso'])
+                || empty($r['secuencial_doc_reembolso']) || empty($r['fecha_emision_doc_reembolso']) || empty($r['numero_autorizacion_doc_reemb'])
+            ) {
+                throw new \Exception("Reembolso #{$num}: faltan datos del comprobante del proveedor (tipo, serie, secuencial, fecha o autorización).");
+            }
+            if (empty($r['impuestos']) || !is_array($r['impuestos'])) {
+                throw new \Exception("Reembolso #{$num}: debe traer al menos un impuesto (base imponible y valor).");
+            }
         }
     }
 

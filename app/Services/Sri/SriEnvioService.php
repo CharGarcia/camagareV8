@@ -107,6 +107,12 @@ class SriEnvioService
         $pagos         = $repo->getPagos($idVenta);
         $infoAdicional = $repo->getInfoAdicional($idVenta);
 
+        $reembolsos = $repo->getReembolsos($idVenta);
+        foreach ($reembolsos as &$r) {
+            $r['impuestos'] = $repo->getImpuestosReembolso((int)$r['id']);
+        }
+        unset($r);
+
         $empresaModel = new \App\models\Empresa();
         $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
 
@@ -151,7 +157,7 @@ class SriEnvioService
 
         // 1. Generar XML
         $xmlService = new XmlFacturaVentaService();
-        $xmlLimpio  = $xmlService->generar($cabecera, $detalles, $pagos, $infoAdicional, $empresa, $dirEstablecimiento);
+        $xmlLimpio  = $xmlService->generar($cabecera, $detalles, $pagos, $infoAdicional, $empresa, $dirEstablecimiento, $reembolsos);
 
         // 2. Obtener configuración de firma de la empresa
         $firmaConfig = $this->getFirmaConfig($idEmpresa);
@@ -463,6 +469,180 @@ class SriEnvioService
                 }
             } catch (\Throwable $eEmail) {
                 error_log('[SRI] Error al procesar envío automático de correo (NC #' . $idNC . '): ' . $eEmail->getMessage());
+            }
+        }
+
+        return [
+            'ok'                  => $estadoInterno === 'autorizado',
+            'estado'              => $estadoInterno,
+            'numero_autorizacion' => $numAut,
+            'fecha_autorizacion'  => $fechaAut,
+            'mensaje'             => $estadoInterno === 'autorizado' ? 'Comprobante autorizado por el SRI.' : 'El SRI no autorizó el comprobante.',
+            'errores'             => $autResult['errores'] ?? [],
+        ];
+    }
+
+    // ── Nota de Débito ─────────────────────────────────────────────────────────
+
+    public function enviarNotaDebito(int $idND, int $idEmpresa, int $idUsuario): array
+    {
+        $repo = new \App\repositories\modulos\NotaDebitoRepository();
+
+        $cabecera = $repo->getPorId($idND);
+        if (!$cabecera || (int)$cabecera['id_empresa'] !== $idEmpresa) {
+            throw new \RuntimeException("Nota de débito #{$idND} no encontrada.");
+        }
+        if (empty($cabecera['clave_acceso'])) {
+            throw new \RuntimeException("La nota de débito no tiene clave de acceso generada.");
+        }
+
+        $tipoAmbiente = $cabecera['tipo_ambiente'] ?? '1';
+        $claveAcceso  = $cabecera['clave_acceso'];
+
+        $preCheck = $this->preVerificarAutorizacion(
+            'nota_debito_cabecera', $idND, $claveAcceso, $tipoAmbiente,
+            'nota_debito', $idEmpresa, $idUsuario, 'autorizado',
+            function (string $numAut, ?string $fechaAut, string $xmlDetalle) use ($repo, $idND, $idUsuario): void {
+                $db = Database::getConnection();
+                $db->prepare("UPDATE nota_debito_cabecera SET estado = 'autorizado', updated_by = ?, updated_at = NOW() WHERE id = ?")
+                   ->execute([$idUsuario, $idND]);
+                try { $repo->updateDetalleXml($idND, $xmlDetalle); } catch (\Throwable) {}
+            }
+        );
+        if ($preCheck !== null) {
+            return $preCheck;
+        }
+
+        $motivos   = $repo->getMotivos($idND);
+        $impuestos = $repo->getImpuestos($idND);
+        $pagos     = $repo->getPagos($idND);
+
+        $empresaModel = new \App\models\Empresa();
+        $empresa      = $empresaModel->getPorId($idEmpresa) ?? [];
+
+        $infoAdicional = $repo->getInfoAdicional($idND);
+
+        $dirEstablecimiento = null;
+        try {
+            $estRepo = new \App\repositories\modulos\EmpresaRepository();
+            foreach ($estRepo->getEstablecimientos($idEmpresa) as $est) {
+                $esElEstablecimiento = !empty($cabecera['id_establecimiento'])
+                    ? (int)$est['id'] === (int)$cabecera['id_establecimiento']
+                    : true;
+                if ($esElEstablecimiento) {
+                    $dirEstablecimiento = $est['direccion'] ?? null;
+                    if (!empty($est['logo_ruta']))           $empresa['logo_ruta'] = $est['logo_ruta'];
+                    if (!empty($est['direccion']))           $empresa['direccion_establecimiento'] = $est['direccion'];
+                    if (!empty($est['leyenda_pdf_titulo']))  $empresa['leyenda_pdf_titulo'] = $est['leyenda_pdf_titulo'];
+                    if (!empty($est['leyenda_pdf_mensaje'])) $empresa['leyenda_pdf_mensaje'] = $est['leyenda_pdf_mensaje'];
+
+                    $estConfig = $estRepo->getEstablecimientoConfig((int)$est['id']);
+                    if ($estConfig) {
+                        $estConfig['direccion_matriz'] = $empresa['direccion'] ?? '';
+                        $estConfig['direccion_establecimiento'] = $est['direccion'] ?? '';
+                        if (!empty($est['logo_ruta'])) $estConfig['logo_ruta'] = $est['logo_ruta'];
+                        $empresa = array_merge($empresa, $estConfig);
+                    }
+                    break;
+                }
+            }
+        } catch (\Throwable) {}
+
+        // 1. Generar XML
+        $xmlService = new \App\Services\Xml\XmlNotaDebitoService();
+        $xmlLimpio  = $xmlService->generar($cabecera, $motivos, $impuestos, $pagos, $infoAdicional, $empresa, $dirEstablecimiento);
+
+        // 2. Obtener config firma
+        $firmaConfig = $this->getFirmaConfig($idEmpresa);
+        if (!$firmaConfig) {
+            throw new \RuntimeException("La empresa no tiene firma electrónica configurada.");
+        }
+
+        // 3. Firmar XML
+        $xmlFirmado = $this->firmador->firmar($xmlLimpio, $firmaConfig['archivo_path'], $firmaConfig['p12_password']);
+
+        // 4. Enviar
+        $logBase = [
+            'id_empresa'      => $idEmpresa,
+            'tipo_comprobante'=> 'nota_debito',
+            'id_comprobante'  => $idND,
+            'clave_acceso'    => $claveAcceso,
+            'tipo_ambiente'   => $tipoAmbiente,
+            'created_by'      => $idUsuario,
+        ];
+
+        $this->actualizarEstadoDocumento('nota_debito_cabecera', $idND, 'enviando', null, null, null, $idUsuario);
+        $this->log($logBase + ['accion' => 'enviando', 'mensaje' => 'Comprobante enviado al WS de recepción del SRI.']);
+
+        $recepcion = $this->ws->enviarRecepcion($xmlFirmado, $tipoAmbiente);
+
+        if ($recepcion['estado'] !== 'RECIBIDA') {
+            $erroresJson = json_encode($recepcion['errores'], JSON_UNESCAPED_UNICODE);
+            $this->actualizarEstadoDocumento('nota_debito_cabecera', $idND, 'devuelta', null, null, $erroresJson, $idUsuario);
+            $this->log($logBase + [
+                'accion' => 'devuelta', 'estado_sri' => 'DEVUELTA', 'mensaje' => 'El SRI devolvió el comprobante con errores.', 'detalle_json' => $erroresJson
+            ]);
+            return ['ok' => false, 'estado' => 'devuelta', 'mensaje' => 'El SRI devolvió el comprobante con errores.', 'errores' => $recepcion['errores']];
+        }
+
+        $this->actualizarEstadoDocumento('nota_debito_cabecera', $idND, 'recibida', null, null, null, $idUsuario);
+
+        // 5. Autorización
+        $autResult = $this->consultarConReintentos($claveAcceso, $tipoAmbiente);
+        $estadoInterno = match (strtoupper($autResult['estado'] ?? '')) {
+            'AUTORIZADO' => 'autorizado',
+            'NO AUTORIZADO', 'RECHAZADO' => 'no_autorizado',
+            'EN PROCESAMIENTO' => 'en_procesamiento',
+            default => 'error',
+        };
+
+        $erroresJson   = !empty($autResult['errores']) ? json_encode($autResult['errores'], JSON_UNESCAPED_UNICODE) : null;
+        $fechaAut      = $autResult['fecha_autorizacion']  ?: null;
+        $xmlAutorizado = $autResult['xml_autorizado']      ?: null;
+        $numAut        = $autResult['numero_autorizacion'] ?? $claveAcceso;
+
+        $this->actualizarEstadoDocumento('nota_debito_cabecera', $idND, $estadoInterno, $fechaAut, $xmlAutorizado, $erroresJson, $idUsuario);
+
+        $this->log($logBase + [
+            'accion'              => $estadoInterno,
+            'estado_sri'          => strtoupper($autResult['estado'] ?? ''),
+            'mensaje'             => $estadoInterno === 'autorizado' ? 'Autorizado.' : 'No autorizado.',
+            'detalle_json'        => $erroresJson,
+            'numero_autorizacion' => $numAut,
+            'fecha_autorizacion'  => $fechaAut,
+        ]);
+
+        if ($estadoInterno === 'autorizado') {
+            $db = Database::getConnection();
+            $db->prepare("UPDATE nota_debito_cabecera SET estado = 'autorizado', updated_by = ?, updated_at = NOW() WHERE id = ?")
+               ->execute([$idUsuario, $idND]);
+
+            $comprobante = !empty($xmlAutorizado) ? $xmlAutorizado : $xmlFirmado;
+            $xmlDetalleCompleto = $this->buildXmlDetalleCompleto($numAut, (string)$fechaAut, $tipoAmbiente, $comprobante);
+
+            try {
+                $repo->updateDetalleXml($idND, $xmlDetalleCompleto);
+            } catch (\Throwable $eXml) {
+                error_log('[SRI] Error guardando detalle_xml en ND #' . $idND . ': ' . $eXml->getMessage());
+            }
+
+            $cabecera['estado']              = 'autorizado';
+            $cabecera['numero_autorizacion'] = $numAut;
+            $cabecera['fecha_autorizacion']  = $fechaAut;
+
+            // --- ENVÍO AUTOMÁTICO DE CORREO ---
+            try {
+                $pdfService = new \App\Services\modulos\NotaDebitoPdfService();
+                $pdfString  = $pdfService->generarBytes($cabecera, $motivos, $impuestos, $pagos, $empresa, $infoAdicional);
+
+                $emailSvc = new \App\Services\EnvioDocumentosSRIService();
+                $enviado = $emailSvc->enviarSiAplica($idEmpresa, 'nota_debito', $cabecera, $xmlDetalleCompleto, $pdfString, $numAut);
+                if ($enviado) {
+                    $db->prepare("UPDATE nota_debito_cabecera SET estado_correo = 'enviado', updated_at = NOW() WHERE id = ?")
+                       ->execute([$idND]);
+                }
+            } catch (\Throwable $eEmail) {
+                error_log('[SRI] Error al procesar envío automático de correo (ND #' . $idND . '): ' . $eEmail->getMessage());
             }
         }
 

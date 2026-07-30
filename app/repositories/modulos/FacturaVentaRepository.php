@@ -18,6 +18,40 @@ class FacturaVentaRepository extends BaseRepository
         try {
             $this->db->exec("ALTER TABLE ventas_cabecera ADD COLUMN IF NOT EXISTS detalle_xml TEXT;");
         } catch (\Throwable $e) {}
+        try {
+            $this->db->exec("CREATE TABLE IF NOT EXISTS ventas_reembolso_detalle (
+                id                              SERIAL PRIMARY KEY,
+                id_venta                        INTEGER NOT NULL,
+                id_compra                       INTEGER,
+                tipo_identificacion_proveedor   VARCHAR(2)  NOT NULL,
+                identificacion_proveedor        VARCHAR(20) NOT NULL,
+                razon_social_proveedor          VARCHAR(300),
+                cod_pais_pago_proveedor         VARCHAR(3),
+                tipo_proveedor                  VARCHAR(2)  NOT NULL,
+                cod_doc_reembolso               VARCHAR(3)  NOT NULL,
+                estab_doc_reembolso             VARCHAR(3)  NOT NULL,
+                pto_emi_doc_reembolso           VARCHAR(3)  NOT NULL,
+                secuencial_doc_reembolso        VARCHAR(9)  NOT NULL,
+                fecha_emision_doc_reembolso     DATE        NOT NULL,
+                numero_autorizacion_doc_reemb   VARCHAR(49) NOT NULL,
+                created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                created_by INTEGER,
+                CONSTRAINT fk_reembolso_venta  FOREIGN KEY (id_venta)  REFERENCES ventas_cabecera(id) ON DELETE CASCADE
+            );");
+            $this->db->exec("CREATE INDEX IF NOT EXISTS idx_reembolso_venta  ON ventas_reembolso_detalle(id_venta);");
+            $this->db->exec("CREATE INDEX IF NOT EXISTS idx_reembolso_compra ON ventas_reembolso_detalle(id_compra);");
+            $this->db->exec("CREATE TABLE IF NOT EXISTS ventas_reembolso_impuestos (
+                id                  SERIAL PRIMARY KEY,
+                id_reembolso        INTEGER NOT NULL,
+                codigo_impuesto     VARCHAR(5) NOT NULL,
+                codigo_porcentaje   VARCHAR(5) NOT NULL,
+                tarifa              NUMERIC(5,2)  NOT NULL DEFAULT 0,
+                base_imponible      NUMERIC(14,2) NOT NULL DEFAULT 0,
+                valor               NUMERIC(14,2) NOT NULL DEFAULT 0,
+                CONSTRAINT fk_reembolso_impuesto FOREIGN KEY (id_reembolso) REFERENCES ventas_reembolso_detalle(id) ON DELETE CASCADE
+            );");
+            $this->db->exec("CREATE INDEX IF NOT EXISTS idx_reembolso_impuestos_reembolso ON ventas_reembolso_impuestos(id_reembolso);");
+        } catch (\Throwable $e) {}
     }
 
     public function query(string $sql, array $params = []): \PDOStatement
@@ -372,6 +406,104 @@ class FacturaVentaRepository extends BaseRepository
     {
         $sql = "SELECT * FROM ventas_adicional WHERE id_venta = ?";
         return $this->query($sql, [$idVenta])->fetchAll();
+    }
+
+    public function getReembolsos(int $idVenta): array
+    {
+        $sql = "SELECT * FROM ventas_reembolso_detalle WHERE id_venta = ? ORDER BY id ASC";
+        return $this->query($sql, [$idVenta])->fetchAll();
+    }
+
+    public function getImpuestosReembolso(int $idReembolso): array
+    {
+        $sql = "SELECT * FROM ventas_reembolso_impuestos WHERE id_reembolso = ?";
+        return $this->query($sql, [$idReembolso])->fetchAll();
+    }
+
+    public function insertReembolso(array $data): int
+    {
+        $sql = "INSERT INTO ventas_reembolso_detalle (
+                    id_venta, id_compra, tipo_identificacion_proveedor, identificacion_proveedor,
+                    razon_social_proveedor, cod_pais_pago_proveedor, tipo_proveedor,
+                    cod_doc_reembolso, estab_doc_reembolso, pto_emi_doc_reembolso,
+                    secuencial_doc_reembolso, fecha_emision_doc_reembolso, numero_autorizacion_doc_reemb,
+                    created_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                RETURNING id";
+        $st = $this->query($sql, [
+            $data['id_venta'],
+            !empty($data['id_compra']) ? (int) $data['id_compra'] : null,
+            $data['tipo_identificacion_proveedor'],
+            $data['identificacion_proveedor'],
+            $data['razon_social_proveedor'] ?? null,
+            $data['cod_pais_pago_proveedor'] ?? null,
+            $data['tipo_proveedor'],
+            $data['cod_doc_reembolso'],
+            $data['estab_doc_reembolso'],
+            $data['pto_emi_doc_reembolso'],
+            $data['secuencial_doc_reembolso'],
+            $data['fecha_emision_doc_reembolso'],
+            $data['numero_autorizacion_doc_reemb'],
+            $data['created_by'] ?? null,
+        ]);
+        return (int) $st->fetchColumn();
+    }
+
+    public function insertReembolsoImpuesto(array $data): void
+    {
+        $sql = "INSERT INTO ventas_reembolso_impuestos (
+                    id_reembolso, codigo_impuesto, codigo_porcentaje, tarifa, base_imponible, valor
+                ) VALUES (?, ?, ?, ?, ?, ?)";
+        $this->query($sql, [
+            $data['id_reembolso'], $data['codigo_impuesto'], $data['codigo_porcentaje'],
+            $data['tarifa'], $data['base_imponible'], $data['valor'],
+        ]);
+    }
+
+    public function deleteReembolsos(int $idVenta): void
+    {
+        // Los impuestos se eliminan en cascada (FK ON DELETE CASCADE).
+        $this->query("DELETE FROM ventas_reembolso_detalle WHERE id_venta = ?", [$idVenta]);
+    }
+
+    /**
+     * Typeahead de compras ya registradas para autocompletar un reembolsoDetalle:
+     * trae la cabecera (proveedor, tipo/serie/secuencial/autorización del documento)
+     * más el detalle de impuestos agregado por código/tarifa, listo para el XML.
+     */
+    public function buscarComprasParaReembolso(int $idEmpresa, string $buscar, int $limit = 15): array
+    {
+        $buscar = trim($buscar);
+        $params = [':id_empresa' => $idEmpresa];
+        $whereBuscar = '';
+        if ($buscar !== '') {
+            $whereBuscar = " AND (p.razon_social ILIKE :buscar OR p.identificacion ILIKE :buscar
+                              OR (c.establecimiento_prov || '-' || c.punto_emision_prov || '-' || c.secuencial_prov) ILIKE :buscar) ";
+            $params[':buscar'] = '%' . $buscar . '%';
+        }
+        $sql = "SELECT c.id, c.id_proveedor, c.tipo_id_proveedor, c.tipo_comprobante,
+                       c.establecimiento_prov, c.punto_emision_prov, c.secuencial_prov,
+                       c.fecha_emision, c.numero_autorizacion, c.total_sin_impuestos, c.importe_total,
+                       p.razon_social AS proveedor_nombre, p.identificacion AS proveedor_identificacion
+                FROM compras_cabecera c
+                INNER JOIN proveedores p ON p.id = c.id_proveedor
+                WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+                $whereBuscar
+                ORDER BY c.fecha_emision DESC, c.id DESC
+                LIMIT $limit";
+        return $this->query($sql, $params)->fetchAll();
+    }
+
+    /** Impuestos de una compra agregados por (codigo_impuesto, codigo_porcentaje, tarifa) — para autollenar el reembolso. */
+    public function getImpuestosAgregadosCompra(int $idCompra): array
+    {
+        $sql = "SELECT di.codigo_impuesto, di.codigo_porcentaje, di.tarifa,
+                       SUM(di.base_imponible) AS base_imponible, SUM(di.valor) AS valor
+                FROM compras_detalle_impuestos di
+                INNER JOIN compras_detalle d ON d.id = di.id_compra_detalle
+                WHERE d.id_compra = ?
+                GROUP BY di.codigo_impuesto, di.codigo_porcentaje, di.tarifa";
+        return $this->query($sql, [$idCompra])->fetchAll();
     }
 
     public function insertCabecera(array $data): int

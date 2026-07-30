@@ -79,6 +79,10 @@ $puedeCrear = !empty($perm['crear']);
                             <label class="form-check-label small" for="els-t-nc">Notas de crédito</label>
                         </div>
                         <div class="form-check form-check-inline">
+                            <input class="form-check-input els-tipo" type="checkbox" value="nota_debito" id="els-t-nd" checked>
+                            <label class="form-check-label small" for="els-t-nd">Notas de débito</label>
+                        </div>
+                        <div class="form-check form-check-inline">
                             <input class="form-check-input els-tipo" type="checkbox" value="retencion_compra" id="els-t-rc" checked>
                             <label class="form-check-label small" for="els-t-rc">Retenciones de compra</label>
                         </div>

@@ -311,7 +311,7 @@ class ReporteInventariosController extends BaseModuloController
                 . '<td class="text-end small">' . number_format((float) ($r['costo_unitario'] ?? 0), 4) . '</td>'
                 . '<td class="small">' . htmlspecialchars($r['numero_lote'] ?? '-') . '</td>'
                 . '<td class="small">' . $cad . '</td>'
-                . '<td class="small text-truncate" style="max-width:150px" title="' . htmlspecialchars($r['observaciones'] ?? '') . '">' . htmlspecialchars($r['observaciones'] ?? '-') . '</td>'
+                . '<td class="small" style="max-width:280px;white-space:normal;word-break:break-word;">' . htmlspecialchars($r['observaciones'] ?? '-') . '</td>'
                 . '</tr>';
         }
 

@@ -96,6 +96,28 @@ class CuentasPorCobrarRepository extends BaseRepository
     }
 
     /**
+     * CTE que calcula el total de notas de débito aplicadas hasta una fecha de corte opcional.
+     * A diferencia de la NC (que resta), la ND SUMA al saldo pendiente de la factura:
+     * es un cargo adicional al cliente, no una devolución.
+     */
+    private function getCteND(int $idEmpresa, ?string $fechaHasta = null): string
+    {
+        $filtroFecha = $fechaHasta ? "AND nd.fecha_emision <= :nd_hasta" : '';
+        return "
+            SELECT nd.num_doc_modificado,
+                   SUM(nd.importe_total) AS total_nd
+            FROM nota_debito_cabecera nd
+            WHERE nd.estado   != 'anulado'
+              AND nd.eliminado = false
+              AND nd.id_empresa = {$idEmpresa}
+              AND (nd.tipo_ambiente IS NULL
+                   OR nd.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = {$idEmpresa}))
+              {$filtroFecha}
+            GROUP BY nd.num_doc_modificado
+        ";
+    }
+
+    /**
      * Extrae fecha_hasta del array de filtros y agrega los parámetros de corte
      * en $params para los CTEs que la necesitan.
      */
@@ -106,6 +128,7 @@ class CuentasPorCobrarRepository extends BaseRepository
             $params[':cobrado_hasta']  = $fechaHasta;
             $params[':retenido_hasta'] = $fechaHasta;
             $params[':nc_hasta']       = $fechaHasta;
+            $params[':nd_hasta']       = $fechaHasta;
         }
         return $fechaHasta ?: null;
     }
@@ -121,7 +144,8 @@ class CuentasPorCobrarRepository extends BaseRepository
         $sql = "
             WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
                  retenido AS (" . $this->getCteRetenido($fh) . "),
-                 nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . ")
+                 nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . "),
+                 nd_aplic AS (" . $this->getCteND($idEmpresa, $fh) . ")
             SELECT
                 v.id,
                 v.fecha_emision,
@@ -135,7 +159,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(cb.total_cobrado, 0)                                                                               AS total_cobrado,
                 COALESCE(rt.total_retenido, 0)                                                                              AS total_retenido,
                 COALESCE(nc.total_nc, 0)                                                                                    AS total_nc,
-                v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
+                v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
                 v.fecha_emision + INTERVAL '1 day' * v.dias_credito AS fecha_vencimiento,
                 v.dias_credito,
                 (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido
@@ -144,6 +168,7 @@ class CuentasPorCobrarRepository extends BaseRepository
             LEFT JOIN cobrado  cb ON cb.id_venta = v.id
             LEFT JOIN retenido rt ON rt.id_venta = v.id
             LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+            LEFT JOIN nd_aplic nd ON nd.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
             WHERE {$where}
             ORDER BY fecha_vencimiento ASC, v.fecha_emision DESC
         ";
@@ -180,18 +205,19 @@ class CuentasPorCobrarRepository extends BaseRepository
             $sql = "
                 WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
                      retenido AS (" . $this->getCteRetenido($fh) . "),
-                     nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . ")
+                     nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . "),
+                     nd_aplic AS (" . $this->getCteND($idEmpresa, $fh) . ")
                 SELECT
                     COUNT(v.id) AS total_facturas,
-                    SUM(v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) AS total_saldo,
+                    SUM(v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) AS total_saldo,
                     SUM(CASE
                         WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE
-                        THEN v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)
+                        THEN v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)
                         ELSE 0
                     END) AS total_vencido,
                     SUM(CASE
                         WHEN (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date >= CURRENT_DATE
-                        THEN v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)
+                        THEN v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)
                         ELSE 0
                     END) AS total_al_dia,
                     COUNT(CASE
@@ -202,6 +228,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 LEFT JOIN cobrado  cb ON cb.id_venta = v.id
                 LEFT JOIN retenido rt ON rt.id_venta = v.id
                 LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+            LEFT JOIN nd_aplic nd ON nd.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
                 WHERE {$where}
             ";
 
@@ -316,7 +343,8 @@ class CuentasPorCobrarRepository extends BaseRepository
             $sql = "
                 WITH cobrado  AS (" . $this->getCteCobrado($fh) . "),
                      retenido AS (" . $this->getCteRetenido($fh) . "),
-                     nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . ")
+                     nc_aplic AS (" . $this->getCteNC($idEmpresa, $fh) . "),
+                     nd_aplic AS (" . $this->getCteND($idEmpresa, $fh) . ")
                 SELECT
                     SUM(CASE WHEN dias_vencido BETWEEN 1 AND 30
                         THEN saldo ELSE 0 END) AS tramo_1_30,
@@ -330,13 +358,15 @@ class CuentasPorCobrarRepository extends BaseRepository
                         THEN saldo ELSE 0 END) AS tramo_vigente
                 FROM (
                     SELECT
-                        v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
+                        v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
                         (CURRENT_DATE - (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date) AS dias_vencido
                     FROM ventas_cabecera v
                     JOIN clientes c ON c.id = v.id_cliente
                     LEFT JOIN cobrado  cb ON cb.id_venta = v.id
                     LEFT JOIN retenido rt ON rt.id_venta = v.id
                     LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+                    LEFT JOIN nd_aplic nd ON nd.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+            LEFT JOIN nd_aplic nd ON nd.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
                     WHERE {$where}
                 ) sub
             ";
@@ -731,7 +761,8 @@ class CuentasPorCobrarRepository extends BaseRepository
         $sql = "
             WITH cobrado  AS (" . $this->getCteCobrado() . "),
                  retenido AS (" . $this->getCteRetenido() . "),
-                 nc_aplic AS (" . $this->getCteNC($idEmpresa) . ")
+                 nc_aplic AS (" . $this->getCteNC($idEmpresa) . "),
+                 nd_aplic AS (" . $this->getCteND($idEmpresa) . ")
             SELECT
                 v.*,
                 c.nombre         AS cliente_nombre,
@@ -741,13 +772,14 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(cb.total_cobrado, 0)                                                                                AS total_cobrado,
                 COALESCE(rt.total_retenido, 0)                                                                               AS total_retenido,
                 COALESCE(nc.total_nc, 0)                                                                                     AS total_nc,
-                v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
+                v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
                 CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_factura
             FROM ventas_cabecera v
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN cobrado  cb ON cb.id_venta = v.id
             LEFT JOIN retenido rt ON rt.id_venta = v.id
             LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+            LEFT JOIN nd_aplic nd ON nd.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
             WHERE v.id         = :id
               AND v.id_empresa = :id_empresa
               AND v.eliminado  = false
@@ -931,7 +963,8 @@ class CuentasPorCobrarRepository extends BaseRepository
         $sql = "
             WITH cobrado  AS (" . $this->getCteCobrado() . "),
                  retenido AS (" . $this->getCteRetenido() . "),
-                 nc_aplic AS (" . $this->getCteNC($idEmpresa) . ")
+                 nc_aplic AS (" . $this->getCteNC($idEmpresa) . "),
+                 nd_aplic AS (" . $this->getCteND($idEmpresa) . ")
             SELECT
                 v.id,
                 v.id_cliente,
@@ -947,17 +980,18 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(cb.total_cobrado, 0)                                               AS total_cobrado,
                 COALESCE(rt.total_retenido, 0)                                              AS total_retenido,
                 COALESCE(nc.total_nc, 0)                                                    AS total_nc,
-                (v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) AS saldo
+                (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) AS saldo
             FROM ventas_cabecera v
             JOIN clientes c ON c.id = v.id_cliente
             LEFT JOIN cobrado  cb ON cb.id_venta = v.id
             LEFT JOIN retenido rt ON rt.id_venta = v.id
             LEFT JOIN nc_aplic nc ON nc.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
+            LEFT JOIN nd_aplic nd ON nd.num_doc_modificado = CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial)
             WHERE v.id_empresa = :id_empresa
               AND v.eliminado  = false
               AND v.estado    IN ('autorizado','autorizada')
               AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa_ta)
-              AND (v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0
+              AND (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0
         ";
 
         $params = [':id_empresa' => $idEmpresa, ':id_empresa_ta' => $idEmpresa];
@@ -1116,15 +1150,15 @@ class CuentasPorCobrarRepository extends BaseRepository
         // Filtro de estado CxC
         $estado = $filtros['estado'] ?? 'PENDIENTES';
         if ($estado === 'PENDIENTES') {
-            $where .= " AND (v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0";
+            $where .= " AND (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0";
         } elseif ($estado === 'VENCIDAS') {
-            $where .= " AND (v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0
+            $where .= " AND (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0
                         AND (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date < CURRENT_DATE";
         } elseif ($estado === 'AL_DIA') {
-            $where .= " AND (v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0
+            $where .= " AND (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0
                         AND (v.fecha_emision + INTERVAL '1 day' * v.dias_credito)::date >= CURRENT_DATE";
         } elseif ($estado === 'PAGADAS') {
-            $where .= " AND (v.importe_total - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) <= 0";
+            $where .= " AND (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) <= 0";
         }
         // TODOS → sin filtro extra
 

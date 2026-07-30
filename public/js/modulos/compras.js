@@ -832,6 +832,12 @@ async function CMG_buscarProductos(q) {
     }
 }
 
+function mcAutosizeTextareaInv(el) {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+}
+
 let _idxAVincularInv = null;
 
 window.CMG_seleccionarProducto = function(p) {
@@ -854,13 +860,19 @@ window.CMG_seleccionarProducto = function(p) {
                 trInv.querySelector('.input-inv-id-producto').value = p.id;
                 trInv.dataset.idProducto = p.id;
 
-                const spanNombre = trInv.querySelector('.text-truncate');
-                if (spanNombre) {
-                    spanNombre.classList.add('text-primary', 'fw-bold');
-                    spanNombre.innerHTML = `<i class="bi bi-tag-fill me-1"></i>${_esc(p.nombre)}`;
-                    
+                const taNombre = trInv.querySelector('.mc-nombre-inv');
+                if (taNombre) {
+                    taNombre.classList.add('text-primary', 'fw-bold');
+                    taNombre.value = p.nombre;
+                    mcAutosizeTextareaInv(taNombre);
+                    if (!taNombre.previousElementSibling || !taNombre.previousElementSibling.classList.contains('bi-tag-fill')) {
+                        const icon = document.createElement('i');
+                        icon.className = 'bi bi-tag-fill me-1 mt-1';
+                        taNombre.parentElement.insertBefore(icon, taNombre);
+                    }
+
                     // Mostrar descripción original del documento debajo
-                    const divCont = spanNombre.closest('.fw-medium.small');
+                    const divCont = taNombre.closest('.fw-medium.small');
                     const descOriginal = tr.dataset.descripcionOriginal || '';
                     if (divCont && descOriginal && descOriginal !== p.nombre) {
                         let smallDesc = divCont.querySelector('.small-original');
@@ -972,23 +984,55 @@ window.CMG_iniciarVinculacionInv = function(idx, descripcion) {
     searchInput.focus();
 };
 
+// Dropdown de resultados actualmente visible (para reposicionarlo/cerrarlo desde
+// un único listener de scroll/resize; ver mcRepositionVinculacionInline).
+let _vincListaAbierta = null;
+let _vincInputAbierta = null;
+
+function mcRepositionVinculacionInline() {
+    if (!_vincListaAbierta || !_vincInputAbierta) return;
+    const grupo = _vincInputAbierta.closest('.input-group') || _vincInputAbierta;
+    const r = grupo.getBoundingClientRect();
+    _vincListaAbierta.style.top = (r.bottom + 2) + 'px';
+    _vincListaAbierta.style.left = r.left + 'px';
+    _vincListaAbierta.style.width = r.width + 'px';
+}
+
+if (!window._mcVincScrollListenerInit) {
+    window._mcVincScrollListenerInit = true;
+    window.addEventListener('scroll', mcRepositionVinculacionInline, true);
+    window.addEventListener('resize', mcRepositionVinculacionInline);
+}
+
 window.CMG_mostrarBuscadorInline = function(idx) {
     const cont = document.getElementById(`vinc-cont-${idx}`);
     if (!cont) return;
-    
+
     cont.querySelector('.info-vinculacion').classList.add('d-none');
     const divBusq = cont.querySelector('.buscador-inline-div');
     divBusq.classList.remove('d-none');
     const input = divBusq.querySelector('.input-buscar-inline');
+    const lista = divBusq.querySelector('.lista-resultados-inline');
+
+    // La tabla de inventario tiene scroll propio (.table-responsive con overflow
+    // auto); un dropdown "position: absolute" queda recortado por ese scroll.
+    // Se posiciona como "fixed" sobre el input y con z-index por encima del
+    // modal (.modal = 5060 !important, ver app.css) para que se vea por
+    // arriba de todo el modal en vez de encajonado dentro del listado.
+    lista.style.position = 'fixed';
+    lista.style.zIndex = 5070;
+    _vincListaAbierta = lista;
+    _vincInputAbierta = input;
+    mcRepositionVinculacionInline();
+
     input.focus();
-    
+
     // Timer local para el debounce
     let timerInline;
     input.oninput = function(e) {
         clearTimeout(timerInline);
         const q = e.target.value.trim();
-        const lista = divBusq.querySelector('.lista-resultados-inline');
-        
+
         if (q.length < 2) {
             lista.classList.add('d-none');
             return;
@@ -1013,11 +1057,17 @@ window.CMG_mostrarBuscadorInline = function(idx) {
                             </div>`;
                             btn.onclick = () => {
                                 _idxAVincularInv = idx;
+                                lista.classList.add('d-none');
+                                if (_vincListaAbierta === lista) {
+                                    _vincListaAbierta = null;
+                                    _vincInputAbierta = null;
+                                }
                                 CMG_seleccionarProducto(p);
                             };
                             lista.appendChild(btn);
                         });
                     }
+                    mcRepositionVinculacionInline();
                     lista.classList.remove('d-none');
                 }
             } catch (err) { console.error(err); }
@@ -1032,7 +1082,12 @@ window.CMG_cancelarVinculacionInline = function(idx) {
     if (!cont) return;
     cont.querySelector('.info-vinculacion').classList.remove('d-none');
     cont.querySelector('.buscador-inline-div').classList.add('d-none');
-    cont.querySelector('.lista-resultados-inline').classList.add('d-none');
+    const lista = cont.querySelector('.lista-resultados-inline');
+    lista.classList.add('d-none');
+    if (_vincListaAbierta === lista) {
+        _vincListaAbierta = null;
+        _vincInputAbierta = null;
+    }
 };
 
 
@@ -2138,13 +2193,10 @@ window.mcSincronizarInventario = function(forceReset = false) {
                 <input type="hidden" class="input-inv-id-producto" value="${item.id_producto || ''}">
                 <td class="ps-3 py-2">
                     <div class="fw-medium small">
-                        <div class="d-flex align-items-center">
-                            <span class="text-truncate ${(item.id_producto && item.id_producto != '0') ? 'text-primary fw-bold' : ''}" style="max-width: 250px;">
-                                ${(item.id_producto && item.id_producto != '0') ? 
-                                    `<i class="bi bi-tag-fill me-1"></i>${_esc(item.producto_nombre || item.descripcion)}` : 
-                                    _esc(item.descripcion)}
-                            </span>
-                            ${procesadoEnFila >= item.cantidad ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2"><i class="bi bi-check-all me-1"></i>Enviado</span>' : ''}
+                        <div class="d-flex align-items-start">
+                            ${(item.id_producto && item.id_producto != '0') ? '<i class="bi bi-tag-fill me-1 mt-1"></i>' : ''}
+                            <textarea class="form-control form-control-sm border-0 bg-transparent p-0 mc-nombre-inv ${(item.id_producto && item.id_producto != '0') ? 'text-primary fw-bold' : ''}" readonly rows="1" style="resize:none; overflow:hidden; flex:1 1 auto; min-width:0; font-size:.8rem; line-height:1.25;">${(item.id_producto && item.id_producto != '0') ? _esc(item.producto_nombre || item.descripcion) : _esc(item.descripcion)}</textarea>
+                            ${procesadoEnFila >= item.cantidad ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2 mt-1"><i class="bi bi-check-all me-1"></i>Enviado</span>' : ''}
                         </div>
                         ${(procesadoEnFila > 0 && procesadoEnFila < item.cantidad) ? `<div class="text-warning x-small mt-1 fw-bold" style="font-size:0.7rem;"><i class="bi bi-info-circle me-1"></i>Saldo por enviar a inventario: ${(item.cantidad - procesadoEnFila).toFixed(2)}</div>` : ''}
                         ${(item.id_producto && item.id_producto != '0') && item.producto_nombre && item.producto_nombre !== item.descripcion_original ? 
@@ -2163,7 +2215,7 @@ window.mcSincronizarInventario = function(forceReset = false) {
                                     <input type="text" class="form-control form-control-xs input-buscar-inline py-0 px-1" placeholder="Buscar código o nombre..." style="font-size: 0.7rem;">
                                     <button class="btn btn-outline-secondary py-0 px-1" type="button" onclick="CMG_cancelarVinculacionInline(${item.index})"><i class="bi bi-x"></i></button>
                                 </div>
-                                <div class="list-group shadow dropdown-predictivo position-absolute d-none lista-resultados-inline w-100" style="z-index: 1060; max-height: 200px; overflow-y: auto;"></div>
+                                <div class="list-group shadow dropdown-predictivo d-none lista-resultados-inline" style="max-height: 200px; overflow-y: auto;"></div>
                             </div>
                         </div>` : ''}
                 </td>
@@ -2191,6 +2243,8 @@ window.mcSincronizarInventario = function(forceReset = false) {
             if (prev.id_bodega) tr.querySelector('.input-inv-bodega').value = prev.id_bodega;
         }
     });
+
+    tbody.querySelectorAll('.mc-nombre-inv').forEach(mcAutosizeTextareaInv);
 
     mcActualizarContadorInventario();
     window._mcSincronizando = false;
@@ -2222,8 +2276,8 @@ window.mcProcesarInventario = async function() {
             const cant   = parseFloat(tr.querySelector('.input-inv-cantidad')?.value || 0);
             const costo  = parseFloat(tr.querySelector('.input-inv-costo')?.value || 0);
             
-            const descSpan = tr.querySelector('.text-truncate');
-            const desc = descSpan ? descSpan.textContent.trim() : 'Producto';
+            const descTa = tr.querySelector('.mc-nombre-inv');
+            const desc = descTa ? descTa.value.trim() : 'Producto';
 
             // Validaciones locales
             if (!idProd) {
